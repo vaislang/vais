@@ -26,11 +26,14 @@ F print_i64_digits(n: i64) -> i64 {
 F print_i64(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
+        0
     } E I n < 0 {
         putchar(45)
         print_i64_digits(0 - n)
+        0
     } E {
         print_i64_digits(n)
+        0
     }
 }
 
@@ -56,8 +59,10 @@ F print_bool(b: i64) -> i64 {
 F print_hex_digit(digit: i64) -> i64 {
     I digit < 10 {
         putchar(digit + 48)
+        0
     } E {
         putchar(digit - 10 + 97)
+        0
     }
 }
 
@@ -74,6 +79,7 @@ F print_hex_digits(n: i64, pos: i64) -> i64 {
             print_hex_digits(n, pos - 1)
         } E {
             putchar(48)
+            0
         }
     } E {
         print_hex_digit(digit)
@@ -91,6 +97,7 @@ F print_hex(n: i64) -> i64 {
 
     I n == 0 {
         putchar(48)
+        0
     } E {
         # Print up to 16 hex digits (64 bits = 16 nibbles)
         print_hex_digits(n, 15)
@@ -135,6 +142,7 @@ F print_bytes(data_ptr: i64, len: i64) -> i64 {
 F println_i64(n: i64) -> i64 {
     print_i64(n)
     putchar(10)
+    0
 }
 
 # 7. Print string + newline
@@ -151,11 +159,13 @@ F println_str(s: str) -> i64 {
         0
     }
     putchar(10)
+    0
 }
 
 # 8. Print single character
 F print_char(ch: i64) -> i64 {
     putchar(ch)
+    0
 }
 
 # 9. Print to stderr
@@ -190,6 +200,7 @@ F print_repeat(ch: i64, count: i64) -> i64 {
 # Bonus: Print newline
 F println() -> i64 {
     putchar(10)
+    0
 }
 
 # Bonus: Print string (no newline)
@@ -213,6 +224,7 @@ F print_str(s: str) -> i64 {
 F eprintln_str(s: str) -> i64 {
     eprint_str(s)
     putchar(10)
+    0
 }
 
 # Bonus: Print labeled integer (e.g., "count: 42\n")

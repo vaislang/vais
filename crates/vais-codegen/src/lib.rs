@@ -1124,8 +1124,11 @@ impl CodeGenerator {
             .filter(|(_, info)| info.is_extern)
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
-        for (_, info) in &sorted_fns {
-            if !declared_fns.contains(&info.signature.name) {
+        for (key, info) in &sorted_fns {
+            if !declared_fns.contains(&info.signature.name)
+                && !module_functions.contains(&info.signature.name)
+                && !module_functions.contains(*key)
+            {
                 if !is_main_module && info.signature.name == "fopen_ptr" {
                     // Non-main modules should declare fopen_ptr (not define it).
                     // The wrapper definition lives in the main module only.
@@ -1258,7 +1261,11 @@ impl CodeGenerator {
             sorted_helpers.sort();
             for key in sorted_helpers {
                 if let Some(info) = self.functions.get(key) {
-                    if !info.is_extern && !declared_fns.contains(&info.signature.name) {
+                    if !info.is_extern
+                        && !declared_fns.contains(&info.signature.name)
+                        && !module_functions.contains(key)
+                        && !module_functions.contains(&info.signature.name)
+                    {
                         ir.push_str(&self.generate_extern_decl(info));
                         ir.push('\n');
                         declared_fns.insert(info.signature.name.clone());
@@ -2905,7 +2912,13 @@ impl CodeGenerator {
                     }
 
                     // Handle print_i64/print_f64 builtins: emit printf call
-                    if name == "print_i64" && args.len() == 1 {
+                    // Skip if user defined their own function with the same name
+                    let has_user_print_i64 = self
+                        .functions
+                        .get("print_i64")
+                        .map(|f| !f.is_extern)
+                        .unwrap_or(false);
+                    if name == "print_i64" && args.len() == 1 && !has_user_print_i64 {
                         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
                         let mut ir = arg_ir;
                         let fmt_str = "%ld";
@@ -2919,15 +2932,25 @@ impl CodeGenerator {
                             "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
                             fmt_ptr, fmt_len, fmt_len, fmt_name
                         ));
-                        let result = self.next_temp(counter);
+                        let i32_result = self.next_temp(counter);
                         ir.push_str(&format!(
                             "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
-                            result, fmt_ptr, arg_val
+                            i32_result, fmt_ptr, arg_val
+                        ));
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = sext i32 {} to i64\n",
+                            result, i32_result
                         ));
                         return Ok((result, ir));
                     }
 
-                    if name == "print_f64" && args.len() == 1 {
+                    let has_user_print_f64 = self
+                        .functions
+                        .get("print_f64")
+                        .map(|f| !f.is_extern)
+                        .unwrap_or(false);
+                    if name == "print_f64" && args.len() == 1 && !has_user_print_f64 {
                         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
                         let mut ir = arg_ir;
                         let fmt_str = "%f";
@@ -2941,10 +2964,15 @@ impl CodeGenerator {
                             "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
                             fmt_ptr, fmt_len, fmt_len, fmt_name
                         ));
-                        let result = self.next_temp(counter);
+                        let i32_result = self.next_temp(counter);
                         ir.push_str(&format!(
                             "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
-                            result, fmt_ptr, arg_val
+                            i32_result, fmt_ptr, arg_val
+                        ));
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = sext i32 {} to i64\n",
+                            result, i32_result
                         ));
                         return Ok((result, ir));
                     }
@@ -3146,6 +3174,21 @@ impl CodeGenerator {
                         }
                     }
 
+                    // Convert i64 to i8* when parameter expects str/i8* but arg is i64
+                    if let Some(ref param_type) = param_ty {
+                        if matches!(param_type, ResolvedType::Str) {
+                            let actual_ty = self.infer_expr_type(arg);
+                            if matches!(actual_ty, ResolvedType::I64) {
+                                let ptr_tmp = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i8*\n",
+                                    ptr_tmp, val
+                                ));
+                                val = ptr_tmp;
+                            }
+                        }
+                    }
+
                     arg_vals.push(format!("{} {}", arg_ty, val));
                 }
 
@@ -3293,10 +3336,10 @@ impl CodeGenerator {
 
                     // Handle dest pointer
                     let dest_ptr = if dest_full.starts_with("i8*") {
+                        // Use everything after "i8* " to preserve complex expressions
                         dest_full
-                            .split_whitespace()
-                            .last()
-                            .unwrap_or("null")
+                            .strip_prefix("i8* ")
+                            .unwrap_or(dest_full.split_whitespace().last().unwrap_or("null"))
                             .to_string()
                     } else {
                         let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
@@ -3307,10 +3350,10 @@ impl CodeGenerator {
 
                     // Handle src pointer (can be i64 or i8* for memcpy_str)
                     let src_ptr = if src_full.starts_with("i8*") {
+                        // Use everything after "i8* " to preserve complex expressions
                         src_full
-                            .split_whitespace()
-                            .last()
-                            .unwrap_or("null")
+                            .strip_prefix("i8* ")
+                            .unwrap_or(src_full.split_whitespace().last().unwrap_or("null"))
                             .to_string()
                     } else {
                         let src_val = src_full.split_whitespace().last().unwrap_or("0");
@@ -3341,7 +3384,10 @@ impl CodeGenerator {
                     // Check if the argument is already i8* (str type) or i64 (pointer as integer)
                     if arg_full.starts_with("i8*") {
                         // Already a pointer, use directly
-                        let ptr_val = arg_full.split_whitespace().last().unwrap_or("null");
+                        // Use everything after "i8* " to preserve complex expressions like getelementptr
+                        let ptr_val = arg_full.strip_prefix("i8* ").unwrap_or(
+                            arg_full.split_whitespace().last().unwrap_or("null"),
+                        );
                         ir.push_str(&format!(
                             "  {} = call i64 @strlen(i8* {}){}\n",
                             result, ptr_val, dbg_info

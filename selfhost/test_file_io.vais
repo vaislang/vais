@@ -342,8 +342,7 @@ F test_read_line() -> i64 {
         R 0
     } E { 0 }
 
-    all_match := match1 & match2
-    all_match = all_match & match3
+    all_match := match1 & match2 & match3
 
     assert_true(all_match, "read_line")
 }
@@ -381,8 +380,7 @@ F test_seek_tell() -> i64 {
     ok2 := assert_eq(pos2, 5, "seek_tell: seek to 5")
     ok3 := assert_eq(pos3, 10, "seek_tell: seek to end")
 
-    all_ok := ok1 & ok2
-    all_ok = all_ok & ok3
+    all_ok := ok1 & ok2 & ok3
     all_ok
 }
 
