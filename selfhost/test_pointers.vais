@@ -1,0 +1,150 @@
+# ============================================================================
+# Test Suite for Pointer and Reference Types
+# ============================================================================
+# Tests *T, &T, &mut T type parsing, &expr, *expr expressions, and *ptr = val
+# ============================================================================
+
+# ============================================================================
+# Test Helpers
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        putchar(10)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        putchar(10)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual:   ")
+        println_i64(actual)
+        0
+    }
+}
+
+# ============================================================================
+# Test: Basic reference and dereference
+# ============================================================================
+
+F test_basic_ref() -> i64 {
+    x := 42
+    p := &x
+    val := *p
+    assert_eq(val, 42, "basic ref and deref")
+}
+
+# ============================================================================
+# Test: Deref assignment (*ptr = val)
+# ============================================================================
+
+F set_via_ptr(ptr: &i64, val: i64) -> i64 {
+    *ptr = val
+    0
+}
+
+F test_deref_assign() -> i64 {
+    x := mut 0
+    set_via_ptr(&x, 99)
+    assert_eq(x, 99, "deref assignment via function")
+}
+
+# ============================================================================
+# Test: Pointer type annotation
+# ============================================================================
+
+F test_pointer_type() -> i64 {
+    buf := malloc(16)
+    store_i64(buf, 123)
+    val := load_i64(buf)
+    assert_eq(val, 123, "pointer type with malloc")
+}
+
+# ============================================================================
+# Test: Multiple references
+# ============================================================================
+
+F test_multi_ref() -> i64 {
+    a := 10
+    b := 20
+    pa := &a
+    pb := &b
+    sum := *pa + *pb
+    assert_eq(sum, 30, "multiple refs sum")
+}
+
+# ============================================================================
+# Test: Ref to expression (spill to stack)
+# ============================================================================
+
+F identity(x: i64) -> i64 = x
+
+F test_ref_spill() -> i64 {
+    x := 50
+    # &x should get alloca address
+    p := &x
+    val := *p
+    assert_eq(val, 50, "ref spill to stack")
+}
+
+# ============================================================================
+# Test: Nested deref
+# ============================================================================
+
+F test_nested_deref() -> i64 {
+    x := 77
+    p := &x
+    # read *p twice
+    a := *p
+    b := *p
+    assert_eq(a + b, 154, "nested deref reads")
+}
+
+# ============================================================================
+# Main test runner
+# ============================================================================
+
+F main() -> i64 {
+    passed: mut i64 = 0
+
+    puts("=== Pointer/Reference Type Tests ===\n")
+
+    passed = passed + test_basic_ref()
+    passed = passed + test_deref_assign()
+    passed = passed + test_pointer_type()
+    passed = passed + test_multi_ref()
+    passed = passed + test_ref_spill()
+    passed = passed + test_nested_deref()
+
+    puts("\nResults: ")
+    print_i64(passed)
+    puts("/6 passed\n")
+
+    I passed == 6 { 0 } E { 1 }
+}

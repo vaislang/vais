@@ -3000,6 +3000,20 @@ X CodeGenerator {
         value_ptr := load_i64(expr_ptr + 32)
 
         target_kind := load_i64(target_ptr)
+
+        # Deref assign: *ptr = value
+        I target_kind == 47 {
+            inner_ptr := load_i64(target_ptr + 24)
+            ptr_reg := @.generate_expr(inner_ptr)
+            value_reg := @.generate_expr(value_ptr)
+            @.emit_cstr("  call void @store_i64(i64 ")
+            @.emit_reg(ptr_reg)
+            @.emit_cstr(", i64 ")
+            @.emit_reg(value_reg)
+            @.emit_cstr(")\n")
+            R value_reg
+        }
+
         I target_kind != 25 {
             # Not an identifier target, just evaluate value
             R @.generate_expr(value_ptr)

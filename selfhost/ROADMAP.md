@@ -70,7 +70,7 @@ MIR pipeline, LSP server, code formatter, doc generator, and stdlib test suites 
 - [x] Negative number literals in lexer (UnaryNeg + IntLiteral — standard approach)
 - [x] Pattern matching enhancements (wildcard, variable binding, guards, or-patterns, range)
 - [x] Option<T> / Result<T, E> support (option.vais — tag-value pair helpers)
-- [ ] Pointer types (*T), references (&T, &mut T)
+- [x] Pointer types (*T), references (&T, &mut T) ✅ 2026-02-07
 - [x] Defer statement (D expr — LIFO cleanup in codegen)
 
 ### Standard Library

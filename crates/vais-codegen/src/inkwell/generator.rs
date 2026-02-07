@@ -1082,7 +1082,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Expr::Deref(inner) => {
                 let ptr = self.generate_expr(&inner.node)?;
-                let ptr_val = ptr.into_pointer_value();
+                let ptr_val = if ptr.is_pointer_value() {
+                    ptr.into_pointer_value()
+                } else {
+                    // IntValue (i64) → PointerValue via inttoptr
+                    let int_val = ptr.into_int_value();
+                    self.builder
+                        .build_int_to_ptr(
+                            int_val,
+                            self.context.i64_type().ptr_type(inkwell::AddressSpace::default()),
+                            "deref_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
                 self.builder
                     .build_load(self.context.i64_type(), ptr_val, "deref")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))

@@ -28,6 +28,7 @@ F TOK_KW_MUT() -> i64 = 18
 F TOK_KW_ELSE() -> i64 = 19
 F TOK_KW_D() -> i64 = 20        # defer (same as TOK_KW_MOVE in selfhost context)
 F TOK_KW_AWAIT() -> i64 = 21
+F TOK_KW_MOVE() -> i64 = 125
 
 # Literal tokens (51-60)
 F TOK_INT() -> i64 = 51
@@ -1960,12 +1961,40 @@ X Parser {
     F parse_type(&self) -> i64 {
         start := @.current_span_start()
 
-        # Reference type: &T
+        # Reference type: &T or &mut T
         I @.check(TOK_AMP()) == 1 {
+            @.advance()
+            # Check for &mut T
+            is_mut: mut i64 = 0
+            I @.check(TOK_KW_MUT()) == 1 {
+                @.advance()
+                is_mut = 1
+                0
+            } E { 0 }
+            inner := @.parse_type()
+            type_ptr := malloc(TypeNode.size())
+            I is_mut == 1 {
+                store_i64(type_ptr + 0, TYPE_REF_MUT())
+                0
+            } E {
+                store_i64(type_ptr + 0, TYPE_REF())
+                0
+            }
+            store_i64(type_ptr + 8, start)
+            store_i64(type_ptr + 16, @.current_span_start())
+            store_i64(type_ptr + 24, inner)
+            store_i64(type_ptr + 32, 0)
+            store_i64(type_ptr + 40, 0)
+            store_i64(type_ptr + 48, 0)
+            R type_ptr
+        }
+
+        # Pointer type: *T
+        I @.check(TOK_STAR()) == 1 {
             @.advance()
             inner := @.parse_type()
             type_ptr := malloc(TypeNode.size())
-            store_i64(type_ptr + 0, TYPE_REF())
+            store_i64(type_ptr + 0, TYPE_POINTER())
             store_i64(type_ptr + 8, start)
             store_i64(type_ptr + 16, @.current_span_start())
             store_i64(type_ptr + 24, inner)
@@ -2604,6 +2633,42 @@ X Parser {
             store_i64(expr_ptr + 16, load_i64(inner + 16))
             store_i64(expr_ptr + 24, inner)
             store_i64(expr_ptr + 32, UNOP_NOT())
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Reference: &expr
+        I @.check(TOK_AMP()) == 1 {
+            @.advance()
+            inner := @.parse_unary()
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_REF())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, load_i64(inner + 16))
+            store_i64(expr_ptr + 24, inner)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Dereference: *expr
+        I @.check(TOK_STAR()) == 1 {
+            @.advance()
+            inner := @.parse_unary()
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_DEREF())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, load_i64(inner + 16))
+            store_i64(expr_ptr + 24, inner)
+            store_i64(expr_ptr + 32, 0)
             store_i64(expr_ptr + 40, 0)
             store_i64(expr_ptr + 48, 0)
             store_i64(expr_ptr + 56, 0)

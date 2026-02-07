@@ -2516,6 +2516,30 @@ X TypeChecker {
                 store_i64(type_ptr + 24, ty.field2)
                 type_ptr
             }
+            # TYPE_REF = 67
+            E I kind == 67 {
+                inner_ptr := load_i64(type_node_ptr + 24)
+                inner_resolved := @.resolve_type_node(inner_ptr)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.ref_type(inner_resolved)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # TYPE_REF_MUT = 68
+            E I kind == 68 {
+                inner_ptr := load_i64(type_node_ptr + 24)
+                inner_resolved := @.resolve_type_node(inner_ptr)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.ref_mut_type(inner_resolved)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
             # TYPE_UNIT = 70
             E I kind == 70 {
                 type_ptr := malloc(ResolvedType.size())

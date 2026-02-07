@@ -136,3 +136,14 @@ fn selfhost_stdlib_print_tests() {
     );
     assert_eq!(exit_code, 0, "Print test suite should exit with 0");
 }
+
+#[test]
+fn selfhost_pointer_ref_tests() {
+    let (exit_code, stdout, _stderr) = compile_and_run_selfhost("test_pointers.vais");
+    assert!(
+        stdout.contains("6/6 passed"),
+        "Pointer/ref tests should all pass.\nstdout:\n{}",
+        stdout
+    );
+    assert_eq!(exit_code, 0, "Pointer/ref test suite should exit with 0");
+}
