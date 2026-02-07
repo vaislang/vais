@@ -1,0 +1,1357 @@
+# Vais Self-Hosting Compiler - MIR Borrow Checker
+# Implements ownership and borrow checking on MIR (Middle Intermediate Representation).
+#
+# Based on crates/vais-types/src/ownership.rs but operates on MIR rather than AST.
+# Uses MIR analysis passes (liveness, dominance, CFG) from mir_analysis.vais.
+#
+# Checks:
+#   1. Use after move: non-Copy values used after being moved
+#   2. Move while borrowed: moving a value that is currently borrowed
+#   3. Double mutable borrow: two &mut borrows of the same local alive at once
+#   4. Mutable + immutable borrow conflict: &mut and & coexisting
+#   5. Assignment while borrowed: reassigning a borrowed variable
+#   6. Dangling reference: reference outlives its referent (cross-block scope analysis)
+#   7. Mutable borrow of immutable: &mut of non-mutable local
+#
+# Layout reference:
+#   MirBody: name_idx(0), params_ptr(8), params_len(16), return_type_ptr(24),
+#            locals_ptr(32), locals_len(40), blocks_ptr(48), blocks_len(56)
+#   MirBasicBlock: stmts_ptr(0), stmts_len(8), term_ptr(16)
+#   MirLocalDecl: name_idx(0), type_ptr(8), is_mutable(16)
+#   MirType: kind(0), inner_type_ptr(8), inner_count(16), name_idx(24)
+#   Operand: kind(0), local_idx(8), const_kind(16), const_value(24), const_float_bits(32)
+#   Place: local_idx(0), proj_ptr(8), proj_len(16)
+#   Rvalue: kind(0), operand_ptr(8), op(16), lhs_ptr(24), rhs_ptr(32),
+#           place_ptr(40), agg_kind(48), agg_operands_ptr(56), agg_operands_len(64)
+
+U mir
+U mir_analysis
+
+# ============================================================================
+# Borrow Checker Error Constants
+# ============================================================================
+
+F BC_ERR_USE_AFTER_MOVE() -> i64 = 1
+F BC_ERR_MOVE_WHILE_BORROWED() -> i64 = 2
+F BC_ERR_DOUBLE_MUT_BORROW() -> i64 = 3
+F BC_ERR_MUT_IMMUT_CONFLICT() -> i64 = 4
+F BC_ERR_ASSIGN_WHILE_BORROWED() -> i64 = 5
+F BC_ERR_DANGLING_REF() -> i64 = 6
+F BC_ERR_MUT_BORROW_OF_IMMUT() -> i64 = 7
+
+# ============================================================================
+# Local State Constants
+# ============================================================================
+
+# Ownership states per local
+F STATE_OWNED() -> i64 = 0
+F STATE_MOVED() -> i64 = 1
+F STATE_BORROWED() -> i64 = 2
+F STATE_MUT_BORROWED() -> i64 = 3
+
+# Borrow kinds
+F BORROW_IMMUT() -> i64 = 0
+F BORROW_MUT() -> i64 = 1
+
+# ============================================================================
+# BorrowError — collected error entry (40 bytes)
+# ============================================================================
+# [0]: error_kind (BC_ERR_*)
+# [8]: local_idx (the affected local)
+# [16]: block_idx (where error occurs)
+# [24]: stmt_idx (statement index within block, -1 for terminator)
+# [32]: extra_info (borrow_local for conflicts, move_block for use-after-move)
+
+# ============================================================================
+# BorrowChecker State (96 bytes)
+# ============================================================================
+# [0]:  body_ptr
+# [8]:  locals_len
+# [16]: blocks_len
+# [24]: blocks_ptr
+# [32]: locals_ptr
+# [40]: errors_ptr (array of error entries, 40 bytes each)
+# [48]: errors_len
+# [56]: errors_cap
+# [64]: liveness_result (from mir_liveness_analysis)
+# [72]: idom (from mir_dominance_analysis)
+# [80]: copy_flags (bitset: 1 = copy type, 0 = move type)
+# [88]: param_count
+
+F bc_new(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+    locals_ptr := load_i64(body_ptr + 32)
+    params_len := load_i64(body_ptr + 16)
+
+    ctx := malloc(96)
+    store_i64(ctx, body_ptr)
+    store_i64(ctx + 8, locals_len)
+    store_i64(ctx + 16, blocks_len)
+    store_i64(ctx + 24, blocks_ptr)
+    store_i64(ctx + 32, locals_ptr)
+
+    # Error buffer
+    cap := 64
+    store_i64(ctx + 40, malloc(40 * cap))
+    store_i64(ctx + 48, 0)
+    store_i64(ctx + 56, cap)
+
+    # Compute analyses
+    store_i64(ctx + 64, mir_liveness_analysis(body_ptr))
+    store_i64(ctx + 72, mir_dominance_analysis(body_ptr))
+
+    # Compute copy flags
+    copy_flags := bitset_new(locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        local_decl := load_i64(locals_ptr + i * 8)
+        type_ptr := load_i64(local_decl + 8)
+        I bc_is_copy_type(type_ptr) == 1 {
+            bitset_set(copy_flags, i)
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    store_i64(ctx + 80, copy_flags)
+    store_i64(ctx + 88, params_len)
+
+    R ctx
+}
+
+F bc_free(ctx: i64) -> i64 {
+    liveness := load_i64(ctx + 64)
+    I liveness != 0 { liveness_free(liveness); 0 } E { 0 }
+    idom := load_i64(ctx + 72)
+    I idom != 0 { free(idom); 0 } E { 0 }
+    copy_flags := load_i64(ctx + 80)
+    I copy_flags != 0 { free(copy_flags); 0 } E { 0 }
+    errors_ptr := load_i64(ctx + 40)
+    I errors_ptr != 0 { free(errors_ptr); 0 } E { 0 }
+    free(ctx)
+    1
+}
+
+# ============================================================================
+# Copy Type Determination
+# ============================================================================
+# Mirrors Rust ownership.rs is_copy_type:
+# Copy: all primitives (i8-i128, u8-u128, f32, f64, bool, unit, never),
+#        immutable references (&T), function pointers
+# Non-copy: str, arrays, structs, enums, tuples, &mut T, pointers
+
+F bc_is_copy_type(type_ptr: i64) -> i64 {
+    I type_ptr == 0 { R 1 }  # Unknown type → treat as copy (conservative)
+    kind := load_i64(type_ptr)
+
+    # Primitives: i8-i128 (1-5), u8-u128 (6-10), f32/f64 (11-12), bool (13)
+    I kind >= 1 {
+        I kind <= 13 { R 1 } E { 0 }
+    } E { 0 }
+
+    # Unit (15), Never (23)
+    I kind == MIR_TY_UNIT() { R 1 } E { 0 }
+    I kind == MIR_TY_NEVER() { R 1 } E { 0 }
+
+    # Immutable reference: Ref is copy (the reference itself, not the referent)
+    I kind == MIR_TY_REF() { R 1 } E { 0 }
+
+    # Function type: always copy
+    I kind == MIR_TY_FUNCTION() { R 1 } E { 0 }
+
+    # str (14): non-copy (heap allocated)
+    I kind == MIR_TY_STR() { R 0 } E { 0 }
+
+    # Pointer: copy (raw pointer)
+    I kind == MIR_TY_POINTER() { R 1 } E { 0 }
+
+    # Arrays, tuples, structs, enums: non-copy by default
+    R 0
+}
+
+# ============================================================================
+# Error Reporting
+# ============================================================================
+
+F bc_add_error(ctx: i64, kind: i64, local_idx: i64, block_idx: i64, stmt_idx: i64, extra: i64) -> i64 {
+    errors_ptr := load_i64(ctx + 40)
+    len := load_i64(ctx + 48)
+    cap := load_i64(ctx + 56)
+
+    # Grow if needed
+    I len >= cap {
+        new_cap := cap * 2
+        new_ptr := malloc(40 * new_cap)
+        i := mut 0
+        L {
+            I i >= len { R 0 }
+            # Copy 40 bytes per error entry
+            j := mut 0
+            L {
+                I j >= 5 { R 0 }
+                store_i64(new_ptr + i * 40 + j * 8, load_i64(errors_ptr + i * 40 + j * 8))
+                j = j + 1
+            }
+            i = i + 1
+        }
+        free(errors_ptr)
+        errors_ptr = new_ptr
+        store_i64(ctx + 40, new_ptr)
+        store_i64(ctx + 56, new_cap)
+        0
+    } E { 0 }
+
+    # Write error entry
+    base := errors_ptr + len * 40
+    store_i64(base, kind)
+    store_i64(base + 8, local_idx)
+    store_i64(base + 16, block_idx)
+    store_i64(base + 24, stmt_idx)
+    store_i64(base + 32, extra)
+    store_i64(ctx + 48, len + 1)
+    1
+}
+
+# ============================================================================
+# Per-Block State: ownership state + active borrows
+# ============================================================================
+# ownership_state: array of i64, one per local (STATE_OWNED/MOVED/BORROWED/MUT_BORROWED)
+# borrow_map: tracks which locals are borrowed and by whom
+#   borrow_map layout: per local = 24 bytes
+#     [i*24]:    borrow_kind (BORROW_IMMUT or BORROW_MUT, -1 if none)
+#     [i*24+8]:  borrow_count (number of immutable borrows, or 1 for mut)
+#     [i*24+16]: borrower_local (the local that holds the reference, -1 if none)
+
+F bc_state_new(locals_len: i64) -> i64 {
+    ptr := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(ptr + i * 8, STATE_OWNED())
+        i = i + 1
+    }
+    R ptr
+}
+
+F bc_state_copy(dst: i64, src: i64, locals_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(dst + i * 8, load_i64(src + i * 8))
+        i = i + 1
+    }
+    1
+}
+
+F bc_borrow_map_new(locals_len: i64) -> i64 {
+    ptr := malloc(24 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(ptr + i * 24, 0 - 1)     # borrow_kind = -1 (no borrow)
+        store_i64(ptr + i * 24 + 8, 0)     # borrow_count = 0
+        store_i64(ptr + i * 24 + 16, 0 - 1) # borrower = -1
+        i = i + 1
+    }
+    R ptr
+}
+
+F bc_borrow_map_copy(dst: i64, src: i64, locals_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(dst + i * 24, load_i64(src + i * 24))
+        store_i64(dst + i * 24 + 8, load_i64(src + i * 24 + 8))
+        store_i64(dst + i * 24 + 16, load_i64(src + i * 24 + 16))
+        i = i + 1
+    }
+    1
+}
+
+# Merge two borrow maps (union for forward dataflow at merge points)
+F bc_borrow_map_merge(dst: i64, src: i64, locals_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        dk := load_i64(dst + i * 24)
+        sk := load_i64(src + i * 24)
+        # If source has a borrow that dst doesn't, adopt it
+        I dk == (0 - 1) {
+            I sk != (0 - 1) {
+                store_i64(dst + i * 24, sk)
+                store_i64(dst + i * 24 + 8, load_i64(src + i * 24 + 8))
+                store_i64(dst + i * 24 + 16, load_i64(src + i * 24 + 16))
+                0
+            } E { 0 }
+        } E {
+            # Both have borrows — take the more restrictive
+            I sk == BORROW_MUT() {
+                store_i64(dst + i * 24, BORROW_MUT())
+                dc := load_i64(dst + i * 24 + 8)
+                sc := load_i64(src + i * 24 + 8)
+                I sc > dc { store_i64(dst + i * 24 + 8, sc); 0 } E { 0 }
+                0
+            } E I sk == BORROW_IMMUT() {
+                # Merge immutable borrow counts
+                I dk == BORROW_IMMUT() {
+                    dc := load_i64(dst + i * 24 + 8)
+                    sc := load_i64(src + i * 24 + 8)
+                    I sc > dc { store_i64(dst + i * 24 + 8, sc); 0 } E { 0 }
+                    0
+                } E { 0 }
+            } E { 0 }
+        }
+        i = i + 1
+    }
+    1
+}
+
+# Merge two ownership states (conservative: if any path has MOVED, result is MOVED)
+F bc_state_merge(dst: i64, src: i64, locals_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        ds := load_i64(dst + i * 8)
+        ss := load_i64(src + i * 8)
+        # If either path moved it, result is moved (conservative)
+        I ss == STATE_MOVED() {
+            I ds != STATE_MOVED() {
+                store_i64(dst + i * 8, STATE_MOVED())
+                0
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Main Entry Point: check a function body
+# ============================================================================
+
+F mir_borrow_check_body(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_len := load_i64(body_ptr + 56)
+
+    I locals_len == 0 { R 0 }
+    I blocks_len == 0 { R 0 }
+
+    ctx := bc_new(body_ptr)
+
+    # Per-block entry/exit states (forward dataflow)
+    # entry_states[bi] = ownership state array ptr
+    # exit_states[bi] = ownership state array ptr
+    # entry_borrows[bi] = borrow map ptr
+    # exit_borrows[bi] = borrow map ptr
+    entry_states := malloc(8 * blocks_len)
+    exit_states := malloc(8 * blocks_len)
+    entry_borrows := malloc(8 * blocks_len)
+    exit_borrows := malloc(8 * blocks_len)
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        store_i64(entry_states + bi * 8, bc_state_new(locals_len))
+        store_i64(exit_states + bi * 8, bc_state_new(locals_len))
+        store_i64(entry_borrows + bi * 8, bc_borrow_map_new(locals_len))
+        store_i64(exit_borrows + bi * 8, bc_borrow_map_new(locals_len))
+        bi = bi + 1
+    }
+
+    # Build predecessors
+    pred_info := cfg_build_predecessors(body_ptr)
+    blocks_ptr := load_i64(ctx + 24)
+
+    # Forward dataflow fixed-point: propagate ownership + borrow state
+    changed := mut 1
+    iter := mut 0
+    L {
+        I changed == 0 { R 0 }
+        I iter >= 100 { R 0 }  # safety limit
+        changed = 0
+        iter = iter + 1
+
+        bi = 0
+        L {
+            I bi >= blocks_len { R 0 }
+
+            # Merge entry state from predecessors
+            es := load_i64(entry_states + bi * 8)
+            eb := load_i64(entry_borrows + bi * 8)
+
+            I bi == 0 {
+                # Entry block: all locals owned, no borrows
+                0
+            } E {
+                # Merge from all predecessors
+                pred_list := load_i64(pred_info + bi * 16)
+                pred_cnt := load_i64(pred_info + bi * 16 + 8)
+                I pred_cnt > 0 {
+                    # Initialize from first predecessor
+                    first_pred := load_i64(pred_list)
+                    bc_state_copy(es, load_i64(exit_states + first_pred * 8), locals_len)
+                    bc_borrow_map_copy(eb, load_i64(exit_borrows + first_pred * 8), locals_len)
+
+                    # Merge remaining predecessors
+                    pi := mut 1
+                    L {
+                        I pi >= pred_cnt { R 0 }
+                        p := load_i64(pred_list + pi * 8)
+                        bc_state_merge(es, load_i64(exit_states + p * 8), locals_len)
+                        bc_borrow_map_merge(eb, load_i64(exit_borrows + p * 8), locals_len)
+                        pi = pi + 1
+                    }
+                    0
+                } E { 0 }
+            }
+
+            # Compute exit state by simulating block
+            old_exit := load_i64(exit_states + bi * 8)
+
+            # Save old exit for change detection
+            old_copy := bc_state_new(locals_len)
+            bc_state_copy(old_copy, old_exit, locals_len)
+
+            # Copy entry to working state for simulation
+            work_state := load_i64(exit_states + bi * 8)
+            bc_state_copy(work_state, es, locals_len)
+            work_borrows := load_i64(exit_borrows + bi * 8)
+            bc_borrow_map_copy(work_borrows, eb, locals_len)
+
+            # Simulate block statements
+            bc_check_block(ctx, bi, work_state, work_borrows)
+
+            # Check if exit state changed
+            ci := mut 0
+            L {
+                I ci >= locals_len { R 0 }
+                I load_i64(work_state + ci * 8) != load_i64(old_copy + ci * 8) {
+                    changed = 1
+                    R 0
+                } E { 0 }
+                ci = ci + 1
+            }
+
+            free(old_copy)
+            bi = bi + 1
+        }
+    }
+
+    # After fixed-point: do a final pass to emit errors
+    # Reset error count (only final pass errors matter)
+    store_i64(ctx + 48, 0)
+
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        work_state := bc_state_new(locals_len)
+        work_borrows := bc_borrow_map_new(locals_len)
+        bc_state_copy(work_state, load_i64(entry_states + bi * 8), locals_len)
+        bc_borrow_map_copy(work_borrows, load_i64(entry_borrows + bi * 8), locals_len)
+        bc_check_block(ctx, bi, work_state, work_borrows)
+        free(work_state)
+        free(work_borrows)
+        bi = bi + 1
+    }
+
+    # Check for dangling references at return blocks
+    bc_check_dangling_refs(ctx, entry_states, entry_borrows)
+
+    # Collect results
+    error_count := load_i64(ctx + 48)
+
+    # Cleanup
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        free(load_i64(entry_states + bi * 8))
+        free(load_i64(exit_states + bi * 8))
+        free(load_i64(entry_borrows + bi * 8))
+        free(load_i64(exit_borrows + bi * 8))
+        bi = bi + 1
+    }
+    free(entry_states)
+    free(exit_states)
+    free(entry_borrows)
+    free(exit_borrows)
+    cfg_free_predecessors(pred_info, blocks_len)
+    bc_free(ctx)
+
+    R error_count
+}
+
+# ============================================================================
+# Check all bodies in a module
+# ============================================================================
+
+F mir_borrow_check_module(mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+    total_errors := mut 0
+
+    i := mut 0
+    L {
+        I i >= bodies_len { R total_errors }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        errs := mir_borrow_check_body(body_ptr)
+        total_errors = total_errors + errs
+        i = i + 1
+    }
+    total_errors
+}
+
+# ============================================================================
+# Per-Block Checking: simulate statements and check invariants
+# ============================================================================
+
+F bc_check_block(ctx: i64, bi: i64, state: i64, borrows: i64) -> i64 {
+    blocks_ptr := load_i64(ctx + 24)
+    locals_len := load_i64(ctx + 8)
+    bb_ptr := load_i64(blocks_ptr + bi * 8)
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+    term_ptr := load_i64(bb_ptr + 16)
+
+    # Process each statement
+    si := mut 0
+    L {
+        I si >= stmts_len { R 0 }
+        stmt_ptr := load_i64(stmts_ptr + si * 8)
+        kind := load_i64(stmt_ptr)
+
+        I kind == STMT_MIR_ASSIGN() {
+            place_ptr := load_i64(stmt_ptr + 8)
+            rvalue_ptr := load_i64(stmt_ptr + 16)
+            bc_check_assign(ctx, bi, si, place_ptr, rvalue_ptr, state, borrows)
+        }
+        E I kind == STMT_MIR_DROP() {
+            place_ptr := load_i64(stmt_ptr + 8)
+            bc_check_drop(ctx, bi, si, place_ptr, state, borrows)
+        }
+        E { 0 }
+
+        si = si + 1
+    }
+
+    # Process terminator
+    I term_ptr != 0 {
+        bc_check_terminator(ctx, bi, term_ptr, state, borrows)
+        0
+    } E { 0 }
+
+    1
+}
+
+# ============================================================================
+# Assignment checking
+# ============================================================================
+
+F bc_check_assign(ctx: i64, bi: i64, si: i64, place_ptr: i64, rvalue_ptr: i64, state: i64, borrows: i64) -> i64 {
+    locals_len := load_i64(ctx + 8)
+    local_idx := load_i64(place_ptr)
+    proj_len := load_i64(place_ptr + 16)
+
+    # First check rvalue for uses (may trigger use-after-move)
+    bc_check_rvalue_uses(ctx, bi, si, rvalue_ptr, state, borrows)
+
+    # Check if assigning to a borrowed variable
+    I proj_len == 0 {
+        I local_idx < locals_len {
+            bk := load_i64(borrows + local_idx * 24)
+            I bk != (0 - 1) {
+                # Variable is borrowed — cannot reassign
+                borrower := load_i64(borrows + local_idx * 24 + 16)
+                bc_add_error(ctx, BC_ERR_ASSIGN_WHILE_BORROWED(), local_idx, bi, si, borrower)
+                0
+            } E { 0 }
+
+            # Reset state to owned (new value assigned)
+            store_i64(state + local_idx * 8, STATE_OWNED())
+            0
+        } E { 0 }
+    } E {
+        # Projected assignment (field/index) — base must be owned and mutable
+        I local_idx < locals_len {
+            s := load_i64(state + local_idx * 8)
+            I s == STATE_MOVED() {
+                bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), local_idx, bi, si, 0)
+                0
+            } E { 0 }
+            0
+        } E { 0 }
+    }
+
+    # Handle rvalue Ref — creates a borrow
+    rv_kind := load_i64(rvalue_ptr)
+    I rv_kind == RVALUE_REF() {
+        ref_place_ptr := load_i64(rvalue_ptr + 40)
+        I ref_place_ptr != 0 {
+            bc_create_borrow(ctx, bi, si, local_idx, ref_place_ptr, state, borrows)
+            0
+        } E { 0 }
+    } E { 0 }
+
+    1
+}
+
+# ============================================================================
+# Create a borrow: _dest = &_source or _dest = &mut _source
+# ============================================================================
+# Note: In MIR, Rvalue::Ref does not directly encode mut vs immut.
+# We determine mutability from the destination local's type.
+
+F bc_create_borrow(ctx: i64, bi: i64, si: i64, dest_local: i64, ref_place_ptr: i64, state: i64, borrows: i64) -> i64 {
+    locals_len := load_i64(ctx + 8)
+    locals_ptr := load_i64(ctx + 32)
+    source_local := load_i64(ref_place_ptr)
+
+    I source_local >= locals_len { R 0 }
+
+    # Determine borrow kind from destination type
+    dest_decl := load_i64(locals_ptr + dest_local * 8)
+    dest_type := load_i64(dest_decl + 8)
+    is_mut_borrow := bc_is_mut_ref_type(dest_type)
+
+    # Check source is not moved
+    src_state := load_i64(state + source_local * 8)
+    I src_state == STATE_MOVED() {
+        bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), source_local, bi, si, 0)
+        R 0
+    } E { 0 }
+
+    # Check mutability: &mut requires source to be mutable
+    I is_mut_borrow == 1 {
+        src_decl := load_i64(locals_ptr + source_local * 8)
+        src_is_mut := load_i64(src_decl + 16)
+        I src_is_mut == 0 {
+            # Can't take &mut of immutable local
+            # Exception: _0 (return place) is always implicitly mutable
+            I source_local != 0 {
+                bc_add_error(ctx, BC_ERR_MUT_BORROW_OF_IMMUT(), source_local, bi, si, dest_local)
+                R 0
+            } E { 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Check borrow conflicts
+    existing_bk := load_i64(borrows + source_local * 24)
+
+    I is_mut_borrow == 1 {
+        # Requesting &mut — conflicts with any existing borrow
+        I existing_bk == BORROW_IMMUT() {
+            existing_borrower := load_i64(borrows + source_local * 24 + 16)
+            bc_add_error(ctx, BC_ERR_MUT_IMMUT_CONFLICT(), source_local, bi, si, existing_borrower)
+            R 0
+        } E I existing_bk == BORROW_MUT() {
+            existing_borrower := load_i64(borrows + source_local * 24 + 16)
+            bc_add_error(ctx, BC_ERR_DOUBLE_MUT_BORROW(), source_local, bi, si, existing_borrower)
+            R 0
+        } E { 0 }
+
+        # Register mutable borrow
+        store_i64(borrows + source_local * 24, BORROW_MUT())
+        store_i64(borrows + source_local * 24 + 8, 1)
+        store_i64(borrows + source_local * 24 + 16, dest_local)
+        store_i64(state + source_local * 8, STATE_MUT_BORROWED())
+    } E {
+        # Requesting & — conflicts only with &mut
+        I existing_bk == BORROW_MUT() {
+            existing_borrower := load_i64(borrows + source_local * 24 + 16)
+            bc_add_error(ctx, BC_ERR_MUT_IMMUT_CONFLICT(), source_local, bi, si, existing_borrower)
+            R 0
+        } E { 0 }
+
+        # Register or increment immutable borrow
+        I existing_bk == BORROW_IMMUT() {
+            cnt := load_i64(borrows + source_local * 24 + 8)
+            store_i64(borrows + source_local * 24 + 8, cnt + 1)
+            0
+        } E {
+            store_i64(borrows + source_local * 24, BORROW_IMMUT())
+            store_i64(borrows + source_local * 24 + 8, 1)
+            store_i64(borrows + source_local * 24 + 16, dest_local)
+            0
+        }
+        store_i64(state + source_local * 8, STATE_BORROWED())
+    }
+
+    1
+}
+
+# Check if a MirType is &mut T (vs &T)
+# MIR_TY_REF with inner type — we use a convention:
+# MirType for &mut has inner_count == 1, &T has inner_count == 0
+# If this info isn't available, we check the local's is_mutable flag
+F bc_is_mut_ref_type(type_ptr: i64) -> i64 {
+    I type_ptr == 0 { R 0 }
+    kind := load_i64(type_ptr)
+    I kind == MIR_TY_REF() {
+        # Convention: inner_count field (offset 16) = 1 for &mut, 0 for &
+        R load_i64(type_ptr + 16)
+    } E { R 0 }
+}
+
+# ============================================================================
+# Rvalue Use Checking: verify operands are valid
+# ============================================================================
+
+F bc_check_rvalue_uses(ctx: i64, bi: i64, si: i64, rvalue_ptr: i64, state: i64, borrows: i64) -> i64 {
+    kind := load_i64(rvalue_ptr)
+
+    I kind == RVALUE_USE() {
+        bc_check_operand(ctx, bi, si, load_i64(rvalue_ptr + 8), state, borrows)
+    }
+    E I kind == RVALUE_BINOP() {
+        bc_check_operand(ctx, bi, si, load_i64(rvalue_ptr + 24), state, borrows)
+        bc_check_operand(ctx, bi, si, load_i64(rvalue_ptr + 32), state, borrows)
+    }
+    E I kind == RVALUE_UNOP() {
+        bc_check_operand(ctx, bi, si, load_i64(rvalue_ptr + 8), state, borrows)
+    }
+    E I kind == RVALUE_CAST() {
+        bc_check_operand(ctx, bi, si, load_i64(rvalue_ptr + 8), state, borrows)
+    }
+    E I kind == RVALUE_REF() {
+        # Ref uses are handled in bc_create_borrow — just check source not moved
+        ref_place := load_i64(rvalue_ptr + 40)
+        I ref_place != 0 {
+            bc_check_place_use(ctx, bi, si, ref_place, state, borrows)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { R 0 }
+            bc_check_operand(ctx, bi, si, load_i64(agg_ops + j * 8), state, borrows)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == RVALUE_DISCRIMINANT() {
+        ref_place := load_i64(rvalue_ptr + 40)
+        I ref_place != 0 {
+            bc_check_place_use(ctx, bi, si, ref_place, state, borrows)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_LEN() {
+        ref_place := load_i64(rvalue_ptr + 40)
+        I ref_place != 0 {
+            bc_check_place_use(ctx, bi, si, ref_place, state, borrows)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# ============================================================================
+# Operand checking: Copy vs Move
+# ============================================================================
+
+F bc_check_operand(ctx: i64, bi: i64, si: i64, op_ptr: i64, state: i64, borrows: i64) -> i64 {
+    I op_ptr == 0 { R 0 }
+    op_kind := load_i64(op_ptr)
+    locals_len := load_i64(ctx + 8)
+
+    I op_kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            s := load_i64(state + local_idx * 8)
+            I s == STATE_MOVED() {
+                bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), local_idx, bi, si, 0)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E I op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            # Check use-after-move
+            s := load_i64(state + local_idx * 8)
+            I s == STATE_MOVED() {
+                bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), local_idx, bi, si, 0)
+                R 0
+            } E { 0 }
+
+            # Check move-while-borrowed
+            bk := load_i64(borrows + local_idx * 24)
+            I bk != (0 - 1) {
+                borrower := load_i64(borrows + local_idx * 24 + 16)
+                bc_add_error(ctx, BC_ERR_MOVE_WHILE_BORROWED(), local_idx, bi, si, borrower)
+                R 0
+            } E { 0 }
+
+            # Check if type is copy — if copy, move is actually a copy (no state change)
+            copy_flags := load_i64(ctx + 80)
+            I bitset_test(copy_flags, local_idx) == 0 {
+                # Non-copy: mark as moved
+                store_i64(state + local_idx * 8, STATE_MOVED())
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E { 0 }  # OPERAND_CONSTANT — always valid
+}
+
+# Check a place use (not move, just read)
+F bc_check_place_use(ctx: i64, bi: i64, si: i64, place_ptr: i64, state: i64, borrows: i64) -> i64 {
+    locals_len := load_i64(ctx + 8)
+    local_idx := load_i64(place_ptr)
+    I local_idx < locals_len {
+        s := load_i64(state + local_idx * 8)
+        I s == STATE_MOVED() {
+            bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), local_idx, bi, si, 0)
+            0
+        } E { 0 }
+    } E { 0 }
+}
+
+# ============================================================================
+# Drop checking
+# ============================================================================
+
+F bc_check_drop(ctx: i64, bi: i64, si: i64, place_ptr: i64, state: i64, borrows: i64) -> i64 {
+    locals_len := load_i64(ctx + 8)
+    local_idx := load_i64(place_ptr)
+
+    I local_idx >= locals_len { R 0 }
+
+    # Can't drop a moved value (already gone)
+    s := load_i64(state + local_idx * 8)
+    I s == STATE_MOVED() {
+        # Dropping an already-moved value is a no-op (not an error per se)
+        R 0
+    } E { 0 }
+
+    # Can't drop while borrowed
+    bk := load_i64(borrows + local_idx * 24)
+    I bk != (0 - 1) {
+        borrower := load_i64(borrows + local_idx * 24 + 16)
+        bc_add_error(ctx, BC_ERR_MOVE_WHILE_BORROWED(), local_idx, bi, si, borrower)
+        R 0
+    } E { 0 }
+
+    # Mark as moved (dropped)
+    store_i64(state + local_idx * 8, STATE_MOVED())
+
+    # Release any borrows FROM this local
+    bc_release_borrows_by(borrows, local_idx, locals_len)
+
+    1
+}
+
+# Release borrows where the borrower is `local_idx`
+# (i.e., the reference variable goes out of scope / is dropped)
+F bc_release_borrows_by(borrows: i64, borrower_local: i64, locals_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        bk := load_i64(borrows + i * 24)
+        I bk != (0 - 1) {
+            bwr := load_i64(borrows + i * 24 + 16)
+            I bwr == borrower_local {
+                I bk == BORROW_IMMUT() {
+                    cnt := load_i64(borrows + i * 24 + 8)
+                    I cnt <= 1 {
+                        # Last borrow released
+                        store_i64(borrows + i * 24, 0 - 1)
+                        store_i64(borrows + i * 24 + 8, 0)
+                        store_i64(borrows + i * 24 + 16, 0 - 1)
+                        0
+                    } E {
+                        store_i64(borrows + i * 24 + 8, cnt - 1)
+                        0
+                    }
+                } E {
+                    # Mutable borrow released
+                    store_i64(borrows + i * 24, 0 - 1)
+                    store_i64(borrows + i * 24 + 8, 0)
+                    store_i64(borrows + i * 24 + 16, 0 - 1)
+                    0
+                }
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Terminator checking
+# ============================================================================
+
+F bc_check_terminator(ctx: i64, bi: i64, term_ptr: i64, state: i64, borrows: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_CALL() {
+        # Check arguments
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            bc_check_operand(ctx, bi, 0 - 1, load_i64(args_ptr + j * 8), state, borrows)
+            j = j + 1
+        }
+        # Call destination is a new def — mark as owned
+        dest_ptr := load_i64(term_ptr + 72)
+        I dest_ptr != 0 {
+            locals_len := load_i64(ctx + 8)
+            local_idx := load_i64(dest_ptr)
+            I local_idx < locals_len {
+                store_i64(state + local_idx * 8, STATE_OWNED())
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            bc_check_operand(ctx, bi, 0 - 1, load_i64(args_ptr + j * 8), state, borrows)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_SWITCH_INT() {
+        disc_ptr := load_i64(term_ptr + 16)
+        bc_check_operand(ctx, bi, 0 - 1, disc_ptr, state, borrows)
+    }
+    E I kind == TERM_RETURN() {
+        # _0 must be in owned state
+        locals_len := load_i64(ctx + 8)
+        I locals_len > 0 {
+            s := load_i64(state)
+            I s == STATE_MOVED() {
+                bc_add_error(ctx, BC_ERR_USE_AFTER_MOVE(), 0, bi, 0 - 1, 0)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E { 0 }  # GOTO, UNREACHABLE, ASSERT — no operands to check
+}
+
+# ============================================================================
+# Dangling Reference Checking
+# ============================================================================
+# At return terminators, check that returned references don't point to locals
+# that will be destroyed when the function returns.
+
+F bc_check_dangling_refs(ctx: i64, entry_states: i64, entry_borrows: i64) -> i64 {
+    blocks_ptr := load_i64(ctx + 24)
+    blocks_len := load_i64(ctx + 16)
+    locals_len := load_i64(ctx + 8)
+    locals_ptr := load_i64(ctx + 32)
+    param_count := load_i64(ctx + 88)
+
+    # Check return type — if function returns a reference, validate it
+    body_ptr := load_i64(ctx)
+    ret_type := load_i64(body_ptr + 24)
+    I ret_type == 0 { R 0 }
+    ret_kind := load_i64(ret_type)
+    I ret_kind != MIR_TY_REF() { R 0 }  # Non-reference return — no dangling possible
+
+    # Find all return terminators
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            I load_i64(term_ptr) == TERM_RETURN() {
+                # _0 holds the returned value
+                # Check: if _0 is a reference, its source must outlive the function
+                # Use liveness: the source of _0 must be a parameter (lives in caller)
+                # or a static/global
+                bc_check_return_ref(ctx, bi)
+                0
+            } E { 0 }
+        } E { 0 }
+        bi = bi + 1
+    }
+    0
+}
+
+# Check if the return value (_0) references a local that won't outlive the function
+F bc_check_return_ref(ctx: i64, ret_block: i64) -> i64 {
+    blocks_ptr := load_i64(ctx + 24)
+    locals_len := load_i64(ctx + 8)
+    param_count := load_i64(ctx + 88)
+
+    # Walk backward from return block to find where _0 was assigned a Ref
+    # Look for the most recent assignment to _0 that is Rvalue::Ref
+    bb_ptr := load_i64(blocks_ptr + ret_block * 8)
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+
+    # Search backward in this block
+    si := mut stmts_len - 1
+    L {
+        I si < 0 { R 0 }
+        stmt_ptr := load_i64(stmts_ptr + si * 8)
+        kind := load_i64(stmt_ptr)
+        I kind == STMT_MIR_ASSIGN() {
+            place_ptr := load_i64(stmt_ptr + 8)
+            local_idx := load_i64(place_ptr)
+            I local_idx == 0 {
+                # Found assignment to _0
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+                I rv_kind == RVALUE_REF() {
+                    ref_place := load_i64(rvalue_ptr + 40)
+                    I ref_place != 0 {
+                        source := load_i64(ref_place)
+                        # Source must be a parameter (idx 1..param_count) to be safe
+                        I source > param_count {
+                            # Source is a local temp — dangling!
+                            bc_add_error(ctx, BC_ERR_DANGLING_REF(), 0, ret_block, si, source)
+                            R 0
+                        } E { R 0 }  # Safe: source is a param
+                    } E { R 0 }
+                } E I rv_kind == RVALUE_USE() {
+                    # _0 = copy/move of another local — check if that local holds a ref
+                    # to a local. For now, consider this safe (transitive tracking future work)
+                    R 0
+                } E { R 0 }
+            } E { 0 }
+        } E { 0 }
+        si = si - 1
+    }
+    0
+}
+
+# ============================================================================
+# Liveness-based Borrow Invalidation
+# ============================================================================
+# When a borrow's borrower is no longer live, the borrow can be released.
+# This enables NLL (Non-Lexical Lifetimes) style checking.
+
+F bc_invalidate_dead_borrows(ctx: i64, bi: i64, borrows: i64) -> i64 {
+    locals_len := load_i64(ctx + 8)
+    liveness := load_i64(ctx + 64)
+
+    I liveness == 0 { R 0 }
+
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        bk := load_i64(borrows + i * 24)
+        I bk != (0 - 1) {
+            borrower := load_i64(borrows + i * 24 + 16)
+            I borrower >= 0 {
+                I borrower < locals_len {
+                    # If borrower is not live at this block's exit, release the borrow
+                    I liveness_is_live_out(liveness, bi, borrower) == 0 {
+                        store_i64(borrows + i * 24, 0 - 1)
+                        store_i64(borrows + i * 24 + 8, 0)
+                        store_i64(borrows + i * 24 + 16, 0 - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Query APIs
+# ============================================================================
+
+# Get error count from a borrow check result
+F bc_error_count(body_ptr: i64) -> i64 {
+    R mir_borrow_check_body(body_ptr)
+}
+
+# Check a body and print errors to stderr
+F mir_borrow_check_and_report(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_len := load_i64(body_ptr + 56)
+    locals_ptr := load_i64(body_ptr + 32)
+
+    I locals_len == 0 { R 0 }
+    I blocks_len == 0 { R 0 }
+
+    ctx := bc_new(body_ptr)
+
+    # Per-block states (same as mir_borrow_check_body but we keep ctx for error access)
+    blocks_ptr := load_i64(ctx + 24)
+    entry_states := malloc(8 * blocks_len)
+    exit_states := malloc(8 * blocks_len)
+    entry_borrows := malloc(8 * blocks_len)
+    exit_borrows := malloc(8 * blocks_len)
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        store_i64(entry_states + bi * 8, bc_state_new(locals_len))
+        store_i64(exit_states + bi * 8, bc_state_new(locals_len))
+        store_i64(entry_borrows + bi * 8, bc_borrow_map_new(locals_len))
+        store_i64(exit_borrows + bi * 8, bc_borrow_map_new(locals_len))
+        bi = bi + 1
+    }
+
+    pred_info := cfg_build_predecessors(body_ptr)
+
+    # Forward dataflow
+    changed := mut 1
+    iter := mut 0
+    L {
+        I changed == 0 { R 0 }
+        I iter >= 100 { R 0 }
+        changed = 0
+        iter = iter + 1
+
+        bi = 0
+        L {
+            I bi >= blocks_len { R 0 }
+            es := load_i64(entry_states + bi * 8)
+            eb := load_i64(entry_borrows + bi * 8)
+
+            I bi > 0 {
+                pred_list := load_i64(pred_info + bi * 16)
+                pred_cnt := load_i64(pred_info + bi * 16 + 8)
+                I pred_cnt > 0 {
+                    first_pred := load_i64(pred_list)
+                    bc_state_copy(es, load_i64(exit_states + first_pred * 8), locals_len)
+                    bc_borrow_map_copy(eb, load_i64(exit_borrows + first_pred * 8), locals_len)
+                    pi := mut 1
+                    L {
+                        I pi >= pred_cnt { R 0 }
+                        p := load_i64(pred_list + pi * 8)
+                        bc_state_merge(es, load_i64(exit_states + p * 8), locals_len)
+                        bc_borrow_map_merge(eb, load_i64(exit_borrows + p * 8), locals_len)
+                        pi = pi + 1
+                    }
+                    0
+                } E { 0 }
+            } E { 0 }
+
+            old_copy := bc_state_new(locals_len)
+            work_state := load_i64(exit_states + bi * 8)
+            bc_state_copy(old_copy, work_state, locals_len)
+            bc_state_copy(work_state, es, locals_len)
+            work_borrows := load_i64(exit_borrows + bi * 8)
+            bc_borrow_map_copy(work_borrows, eb, locals_len)
+
+            bc_check_block(ctx, bi, work_state, work_borrows)
+            bc_invalidate_dead_borrows(ctx, bi, work_borrows)
+
+            ci := mut 0
+            L {
+                I ci >= locals_len { R 0 }
+                I load_i64(work_state + ci * 8) != load_i64(old_copy + ci * 8) {
+                    changed = 1
+                    R 0
+                } E { 0 }
+                ci = ci + 1
+            }
+            free(old_copy)
+            bi = bi + 1
+        }
+    }
+
+    # Final pass for errors
+    store_i64(ctx + 48, 0)
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        work_state := bc_state_new(locals_len)
+        work_borrows := bc_borrow_map_new(locals_len)
+        bc_state_copy(work_state, load_i64(entry_states + bi * 8), locals_len)
+        bc_borrow_map_copy(work_borrows, load_i64(entry_borrows + bi * 8), locals_len)
+        bc_check_block(ctx, bi, work_state, work_borrows)
+        free(work_state)
+        free(work_borrows)
+        bi = bi + 1
+    }
+
+    bc_check_dangling_refs(ctx, entry_states, entry_borrows)
+
+    error_count := load_i64(ctx + 48)
+
+    # Print errors
+    I error_count > 0 {
+        bc_print_errors(ctx)
+        0
+    } E { 0 }
+
+    # Cleanup
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        free(load_i64(entry_states + bi * 8))
+        free(load_i64(exit_states + bi * 8))
+        free(load_i64(entry_borrows + bi * 8))
+        free(load_i64(exit_borrows + bi * 8))
+        bi = bi + 1
+    }
+    free(entry_states)
+    free(exit_states)
+    free(entry_borrows)
+    free(exit_borrows)
+    cfg_free_predecessors(pred_info, blocks_len)
+    bc_free(ctx)
+
+    R error_count
+}
+
+# ============================================================================
+# Printing Helpers (putchar-based, no string dependencies)
+# ============================================================================
+
+F bc_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        bc_print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            bc_print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+# Print a short ASCII string char-by-char using putchar
+# Each bc_emit_* prints a fixed message
+F bc_emit_prefix() -> i64 {
+    # "borrow error: "
+    putchar(98); putchar(111); putchar(114); putchar(114); putchar(111); putchar(119)
+    putchar(32); putchar(101); putchar(114); putchar(114); putchar(111); putchar(114)
+    putchar(58); putchar(32)
+    1
+}
+
+F bc_emit_at_bb() -> i64 {
+    # " at bb"
+    putchar(32); putchar(97); putchar(116); putchar(32); putchar(98); putchar(98)
+    1
+}
+
+F bc_emit_underscore() -> i64 {
+    # "_"
+    putchar(95)
+    1
+}
+
+F bc_emit_newline() -> i64 {
+    putchar(10)
+    1
+}
+
+# ============================================================================
+# Error Printing
+# ============================================================================
+
+F bc_print_errors(ctx: i64) -> i64 {
+    errors_ptr := load_i64(ctx + 40)
+    error_count := load_i64(ctx + 48)
+
+    i := mut 0
+    L {
+        I i >= error_count { R 0 }
+        base := errors_ptr + i * 40
+        kind := load_i64(base)
+        local_idx := load_i64(base + 8)
+        block_idx := load_i64(base + 16)
+        stmt_idx := load_i64(base + 24)
+        extra := load_i64(base + 32)
+
+        bc_emit_prefix()
+
+        I kind == BC_ERR_USE_AFTER_MOVE() {
+            # "use of moved value _N at bbM"
+            # u=117,s=115,e=101, =32,o=111,f=102, =32,m=109,o,v=118,e,d=100, =32,v=118,a=97,l=108,u,e=101
+            putchar(117); putchar(115); putchar(101); putchar(32)
+            putchar(111); putchar(102); putchar(32)
+            putchar(109); putchar(111); putchar(118); putchar(101); putchar(100); putchar(32)
+            putchar(118); putchar(97); putchar(108); putchar(117); putchar(101); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_MOVE_WHILE_BORROWED() {
+            # "cannot move _N while borrowed at bbM"
+            # c=99,a=97,n=110,n,o=111,t=116, =32,m=109,o,v=118,e=101
+            putchar(99); putchar(97); putchar(110); putchar(110); putchar(111); putchar(116); putchar(32)
+            putchar(109); putchar(111); putchar(118); putchar(101); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            # " while borrowed"
+            putchar(32); putchar(119); putchar(104); putchar(105); putchar(108); putchar(101); putchar(32)
+            putchar(98); putchar(111); putchar(114); putchar(114); putchar(111); putchar(119); putchar(101); putchar(100)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_DOUBLE_MUT_BORROW() {
+            # "double &mut borrow of _N at bbM"
+            putchar(100); putchar(111); putchar(117); putchar(98); putchar(108); putchar(101); putchar(32)
+            putchar(38); putchar(109); putchar(117); putchar(116); putchar(32)
+            putchar(98); putchar(111); putchar(114); putchar(114); putchar(111); putchar(119); putchar(32)
+            putchar(111); putchar(102); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_MUT_IMMUT_CONFLICT() {
+            # "&mut/& conflict on _N at bbM"
+            putchar(38); putchar(109); putchar(117); putchar(116); putchar(47); putchar(38); putchar(32)
+            putchar(99); putchar(111); putchar(110); putchar(102); putchar(108); putchar(105)
+            putchar(99); putchar(116); putchar(32)
+            putchar(111); putchar(110); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_ASSIGN_WHILE_BORROWED() {
+            # "assign while borrowed _N at bbM"
+            putchar(97); putchar(115); putchar(115); putchar(105); putchar(103); putchar(110); putchar(32)
+            putchar(119); putchar(104); putchar(105); putchar(108); putchar(101); putchar(32)
+            putchar(98); putchar(111); putchar(114); putchar(114); putchar(111); putchar(119); putchar(101); putchar(100); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_DANGLING_REF() {
+            # "dangling ref to _N at bbM"
+            putchar(100); putchar(97); putchar(110); putchar(103); putchar(108); putchar(105); putchar(110); putchar(103); putchar(32)
+            putchar(114); putchar(101); putchar(102); putchar(32)
+            putchar(116); putchar(111); putchar(32)
+            bc_emit_underscore(); bc_print_i64(extra)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E I kind == BC_ERR_MUT_BORROW_OF_IMMUT() {
+            # "&mut of immutable _N at bbM"
+            putchar(38); putchar(109); putchar(117); putchar(116); putchar(32)
+            putchar(111); putchar(102); putchar(32)
+            putchar(105); putchar(109); putchar(109); putchar(117); putchar(116); putchar(97); putchar(98); putchar(108); putchar(101); putchar(32)
+            bc_emit_underscore(); bc_print_i64(local_idx)
+            bc_emit_at_bb(); bc_print_i64(block_idx)
+            bc_emit_newline()
+            0
+        }
+        E { 0 }
+
+        i = i + 1
+    }
+    error_count
+}

@@ -71,6 +71,16 @@ F mir_type_inner(kind: i64, inner: i64) -> i64 {
     R ptr
 }
 
+# Mutable reference type: REF with inner_count=1 to distinguish &mut T from &T
+F mir_type_mut_ref(inner: i64) -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, MIR_TY_REF())
+    store_i64(ptr + 8, inner)
+    store_i64(ptr + 16, 1)  # inner_count=1 → mutable ref
+    store_i64(ptr + 24, 0)
+    R ptr
+}
+
 F mir_type_named(kind: i64, name_idx: i64) -> i64 {
     ptr := malloc(32)
     store_i64(ptr, kind)

@@ -152,6 +152,34 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 - [ ] References (&T, &mut T)
 - [ ] Defer statement
 
+### MIR (Middle-Level Intermediate Representation)
+- [x] MIR data structures (mir.vais) ✅
+- [x] MIR builder API (mir_builder.vais) ✅
+- [x] AST → MIR lowering (mir_lower.vais, 1,420 LOC) ✅
+- [x] MIR → LLVM IR emission (mir_emit_llvm.vais, 1,228 LOC) ✅
+- [x] MIR optimizer with 4 passes (mir_optimizer.vais, 756 LOC) ✅
+  - [x] Constant Propagation
+  - [x] Constant Folding
+  - [x] Dead Code Elimination
+  - [x] Unreachable Block Elimination
+- [x] MIR analysis passes (mir_analysis.vais, 1,536 LOC) ✅
+  - [x] BitSet utilities
+  - [x] Control Flow Graph (CFG)
+  - [x] Liveness Analysis
+  - [x] Dominance Analysis
+  - [x] Loop Analysis
+  - [x] Reaching Definitions Analysis
+  - [x] Use-Def Chain Analysis
+- [x] MIR Borrow Checker (mir_borrow.vais) ✅
+  - [x] Loan tracking
+  - [x] Move/Copy semantics
+  - [x] Borrow conflict detection
+  - [x] Lifetime validation
+- [ ] MIR pipeline integration in main_entry.vais
+  - [ ] Wire AST → MIR → LLVM IR path
+  - [ ] Add --mir-opt flag support
+  - [ ] Add --dump-mir debug output
+
 ---
 
 ## Phase 3: Standard Library

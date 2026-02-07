@@ -1,0 +1,363 @@
+# Vais Self-Hosting Compiler - MIR Borrow Checker Tests
+# Tests the borrow checker implementation in mir_borrow.vais
+# Validates ownership and borrowing rules at MIR level.
+
+U mir
+U mir_borrow
+
+# ============================================================================
+# Test 1: No error case (clean code with no borrows)
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: i64 (param)
+#   _2: i64 (temp)
+# bb0:
+#   _2 = Copy(_1)
+#   _0 = Use(_2)
+#   return
+F test_no_error() -> i64 {
+    # Create locals array: 3 locals (return, param, temp)
+    locals_ptr := malloc(8 * 3)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+
+    # Create basic block bb0
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_use(operand_copy(1))))
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(0), rvalue_use(operand_copy(2))))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody (56 bytes)
+    body := malloc(56)
+    store_i64(body, 0)                      # name_idx
+    store_i64(body + 8, 0)                  # params_ptr
+    store_i64(body + 16, 1)                 # params_len = 1 (_1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))  # return_type
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 3)                 # locals_len
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)                 # blocks_len
+
+    # Run borrow checker (expect 0 errors)
+    error_count := mir_borrow_check_body(body)
+
+    # Return 0 if PASS, 1 if FAIL
+    I error_count == 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 2: Use after move (non-Copy type)
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: str (param, non-Copy)
+#   _2: str (temp)
+#   _3: i64 (temp)
+# bb0:
+#   _2 = Move(_1)         # Move _1 to _2
+#   _3 = Use(Copy(_1))    # Use _1 after move → ERROR!
+#   return
+F test_use_after_move() -> i64 {
+    # Create locals: str param is non-Copy
+    locals_ptr := malloc(8 * 4)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_STR()), 0))
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_prim(MIR_TY_STR()), 0))
+    store_i64(locals_ptr + 24, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_use(operand_move(1))))
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(3), rvalue_use(operand_copy(1))))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)                 # params_len = 1
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 4)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect BC_ERR_USE_AFTER_MOVE
+    error_count := mir_borrow_check_body(body)
+    I error_count > 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 3: Double mutable borrow
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: i64 (param, mutable)
+#   _2: &mut i64 (first borrow)
+#   _3: &mut i64 (second borrow)
+# bb0:
+#   _2 = &mut _1
+#   _3 = &mut _1          # Two &mut to same local → ERROR!
+#   return
+F test_double_mut_borrow() -> i64 {
+    # Create locals
+    locals_ptr := malloc(8 * 4)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 1))  # mutable
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_mut_ref(mir_type_prim(MIR_TY_I64())), 0))
+    store_i64(locals_ptr + 24, mir_local_decl(0, mir_type_mut_ref(mir_type_prim(MIR_TY_I64())), 0))
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_ref(place_local(1))))
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(3), rvalue_ref(place_local(1))))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 4)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect BC_ERR_DOUBLE_MUT_BORROW
+    error_count := mir_borrow_check_body(body)
+    I error_count > 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 4: Mutable + immutable borrow conflict
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: i64 (param, mutable)
+#   _2: &mut i64
+#   _3: &i64
+# bb0:
+#   _2 = &mut _1
+#   _3 = &_1              # &mut + & conflict → ERROR!
+#   return
+F test_mut_immut_conflict() -> i64 {
+    # Create locals
+    locals_ptr := malloc(8 * 4)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 1))  # mutable
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_mut_ref(mir_type_prim(MIR_TY_I64())), 0))  # &mut
+    store_i64(locals_ptr + 24, mir_local_decl(0, mir_type_inner(MIR_TY_REF(), mir_type_prim(MIR_TY_I64())), 0))  # & (immut)
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_ref(place_local(1))))   # &mut _1
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(3), rvalue_ref(place_local(1))))   # & _1 → conflict!
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 4)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect BC_ERR_MUT_IMMUT_CONFLICT
+    error_count := mir_borrow_check_body(body)
+    I error_count > 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 5: Copy type - no error on move
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: i64 (param, Copy type)
+#   _2: i64
+#   _3: i64
+# bb0:
+#   _2 = Move(_1)         # Move Copy type
+#   _3 = Copy(_1)         # Use after move - OK for Copy types!
+#   return
+F test_copy_type_ok() -> i64 {
+    # Create locals (all i64, which is Copy)
+    locals_ptr := malloc(8 * 4)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 24, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_use(operand_move(1))))
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(3), rvalue_use(operand_copy(1))))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 4)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect 0 errors (Copy type allows use after move)
+    error_count := mir_borrow_check_body(body)
+    I error_count == 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 6: Assign while borrowed
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: i64 (param, mutable)
+#   _2: &mut i64
+#   _3: i64
+# bb0:
+#   _2 = &mut _1
+#   _1 = Use(Const(42))   # Assign to borrowed variable → ERROR!
+#   return
+F test_assign_while_borrowed() -> i64 {
+    # Create locals
+    locals_ptr := malloc(8 * 4)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 1))  # mutable
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_mut_ref(mir_type_prim(MIR_TY_I64())), 0))  # &mut
+    store_i64(locals_ptr + 24, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_ref(place_local(1))))
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(1), rvalue_use(operand_const_int(42))))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 4)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect BC_ERR_ASSIGN_WHILE_BORROWED
+    error_count := mir_borrow_check_body(body)
+    I error_count > 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Test 7: Drop while borrowed
+# ============================================================================
+# MIR body:
+#   _0: i64 (return)
+#   _1: str (param)
+#   _2: &str
+# bb0:
+#   _2 = &_1
+#   drop(_1)              # Drop borrowed variable → ERROR!
+#   return
+F test_drop_while_borrowed() -> i64 {
+    # Create locals
+    locals_ptr := malloc(8 * 3)
+    store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
+    store_i64(locals_ptr + 8, mir_local_decl(0, mir_type_prim(MIR_TY_STR()), 0))
+    store_i64(locals_ptr + 16, mir_local_decl(0, mir_type_inner(MIR_TY_REF(), mir_type_prim(MIR_TY_STR())), 0))
+
+    # Create basic block
+    bb := mir_bb_new()
+    mir_bb_add_stmt(bb, mir_stmt_assign(place_local(2), rvalue_ref(place_local(1))))
+    mir_bb_add_stmt(bb, mir_stmt_drop(place_local(1)))
+    mir_bb_set_term(bb, term_return())
+
+    blocks_ptr := malloc(8)
+    store_i64(blocks_ptr, bb)
+
+    # Build MirBody
+    body := malloc(56)
+    store_i64(body, 0)
+    store_i64(body + 8, 0)
+    store_i64(body + 16, 1)
+    store_i64(body + 24, mir_type_prim(MIR_TY_I64()))
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, 3)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, 1)
+
+    # Expect BC_ERR_MOVE_WHILE_BORROWED or similar
+    error_count := mir_borrow_check_body(body)
+    I error_count > 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Main - Run all tests and report results
+# ============================================================================
+F main() -> i64 {
+    # Test 1: No error
+    result1 := test_no_error()
+    putchar(48 + result1)
+    putchar(32)  # space
+
+    # Test 2: Use after move
+    result2 := test_use_after_move()
+    putchar(48 + result2)
+    putchar(32)
+
+    # Test 3: Double mutable borrow
+    result3 := test_double_mut_borrow()
+    putchar(48 + result3)
+    putchar(32)
+
+    # Test 4: Mutable + immutable conflict
+    result4 := test_mut_immut_conflict()
+    putchar(48 + result4)
+    putchar(32)
+
+    # Test 5: Copy type OK
+    result5 := test_copy_type_ok()
+    putchar(48 + result5)
+    putchar(32)
+
+    # Test 6: Assign while borrowed
+    result6 := test_assign_while_borrowed()
+    putchar(48 + result6)
+    putchar(32)
+
+    # Test 7: Drop while borrowed
+    result7 := test_drop_while_borrowed()
+    putchar(48 + result7)
+    putchar(10)  # newline
+
+    # Return 0 if all passed, 1 otherwise
+    total := result1 + result2 + result3 + result4 + result5 + result6 + result7
+    I total == 0 { 0 } E { 1 }
+}
