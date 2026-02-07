@@ -110,110 +110,264 @@ X SliceIter: Iterator {
     }
 }
 
-# ===== Iterator Adapters =====
-# These are struct-based adapters for functional-style iteration
+# ===== Iterator Adapter Functions =====
+# Free-function-based adapters that work with arrays stored as (ptr, len) pairs.
+# All use the convention: -1 = exhausted sentinel.
 
-# Take adapter - takes first n elements
-S Take {
-    data: i64,      # Pointer to inner iterator
-    remaining: i64  # Remaining elements to take
+# ===== Consuming Functions (Array-based) =====
+# These operate on arrays stored as ptr + len pairs.
+
+# Sum all elements in an array
+F iter_sum(data: i64, len: i64) -> i64 {
+    acc := mut 0
+    i := mut 0
+    L {
+        I i >= len { B }
+        acc = acc + load_i64(data + i * 8)
+        i = i + 1
+    }
+    acc
 }
 
-X Take: Iterator {
-    F next(&self) -> i64 {
-        I self.remaining > 0 {
-            self.remaining = self.remaining - 1
-            # Would call inner.next() here
-            # For now, simplified version
-            0
-        } E {
-            0 - 1
+# Product of all elements in an array
+F iter_product(data: i64, len: i64) -> i64 {
+    acc := mut 1
+    i := mut 0
+    L {
+        I i >= len { B }
+        acc = acc * load_i64(data + i * 8)
+        i = i + 1
+    }
+    acc
+}
+
+# Count elements in an array
+F iter_count(data: i64, len: i64) -> i64 {
+    len
+}
+
+# Find min element in an array (returns 0 if empty)
+F iter_min(data: i64, len: i64) -> i64 {
+    I len == 0 { R 0 }
+    min_val := mut load_i64(data)
+    i := mut 1
+    L {
+        I i >= len { B }
+        v := load_i64(data + i * 8)
+        I v < min_val { min_val = v }
+        i = i + 1
+    }
+    min_val
+}
+
+# Find max element in an array (returns 0 if empty)
+F iter_max(data: i64, len: i64) -> i64 {
+    I len == 0 { R 0 }
+    max_val := mut load_i64(data)
+    i := mut 1
+    L {
+        I i >= len { B }
+        v := load_i64(data + i * 8)
+        I v > max_val { max_val = v }
+        i = i + 1
+    }
+    max_val
+}
+
+# Check if any element equals value
+F iter_contains(data: i64, len: i64, value: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I load_i64(data + i * 8) == value { R 1 }
+        i = i + 1
+    }
+    0
+}
+
+# ===== Adapter Functions =====
+# These create new arrays (allocate via malloc) and return (ptr, len) via out params.
+
+# Map: apply f to each element, return new array pointer (caller sets len = input len)
+F iter_map(data: i64, len: i64, f: fn(i64) -> i64) -> i64 {
+    out := malloc(len * 8)
+    i := mut 0
+    L {
+        I i >= len { B }
+        store_i64(out + i * 8, f(load_i64(data + i * 8)))
+        i = i + 1
+    }
+    out
+}
+
+# Filter: return new array pointer; actual count stored at out_count_ptr
+F iter_filter(data: i64, len: i64, pred: fn(i64) -> i64, out_count_ptr: i64) -> i64 {
+    out := malloc(len * 8)
+    j := mut 0
+    i := mut 0
+    L {
+        I i >= len { B }
+        v := load_i64(data + i * 8)
+        I pred(v) != 0 {
+            store_i64(out + j * 8, v)
+            j = j + 1
         }
+        i = i + 1
     }
+    store_i64(out_count_ptr, j)
+    out
 }
 
-# ===== Helper Functions =====
-# Use these to create iterators since static methods aren't supported yet
-
-# Count elements in range [start, end)
-F iter_count(start: i64, end: i64) -> i64 {
-    I end > start {
-        end - start
-    } E {
-        0
+# Take: return new array with first n elements (or fewer if len < n)
+F iter_take(data: i64, len: i64, n: i64) -> i64 {
+    count := I n < len { n } E { len }
+    out := malloc(count * 8)
+    i := mut 0
+    L {
+        I i >= count { B }
+        store_i64(out + i * 8, load_i64(data + i * 8))
+        i = i + 1
     }
+    out
 }
 
-# Sum elements in range [start, end)
-# Uses arithmetic formula: sum = n*(n-1)/2 - k*(k-1)/2
-F iter_sum(start: i64, end: i64) -> i64 {
-    I end <= start {
-        0
-    } E {
-        n := end - 1
-        k := start
-        # Sum of 1..n minus sum of 1..(k-1)
-        n_sum := n * (n + 1) / 2
-        k_sum := k * (k - 1) / 2
-        n_sum - k_sum
+# Skip: return new array skipping first n elements
+F iter_skip(data: i64, len: i64, n: i64) -> i64 {
+    start := I n < len { n } E { len }
+    new_len := len - start
+    out := malloc(new_len * 8)
+    i := mut 0
+    L {
+        I i >= new_len { B }
+        store_i64(out + i * 8, load_i64(data + (start + i) * 8))
+        i = i + 1
     }
+    out
 }
 
-# Product of range [start, end)
-F iter_product(start: i64, end: i64) -> i64 {
-    I end <= start {
-        1
-    } E {
-        result := mut 1
-        # Note: Can't use loop with break due to codegen issue
-        # This is a simplified version
-        I end - start >= 1 { result = result * start }
-        I end - start >= 2 { result = result * (start + 1) }
-        I end - start >= 3 { result = result * (start + 2) }
-        I end - start >= 4 { result = result * (start + 3) }
-        I end - start >= 5 { result = result * (start + 4) }
-        result
+# Chain: concatenate two arrays, return new array pointer
+# Total length = len1 + len2
+F iter_chain(data1: i64, len1: i64, data2: i64, len2: i64) -> i64 {
+    total := len1 + len2
+    out := malloc(total * 8)
+    i := mut 0
+    L {
+        I i >= len1 { B }
+        store_i64(out + i * 8, load_i64(data1 + i * 8))
+        i = i + 1
     }
+    j := mut 0
+    L {
+        I j >= len2 { B }
+        store_i64(out + (len1 + j) * 8, load_i64(data2 + j * 8))
+        j = j + 1
+    }
+    out
 }
 
-# Find min in range
-F iter_min(start: i64, end: i64) -> i64 {
-    I end <= start {
-        0
-    } E {
-        start
+# Zip: pair elements from two arrays as (a, b) stored as consecutive i64 pairs
+# Returns pointer to 2*min(len1,len2) elements [a0,b0,a1,b1,...]
+F iter_zip(data1: i64, len1: i64, data2: i64, len2: i64) -> i64 {
+    min_len := I len1 < len2 { len1 } E { len2 }
+    out := malloc(min_len * 16)
+    i := mut 0
+    L {
+        I i >= min_len { B }
+        store_i64(out + i * 16, load_i64(data1 + i * 8))
+        store_i64(out + i * 16 + 8, load_i64(data2 + i * 8))
+        i = i + 1
     }
+    out
 }
 
-# Find max in range
-F iter_max(start: i64, end: i64) -> i64 {
-    I end <= start {
-        0
-    } E {
-        end - 1
+# Enumerate: pair each element with its index as (index, value)
+# Returns pointer to 2*len elements [0,v0,1,v1,...]
+F iter_enumerate(data: i64, len: i64) -> i64 {
+    out := malloc(len * 16)
+    i := mut 0
+    L {
+        I i >= len { B }
+        store_i64(out + i * 16, i)
+        store_i64(out + i * 16 + 8, load_i64(data + i * 8))
+        i = i + 1
     }
+    out
 }
 
-# Check if value is in range [start, end)
-F iter_contains(start: i64, end: i64, value: i64) -> i64 {
-    I value >= start && value < end { 1 } E { 0 }
+# Fold: reduce array to single value
+F iter_fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
+    acc := mut init
+    i := mut 0
+    L {
+        I i >= len { B }
+        acc = f(acc, load_i64(data + i * 8))
+        i = i + 1
+    }
+    acc
+}
+
+# Any: check if any element satisfies predicate
+F iter_any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) != 0 { R 1 }
+        i = i + 1
+    }
+    0
+}
+
+# All: check if all elements satisfy predicate
+F iter_all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) == 0 { R 0 }
+        i = i + 1
+    }
+    1
+}
+
+# Find: return first element satisfying predicate (or -1 if not found)
+F iter_find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        v := load_i64(data + i * 8)
+        I pred(v) != 0 { R v }
+        i = i + 1
+    }
+    0 - 1
+}
+
+# Position: return index of first element satisfying predicate (or -1)
+F iter_position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) != 0 { R i }
+        i = i + 1
+    }
+    0 - 1
 }
 
 # ===== Usage Examples =====
 #
-# Creating a Range iterator:
+# Range-based for loop:
+#   L i:0..10 { print(i) }
+#
+# Manual iterator loop with Range struct:
 #   r := Range { current: 0, end: 10, step: 1 }
-#
-# Iterating (manual unrolling due to codegen limitations):
-#   v := r.next()
-#   I v >= 0 { ... }
-#
-# Creating VecIter:
-#   iter := VecIter { data: vec.data, len: vec.len, index: 0 }
-#
-# For-loop style (when codegen supports break):
 #   L {
 #       v := r.next()
-#       I v < 0 { B 0 }
+#       I v < 0 { B }
 #       # process v
 #   }
+#
+# Adapter chaining (array-based):
+#   data := iter_map(arr, len, |x: i64| x * 2)
+#   sum := iter_sum(data, len)
+#
+# Zip two arrays:
+#   paired := iter_zip(a_ptr, a_len, b_ptr, b_len)
+#   # paired[i*2] = a[i], paired[i*2+1] = b[i]

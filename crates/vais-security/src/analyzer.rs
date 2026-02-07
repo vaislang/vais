@@ -394,6 +394,7 @@ impl SecurityAnalyzer {
             | Expr::Ident(_)
             | Expr::SelfCall
             | Expr::MacroInvoke(_)
+            | Expr::Yield(_)
             | Expr::Error { .. } => {}
         }
     }

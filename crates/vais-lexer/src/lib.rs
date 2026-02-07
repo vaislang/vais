@@ -88,6 +88,8 @@ pub enum Token {
     #[token("await")]
     #[token("Y", priority = 3)]
     Await,
+    #[token("yield")]
+    Yield,
     #[token("weak")]
     Weak,
     #[token("clone")]
@@ -371,6 +373,7 @@ impl fmt::Display for Token {
             Token::Union => write!(f, "O"),
             Token::Extern => write!(f, "N"),
             Token::Global => write!(f, "G"),
+            Token::Yield => write!(f, "yield"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),

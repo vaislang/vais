@@ -356,6 +356,11 @@ impl EffectInferrer {
                 effects
             }
 
+            // Yield suspends the generator
+            Expr::Yield(inner) => {
+                self.infer_expr_effects(&inner.node, functions)
+            }
+
             // Cast is pure
             Expr::Cast { expr, .. } => self.infer_expr_effects(&expr.node, functions),
 

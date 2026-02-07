@@ -1251,6 +1251,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Spawn: for now just evaluate inner
             Expr::Spawn(inner) => self.generate_expr(&inner.node),
 
+            // Yield: for now just evaluate inner (simplified generator)
+            Expr::Yield(inner) => self.generate_expr(&inner.node),
+
             // SelfCall (@): recursive call to current function
             Expr::SelfCall => {
                 // Return a reference to the current function (for indirect calls)

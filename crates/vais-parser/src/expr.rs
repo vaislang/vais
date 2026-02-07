@@ -1114,6 +1114,15 @@ impl Parser {
                     Span::new(start, end),
                 ));
             }
+            Token::Yield => {
+                // Yield expression: yield expr
+                let value = self.parse_expr()?;
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Yield(Box::new(value)),
+                    Span::new(start, end),
+                ));
+            }
             Token::Pipe => {
                 // Lambda expression: |params| body
                 return self.parse_lambda(start);
@@ -1541,6 +1550,7 @@ impl Parser {
             Token::Io => "io".to_string(),
             Token::Mut => "mut".to_string(),
             Token::Spawn => "spawn".to_string(),
+            Token::Yield => "yield".to_string(),
             Token::SelfLower => "self".to_string(),
             Token::Str => "str".to_string(),
             Token::Bool => "bool".to_string(),

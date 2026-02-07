@@ -5100,6 +5100,14 @@ impl TypeChecker {
                 // Future: Return Task<T> type for proper async handling
                 Ok(inner_type)
             }
+
+            Expr::Yield(inner) => {
+                let _inner_type = self.check_expr(inner)?;
+                // Yield suspends the generator and returns the value to the caller.
+                // The yield expression itself evaluates to i64 (value sent back by caller, or 0).
+                Ok(ResolvedType::I64)
+            }
+
             Expr::Lazy(inner) => {
                 let inner_type = self.check_expr(inner)?;
                 // lazy expr creates a Lazy<T> thunk
@@ -6276,7 +6284,8 @@ impl TypeChecker {
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner) => {
+            | Expr::Spawn(inner)
+            | Expr::Yield(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
             Expr::Lazy(inner) => {

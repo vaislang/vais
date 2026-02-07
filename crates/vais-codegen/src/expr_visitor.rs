@@ -94,6 +94,7 @@ impl ExprVisitor for CodeGenerator {
             } => self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter),
             Expr::Await(inner) => self.visit_await(inner, counter),
             Expr::Spawn(inner) => self.visit_spawn(inner, counter),
+            Expr::Yield(inner) => self.visit_expr(inner, counter),
             Expr::Lambda {
                 params,
                 body,

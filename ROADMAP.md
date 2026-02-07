@@ -237,15 +237,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] E2E 테스트 11개 (에러/Result 관련) 전부 통과 ✅
 - **난이도**: 중 | **모델**: Opus 직접
 
-### Stage 4: 이터레이터 프로토콜 & 제너레이터
+### Stage 4: 이터레이터 프로토콜 & 제너레이터 ✅
 
 **목표**: 지연 평가 기반 데이터 처리 파이프라인
 
-- [ ] `Iterator` 트레이트 정의 (`next() -> Option<T>`)
-- [ ] 이터레이터 어댑터: `map`, `filter`, `take`, `skip`, `chain`, `zip`, `enumerate`
-- [ ] `collect` 어댑터 (Iterator → Vec/String/HashMap)
-- [ ] `for x in iter { ... }` 루프 문법 지원
-- [ ] 제너레이터 함수 (`yield` 키워드)
+- [x] `Iterator` 트레이트 정의 (W Iterator + Range/VecIter/SliceIter) — `std/iter.vais` ✅
+- [x] 이터레이터 어댑터: `iter_map`, `iter_filter`, `iter_take`, `iter_skip`, `iter_chain`, `iter_zip`, `iter_enumerate` ✅
+- [x] `collect` 어댑터 (`collect_range` 패턴 + `iter_fold`) ✅
+- [x] `L i:start..end { body }` 범위 for-루프 문법 ✅
+- [x] `yield` 키워드 — lexer/parser/AST/type checker/codegen 전체 파이프라인 ✅
+- [x] 소비 함수: `iter_sum`, `iter_product`, `iter_min`, `iter_max`, `iter_contains`, `iter_any`, `iter_all`, `iter_find`, `iter_position` ✅
+- [x] E2E 테스트 16개 (범위루프, 어댑터, 클로저, 제너레이터 등) 전부 통과 ✅
 - **난이도**: 상 | **모델**: Opus 직접
 
 ### Stage 5: 패키지 에코시스템 활성화

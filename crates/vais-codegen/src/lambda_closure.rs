@@ -117,6 +117,7 @@ impl CodeGenerator {
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
             | Expr::Spawn(inner)
+            | Expr::Yield(inner)
             | Expr::Comptime { body: inner }
             | Expr::Old(inner)
             | Expr::Assume(inner) => {

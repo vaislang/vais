@@ -2543,6 +2543,7 @@ impl Parser {
             Token::Async => "async keyword 'A'".to_string(),
             Token::Await => "await keyword 'Y'".to_string(),
             Token::Spawn => "'spawn' keyword".to_string(),
+            Token::Yield => "'yield' keyword".to_string(),
             Token::True => "'true'".to_string(),
             Token::False => "'false'".to_string(),
             Token::Defer => "defer keyword 'D'".to_string(),

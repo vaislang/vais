@@ -4402,6 +4402,15 @@ impl CodeGenerator {
                 Ok((future_ptr, ir))
             }
 
+            // Yield expression: yield a value from generator
+            // For now, treat yield as returning the value (simplified generator support)
+            Expr::Yield(inner) => {
+                let (val, ir) = self.generate_expr(inner, counter)?;
+                // In a full implementation, yield would save state and return.
+                // For now, it just evaluates and returns the yielded value.
+                Ok((val, ir))
+            }
+
             // Comptime expression: evaluate at compile time and emit constant
             Expr::Comptime { body } => {
                 // Evaluate at compile time

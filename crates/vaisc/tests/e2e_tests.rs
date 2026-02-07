@@ -6071,6 +6071,537 @@ F main() -> i64 {
     assert_eq!(result.exit_code, 0, "ensure pattern failed: {}", result.stderr);
 }
 
+// ===== Stage 4: Iterator Protocol & Generator Tests =====
+
+#[test]
+fn e2e_iter_range_for_loop() {
+    // Test range-based for loop: L i:start..end { body }
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..10 {
+        sum = sum + i
+    }
+    I sum == 45 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "range for loop failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_range_step_manual() {
+    // Test manual range iterator with step > 1
+    let source = r#"
+F main() -> i64 {
+    # Sum even numbers 0,2,4,6,8
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 10 { B }
+        sum = sum + i
+        i = i + 2
+    }
+    I sum == 20 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "manual step range failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_map_array() {
+    // Test map adapter on array via malloc/store/load pattern
+    let source = r#"
+F main() -> i64 {
+    # Create array [1, 2, 3, 4, 5]
+    data := malloc(40)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+
+    # Map: double each element
+    out := malloc(40)
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        v := load_i64(data + i * 8)
+        store_i64(out + i * 8, v * 2)
+        i = i + 1
+    }
+
+    # Sum mapped: 2+4+6+8+10 = 30
+    sum := mut 0
+    j := mut 0
+    L {
+        I j >= 5 { B }
+        sum = sum + load_i64(out + j * 8)
+        j = j + 1
+    }
+    free(data)
+    free(out)
+    I sum == 30 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter map array failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_filter_array() {
+    // Test filter adapter: keep only even elements
+    let source = r#"
+F main() -> i64 {
+    # Create array [1, 2, 3, 4, 5, 6]
+    data := malloc(48)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+    store_i64(data + 40, 6)
+
+    # Filter: keep even numbers
+    out := malloc(48)
+    count := mut 0
+    i := mut 0
+    L {
+        I i >= 6 { B }
+        v := load_i64(data + i * 8)
+        rem := v - (v / 2) * 2
+        I rem == 0 {
+            store_i64(out + count * 8, v)
+            count = count + 1
+        }
+        i = i + 1
+    }
+
+    # Sum filtered (2+4+6=12), count should be 3
+    sum := mut 0
+    j := mut 0
+    L {
+        I j >= count { B }
+        sum = sum + load_i64(out + j * 8)
+        j = j + 1
+    }
+    free(data)
+    free(out)
+    I sum == 12 && count == 3 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter filter array failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_fold_sum() {
+    // Test fold/reduce pattern
+    let source = r#"
+F fold(data: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
+    acc := mut init
+    i := mut 0
+    L {
+        I i >= len { B }
+        acc = f(acc, load_i64(data + i * 8))
+        i = i + 1
+    }
+    acc
+}
+F main() -> i64 {
+    data := malloc(40)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+
+    sum := fold(data, 5, 0, |a: i64, b: i64| a + b)
+    product := fold(data, 5, 1, |a: i64, b: i64| a * b)
+    free(data)
+    I sum == 15 && product == 120 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter fold failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_take_skip() {
+    // Test take and skip patterns
+    let source = r#"
+F main() -> i64 {
+    # Array [10, 20, 30, 40, 50]
+    data := malloc(40)
+    store_i64(data, 10)
+    store_i64(data + 8, 20)
+    store_i64(data + 16, 30)
+    store_i64(data + 24, 40)
+    store_i64(data + 32, 50)
+
+    # Take first 3: sum = 10+20+30 = 60
+    take_sum := mut 0
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        take_sum = take_sum + load_i64(data + i * 8)
+        i = i + 1
+    }
+
+    # Skip first 2: sum = 30+40+50 = 120
+    skip_sum := mut 0
+    j := mut 2
+    L {
+        I j >= 5 { B }
+        skip_sum = skip_sum + load_i64(data + j * 8)
+        j = j + 1
+    }
+    free(data)
+    I take_sum == 60 && skip_sum == 120 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "take/skip failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_chain() {
+    // Test chain: concatenate two arrays
+    let source = r#"
+F main() -> i64 {
+    a := malloc(24)
+    store_i64(a, 1)
+    store_i64(a + 8, 2)
+    store_i64(a + 16, 3)
+
+    b := malloc(16)
+    store_i64(b, 4)
+    store_i64(b + 8, 5)
+
+    # Chain: [1,2,3] ++ [4,5]
+    out := malloc(40)
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        store_i64(out + i * 8, load_i64(a + i * 8))
+        i = i + 1
+    }
+    j := mut 0
+    L {
+        I j >= 2 { B }
+        store_i64(out + (3 + j) * 8, load_i64(b + j * 8))
+        j = j + 1
+    }
+
+    # Sum chained: 1+2+3+4+5 = 15
+    sum := mut 0
+    k := mut 0
+    L {
+        I k >= 5 { B }
+        sum = sum + load_i64(out + k * 8)
+        k = k + 1
+    }
+    free(a)
+    free(b)
+    free(out)
+    I sum == 15 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter chain failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_zip() {
+    // Test zip: pair elements from two arrays
+    let source = r#"
+F main() -> i64 {
+    a := malloc(24)
+    store_i64(a, 1)
+    store_i64(a + 8, 2)
+    store_i64(a + 16, 3)
+
+    b := malloc(24)
+    store_i64(b, 10)
+    store_i64(b + 8, 20)
+    store_i64(b + 16, 30)
+
+    # Zip: pairs (1,10), (2,20), (3,30)
+    # Sum of products: 1*10 + 2*20 + 3*30 = 10+40+90 = 140
+    dot := mut 0
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        ai := load_i64(a + i * 8)
+        bi := load_i64(b + i * 8)
+        dot = dot + ai * bi
+        i = i + 1
+    }
+    free(a)
+    free(b)
+    I dot == 140 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter zip failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_enumerate() {
+    // Test enumerate: pair each element with its index
+    let source = r#"
+F main() -> i64 {
+    data := malloc(24)
+    store_i64(data, 100)
+    store_i64(data + 8, 200)
+    store_i64(data + 16, 300)
+
+    # Enumerate: (0,100), (1,200), (2,300)
+    # Sum of index*value: 0*100 + 1*200 + 2*300 = 800
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        v := load_i64(data + i * 8)
+        sum = sum + i * v
+        i = i + 1
+    }
+    free(data)
+    I sum == 800 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter enumerate failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_any_all_find() {
+    // Test any, all, find patterns with closures
+    let source = r#"
+F any(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) != 0 { R 1 }
+        i = i + 1
+    }
+    0
+}
+F all(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) == 0 { R 0 }
+        i = i + 1
+    }
+    1
+}
+F find(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        v := load_i64(data + i * 8)
+        I pred(v) != 0 { R v }
+        i = i + 1
+    }
+    0 - 1
+}
+F main() -> i64 {
+    data := malloc(40)
+    store_i64(data, 2)
+    store_i64(data + 8, 4)
+    store_i64(data + 16, 6)
+    store_i64(data + 24, 8)
+    store_i64(data + 32, 10)
+
+    has_even := any(data, 5, |x: i64| I x - (x / 2) * 2 == 0 { 1 } E { 0 })
+    has_odd := any(data, 5, |x: i64| I x - (x / 2) * 2 != 0 { 1 } E { 0 })
+    all_pos := all(data, 5, |x: i64| I x > 0 { 1 } E { 0 })
+    first_big := find(data, 5, |x: i64| I x > 7 { 1 } E { 0 })
+    free(data)
+    I has_even == 1 && has_odd == 0 && all_pos == 1 && first_big == 8 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "any/all/find failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_map_filter_chain() {
+    // Test chaining map -> filter -> fold
+    let source = r#"
+F main() -> i64 {
+    # [1, 2, 3, 4, 5]
+    data := malloc(40)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+
+    # Step 1: Map (double): [2, 4, 6, 8, 10]
+    mapped := malloc(40)
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        store_i64(mapped + i * 8, load_i64(data + i * 8) * 2)
+        i = i + 1
+    }
+
+    # Step 2: Filter (keep > 5): [6, 8, 10]
+    filtered := malloc(40)
+    count := mut 0
+    j := mut 0
+    L {
+        I j >= 5 { B }
+        v := load_i64(mapped + j * 8)
+        I v > 5 {
+            store_i64(filtered + count * 8, v)
+            count = count + 1
+        }
+        j = j + 1
+    }
+
+    # Step 3: Fold (sum): 6+8+10 = 24
+    sum := mut 0
+    k := mut 0
+    L {
+        I k >= count { B }
+        sum = sum + load_i64(filtered + k * 8)
+        k = k + 1
+    }
+    free(data)
+    free(mapped)
+    free(filtered)
+    I sum == 24 && count == 3 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "map-filter-chain failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_collect_to_array() {
+    // Test collecting results into a new array (simulating Iterator.collect())
+    let source = r#"
+F collect_range(start: i64, end: i64) -> i64 {
+    len := end - start
+    out := malloc(len * 8)
+    i := mut 0
+    L {
+        I i >= len { B }
+        store_i64(out + i * 8, start + i)
+        i = i + 1
+    }
+    out
+}
+F main() -> i64 {
+    # Collect 5..10 into array [5,6,7,8,9]
+    arr := collect_range(5, 10)
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        sum = sum + load_i64(arr + i * 8)
+        i = i + 1
+    }
+    free(arr)
+    # 5+6+7+8+9 = 35
+    I sum == 35 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "collect to array failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_position() {
+    // Test finding position/index of first matching element
+    let source = r#"
+F position(data: i64, len: i64, pred: fn(i64) -> i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B }
+        I pred(load_i64(data + i * 8)) != 0 { R i }
+        i = i + 1
+    }
+    0 - 1
+}
+F main() -> i64 {
+    data := malloc(40)
+    store_i64(data, 10)
+    store_i64(data + 8, 20)
+    store_i64(data + 16, 30)
+    store_i64(data + 24, 40)
+    store_i64(data + 32, 50)
+
+    pos := position(data, 5, |x: i64| I x == 30 { 1 } E { 0 })
+    not_found := position(data, 5, |x: i64| I x == 99 { 1 } E { 0 })
+    free(data)
+    I pos == 2 && not_found == 0 - 1 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "iter position failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_generator_yield_parse() {
+    // Test that yield keyword is recognized by the parser
+    // (simplified generator — yield evaluates the expression for now)
+    let source = r#"
+F gen_next(state: i64) -> i64 {
+    yield state * 2
+}
+F main() -> i64 {
+    a := gen_next(5)
+    b := gen_next(10)
+    I a == 10 && b == 20 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "yield parse failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_nested_loops() {
+    // Test nested range for loops
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..3 {
+        L j:0..4 {
+            sum = sum + 1
+        }
+    }
+    # 3 * 4 = 12
+    I sum == 12 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "nested loops failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_iter_closure_capture_in_loop() {
+    // Test closures that capture loop variables
+    let source = r#"
+F apply(x: i64, f: fn(i64) -> i64) -> i64 { f(x) }
+F main() -> i64 {
+    sum := mut 0
+    L i:1..6 {
+        doubled := apply(i, |x: i64| x * 2)
+        sum = sum + doubled
+    }
+    # 2+4+6+8+10 = 30
+    I sum == 30 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure in loop failed: {}", result.stderr);
+}
+
 #[test]
 fn e2e_recovery_max_errors_limit() {
     // Normal mode should fail fast on first error

@@ -947,6 +947,8 @@ pub enum Expr {
     },
     /// Spawn: `spawn{expr}`
     Spawn(Box<Spanned<Expr>>),
+    /// Yield: `Y expr` - Yield a value from a generator function
+    Yield(Box<Spanned<Expr>>),
     /// Comptime: `comptime { expr }` - Evaluated at compile time
     Comptime { body: Box<Spanned<Expr>> },
     /// Macro invocation: `name!(args)`

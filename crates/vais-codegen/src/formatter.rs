@@ -1495,6 +1495,7 @@ impl Formatter {
             }
 
             Expr::Spawn(expr) => format!("spawn {{ {} }}", self.format_expr(&expr.node)),
+            Expr::Yield(expr) => format!("yield {}", self.format_expr(&expr.node)),
             Expr::Comptime { body } => format!("comptime {{ {} }}", self.format_expr(&body.node)),
             Expr::Old(inner) => format!("old({})", self.format_expr(&inner.node)),
             Expr::Assert { condition, message } => {
