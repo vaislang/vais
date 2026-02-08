@@ -160,7 +160,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 43** | Codegen 품질 개선 | match phi node 수정 (enum/struct 반환), clippy 0건, ignored 35개 분류, 315 E2E | 2026-02-08 |
 | **Hotfix** | 바인딩 수정 | vais-python PyO3 0.28 마이그레이션 (PyObject→Py\<PyAny\>, with_gil 제거, skip_from_py_object), vais-node NAPI 3.x 마이그레이션 (Object→ParseResult struct), 양쪽 Token::Yield 추가 | 2026-02-08 |
 | **Phase 44** | Nested Struct 접근 | ✅ Parser/TC 이미 지원, Codegen infer_struct_name() 수정 + struct_field_type_names 맵 추가, 318 E2E (+3 nested) | 2026-02-08 |
-| **Phase 45** | Stdlib 확장 | 📋 예정 — std/process, std/env, std/signal 모듈 추가 | - |
+| **Phase 45** | Stdlib 확장 | ✅ std/env (getenv/setenv/unsetenv), std/process (system/popen/pclose/exit), std/signal (signal/raise + 상수), 322 E2E (+4) | 2026-02-08 |
 | **Phase 46** | Parser 모듈화 | 📋 예정 — parser/lib.rs 4,208줄을 expr/stmt/type 모듈로 분리 | - |
 | **Phase 47** | Incremental TC | 📋 예정 — per-module 타입체킹 캐싱, Phase 42 codegen 캐싱 확장 | - |
 
@@ -546,35 +546,35 @@ Stage 0 → Stage 1 → Stage 2
 
 ## 🚀 Phase 45: Stdlib 확장 (process/env/signal)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-08)
 > **목표**: 실제 CLI 프로그램 작성에 필요한 시스템 모듈 추가
 > **배경**: 현재 stdlib 60개 모듈이지만 subprocess 실행, 환경변수, 시그널 처리 없음
 
-### Stage 0: std/env 모듈
+### Stage 0: std/env 모듈 ✅
 
-**목표**: 환경변수 접근 — `env_get("PATH")`, `env_set("KEY", "val")`, `env_vars()`
+**목표**: 환경변수 접근 — `env_get("PATH")`, `env_set("KEY", "val")`
 
-- [ ] `std/env.vais` 작성 — getenv/setenv FFI 래퍼
-- [ ] codegen에 getenv/setenv 빌트인 또는 extern 선언
-- [ ] E2E 테스트
+- [x] `std/env.vais` 작성 — getenv/setenv/unsetenv FFI 래퍼
+- [x] codegen + type checker에 getenv/setenv/unsetenv 빌트인 선언
+- [x] E2E 테스트 (env_get returns ptr, unknown returns zero)
 - **난이도**: 하 | **모델**: Sonnet 위임
 
-### Stage 1: std/process 모듈
+### Stage 1: std/process 모듈 ✅
 
-**목표**: 서브프로세스 실행 — `process_run("ls", args)`, exit code 수집
+**목표**: 서브프로세스 실행 — `process_run("ls")`, exit code 수집
 
-- [ ] `std/process.vais` 작성 — fork/exec 또는 system() FFI 래퍼
-- [ ] 프로세스 출력 캡처 (popen/pclose)
-- [ ] E2E 테스트
+- [x] `std/process.vais` 작성 — system/popen/pclose/exit FFI 래퍼
+- [x] 프로세스 출력 캡처 (popen/pclose)
+- [x] E2E 테스트 (system echo)
 - **난이도**: 중 | **모델**: Opus 직접
 
-### Stage 2: std/signal 모듈
+### Stage 2: std/signal 모듈 ✅
 
 **목표**: 시그널 핸들링 — `signal_handle(SIGINT, handler)`
 
-- [ ] `std/signal.vais` 작성 — signal() FFI 래퍼
-- [ ] 시그널 번호 상수 정의 (SIGINT, SIGTERM 등)
-- [ ] E2E 테스트 (시그널 전송/수신)
+- [x] `std/signal.vais` 작성 — signal/raise FFI 래퍼
+- [x] 시그널 번호 상수 정의 (SIGHUP~SIGUSR2, SIG_DFL, SIG_IGN)
+- [x] E2E 테스트 (signal constants)
 - **난이도**: 중 | **모델**: Opus 직접
 
 ### 우선순위

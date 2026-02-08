@@ -475,6 +475,62 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     module.add_function("time", i64_type.fn_type(&[i8_ptr.into()], false), None);
     module.add_function("clock", i64_type.fn_type(&[], false), None);
 
+    // ===== System functions (env/process/signal) =====
+    // getenv(name) -> ptr (NULL if not found)
+    module.add_function(
+        "getenv",
+        i8_ptr.fn_type(&[i8_ptr.into()], false),
+        None,
+    );
+    // setenv(name, value, overwrite) -> i32
+    module.add_function(
+        "setenv",
+        i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into(), i32_type.into()], false),
+        None,
+    );
+    // unsetenv(name) -> i32
+    module.add_function(
+        "unsetenv",
+        i32_type.fn_type(&[i8_ptr.into()], false),
+        None,
+    );
+    // system(command) -> i32
+    module.add_function(
+        "system",
+        i32_type.fn_type(&[i8_ptr.into()], false),
+        None,
+    );
+    // popen(command, mode) -> FILE*
+    module.add_function(
+        "popen",
+        i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false),
+        None,
+    );
+    // pclose(stream) -> i32
+    module.add_function(
+        "pclose",
+        i32_type.fn_type(&[i8_ptr.into()], false),
+        None,
+    );
+    // exit(status) -> void
+    module.add_function(
+        "exit",
+        void_type.fn_type(&[i32_type.into()], false),
+        None,
+    );
+    // signal(signum, handler) -> ptr
+    module.add_function(
+        "signal",
+        i8_ptr.fn_type(&[i32_type.into(), i8_ptr.into()], false),
+        None,
+    );
+    // raise(signum) -> i32
+    module.add_function(
+        "raise",
+        i32_type.fn_type(&[i32_type.into()], false),
+        None,
+    );
+
     // ===== Network functions =====
     module.add_function(
         "socket",

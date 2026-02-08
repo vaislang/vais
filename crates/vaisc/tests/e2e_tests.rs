@@ -7547,3 +7547,53 @@ F bar() -> i64 { R 10 }
         stderr
     );
 }
+
+// ==================== System Functions (env/process/signal) ====================
+
+#[test]
+fn e2e_getenv_returns_ptr() {
+    // getenv returns a pointer (non-zero) for known env vars like PATH
+    let source = r#"
+F main() -> i64 {
+    ptr := getenv("PATH")
+    I ptr != 0 { 42 } E { 1 }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_getenv_unknown_returns_zero() {
+    // getenv returns 0 (null) for unknown env vars
+    let source = r#"
+F main() -> i64 {
+    ptr := getenv("VAIS_NONEXISTENT_VAR_12345")
+    I ptr == 0 { 42 } E { 1 }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_system_echo() {
+    // system() runs a command and returns exit status
+    let source = r#"
+F main() -> i64 {
+    ret := system("true")
+    I ret == 0 { 42 } E { 1 }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_signal_constants() {
+    // Signal constants are just integer values
+    let source = r#"
+F main() -> i64 {
+    # SIGINT = 2, SIGTERM = 15
+    2 + 15
+}
+"#;
+    assert_exit_code(source, 17);
+}

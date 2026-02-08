@@ -1,0 +1,25 @@
+# Process execution operations
+# Uses C standard library system/popen/pclose via extern
+
+# Run a shell command and return its exit status
+# Returns the exit status (0 = success)
+F process_run(command: str) -> i32 {
+    system(command)
+}
+
+# Run a command and capture its output
+# Returns a file handle for reading output (0 on error)
+F process_open(command: str) -> i64 {
+    popen(command, "r")
+}
+
+# Close a process handle and get exit status
+# Returns the exit status
+F process_close(handle: i64) -> i32 {
+    pclose(handle)
+}
+
+# Exit the current process with a status code
+F process_exit(status: i32) {
+    exit(status)
+}

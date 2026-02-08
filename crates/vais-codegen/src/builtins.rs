@@ -96,6 +96,7 @@ impl CodeGenerator {
         self.register_async_functions();
         self.register_simd_functions();
         self.register_gc_functions();
+        self.register_system_functions();
     }
 
     fn register_io_functions(&mut self) {
@@ -1221,5 +1222,84 @@ impl CodeGenerator {
         );
 
         register_extern!(self, "vais_gc_print_stats", vec![], ResolvedType::I64);
+    }
+
+    fn register_system_functions(&mut self) {
+        // Environment variable functions
+        register_extern!(
+            self,
+            "getenv",
+            vec![("name".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        register_extern!(
+            self,
+            "setenv",
+            vec![
+                ("name".to_string(), ResolvedType::Str),
+                ("value".to_string(), ResolvedType::Str),
+                ("overwrite".to_string(), ResolvedType::I32),
+            ],
+            ResolvedType::I32
+        );
+
+        register_extern!(
+            self,
+            "unsetenv",
+            vec![("name".to_string(), ResolvedType::Str)],
+            ResolvedType::I32
+        );
+
+        // Process execution functions
+        register_extern!(
+            self,
+            "system",
+            vec![("command".to_string(), ResolvedType::Str)],
+            ResolvedType::I32
+        );
+
+        register_extern!(
+            self,
+            "popen",
+            vec![
+                ("command".to_string(), ResolvedType::Str),
+                ("mode".to_string(), ResolvedType::Str),
+            ],
+            ResolvedType::I64
+        );
+
+        register_extern!(
+            self,
+            "pclose",
+            vec![("stream".to_string(), ResolvedType::I64)],
+            ResolvedType::I32
+        );
+
+        // Exit
+        register_extern!(
+            self,
+            "exit",
+            vec![("status".to_string(), ResolvedType::I32)],
+            ResolvedType::Unit
+        );
+
+        // Signal handling
+        register_extern!(
+            self,
+            "signal",
+            vec![
+                ("signum".to_string(), ResolvedType::I32),
+                ("handler".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        register_extern!(
+            self,
+            "raise",
+            vec![("signum".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
     }
 }

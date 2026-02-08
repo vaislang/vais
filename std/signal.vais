@@ -1,0 +1,35 @@
+# Signal handling operations
+# Uses C standard library signal/raise via extern
+
+# POSIX signal number constants
+C SIGHUP: i32 = 1     # Hangup
+C SIGINT: i32 = 2     # Interrupt (Ctrl+C)
+C SIGQUIT: i32 = 3    # Quit
+C SIGILL: i32 = 4     # Illegal instruction
+C SIGTRAP: i32 = 5    # Trace trap
+C SIGABRT: i32 = 6    # Abort
+C SIGFPE: i32 = 8     # Floating point exception
+C SIGKILL: i32 = 9    # Kill (cannot be caught)
+C SIGBUS: i32 = 10    # Bus error
+C SIGSEGV: i32 = 11   # Segmentation fault
+C SIGPIPE: i32 = 13   # Broken pipe
+C SIGALRM: i32 = 14   # Alarm clock
+C SIGTERM: i32 = 15   # Termination
+C SIGUSR1: i32 = 30   # User-defined signal 1
+C SIGUSR2: i32 = 31   # User-defined signal 2
+
+# Special signal handler values
+C SIG_DFL: i64 = 0    # Default signal handling
+C SIG_IGN: i64 = 1    # Ignore signal
+
+# Register a signal handler
+# Returns previous handler (0 for default, 1 for ignore)
+F signal_handle(signum: i32, handler: i64) -> i64 {
+    signal(signum, handler)
+}
+
+# Send a signal to the current process
+# Returns 0 on success, -1 on error
+F signal_raise(signum: i32) -> i32 {
+    raise(signum)
+}
