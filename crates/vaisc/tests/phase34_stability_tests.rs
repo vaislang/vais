@@ -24,24 +24,6 @@ fn compile_strict(source: &str) -> Result<String, String> {
     Ok(ir)
 }
 
-/// Compile Vais source to LLVM IR with warn-only ownership
-fn compile_warn_only(source: &str) -> Result<String, String> {
-    let _tokens = tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
-    let module = parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
-    let mut checker = TypeChecker::new();
-    // warn-only: ownership issues are warnings, not errors
-    checker.set_strict_ownership(false);
-    checker
-        .check_module(&module)
-        .map_err(|e| format!("Type error: {:?}", e))?;
-    let mut gen = CodeGenerator::new("warn_test");
-    gen.set_resolved_functions(checker.get_all_functions().clone());
-    let ir = gen
-        .generate_module(&module)
-        .map_err(|e| format!("Codegen error: {:?}", e))?;
-    Ok(ir)
-}
-
 // ============================================
 // Strict mode: valid programs should compile
 // ============================================

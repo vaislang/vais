@@ -109,6 +109,8 @@ examples/void_phi_assert
 examples/http_server_example
 examples/projects/benchmark/benchmark
 examples/projects/benchmark/benchmark_c
+examples/projects/benchmark/benchmark_o2
+examples/projects/benchmark/benchmark_rs
 examples/projects/num-convert/file_stats
 examples/projects/num-convert/num_convert
 
