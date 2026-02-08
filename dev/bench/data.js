@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770520325451,
+  "lastUpdate": 1770521286328,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -11255,6 +11255,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1816086,
             "range": "± 18766",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "f0fdd2ac34d89647efd199e23af39c72952f1470",
+          "message": "bench: SIMD vector distance benchmarks with NEON/AVX2, 357 E2E tests (Phase 49 Stage 1)\n\nAdd criterion benchmarks for 1536-dim f32 vector operations (dot product, cosine distance, L2 distance) comparing scalar vs SIMD4/SIMD8/NEON-FMA/AVX2-FMA. NEON achieves 3.0-3.4x speedup. Add Vais SIMD IR generation verification tests and simd_distance.vais example.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-08T12:21:18+09:00",
+          "tree_id": "e51d3fc9a08825dd7dd050d1fa8d266d6062a669",
+          "url": "https://github.com/vaislang/vais/commit/f0fdd2ac34d89647efd199e23af39c72952f1470"
+        },
+        "date": 1770521286024,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2408,
+            "range": "± 28",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5323,
+            "range": "± 70",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6252,
+            "range": "± 237",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11124,
+            "range": "± 84",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17870,
+            "range": "± 222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33958,
+            "range": "± 252",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30267,
+            "range": "± 771",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66502,
+            "range": "± 486",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 287530,
+            "range": "± 1568",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 436721,
+            "range": "± 1806",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 107405,
+            "range": "± 954",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 749966,
+            "range": "± 6754",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 160571,
+            "range": "± 540",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 185676,
+            "range": "± 722",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 196115,
+            "range": "± 2208",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 237279,
+            "range": "± 1017",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 513248,
+            "range": "± 2251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 718181,
+            "range": "± 2200",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 392147,
+            "range": "± 1879",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1137209,
+            "range": "± 13672",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39112,
+            "range": "± 245",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 196819,
+            "range": "± 1401",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 380786,
+            "range": "± 2656",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1843141,
+            "range": "± 16885",
             "unit": "ns/iter"
           }
         ]
