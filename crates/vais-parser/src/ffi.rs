@@ -36,7 +36,11 @@ impl Parser {
     }
 
     /// Parse extern function declaration: `F name(params) -> ret_type;`
+    /// Supports attributes like `#[wasm_import("env", "js_alert")]` before the function keyword.
     fn parse_extern_function(&mut self) -> ParseResult<ExternFunction> {
+        // Parse optional attributes before function keyword
+        let attributes = self.parse_attributes()?;
+
         self.expect(&Token::Function)?;
 
         let name = self.parse_ident()?;
@@ -64,6 +68,7 @@ impl Parser {
             params,
             ret_type,
             is_vararg,
+            attributes,
         })
     }
 
@@ -224,6 +229,139 @@ mod tests {
                 assert_eq!(block.functions[1].name.node, "free");
                 assert_eq!(block.functions[2].name.node, "printf");
                 assert!(block.functions[2].is_vararg);
+            }
+            _ => panic!("Expected extern block"),
+        }
+    }
+
+    #[test]
+    fn test_wasm_import_attribute_on_extern_function() {
+        let source = r#"
+        N "C" {
+            #[wasm_import("env", "js_alert")]
+            F alert(msg: *i8);
+        }
+        "#;
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse_module().unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].node {
+            Item::ExternBlock(block) => {
+                assert_eq!(block.functions.len(), 1);
+                let func = &block.functions[0];
+                assert_eq!(func.name.node, "alert");
+                assert_eq!(func.attributes.len(), 1);
+                assert_eq!(func.attributes[0].name, "wasm_import");
+                assert_eq!(func.attributes[0].args, vec!["env", "js_alert"]);
+            }
+            _ => panic!("Expected extern block"),
+        }
+    }
+
+    #[test]
+    fn test_wasm_export_attribute_on_function() {
+        let source = r#"
+        #[wasm_export("add")]
+        F add(a: i64, b: i64) -> i64 = a + b
+        "#;
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse_module().unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].node {
+            Item::Function(f) => {
+                assert_eq!(f.name.node, "add");
+                assert_eq!(f.attributes.len(), 1);
+                assert_eq!(f.attributes[0].name, "wasm_export");
+                assert_eq!(f.attributes[0].args, vec!["add"]);
+            }
+            _ => panic!("Expected function"),
+        }
+    }
+
+    #[test]
+    fn test_wasm_import_no_args() {
+        // wasm_import with no args uses function name as import name
+        let source = r#"
+        N "C" {
+            #[wasm_import]
+            F console_log(msg: *i8);
+        }
+        "#;
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse_module().unwrap();
+
+        match &module.items[0].node {
+            Item::ExternBlock(block) => {
+                let func = &block.functions[0];
+                assert_eq!(func.attributes.len(), 1);
+                assert_eq!(func.attributes[0].name, "wasm_import");
+                assert!(func.attributes[0].args.is_empty());
+            }
+            _ => panic!("Expected extern block"),
+        }
+    }
+
+    #[test]
+    fn test_wasm_export_on_single_extern() {
+        // X F syntax with wasm_export attribute
+        let source = r#"
+        #[wasm_export("greet")]
+        X F greet(name: *i8) -> i64
+        "#;
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse_module().unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].node {
+            Item::ExternBlock(block) => {
+                let func = &block.functions[0];
+                assert_eq!(func.name.node, "greet");
+                assert_eq!(func.attributes.len(), 1);
+                assert_eq!(func.attributes[0].name, "wasm_export");
+                assert_eq!(func.attributes[0].args, vec!["greet"]);
+            }
+            _ => panic!("Expected extern block"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_wasm_attributes() {
+        let source = r#"
+        N "C" {
+            #[wasm_import("env", "fetch")]
+            F js_fetch(url: *i8) -> i64;
+
+            F malloc(size: i64) -> *i8;
+
+            #[wasm_import("env", "setTimeout")]
+            F js_set_timeout(callback: i64, ms: i64);
+        }
+        "#;
+        let tokens = tokenize(source).unwrap();
+        let mut parser = Parser::new(tokens);
+        let module = parser.parse_module().unwrap();
+
+        match &module.items[0].node {
+            Item::ExternBlock(block) => {
+                assert_eq!(block.functions.len(), 3);
+                // First has wasm_import
+                assert_eq!(block.functions[0].attributes.len(), 1);
+                assert_eq!(block.functions[0].attributes[0].name, "wasm_import");
+                // Second has no attributes
+                assert!(block.functions[1].attributes.is_empty());
+                // Third has wasm_import
+                assert_eq!(block.functions[2].attributes.len(), 1);
+                assert_eq!(block.functions[2].attributes[0].name, "wasm_import");
+                assert_eq!(
+                    block.functions[2].attributes[0].args,
+                    vec!["env", "setTimeout"]
+                );
             }
             _ => panic!("Expected extern block"),
         }

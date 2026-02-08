@@ -1298,38 +1298,38 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 
 ---
 
-## Phase 59: WASM ↔ JS Interop 📋 예정
+## Phase 59: WASM ↔ JS Interop ✅ 완료
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: WASM 모듈에서 JS 함수를 호출(import)하고, Vais 함수를 JS에서 호출(export)할 수 있는 FFI 메커니즘 구현
 > **선행**: Phase 57 (WASM 타겟 지원)
 
 ### Stage 0: Import — JS 함수를 Vais에서 호출
 
-- [ ] 1. `#[wasm_import]` 어트리뷰트 파서 지원
-  대상: vais-parser, vais-ast (어트리뷰트 확장)
-- [ ] 2. WASM import 섹션 코드 생성
-  대상: vais-codegen (WASM import table 생성)
-- [ ] 3. JS↔WASM 타입 직렬화 레이어
-  대상: 신규 모듈 (str, struct, array 등 경계 넘어 전달)
+- [x] 1. `#[wasm_import]` 어트리뷰트 파서 지원 ✅ 2026-02-09
+  변경: vais-ast/lib.rs (ExternFunction에 attributes 필드 추가), vais-parser/ffi.rs (extern 함수 어트리뷰트 파싱), vais-parser/item.rs (String literal 어트리뷰트 인자 지원)
+- [x] 2. WASM import 섹션 코드 생성 ✅ 2026-02-09
+  변경: vais-codegen/lib.rs (wasm_imports HashMap + generate_wasm_metadata), vais-codegen/registration.rs (wasm_import 어트리뷰트 처리)
+- [x] 3. JS↔WASM 타입 직렬화 레이어 ✅ 2026-02-09
+  변경: vais-codegen/wasm_component.rs (WasmSerializer 구조체 — wit_type_size/generate_js_write/read/generate_js_serde_module/generate_wasm_serde_ir)
 
 ### Stage 1: Export — Vais 함수를 JS에서 호출
 
-- [ ] 4. `#[wasm_export]` 어트리뷰트 파서 지원
-  대상: vais-parser, vais-ast
-- [ ] 5. WASM export 섹션 코드 생성
-  대상: vais-codegen (함수 시그니처 노출)
-- [ ] 6. JS 글루 코드 자동 생성 (.js 바인딩 파일)
-  대상: vais-bindgen 확장 또는 신규 모듈
+- [x] 4. `#[wasm_export]` 어트리뷰트 파서 지원 ✅ 2026-02-09
+  변경: vais-parser/ffi.rs (wasm_export 파싱 — Task 1과 동시 구현), vais-parser/item.rs (parse_single_extern_function에 attributes 전달)
+- [x] 5. WASM export 섹션 코드 생성 ✅ 2026-02-09
+  변경: vais-codegen/lib.rs (wasm_exports HashMap + wasm-export-name LLVM 어트리뷰트), vais-codegen/registration.rs (register_function에 wasm_export 처리)
+- [x] 6. JS 글루 코드 자동 생성 (.js 바인딩 파일) ✅ 2026-02-09
+  변경: vais-bindgen/wasm_js.rs (신규 — WasmJsBindgen + createImports/load/dts 생성)
 
 ### Stage 2: 표준 웹 바인딩 & 검증
 
-- [ ] 7. `std/web.vais` — 기본 웹 API 바인딩 (console, setTimeout, fetch)
-  대상: std/web.vais (신규)
-- [ ] 8. E2E 테스트 — 브라우저에서 WASM 모듈 로드 & JS 상호작용
-  대상: tests/wasm_interop/
+- [x] 7. `std/web.vais` — 기본 웹 API 바인딩 (console, setTimeout, fetch) ✅ 2026-02-09
+  변경: std/web.vais (신규 350줄 — Console/Timer/DOM/Fetch/Storage/Window/Canvas API 바인딩)
+- [x] 8. E2E 테스트 — 브라우저에서 WASM 모듈 로드 & JS 상호작용 ✅ 2026-02-09
+  변경: vaisc/tests/e2e_tests.rs (+9개 E2E: import/export/metadata/serializer/bindgen)
 
-진행률: 0/8 (0%)
+진행률: 8/8 (100%)
 
 ---
 

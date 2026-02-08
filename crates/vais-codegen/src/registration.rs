@@ -55,8 +55,10 @@ impl CodeGenerator {
             ResolvedType::Unit
         };
 
+        let func_name = f.name.node.to_string();
+
         self.functions.insert(
-            f.name.node.to_string(),
+            func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
                     name: f.name.node.to_string(),
@@ -84,6 +86,14 @@ impl CodeGenerator {
                 _extern_abi: None,
             },
         );
+
+        // Check for wasm_export attribute
+        for attr in &f.attributes {
+            if attr.name == "wasm_export" {
+                let export_name = attr.args.first().cloned().unwrap_or_else(|| func_name.clone());
+                self.wasm_exports.insert(func_name.clone(), export_name);
+            }
+        }
 
         Ok(())
     }
@@ -298,7 +308,7 @@ impl CodeGenerator {
         };
 
         self.functions.insert(
-            func_name,
+            func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
                     name: func.name.node.to_string(),
@@ -317,6 +327,15 @@ impl CodeGenerator {
                 _extern_abi: Some(abi.to_string()),
             },
         );
+
+        // Check for wasm_import attribute
+        for attr in &func.attributes {
+            if attr.name == "wasm_import" {
+                let module_name = attr.args.first().cloned().unwrap_or_else(|| "env".to_string());
+                let import_name = attr.args.get(1).cloned().unwrap_or_else(|| func_name.clone());
+                self.wasm_imports.insert(func_name.clone(), (module_name, import_name));
+            }
+        }
 
         Ok(())
     }

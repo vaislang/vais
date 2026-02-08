@@ -52,7 +52,7 @@ impl Parser {
             // Check if this is an extern function declaration (X F name(...))
             if self.check(&Token::Function) {
                 self.advance();
-                Item::ExternBlock(self.parse_single_extern_function()?)
+                Item::ExternBlock(self.parse_single_extern_function(attributes)?)
             } else {
                 Item::Impl(self.parse_impl()?)
             }
@@ -132,9 +132,11 @@ impl Parser {
             let mut args = Vec::new();
             while !self.check(&Token::RParen) && !self.is_at_end() {
                 if let Some(tok) = self.peek() {
-                    // Accept identifiers and single-letter keywords as attribute args
+                    // Accept identifiers, string literals, and single-letter keywords as attribute args
                     let arg = match &tok.token {
                         Token::Ident(s) => Some(s.clone()),
+                        // String literals for wasm_import/wasm_export module/name args
+                        Token::String(s) => Some(s.clone()),
                         // Single-letter keywords can be attribute args (e.g., repr(C))
                         Token::Continue => Some("C".to_string()),
                         Token::Function => Some("F".to_string()),
@@ -485,7 +487,10 @@ impl Parser {
     /// Parse a single extern function declaration: `X F name(params) -> RetType`
     /// This is a shorthand for declaring an extern function without a body.
     /// Returns an ExternBlock containing the single function.
-    fn parse_single_extern_function(&mut self) -> ParseResult<ExternBlock> {
+    fn parse_single_extern_function(
+        &mut self,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<ExternBlock> {
         let name = self.parse_ident()?;
 
         // Parse parameters
@@ -508,6 +513,7 @@ impl Parser {
                 params,
                 ret_type,
                 is_vararg,
+                attributes,
             }],
         })
     }

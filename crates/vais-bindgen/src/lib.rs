@@ -1,6 +1,7 @@
 pub mod config;
 pub mod generator;
 pub mod parser;
+pub mod wasm_js;
 
 pub use config::BindgenConfig;
 use generator::Generator;

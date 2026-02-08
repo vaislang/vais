@@ -897,6 +897,12 @@ pub struct CodeGenerator {
 
     // Module-specific prefix for string constants (avoids collisions in multi-module builds)
     string_prefix: Option<String>,
+
+    // WASM import metadata: function_name -> (module_name, import_name)
+    pub(crate) wasm_imports: HashMap<String, (String, String)>,
+
+    // WASM export metadata: function_name -> export_name
+    pub(crate) wasm_exports: HashMap<String, String>,
 }
 
 /// Information about a function's decreases clause for termination proof
@@ -981,6 +987,8 @@ impl CodeGenerator {
             generic_function_templates: HashMap::new(),
             resolved_function_sigs: HashMap::new(),
             string_prefix: None,
+            wasm_imports: HashMap::new(),
+            wasm_exports: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -1047,6 +1055,37 @@ impl CodeGenerator {
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
     pub fn set_string_prefix(&mut self, prefix: &str) {
         self.string_prefix = Some(prefix.to_string());
+    }
+
+    /// Generate WASM import/export attribute sections
+    pub(crate) fn generate_wasm_metadata(&self) -> String {
+        let mut ir = String::new();
+
+        if self.wasm_imports.is_empty() && self.wasm_exports.is_empty() {
+            return ir;
+        }
+
+        // Generate WASM import attributes using custom section metadata
+        // These are recognized by LLVM's WASM backend
+        let mut attr_idx = 1;
+        for (module_name, import_name) in self.wasm_imports.values() {
+            ir.push_str(&format!(
+                "attributes #{} = {{ \"wasm-import-module\"=\"{}\" \"wasm-import-name\"=\"{}\" }}\n",
+                attr_idx, module_name, import_name
+            ));
+            attr_idx += 1;
+        }
+
+        // Generate WASM export annotations
+        for export_name in self.wasm_exports.values() {
+            ir.push_str(&format!(
+                "attributes #{} = {{ \"wasm-export-name\"=\"{}\" }}\n",
+                attr_idx, export_name
+            ));
+            attr_idx += 1;
+        }
+
+        ir
     }
 
     /// Generate a unique string constant name, with optional module prefix
@@ -1393,6 +1432,12 @@ impl CodeGenerator {
 
         if !self.target.is_wasm() {
             ir.push_str(&self.debug_info.finalize());
+        }
+
+        // Add WASM import/export metadata attributes
+        if self.target.is_wasm() && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty()) {
+            ir.push_str("\n; WASM import/export metadata\n");
+            ir.push_str(&self.generate_wasm_metadata());
         }
 
         Ok(ir)
@@ -2044,6 +2089,14 @@ impl CodeGenerator {
         // Add debug metadata at the end
         if !self.target.is_wasm() {
             ir.push_str(&self.debug_info.finalize());
+        }
+
+        // Add WASM import/export metadata attributes
+        if self.target.is_wasm()
+            && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty())
+        {
+            ir.push_str("\n; WASM import/export metadata\n");
+            ir.push_str(&self.generate_wasm_metadata());
         }
 
         // Add ABI version metadata

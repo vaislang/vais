@@ -11959,3 +11959,257 @@ F main() -> i64 {
     assert!(ir.contains("store"));
     assert!(ir.contains("load"));
 }
+
+// ============================================================================
+// Phase 59: WASM ↔ JS Interop E2E Tests
+// ============================================================================
+
+#[test]
+fn test_wasm_import_attribute_extern_function() {
+    let source = r#"
+N "C" {
+    #[wasm_import("env", "js_alert")]
+    F alert(msg: *i8);
+}
+
+F main() -> i64 {
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("target triple = \"wasm32-unknown-unknown\""));
+    assert!(ir.contains("wasm-import-module"));
+    assert!(ir.contains("wasm-import-name"));
+}
+
+#[test]
+fn test_wasm_export_attribute_function() {
+    let source = r#"
+#[wasm_export("add")]
+F add(a: i64, b: i64) -> i64 = a + b
+
+F main() -> i64 {
+    R add(1, 2)
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("define i64 @add(i64 %a, i64 %b)"));
+    assert!(ir.contains("wasm-export-name"));
+}
+
+#[test]
+fn test_wasm_import_default_module() {
+    // wasm_import with no args defaults to "env" module and function name
+    let source = r#"
+N "C" {
+    #[wasm_import]
+    F console_log(ptr: *i8, len: i64);
+}
+
+F main() -> i64 {
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    let ir = gen.generate_module(&module).unwrap();
+    // Should use "env" as default module
+    assert!(ir.contains("wasm-import-module"));
+    assert!(ir.contains("env"));
+}
+
+#[test]
+fn test_wasm_import_custom_module() {
+    let source = r#"
+N "C" {
+    #[wasm_import("wasi_snapshot_preview1", "fd_write")]
+    F fd_write(fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32;
+}
+
+F main() -> i64 {
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("wasi_snapshot_preview1"));
+    assert!(ir.contains("fd_write"));
+}
+
+#[test]
+fn test_wasm_export_with_no_args() {
+    // wasm_export with no args uses function name as export name
+    let source = r#"
+#[wasm_export]
+F greet() -> i64 = 42
+
+F main() -> i64 {
+    R greet()
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("wasm-export-name"));
+    assert!(ir.contains("greet"));
+}
+
+#[test]
+fn test_wasm_multiple_imports_exports() {
+    let source = r#"
+N "C" {
+    #[wasm_import("env", "js_log")]
+    F js_log(ptr: *i8, len: i64);
+
+    #[wasm_import("env", "js_alert")]
+    F js_alert(ptr: *i8, len: i64);
+}
+
+#[wasm_export("add")]
+F add(a: i64, b: i64) -> i64 = a + b
+
+#[wasm_export("multiply")]
+F multiply(a: i64, b: i64) -> i64 = a * b
+
+F main() -> i64 {
+    R add(2, 3) + multiply(4, 5)
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    let ir = gen.generate_module(&module).unwrap();
+    // Should have both import and export metadata
+    assert!(ir.contains("wasm-import-module"));
+    assert!(ir.contains("wasm-export-name"));
+    // Function definitions
+    assert!(ir.contains("define i64 @add"));
+    assert!(ir.contains("define i64 @multiply"));
+}
+
+#[test]
+fn test_wasm_import_not_on_native_target() {
+    // wasm_import attributes should NOT produce metadata on native target
+    let source = r#"
+N "C" {
+    #[wasm_import("env", "js_alert")]
+    F alert(msg: *i8);
+}
+
+F main() -> i64 {
+    R 0
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Native target should NOT have wasm metadata
+    assert!(!ir.contains("wasm-import-module"));
+    assert!(!ir.contains("wasm-export-name"));
+}
+
+#[test]
+fn test_wasm_bindgen_js_generation() {
+    // Test JS binding generation
+    use vais_bindgen::wasm_js::{WasmExportInfo, WasmImportInfo, WasmJsBindgen};
+
+    let mut gen = WasmJsBindgen::new("math_module");
+    gen.add_export(WasmExportInfo {
+        wasm_name: "add".to_string(),
+        js_name: "add".to_string(),
+        params: vec![
+            ("a".to_string(), "i64".to_string()),
+            ("b".to_string(), "i64".to_string()),
+        ],
+        return_type: Some("i64".to_string()),
+    });
+    gen.add_import(WasmImportInfo {
+        module: "env".to_string(),
+        name: "console_log".to_string(),
+        vais_name: "console_log".to_string(),
+        params: vec!["i64".to_string(), "i64".to_string()],
+        return_type: None,
+    });
+
+    let js = gen.generate_js();
+    assert!(js.contains("createImports"));
+    assert!(js.contains("WebAssembly.instantiate"));
+    assert!(js.contains("add: (a, b) => instance.exports.add(a, b)"));
+    assert!(js.contains("console_log"));
+
+    let dts = gen.generate_dts();
+    assert!(js.contains("load"));
+    assert!(dts.contains("Math_moduleModule"));
+    assert!(dts.contains("add(a: number, b: number): number"));
+}
+
+#[test]
+fn test_wasm_serializer_types() {
+    // Test WasmSerializer type infrastructure
+    use vais_codegen::wasm_component::{WasmSerializer, WitType};
+
+    let ser = WasmSerializer::new();
+
+    // Primitive type sizes
+    assert_eq!(ser.wit_type_size(&WitType::Bool), 1);
+    assert_eq!(ser.wit_type_size(&WitType::S32), 4);
+    assert_eq!(ser.wit_type_size(&WitType::S64), 8);
+    assert_eq!(ser.wit_type_size(&WitType::F64), 8);
+
+    // Complex type sizes (ptr + len for wasm32)
+    assert_eq!(ser.wit_type_size(&WitType::String), 8);
+    assert_eq!(
+        ser.wit_type_size(&WitType::List(Box::new(WitType::S32))),
+        8
+    );
+
+    // Alignment
+    assert_eq!(ser.aligned_size(&WitType::Bool), 4); // 1 → 4
+
+    // JS read/write code gen
+    let write = ser.generate_js_write(&WitType::S32, "x", "offset");
+    assert!(write.contains("setInt32"));
+
+    let read = ser.generate_js_read(&WitType::String, "offset");
+    assert!(read.contains("decoder.decode"));
+
+    // Full serde module
+    let module = ser.generate_js_serde_module();
+    assert!(module.contains("class WasmSerde"));
+    assert!(module.contains("writeString"));
+    assert!(module.contains("readResult"));
+
+    // IR types
+    let ir = ser.generate_wasm_serde_ir();
+    assert!(ir.contains("%WasmString"));
+    assert!(ir.contains("%WasmResult"));
+}

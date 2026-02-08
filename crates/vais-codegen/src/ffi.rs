@@ -459,6 +459,7 @@ mod tests {
                     Span::new(0, 3),
                 )),
                 is_vararg: false,
+                attributes: vec![],
             }],
         };
 
@@ -501,6 +502,7 @@ mod tests {
                     Span::new(0, 3),
                 )),
                 is_vararg: true,
+                attributes: vec![],
             }],
         };
 
@@ -648,6 +650,7 @@ mod tests {
                     Span::new(0, 3),
                 )),
                 is_vararg: false,
+                attributes: vec![],
             }],
         };
 
@@ -680,5 +683,66 @@ mod tests {
         assert!(fn_ptr_type.contains("..."));
         assert!(fn_ptr_type.contains("i32"));
         assert!(fn_ptr_type.contains("i8*"));
+    }
+
+    #[test]
+    fn test_wasm_import_registration() {
+        use crate::TargetTriple;
+
+        let mut gen = CodeGenerator::new_with_target("test", TargetTriple::Wasm32Unknown);
+
+        let func = ExternFunction {
+            name: Spanned::new("js_alert".to_string(), Span::new(0, 8)),
+            params: vec![Param {
+                name: Spanned::new("msg".to_string(), Span::new(0, 3)),
+                ty: Spanned::new(
+                    Type::Pointer(Box::new(Spanned::new(
+                        Type::Named { name: "i8".to_string(), generics: vec![] },
+                        Span::new(0, 2),
+                    ))),
+                    Span::new(0, 3),
+                ),
+                is_mut: false,
+                is_vararg: false,
+                ownership: Ownership::Regular,
+                default_value: None,
+            }],
+            ret_type: None,
+            is_vararg: false,
+            attributes: vec![Attribute {
+                name: "wasm_import".to_string(),
+                args: vec!["env".to_string(), "js_alert".to_string()],
+                expr: None,
+            }],
+        };
+
+        gen.register_extern_function(&func, "C").unwrap();
+        assert!(gen.wasm_imports.contains_key("js_alert"));
+        let (module, name) = gen.wasm_imports.get("js_alert").unwrap();
+        assert_eq!(module, "env");
+        assert_eq!(name, "js_alert");
+    }
+
+    #[test]
+    fn test_wasm_export_metadata() {
+        use crate::TargetTriple;
+
+        let gen = CodeGenerator::new_with_target("test", TargetTriple::Wasm32Unknown);
+        // wasm_exports is initially empty
+        assert!(gen.wasm_exports.is_empty());
+    }
+
+    #[test]
+    fn test_wasm_metadata_generation() {
+        use crate::TargetTriple;
+
+        let mut gen = CodeGenerator::new_with_target("test", TargetTriple::Wasm32Unknown);
+        gen.wasm_imports.insert("js_alert".to_string(), ("env".to_string(), "alert".to_string()));
+        gen.wasm_exports.insert("add".to_string(), "add".to_string());
+
+        let metadata = gen.generate_wasm_metadata();
+        assert!(metadata.contains("wasm-import-module"));
+        assert!(metadata.contains("wasm-import-name"));
+        assert!(metadata.contains("wasm-export-name"));
     }
 }
