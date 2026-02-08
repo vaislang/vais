@@ -12,7 +12,7 @@ cranelift = "0.115"
 cranelift-jit = "0.115"
 cranelift-module = "0.115"
 cranelift-native = "0.115"
-cranelift-codegen = "0.115"
+cranelift-codegen = "0.128"
 
 # Vais crates
 vais-ast = { path = "../vais-ast" }
