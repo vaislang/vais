@@ -163,6 +163,63 @@ impl PgoMode {
     }
 }
 
+/// Source-based code coverage mode
+///
+/// Uses LLVM's Source-Based Code Coverage (clang -fprofile-instr-generate -fcoverage-mapping).
+///
+/// # Workflow
+/// ```bash
+/// # 1. Build with coverage instrumentation
+/// vaisc build --coverage main.vais -o main_cov
+///
+/// # 2. Run the instrumented binary (generates .profraw)
+/// LLVM_PROFILE_FILE="coverage/%m.profraw" ./main_cov
+///
+/// # 3. Merge profiles and generate report
+/// llvm-profdata merge -output=coverage.profdata coverage/*.profraw
+/// llvm-cov show ./main_cov -instr-profile=coverage.profdata
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum CoverageMode {
+    /// No coverage instrumentation
+    #[default]
+    None,
+    /// Enable coverage instrumentation
+    /// The string specifies the output directory for .profraw files (default: ./coverage)
+    Enabled(String),
+}
+
+impl CoverageMode {
+    /// Parse coverage mode from CLI argument
+    pub fn from_dir(dir: Option<&str>) -> Self {
+        CoverageMode::Enabled(dir.unwrap_or("./coverage").to_string())
+    }
+
+    /// Check if coverage is enabled
+    pub fn is_enabled(&self) -> bool {
+        matches!(self, CoverageMode::Enabled(_))
+    }
+
+    /// Get the coverage output directory
+    pub fn coverage_dir(&self) -> Option<&str> {
+        match self {
+            CoverageMode::Enabled(dir) => Some(dir),
+            CoverageMode::None => None,
+        }
+    }
+
+    /// Get clang flags for coverage instrumentation
+    pub fn clang_flags(&self) -> Vec<&'static str> {
+        match self {
+            CoverageMode::None => vec![],
+            CoverageMode::Enabled(_) => vec![
+                "-fprofile-instr-generate",
+                "-fcoverage-mapping",
+            ],
+        }
+    }
+}
+
 /// PGO configuration and helpers
 pub struct PgoConfig {
     pub mode: PgoMode,

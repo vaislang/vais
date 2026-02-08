@@ -37,6 +37,7 @@ pub(crate) fn cmd_run(
         false,
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
+        vais_codegen::optimize::CoverageMode::None,
         false,
         None,  // parallel_config
         false, // use_inkwell

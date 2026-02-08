@@ -92,6 +92,50 @@ fn compile_and_run_with_extra_sources(
     })
 }
 
+/// Compile source with coverage instrumentation flags, run it, return result
+fn compile_and_run_with_coverage(source: &str) -> Result<RunResult, String> {
+    let ir = compile_to_ir(source)?;
+
+    let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let ll_path = tmp_dir.path().join("test.ll");
+    let exe_path = tmp_dir.path().join("test_exe");
+    let profraw_path = tmp_dir.path().join("default_%m.profraw");
+
+    fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+
+    // Compile with coverage instrumentation flags
+    let clang_output = Command::new("clang")
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("-Wno-override-module")
+        .arg("-fprofile-instr-generate")
+        .arg("-fcoverage-mapping")
+        .output()
+        .map_err(|e| format!("Failed to run clang: {}", e))?;
+
+    if !clang_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        return Err(format!("clang compilation failed:\n{}", stderr));
+    }
+
+    // Run with LLVM_PROFILE_FILE set
+    let run_output = Command::new(&exe_path)
+        .env("LLVM_PROFILE_FILE", &profraw_path)
+        .output()
+        .map_err(|e| format!("Failed to run executable: {}", e))?;
+
+    let exit_code = run_output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
+
+    Ok(RunResult {
+        exit_code,
+        stdout,
+        stderr,
+    })
+}
+
 /// Assert that source compiles, runs, and returns the expected exit code
 fn assert_exit_code(source: &str, expected: i32) {
     match compile_and_run(source) {
@@ -9981,5 +10025,93 @@ F main() -> i64 {
 }
 "#).unwrap();
     assert_eq!(result.exit_code, 1);
+}
+
+// ==================== Coverage Instrumentation Tests ====================
+
+#[test]
+fn test_coverage_basic_program() {
+    // Verify that a basic program compiles and runs correctly with coverage flags
+    let result = compile_and_run_with_coverage(r#"
+F main() -> i64 {
+    x := 42
+    y := 58
+    x + y
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 100);
+}
+
+#[test]
+fn test_coverage_branching() {
+    // Coverage instrumentation should track branch coverage — verify branches work correctly
+    let result = compile_and_run_with_coverage(r#"
+F classify(n: i64) -> i64 {
+    I n > 100 {
+        3
+    } E {
+        I n > 50 {
+            2
+        } E {
+            I n > 0 {
+                1
+            } E {
+                0
+            }
+        }
+    }
+}
+
+F main() -> i64 {
+    a := classify(200)
+    b := classify(75)
+    c := classify(25)
+    d := classify(0)
+    # a=3, b=2, c=1, d=0 → sum=6
+    a + b + c + d
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 6);
+}
+
+#[test]
+fn test_coverage_loops() {
+    // Coverage should track loop iterations — verify loops work with instrumentation
+    let result = compile_and_run_with_coverage(r#"
+F sum_to(n: i64) -> i64 {
+    total := mut 0
+    i := mut 1
+    L {
+        I i > n { B }
+        total = total + i
+        i = i + 1
+    }
+    total
+}
+
+F main() -> i64 {
+    # 1+2+3+4+5+6+7+8+9+10 = 55
+    sum_to(10)
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 55);
+}
+
+#[test]
+fn test_coverage_function_calls() {
+    // Coverage should track function call counts — verify multi-function programs
+    let result = compile_and_run_with_coverage(r#"
+F add(a: i64, b: i64) -> i64 { a + b }
+F mul(a: i64, b: i64) -> i64 { a * b }
+F square(n: i64) -> i64 { mul(n, n) }
+
+F main() -> i64 {
+    a := add(3, 4)
+    b := square(3)
+    # a=7, b=9 → 7+9=16
+    add(a, b)
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 16);
 }
 

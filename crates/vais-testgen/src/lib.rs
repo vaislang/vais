@@ -10,7 +10,7 @@ mod generator;
 mod properties;
 mod shrink;
 
-pub use generator::{TestCase, TestGenerator, TestSuite};
+pub use generator::{TestCase, TestCategory, TestGenerator, TestSuite, TestValue, TypeHint};
 pub use properties::Property;
 pub use shrink::Shrinker;
 

@@ -47,6 +47,7 @@ pub(crate) fn cmd_pgo(
             false, // hot
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
+            vais_codegen::optimize::CoverageMode::None,
             false, // suggest_fixes
             None,  // parallel_config
             false, // use_inkwell
@@ -148,6 +149,7 @@ pub(crate) fn cmd_pgo(
         false, // hot
         vais_codegen::optimize::LtoMode::Thin,
         vais_codegen::optimize::PgoMode::Use(profdata_path),
+        vais_codegen::optimize::CoverageMode::None,
         false, // suggest_fixes
         None,  // parallel_config
         false, // use_inkwell
@@ -239,6 +241,7 @@ pub(crate) fn cmd_watch(
         false,
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
+        vais_codegen::optimize::CoverageMode::None,
         false,
         None,  // parallel_config
         false, // use_inkwell
@@ -330,6 +333,7 @@ pub(crate) fn cmd_watch(
                         false,
                         vais_codegen::optimize::LtoMode::None,
                         vais_codegen::optimize::PgoMode::None,
+                        vais_codegen::optimize::CoverageMode::None,
                         false,
                         None,  // parallel_config
                         false, // use_inkwell

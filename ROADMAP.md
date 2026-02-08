@@ -1026,42 +1026,31 @@ Stage 4 (vendor/package) — 독립 진행 가능
 
 ---
 
-## Phase 53: 테스트 & CI 강화 📋 예정
+## Phase 53: 테스트 & CI 강화 ✅ 완료
 
 > **목표**: 미테스트 crate 커버리지 추가, CI 파이프라인 확장
 > **선행**: Phase 51
 
-### Stage 0: 미테스트 Crate 커버리지
-
-- [ ] vais-ast 통합 테스트 추가
-- [ ] vais-security 통합 테스트 추가
-- [ ] vais-supply-chain 통합 테스트 추가
-- [ ] vais-i18n 통합 테스트 추가
-- [ ] vais-testgen 통합 테스트 추가
-- [ ] 13개 미테스트 crate 중 5개 이상 커버
-- **난이도**: 중 | **모델**: Sonnet 위임
-
-### Stage 1: CI 파이프라인 확장
-
-- [ ] ThreadSanitizer (tsan.yml) 추가
-- [ ] `cargo audit` 보안 감사 워크플로우 추가
-- [ ] Dependabot/Renovate 자동 의존성 업데이트
-- [ ] 코드 커버리지 리포팅 (llvm-cov → Codecov)
-- [ ] E2E 프로젝트 통합 테스트 (examples/ 컴파일+실행)
-- **난이도**: 중 | **모델**: Sonnet 위임
-
-### Stage 2: --coverage 플래그 구현
-
-- [ ] `vaisc build --coverage` LLVM Source-Based Coverage 계측
-- [ ] `vaisc test --coverage` 테스트 후 커버리지 리포트 생성
-- [ ] lcov/html 리포트 출력
-- [ ] E2E 3개 추가
-- **난이도**: 상 | **모델**: Opus 직접
+- [x] 1. vais-ast 통합 테스트 추가 (Sonnet 위임) ✅ 2026-02-08
+  변경: crates/vais-ast/tests/integration_tests.rs (76개 통합 테스트 추가)
+- [x] 2. vais-security 통합 테스트 확장 (Sonnet 위임) ✅ 2026-02-08
+  변경: crates/vais-security/tests/integration_tests.rs (20개 통합 테스트 추가)
+- [x] 3. vais-supply-chain/i18n/testgen 테스트 추가 (Sonnet 위임) ✅ 2026-02-08
+  변경: 3개 crate tests/integration_tests.rs (21+21+23=65개 테스트), vais-testgen/src/lib.rs (pub re-exports)
+- [x] 4. CI: tsan + audit + dependabot 추가 (Sonnet 위임) ✅ 2026-02-08
+  변경: .github/workflows/tsan.yml (신규), .github/dependabot.yml (강화)
+- [x] 5. CI: codecov 연동 + E2E 프로젝트 테스트 (Sonnet 위임) ✅ 2026-02-08
+  변경: .github/workflows/ci.yml (codecov flags, e2e-projects job 추가)
+- [x] 6. --coverage 플래그 구현 (Opus 직접) ✅ 2026-02-08
+  변경: optimize.rs (CoverageMode enum), main.rs/build.rs/compile.rs/test.rs/simple.rs/advanced.rs/pkg.rs (coverage 파라미터 전파)
+- [x] 7. E2E 테스트 추가 + 검증 (Sonnet 위임) ✅ 2026-02-08
+  변경: e2e_tests.rs (4개 coverage E2E 테스트, 392→396개)
+진행률: 7/7 (100%)
 
 ### 우선순위
 
 ```
-Stage 0 (crate 테스트) → Stage 1 (CI) → Stage 2 (coverage)
+Stage 0 (crate 테스트: 1,2,3) → Stage 1 (CI: 4,5) → Stage 2 (coverage: 6,7)
 ```
 
 ---

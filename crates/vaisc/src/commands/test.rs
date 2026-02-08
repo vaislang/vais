@@ -12,12 +12,12 @@ use crate::configure_type_checker;
 use crate::commands::build::cmd_build;
 use crate::utils::walkdir;
 
-pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), String> {
+pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
     let test_dir = if path.is_dir() {
         path.to_path_buf()
     } else if path.is_file() {
         // Single test file
-        return run_single_test(path, verbose);
+        return run_single_test(path, verbose, coverage_mode);
     } else {
         // Try relative to current directory
         let cwd = std::env::current_dir()
@@ -26,7 +26,7 @@ pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Resu
         if test_path.is_dir() {
             test_path
         } else if test_path.is_file() {
-            return run_single_test(&test_path, verbose);
+            return run_single_test(&test_path, verbose, coverage_mode);
         } else {
             return Err(format!(
                 "test path '{}' not found. Create a tests/ directory with .vais test files.",
@@ -74,7 +74,7 @@ pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Resu
     let mut errors: Vec<(PathBuf, String)> = Vec::new();
 
     for test_file in &test_files {
-        let result = run_single_test_inner(test_file, verbose);
+        let result = run_single_test_inner(test_file, verbose, coverage_mode);
         match result {
             Ok(true) => {
                 passed += 1;
@@ -101,6 +101,16 @@ pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Resu
     println!();
     if failed == 0 {
         println!("{} {} test(s) passed", "✓".green().bold(), passed);
+
+        // Print coverage instructions if enabled
+        if let Some(dir) = coverage_mode.coverage_dir() {
+            println!();
+            println!("{} Coverage data collected in: {}/", "Coverage:".cyan().bold(), dir);
+            println!("  Generate report:");
+            println!("    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw", dir, dir);
+            println!("    llvm-cov report --instr-profile={}/coverage.profdata", dir);
+        }
+
         Ok(())
     } else {
         if !errors.is_empty() && verbose {
@@ -197,6 +207,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
             false,
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::None,
+            vais_codegen::optimize::CoverageMode::None,
             false,
             None,
             false,
@@ -602,13 +613,13 @@ pub(crate) fn discover_test_files(dir: &Path, results: &mut Vec<PathBuf>) -> Res
     Ok(())
 }
 
-pub(crate) fn run_single_test(path: &Path, verbose: bool) -> Result<(), String> {
+pub(crate) fn run_single_test(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
     println!(
         "{} Running test: {}\n",
         "Testing".cyan().bold(),
         path.display()
     );
-    match run_single_test_inner(path, verbose) {
+    match run_single_test_inner(path, verbose, coverage_mode) {
         Ok(true) => {
             println!("  {} {}", "PASS".green().bold(), path.display());
             Ok(())
@@ -624,7 +635,7 @@ pub(crate) fn run_single_test(path: &Path, verbose: bool) -> Result<(), String> 
     }
 }
 
-pub(crate) fn run_single_test_inner(path: &Path, verbose: bool) -> Result<bool, String> {
+pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<bool, String> {
     use std::process::Command;
 
     // Step 1: Compile to LLVM IR
@@ -639,13 +650,20 @@ pub(crate) fn run_single_test_inner(path: &Path, verbose: bool) -> Result<bool, 
     fs::write(&ir_path, &ir).map_err(|e| format!("failed to write IR: {}", e))?;
 
     // Step 3: Compile IR to binary with clang
+    let mut clang_args = vec![
+        ir_path.to_str().unwrap().to_string(),
+        "-o".to_string(),
+        bin_path.to_str().unwrap().to_string(),
+        "-lm".to_string(),
+    ];
+
+    // Add coverage flags if enabled
+    for flag in coverage_mode.clang_flags() {
+        clang_args.push(flag.to_string());
+    }
+
     let clang_output = Command::new("clang")
-        .args([
-            ir_path.to_str().unwrap(),
-            "-o",
-            bin_path.to_str().unwrap(),
-            "-lm",
-        ])
+        .args(&clang_args)
         .output()
         .map_err(|e| format!("failed to run clang: {}", e))?;
 
@@ -654,8 +672,16 @@ pub(crate) fn run_single_test_inner(path: &Path, verbose: bool) -> Result<bool, 
         return Err(format!("clang compilation failed: {}", stderr));
     }
 
-    // Step 4: Run the binary
-    let run_output = Command::new(&bin_path)
+    // Step 4: Run the binary (with LLVM_PROFILE_FILE if coverage is enabled)
+    let mut cmd = Command::new(&bin_path);
+    if let Some(dir) = coverage_mode.coverage_dir() {
+        let cov_dir = std::path::Path::new(dir);
+        if !cov_dir.exists() {
+            let _ = std::fs::create_dir_all(cov_dir);
+        }
+        cmd.env("LLVM_PROFILE_FILE", format!("{}/{}_test_%m.profraw", dir, stem));
+    }
+    let run_output = cmd
         .output()
         .map_err(|e| format!("failed to run test binary: {}", e))?;
 

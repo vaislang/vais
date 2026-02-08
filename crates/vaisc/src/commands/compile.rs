@@ -267,6 +267,7 @@ pub(crate) fn compile_ir_to_binary(
     hot: bool,
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
     used_modules: &HashSet<String>,
     native_deps: &HashMap<String, package::NativeDependency>,
     obj_cache_dir: Option<&Path>,
@@ -285,6 +286,7 @@ pub(crate) fn compile_ir_to_binary(
             hot,
             lto_mode,
             pgo_mode,
+            coverage_mode,
             used_modules,
             native_deps,
             obj_cache_dir,
@@ -302,6 +304,7 @@ pub(crate) fn compile_to_native(
     hot: bool,
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
     used_modules: &HashSet<String>,
     native_deps: &HashMap<String, package::NativeDependency>,
     obj_cache_dir: Option<&Path>,
@@ -383,6 +386,11 @@ pub(crate) fn compile_to_native(
             link_args.push(flag);
         }
 
+        // Add coverage flags
+        for flag in coverage_mode.clang_flags() {
+            link_args.push(flag.to_string());
+        }
+
         link_args.push("-o".to_string());
         link_args.push(
             bin_path
@@ -439,6 +447,27 @@ pub(crate) fn compile_to_native(
     // Add PGO flags
     for flag in pgo_mode.clang_flags() {
         args.push(flag);
+    }
+
+    // Add coverage flags
+    for flag in coverage_mode.clang_flags() {
+        args.push(flag.to_string());
+    }
+
+    // Create coverage directory if coverage is enabled
+    if let Some(dir) = coverage_mode.coverage_dir() {
+        let coverage_path = Path::new(dir);
+        if !coverage_path.exists() {
+            std::fs::create_dir_all(coverage_path)
+                .map_err(|e| format!("Failed to create coverage directory '{}': {}", dir, e))?;
+        }
+        if verbose {
+            println!(
+                "{} Coverage enabled: run binary with LLVM_PROFILE_FILE=\"{}/default_%m.profraw\"",
+                "info:".blue().bold(),
+                dir,
+            );
+        }
     }
 
     // Create profile directory if using profile-generate
@@ -646,7 +675,7 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled()) {
+    if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled() || coverage_mode.is_enabled()) {
         let mut features = vec![];
         if lto_mode.is_enabled() {
             features.push(format!("LTO={:?}", lto_mode));
@@ -655,6 +684,9 @@ pub(crate) fn compile_to_native(
             features.push("PGO=generate".to_string());
         } else if pgo_mode.is_use() {
             features.push("PGO=use".to_string());
+        }
+        if coverage_mode.is_enabled() {
+            features.push("Coverage=enabled".to_string());
         }
         println!(
             "{} Compiling with: {}",
@@ -680,6 +712,19 @@ pub(crate) fn compile_to_native(
             } else {
                 println!("{}", bin_path.display());
             }
+
+            // Print coverage usage instructions
+            if let Some(dir) = coverage_mode.coverage_dir() {
+                println!();
+                println!("{} Coverage instrumentation enabled.", "Coverage:".cyan().bold());
+                println!("  Run the binary to generate profile data:");
+                println!("    LLVM_PROFILE_FILE=\"{}/default_%m.profraw\" {}", dir, bin_path.display());
+                println!("  Then generate a report:");
+                println!("    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw", dir, dir);
+                println!("    llvm-cov show {} -instr-profile={}/coverage.profdata", bin_path.display(), dir);
+                println!("    llvm-cov export {} -instr-profile={}/coverage.profdata -format=lcov > {}/lcov.info", bin_path.display(), dir, dir);
+            }
+
             Ok(())
         }
         Ok(s) => Err(format!("clang exited with code {}", s.code().unwrap_or(-1))),

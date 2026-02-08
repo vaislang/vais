@@ -1,0 +1,163 @@
+# ThreadSanitizer (TSan) Workflow
+# Detects data races and concurrency issues in the Vais compiler codebase.
+# Runs on push to main, PRs, and weekly schedule (Sundays at 06:00 UTC).
+# Tests are run with --test-threads=1 to ensure deterministic execution.
+
+name: Thread Safety (TSan)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Sundays at 06:00 UTC
+    - cron: '0 6 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  tsan:
+    name: ThreadSanitizer Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-tsan-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Run TSan tests on vais-parser
+        env:
+          RUSTFLAGS: "-Z sanitizer=thread"
+          RUSTDOCFLAGS: "-Z sanitizer=thread"
+        run: |
+          cargo +nightly test -p vais-parser \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run TSan tests on vais-lexer
+        env:
+          RUSTFLAGS: "-Z sanitizer=thread"
+          RUSTDOCFLAGS: "-Z sanitizer=thread"
+        run: |
+          cargo +nightly test -p vais-lexer \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run TSan tests on vais-types
+        env:
+          RUSTFLAGS: "-Z sanitizer=thread"
+          RUSTDOCFLAGS: "-Z sanitizer=thread"
+        run: |
+          cargo +nightly test -p vais-types \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run TSan tests on vais-codegen
+        env:
+          RUSTFLAGS: "-Z sanitizer=thread"
+          RUSTDOCFLAGS: "-Z sanitizer=thread"
+        run: |
+          cargo +nightly test -p vais-codegen \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run TSan tests on vais-gc
+        env:
+          RUSTFLAGS: "-Z sanitizer=thread"
+          RUSTDOCFLAGS: "-Z sanitizer=thread"
+        run: |
+          cargo +nightly test -p vais-gc \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Upload TSan logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-logs
+          retention-days: 7
+          path: |
+            target/tsan-logs/
+            **/tsan-report-*.txt
+
+  verify-without-tsan:
+    name: Verify tests work without TSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Run tests without TSan (vais-parser)
+        run: cargo test -p vais-parser
+        continue-on-error: false
+
+      - name: Run tests without TSan (vais-lexer)
+        run: cargo test -p vais-lexer
+        continue-on-error: false
+
+      - name: Run tests without TSan (vais-types)
+        run: cargo test -p vais-types
+        continue-on-error: false
+
+      - name: Run tests without TSan (vais-codegen)
+        run: cargo test -p vais-codegen
+        continue-on-error: false
+
+      - name: Run tests without TSan (vais-gc)
+        run: cargo test -p vais-gc
+        continue-on-error: false
+
+      - name: Verify tests pass
+        run: echo "Thread safety tests work without TSan ✓"

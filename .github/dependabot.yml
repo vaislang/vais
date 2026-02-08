@@ -1,23 +1,46 @@
+# Dependabot Configuration
+# Automatically creates pull requests to update dependencies
+# for both Cargo (Rust) and GitHub Actions.
+# Runs weekly on Mondays and creates up to 10 PRs per ecosystem.
+
 version: 2
 updates:
-  # Rust dependencies
+  # Rust dependencies (Cargo.toml/Cargo.lock)
   - package-ecosystem: "cargo"
-    directory: "/vais-rs"
+    directory: "/"
     schedule:
       interval: "weekly"
-    commit-message:
-      prefix: "deps(rust)"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
     labels:
       - "dependencies"
       - "rust"
+    commit-message:
+      prefix: "chore(deps):"
+      include: "scope"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "vaislang/maintainers"
+    assignees:
+      - "vaislang/maintainers"
 
-  # GitHub Actions
+  # GitHub Actions dependencies (.github/workflows/*.yml)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    commit-message:
-      prefix: "deps(actions)"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
     labels:
       - "dependencies"
       - "github-actions"
+    commit-message:
+      prefix: "chore(deps):"
+      include: "scope"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "vaislang/maintainers"
+    assignees:
+      - "vaislang/maintainers"

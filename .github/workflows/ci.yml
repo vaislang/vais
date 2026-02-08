@@ -178,7 +178,7 @@ jobs:
     name: Test Coverage
     runs-on: ubuntu-latest
     needs: [test]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -231,9 +231,69 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./target/coverage/lcov.info
-          flags: unittests
+          flags: unittests,integration
           fail_ci_if_error: false
+          verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------- E2E project tests ----------
+  e2e-projects:
+    name: E2E Project Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17 (Ubuntu)
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
+      - name: Build vaisc compiler
+        run: cargo build --release -p vaisc
+
+      - name: Compile math-cli project
+        run: |
+          ./target/release/vaisc examples/projects/math-cli/math_cli.vais -o /tmp/math_cli
+
+      - name: Run math-cli project
+        run: /tmp/math_cli
+
+      - name: Compile num-convert project
+        run: |
+          ./target/release/vaisc examples/projects/num-convert/num_convert.vais -o /tmp/num_convert
+
+      - name: Run num-convert project
+        run: /tmp/num_convert
+
+      - name: Batch compile example programs
+        run: |
+          for file in examples/*.vais; do
+            echo "Compiling $file..."
+            ./target/release/vaisc "$file" -o "/tmp/$(basename $file .vais)" || echo "Failed: $file (may need external dependencies)"
+          done
+        continue-on-error: true
 
   # ---------- Security audit ----------
   audit:

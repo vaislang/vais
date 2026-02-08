@@ -265,6 +265,12 @@ enum Commands {
         /// Old .o files will be deleted automatically to stay under this limit
         #[arg(long, value_name = "BYTES", default_value = "536870912")]
         cache_limit: u64,
+
+        /// Enable source-based code coverage instrumentation
+        /// Generates an instrumented binary; run it to produce .profraw files
+        /// Optional value: output directory for coverage data (default: ./coverage)
+        #[arg(long, value_name = "DIR", default_missing_value = "./coverage", num_args = 0..=1)]
+        coverage: Option<String>,
     },
 
     /// Run a Vais source file
@@ -366,6 +372,11 @@ enum Commands {
         /// Show verbose test output
         #[arg(short, long)]
         verbose: bool,
+
+        /// Enable coverage instrumentation for tests
+        /// Optional value: output directory for coverage data (default: ./coverage)
+        #[arg(long, value_name = "DIR", default_missing_value = "./coverage", num_args = 0..=1)]
+        coverage: Option<String>,
     },
 
     /// Run benchmarks
@@ -517,6 +528,7 @@ fn main() {
             inkwell: _build_inkwell,
             per_module,
             cache_limit,
+            coverage,
         }) => {
             // Resolve directory input to entry point file
             let (resolved_input, dir_dep_paths) = if input.is_dir() {
@@ -638,6 +650,13 @@ fn main() {
                     vais_codegen::optimize::PgoMode::None
                 };
 
+                // Parse coverage mode
+                let coverage_mode = if let Some(dir) = coverage.as_deref() {
+                    vais_codegen::optimize::CoverageMode::Enabled(dir.to_string())
+                } else {
+                    vais_codegen::optimize::CoverageMode::None
+                };
+
                 // Configure parallel compilation
                 let parallel_config = parallel.map(vais_codegen::parallel::ParallelConfig::new);
 
@@ -662,6 +681,7 @@ fn main() {
                     hot,
                     lto_mode,
                     pgo_mode,
+                    coverage_mode,
                     suggest_fixes,
                     parallel_config,
                     use_inkwell,
@@ -697,7 +717,15 @@ fn main() {
             path,
             filter,
             verbose,
-        }) => commands::test::cmd_test(&path, filter.as_deref(), verbose || cli.verbose),
+            coverage,
+        }) => {
+            let coverage_mode = if let Some(dir) = coverage.as_deref() {
+                vais_codegen::optimize::CoverageMode::Enabled(dir.to_string())
+            } else {
+                vais_codegen::optimize::CoverageMode::None
+            };
+            commands::test::cmd_test(&path, filter.as_deref(), verbose || cli.verbose, &coverage_mode)
+        }
         Some(Commands::Bench { path, filter }) => {
             commands::test::cmd_bench(&path, filter.as_deref(), cli.verbose)
         }
@@ -759,6 +787,7 @@ fn main() {
                     false,
                     vais_codegen::optimize::LtoMode::None,
                     vais_codegen::optimize::PgoMode::None,
+                    vais_codegen::optimize::CoverageMode::None,
                     false,
                     None, // parallel_config
                     {
