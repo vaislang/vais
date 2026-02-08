@@ -1,0 +1,198 @@
+# search.vais - File search and pattern matching logic
+
+X F fopen(path: i64, mode: str) -> i64
+X F fclose(handle: i64) -> i64
+X F fgetc(handle: i64) -> i64
+X F opendir(path: str) -> i64
+X F readdir(dir: i64) -> i64
+X F closedir(dir: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __strlen_ptr(s: i64) -> i64
+X F __str_eq(a: i64, b: str) -> i64
+X F __str_starts_with(s: i64, prefix: str) -> i64
+X F __str_contains(haystack: i64, needle: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> ()
+X F store_byte(ptr: i64, value: i64) -> ()
+X F load_byte(ptr: i64) -> i64
+X F printf(fmt: str, a: i64, b: i64) -> i64
+X F snprintf(buf: i64, size: i64, fmt: str, a: i64) -> i64
+
+# Result structure for search matches
+S SearchResult {
+    file_path: i64,
+    line_num: i64,
+    line_content: i64,
+}
+
+# Read one line from file handle
+# Returns: pointer to null-terminated string (caller must free), or 0 on EOF
+F read_line(handle: i64) -> i64 {
+    buf := malloc(1024)
+    idx := mut 0
+
+    L {
+        I idx >= 1023 { B }
+
+        c := fgetc(handle)
+        I c < 0 {
+            # EOF or error
+            I idx == 0 {
+                free(buf)
+                R 0
+            }
+            B
+        }
+
+        I c == 10 { B }  # newline
+
+        store_byte(buf + idx, c)
+        idx = idx + 1
+    }
+
+    store_byte(buf + idx, 0)  # null terminator
+    R buf
+}
+
+# Search a single file for pattern matches
+# Returns: number of matches found
+F search_file(path: i64, pattern: i64, results: i64, max_results: i64) -> i64 {
+    handle := fopen(path, "r")
+    I handle == 0 {
+        R 0
+    }
+
+    match_count := mut 0
+    line_num := mut 1
+
+    L {
+        line := read_line(handle)
+        I line == 0 { B }  # EOF
+
+        # Check if line contains pattern
+        contains := __str_contains(line, pattern)
+        I contains != 0 {
+            I match_count < max_results {
+                # Store result
+                result_ptr := results + (match_count * 24)  # sizeof(SearchResult) = 24
+
+                # Allocate and copy path
+                path_len := __strlen_ptr(path)
+                path_copy := malloc(path_len + 1)
+                idx := mut 0
+                L {
+                    I idx >= path_len { B }
+                    b := load_byte(path + idx)
+                    store_byte(path_copy + idx, b)
+                    idx = idx + 1
+                }
+                store_byte(path_copy + path_len, 0)
+
+                store_i64(result_ptr, path_copy)
+                store_i64(result_ptr + 8, line_num)
+                store_i64(result_ptr + 16, line)
+
+                match_count = match_count + 1
+            }
+        } E {
+            free(line)
+        }
+
+        line_num = line_num + 1
+    }
+
+    fclose(handle)
+    R match_count
+}
+
+# Check if path is a directory entry we should skip (. or ..)
+F should_skip_entry(name: i64) -> i64 {
+    I __str_eq(name, ".") != 0 { R 1 }
+    I __str_eq(name, "..") != 0 { R 1 }
+    R 0
+}
+
+# Check if filename starts with dot (hidden file)
+F is_hidden(name: i64) -> i64 {
+    first := load_byte(name)
+    I first == 46 { R 1 }  # 46 = '.'
+    R 0
+}
+
+# Get d_name field from dirent struct (offset 21 on macOS)
+F get_dirent_name(dirent: i64) -> i64 {
+    R dirent + 21
+}
+
+# Search directory recursively
+# Returns: total number of matches found
+# Note: dir_path can be str literal or i64 pointer
+F search_dir_str(dir_path: str, pattern: i64, results: i64, max_results: i64, current_count: i64) -> i64 {
+    dir := opendir(dir_path)
+    I dir == 0 {
+        R current_count
+    }
+
+    total := mut current_count
+
+    L {
+        I total >= max_results { B }
+
+        entry := readdir(dir)
+        I entry == 0 { B }  # No more entries
+
+        name := get_dirent_name(entry)
+
+        # Skip . and ..
+        I should_skip_entry(name) != 0 { C }
+
+        # Skip hidden files
+        I is_hidden(name) != 0 { C }
+
+        # Build full path
+        dir_len := __strlen(dir_path)
+        name_len := __strlen_ptr(name)
+        full_path := malloc(dir_len + name_len + 2)
+
+        # Copy dir_path
+        idx := mut 0
+        L {
+            I idx >= dir_len { B }
+            b := load_byte(dir_path + idx)
+            store_byte(full_path + idx, b)
+            idx = idx + 1
+        }
+
+        # Add slash if needed
+        last := load_byte(dir_path + (dir_len - 1))
+        I last != 47 {  # 47 = '/'
+            store_byte(full_path + idx, 47)
+            idx = idx + 1
+        }
+
+        # Copy name
+        j := mut 0
+        L {
+            I j >= name_len { B }
+            b := load_byte(name + j)
+            store_byte(full_path + (idx + j), b)
+            j = j + 1
+        }
+        store_byte(full_path + (idx + j), 0)
+
+        # Try to open as file
+        handle := fopen(full_path, "r")
+        I handle != 0 {
+            # It's a file - search it
+            fclose(handle)
+            matches := search_file(full_path, pattern, results + (total * 24), max_results - total)
+            total = total + matches
+        }
+        # Note: skipping subdirectory recursion due to type limitations
+
+        free(full_path)
+    }
+
+    closedir(dir)
+    R total
+}

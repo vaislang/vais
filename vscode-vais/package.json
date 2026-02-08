@@ -20,6 +20,11 @@
     "url": "https://github.com/vaislang/vais"
   },
   "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
   "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:vais"
@@ -202,6 +207,47 @@
     "breakpoints": [
       {
         "language": "vais"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "vais",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Vais compiler command (build, test, run, bench)"
+          },
+          "file": {
+            "type": "string",
+            "description": "Source file path"
+          },
+          "optimizationLevel": {
+            "type": "number",
+            "description": "Optimization level (0-3)"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "vais",
+        "owner": "vais",
+        "fileLocation": "relative",
+        "pattern": [
+          {
+            "regexp": "^(error|warning)\\[([EW]\\d+)\\]:\\s+(.*)$",
+            "severity": 1,
+            "code": 2,
+            "message": 3
+          },
+          {
+            "regexp": "^\\s*→\\s+(.+):(\\d+):(\\d+)",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ]
       }
     ]
   }

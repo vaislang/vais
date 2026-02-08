@@ -20,6 +20,27 @@ Syntax highlighting and language support for the **Vais** programming language -
   - Document symbols
   - Workspace symbols
 
+- **Debugging Support (DAP)**:
+  - Launch and debug Vais programs
+  - Attach to running processes
+  - Breakpoints and stepping
+  - Variable inspection
+  - Call stack navigation
+  - Auto-compilation before debugging
+
+- **Code Snippets**:
+  - 50+ built-in snippets for common patterns
+  - Function definitions, structs, enums, traits
+  - Control flow constructs
+  - Async/await patterns
+  - Self-recursion templates
+
+- **Build Tasks**:
+  - Integrated task definitions for Vais compiler
+  - Build, test, run, and benchmark commands
+  - Problem matcher for compiler errors
+  - Configurable optimization levels
+
 - **Language Features**:
   - Bracket matching and auto-closing pairs
   - Comment toggling with `#`
@@ -111,14 +132,22 @@ F main() -> i64 {
 
 ### Prerequisites
 
-For full LSP support, you need to build the Vais language server:
+For full language support, you need to build the Vais compiler and tools:
+
+**Requirements:**
+- LLVM 17 (required for compilation)
+- Rust toolchain (for building from source)
 
 ```bash
 # In the vais project root directory
 cargo build --release
 
-# The vais-lsp binary will be at target/release/vais-lsp
-# Optionally, add it to your PATH:
+# The binaries will be at target/release/
+# - vaisc: Vais compiler
+# - vais-lsp: Language server
+# - vais-dap: Debug adapter
+
+# Optionally, add them to your PATH:
 export PATH="$PATH:/path/to/vais/target/release"
 ```
 
@@ -221,6 +250,16 @@ By default, the extension looks for `vais-lsp` in your PATH. You can specify a c
 
 If you're working in a Vais workspace, the extension will automatically try to use `target/release/vais-lsp` from your workspace root.
 
+### Debug Adapter Path
+
+Configure the debug adapter location:
+
+```json
+{
+  "vais.debugAdapter.path": "/path/to/vais-dap"
+}
+```
+
 ### Trace Server Communication
 
 For debugging LSP issues, you can enable communication tracing:
@@ -233,15 +272,72 @@ For debugging LSP issues, you can enable communication tracing:
 
 Options: `off`, `messages`, `verbose`
 
+## Keyboard Shortcuts
+
+The extension provides quick access to common operations:
+
+- **Compile Current File**: No default shortcut (can be configured via keybindings)
+- **Run Tests**: No default shortcut (can be configured via keybindings)
+- **Build Project**: Use VSCode tasks (`Ctrl+Shift+B` / `Cmd+Shift+B`)
+- **Start Debugging**: `F5`
+- **Toggle Breakpoint**: `F9`
+
+To configure custom shortcuts, open Keyboard Shortcuts (`Ctrl+K Ctrl+S` / `Cmd+K Cmd+S`) and search for "vais".
+
+## Build Tasks
+
+The extension supports Vais build tasks that can be configured in `.vscode/tasks.json`:
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "vais",
+      "command": "build",
+      "file": "${file}",
+      "optimizationLevel": 2,
+      "problemMatcher": ["$vais"],
+      "label": "vais: Build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "type": "vais",
+      "command": "test",
+      "problemMatcher": ["$vais"],
+      "label": "vais: Test"
+    },
+    {
+      "type": "vais",
+      "command": "bench",
+      "label": "vais: Benchmark"
+    }
+  ]
+}
+```
+
+The `$vais` problem matcher automatically parses compiler errors and warnings in the format:
+```
+error[E001]: Type mismatch
+  → file.vais:10:5
+```
+
 ## Requirements
 
 - Visual Studio Code 1.75.0 or higher
-- Vais LSP server (`vais-lsp`) for full language support
+- LLVM 17 (required for Vais compilation)
+- Vais compiler and tools:
+  - `vaisc`: Vais compiler
+  - `vais-lsp`: Language server (for LSP features)
+  - `vais-dap`: Debug adapter (for debugging support)
 
 ## Known Issues
 
-- No debugging support yet
-- LSP server must be manually built from source
+- Vais compiler and tools must be manually built from source
+- Some advanced debugging features are still in development
 
 ## Release Notes
 
@@ -275,8 +371,9 @@ MIT License - see LICENSE file for details
 
 ## Resources
 
-- [Vais GitHub Repository](https://github.com/yourusername/vais)
-- [Report Issues](https://github.com/yourusername/vais/issues)
+- [Vais GitHub Repository](https://github.com/vaislang/vais)
+- [Report Issues](https://github.com/vaislang/vais/issues)
+- [Documentation](https://github.com/vaislang/vais/tree/main/docs-site)
 
 ---
 

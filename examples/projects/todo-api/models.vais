@@ -1,0 +1,100 @@
+# models.vais - Data structures for Todo API
+
+S Todo {
+    id: i64,
+    title: str,
+    completed: bool
+}
+
+F todo_new(id: i64, title: str, completed: bool) -> Todo {
+    Todo {
+        id: id,
+        title: title,
+        completed: completed
+    }
+}
+
+F todo_to_json(todo: Todo) -> str {
+    # Format: {"id":1,"title":"Buy milk","completed":false}
+    completed_str := I todo.completed { "true" } E { "false" }
+
+    # Build JSON string manually
+    result := "{"
+    result = concat(result, "\"id\":")
+    result = concat(result, i64_to_str(todo.id))
+    result = concat(result, ",\"title\":\"")
+    result = concat(result, todo.title)
+    result = concat(result, "\",\"completed\":")
+    result = concat(result, completed_str)
+    result = concat(result, "}")
+
+    result
+}
+
+F todos_array_to_json(todos: i64, count: i64) -> str {
+    # Format: [{"id":1,...},{"id":2,...}]
+    result := "["
+
+    i := 0
+    L {
+        I i >= count { B }
+
+        todo_ptr := todos + (i * 24)  # sizeof(Todo) = 24 (i64+str+bool)
+        todo_id := load_i64(todo_ptr)
+        todo_title := load_str(todo_ptr + 8)
+        todo_completed := load_bool(todo_ptr + 16)
+
+        todo := todo_new(todo_id, todo_title, todo_completed)
+
+        I i > 0 {
+            result = concat(result, ",")
+        }
+
+        result = concat(result, todo_to_json(todo))
+
+        i = i + 1
+    }
+
+    result = concat(result, "]")
+    result
+}
+
+# Helper functions
+F concat(a: str, b: str) -> str {
+    len_a := strlen(a)
+    len_b := strlen(b)
+    total := len_a + len_b + 1
+
+    buf := malloc(total)
+    str_copy_to(buf, a)
+    str_copy_to(buf + len_a, b)
+    store_byte(buf + len_a + len_b, 0)
+
+    ptr_to_str(buf)
+}
+
+F i64_to_str(n: i64) -> str {
+    I n == 0 { R "0" }
+
+    is_neg := n < 0
+    val := I is_neg { 0 - n } E { n }
+
+    buf := malloc(32)
+    pos := 31
+    store_byte(buf + pos, 0)
+
+    L {
+        I val == 0 { B }
+        pos = pos - 1
+        digit := val % 10
+        store_byte(buf + pos, 48 + digit)  # ASCII '0' = 48
+        val = val / 10
+    }
+
+    I is_neg {
+        pos = pos - 1
+        store_byte(buf + pos, 45)  # ASCII '-' = 45
+    }
+
+    ptr_to_str(buf + pos)
+}

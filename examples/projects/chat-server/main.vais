@@ -1,0 +1,70 @@
+# Chat Server - Main Entry Point
+# TCP WebSocket chat server on port 8081
+
+U room
+U client
+
+# External functions for TCP networking
+X F __tcp_listen(port: i64) -> i64
+X F __tcp_accept(listener_fd: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+X F puts(s: str) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+
+# Global chat room instance (simplified - single room for this example)
+F create_global_room() -> i64 {
+    # Allocate ChatRoom struct: clients_ptr(i64), clients_count(i64), max_clients(i64)
+    room_ptr := __malloc(24)
+
+    # Initialize with empty client list (capacity 100)
+    clients_array := __malloc(800)  # 100 clients * 8 bytes
+    store_i64(room_ptr, clients_array)
+    store_i64(room_ptr + 8, 0)   # clients_count = 0
+    store_i64(room_ptr + 16, 100)  # max_clients = 100
+
+    room_ptr
+}
+
+# Main server loop
+F main() -> i64 {
+    puts("=== Vais WebSocket Chat Server ===")
+    puts("Starting server on port 8081...")
+
+    # Create listener socket
+    listener := __tcp_listen(8081)
+    I listener < 0 {
+        puts("ERROR: Failed to bind to port 8081")
+        R 1
+    }
+
+    puts("Server started successfully!")
+    puts("Waiting for client connections...")
+    puts("(Connect via ws://localhost:8081)")
+    puts("")
+
+    # Create global chat room
+    room := create_global_room()
+
+    # Accept connections loop
+    connection_count := mut 0
+    L {
+        # Accept new client connection
+        client_fd := __tcp_accept(listener)
+
+        I client_fd >= 0 {
+            connection_count := connection_count + 1
+            puts("New connection accepted!")
+
+            # Handle client in this thread (simplified - no threading for this example)
+            # In production, you'd spawn a new thread here
+            handle_client(client_fd, room)
+        } E {
+            puts("Accept failed, retrying...")
+        }
+    }
+
+    # Cleanup (unreachable in infinite loop)
+    __tcp_close(listener)
+    0
+}

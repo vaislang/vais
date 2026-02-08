@@ -1,0 +1,144 @@
+# Client Handler
+# Manages individual client connections and message processing
+
+U room
+
+X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F puts(s: str) -> i64
+X F __memset(ptr: i64, value: i64, size: i64) -> i64
+
+# Simplified WebSocket handshake
+# In a real implementation, you'd parse HTTP headers and compute Sec-WebSocket-Accept
+F perform_handshake(fd: i64) -> i64 {
+    # Read HTTP request (simplified - just read fixed amount)
+    buffer := __malloc(1024)
+    bytes_read := __tcp_recv(fd, buffer, 1024)
+
+    I bytes_read <= 0 {
+        __free(buffer)
+        R 0
+    }
+
+    # Send simplified WebSocket handshake response (hardcoded)
+    # HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n
+    response := __malloc(256)
+
+    # Manually build the response string (simplified approach to avoid str ownership issues)
+    store_byte(response + 0, 72)    # H
+    store_byte(response + 1, 84)    # T
+    store_byte(response + 2, 84)    # T
+    store_byte(response + 3, 80)    # P
+    store_byte(response + 4, 47)    # /
+    store_byte(response + 5, 49)    # 1
+    store_byte(response + 6, 46)    # .
+    store_byte(response + 7, 49)    # 1
+    store_byte(response + 8, 32)    # space
+    store_byte(response + 9, 49)    # 1
+    store_byte(response + 10, 48)   # 0
+    store_byte(response + 11, 49)   # 1
+    store_byte(response + 12, 13)   # \r
+    store_byte(response + 13, 10)   # \n
+    store_byte(response + 14, 13)   # \r
+    store_byte(response + 15, 10)   # \n
+    store_byte(response + 16, 0)    # null terminator
+
+    _ := __tcp_send(fd, response, 16)
+    __free(response)
+    __free(buffer)
+    1
+}
+
+# Handle a connected client
+F handle_client(fd: i64, room_ptr: i64) -> i64 {
+    puts("Handling new client connection...")
+
+    # Perform WebSocket handshake
+    handshake_ok := perform_handshake(fd)
+    I handshake_ok == 0 {
+        puts("Handshake failed!")
+        __tcp_close(fd)
+        R 0
+    }
+
+    puts("WebSocket handshake successful!")
+
+    # Add client to room
+    _ := add_client(room_ptr, fd)
+
+    # Prepare welcome message: "Welcome!\n"
+    welcome := __malloc(16)
+    store_byte(welcome + 0, 87)   # W
+    store_byte(welcome + 1, 101)  # e
+    store_byte(welcome + 2, 108)  # l
+    store_byte(welcome + 3, 99)   # c
+    store_byte(welcome + 4, 111)  # o
+    store_byte(welcome + 5, 109)  # m
+    store_byte(welcome + 6, 101)  # e
+    store_byte(welcome + 7, 33)   # !
+    store_byte(welcome + 8, 10)   # \n
+    store_byte(welcome + 9, 0)    # null
+
+    _ := __tcp_send(fd, welcome, 9)
+    __free(welcome)
+
+    # Broadcast join message: "*** User joined ***\n"
+    join_msg := __malloc(32)
+    store_byte(join_msg + 0, 42)   # *
+    store_byte(join_msg + 1, 42)   # *
+    store_byte(join_msg + 2, 42)   # *
+    store_byte(join_msg + 3, 32)   # space
+    store_byte(join_msg + 4, 74)   # J
+    store_byte(join_msg + 5, 111)  # o
+    store_byte(join_msg + 6, 105)  # i
+    store_byte(join_msg + 7, 110)  # n
+    store_byte(join_msg + 8, 10)   # \n
+    store_byte(join_msg + 9, 0)    # null
+
+    _ := broadcast(room_ptr, join_msg, 9, fd)
+    __free(join_msg)
+
+    # Message receive loop
+    buffer := __malloc(4096)
+    L {
+        __memset(buffer, 0, 4096)
+        bytes_read := __tcp_recv(fd, buffer, 4096)
+
+        # Client disconnected
+        I bytes_read <= 0 {
+            puts("Client disconnected")
+            B
+        }
+
+        # Broadcast received message (simplified - no WebSocket frame decoding)
+        puts("Broadcasting message...")
+        _ := broadcast(room_ptr, buffer, bytes_read, fd)
+    }
+
+    # Cleanup
+    _ := remove_client(room_ptr, fd)
+
+    # Broadcast leave message: "*** User left ***\n"
+    leave_msg := __malloc(32)
+    store_byte(leave_msg + 0, 42)   # *
+    store_byte(leave_msg + 1, 42)   # *
+    store_byte(leave_msg + 2, 42)   # *
+    store_byte(leave_msg + 3, 32)   # space
+    store_byte(leave_msg + 4, 76)   # L
+    store_byte(leave_msg + 5, 101)  # e
+    store_byte(leave_msg + 6, 102)  # f
+    store_byte(leave_msg + 7, 116)  # t
+    store_byte(leave_msg + 8, 10)   # \n
+    store_byte(leave_msg + 9, 0)    # null
+
+    _ := broadcast(room_ptr, leave_msg, 9, fd)
+    __free(leave_msg)
+
+    __free(buffer)
+    __tcp_close(fd)
+    puts("Client handler finished")
+    0
+}

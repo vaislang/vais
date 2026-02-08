@@ -246,5 +246,223 @@
     "prefix": ["Err"],
     "body": "Err(${0:error})",
     "description": "Err variant of Result"
+  },
+  "Impl for Trait": {
+    "prefix": ["implfor", "Xfor"],
+    "body": [
+      "X ${1:TraitName} for ${2:TypeName} {",
+      "\tF ${3:method}(&self) -> ${4:ReturnType} {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Implement a trait for a type"
+  },
+  "Impl Constructor": {
+    "prefix": ["implnew", "new"],
+    "body": [
+      "F new(${1:params}) -> Self {",
+      "\tSelf {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Constructor pattern returning Self"
+  },
+  "Derive Multiple": {
+    "prefix": ["derives"],
+    "body": "#[derive(Debug, Clone, PartialEq)]",
+    "description": "Derive Debug, Clone, and PartialEq"
+  },
+  "Match Option": {
+    "prefix": ["moption", "matchopt"],
+    "body": [
+      "M ${1:option_expr} {",
+      "\tSome(${2:v}) => ${3:v},",
+      "\tNone => ${0:default},",
+      "}"
+    ],
+    "description": "Match on Option with Some/None"
+  },
+  "Match Result": {
+    "prefix": ["mresult", "matchres"],
+    "body": [
+      "M ${1:result_expr} {",
+      "\tOk(${2:v}) => ${3:v},",
+      "\tErr(${4:e}) => ${0:handle_error},",
+      "}"
+    ],
+    "description": "Match on Result with Ok/Err"
+  },
+  "Match Enum": {
+    "prefix": ["menum", "matchenum"],
+    "body": [
+      "M ${1:enum_expr} {",
+      "\t${2:Variant1} => ${3:result1},",
+      "\t${4:Variant2}(${5:data}) => ${6:result2},",
+      "\t_ => ${0:default},",
+      "}"
+    ],
+    "description": "Match on enum with multiple variants"
+  },
+  "Async Main": {
+    "prefix": ["asyncmain", "amain"],
+    "body": [
+      "async F main() -> i64 {",
+      "\t$0",
+      "\t0",
+      "}"
+    ],
+    "description": "Async main function"
+  },
+  "Spawn Await": {
+    "prefix": ["spawnawait", "spawny"],
+    "body": [
+      "handle := spawn ${1:async_fn}(${2:args})",
+      "result := handle.Y",
+      "$0"
+    ],
+    "description": "Spawn async task and await result"
+  },
+  "Async Handler": {
+    "prefix": ["asynchandler", "ahandler"],
+    "body": [
+      "async F ${1:handler}(${2:request}: ${3:Request}) -> ${4:Response} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Async handler function"
+  },
+  "Try Chain": {
+    "prefix": ["trychain", "??"],
+    "body": "${1:fn1}()?${2:.fn2}()?${0}",
+    "description": "Chain try operator for error propagation"
+  },
+  "Unwrap Or": {
+    "prefix": ["unwrapor", "!or"],
+    "body": "${1:option}! ?: ${0:default}",
+    "description": "Unwrap with default value fallback"
+  },
+  "Vec New": {
+    "prefix": ["vecnew", "vec"],
+    "body": [
+      "${1:v} := Vec::new<${2:T}>()",
+      "${1:v}.push(${0:value})"
+    ],
+    "description": "Create new Vec and push value"
+  },
+  "HashMap New": {
+    "prefix": ["hashmapnew", "hashmap"],
+    "body": [
+      "${1:map} := HashMap::new<${2:K}, ${3:V}>()",
+      "${1:map}.insert(${4:key}, ${0:value})"
+    ],
+    "description": "Create new HashMap and insert key-value"
+  },
+  "For Range": {
+    "prefix": ["forrange", "fori"],
+    "body": [
+      "for ${1:i} in 0..${2:n} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For loop over range 0..n"
+  },
+  "Iter Chain": {
+    "prefix": ["iterchain", "ichain"],
+    "body": [
+      "${1:collection}",
+      "\t.iter_map(|${2:x}| ${3:x * 2})",
+      "\t.iter_filter(|${4:x}| ${5:x > 0})",
+      "\t${0}"
+    ],
+    "description": "Iterator chain with map and filter"
+  },
+  "Module File": {
+    "prefix": ["module", "mod"],
+    "body": [
+      "# ${1:Module description}",
+      "",
+      "U \"${2:dependency}\"",
+      "",
+      "F ${3:function}(${4:params}) -> ${5:ReturnType} {",
+      "\t$0",
+      "}",
+      ""
+    ],
+    "description": "Basic module file structure"
+  },
+  "Const Definition": {
+    "prefix": ["const", "C"],
+    "body": "const ${1:NAME}: ${2:Type} = ${0:value}",
+    "description": "Constant definition"
+  },
+  "Extern Function": {
+    "prefix": ["extern", "XF"],
+    "body": "extern F ${1:name}(${2:params}) -> ${0:ReturnType}",
+    "description": "External function declaration"
+  },
+  "Closure": {
+    "prefix": ["closure", "lambda"],
+    "body": "|${1:params}| ${0:body}",
+    "description": "Closure/lambda expression"
+  },
+  "Test Assert Eq": {
+    "prefix": ["testeq", "asserteq"],
+    "body": [
+      "#[test]",
+      "F test_${1:name}() {",
+      "\tresult := ${2:function_call}()",
+      "\tassert_eq(result, ${0:expected})",
+      "}"
+    ],
+    "description": "Test function with assert_eq"
+  },
+  "Benchmark": {
+    "prefix": ["benchmark", "bench"],
+    "body": [
+      "#[bench]",
+      "F bench_${1:name}(b: &mut Bencher) {",
+      "\tb.iter(|| {",
+      "\t\t${0:code_to_benchmark}",
+      "\t})",
+      "}"
+    ],
+    "description": "Benchmark function"
+  },
+  "Vais Binding": {
+    "prefix": [":="],
+    "body": "${1:name} := ${0:value}",
+    "description": "Vais variable binding"
+  },
+  "Vais Mut Binding": {
+    "prefix": [":=mut", "mutbind"],
+    "body": "${1:name} := mut ${0:value}",
+    "description": "Vais mutable variable binding"
+  },
+  "Self Recursion": {
+    "prefix": ["@", "selfrecur"],
+    "body": "@(${0:args})",
+    "description": "Self-recursion operator"
+  },
+  "Postfix Await": {
+    "prefix": [".Y", "postfixawait"],
+    "body": "${1:future}.Y",
+    "description": "Postfix await operator"
+  },
+  "Use Import": {
+    "prefix": ["U", "use"],
+    "body": "U \"${0:module_path}\"",
+    "description": "Use/import statement"
+  },
+  "Ternary": {
+    "prefix": ["ternary", "?:"],
+    "body": "${1:condition} ? ${2:if_true} : ${0:if_false}",
+    "description": "Ternary conditional operator"
+  },
+  "Type Alias": {
+    "prefix": ["type", "talias"],
+    "body": "type ${1:Alias} = ${0:Type}",
+    "description": "Type alias definition"
   }
 }

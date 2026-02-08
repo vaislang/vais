@@ -97,6 +97,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **43** | **Codegen 품질 개선** | ✅ 완료 | match phi node 수정, clippy 0건, 315 E2E |
 | 44~52 | Nested Struct ~ 표준 라이브러리 확충 | ✅ 완료 | 315→392 E2E |
 | **53** | **테스트 & CI 강화** | ✅ 완료 | 5개 crate 통합 테스트, CI 확장, --coverage, clippy 0건, 396 E2E |
+| **54** | **문서화 & 개발자 경험** | 🔄 진행 중 | 0/12 (0%) — Migration Guide, 실전 예제, IDE 확장 |
+| **55** | **VaisDB 대응: Stdlib 갭 해소** | ⏳ 계획됨 | 0/12 (0%) — HashMap 문자열 키, readdir, ByteBuffer 확장, 실전 검증 |
 | | *VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -1059,42 +1061,102 @@ Stage 0 (crate 테스트: 1,2,3) → Stage 1 (CI: 4,5) → Stage 2 (coverage: 6,
 
 ---
 
-## Phase 54: 문서화 & 개발자 경험 📋 예정
+## Phase 54: 문서화 & 개발자 경험 ✅ 완료
 
 > **목표**: 온보딩 문서, cookbook, IDE 마켓플레이스 게시
 > **선행**: Phase 52
 
 ### Stage 0: Migration Guide & Cookbook
 
-- [ ] docs-site/src/guides/migration-from-rust.md (Rust → Vais 이전 가이드)
-- [ ] docs-site/src/guides/migration-from-c.md (C/C++ → Vais 이전 가이드)
-- [ ] docs-site/src/guides/cookbook.md (20+ 레시피: 에러 처리, async, FFI, 컬렉션 등)
-- [ ] docs-site/src/guides/performance.md (프로파일링 & 최적화 가이드)
-- [ ] docs-site/src/troubleshooting.md (FAQ & 자주 발생하는 컴파일 에러)
-- **난이도**: 중 | **모델**: Sonnet 위임
+- [x] 1. Migration Guide 작성 — Rust→Vais, C/C++→Vais (Sonnet 위임) ✅ 2026-02-08
+  변경: docs-site/src/guides/migration-from-rust.md (808줄), migration-from-c.md (760줄)
+- [x] 2. Cookbook & Performance Guide 작성 (Sonnet 위임) ✅ 2026-02-08
+  변경: docs-site/src/guides/cookbook.md (728줄, 30+ 레시피), performance.md (492줄)
+- [x] 3. Troubleshooting & FAQ 작성 (Sonnet 위임) ✅ 2026-02-08
+  변경: docs-site/src/troubleshooting.md (~250줄, E001~E031 + FAQ 11개)
+- [x] 4. SUMMARY.md 가이드 섹션 업데이트 (Opus 직접) ✅ 2026-02-08
+  변경: docs-site/src/SUMMARY.md (guides 5개 링크 추가)
 
 ### Stage 1: 실전 예제 프로젝트
 
-- [ ] examples/projects/todo-api/ — REST API + SQLite CRUD
-- [ ] examples/projects/grep-vais/ — 재귀 파일 검색 CLI
-- [ ] examples/projects/chat-server/ — WebSocket 채팅 서버
-- [ ] examples/projects/data-pipeline/ — CSV→Transform→SQLite ETL
-- [ ] 각 프로젝트 README.md 포함
-- **난이도**: 중 | **모델**: Sonnet 위임
+- [x] 5. todo-api — REST API + SQLite CRUD (Sonnet 위임) ✅ 2026-02-08
+  변경: examples/projects/todo-api/ (main+models+db=701줄 + README)
+- [x] 6. grep-vais — 재귀 파일 검색 CLI (Sonnet 위임) ✅ 2026-02-08
+  변경: examples/projects/grep-vais/ (main+search+simple_grep=~450줄 + README)
+- [x] 7. chat-server — WebSocket 채팅 서버 (Sonnet 위임) ✅ 2026-02-08
+  변경: examples/projects/chat-server/ (main+room+client=~300줄 + README)
+- [x] 8. data-pipeline — CSV→SQLite ETL (Sonnet 위임) ✅ 2026-02-08
+  변경: examples/projects/data-pipeline/ (main+csv_reader+transform+loader=504줄 + sample.csv + README)
 
 ### Stage 2: IDE 확장 개선 & 게시
 
-- [ ] VSCode 확장 마켓플레이스 게시 준비 (package.json, README, icon)
-- [ ] VSCode 스니펫 확충 (trait impl, match arms, async fn 등 20+)
-- [ ] VSCode task/problem matcher 추가
-- [ ] IntelliJ 플러그인 실행 구성 추가
-- **난이도**: 중 | **모델**: Sonnet 위임
+- [x] 9. VSCode 스니펫 확충 28개 추가 (Sonnet 위임) ✅ 2026-02-08
+  변경: vscode-vais/snippets/vais.json (34→62 스니펫)
+- [x] 10. VSCode task/problem matcher + 게시 준비 (Sonnet 위임) ✅ 2026-02-08
+  변경: vscode-vais/package.json (taskDefinitions+problemMatchers), README.md, .vscodeignore
+- [x] 11. IntelliJ 실행 구성 추가 (Sonnet 위임) ✅ 2026-02-08
+  변경: intellij-vais/src/.../run/ (5 Kotlin 파일), plugin.xml (configurationType 등록)
+
+### Stage 3: 검증
+
+- [x] 12. E2E 테스트 추가 + 전체 검증 (Opus 직접) ✅ 2026-02-08
+  변경: e2e_tests.rs (4개 프로젝트 패턴 테스트 추가, 396→400개)
+
+진행률: 12/12 (100%)
 
 ### 우선순위
 
 ```
-Stage 0 (문서) → Stage 1 (예제) — 온보딩 우선
-Stage 2 (IDE) — 독립 진행 가능
+Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 병렬) → Stage 3 (12)
+```
+
+---
+
+## Phase 55: VaisDB 대응 — Stdlib 갭 해소 & 실전 검증
+
+> **상태**: ⏳ 계획됨
+> **목표**: VaisDB 구현에 필요한 표준 라이브러리 잔여 갭 해소 + 실전 규모 검증
+> **배경**: VaisDB 구현 가능성 평가에서 발견된 잔존 이슈 해결
+> **선행**: Phase 53
+
+### Stage 0: HashMap 문자열 키 완전 지원
+
+**현상**: `HashMap<K,V>`는 `load_i64`/`==`로 키 비교 → 문자열 키는 포인터 주소 비교됨 (내용 비교 아님). `StringMap`은 값 타입이 `i64`로 고정.
+
+- [ ] 1. `HashMap<K,V>`에 Hash/Eq 트레이트 디스패치 추가 — 문자열 키 시 `hash_string()` + `strmap_str_eq()` 자동 사용 (Opus 직접)
+- [ ] 2. `StringMap` 제네릭화 → `StringMap<V>` — 값 타입을 제네릭으로 변경, 구조체/포인터 등 임의 값 저장 가능 (Sonnet 위임)
+- [ ] 3. E2E 테스트 5개 추가 — HashMap 문자열 키 CRUD, StringMap<V> 제네릭 값 (Sonnet 위임) [blockedBy: 1,2]
+
+### Stage 1: 디렉토리 연산 완성
+
+**현상**: `readdir()` 미구현, `fs_getcwd()` TODO 상태 (빈 문자열 반환)
+
+- [ ] 4. `readdir()` / `fs_list_dir()` 구현 — POSIX `opendir`/`readdir`/`closedir` C FFI 래퍼 + 파일명 Vec 반환 (Opus 직접)
+- [ ] 5. `fs_getcwd()` 수정 — buf→str 변환 구현, 정상 경로 반환 (Sonnet 위임)
+- [ ] 6. `fs_exists()` / `fs_is_dir()` / `fs_is_file()` 추가 — stat 기반 존재 확인 (Sonnet 위임) [∥5]
+- [ ] 7. E2E 테스트 5개 추가 — readdir, getcwd, exists, is_dir, is_file (Sonnet 위임) [blockedBy: 4,5,6]
+
+### Stage 2: ByteBuffer 확장 (바이너리 직렬화)
+
+**현상**: ByteBuffer에 u8/i32/i64/bytes/str 읽기/쓰기 존재하나 VaisDB WAL/페이지 포맷에 필요한 추가 기능 부족
+
+- [ ] 8. varint 인코딩/디코딩 추가 — `write_varint()` / `read_varint()` (LEB128) (Sonnet 위임)
+- [ ] 9. u16 little-endian 읽기/쓰기 + f64 읽기/쓰기 추가 (Sonnet 위임) [∥8]
+- [ ] 10. `read_str()` 구현 — length-prefixed 문자열 읽기 (write_str 대응) (Sonnet 위임) [∥8]
+
+### Stage 3: 실전 규모 검증
+
+**현상**: 10K+ LOC 비트리비얼 프로젝트에서의 컴파일러/런타임 안정성 미검증
+
+- [ ] 11. VaisDB Storage Engine 프로토타입 (1,000+ LOC) — Page Manager + ByteBuffer 직렬화 + 파일 I/O 통합 테스트 (Opus 직접) [blockedBy: 3,7,10]
+- [ ] 12. 프로토타입에서 발견된 컴파일러/런타임 버그 수정 + E2E 추가 (Opus 직접) [blockedBy: 11]
+
+진행률: 0/12 (0%)
+
+### 우선순위
+
+```
+Stage 0 (1,2 병렬 → 3) → Stage 1 (4,5,6 병렬 → 7) → Stage 2 (8,9,10 병렬) → Stage 3 (11 → 12)
 ```
 
 ---

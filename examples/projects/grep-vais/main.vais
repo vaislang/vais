@@ -1,0 +1,138 @@
+# main.vais - grep-vais CLI entry point
+
+U search
+
+X F printf(fmt: str, a: i64, b: i64) -> i64
+X F printf1(fmt: str, a: i64) -> i64
+X F puts(s: str) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> ()
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, value: i64) -> ()
+X F __strlen(s: i64) -> i64
+X F __str_eq(a: i64, b: str) -> i64
+X F exit(code: i64) -> ()
+
+# Print usage message
+F print_usage() -> () {
+    puts("Usage: grep-vais <pattern>")
+    puts("")
+    puts("Search for PATTERN in files in current directory recursively.")
+    puts("")
+    puts("Arguments:")
+    puts("  <pattern>     Text pattern to search for")
+    puts("")
+    puts("Examples:")
+    puts("  grep-vais \"TODO\"")
+    puts("  grep-vais \"fn main\"")
+    0
+}
+
+# Print a single search result
+F print_result(result: i64) -> () {
+    file_path := load_i64(result)
+    line_num := load_i64(result + 8)
+    line_content := load_i64(result + 16)
+
+    # Print format: filepath:linenum: content
+    printf("%s:%d: ", file_path, line_num)
+
+    # Print line content character by character
+    idx := mut 0
+    L {
+        c := load_byte(line_content + idx)
+        I c == 0 { B }
+        printf1("%c", c)
+        idx = idx + 1
+    }
+    puts("")
+    0
+}
+
+# Free memory allocated for search results
+F free_results(results: i64, count: i64) -> () {
+    idx := mut 0
+    L {
+        I idx >= count { B }
+
+        result_ptr := results + (idx * 24)
+        file_path := load_i64(result_ptr)
+        line_content := load_i64(result_ptr + 16)
+
+        free(file_path)
+        free(line_content)
+
+        idx = idx + 1
+    }
+    free(results)
+    0
+}
+
+# Get command-line argument as pointer
+F get_arg_ptr(argv: i64, index: i64) -> i64 {
+    ptr := load_i64(argv + (index * 8))
+    R ptr
+}
+
+# Main entry point
+F main(argc: i64, argv: i64) -> i64 {
+    # Check for help flag
+    I argc >= 2 {
+        arg1 := get_arg_ptr(argv, 1)
+        I __str_eq(arg1, "-h") != 0 {
+            print_usage()
+            R 0
+        }
+        I __str_eq(arg1, "--help") != 0 {
+            print_usage()
+            R 0
+        }
+        0
+    }
+
+    # Need at least pattern argument
+    I argc < 2 {
+        puts("Error: missing required argument <pattern>")
+        puts("")
+        print_usage()
+        R 1
+    }
+
+    pattern := get_arg_ptr(argv, 1)
+
+    puts("Starting search in current directory...")
+    puts("")
+
+    # Allocate space for up to 1000 results
+    max_results := 1000
+    results := malloc(max_results * 24)  # sizeof(SearchResult) = 24
+
+    # Perform the search in current directory only
+    match_count := search_dir_str(".", pattern, results, max_results, 0)
+
+    # Print all results
+    I match_count > 0 {
+        printf1("Found %d matches:", match_count)
+        puts("")
+        puts("")
+
+        idx := mut 0
+        L {
+            I idx >= match_count { B }
+            result_ptr := results + (idx * 24)
+            print_result(result_ptr)
+            idx = idx + 1
+        }
+    } E {
+        puts("No matches found.")
+    }
+
+    puts("")
+    printf1("Total: %d matches", match_count)
+    puts("")
+
+    # Cleanup
+    free_results(results, match_count)
+
+    R 0
+}

@@ -16,6 +16,11 @@
 - [성능 튜닝](./guide/performance.md)
 - [코딩 스타일](./guide/style-guide.md)
 - [FAQ](./guide/faq.md)
+- [Rust에서 Vais로 전환하기](./guides/migration-from-rust.md)
+- [C/C++에서 Vais로 전환하기](./guides/migration-from-c.md)
+- [Cookbook — 실전 레시피](./guides/cookbook.md)
+- [성능 최적화 가이드](./guides/performance.md)
+- [트러블슈팅 & FAQ](./troubleshooting.md)
 
 # 언어 레퍼런스
 

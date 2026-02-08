@@ -63,6 +63,9 @@
         <notificationGroup
             id="Vais LSP"
             displayType="BALLOON"/>
+
+        <!-- Run Configuration -->
+        <configurationType implementation="com.vais.intellij.run.VaisRunConfigurationType"/>
     </extensions>
 
     <applicationListeners>

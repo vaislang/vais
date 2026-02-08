@@ -1,0 +1,108 @@
+# Data Transformation Module
+# Filters, aggregates, and transforms CSV data
+
+S CsvRow {
+    name: str,
+    age: i64,
+    score: i64,
+}
+
+S TransformResult {
+    filtered_rows: i64,  # Pointer to filtered array
+    filtered_count: i64,
+    avg_score: i64,
+    total_score: i64,
+}
+
+# Filter rows where score >= threshold
+F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
+    # Allocate result array (worst case: all pass)
+    filtered := malloc(count * 24)
+    filtered_idx := mut 0
+
+    i := mut 0
+    L {
+        I i >= count { B }
+
+        row_ptr := rows + i * 24
+        score := load_i64(row_ptr + 16)
+
+        I score >= threshold {
+            # Copy row
+            dest := filtered + filtered_idx * 24
+            store_i64(dest, load_i64(row_ptr))
+            store_i64(dest + 8, load_i64(row_ptr + 8))
+            store_i64(dest + 16, load_i64(row_ptr + 16))
+            filtered_idx := filtered_idx + 1
+        }
+
+        i := i + 1
+    }
+
+    # Return [count, array]
+    result := malloc(16)
+    store_i64(result, filtered_idx)
+    store_i64(result + 8, filtered)
+    R result
+}
+
+# Calculate statistics
+F calculate_stats(rows: i64, count: i64) -> i64 {
+    total := mut 0
+    i := mut 0
+
+    L {
+        I i >= count { B }
+        row_ptr := rows + i * 24
+        score := load_i64(row_ptr + 16)
+        total := total + score
+        i := i + 1
+    }
+
+    avg := I count > 0 { total / count } E { 0 }
+
+    # Return [avg, total]
+    result := malloc(16)
+    store_i64(result, avg)
+    store_i64(result + 8, total)
+    R result
+}
+
+# Main transform function
+F transform_data(rows: i64, count: i64) -> i64 {
+    puts("Transforming data...")
+
+    # Filter: only rows with score >= 85
+    filter_result := filter_by_score(rows, count, 85)
+    filtered_count := load_i64(filter_result)
+    filtered_rows := load_i64(filter_result + 8)
+
+    printf("Filtered: %d rows with score >= 85\n", filtered_count)
+
+    # Calculate statistics on filtered data
+    stats := calculate_stats(filtered_rows, filtered_count)
+    avg_score := load_i64(stats)
+    total_score := load_i64(stats + 8)
+
+    printf("Average score: %d\n", avg_score)
+    printf("Total score: %d\n", total_score)
+
+    # Build TransformResult
+    result := malloc(32)
+    store_i64(result, filtered_rows)       # filtered_rows
+    store_i64(result + 8, filtered_count)  # filtered_count
+    store_i64(result + 16, avg_score)      # avg_score
+    store_i64(result + 24, total_score)    # total_score
+
+    R result
+}
+
+# Print row for debugging
+F print_row(row: i64) {
+    name := load_i64(row)
+    age := load_i64(row + 8)
+    score := load_i64(row + 16)
+
+    printf("%s, age=%d, score=%d\n", name, age)
+    printf("  (score value: %d)\n", score)
+}

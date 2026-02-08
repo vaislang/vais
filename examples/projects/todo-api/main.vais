@@ -1,0 +1,414 @@
+# main.vais - REST API server for Todo application
+
+U models
+U db
+
+# Extern TCP functions
+X F __tcp_listen(port: i64) -> i64
+X F __tcp_accept(listener_fd: i64) -> i64
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+
+F main() -> i64 {
+    println("Starting Todo API server...")
+
+    # Initialize database
+    rc := init_db()
+    I rc != 0 {
+        println("Failed to initialize database")
+        R 1
+    }
+
+    # Start HTTP server
+    port := 8080
+    listener := __tcp_listen(port)
+
+    I listener < 0 {
+        println("Failed to start server")
+        R 1
+    }
+
+    print("Server listening on port ")
+    println_i64(port)
+
+    # Main server loop
+    L {
+        # Accept connection
+        client_fd := __tcp_accept(listener)
+        I client_fd < 0 {
+            println("Accept failed")
+            next
+        }
+
+        # Read HTTP request
+        buffer := malloc(4096)
+        bytes_read := __tcp_recv(client_fd, buffer, 4096)
+
+        I bytes_read > 0 {
+            # Parse request and route
+            handle_request(client_fd, buffer, bytes_read)
+        }
+
+        free(buffer)
+        __tcp_close(client_fd)
+    }
+
+    close_db()
+    0
+}
+
+F handle_request(fd: i64, buffer: i64, len: i64) -> i64 {
+    # Parse HTTP method and path
+    method := parse_method(buffer)
+    path := parse_path(buffer)
+
+    # Route to handlers
+    I str_starts_with(path, "/todos") {
+        I str_eq(method, "GET") {
+            I str_eq(path, "/todos") {
+                handle_get_all_todos(fd)
+            } E {
+                # Check for /todos/:id pattern
+                id := parse_todo_id(path)
+                I id > 0 {
+                    handle_get_todo(fd, id)
+                } E {
+                    send_404(fd)
+                }
+            }
+        } E {
+            I str_eq(method, "POST") {
+                I str_eq(path, "/todos") {
+                    # Parse request body for title
+                    title := parse_post_body(buffer, len)
+                    handle_create_todo(fd, title)
+                } E {
+                    send_404(fd)
+                }
+            } E {
+                I str_eq(method, "DELETE") {
+                    id := parse_todo_id(path)
+                    I id > 0 {
+                        handle_delete_todo(fd, id)
+                    } E {
+                        send_404(fd)
+                    }
+                } E {
+                    send_405(fd)
+                }
+            }
+        }
+    } E {
+        send_404(fd)
+    }
+
+    0
+}
+
+# Route handlers
+F handle_get_all_todos(fd: i64) -> i64 {
+    todos_ptr := malloc(8)
+    count_ptr := malloc(8)
+
+    rc := get_all_todos(todos_ptr, count_ptr)
+
+    I rc != 0 {
+        send_500(fd)
+        R 1
+    }
+
+    todos := load_i64(todos_ptr)
+    count := load_i64(count_ptr)
+
+    json := todos_array_to_json(todos, count)
+
+    send_json_response(fd, 200, json)
+    free(todos)
+    0
+}
+
+F handle_get_todo(fd: i64, id: i64) -> i64 {
+    todo_ptr := malloc(24)  # sizeof(Todo)
+
+    rc := get_todo(id, todo_ptr)
+
+    I rc != 0 {
+        send_404(fd)
+        R 1
+    }
+
+    todo_id := load_i64(todo_ptr)
+    todo_title := load_str(todo_ptr + 8)
+    todo_completed := load_bool(todo_ptr + 16)
+
+    todo := todo_new(todo_id, todo_title, todo_completed)
+    json := todo_to_json(todo)
+
+    send_json_response(fd, 200, json)
+    free(todo_ptr)
+    0
+}
+
+F handle_create_todo(fd: i64, title: str) -> i64 {
+    I strlen(title) == 0 {
+        send_400(fd, "Title is required")
+        R 1
+    }
+
+    todo_id := create_todo(title)
+
+    I todo_id < 0 {
+        send_500(fd)
+        R 1
+    }
+
+    todo := todo_new(todo_id, title, false)
+    json := todo_to_json(todo)
+
+    send_json_response(fd, 201, json)
+    0
+}
+
+F handle_delete_todo(fd: i64, id: i64) -> i64 {
+    rc := delete_todo(id)
+
+    I rc != 0 {
+        send_404(fd)
+        R 1
+    }
+
+    send_json_response(fd, 204, "")
+    0
+}
+
+# HTTP helpers
+F send_json_response(fd: i64, status: i64, body: str) -> i64 {
+    status_line := get_status_line(status)
+
+    response := concat_http(status_line, "Content-Type: application/json\r\n")
+    response = concat_http(response, "Connection: close\r\n")
+    response = concat_http(response, "\r\n")
+    response = concat_http(response, body)
+
+    response_ptr := str_to_ptr(response)
+    __tcp_send(fd, response_ptr, strlen(response))
+    0
+}
+
+F send_404(fd: i64) -> i64 {
+    send_json_response(fd, 404, "{\"error\":\"Not found\"}")
+}
+
+F send_405(fd: i64) -> i64 {
+    send_json_response(fd, 405, "{\"error\":\"Method not allowed\"}")
+}
+
+F send_400(fd: i64, msg: str) -> i64 {
+    json := concat_http("{\"error\":\"", msg)
+    json = concat_http(json, "\"}")
+    send_json_response(fd, 400, json)
+}
+
+F send_500(fd: i64) -> i64 {
+    send_json_response(fd, 500, "{\"error\":\"Internal server error\"}")
+}
+
+F get_status_line(status: i64) -> str {
+    I status == 200 { R "HTTP/1.1 200 OK\r\n" }
+    I status == 201 { R "HTTP/1.1 201 Created\r\n" }
+    I status == 204 { R "HTTP/1.1 204 No Content\r\n" }
+    I status == 400 { R "HTTP/1.1 400 Bad Request\r\n" }
+    I status == 404 { R "HTTP/1.1 404 Not Found\r\n" }
+    I status == 405 { R "HTTP/1.1 405 Method Not Allowed\r\n" }
+    "HTTP/1.1 500 Internal Server Error\r\n"
+}
+
+# Parsing helpers
+F parse_method(buffer: i64) -> str {
+    # Read until first space
+    end := 0
+    L {
+        ch := load_byte(buffer + end)
+        I ch == 32 { B }  # space
+        I ch == 0 { B }
+        end = end + 1
+    }
+
+    result := malloc(end + 1)
+    memcpy(result, buffer, end)
+    store_byte(result + end, 0)
+    ptr_to_str(result)
+}
+
+F parse_path(buffer: i64) -> str {
+    # Skip method and space
+    pos := 0
+    L {
+        ch := load_byte(buffer + pos)
+        I ch == 32 { B }  # space
+        pos = pos + 1
+    }
+
+    pos = pos + 1  # Skip space
+
+    # Read until next space or ?
+    start := pos
+    L {
+        ch := load_byte(buffer + pos)
+        I ch == 32 { B }  # space
+        I ch == 63 { B }  # ?
+        I ch == 0 { B }
+        pos = pos + 1
+    }
+
+    len := pos - start
+    result := malloc(len + 1)
+    memcpy(result, buffer + start, len)
+    store_byte(result + len, 0)
+    ptr_to_str(result)
+}
+
+F parse_todo_id(path: str) -> i64 {
+    # Parse /todos/:id - extract id after last /
+    path_ptr := str_to_ptr(path)
+    len := strlen(path)
+
+    # Find last /
+    last_slash := -1
+    i := 0
+    L {
+        I i >= len { B }
+        ch := load_byte(path_ptr + i)
+        I ch == 47 {  # /
+            last_slash = i
+        }
+        i = i + 1
+    }
+
+    I last_slash < 0 { R -1 }
+    I last_slash == len - 1 { R -1 }  # Ends with /
+
+    # Parse number after last /
+    str_to_i64(path_ptr + last_slash + 1)
+}
+
+F parse_post_body(buffer: i64, len: i64) -> str {
+    # Find \r\n\r\n (end of headers)
+    pos := 0
+    L {
+        I pos >= len - 3 { B }
+        I load_byte(buffer + pos) == 13 {
+            I load_byte(buffer + pos + 1) == 10 {
+                I load_byte(buffer + pos + 2) == 13 {
+                    I load_byte(buffer + pos + 3) == 10 {
+                        pos = pos + 4
+                        B
+                    }
+                }
+            }
+        }
+        pos = pos + 1
+    }
+
+    # Parse JSON: {"title":"..."}
+    # Find "title": and extract value
+    body_start := pos
+    title_key := "\"title\":\""
+
+    title_pos := find_substr(buffer + body_start, title_key)
+    I title_pos < 0 { R "" }
+
+    value_start := body_start + title_pos + strlen(title_key)
+
+    # Find closing "
+    value_end := value_start
+    L {
+        ch := load_byte(buffer + value_end)
+        I ch == 34 { B }  # "
+        I ch == 0 { B }
+        value_end = value_end + 1
+    }
+
+    value_len := value_end - value_start
+    result := malloc(value_len + 1)
+    memcpy(result, buffer + value_start, value_len)
+    store_byte(result + value_len, 0)
+    ptr_to_str(result)
+}
+
+F str_starts_with(s: str, prefix: str) -> bool {
+    s_len := strlen(s)
+    p_len := strlen(prefix)
+
+    I p_len > s_len { R false }
+
+    i := 0
+    L {
+        I i >= p_len { B }
+        I load_byte(str_to_ptr(s) + i) != load_byte(str_to_ptr(prefix) + i) {
+            R false
+        }
+        i = i + 1
+    }
+    true
+}
+
+F find_substr(haystack: i64, needle: str) -> i64 {
+    needle_ptr := str_to_ptr(needle)
+    needle_len := strlen(needle)
+
+    pos := 0
+    L {
+        ch := load_byte(haystack + pos)
+        I ch == 0 { R -1 }
+
+        # Check if substring matches
+        match := true
+        i := 0
+        L {
+            I i >= needle_len { B }
+            I load_byte(haystack + pos + i) != load_byte(needle_ptr + i) {
+                match = false
+                B
+            }
+            i = i + 1
+        }
+
+        I match { R pos }
+        pos = pos + 1
+    }
+    -1
+}
+
+F str_to_i64(ptr: i64) -> i64 {
+    result := 0
+    L {
+        ch := load_byte(ptr)
+        I ch < 48 { B }  # < '0'
+        I ch > 57 { B }  # > '9'
+        result = result * 10 + (ch - 48)
+        ptr = ptr + 1
+    }
+    result
+}
+
+F concat_http(a: str, b: str) -> str {
+    len_a := strlen(a)
+    len_b := strlen(b)
+    buf := malloc(len_a + len_b + 1)
+    memcpy(buf, str_to_ptr(a), len_a)
+    memcpy(buf + len_a, str_to_ptr(b), len_b)
+    store_byte(buf + len_a + len_b, 0)
+    ptr_to_str(buf)
+}
+
+F memcpy(dst: i64, src: i64, n: i64) -> i64 {
+    i := 0
+    L {
+        I i >= n { B }
+        store_byte(dst + i, load_byte(src + i))
+        i = i + 1
+    }
+    0
+}

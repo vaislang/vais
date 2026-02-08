@@ -1,0 +1,121 @@
+# Data Pipeline - Main Orchestrator
+# CSV → Transform → SQLite ETL Pipeline
+
+# External declarations for file I/O
+X F fopen(path: str, mode: str) -> i64
+X F fprintf(file: i64, fmt: str, arg: i64) -> i64
+X F fprintf_3(file: i64, fmt: str, arg1: str, arg2: i64, arg3: i64) -> i64
+X F fclose(file: i64) -> i64
+
+# Import modules (simplified - in real Vais use U directive)
+# For this example, we inline the necessary struct definitions
+
+S CsvRow {
+    name: str,
+    age: i64,
+    score: i64,
+}
+
+S TransformResult {
+    filtered_rows: i64,
+    filtered_count: i64,
+    avg_score: i64,
+    total_score: i64,
+}
+
+# Module function declarations
+X F read_csv(path: str) -> i64
+X F transform_data(rows: i64, count: i64) -> i64
+X F load_to_database(rows: i64, count: i64, db_path: str) -> i64
+X F write_csv(rows: i64, count: i64, out_path: str)
+
+# Print pipeline banner
+F print_banner() {
+    puts("=" * 50)
+    puts("  DATA PIPELINE - CSV to SQLite ETL")
+    puts("=" * 50)
+    puts("")
+}
+
+# Print step header
+F print_step(step_num: i64, description: str) {
+    puts("")
+    printf("Step %d: ", step_num)
+    puts(description)
+    puts("-" * 40)
+}
+
+# Error handler
+F handle_error(message: str) {
+    puts("")
+    puts("ERROR: " + message)
+    puts("Pipeline aborted.")
+}
+
+# Main pipeline orchestrator
+F main() -> i64 {
+    print_banner()
+
+    # Configuration
+    input_file := "sample.csv"
+    output_db := "output.sql"
+    output_csv := "filtered_output.csv"
+
+    # ===== STEP 1: Read CSV =====
+    print_step(1, "Reading CSV data")
+
+    csv_result := read_csv(input_file)
+    I csv_result == 0 {
+        handle_error("Failed to read CSV file")
+        R 1
+    }
+
+    row_count := load_i64(csv_result)
+    rows := load_i64(csv_result + 8)
+
+    printf("Successfully read %d rows\n", row_count)
+
+    # ===== STEP 2: Transform Data =====
+    print_step(2, "Transforming data (filter + aggregate)")
+
+    transform_result := transform_data(rows, row_count)
+    I transform_result == 0 {
+        handle_error("Failed to transform data")
+        R 1
+    }
+
+    filtered_rows := load_i64(transform_result)
+    filtered_count := load_i64(transform_result + 8)
+    avg_score := load_i64(transform_result + 16)
+    total_score := load_i64(transform_result + 24)
+
+    puts("Transformation complete:")
+    printf("  - Filtered rows: %d\n", filtered_count)
+    printf("  - Average score: %d\n", avg_score)
+    printf("  - Total score: %d\n", total_score)
+
+    # ===== STEP 3: Load to Database =====
+    print_step(3, "Loading to database")
+
+    db_status := load_to_database(filtered_rows, filtered_count, output_db)
+    I db_status == 0 {
+        handle_error("Failed to load data to database")
+        R 1
+    }
+
+    # Also write to CSV for verification
+    write_csv(filtered_rows, filtered_count, output_csv)
+
+    # ===== COMPLETION =====
+    puts("")
+    puts("=" * 50)
+    puts("  PIPELINE COMPLETED SUCCESSFULLY")
+    puts("=" * 50)
+    puts("")
+    puts("Output files:")
+    printf("  - SQL: %s\n", output_db)
+    printf("  - CSV: %s\n", output_csv)
+    puts("")
+
+    R 0
+}

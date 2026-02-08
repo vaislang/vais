@@ -1,0 +1,103 @@
+# Chat Room Management
+# Handles client list and message broadcasting
+
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F puts(s: str) -> i64
+
+# ChatRoom struct layout:
+# - clients_ptr: i64 (pointer to client fd array)
+# - clients_count: i64
+# - max_clients: i64
+
+# Add a client to the room
+F add_client(room_ptr: i64, fd: i64) -> i64 {
+    clients_ptr := load_i64(room_ptr)
+    count := load_i64(room_ptr + 8)
+    max_clients := load_i64(room_ptr + 16)
+
+    # Check if room is full
+    I count >= max_clients {
+        puts("ERROR: Chat room is full!")
+        R 0
+    }
+
+    # Add client fd to array
+    store_i64(clients_ptr + count * 8, fd)
+
+    # Increment count
+    new_count := count + 1
+    store_i64(room_ptr + 8, new_count)
+
+    puts("Client added to room")
+    1
+}
+
+# Remove a client from the room
+F remove_client(room_ptr: i64, fd: i64) -> i64 {
+    clients_ptr := load_i64(room_ptr)
+    count := load_i64(room_ptr + 8)
+
+    # Find the client
+    found_idx := mut -1
+    idx := mut 0
+    L {
+        I idx >= count { B }
+
+        client_fd := load_i64(clients_ptr + idx * 8)
+        I client_fd == fd {
+            found_idx := idx
+            B
+        }
+
+        idx := idx + 1
+    }
+
+    # If not found, return 0
+    I found_idx < 0 { R 0 }
+
+    # Shift remaining clients down
+    shift_idx := mut found_idx
+    L {
+        I shift_idx >= count - 1 { B }
+
+        next_fd := load_i64(clients_ptr + (shift_idx + 1) * 8)
+        store_i64(clients_ptr + shift_idx * 8, next_fd)
+
+        shift_idx := shift_idx + 1
+    }
+
+    # Decrement count
+    new_count := count - 1
+    store_i64(room_ptr + 8, new_count)
+
+    puts("Client removed from room")
+    1
+}
+
+# Broadcast message to all clients except sender
+# Takes message as raw pointer and length to avoid ownership issues
+F broadcast(room_ptr: i64, msg_ptr: i64, msg_len: i64, sender_fd: i64) -> i64 {
+    clients_ptr := load_i64(room_ptr)
+    count := load_i64(room_ptr + 8)
+
+    # Send to each client except sender
+    sent_count := mut 0
+    idx := mut 0
+    L {
+        I idx >= count { B }
+
+        client_fd := load_i64(clients_ptr + idx * 8)
+        I client_fd != sender_fd {
+            result := __tcp_send(client_fd, msg_ptr, msg_len)
+            I result > 0 {
+                sent_count := sent_count + 1
+            }
+        }
+
+        idx := idx + 1
+    }
+
+    sent_count
+}

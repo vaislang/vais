@@ -10115,3 +10115,154 @@ F main() -> i64 {
     assert_eq!(result.exit_code, 16);
 }
 
+// ===== Phase 54: Example project pattern tests =====
+
+#[test]
+fn test_project_todo_model_struct() {
+    // Test Todo struct pattern from todo-api project
+    let result = compile_and_run(r#"
+S Todo {
+    id: i64,
+    title: str,
+    completed: bool
+}
+
+F todo_new(id: i64, title: str, completed: bool) -> Todo {
+    Todo { id: id, title: title, completed: completed }
+}
+
+F main() -> i64 {
+    t := todo_new(1, "Buy milk", false)
+    I t.id == 1 { 10 } E { 1 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 10);
+}
+
+#[test]
+fn test_project_csv_row_struct() {
+    // Test CsvRow struct pattern from data-pipeline project
+    let result = compile_and_run(r#"
+S CsvRow {
+    name: str,
+    age: i64,
+    score: i64
+}
+
+S TransformResult {
+    filtered_count: i64,
+    avg_score: i64,
+    total_score: i64
+}
+
+F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
+    passed := mut 0
+    i := mut 0
+    L {
+        I i >= count { B }
+        score := load_i64(rows + i * 8)
+        I score >= threshold {
+            passed = passed + 1
+        }
+        i = i + 1
+    }
+    passed
+}
+
+F main() -> i64 {
+    # Simulate scores array: 85, 92, 78, 95, 88
+    buf := malloc(40)
+    store_i64(buf, 85)
+    store_i64(buf + 8, 92)
+    store_i64(buf + 16, 78)
+    store_i64(buf + 24, 95)
+    store_i64(buf + 32, 88)
+
+    # Filter scores >= 85 → should be 4 (85, 92, 95, 88)
+    result := filter_by_score(buf, 5, 85)
+    free(buf)
+    result
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 4);
+}
+
+#[test]
+fn test_project_chat_room_pattern() {
+    // Test ChatRoom-like client list management pattern
+    let result = compile_and_run(r#"
+F add_client(clients: i64, count_ptr: i64, fd: i64) -> i64 {
+    count := load_i64(count_ptr)
+    store_i64(clients + count * 8, fd)
+    store_i64(count_ptr, count + 1)
+    1
+}
+
+F get_client_count(count_ptr: i64) -> i64 {
+    load_i64(count_ptr)
+}
+
+F main() -> i64 {
+    clients := malloc(80)
+    count_ptr := malloc(8)
+    store_i64(count_ptr, 0)
+
+    add_client(clients, count_ptr, 100)
+    add_client(clients, count_ptr, 200)
+    add_client(clients, count_ptr, 300)
+
+    result := get_client_count(count_ptr)
+    free(clients)
+    free(count_ptr)
+    result
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 3);
+}
+
+#[test]
+fn test_project_line_reader_pattern() {
+    // Test line-by-line buffer pattern from grep-vais
+    let result = compile_and_run(r#"
+F count_newlines(buf: i64, len: i64) -> i64 {
+    count := mut 0
+    i := mut 0
+    L {
+        I i >= len { B }
+        c := load_byte(buf + i)
+        I c == 10 {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    count
+}
+
+F main() -> i64 {
+    # Simulate "hello\nworld\nfoo\n" — 3 newlines
+    buf := malloc(20)
+    store_byte(buf, 104)     # h
+    store_byte(buf + 1, 101) # e
+    store_byte(buf + 2, 108) # l
+    store_byte(buf + 3, 108) # l
+    store_byte(buf + 4, 111) # o
+    store_byte(buf + 5, 10)  # \n
+    store_byte(buf + 6, 119) # w
+    store_byte(buf + 7, 111) # o
+    store_byte(buf + 8, 114) # r
+    store_byte(buf + 9, 108) # l
+    store_byte(buf + 10, 100) # d
+    store_byte(buf + 11, 10)  # \n
+    store_byte(buf + 12, 102) # f
+    store_byte(buf + 13, 111) # o
+    store_byte(buf + 14, 111) # o
+    store_byte(buf + 15, 10)  # \n
+
+    result := count_newlines(buf, 16)
+    free(buf)
+    result
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 3);
+}
+
