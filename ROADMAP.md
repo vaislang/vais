@@ -158,6 +158,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 41** | 언어 진화 | Error 트레이트, enum impl 블록, Iterator 어댑터 (map/filter/take/skip/chain/zip/enumerate), yield 키워드, 301 E2E | 2026-02-07 |
 | **Phase 42** | 인크리멘탈 컴파일 | per-module .o 캐싱, rayon 병렬, atomic write, 순환 감지, 30K lines 1-file: **571ms→96ms** (5.9x), 312 E2E | 2026-02-08 |
 | **Phase 43** | Codegen 품질 개선 | match phi node 수정 (enum/struct 반환), clippy 0건, ignored 35개 분류, 315 E2E | 2026-02-08 |
+| **Hotfix** | 바인딩 수정 | vais-python PyO3 0.28 마이그레이션 (PyObject→Py\<PyAny\>, with_gil 제거, skip_from_py_object), vais-node NAPI 3.x 마이그레이션 (Object→ParseResult struct), 양쪽 Token::Yield 추가 | 2026-02-08 |
 | **Phase 44** | Nested Struct 접근 | 📋 예정 — `o.a.val` 다단계 필드 접근 지원 | - |
 | **Phase 45** | Stdlib 확장 | 📋 예정 — std/process, std/env, std/signal 모듈 추가 | - |
 | **Phase 46** | Parser 모듈화 | 📋 예정 — parser/lib.rs 4,208줄을 expr/stmt/type 모듈로 분리 | - |

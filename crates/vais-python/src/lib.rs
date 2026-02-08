@@ -16,7 +16,7 @@ use vais_parser::{parse as vais_parse, ParseError};
 use vais_types::TypeChecker;
 
 /// Represents a compilation error
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct Error {
     #[pyo3(get)]
@@ -44,7 +44,7 @@ impl Error {
 }
 
 /// Represents a token
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct TokenInfo {
     #[pyo3(get)]
@@ -72,7 +72,7 @@ impl TokenInfo {
 }
 
 /// Result of a compilation
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct CompileResult {
     #[pyo3(get)]
@@ -107,7 +107,7 @@ impl CompileResult {
 }
 
 /// Result of running compiled code
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone)]
 pub struct RunResult {
     #[pyo3(get)]
@@ -159,19 +159,17 @@ fn tokenize(source: String) -> PyResult<Vec<TokenInfo>> {
 }
 
 /// Serialize AST to Python dict
-fn module_to_dict(module: &Module) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
-        let dict = PyDict::new(py);
-        dict.set_item("type", "Module")?;
+fn module_to_dict(py: Python<'_>, module: &Module) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item("type", "Module")?;
 
-        let items_list = PyList::empty(py);
-        // For now, return simplified representation with item count
-        // Full AST serialization would require extensive boilerplate
-        dict.set_item("items_count", module.items.len())?;
-        dict.set_item("items", &items_list)?;
+    let items_list = PyList::empty(py);
+    // For now, return simplified representation with item count
+    // Full AST serialization would require extensive boilerplate
+    dict.set_item("items_count", module.items.len())?;
+    dict.set_item("items", &items_list)?;
 
-        Ok(dict.into_any().unbind())
-    })
+    Ok(dict.into_any().unbind())
 }
 
 /// Parse Vais source code into an AST
@@ -185,7 +183,7 @@ fn module_to_dict(module: &Module) -> PyResult<PyObject> {
 /// Raises:
 ///     ValueError: If the source code contains syntax errors
 #[pyfunction]
-fn parse(source: String) -> PyResult<PyObject> {
+fn parse(py: Python<'_>, source: String) -> PyResult<Py<PyAny>> {
     let ast = vais_parse(&source).map_err(|e| {
         let error_msg = match &e {
             ParseError::UnexpectedToken {
@@ -206,7 +204,7 @@ fn parse(source: String) -> PyResult<PyObject> {
         PyValueError::new_err(error_msg)
     })?;
 
-    module_to_dict(&ast)
+    module_to_dict(py, &ast)
 }
 
 /// Type check Vais source code
@@ -543,8 +541,8 @@ impl VaisCompiler {
     ///
     /// Returns:
     ///     Dictionary representing the AST
-    fn parse(&self, source: String) -> PyResult<PyObject> {
-        parse(source)
+    fn parse(&self, py: Python<'_>, source: String) -> PyResult<Py<PyAny>> {
+        parse(py, source)
     }
 
     /// Type check source code

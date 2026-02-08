@@ -24,6 +24,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Mut => "Mut",
         Token::Spawn => "Spawn",
         Token::Await => "Await",
+        Token::Yield => "Yield",
         Token::SelfLower => "self",
         Token::SelfUpper => "Self",
         Token::Weak => "Weak",

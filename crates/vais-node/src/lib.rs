@@ -95,8 +95,14 @@ pub fn tokenize(source: String) -> Result<Vec<VaisToken>> {
 /// # Errors
 ///
 /// Throws an error if the source code contains syntax errors
+#[napi(object)]
+pub struct ParseResult {
+    pub r#type: String,
+    pub items_count: i32,
+}
+
 #[napi]
-pub fn parse(env: Env, source: String) -> Result<Object> {
+pub fn parse(source: String) -> Result<ParseResult> {
     let ast = vais_parse(&source).map_err(|e| {
         let error_msg = match &e {
             ParseError::UnexpectedToken {
@@ -117,17 +123,10 @@ pub fn parse(env: Env, source: String) -> Result<Object> {
         Error::new(Status::InvalidArg, error_msg)
     })?;
 
-    // Create simplified AST representation
-    let mut obj = env.create_object()?;
-    obj.set_named_property("type", env.create_string("Module")?)?;
-    obj.set_named_property("items_count", env.create_int32(ast.items.len() as i32)?)?;
-
-    // For now, return simplified representation
-    // Full AST serialization would require extensive boilerplate
-    let items_arr = env.create_array(0)?;
-    obj.set_named_property("items", items_arr)?;
-
-    Ok(obj)
+    Ok(ParseResult {
+        r#type: "Module".to_string(),
+        items_count: ast.items.len() as i32,
+    })
 }
 
 /// Type check Vais source code
