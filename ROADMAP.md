@@ -159,7 +159,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 42** | 인크리멘탈 컴파일 | per-module .o 캐싱, rayon 병렬, atomic write, 순환 감지, 30K lines 1-file: **571ms→96ms** (5.9x), 312 E2E | 2026-02-08 |
 | **Phase 43** | Codegen 품질 개선 | match phi node 수정 (enum/struct 반환), clippy 0건, ignored 35개 분류, 315 E2E | 2026-02-08 |
 | **Hotfix** | 바인딩 수정 | vais-python PyO3 0.28 마이그레이션 (PyObject→Py\<PyAny\>, with_gil 제거, skip_from_py_object), vais-node NAPI 3.x 마이그레이션 (Object→ParseResult struct), 양쪽 Token::Yield 추가 | 2026-02-08 |
-| **Phase 44** | Nested Struct 접근 | 📋 예정 — `o.a.val` 다단계 필드 접근 지원 | - |
+| **Phase 44** | Nested Struct 접근 | ✅ Parser/TC 이미 지원, Codegen infer_struct_name() 수정 + struct_field_type_names 맵 추가, 318 E2E (+3 nested) | 2026-02-08 |
 | **Phase 45** | Stdlib 확장 | 📋 예정 — std/process, std/env, std/signal 모듈 추가 | - |
 | **Phase 46** | Parser 모듈화 | 📋 예정 — parser/lib.rs 4,208줄을 expr/stmt/type 모듈로 분리 | - |
 | **Phase 47** | Incremental TC | 📋 예정 — per-module 타입체킹 캐싱, Phase 42 codegen 캐싱 확장 | - |
@@ -516,36 +516,25 @@ Stage 0 ✅ → Stage 1 ✅ → Stage 2 ✅ → Stage 3 ✅  🎉 완료!
 
 ## 🚀 Phase 44: Nested Struct Field Access
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-08)
 > **목표**: `o.a.val` 같은 다단계 필드 접근 지원 — 현재 단일 레벨(`o.a`)만 가능
 > **배경**: E2E 테스트 주석에도 명시된 실사용 제약. 중간 변수 없이 체이닝 가능하게 개선
 
-### Stage 0: Parser 다단계 FieldAccess 지원
+### Stage 0: Parser 다단계 FieldAccess 지원 ✅ (이미 구현됨)
 
-**목표**: `a.b.c` 파싱 시 중첩 FieldAccess AST 노드 생성
+- [x] parser `parse_postfix()`에서 연속 `.field` 를 재귀 FieldAccess로 변환 — 기존 loop 구조로 지원
+- [x] AST 프린터/visitor에서 중첩 FieldAccess 순회 지원
 
-- [ ] parser `parse_postfix()`에서 연속 `.field` 를 재귀 FieldAccess로 변환
-- [ ] AST 프린터/visitor에서 중첩 FieldAccess 순회 지원
-- [ ] 파서 유닛 테스트 추가
-- **난이도**: 중 | **모델**: Opus 직접
+### Stage 1: Type Checker 다단계 FieldAccess 추론 ✅ (이미 구현됨)
 
-### Stage 1: Type Checker 다단계 FieldAccess 추론
+- [x] type checker `check_expr(Expr::Field)`에서 재귀 호출로 중첩 처리
+- [x] 중간 필드가 구조체가 아닌 경우 NoSuchField 에러
 
-**목표**: `a.b.c` 타입 추론 — 각 단계별 구조체 타입 확인
+### Stage 2: Codegen 다단계 GEP 체이닝 ✅
 
-- [ ] type checker `check_field_access()`에서 중첩 FieldAccess 처리
-- [ ] 중간 필드가 구조체가 아닌 경우 에러 메시지 (E003 or 신규)
-- [ ] Ref/RefMut 자동 역참조 지원
-- **난이도**: 중 | **모델**: Opus 직접
-
-### Stage 2: Codegen 다단계 GEP 체이닝
-
-**목표**: text codegen에서 `getelementptr` 체이닝으로 다단계 접근
-
-- [ ] `generate_field_access()`에서 중첩 필드 → 연속 GEP 명령 생성
-- [ ] Inkwell 백엔드도 동일 지원
-- [ ] E2E 테스트 추가 (2~3단계 접근, 구조체 안 구조체 등)
-- **난이도**: 중 | **모델**: Opus 직접
+- [x] Inkwell `infer_struct_name(Expr::Field)` 수정 — `struct_field_type_names` 맵으로 중간 필드 구조체 타입 해결
+- [x] Text codegen — `infer_expr_type` + GEP 체이닝 이미 동작
+- [x] E2E 테스트 3개 추가: 2단계, 3단계, 산술 조합 (315 → 318개)
 
 ### 우선순위
 

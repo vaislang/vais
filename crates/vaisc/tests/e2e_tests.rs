@@ -390,7 +390,51 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-// NOTE: Nested struct field access (o.a.val) is a known limitation.
+#[test]
+fn e2e_nested_struct_field_access() {
+    let source = r#"
+S Inner { val: i64 }
+S Outer { a: Inner }
+F main() -> i64 {
+    inner := Inner { val: 42 }
+    outer := Outer { a: inner }
+    outer.a.val
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_nested_struct_three_levels() {
+    let source = r#"
+S Deep { x: i64 }
+S Mid { d: Deep }
+S Top { m: Mid }
+F main() -> i64 {
+    deep := Deep { x: 99 }
+    mid := Mid { d: deep }
+    top := Top { m: mid }
+    top.m.d.x
+}
+"#;
+    assert_exit_code(source, 99);
+}
+
+#[test]
+fn e2e_nested_struct_field_arithmetic() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+S Line { start: Point, end: Point }
+F main() -> i64 {
+    s := Point { x: 10, y: 20 }
+    e := Point { x: 30, y: 40 }
+    line := Line { start: s, end: e }
+    line.start.x + line.end.y
+}
+"#;
+    assert_exit_code(source, 50);
+}
+
 // This test verifies single-level struct field access works correctly.
 #[test]
 fn e2e_struct_two_fields() {

@@ -91,6 +91,10 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Struct field names (struct name -> field names in order)
     struct_fields: HashMap<String, Vec<String>>,
 
+    /// Struct field type names (struct name -> [(field_name, type_name)])
+    /// Used for nested field access to resolve intermediate struct types
+    struct_field_type_names: HashMap<String, Vec<(String, String)>>,
+
     /// Lambda function counter for unique naming
     lambda_counter: usize,
 
@@ -174,6 +178,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             generic_substitutions: HashMap::new(),
             generated_structs: HashMap::new(),
             struct_fields: HashMap::new(),
+            struct_field_type_names: HashMap::new(),
             lambda_counter: 0,
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
@@ -395,6 +400,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let field_names: Vec<String> = s.fields.iter().map(|f| f.name.node.clone()).collect();
         let name = s.name.node.clone();
         self.struct_fields.insert(name.clone(), field_names);
+
+        // Store field type names for nested field access resolution
+        let field_type_names: Vec<(String, String)> = s
+            .fields
+            .iter()
+            .map(|f| {
+                let type_name = match &f.ty.node {
+                    ast::Type::Named { name, .. } => name.clone(),
+                    _ => String::new(),
+                };
+                (f.name.node.clone(), type_name)
+            })
+            .collect();
+        self.struct_field_type_names
+            .insert(name.clone(), field_type_names);
 
         let struct_type = self.context.struct_type(&field_types, false);
         self.type_mapper.register_struct(&name, struct_type);
@@ -3920,12 +3940,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Recursively infer the inner expression's struct type,
                 // then look up the field's type (if it's also a struct)
                 let parent_struct = self.infer_struct_name(&inner.node)?;
-                // Check if the field type is itself a known struct
-                if let Some(fields) = self.struct_fields.get(&parent_struct) {
-                    let field_idx = fields.iter().position(|f| f == &field.node);
-                    if let Some(_idx) = field_idx {
-                        // We'd need field type info to resolve nested struct types
-                        // For now, just return an error for nested field access
+                // Look up the field's type name from struct_field_type_names
+                if let Some(field_types) = self.struct_field_type_names.get(&parent_struct) {
+                    for (fname, ftype) in field_types {
+                        if fname == &field.node && !ftype.is_empty() {
+                            // Check if this type name is a known struct
+                            if self.generated_structs.contains_key(ftype) {
+                                return Ok(ftype.clone());
+                            }
+                        }
                     }
                 }
                 Err(CodegenError::Unsupported(format!(
