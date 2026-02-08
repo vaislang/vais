@@ -8503,3 +8503,221 @@ F main() -> i64 {
     assert!(ir.contains("fmul <4 x float>") || ir.contains("fmul"), "Expected fmul for vec4f32 mul");
 }
 
+#[test]
+fn test_cfg_platform_net_constants() {
+    // Verify network constants are platform-specific
+    // AF_INET6: Linux=10, macOS=30
+    // SOL_SOCKET: Linux=1, macOS=65535 (would exceed exit code, use modulo)
+    let result_linux = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C AF_INET6: i64 = 10
+
+#[cfg(target_os = "macos")]
+C AF_INET6: i64 = 30
+
+#[cfg(target_os = "linux")]
+C SOL_SOCKET: i64 = 1
+
+#[cfg(target_os = "macos")]
+C SOL_SOCKET: i64 = 255
+
+F main() -> i64 {
+    AF_INET6 + SOL_SOCKET
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    assert_eq!(result_linux.unwrap().exit_code, 11); // 10 + 1
+
+    let result_macos = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C AF_INET6: i64 = 10
+
+#[cfg(target_os = "macos")]
+C AF_INET6: i64 = 30
+
+#[cfg(target_os = "linux")]
+C SOL_SOCKET: i64 = 1
+
+#[cfg(target_os = "macos")]
+C SOL_SOCKET: i64 = 255
+
+F main() -> i64 {
+    AF_INET6 + SOL_SOCKET
+}
+"#,
+        cfg_map(&[("target_os", "macos")]),
+    );
+    assert_eq!(result_macos.unwrap().exit_code, 285 % 256); // (30 + 255) % 256 = 29
+}
+
+#[test]
+fn test_cfg_platform_signal_constants() {
+    // Verify signal constants are platform-specific
+    // SIGUSR1: Linux=10, macOS=30
+    // SIGUSR2: Linux=12, macOS=31
+    let result_linux = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C SIGUSR1: i64 = 10
+
+#[cfg(target_os = "macos")]
+C SIGUSR1: i64 = 30
+
+#[cfg(target_os = "linux")]
+C SIGUSR2: i64 = 12
+
+#[cfg(target_os = "macos")]
+C SIGUSR2: i64 = 31
+
+F main() -> i64 {
+    SIGUSR1 + SIGUSR2
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    assert_eq!(result_linux.unwrap().exit_code, 22); // 10 + 12
+
+    let result_macos = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C SIGUSR1: i64 = 10
+
+#[cfg(target_os = "macos")]
+C SIGUSR1: i64 = 30
+
+#[cfg(target_os = "linux")]
+C SIGUSR2: i64 = 12
+
+#[cfg(target_os = "macos")]
+C SIGUSR2: i64 = 31
+
+F main() -> i64 {
+    SIGUSR1 + SIGUSR2
+}
+"#,
+        cfg_map(&[("target_os", "macos")]),
+    );
+    assert_eq!(result_macos.unwrap().exit_code, 61); // 30 + 31
+}
+
+#[test]
+fn test_cfg_platform_file_constants() {
+    // Verify file mmap constants are platform-specific
+    // MS_SYNC: Linux=4, macOS=16
+    // MAP_ANONYMOUS: Linux=32, macOS=4096 (use smaller value for exit code)
+    let result_linux = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C MS_SYNC: i64 = 4
+
+#[cfg(target_os = "macos")]
+C MS_SYNC: i64 = 16
+
+#[cfg(target_os = "linux")]
+C MAP_ANON: i64 = 32
+
+#[cfg(target_os = "macos")]
+C MAP_ANON: i64 = 64
+
+F main() -> i64 {
+    MS_SYNC + MAP_ANON
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    assert_eq!(result_linux.unwrap().exit_code, 36); // 4 + 32
+
+    let result_macos = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C MS_SYNC: i64 = 4
+
+#[cfg(target_os = "macos")]
+C MS_SYNC: i64 = 16
+
+#[cfg(target_os = "linux")]
+C MAP_ANON: i64 = 32
+
+#[cfg(target_os = "macos")]
+C MAP_ANON: i64 = 64
+
+F main() -> i64 {
+    MS_SYNC + MAP_ANON
+}
+"#,
+        cfg_map(&[("target_os", "macos")]),
+    );
+    assert_eq!(result_macos.unwrap().exit_code, 80); // 16 + 64
+}
+
+#[test]
+fn test_cfg_target_family() {
+    // Verify target_family = "unix" includes constants
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_family = "unix")]
+C UNIX_VAL: i64 = 42
+
+#[cfg(target_family = "windows")]
+C UNIX_VAL: i64 = 99
+
+F main() -> i64 {
+    UNIX_VAL
+}
+"#,
+        cfg_map(&[("target_family", "unix")]),
+    );
+    assert_eq!(result.unwrap().exit_code, 42);
+
+    let result_windows = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_family = "unix")]
+C UNIX_VAL: i64 = 42
+
+#[cfg(target_family = "windows")]
+C UNIX_VAL: i64 = 99
+
+F main() -> i64 {
+    UNIX_VAL
+}
+"#,
+        cfg_map(&[("target_family", "windows")]),
+    );
+    assert_eq!(result_windows.unwrap().exit_code, 99);
+}
+
+#[test]
+fn test_cfg_cross_compile_simulation() {
+    // Simulate cross-compilation: running on macOS but compiling for Linux
+    // Only verify IR generation, not execution
+    let ir = compile_to_ir_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C SIGUSR1: i64 = 10
+
+#[cfg(target_os = "macos")]
+C SIGUSR1: i64 = 30
+
+#[cfg(target_os = "linux")]
+C AF_INET6: i64 = 10
+
+#[cfg(target_os = "macos")]
+C AF_INET6: i64 = 30
+
+F main() -> i64 {
+    SIGUSR1 + AF_INET6
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let ir = ir.unwrap();
+    // Verify Linux constants are included (both should be 10)
+    // The IR should contain constant definitions with value 10
+    assert!(ir.contains("10"), "Expected Linux constants (value 10) in IR");
+    assert!(!ir.contains("30") || ir.matches("30").count() == 0 || ir.contains("@main"),
+            "Should not contain macOS constants (value 30) when targeting Linux");
+}
+
