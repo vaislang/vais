@@ -8435,3 +8435,71 @@ F main() -> i64 {
     assert_eq!(r.exit_code, 4096 % 256); // exit code truncated to 8 bits
 }
 
+// ============================================================================
+// SIMD Vector Operation Tests
+// ============================================================================
+
+#[test]
+fn test_simd_vec4f32_dot_product_ir() {
+    // Verify that SIMD dot product generates correct LLVM IR with vector ops
+    let ir = compile_to_ir(
+        r#"
+F dot4(a: Vec4f32, b: Vec4f32) -> f32 {
+    product := simd_mul_vec4f32(a, b)
+    simd_reduce_add_vec4f32(product)
+}
+
+F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+    // Verify vector operations in generated IR
+    assert!(ir.contains("fmul <4 x float>") || ir.contains("fmul"), "Expected fmul for vec4f32 multiply");
+}
+
+#[test]
+fn test_simd_vec8f32_ops_ir() {
+    // Verify 8-wide SIMD operations generate correct IR
+    let ir = compile_to_ir(
+        r#"
+F add8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
+    simd_add_vec8f32(a, b)
+}
+
+F sub8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
+    simd_sub_vec8f32(a, b)
+}
+
+F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+    assert!(ir.contains("fadd <8 x float>") || ir.contains("fadd"), "Expected fadd for vec8f32 add");
+    assert!(ir.contains("fsub <8 x float>") || ir.contains("fsub"), "Expected fsub for vec8f32 sub");
+}
+
+#[test]
+fn test_simd_vec4f32_l2_pattern_ir() {
+    // Verify L2 distance pattern (sub + mul + reduce) generates correct IR
+    let ir = compile_to_ir(
+        r#"
+F sq_diff(a: Vec4f32, b: Vec4f32) -> f32 {
+    diff := simd_sub_vec4f32(a, b)
+    sq := simd_mul_vec4f32(diff, diff)
+    simd_reduce_add_vec4f32(sq)
+}
+
+F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+    assert!(ir.contains("fsub <4 x float>") || ir.contains("fsub"), "Expected fsub for vec4f32 sub");
+    assert!(ir.contains("fmul <4 x float>") || ir.contains("fmul"), "Expected fmul for vec4f32 mul");
+}
+

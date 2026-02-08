@@ -1,0 +1,43 @@
+# SIMD vector distance calculations
+# Demonstrates Vec4f32 and Vec8f32 operations for VaisDB-style workloads
+
+# Dot product using Vec4f32 (4-wide SIMD)
+F dot4(a: Vec4f32, b: Vec4f32) -> f32 {
+    product := simd_mul_vec4f32(a, b)
+    simd_reduce_add_vec4f32(product)
+}
+
+# Dot product using Vec8f32 (8-wide SIMD, AVX2)
+F dot8(a: Vec8f32, b: Vec8f32) -> f32 {
+    product := simd_mul_vec8f32(a, b)
+    simd_reduce_add_vec8f32(product)
+}
+
+# Squared difference using Vec4f32 (for L2 distance)
+F sq_diff4(a: Vec4f32, b: Vec4f32) -> f32 {
+    diff := simd_sub_vec4f32(a, b)
+    sq := simd_mul_vec4f32(diff, diff)
+    simd_reduce_add_vec4f32(sq)
+}
+
+F main() -> i64 {
+    # Test dot product
+    a := vec4f32(1.0, 2.0, 3.0, 4.0)
+    b := vec4f32(5.0, 6.0, 7.0, 8.0)
+    d := dot4(a, b)
+    # 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
+
+    # Test 8-wide dot product
+    a8 := vec8f32(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+    b8 := vec8f32(2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0)
+    d8 := dot8(a8, b8)
+    # 8 * (1*2) = 16
+
+    # Test squared difference (L2 component)
+    c := vec4f32(1.0, 0.0, 1.0, 0.0)
+    e := vec4f32(0.0, 1.0, 0.0, 1.0)
+    sq := sq_diff4(c, e)
+    # (1-0)^2 + (0-1)^2 + (1-0)^2 + (0-1)^2 = 4
+
+    0
+}
