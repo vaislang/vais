@@ -8972,3 +8972,224 @@ fn test_workspace_auto_detect_e2e() {
     );
 }
 
+// ==========================================================================
+// Phase 50 Stage 1: Feature Flags E2E Tests
+// ==========================================================================
+
+#[test]
+fn test_feature_flag_basic_cfg_e2e() {
+    // Test that #[cfg(feature = "json")] works with --features flag
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[package]
+name = "feat-test"
+version = "0.1.0"
+
+[features]
+default = []
+json = []
+"#,
+    )
+    .unwrap();
+
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("src/main.vais"),
+        r#"
+#[cfg(feature = "json")]
+F json_support() -> i64 { 42 }
+
+F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+
+    // Build with --features json
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--features", "json"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "build with --features json failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_feature_flag_default_features_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[package]
+name = "default-feat"
+version = "0.1.0"
+
+[features]
+default = ["logging"]
+logging = []
+"#,
+    )
+    .unwrap();
+
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("src/main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Build without any flags — default features should be enabled
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "build with default features failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_feature_flag_no_default_features_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[package]
+name = "no-default"
+version = "0.1.0"
+
+[features]
+default = ["extra"]
+extra = []
+"#,
+    )
+    .unwrap();
+
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("src/main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Build with --no-default-features
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--no-default-features"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "build with --no-default-features failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_feature_flag_all_features_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[package]
+name = "all-feat"
+version = "0.1.0"
+
+[features]
+default = []
+json = []
+async_io = []
+logging = ["json"]
+"#,
+    )
+    .unwrap();
+
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("src/main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Build with --all-features
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--all-features"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "build with --all-features failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_feature_flag_invalid_feature_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[package]
+name = "invalid-feat"
+version = "0.1.0"
+
+[features]
+default = []
+json = []
+"#,
+    )
+    .unwrap();
+
+    fs::create_dir_all(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("src/main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Build with nonexistent feature — should fail
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--features", "nonexistent"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    assert!(
+        !output.status.success(),
+        "build with nonexistent feature should fail"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not found") || stderr.contains("nonexistent"),
+        "error should mention the invalid feature: {}", stderr
+    );
+}
+

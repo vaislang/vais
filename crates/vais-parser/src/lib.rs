@@ -517,6 +517,13 @@ impl Parser {
         if args.len() >= 3 && args[1] == "=" {
             let key = &args[0];
             let value = &args[2];
+
+            // Feature keys are stored as "feature:<name>" to support multiple features
+            if key == "feature" {
+                let feature_key = format!("feature:{}", value);
+                return self.cfg_values.contains_key(&feature_key);
+            }
+
             return self.cfg_values.get(key) == Some(value);
         }
 

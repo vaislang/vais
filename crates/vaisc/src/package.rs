@@ -20,9 +20,64 @@ pub struct PackageManifest {
     pub native_dependencies: HashMap<String, NativeDependency>,
     #[serde(default)]
     pub build: BuildConfig,
+    /// Feature flags configuration
+    #[serde(default)]
+    pub features: Option<FeatureConfig>,
     /// Workspace configuration (only in workspace root)
     #[serde(default)]
     pub workspace: Option<WorkspaceConfig>,
+}
+
+/// Feature flags configuration section
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FeatureConfig {
+    /// Default features enabled when no --no-default-features is passed
+    #[serde(default)]
+    pub default: Vec<String>,
+    /// All available features and their dependencies
+    /// Each feature maps to a list of other features/optional deps it enables
+    #[serde(flatten)]
+    pub features: HashMap<String, Vec<String>>,
+}
+
+impl FeatureConfig {
+    /// Resolve the full set of enabled features given user selections
+    pub fn resolve_features(
+        &self,
+        selected: &[String],
+        use_defaults: bool,
+    ) -> Vec<String> {
+        let mut enabled = std::collections::HashSet::new();
+        let mut stack: Vec<String> = selected.to_vec();
+
+        if use_defaults {
+            stack.extend(self.default.clone());
+        }
+
+        while let Some(feat) = stack.pop() {
+            if enabled.insert(feat.clone()) {
+                // Add transitive feature dependencies
+                if let Some(deps) = self.features.get(&feat) {
+                    for dep in deps {
+                        if !enabled.contains(dep) {
+                            stack.push(dep.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result: Vec<String> = enabled.into_iter().collect();
+        result.sort();
+        result
+    }
+
+    /// Get all defined feature names
+    pub fn all_features(&self) -> Vec<String> {
+        let mut all: Vec<String> = self.features.keys().cloned().collect();
+        all.sort();
+        all
+    }
 }
 
 /// Workspace configuration section
@@ -282,6 +337,7 @@ pub fn init_package(dir: &Path, name: Option<&str>) -> PackageResult<()> {
         dev_dependencies: HashMap::new(),
         native_dependencies: HashMap::new(),
         build: BuildConfig::default(),
+        features: None,
         workspace: None,
     };
 
@@ -515,6 +571,7 @@ fn resolve_deps_recursive(
                     dev_dependencies: HashMap::new(),
                     native_dependencies: HashMap::new(),
                     build: BuildConfig::default(),
+                    features: None,
                     workspace: None,
                 }
             }
@@ -1374,5 +1431,96 @@ lib-core = "0.1.0"
             }
             _ => panic!("expected Detailed dependency with path"),
         }
+    }
+
+    #[test]
+    fn test_feature_config_parsing() {
+        let dir = tempdir().unwrap();
+        let toml_content = r#"
+[package]
+name = "my-pkg"
+version = "1.0.0"
+
+[features]
+default = ["json"]
+json = []
+async = ["json"]
+full = ["json", "async"]
+"#;
+        fs::write(dir.path().join("vais.toml"), toml_content).unwrap();
+
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert!(manifest.features.is_some());
+
+        let fc = manifest.features.as_ref().unwrap();
+        assert_eq!(fc.default, vec!["json"]);
+        assert!(fc.features.contains_key("json"));
+        assert!(fc.features.contains_key("async"));
+        assert!(fc.features.contains_key("full"));
+    }
+
+    #[test]
+    fn test_feature_resolve_defaults() {
+        let fc = FeatureConfig {
+            default: vec!["json".to_string()],
+            features: {
+                let mut m = HashMap::new();
+                m.insert("json".to_string(), vec![]);
+                m.insert("async".to_string(), vec!["json".to_string()]);
+                m
+            },
+        };
+
+        // With defaults
+        let resolved = fc.resolve_features(&[], true);
+        assert!(resolved.contains(&"json".to_string()));
+        assert!(!resolved.contains(&"async".to_string()));
+
+        // Without defaults
+        let resolved = fc.resolve_features(&[], false);
+        assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn test_feature_resolve_transitive() {
+        let fc = FeatureConfig {
+            default: vec![],
+            features: {
+                let mut m = HashMap::new();
+                m.insert("json".to_string(), vec![]);
+                m.insert("async".to_string(), vec!["json".to_string()]);
+                m.insert("full".to_string(), vec!["json".to_string(), "async".to_string()]);
+                m
+            },
+        };
+
+        // Selecting "async" should also enable "json"
+        let resolved = fc.resolve_features(&["async".to_string()], false);
+        assert!(resolved.contains(&"async".to_string()));
+        assert!(resolved.contains(&"json".to_string()));
+
+        // Selecting "full" should enable all
+        let resolved = fc.resolve_features(&["full".to_string()], false);
+        assert_eq!(resolved.len(), 3);
+    }
+
+    #[test]
+    fn test_feature_all_features() {
+        let fc = FeatureConfig {
+            default: vec!["json".to_string()],
+            features: {
+                let mut m = HashMap::new();
+                m.insert("json".to_string(), vec![]);
+                m.insert("async".to_string(), vec![]);
+                m.insert("full".to_string(), vec![]);
+                m
+            },
+        };
+
+        let all = fc.all_features();
+        assert_eq!(all.len(), 3);
+        assert!(all.contains(&"async".to_string()));
+        assert!(all.contains(&"full".to_string()));
+        assert!(all.contains(&"json".to_string()));
     }
 }

@@ -857,15 +857,19 @@ Stage 1 (SIMD 벤치마크는 독립 진행 가능)
 - [x] E2E 5개 추가 (362→367) ✅ 2026-02-08
 - **난이도**: 상 | **모델**: Opus 직접
 
-### Stage 1: Feature Flags
+### Stage 1: Feature Flags ✅
 
 **목표**: 조건부 의존성 및 선택적 기능 (`#[cfg(feature = "...")]`)
 
-- [ ] vais.toml `[features]` 섹션 파싱 (default features 포함)
-- [ ] feature 기반 조건부 컴파일 (`#[cfg(feature = "serde")]`)
-- [ ] 의존성의 optional feature 활성화 (`dep = { version = "1.0", features = ["json"] }`)
-- [ ] `vaisc pkg build --features "a,b"` / `--all-features` / `--no-default-features`
-- [ ] E2E 5개 추가
+- [x] vais.toml `[features]` 섹션 파싱 (default features 포함) ✅ 2026-02-08
+  변경: package.rs (FeatureConfig struct + resolve_features + transitive deps)
+- [x] feature 기반 조건부 컴파일 (`#[cfg(feature = "serde")]`) ✅ 2026-02-08
+  변경: vais-parser/lib.rs (eval_cfg_condition feature:key lookup), main.rs (VAIS_FEATURES env injection)
+- [x] 의존성의 optional feature 활성화 (`dep = { version = "1.0", features = ["json"] }`) ✅ 2026-02-08
+  변경: package.rs (DetailedDependency.features already supported)
+- [x] `vaisc pkg build --features "a,b"` / `--all-features` / `--no-default-features` ✅ 2026-02-08
+  변경: main.rs (PkgCommands Build/Check flags + resolve_feature_flags())
+- [x] E2E 5개 추가 (367→372) ✅ 2026-02-08
 - **난이도**: 중 | **모델**: Opus 직접
 
 ### Stage 2: Build Scripts & 글로벌 설치

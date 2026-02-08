@@ -412,6 +412,18 @@ enum PkgCommands {
         /// Build all workspace members
         #[arg(long)]
         workspace: bool,
+
+        /// Comma-separated list of features to enable
+        #[arg(long)]
+        features: Option<String>,
+
+        /// Enable all available features
+        #[arg(long)]
+        all_features: bool,
+
+        /// Do not enable default features
+        #[arg(long)]
+        no_default_features: bool,
     },
 
     /// Type-check the package without compiling
@@ -419,6 +431,18 @@ enum PkgCommands {
         /// Check all workspace members
         #[arg(long)]
         workspace: bool,
+
+        /// Comma-separated list of features to enable
+        #[arg(long)]
+        features: Option<String>,
+
+        /// Enable all available features
+        #[arg(long)]
+        all_features: bool,
+
+        /// Do not enable default features
+        #[arg(long)]
+        no_default_features: bool,
     },
 
     /// Add a dependency
@@ -1743,7 +1767,19 @@ fn cmd_build(
     let mut query_db = QueryDatabase::new();
 
     // Set cfg values from target triple for conditional compilation
-    query_db.set_cfg_values(target.cfg_values());
+    let mut cfg = target.cfg_values();
+
+    // Inject feature flags into cfg values (set by `vaisc pkg build --features`)
+    if let Ok(features_str) = std::env::var("VAIS_FEATURES") {
+        for feat in features_str.split(',') {
+            let feat = feat.trim();
+            if !feat.is_empty() {
+                cfg.insert(format!("feature:{}", feat), feat.to_string());
+            }
+        }
+    }
+
+    query_db.set_cfg_values(cfg);
 
     // Parse main file and resolve imports
     let parse_start = std::time::Instant::now();
@@ -4711,6 +4747,9 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             debug,
             hot,
             workspace,
+            features,
+            all_features,
+            no_default_features,
         } => {
             if workspace {
                 return cmd_pkg_build_workspace(&cwd, release, debug, hot, verbose);
@@ -4728,10 +4767,30 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 return cmd_pkg_build_workspace(&pkg_dir, release, debug, hot, verbose);
             }
 
+            // Resolve feature flags and inject into cfg_values
+            let enabled_features = resolve_feature_flags(
+                &manifest,
+                features.as_deref(),
+                all_features,
+                no_default_features,
+            )?;
+            if !enabled_features.is_empty() {
+                // Set feature cfg values as env var for the build pipeline
+                std::env::set_var("VAIS_FEATURES", enabled_features.join(","));
+                if verbose {
+                    println!("{} features: {}", "Enabled".cyan(), enabled_features.join(", "));
+                }
+            }
+
             cmd_pkg_build_single(&pkg_dir, &manifest, release, debug, hot, verbose)
         }
 
-        PkgCommands::Check { workspace } => {
+        PkgCommands::Check {
+            workspace,
+            features,
+            all_features,
+            no_default_features,
+        } => {
             if workspace {
                 return cmd_pkg_check_workspace(&cwd, verbose);
             }
@@ -4744,6 +4803,20 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             // Auto-detect workspace
             if manifest.workspace.is_some() {
                 return cmd_pkg_check_workspace(&pkg_dir, verbose);
+            }
+
+            // Resolve feature flags
+            let enabled_features = resolve_feature_flags(
+                &manifest,
+                features.as_deref(),
+                all_features,
+                no_default_features,
+            )?;
+            if !enabled_features.is_empty() {
+                std::env::set_var("VAIS_FEATURES", enabled_features.join(","));
+                if verbose {
+                    println!("{} features: {}", "Enabled".cyan(), enabled_features.join(", "));
+                }
             }
 
             let src_dir = pkg_dir.join("src");
@@ -4903,6 +4976,47 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             cmd_pkg_doc(&manifest, &pkg_dir, &output, &format, open, verbose)
         }
     }
+}
+
+/// Resolve feature flags from manifest and CLI options
+fn resolve_feature_flags(
+    manifest: &package::PackageManifest,
+    features_str: Option<&str>,
+    all_features: bool,
+    no_default_features: bool,
+) -> Result<Vec<String>, String> {
+    let feature_config = match &manifest.features {
+        Some(fc) => fc,
+        None => {
+            // No [features] section — if user specified features, warn
+            if features_str.is_some() || all_features {
+                return Err("package has no [features] section in vais.toml".to_string());
+            }
+            return Ok(Vec::new());
+        }
+    };
+
+    if all_features {
+        return Ok(feature_config.all_features());
+    }
+
+    let selected: Vec<String> = features_str
+        .map(|s| s.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect())
+        .unwrap_or_default();
+
+    // Validate that all selected features exist
+    for feat in &selected {
+        if !feature_config.features.contains_key(feat) && !feature_config.default.contains(feat) {
+            return Err(format!(
+                "feature '{}' not found in [features] section. Available: {}",
+                feat,
+                feature_config.all_features().join(", ")
+            ));
+        }
+    }
+
+    let use_defaults = !no_default_features;
+    Ok(feature_config.resolve_features(&selected, use_defaults))
 }
 
 /// Build a single package (non-workspace)
