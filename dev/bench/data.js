@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770591199485,
+  "lastUpdate": 1770593619663,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -13439,6 +13439,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1783968,
             "range": "± 17701",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "61c02db083a9100119021e9564aa770ff9635640",
+          "message": "feat: Phase 59 WASM ↔ JS interop with import/export attributes\n\nAdd complete WASM-JS interop pipeline: #[wasm_import] and #[wasm_export]\nattributes for declaring JS imports and Vais exports, LLVM IR metadata\ngeneration, type serialization layer, JS glue code generator, and\nstd/web.vais with console/timer/DOM/fetch/storage/canvas API bindings.\n\n- AST: ExternFunction gains attributes field for wasm_import/wasm_export\n- Parser: Attribute parsing supports string literal args, extern function\n  attributes inside N blocks and X F declarations\n- Codegen: wasm_imports/wasm_exports HashMaps, generate_wasm_metadata()\n  emitting LLVM wasm-import-module/name and wasm-export-name attributes\n- Serialization: WasmSerializer with type sizes, JS read/write codegen,\n  WasmSerde class generation, LLVM IR type definitions\n- Bindgen: WasmJsBindgen generates .js/.d.ts with createImports/load\n- Standard library: std/web.vais (350 lines) — web API bindings\n- E2E: 444 tests (435→444, +9 WASM interop tests), Clippy 0 warnings\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-09T08:26:56+09:00",
+          "tree_id": "d008868ca4702b709cdbca3fc4089b80b4007b64",
+          "url": "https://github.com/vaislang/vais/commit/61c02db083a9100119021e9564aa770ff9635640"
+        },
+        "date": 1770593619019,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 1994,
+            "range": "± 16",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 4969,
+            "range": "± 24",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5706,
+            "range": "± 359",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10584,
+            "range": "± 121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 16959,
+            "range": "± 456",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 32672,
+            "range": "± 786",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29385,
+            "range": "± 834",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 63465,
+            "range": "± 1163",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 272999,
+            "range": "± 2037",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 408488,
+            "range": "± 3866",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 114402,
+            "range": "± 379",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 687477,
+            "range": "± 6240",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 164604,
+            "range": "± 2091",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 193108,
+            "range": "± 481",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 202813,
+            "range": "± 631",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 242966,
+            "range": "± 1276",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 499730,
+            "range": "± 2369",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 695543,
+            "range": "± 3958",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 410159,
+            "range": "± 1094",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1082421,
+            "range": "± 43944",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38711,
+            "range": "± 449",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 187954,
+            "range": "± 8099",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 363942,
+            "range": "± 3923",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1774271,
+            "range": "± 23034",
             "unit": "ns/iter"
           }
         ]
