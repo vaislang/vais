@@ -1732,7 +1732,10 @@ fn cmd_build(
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
     // Initialize query database for memoized parsing
-    let query_db = QueryDatabase::new();
+    let mut query_db = QueryDatabase::new();
+
+    // Set cfg values from target triple for conditional compilation
+    query_db.set_cfg_values(target.cfg_values());
 
     // Parse main file and resolve imports
     let parse_start = std::time::Instant::now();

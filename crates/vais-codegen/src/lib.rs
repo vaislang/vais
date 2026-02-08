@@ -323,6 +323,93 @@ impl TargetTriple {
         matches!(self, Self::X86_64FreeBsd | Self::Aarch64FreeBsd)
     }
 
+    /// Check if this is a Linux target
+    pub fn is_linux(&self) -> bool {
+        matches!(
+            self,
+            Self::X86_64Linux | Self::X86_64LinuxMusl | Self::Aarch64Linux | Self::Aarch64LinuxMusl | Self::Riscv64LinuxGnu
+        )
+    }
+
+    /// Get the target OS name for cfg matching
+    pub fn target_os(&self) -> &'static str {
+        match self {
+            Self::Native => {
+                if cfg!(target_os = "macos") {
+                    "macos"
+                } else if cfg!(target_os = "linux") {
+                    "linux"
+                } else if cfg!(target_os = "windows") {
+                    "windows"
+                } else if cfg!(target_os = "freebsd") {
+                    "freebsd"
+                } else {
+                    "unknown"
+                }
+            }
+            Self::X86_64Darwin | Self::Aarch64Darwin => "macos",
+            Self::Aarch64Ios | Self::Aarch64IosSimulator => "ios",
+            Self::X86_64Linux
+            | Self::X86_64LinuxMusl
+            | Self::Aarch64Linux
+            | Self::Aarch64LinuxMusl
+            | Self::Riscv64LinuxGnu => "linux",
+            Self::X86_64WindowsMsvc
+            | Self::X86_64WindowsGnu
+            | Self::Aarch64WindowsMsvc => "windows",
+            Self::Aarch64Android | Self::Armv7Android => "android",
+            Self::X86_64FreeBsd | Self::Aarch64FreeBsd => "freebsd",
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm",
+        }
+    }
+
+    /// Get the target architecture name for cfg matching
+    pub fn target_arch(&self) -> &'static str {
+        match self {
+            Self::Native => {
+                if cfg!(target_arch = "x86_64") {
+                    "x86_64"
+                } else if cfg!(target_arch = "aarch64") {
+                    "aarch64"
+                } else {
+                    "unknown"
+                }
+            }
+            Self::X86_64Linux
+            | Self::X86_64LinuxMusl
+            | Self::X86_64WindowsMsvc
+            | Self::X86_64WindowsGnu
+            | Self::X86_64Darwin
+            | Self::X86_64FreeBsd => "x86_64",
+            Self::Aarch64Darwin
+            | Self::Aarch64Linux
+            | Self::Aarch64LinuxMusl
+            | Self::Aarch64Android
+            | Self::Aarch64Ios
+            | Self::Aarch64IosSimulator
+            | Self::Aarch64WindowsMsvc
+            | Self::Aarch64FreeBsd => "aarch64",
+            Self::Armv7Android => "arm",
+            Self::Riscv64LinuxGnu => "riscv64",
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm32",
+        }
+    }
+
+    /// Build a HashMap of cfg key-value pairs for this target
+    pub fn cfg_values(&self) -> std::collections::HashMap<String, String> {
+        let mut map = std::collections::HashMap::new();
+        map.insert("target_os".to_string(), self.target_os().to_string());
+        map.insert("target_arch".to_string(), self.target_arch().to_string());
+        if self.is_wasm() {
+            map.insert("target_family".to_string(), "wasm".to_string());
+        } else if self.is_windows() {
+            map.insert("target_family".to_string(), "windows".to_string());
+        } else {
+            map.insert("target_family".to_string(), "unix".to_string());
+        }
+        map
+    }
+
     /// Get pointer size in bits for this target
     pub fn pointer_bits(&self) -> usize {
         match self {

@@ -65,7 +65,7 @@ impl Parser {
         } else if self.check(&Token::Continue) {
             // C at top level is a constant definition, not continue
             self.advance();
-            Item::Const(self.parse_const_def(is_pub)?)
+            Item::Const(self.parse_const_def(is_pub, attributes)?)
         } else if self.check(&Token::Global) {
             self.advance();
             Item::Global(self.parse_global_def(is_pub)?)
@@ -152,8 +152,56 @@ impl Parser {
                         _ => None,
                     };
                     if let Some(s) = arg {
-                        args.push(s);
+                        args.push(s.clone());
                         self.advance();
+                        // Support nested parens for not(...) syntax
+                        // e.g., #[cfg(not(target_os = "windows"))]
+                        if self.check(&Token::LParen) {
+                            self.advance();
+                            // Parse inner content as flat args
+                            while !self.check(&Token::RParen) && !self.is_at_end() {
+                                if let Some(inner_tok) = self.peek() {
+                                    let inner_arg = match &inner_tok.token {
+                                        Token::Ident(s) => Some(s.clone()),
+                                        _ => None,
+                                    };
+                                    if let Some(inner_s) = inner_arg {
+                                        args.push(inner_s);
+                                        self.advance();
+                                        if self.check(&Token::Eq) {
+                                            self.advance();
+                                            if let Some(val_tok) = self.peek() {
+                                                if let Token::String(val) = &val_tok.token {
+                                                    args.push("=".to_string());
+                                                    args.push(val.clone());
+                                                    self.advance();
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                    if self.check(&Token::Comma) {
+                                        self.advance();
+                                    }
+                                }
+                            }
+                            if self.check(&Token::RParen) {
+                                self.advance();
+                            }
+                        }
+                        // Support key = "value" syntax for cfg attributes
+                        // e.g., #[cfg(target_os = "linux")]
+                        else if self.check(&Token::Eq) {
+                            self.advance();
+                            if let Some(val_tok) = self.peek() {
+                                if let Token::String(val) = &val_tok.token {
+                                    args.push("=".to_string());
+                                    args.push(val.clone());
+                                    self.advance();
+                                }
+                            }
+                        }
                     } else {
                         break;
                     }
@@ -397,7 +445,7 @@ impl Parser {
     }
 
     /// Parse constant definition: `C NAME: Type = value`
-    fn parse_const_def(&mut self, is_pub: bool) -> ParseResult<ConstDef> {
+    fn parse_const_def(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<ConstDef> {
         let name = self.parse_ident()?;
         self.expect(&Token::Colon)?;
         let ty = self.parse_type()?;
@@ -409,6 +457,7 @@ impl Parser {
             ty,
             value,
             is_pub,
+            attributes,
         })
     }
 

@@ -12,8 +12,20 @@ U std/result
 # ============================================================================
 
 # Address families
-C AF_INET: i64 = 2          # IPv4
-C AF_INET6: i64 = 30        # IPv6 (macOS: 30, Linux: 10)
+C AF_INET: i64 = 2          # IPv4 (same on all platforms)
+
+# IPv6 address family (platform-dependent)
+#[cfg(target_os = "macos")]
+C AF_INET6: i64 = 30
+
+#[cfg(target_os = "linux")]
+C AF_INET6: i64 = 10
+
+#[cfg(target_os = "freebsd")]
+C AF_INET6: i64 = 28
+
+#[cfg(target_os = "windows")]
+C AF_INET6: i64 = 23
 
 # Socket types
 C SOCK_STREAM: i64 = 1      # TCP
@@ -23,11 +35,28 @@ C SOCK_DGRAM: i64 = 2       # UDP
 C IPPROTO_TCP: i64 = 6
 C IPPROTO_UDP: i64 = 17
 
-# Socket options
-C SOL_SOCKET: i64 = 65535   # macOS: 0xffff
+# Socket options (platform-dependent)
+#[cfg(target_os = "macos")]
+C SOL_SOCKET: i64 = 65535
+
+#[cfg(target_os = "linux")]
+C SOL_SOCKET: i64 = 1
+
+#[cfg(target_os = "freebsd")]
+C SOL_SOCKET: i64 = 65535
+
+#[cfg(target_os = "windows")]
+C SOL_SOCKET: i64 = 65535
+
 C SO_REUSEADDR: i64 = 4     # macOS: SO_REUSEADDR
 C IPPROTO_IPV6: i64 = 41    # IPv6 protocol
-C IPV6_V6ONLY: i64 = 27     # IPv6-only socket option (macOS)
+
+# IPv6-only socket option (platform-dependent)
+#[cfg(target_os = "macos")]
+C IPV6_V6ONLY: i64 = 27
+
+#[cfg(target_os = "linux")]
+C IPV6_V6ONLY: i64 = 26
 
 # Error codes
 C NET_ERR_NONE: i64 = 0

@@ -469,6 +469,13 @@ C PROT_EXEC: i64 = 4
 C MAP_SHARED: i64 = 1
 C MAP_PRIVATE: i64 = 2
 
+# MAP_ANONYMOUS / MAP_ANON (platform-dependent)
+#[cfg(target_os = "macos")]
+C MAP_ANONYMOUS: i64 = 4096
+
+#[cfg(target_os = "linux")]
+C MAP_ANONYMOUS: i64 = 32
+
 C MAP_FAILED: i64 = 0 - 1
 
 # madvise advice constants
@@ -478,10 +485,15 @@ C MADV_SEQUENTIAL: i64 = 2
 C MADV_WILLNEED: i64 = 3
 C MADV_DONTNEED: i64 = 4
 
-# msync flags (macOS values)
+# msync flags (platform-dependent)
 C MS_ASYNC: i64 = 1
-C MS_SYNC: i64 = 16
 C MS_INVALIDATE: i64 = 2
+
+#[cfg(target_os = "macos")]
+C MS_SYNC: i64 = 16
+
+#[cfg(target_os = "linux")]
+C MS_SYNC: i64 = 4
 
 # Memory-mapped file handle
 S MappedFile {

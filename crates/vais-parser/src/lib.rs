@@ -119,6 +119,9 @@ pub struct Parser {
     depth: usize,
     /// Source code for newline detection (used to prevent cross-line postfix parsing)
     source: String,
+    /// Compile-time cfg key-value pairs for conditional compilation.
+    /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
+    cfg_values: std::collections::HashMap<String, String>,
 }
 
 impl Parser {
@@ -132,6 +135,7 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            cfg_values: std::collections::HashMap::new(),
         }
     }
 
@@ -145,6 +149,7 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: source.to_string(),
+            cfg_values: std::collections::HashMap::new(),
         }
     }
 
@@ -161,7 +166,15 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            cfg_values: std::collections::HashMap::new(),
         }
+    }
+
+    /// Set cfg key-value pairs for conditional compilation filtering.
+    /// Items annotated with `#[cfg(key = "value")]` will be included only
+    /// if the cfg values match.
+    pub fn set_cfg_values(&mut self, values: std::collections::HashMap<String, String>) {
+        self.cfg_values = values;
     }
 
     /// Check if there is a newline between two byte positions in the source.
@@ -395,7 +408,12 @@ impl Parser {
 
         while !self.is_at_end() {
             match self.parse_item() {
-                Ok(item) => items.push(item),
+                Ok(item) => {
+                    // Apply cfg filtering: skip items whose #[cfg(...)] doesn't match
+                    if self.should_include_item(&item.node) {
+                        items.push(item);
+                    }
+                }
                 Err(e) => {
                     if self.recovery_mode {
                         // Record the error and create an Error node
@@ -451,6 +469,64 @@ impl Parser {
         });
         let errors = self.take_errors();
         (module, errors)
+    }
+
+    // === Cfg filtering ===
+
+    /// Check if an item should be included based on its cfg attributes.
+    /// Returns true if the item has no cfg attributes, or if all cfg conditions match.
+    fn should_include_item(&self, item: &Item) -> bool {
+        if self.cfg_values.is_empty() {
+            return true;
+        }
+        let attrs = match item {
+            Item::Function(f) => &f.attributes,
+            Item::Struct(s) => &s.attributes,
+            Item::Const(c) => &c.attributes,
+            _ => return true,
+        };
+        self.check_cfg_attrs(attrs)
+    }
+
+    /// Check if cfg attributes match the current cfg_values.
+    /// Returns true if no cfg attribute is present or if all cfg conditions match.
+    fn check_cfg_attrs(&self, attrs: &[Attribute]) -> bool {
+        for attr in attrs {
+            if attr.name == "cfg" && !self.eval_cfg_condition(&attr.args) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Evaluate a cfg condition from attribute args.
+    /// Supports: `#[cfg(target_os = "linux")]` → args = ["target_os", "=", "linux"]
+    /// Also supports simple flags: `#[cfg(test)]` → args = ["test"]
+    /// Also supports `not(...)`: `#[cfg(not(target_os = "windows"))]` → args = ["not", "target_os", "=", "windows"]
+    fn eval_cfg_condition(&self, args: &[String]) -> bool {
+        if args.is_empty() {
+            return true;
+        }
+
+        // Handle not(...) — parsed as ["not", key, "=", value]
+        if args[0] == "not" {
+            return !self.eval_cfg_condition(&args[1..]);
+        }
+
+        // Handle key = "value" pattern
+        if args.len() >= 3 && args[1] == "=" {
+            let key = &args[0];
+            let value = &args[2];
+            return self.cfg_values.get(key) == Some(value);
+        }
+
+        // Handle simple flag: cfg(test)
+        if args.len() == 1 {
+            return self.cfg_values.contains_key(&args[0]);
+        }
+
+        // Unknown pattern — include by default
+        true
     }
 
     // === Helper methods ===
@@ -733,6 +809,25 @@ pub fn parse(source: &str) -> Result<Module, ParseError> {
     })?;
 
     let mut parser = Parser::new_with_source(tokens, source);
+    parser.parse_module()
+}
+
+/// Parses Vais source code with compile-time cfg values for conditional compilation.
+///
+/// Items annotated with `#[cfg(key = "value")]` will be included only if
+/// the provided cfg_values contain the matching key-value pair.
+pub fn parse_with_cfg(
+    source: &str,
+    cfg_values: std::collections::HashMap<String, String>,
+) -> Result<Module, ParseError> {
+    let tokens = vais_lexer::tokenize(source).map_err(|e| ParseError::UnexpectedToken {
+        found: Token::Ident(format!("LexError: {}", e)),
+        span: 0..0,
+        expected: "valid token".into(),
+    })?;
+
+    let mut parser = Parser::new_with_source(tokens, source);
+    parser.set_cfg_values(cfg_values);
     parser.parse_module()
 }
 

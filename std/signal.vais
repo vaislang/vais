@@ -1,7 +1,7 @@
 # Signal handling operations
 # Uses C standard library signal/raise via extern
 
-# POSIX signal number constants
+# POSIX signal number constants (portable)
 C SIGHUP: i32 = 1     # Hangup
 C SIGINT: i32 = 2     # Interrupt (Ctrl+C)
 C SIGQUIT: i32 = 3    # Quit
@@ -10,13 +10,29 @@ C SIGTRAP: i32 = 5    # Trace trap
 C SIGABRT: i32 = 6    # Abort
 C SIGFPE: i32 = 8     # Floating point exception
 C SIGKILL: i32 = 9    # Kill (cannot be caught)
-C SIGBUS: i32 = 10    # Bus error
 C SIGSEGV: i32 = 11   # Segmentation fault
 C SIGPIPE: i32 = 13   # Broken pipe
 C SIGALRM: i32 = 14   # Alarm clock
 C SIGTERM: i32 = 15   # Termination
-C SIGUSR1: i32 = 30   # User-defined signal 1
-C SIGUSR2: i32 = 31   # User-defined signal 2
+
+# Platform-dependent signal numbers
+#[cfg(target_os = "macos")]
+C SIGBUS: i32 = 10
+
+#[cfg(target_os = "linux")]
+C SIGBUS: i32 = 7
+
+#[cfg(target_os = "macos")]
+C SIGUSR1: i32 = 30
+
+#[cfg(target_os = "macos")]
+C SIGUSR2: i32 = 31
+
+#[cfg(target_os = "linux")]
+C SIGUSR1: i32 = 10
+
+#[cfg(target_os = "linux")]
+C SIGUSR2: i32 = 12
 
 # Special signal handler values
 C SIG_DFL: i64 = 0    # Default signal handling

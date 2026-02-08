@@ -8167,3 +8167,271 @@ F main() -> i64 {
     );
 }
 
+// ============================================================================
+// Conditional Compilation (#[cfg]) Tests
+// ============================================================================
+
+/// Compile Vais source with cfg values and return LLVM IR
+fn compile_to_ir_with_cfg(
+    source: &str,
+    cfg_values: std::collections::HashMap<String, String>,
+) -> Result<String, String> {
+    let module = vais_parser::parse_with_cfg(source, cfg_values)
+        .map_err(|e| format!("Parser error: {:?}", e))?;
+    let mut checker = TypeChecker::new();
+    checker
+        .check_module(&module)
+        .map_err(|e| format!("Type error: {:?}", e))?;
+    let mut gen = CodeGenerator::new("e2e_test");
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    let ir = gen
+        .generate_module(&module)
+        .map_err(|e| format!("Codegen error: {:?}", e))?;
+    Ok(ir)
+}
+
+fn compile_and_run_with_cfg(
+    source: &str,
+    cfg_values: std::collections::HashMap<String, String>,
+) -> Result<RunResult, String> {
+    let ir = compile_to_ir_with_cfg(source, cfg_values)?;
+    let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let ll_path = tmp_dir.path().join("test.ll");
+    let exe_path = tmp_dir.path().join("test_exe");
+    fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+    let clang_output = Command::new("clang")
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("-Wno-override-module")
+        .output()
+        .map_err(|e| format!("Failed to run clang: {}", e))?;
+    if !clang_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        return Err(format!("clang compilation failed:\n{}", stderr));
+    }
+    let run_output = Command::new(&exe_path)
+        .output()
+        .map_err(|e| format!("Failed to run executable: {}", e))?;
+    let exit_code = run_output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
+    Ok(RunResult {
+        exit_code,
+        stdout,
+        stderr,
+    })
+}
+
+fn cfg_map(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+#[test]
+fn test_cfg_basic_target_os_match() {
+    // When cfg matches, the constant should be included
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C PLATFORM_VAL: i64 = 10
+
+#[cfg(target_os = "macos")]
+C PLATFORM_VAL: i64 = 30
+
+F main() -> i64 {
+    PLATFORM_VAL
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 10);
+}
+
+#[test]
+fn test_cfg_macos_target() {
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+C VAL: i64 = 10
+
+#[cfg(target_os = "macos")]
+C VAL: i64 = 30
+
+F main() -> i64 {
+    VAL
+}
+"#,
+        cfg_map(&[("target_os", "macos")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 30);
+}
+
+#[test]
+fn test_cfg_no_match_excludes_item() {
+    // When cfg doesn't match, the function should be excluded
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "windows")]
+F windows_only() -> i64 {
+    42
+}
+
+F main() -> i64 {
+    # windows_only is excluded, so we just return 0
+    0
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 0);
+}
+
+#[test]
+fn test_cfg_not_condition() {
+    // not() should negate the condition
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(not(target_os = "windows"))]
+C UNIX_VAL: i64 = 1
+
+F main() -> i64 {
+    UNIX_VAL
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 1);
+}
+
+#[test]
+fn test_cfg_target_arch() {
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_arch = "x86_64")]
+C ARCH_VAL: i64 = 64
+
+#[cfg(target_arch = "aarch64")]
+C ARCH_VAL: i64 = 65
+
+F main() -> i64 {
+    ARCH_VAL
+}
+"#,
+        cfg_map(&[("target_arch", "x86_64")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 64);
+}
+
+#[test]
+fn test_cfg_no_cfg_values_includes_all() {
+    // Without cfg_values set, all items should be included (backward compatible)
+    let result = compile_and_run(
+        r#"
+C VAL: i64 = 42
+
+F main() -> i64 {
+    VAL
+}
+"#,
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 42);
+}
+
+#[test]
+fn test_cfg_multiple_platforms() {
+    // Test that only the matching platform's constants are included
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "macos")]
+C AF_INET6: i64 = 30
+
+#[cfg(target_os = "linux")]
+C AF_INET6: i64 = 10
+
+#[cfg(target_os = "windows")]
+C AF_INET6: i64 = 23
+
+F main() -> i64 {
+    AF_INET6
+}
+"#,
+        cfg_map(&[("target_os", "macos")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 30);
+}
+
+#[test]
+fn test_cfg_mixed_conditional_and_unconditional() {
+    // Mix of conditional and unconditional constants
+    let result = compile_and_run_with_cfg(
+        r#"
+C ALWAYS: i64 = 100
+
+#[cfg(target_os = "linux")]
+C PLATFORM: i64 = 10
+
+F main() -> i64 {
+    ALWAYS + PLATFORM
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 110);
+}
+
+#[test]
+fn test_cfg_on_function() {
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "macos")]
+F get_val() -> i64 {
+    42
+}
+
+#[cfg(target_os = "linux")]
+F get_val() -> i64 {
+    99
+}
+
+F main() -> i64 {
+    get_val()
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 99);
+}
+
+#[test]
+fn test_cfg_on_struct() {
+    let result = compile_and_run_with_cfg(
+        r#"
+#[cfg(target_os = "linux")]
+S PlatformInfo {
+    page_size: i64,
+    signal_max: i64
+}
+
+F main() -> i64 {
+    info := PlatformInfo { page_size: 4096, signal_max: 64 }
+    info.page_size
+}
+"#,
+        cfg_map(&[("target_os", "linux")]),
+    );
+    let r = result.unwrap();
+    assert_eq!(r.exit_code, 4096 % 256); // exit code truncated to 8 bits
+}
+

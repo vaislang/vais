@@ -612,6 +612,8 @@ pub struct ConstDef {
     pub value: Spanned<Expr>,
     /// Whether the constant is public
     pub is_pub: bool,
+    /// Attributes (e.g., `#[cfg(target_os = "linux")]` for conditional compilation)
+    pub attributes: Vec<Attribute>,
 }
 
 /// Global variable definition: `G name: Type = value`

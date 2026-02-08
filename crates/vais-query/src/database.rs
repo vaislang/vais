@@ -123,6 +123,8 @@ pub struct QueryDatabase {
     revision: RevisionCounter,
     sources: RwLock<HashMap<PathBuf, SourceInput>>,
     caches: RwLock<HashMap<PathBuf, FileCaches>>,
+    /// Compile-time cfg key-value pairs for conditional compilation filtering.
+    cfg_values: HashMap<String, String>,
 }
 
 impl QueryDatabase {
@@ -132,7 +134,13 @@ impl QueryDatabase {
             revision: RevisionCounter::new(),
             sources: RwLock::new(HashMap::new()),
             caches: RwLock::new(HashMap::new()),
+            cfg_values: HashMap::new(),
         }
+    }
+
+    /// Set cfg key-value pairs for conditional compilation.
+    pub fn set_cfg_values(&mut self, values: HashMap<String, String>) {
+        self.cfg_values = values;
     }
 
     /// Current global revision.
@@ -267,9 +275,13 @@ impl QueryDatabase {
             .source_text(&path)
             .ok_or_else(|| QueryError::FileNotFound(path.clone()))?;
 
-        let result = vais_parser::parse(&source)
-            .map(Arc::new)
-            .map_err(|e| QueryError::Parse(format!("{:?}", e)));
+        let result = if self.cfg_values.is_empty() {
+            vais_parser::parse(&source)
+        } else {
+            vais_parser::parse_with_cfg(&source, self.cfg_values.clone())
+        }
+        .map(Arc::new)
+        .map_err(|e| QueryError::Parse(format!("{:?}", e)));
 
         // Store in cache
         self.store_cache(&path, input_rev, |cache| {
