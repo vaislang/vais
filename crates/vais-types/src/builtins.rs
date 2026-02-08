@@ -289,6 +289,24 @@ impl TypeChecker {
             },
         );
 
+        // ptr_to_str: (p) -> str (convert raw pointer to str)
+        self.functions.insert(
+            "ptr_to_str".to_string(),
+            FunctionSig {
+                name: "ptr_to_str".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("p".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::Str,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // puts_ptr: (s) -> i32
         self.functions.insert(
             "puts_ptr".to_string(),
@@ -1389,6 +1407,27 @@ impl TypeChecker {
                 generics: vec![],
                 generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // access: (path, mode) -> i64 (0 on success, -1 on error)
+        self.functions.insert(
+            "access".to_string(),
+            FunctionSig {
+                name: "access".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str, false),
+                    ("mode".to_string(), ResolvedType::I64, false),
+                ],
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,

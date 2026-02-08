@@ -1,0 +1,232 @@
+# VaisDB Storage Engine
+# Combines Page Manager + B-Tree Index + Row Serialization + File I/O
+#
+# Table schema is defined at creation time:
+#   Column 0: Primary key (i64, auto-increment)
+#   Column 1+: User-defined columns
+#
+# Operations:
+#   - insert(row) -> primary key
+#   - get(key) -> row data
+#   - scan(lo, hi) -> iterator over rows
+#   - flush() -> write to disk
+#   - close() -> flush + cleanup
+
+U page
+U row
+U btree
+
+C MAX_SCAN_RESULTS: i64 = 128
+
+# Table: combines storage components
+S Table {
+    name_ptr: i64,       # Table name (i64 pointer to string)
+    pool: BufferPool,    # Page buffer pool
+    index: BTree,        # Primary key index
+    current_page: i64,   # Current data page pointer
+    current_page_id: i64,# Current data page ID
+    next_key: i64,       # Auto-increment primary key counter
+    file_handle: i64,    # File handle (0 = in-memory only)
+    row_count: i64       # Total number of rows
+}
+
+X Table {
+    # Create a new in-memory table
+    F create(name_ptr: i64) -> Table {
+        pool := BufferPool.new()
+        index := BTree.new()
+
+        # Allocate first data page
+        first_page := pool.alloc_page(PAGE_DATA)
+        first_page_id := page_get_id(first_page)
+
+        Table {
+            name_ptr: name_ptr,
+            pool: pool,
+            index: index,
+            current_page: first_page,
+            current_page_id: first_page_id,
+            next_key: 1,
+            file_handle: 0,
+            row_count: 0
+        }
+    }
+
+    # Create table backed by a file
+    F create_with_file(name_ptr: i64, file_path: str) -> Table {
+        t := Table.create(name_ptr)
+        handle := fopen(file_path, "w+b")
+        t.file_handle = handle
+        t
+    }
+
+    # Insert a row from raw data pointer + length
+    # Call rb.finish() and rb.data_ptr() before passing
+    # Returns the auto-assigned primary key
+    F insert(&self, row_data: i64, row_len: i64) -> i64 {
+
+        # Assign primary key
+        pk := self.next_key
+        self.next_key = self.next_key + 1
+
+        # Try to insert into current page
+        slot := mut page_insert_row(self.current_page, row_data, row_len)
+
+        I slot < 0 {
+            # Current page full, allocate new page
+            new_page := self.pool.alloc_page(PAGE_DATA)
+            new_page_id := page_get_id(new_page)
+
+            # Link pages
+            store_i64(self.current_page + 32, new_page_id)  # next_page
+
+            self.current_page = new_page
+            self.current_page_id = new_page_id
+
+            # Insert into new page
+            slot = page_insert_row(self.current_page, row_data, row_len)
+            I slot < 0 { R 0 - 1 }  # Row too large for empty page
+        }
+
+        # Index the row
+        self.index.insert(pk, self.current_page_id, slot)
+        self.row_count = self.row_count + 1
+
+        pk
+    }
+
+    # Get a row by primary key
+    # Returns pointer to row data (within page, NOT owned), 0 if not found
+    # Also sets *out_len to the row length
+    F get(&self, key: i64, out_len: i64) -> i64 {
+        slot_buf := malloc(8)
+        page_id := self.index.search_full(key, slot_buf)
+        I page_id == 0 {
+            free(slot_buf)
+            R 0
+        }
+
+        slot_idx := load_i64(slot_buf)
+        free(slot_buf)
+
+        page_ptr := self.pool.get_page(page_id)
+        I page_ptr == 0 { R 0 }
+
+        row_offset := page_get_row_offset(page_ptr, slot_idx)
+        I row_offset < 0 { R 0 }
+
+        row_len := page_get_row_len(page_ptr, slot_idx)
+        store_i64(out_len, row_len)
+
+        page_ptr + row_offset
+    }
+
+    # Scan rows with primary keys in range [lo, hi]
+    # Returns number of results, fills output arrays
+    F scan(&self, lo: i64, hi: i64, out_ptrs: i64, out_lens: i64, max_results: i64) -> i64 {
+        # Get matching (key, page_id, slot_idx) from B-Tree
+        scan_keys := malloc(max_results * 8)
+        scan_pages := malloc(max_results * 8)
+        scan_slots := malloc(max_results * 8)
+
+        count := self.index.range_scan(lo, hi, scan_keys, scan_pages, scan_slots, max_results)
+
+        # Resolve each result to actual row data
+        @.resolve_scan(scan_pages, scan_slots, out_ptrs, out_lens, count, 0)
+
+        free(scan_keys)
+        free(scan_pages)
+        free(scan_slots)
+
+        count
+    }
+
+    F resolve_scan(&self, scan_pages: i64, scan_slots: i64, out_ptrs: i64, out_lens: i64, count: i64, idx: i64) -> i64 {
+        I idx >= count { R 0 }
+
+        page_id := load_i64(scan_pages + idx * 8)
+        slot_idx := load_i64(scan_slots + idx * 8)
+
+        page_ptr := self.pool.get_page(page_id)
+        I page_ptr != 0 {
+            row_offset := page_get_row_offset(page_ptr, slot_idx)
+            row_len := page_get_row_len(page_ptr, slot_idx)
+            store_i64(out_ptrs + idx * 8, page_ptr + row_offset)
+            store_i64(out_lens + idx * 8, row_len)
+        } E {
+            store_i64(out_ptrs + idx * 8, 0)
+            store_i64(out_lens + idx * 8, 0)
+        }
+
+        @.resolve_scan(scan_pages, scan_slots, out_ptrs, out_lens, count, idx + 1)
+    }
+
+    # Get total row count
+    F count(&self) -> i64 = self.row_count
+
+    # Flush all pages to disk
+    F flush(&self) -> i64 {
+        I self.file_handle == 0 { R 0 }
+        @.flush_pages(0)
+    }
+
+    F flush_pages(&self, idx: i64) -> i64 {
+        I idx >= self.pool.num_pages { R 0 }
+        page_id := load_i64(self.pool.page_ids + idx * 8)
+        self.pool.flush_page(page_id, self.file_handle)
+        @.flush_pages(idx + 1)
+    }
+
+    # Close table: flush and cleanup
+    F close(&self) -> i64 {
+        I self.file_handle != 0 {
+            @.flush()
+            fclose(self.file_handle)
+            self.file_handle = 0
+        }
+        self.index.drop()
+        self.pool.drop()
+        0
+    }
+}
+
+# --- Convenience functions for building rows ---
+
+# Build a simple row: (i64 key, str name, i64 age)
+F build_user_row(name_ptr: i64, age: i64) -> RowBuilder {
+    rb := RowBuilder.new()
+    rb.add_str(name_ptr)
+    rb.add_i64(age)
+    rb
+}
+
+# Read a user row: returns (name_ptr, age) at output addresses
+F read_user_row(data: i64, len: i64, out_name: i64, out_age: i64) -> i64 {
+    reader := RowReader.from_ptr(data, len)
+    name := reader.read_str()
+    store_i64(out_name, name)
+    age := reader.read_i64()
+    store_i64(out_age, age)
+    0
+}
+
+# Build a product row: (str name, i64 price, i64 quantity)
+F build_product_row(name_ptr: i64, price: i64, qty: i64) -> RowBuilder {
+    rb := RowBuilder.new()
+    rb.add_str(name_ptr)
+    rb.add_i64(price)
+    rb.add_i64(qty)
+    rb
+}
+
+# Read a product row
+F read_product_row(data: i64, len: i64, out_name: i64, out_price: i64, out_qty: i64) -> i64 {
+    reader := RowReader.from_ptr(data, len)
+    name := reader.read_str()
+    store_i64(out_name, name)
+    price := reader.read_i64()
+    store_i64(out_price, price)
+    qty := reader.read_i64()
+    store_i64(out_qty, qty)
+    0
+}

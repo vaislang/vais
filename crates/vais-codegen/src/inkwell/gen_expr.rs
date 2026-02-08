@@ -912,6 +912,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     return Ok(arg);
                 }
             }
+            "ptr_to_str" => {
+                // ptr_to_str(i64) -> ptr: convert i64 to i8*
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(
+                        "ptr_to_str requires 1 arg".to_string(),
+                    ));
+                }
+                let arg = self.generate_expr(&args[0].node)?;
+                if arg.is_int_value() {
+                    let i8_ptr_type = self
+                        .context
+                        .i8_type()
+                        .ptr_type(inkwell::AddressSpace::default());
+                    let result = self
+                        .builder
+                        .build_int_to_ptr(
+                            arg.into_int_value(),
+                            i8_ptr_type,
+                            "ptr_to_str_result",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    return Ok(result.into());
+                } else {
+                    // Already a pointer
+                    return Ok(arg);
+                }
+            }
             "strlen_ptr" => {
                 // strlen_ptr(i64) -> i64: convert i64 to ptr then call strlen
                 if args.is_empty() {

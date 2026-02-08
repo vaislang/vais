@@ -305,6 +305,51 @@ impl CodeGenerator {
             ],
             ResolvedType::Unit
         );
+
+        // str_to_ptr: convert str (i8*) to i64 — IR is special-cased in generate_expr
+        // Register so infer_expr_type returns the correct type
+        self.functions.insert(
+            "str_to_ptr".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "str_to_ptr".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![("s".to_string(), ResolvedType::Str, false)],
+                    ret: ResolvedType::I64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: false,
+                extern_abi: None,
+            },
+        );
+
+        // ptr_to_str: convert i64 to str (i8*) — IR is special-cased in generate_expr
+        self.functions.insert(
+            "ptr_to_str".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "ptr_to_str".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                    ret: ResolvedType::Str,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: false,
+                extern_abi: None,
+            },
+        );
     }
 
     fn register_file_functions(&mut self) {
@@ -632,10 +677,8 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
-        // getcwd: (buf, size) -> char* (pointer to buf on success, 0 on error)
-        register_extern!(
-            self,
-            "getcwd",
+        // getcwd: (buf, size) -> i64 (pointer as i64, 0 on error) — needs wrapper for ptr→i64 conversion
+        register_helper!(self, "getcwd" => "__getcwd_wrapper",
             vec![
                 ("buf".to_string(), ResolvedType::I64),
                 ("size".to_string(), ResolvedType::I64),
@@ -648,6 +691,17 @@ impl CodeGenerator {
             self,
             "chdir",
             vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // access: (path, mode) -> int (0 on success, -1 on error)
+        register_extern!(
+            self,
+            "access",
+            vec![
+                ("path".to_string(), ResolvedType::Str),
+                ("mode".to_string(), ResolvedType::I64),
+            ],
             ResolvedType::I64
         );
     }

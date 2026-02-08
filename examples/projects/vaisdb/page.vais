@@ -1,0 +1,237 @@
+# VaisDB Page Manager
+# 4KB fixed-size pages for database storage
+# Layout per page: [header: 64 bytes] [slots: N * 8 bytes] [free space] [row data from end]
+#
+# Header layout (64 bytes):
+#   [0..8)   page_id: i64
+#   [8..16)  num_slots: i64  (number of rows in this page)
+#   [16..24) free_offset: i64 (start of free space after slot array)
+#   [24..32) data_end: i64 (end of row data from bottom, grows backward)
+#   [32..40) next_page: i64 (linked list for overflow, 0 = none)
+#   [40..48) page_type: i64 (0=data, 1=index, 2=overflow)
+#   [48..64) reserved
+
+C PAGE_SIZE: i64 = 4096
+C PAGE_HEADER_SIZE: i64 = 64
+C SLOT_SIZE: i64 = 8     # Each slot: offset into page where row data starts
+
+# Page types
+C PAGE_DATA: i64 = 0
+C PAGE_INDEX: i64 = 1
+C PAGE_OVERFLOW: i64 = 2
+
+# A page is represented as a raw buffer of PAGE_SIZE bytes
+# Functions operate on i64 page_ptr (pointer to 4KB buffer)
+
+# Initialize a fresh page
+F page_init(page_ptr: i64, page_id: i64, page_type: i64) -> i64 {
+    # Zero out header
+    store_i64(page_ptr, page_id)                   # page_id
+    store_i64(page_ptr + 8, 0)                     # num_slots = 0
+    store_i64(page_ptr + 16, PAGE_HEADER_SIZE)     # free_offset starts after header
+    store_i64(page_ptr + 24, PAGE_SIZE)            # data_end starts at page end
+    store_i64(page_ptr + 32, 0)                    # next_page = none
+    store_i64(page_ptr + 40, page_type)            # page_type
+    0
+}
+
+# Get page ID
+F page_get_id(page_ptr: i64) -> i64 {
+    load_i64(page_ptr)
+}
+
+# Get number of rows in page
+F page_num_rows(page_ptr: i64) -> i64 {
+    load_i64(page_ptr + 8)
+}
+
+# Get free space available in page
+F page_free_space(page_ptr: i64) -> i64 {
+    data_end := load_i64(page_ptr + 24)
+    free_offset := load_i64(page_ptr + 16)
+    data_end - free_offset - SLOT_SIZE   # need room for one more slot too
+}
+
+# Insert a row into the page
+# row_ptr: pointer to serialized row data
+# row_len: length of row data in bytes
+# Returns: slot index (0-based) on success, -1 if page full
+F page_insert_row(page_ptr: i64, row_ptr: i64, row_len: i64) -> i64 {
+    num_slots := load_i64(page_ptr + 8)
+    free_offset := load_i64(page_ptr + 16)
+    data_end := load_i64(page_ptr + 24)
+
+    # Check if there's room: need SLOT_SIZE for slot + row_len for data
+    needed := SLOT_SIZE + row_len
+    available := data_end - free_offset
+    I available < needed { R 0 - 1 }
+
+    # Write row data at bottom of page (grow downward)
+    new_data_end := data_end - row_len
+    memcpy(page_ptr + new_data_end, row_ptr, row_len)
+
+    # Write slot entry (offset to row data)
+    slot_offset := free_offset
+    store_i64(page_ptr + slot_offset, new_data_end)
+
+    # Update header
+    store_i64(page_ptr + 8, num_slots + 1)              # num_slots++
+    store_i64(page_ptr + 16, free_offset + SLOT_SIZE)    # advance free_offset
+    store_i64(page_ptr + 24, new_data_end)               # update data_end
+
+    num_slots  # return slot index
+}
+
+# Get row data pointer and length for given slot
+# Returns row data offset within page (add to page_ptr to get actual pointer)
+# Sets row_len_out to the row length
+F page_get_row_offset(page_ptr: i64, slot_idx: i64) -> i64 {
+    num_slots := load_i64(page_ptr + 8)
+    I slot_idx < 0 { R 0 - 1 }
+    I slot_idx >= num_slots { R 0 - 1 }
+
+    # Read slot entry
+    slot_ptr := PAGE_HEADER_SIZE + slot_idx * SLOT_SIZE
+    row_offset := load_i64(page_ptr + slot_ptr)
+    row_offset
+}
+
+# Get the row length for a given slot
+# For a slotted page, row length = next_row_start - this_row_start
+# Last slot's row extends to PAGE_SIZE (or previous data_end)
+F page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
+    num_slots := load_i64(page_ptr + 8)
+    I slot_idx < 0 { R 0 }
+    I slot_idx >= num_slots { R 0 }
+
+    slot_ptr := PAGE_HEADER_SIZE + slot_idx * SLOT_SIZE
+    row_offset := load_i64(page_ptr + slot_ptr)
+
+    # Find the end of this row
+    # Rows are stored in reverse order at bottom of page
+    # The first inserted row starts closest to PAGE_SIZE
+    # Later rows are below it
+    # For simplicity, calculate using next slot's offset or PAGE_SIZE
+    I slot_idx == 0 {
+        # First slot - row extends to PAGE_SIZE
+        PAGE_SIZE - row_offset
+    } E {
+        # Previous slot's row starts right after this one
+        prev_slot_ptr := PAGE_HEADER_SIZE + (slot_idx - 1) * SLOT_SIZE
+        prev_row_offset := load_i64(page_ptr + prev_slot_ptr)
+        prev_row_offset - row_offset
+    }
+}
+
+# --- Buffer Pool ---
+# Simple buffer pool: array of page buffers + page_id mapping
+
+C MAX_PAGES: i64 = 256
+
+S BufferPool {
+    pages: i64,       # Array of page pointers (MAX_PAGES * 8)
+    page_ids: i64,    # Array of page IDs (MAX_PAGES * 8), -1 = empty
+    num_pages: i64,   # Number of allocated pages
+    next_page_id: i64 # Counter for page ID generation
+}
+
+X BufferPool {
+    F new() -> BufferPool {
+        pages := malloc(MAX_PAGES * 8)
+        page_ids := malloc(MAX_PAGES * 8)
+        # Initialize all slots to empty
+        i := mut 0
+        L {
+            I i >= MAX_PAGES { B }
+            store_i64(pages + i * 8, 0)
+            store_i64(page_ids + i * 8, 0 - 1)
+            i = i + 1
+        }
+        BufferPool {
+            pages: pages,
+            page_ids: page_ids,
+            num_pages: 0,
+            next_page_id: 1
+        }
+    }
+
+    # Allocate a new page, returns page_ptr
+    F alloc_page(&self, page_type: i64) -> i64 {
+        I self.num_pages >= MAX_PAGES { R 0 }
+
+        page_ptr := malloc(PAGE_SIZE)
+        page_id := self.next_page_id
+        self.next_page_id = self.next_page_id + 1
+
+        page_init(page_ptr, page_id, page_type)
+
+        # Store in pool
+        idx := self.num_pages
+        store_i64(self.pages + idx * 8, page_ptr)
+        store_i64(self.page_ids + idx * 8, page_id)
+        self.num_pages = self.num_pages + 1
+
+        page_ptr
+    }
+
+    # Find page by ID, returns page_ptr or 0 if not found
+    F get_page(&self, page_id: i64) -> i64 {
+        @.find_page(page_id, 0)
+    }
+
+    F find_page(&self, page_id: i64, idx: i64) -> i64 {
+        I idx >= self.num_pages { 0 }
+        E {
+            pid := load_i64(self.page_ids + idx * 8)
+            I pid == page_id {
+                load_i64(self.pages + idx * 8)
+            } E {
+                @.find_page(page_id, idx + 1)
+            }
+        }
+    }
+
+    # Write page to file
+    F flush_page(&self, page_id: i64, file_handle: i64) -> i64 {
+        page_ptr := @.get_page(page_id)
+        I page_ptr == 0 { R 0 - 1 }
+        # Seek to page position in file
+        offset := (page_id - 1) * PAGE_SIZE
+        fseek(file_handle, offset, 0)  # SEEK_SET
+        fwrite(page_ptr, 1, PAGE_SIZE, file_handle)
+    }
+
+    # Read page from file
+    F load_page(&self, page_id: i64, file_handle: i64) -> i64 {
+        # Allocate buffer if needed
+        page_ptr := mut @.get_page(page_id)
+        I page_ptr == 0 {
+            page_ptr = malloc(PAGE_SIZE)
+            idx := self.num_pages
+            store_i64(self.pages + idx * 8, page_ptr)
+            store_i64(self.page_ids + idx * 8, page_id)
+            self.num_pages = self.num_pages + 1
+        }
+        offset := (page_id - 1) * PAGE_SIZE
+        fseek(file_handle, offset, 0)
+        fread(page_ptr, 1, PAGE_SIZE, file_handle)
+        page_ptr
+    }
+
+    # Free all pages
+    F drop(&self) -> i64 {
+        @.free_pages(0)
+        free(self.pages)
+        free(self.page_ids)
+        0
+    }
+
+    F free_pages(&self, idx: i64) -> i64 {
+        I idx >= self.num_pages { 0 }
+        E {
+            pp := load_i64(self.pages + idx * 8)
+            I pp != 0 { free(pp) }
+            @.free_pages(idx + 1)
+        }
+    }
+}

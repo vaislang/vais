@@ -1,0 +1,274 @@
+# VaisDB Row Serialization
+# Rows are serialized into byte buffers using a type-length-value (TLV) format:
+#   [column_count: varint] [col1_type: u8] [col1_data] [col2_type: u8] [col2_data] ...
+#
+# Column types:
+#   0 = NULL
+#   1 = I64 (8 bytes LE)
+#   2 = STR (varint length + bytes)
+#   3 = BOOL (1 byte: 0 or 1)
+#   4 = F64 (8 bytes LE)
+
+C COL_NULL: i64 = 0
+C COL_I64: i64 = 1
+C COL_STR: i64 = 2
+C COL_BOOL: i64 = 3
+C COL_F64: i64 = 4
+
+# Maximum columns per row
+C MAX_COLS: i64 = 32
+
+# RowBuilder: construct a row by adding columns one at a time
+# Writes to an internal buffer (ByteBuffer-style)
+S RowBuilder {
+    data: i64,       # Heap buffer
+    len: i64,        # Current position
+    cap: i64,        # Buffer capacity
+    col_count: i64   # Number of columns added
+}
+
+X RowBuilder {
+    F new() -> RowBuilder {
+        cap := 256
+        data := malloc(cap)
+        # Reserve space for column count (1 byte initially)
+        store_byte(data, 0)
+        RowBuilder { data: data, len: 1, cap: cap, col_count: 0 }
+    }
+
+    F ensure(&self, needed: i64) -> i64 {
+        I self.len + needed <= self.cap { R 0 }
+        nc := mut self.cap
+        L { I nc >= self.len + needed { B }; nc = nc * 2 }
+        nd := malloc(nc)
+        memcpy(nd, self.data, self.len)
+        free(self.data)
+        self.data = nd
+        self.cap = nc
+        0
+    }
+
+    # Add NULL column
+    F add_null(&self) -> i64 {
+        @.ensure(1)
+        store_byte(self.data + self.len, COL_NULL)
+        self.len = self.len + 1
+        self.col_count = self.col_count + 1
+        0
+    }
+
+    # Add i64 column
+    F add_i64(&self, value: i64) -> i64 {
+        @.ensure(9)  # 1 type + 8 data
+        store_byte(self.data + self.len, COL_I64)
+        self.len = self.len + 1
+        # Write i64 LE
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        store_byte(self.data + self.len + 4, (value >> 32) & 255)
+        store_byte(self.data + self.len + 5, (value >> 40) & 255)
+        store_byte(self.data + self.len + 6, (value >> 48) & 255)
+        store_byte(self.data + self.len + 7, (value >> 56) & 255)
+        self.len = self.len + 8
+        self.col_count = self.col_count + 1
+        0
+    }
+
+    # Add string column (from i64 pointer to null-terminated string)
+    F add_str(&self, s_ptr: i64) -> i64 {
+        # Calculate length manually
+        slen := row_ptr_strlen(s_ptr)
+        @.ensure(1 + 10 + slen)  # type + varint + data
+        store_byte(self.data + self.len, COL_STR)
+        self.len = self.len + 1
+        # Write length as varint
+        @.write_varint(slen)
+        # Write string bytes
+        memcpy(self.data + self.len, s_ptr, slen)
+        self.len = self.len + slen
+        self.col_count = self.col_count + 1
+        0
+    }
+
+    # Add bool column
+    F add_bool(&self, value: i64) -> i64 {
+        @.ensure(2)
+        store_byte(self.data + self.len, COL_BOOL)
+        self.len = self.len + 1
+        bv := I value != 0 { 1 } E { 0 }
+        store_byte(self.data + self.len, bv)
+        self.len = self.len + 1
+        self.col_count = self.col_count + 1
+        0
+    }
+
+    # Internal: write varint to buffer
+    F write_varint(&self, value: i64) -> i64 {
+        v := mut value
+        L {
+            byte := v & 127
+            v = v >> 7
+            I v > 0 {
+                store_byte(self.data + self.len, byte | 128)
+            } E {
+                store_byte(self.data + self.len, byte)
+            }
+            self.len = self.len + 1
+            I v == 0 { B }
+        }
+        0
+    }
+
+    # Finalize: write column count to first byte and return buffer info
+    # Returns total length of serialized row
+    F finish(&self) -> i64 {
+        store_byte(self.data, self.col_count)
+        self.len
+    }
+
+    # Get data pointer (valid after finish())
+    F data_ptr(&self) -> i64 = self.data
+
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        0
+    }
+}
+
+# RowReader: decode a serialized row from a buffer
+S RowReader {
+    data: i64,       # Pointer to row data (NOT owned)
+    pos: i64,        # Current read position
+    len: i64,        # Total data length
+    col_count: i64   # Number of columns
+}
+
+X RowReader {
+    F from_ptr(data: i64, len: i64) -> RowReader {
+        col_count := load_byte(data)
+        RowReader { data: data, pos: 1, len: len, col_count: col_count }
+    }
+
+    F num_cols(&self) -> i64 = self.col_count
+
+    # Read next column type without advancing
+    F peek_type(&self) -> i64 {
+        I self.pos >= self.len { R 0 - 1 }
+        load_byte(self.data + self.pos)
+    }
+
+    # Skip current column
+    F skip_col(&self) -> i64 {
+        ct := @.peek_type()
+        I ct < 0 { R 0 - 1 }
+        self.pos = self.pos + 1  # skip type byte
+
+        I ct == COL_NULL { R 0 }
+        I ct == COL_BOOL {
+            self.pos = self.pos + 1
+            R 0
+        }
+        I ct == COL_I64 {
+            self.pos = self.pos + 8
+            R 0
+        }
+        I ct == COL_F64 {
+            self.pos = self.pos + 8
+            R 0
+        }
+        I ct == COL_STR {
+            slen := @.read_varint()
+            self.pos = self.pos + slen
+            R 0
+        }
+        0 - 1  # unknown type
+    }
+
+    # Read i64 column value
+    F read_i64(&self) -> i64 {
+        ct := load_byte(self.data + self.pos)
+        I ct != COL_I64 { R 0 - 1 }
+        self.pos = self.pos + 1
+
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        b4 := load_byte(self.data + self.pos + 4)
+        b5 := load_byte(self.data + self.pos + 5)
+        b6 := load_byte(self.data + self.pos + 6)
+        b7 := load_byte(self.data + self.pos + 7)
+        self.pos = self.pos + 8
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    }
+
+    # Read bool column value
+    F read_bool(&self) -> i64 {
+        ct := load_byte(self.data + self.pos)
+        I ct != COL_BOOL { R 0 - 1 }
+        self.pos = self.pos + 1
+        val := load_byte(self.data + self.pos)
+        self.pos = self.pos + 1
+        val
+    }
+
+    # Read string column — returns pointer to newly allocated copy
+    F read_str(&self) -> i64 {
+        ct := load_byte(self.data + self.pos)
+        I ct != COL_STR { R 0 }
+        self.pos = self.pos + 1
+        slen := @.read_varint()
+        buf := malloc(slen + 1)
+        memcpy(buf, self.data + self.pos, slen)
+        store_byte(buf + slen, 0)
+        self.pos = self.pos + slen
+        buf
+    }
+
+    # Read column at given index (skips previous columns)
+    # Returns column type, positions reader AFTER the column data
+    F seek_col(&self, target: i64) -> i64 {
+        self.pos = 1  # reset to after col_count
+        @.seek_col_loop(target, 0)
+    }
+
+    F seek_col_loop(&self, target: i64, current: i64) -> i64 {
+        I current >= target {
+            @.peek_type()
+        } E {
+            @.skip_col()
+            @.seek_col_loop(target, current + 1)
+        }
+    }
+
+    # Internal: read varint from buffer
+    F read_varint(&self) -> i64 {
+        result := mut 0
+        shift := mut 0
+        L {
+            I self.pos >= self.len { R 0 - 1 }
+            byte := load_byte(self.data + self.pos)
+            self.pos = self.pos + 1
+            result = result | ((byte & 127) << shift)
+            I (byte & 128) == 0 { B }
+            shift = shift + 7
+            I shift >= 64 { R 0 - 1 }
+        }
+        result
+    }
+}
+
+# Helper: strlen for i64 pointer
+F row_ptr_strlen(s: i64) -> i64 {
+    I s == 0 { R 0 }
+    idx := mut 0
+    L {
+        c := load_byte(s + idx)
+        I c == 0 { R idx }
+        idx = idx + 1
+    }
+    idx
+}

@@ -1,4 +1,4 @@
-# StringMap - hash table with string keys and i64 values
+# StringMap - hash table with string keys and generic values
 # Uses separate chaining for collision resolution
 # String keys are compared by content (not pointer address)
 # Uses DJB2 hash function from std/hash for string hashing
@@ -122,19 +122,19 @@ F strmap_rehash_entries(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
 # key_ptr points to a heap-allocated copy of the key string
 
 # StringMap structure
-S StringMap {
+S StringMap<V> {
     buckets: i64,   # Pointer to array of bucket heads
     size: i64,      # Number of key-value pairs
     cap: i64        # Number of buckets
 }
 
-X StringMap {
+X StringMap<V> {
     # Create a new StringMap with given capacity
-    F with_capacity(capacity: i64) -> StringMap {
+    F with_capacity(capacity: i64) -> StringMap<V> {
         cap := I capacity < 8 { 8 } E { capacity }
         buckets := malloc(cap * 8)
         strmap_init_buckets(buckets, 0, cap)
-        StringMap { buckets: buckets, size: 0, cap: cap }
+        StringMap<V> { buckets: buckets, size: 0, cap: cap }
     }
 
     # Get number of entries
@@ -155,13 +155,13 @@ X StringMap {
     }
 
     # Get value for string key, returns 0 if not found
-    F get(&self, key: i64) -> i64 {
+    F get(&self, key: i64) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         @.get_from_chain(entry_ptr, key)
     }
 
-    F get_from_chain(&self, entry_ptr: i64, key: i64) -> i64 {
+    F get_from_chain(&self, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
         E {
             entry_key := load_i64(entry_ptr)
@@ -175,7 +175,7 @@ X StringMap {
     }
 
     # Get value using Option type
-    F get_opt(&self, key: i64) -> Option<i64> {
+    F get_opt(&self, key: i64) -> Option<V> {
         I @.contains(key) == 1 {
             Some(@.get(key))
         } E {
@@ -204,7 +204,7 @@ X StringMap {
 
     # Set key-value pair (copies the key string)
     # Returns previous value or 0 if new
-    F set(&self, key: i64, value: i64) -> i64 {
+    F set(&self, key: i64, value: V) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
 
@@ -230,7 +230,7 @@ X StringMap {
         }
     }
 
-    F update_in_chain(&self, entry_ptr: i64, key: i64, value: i64) -> i64 {
+    F update_in_chain(&self, entry_ptr: i64, key: i64, value: V) -> V {
         I entry_ptr == 0 {
             0 - 1
         } E {
@@ -247,13 +247,13 @@ X StringMap {
     }
 
     # Remove key-value pair, returns removed value or 0 if not found
-    F remove(&self, key: i64) -> i64 {
+    F remove(&self, key: i64) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         @.remove_from_chain(idx, 0, entry_ptr, key)
     }
 
-    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> i64 {
+    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
         E {
             entry_key := load_i64(entry_ptr)
@@ -318,6 +318,6 @@ X StringMap {
 }
 
 # Convenience constructor
-F stringmap_new() -> StringMap {
+F stringmap_new() -> StringMap<i64> {
     StringMap.with_capacity(16)
 }

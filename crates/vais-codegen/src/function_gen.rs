@@ -503,6 +503,17 @@ impl CodeGenerator {
         ir.push_str("  ret i64 %5\n");
         ir.push_str("}\n");
 
+        // __getcwd_wrapper: getcwd wrapper that converts ptr result to i64
+        ir.push_str("\n; Filesystem helper: getcwd wrapper\n");
+        ir.push_str("declare i8* @getcwd(i8*, i64)\n");
+        ir.push_str("define i64 @__getcwd_wrapper(i64 %buf, i64 %size) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %buf to i8*\n");
+        ir.push_str("  %1 = call i8* @getcwd(i8* %0, i64 %size)\n");
+        ir.push_str("  %2 = ptrtoint i8* %1 to i64\n");
+        ir.push_str("  ret i64 %2\n");
+        ir.push_str("}\n");
+
         // __stat_size: get file size using stat
         ir.push_str("\n; Filesystem helper: stat file size\n");
         ir.push_str("%struct.stat = type opaque\n");

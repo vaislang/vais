@@ -1,0 +1,352 @@
+# VaisDB Demo — Storage Engine Integration Test
+#
+# Demonstrates:
+# 1. Table creation (in-memory)
+# 2. Row insertion with auto-increment primary keys
+# 3. Point lookup by primary key
+# 4. Range scan
+# 5. Multiple data pages (automatic overflow)
+# 6. Row serialization/deserialization
+
+U page
+U row
+U btree
+U storage
+
+# ========== Test 1: Page operations ==========
+F test_page_ops() -> i64 {
+    # Allocate a page
+    page_ptr := malloc(PAGE_SIZE)
+    page_init(page_ptr, 1, PAGE_DATA)
+
+    # Check initial state
+    I page_get_id(page_ptr) != 1 { free(page_ptr); R 1 }
+    I page_num_rows(page_ptr) != 0 { free(page_ptr); R 2 }
+
+    # Insert a small row (10 bytes)
+    row := malloc(10)
+    i := mut 0
+    L { I i >= 10 { B }; store_byte(row + i, 42); i = i + 1 }
+
+    slot := page_insert_row(page_ptr, row, 10)
+    I slot != 0 { free(row); free(page_ptr); R 3 }
+    I page_num_rows(page_ptr) != 1 { free(row); free(page_ptr); R 4 }
+
+    # Read back the row
+    offset := page_get_row_offset(page_ptr, 0)
+    I offset < 0 { free(row); free(page_ptr); R 5 }
+    first_byte := load_byte(page_ptr + offset)
+    I first_byte != 42 { free(row); free(page_ptr); R 6 }
+
+    # Insert a second row
+    slot2 := page_insert_row(page_ptr, row, 10)
+    I slot2 != 1 { free(row); free(page_ptr); R 7 }
+    I page_num_rows(page_ptr) != 2 { free(row); free(page_ptr); R 8 }
+
+    free(row)
+    free(page_ptr)
+    0
+}
+
+# ========== Test 2: Row serialization ==========
+F test_row_serialization() -> i64 {
+    # Build a row with various column types
+    rb := RowBuilder.new()
+    rb.add_i64(42)
+
+    name := str_to_ptr("Alice")
+    rb.add_str(name)
+
+    rb.add_bool(1)
+
+    row_len := rb.finish()
+    I row_len <= 0 { rb.drop(); R 1 }
+
+    # Read the row back
+    reader := RowReader.from_ptr(rb.data_ptr(), row_len)
+    I reader.num_cols() != 3 { rb.drop(); R 2 }
+
+    # Read i64
+    val := reader.read_i64()
+    I val != 42 { rb.drop(); R 3 }
+
+    # Read string
+    str_ptr := reader.read_str()
+    I str_ptr == 0 { rb.drop(); R 4 }
+    # Check first char 'A' = 65
+    I load_byte(str_ptr) != 65 { free(str_ptr); rb.drop(); R 5 }
+    free(str_ptr)
+
+    # Read bool
+    bval := reader.read_bool()
+    I bval != 1 { rb.drop(); R 6 }
+
+    rb.drop()
+    0
+}
+
+# ========== Test 3: B-Tree operations ==========
+F test_btree() -> i64 {
+    tree := BTree.new()
+
+    # Insert entries
+    tree.insert(10, 1, 0)
+    tree.insert(20, 1, 1)
+    tree.insert(5, 1, 2)
+    tree.insert(15, 2, 0)
+    tree.insert(25, 2, 1)
+
+    I tree.len() != 5 { tree.drop(); R 1 }
+
+    # Search for existing key
+    page_id := tree.search(15)
+    I page_id != 2 { tree.drop(); R 2 }
+
+    # Search for non-existing key
+    page_id2 := tree.search(99)
+    I page_id2 != 0 { tree.drop(); R 3 }
+
+    # Search with full info
+    slot_buf := malloc(8)
+    pid := tree.search_full(20, slot_buf)
+    I pid != 1 { free(slot_buf); tree.drop(); R 4 }
+    sid := load_i64(slot_buf)
+    I sid != 1 { free(slot_buf); tree.drop(); R 5 }
+    free(slot_buf)
+
+    # Range scan [10, 20]
+    out_keys := malloc(64)
+    out_pages := malloc(64)
+    out_slots := malloc(64)
+    count := tree.range_scan(10, 20, out_keys, out_pages, out_slots, 8)
+
+    # Should find 10, 15, 20
+    I count != 3 { free(out_keys); free(out_pages); free(out_slots); tree.drop(); R 6 }
+
+    k0 := load_i64(out_keys)
+    I k0 != 10 { free(out_keys); free(out_pages); free(out_slots); tree.drop(); R 7 }
+    k1 := load_i64(out_keys + 8)
+    I k1 != 15 { free(out_keys); free(out_pages); free(out_slots); tree.drop(); R 8 }
+    k2 := load_i64(out_keys + 16)
+    I k2 != 20 { free(out_keys); free(out_pages); free(out_slots); tree.drop(); R 9 }
+
+    free(out_keys)
+    free(out_pages)
+    free(out_slots)
+    tree.drop()
+    0
+}
+
+# ========== Test 4: Table insert + get ==========
+F test_table_basic() -> i64 {
+    name := str_to_ptr("users")
+    t := Table.create(name)
+
+    # Insert user "Alice", age 30
+    alice_name := str_to_ptr("Alice")
+    rb1 := build_user_row(alice_name, 30)
+    rb1_len := rb1.finish()
+    pk1 := t.insert(rb1.data_ptr(), rb1_len)
+    rb1.drop()
+    I pk1 != 1 { t.close(); R 1 }
+
+    # Insert user "Bob", age 25
+    bob_name := str_to_ptr("Bob")
+    rb2 := build_user_row(bob_name, 25)
+    rb2_len := rb2.finish()
+    pk2 := t.insert(rb2.data_ptr(), rb2_len)
+    rb2.drop()
+    I pk2 != 2 { t.close(); R 2 }
+
+    I t.count() != 2 { t.close(); R 3 }
+
+    # Get Alice by primary key
+    len_buf := malloc(8)
+    data := t.get(1, len_buf)
+    I data == 0 { free(len_buf); t.close(); R 4 }
+
+    row_len := load_i64(len_buf)
+    out_name := malloc(8)
+    out_age := malloc(8)
+    read_user_row(data, row_len, out_name, out_age)
+
+    got_name := load_i64(out_name)
+    got_age := load_i64(out_age)
+
+    # Check name starts with 'A' (65)
+    I load_byte(got_name) != 65 { free(got_name); free(out_name); free(out_age); free(len_buf); t.close(); R 5 }
+    I got_age != 30 { free(got_name); free(out_name); free(out_age); free(len_buf); t.close(); R 6 }
+
+    free(got_name)
+
+    # Get Bob by primary key
+    data2 := t.get(2, len_buf)
+    I data2 == 0 { free(out_name); free(out_age); free(len_buf); t.close(); R 7 }
+
+    row_len2 := load_i64(len_buf)
+    read_user_row(data2, row_len2, out_name, out_age)
+
+    got_name2 := load_i64(out_name)
+    got_age2 := load_i64(out_age)
+    I load_byte(got_name2) != 66 { free(got_name2); free(out_name); free(out_age); free(len_buf); t.close(); R 8 }
+    I got_age2 != 25 { free(got_name2); free(out_name); free(out_age); free(len_buf); t.close(); R 9 }
+
+    free(got_name2)
+    free(out_name)
+    free(out_age)
+    free(len_buf)
+    t.close()
+    0
+}
+
+# ========== Test 5: Many inserts (triggers new pages) ==========
+F test_many_inserts() -> i64 {
+    name := str_to_ptr("products")
+    t := Table.create(name)
+
+    # Insert 50 products using loop
+    idx := mut 0
+    L {
+        I idx >= 50 { B }
+        pname := str_to_ptr("Product")
+        price := idx * 100
+        qty := idx + 10
+        rb := build_product_row(pname, price, qty)
+        rb_len := rb.finish()
+        t.insert(rb.data_ptr(), rb_len)
+        rb.drop()
+        idx = idx + 1
+    }
+
+    I t.count() != 50 { t.close(); R 1 }
+
+    # Verify a few entries
+    len_buf := malloc(8)
+    out_name := malloc(8)
+    out_price := malloc(8)
+    out_qty := malloc(8)
+
+    # Check product #1
+    data := t.get(1, len_buf)
+    I data == 0 { free(len_buf); free(out_name); free(out_price); free(out_qty); t.close(); R 2 }
+    row_len := load_i64(len_buf)
+    read_product_row(data, row_len, out_name, out_price, out_qty)
+    got_price := load_i64(out_price)
+    # Price should be 0 * 100 = 0
+    I got_price != 0 { free(load_i64(out_name)); free(len_buf); free(out_name); free(out_price); free(out_qty); t.close(); R 3 }
+    free(load_i64(out_name))
+
+    # Check product #25
+    data2 := t.get(25, len_buf)
+    I data2 == 0 { free(len_buf); free(out_name); free(out_price); free(out_qty); t.close(); R 4 }
+    row_len2 := load_i64(len_buf)
+    read_product_row(data2, row_len2, out_name, out_price, out_qty)
+    got_price2 := load_i64(out_price)
+    # Price should be 24 * 100 = 2400
+    I got_price2 != 2400 { free(load_i64(out_name)); free(len_buf); free(out_name); free(out_price); free(out_qty); t.close(); R 5 }
+    free(load_i64(out_name))
+
+    free(len_buf)
+    free(out_name)
+    free(out_price)
+    free(out_qty)
+    t.close()
+    0
+}
+
+# ========== Test 6: Range scan ==========
+F test_range_scan() -> i64 {
+    name := str_to_ptr("scan_test")
+    t := Table.create(name)
+
+    # Insert 10 items using loop
+    idx := mut 0
+    L {
+        I idx >= 10 { B }
+        pname := str_to_ptr("Product")
+        price := idx * 100
+        qty := idx + 10
+        rb := build_product_row(pname, price, qty)
+        rb_len := rb.finish()
+        t.insert(rb.data_ptr(), rb_len)
+        rb.drop()
+        idx = idx + 1
+    }
+
+    # Scan keys [3, 7]
+    out_ptrs := malloc(128 * 8)
+    out_lens := malloc(128 * 8)
+    count := t.scan(3, 7, out_ptrs, out_lens, 128)
+
+    # Should find keys 3, 4, 5, 6, 7 = 5 results
+    I count != 5 { free(out_ptrs); free(out_lens); t.close(); R 1 }
+
+    # Verify first result is readable
+    first_ptr := load_i64(out_ptrs)
+    first_len := load_i64(out_lens)
+    I first_ptr == 0 { free(out_ptrs); free(out_lens); t.close(); R 2 }
+    I first_len == 0 { free(out_ptrs); free(out_lens); t.close(); R 3 }
+
+    free(out_ptrs)
+    free(out_lens)
+    t.close()
+    0
+}
+
+# ========== Test 7: Buffer pool ==========
+F test_buffer_pool() -> i64 {
+    pool := BufferPool.new()
+
+    # Allocate pages
+    p1 := pool.alloc_page(PAGE_DATA)
+    I p1 == 0 { pool.drop(); R 1 }
+    p2 := pool.alloc_page(PAGE_DATA)
+    I p2 == 0 { pool.drop(); R 2 }
+    p3 := pool.alloc_page(PAGE_INDEX)
+    I p3 == 0 { pool.drop(); R 3 }
+
+    I pool.num_pages != 3 { pool.drop(); R 4 }
+
+    # Look up by ID
+    id1 := page_get_id(p1)
+    found := pool.get_page(id1)
+    I found != p1 { pool.drop(); R 5 }
+
+    id3 := page_get_id(p3)
+    found3 := pool.get_page(id3)
+    I found3 != p3 { pool.drop(); R 6 }
+
+    # Non-existing page
+    not_found := pool.get_page(999)
+    I not_found != 0 { pool.drop(); R 7 }
+
+    pool.drop()
+    0
+}
+
+# ========== Main: run all tests ==========
+F main() -> i64 {
+    r := mut test_page_ops()
+    I r != 0 { print("FAIL: page ops"); R r }
+
+    r = test_row_serialization()
+    I r != 0 { print("FAIL: row serialization"); R 10 + r }
+
+    r = test_btree()
+    I r != 0 { print("FAIL: btree"); R 20 + r }
+
+    r = test_table_basic()
+    I r != 0 { print("FAIL: table basic"); R 30 + r }
+
+    r = test_many_inserts()
+    I r != 0 { print("FAIL: many inserts"); R 40 + r }
+
+    r = test_range_scan()
+    I r != 0 { print("FAIL: range scan"); R 50 + r }
+
+    r = test_buffer_pool()
+    I r != 0 { print("FAIL: buffer pool"); R 60 + r }
+
+    print("All VaisDB tests passed!")
+    0
+}

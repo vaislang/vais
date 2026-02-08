@@ -41,8 +41,159 @@ F fs_getcwd() -> str {
         free(buf)
         R ""
     }
-    # TODO: Convert buf to str properly and free it
-    # For now, return empty string as this needs str conversion support
+    # buf is already a valid C string pointer — same representation as Vais str
+    # We need to copy it to a new allocation so we can free the original buffer
+    len := strlen(result)
+    new_buf := malloc(len + 1)
+    memcpy(new_buf, result, len + 1)
     free(buf)
-    ""
+    # In Vais, str is a pointer to a null-terminated byte sequence
+    # The i64 pointer value IS the str value at the LLVM level
+    ptr_to_str(new_buf)
+}
+
+# List directory contents — returns a Vec<i64> of string pointers
+# Each entry is a pointer to a heap-allocated null-terminated filename
+# Caller must free each entry and the Vec when done
+# Skips "." and ".." entries
+F fs_list_dir(path: str) -> i64 {
+    # Returns a raw pointer to a Vec-like structure:
+    # [data_ptr: i64, len: i64, cap: i64]
+    d := opendir(path)
+    I d == 0 { R 0 }
+
+    # Allocate a simple growable array
+    cap := mut 16
+    data := mut malloc(cap * 8)
+    count := mut 0
+
+    L {
+        entry := readdir(d)
+        I entry == 0 { B }
+
+        # Skip "." and ".."
+        first_byte := load_byte(entry)
+        I first_byte == 46 {
+            second_byte := load_byte(entry + 1)
+            I second_byte == 0 {
+                # "." — skip
+            } E I second_byte == 46 {
+                third_byte := load_byte(entry + 2)
+                I third_byte == 0 {
+                    # ".." — skip
+                } E {
+                    # Filename starting with ".." but longer — keep it
+                    len := strlen(entry)
+                    copy := malloc(len + 1)
+                    memcpy(copy, entry, len + 1)
+                    I count >= cap {
+                        new_cap := cap * 2
+                        new_data := malloc(new_cap * 8)
+                        memcpy(new_data, data, count * 8)
+                        free(data)
+                        data = new_data
+                        cap = new_cap
+                    }
+                    store_i64(data + count * 8, copy)
+                    count = count + 1
+                }
+            } E {
+                # Filename starting with "." but not ".." — keep it (hidden files)
+                len := strlen(entry)
+                copy := malloc(len + 1)
+                memcpy(copy, entry, len + 1)
+                I count >= cap {
+                    new_cap := cap * 2
+                    new_data := malloc(new_cap * 8)
+                    memcpy(new_data, data, count * 8)
+                    free(data)
+                    data = new_data
+                    cap = new_cap
+                }
+                store_i64(data + count * 8, copy)
+                count = count + 1
+            }
+        } E {
+            # Normal filename — copy and store
+            len := strlen(entry)
+            copy := malloc(len + 1)
+            memcpy(copy, entry, len + 1)
+            I count >= cap {
+                new_cap := cap * 2
+                new_data := malloc(new_cap * 8)
+                memcpy(new_data, data, count * 8)
+                free(data)
+                data = new_data
+                cap = new_cap
+            }
+            store_i64(data + count * 8, copy)
+            count = count + 1
+        }
+    }
+
+    closedir(d)
+
+    # Pack into a result struct: [data, count, cap]
+    result := malloc(24)
+    store_i64(result, data)
+    store_i64(result + 8, count)
+    store_i64(result + 16, cap)
+    result
+}
+
+# Get the number of entries from fs_list_dir result
+F fs_list_dir_count(dir_result: i64) -> i64 {
+    I dir_result == 0 { R 0 }
+    load_i64(dir_result + 8)
+}
+
+# Get entry at index from fs_list_dir result (returns filename pointer)
+F fs_list_dir_get(dir_result: i64, idx: i64) -> i64 {
+    I dir_result == 0 { R 0 }
+    data := load_i64(dir_result)
+    load_i64(data + idx * 8)
+}
+
+# Free fs_list_dir result (frees all filename copies and the array)
+F fs_list_dir_free(dir_result: i64) -> i64 {
+    I dir_result == 0 { R 0 }
+    data := load_i64(dir_result)
+    count := load_i64(dir_result + 8)
+    i := mut 0
+    L {
+        I i >= count { B }
+        entry := load_i64(data + i * 8)
+        I entry != 0 { free(entry) }
+        i = i + 1
+    }
+    free(data)
+    free(dir_result)
+    0
+}
+
+# Check if a path exists (file or directory)
+# Uses access() with F_OK (mode=0)
+# Returns 1 if exists, 0 if not
+F fs_exists(path: str) -> i64 {
+    r := access(path, 0)
+    I r == 0 { 1 } E { 0 }
+}
+
+# Check if path is a directory
+# Uses opendir — if it succeeds, it's a directory
+# Returns 1 if directory, 0 if not
+F fs_is_dir(path: str) -> i64 {
+    d := opendir(path)
+    I d == 0 { R 0 }
+    closedir(d)
+    1
+}
+
+# Check if path is a regular file (not a directory)
+# A path is a file if it exists but is not a directory
+# Returns 1 if regular file, 0 if not
+F fs_is_file(path: str) -> i64 {
+    I fs_exists(path) == 0 { R 0 }
+    I fs_is_dir(path) == 1 { R 0 }
+    1
 }

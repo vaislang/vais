@@ -138,7 +138,13 @@ X ByteBuffer {
     # Write a null-terminated string (length-prefixed: i32 len + bytes)
     F write_str(&self, s: str) -> i64 {
         p := str_to_ptr(s)
-        slen := strlen(s)
+        # Calculate string length manually to avoid use-after-move
+        slen := mut 0
+        L {
+            b := load_byte(p + slen)
+            I b == 0 { B }
+            slen = slen + 1
+        }
         @.write_i32_le(slen)
         @.ensure_capacity(self.len + slen)
         memcpy(self.data + self.len, p, slen)
@@ -151,6 +157,89 @@ X ByteBuffer {
         self.len = 0
         self.pos = 0
         0
+    }
+
+    # Write unsigned varint (LEB128 encoding)
+    # Each byte stores 7 bits of data + 1 continuation bit (MSB)
+    # Returns number of bytes written
+    F write_varint(&self, value: i64) -> i64 {
+        count := mut 0
+        v := mut value
+        L {
+            byte := v & 127  # lower 7 bits
+            v = v >> 7
+            I v > 0 {
+                @.write_u8(byte | 128)  # set continuation bit
+            } E {
+                @.write_u8(byte)
+            }
+            count = count + 1
+            I v == 0 { B }
+        }
+        count
+    }
+
+    # Read unsigned varint (LEB128 decoding)
+    # Returns the decoded value, or -1 on error
+    F read_varint(&self) -> i64 {
+        result := mut 0
+        shift := mut 0
+        L {
+            I self.pos >= self.len { R 0 - 1 }
+            byte := @.read_u8()
+            I byte < 0 { R 0 - 1 }
+            result = result | ((byte & 127) << shift)
+            I (byte & 128) == 0 { B }
+            shift = shift + 7
+            I shift >= 64 { R 0 - 1 }  # overflow protection
+        }
+        result
+    }
+
+    # Write u16 in little-endian (2 bytes)
+    F write_u16_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 2)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        self.len = self.len + 2
+        2
+    }
+
+    # Read u16 little-endian
+    F read_u16_le(&self) -> i64 {
+        I self.pos + 2 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        self.pos = self.pos + 2
+        b0 | (b1 << 8)
+    }
+
+    # Write f64 value (stored as 8-byte little-endian, same bit pattern as i64)
+    # Caller should use f64_to_bits() to convert f64 to i64 before calling
+    F write_f64_le(&self, bits: i64) -> i64 {
+        @.write_i64_le(bits)
+    }
+
+    # Read f64 value (returns i64 bit pattern)
+    # Caller should use bits_to_f64() to convert back to f64
+    F read_f64_le(&self) -> i64 {
+        @.read_i64_le()
+    }
+
+    # Read a length-prefixed string
+    # Format: [i32 length (LE)] [bytes]
+    # Returns a new heap-allocated null-terminated string as i64 pointer
+    # Returns 0 on error (insufficient data)
+    F read_str(&self) -> i64 {
+        I self.pos + 4 > self.len { R 0 }
+        slen := @.read_i32_le()
+        I slen < 0 { R 0 }
+        I self.pos + slen > self.len { R 0 }
+        buf := malloc(slen + 1)
+        memcpy(buf, self.data + self.pos, slen)
+        store_byte(buf + slen, 0)  # null terminator
+        self.pos = self.pos + slen
+        buf
     }
 
     # Free memory

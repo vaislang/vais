@@ -383,6 +383,26 @@ impl CodeGenerator {
                 ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, str_val));
                 return Ok((result, ir));
             }
+
+            // Handle ptr_to_str builtin: convert i64 to string pointer
+            // Only do inttoptr if arg is i64; if already a pointer, pass through
+            if name == "ptr_to_str" {
+                if args.len() != 1 {
+                    return Err(CodegenError::TypeError(
+                        "ptr_to_str expects 1 argument".to_string(),
+                    ));
+                }
+                let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+                let mut ir = ptr_ir;
+                let arg_type = self.infer_expr_type(&args[0]);
+                if matches!(arg_type, vais_types::ResolvedType::I64) {
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", result, ptr_val));
+                    return Ok((result, ir));
+                }
+                // Already a pointer type, no conversion needed
+                return Ok((ptr_val, ir));
+            }
         }
 
         // Check if this is a direct function call or indirect (lambda) call

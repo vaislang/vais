@@ -2952,6 +2952,31 @@ impl CodeGenerator {
                         return Ok((result, ir));
                     }
 
+                    // Handle ptr_to_str builtin: convert i64 to string pointer (i8*)
+                    // If value is already a pointer type, pass through directly
+                    if name == "ptr_to_str" {
+                        if args.len() != 1 {
+                            return Err(CodegenError::TypeError(
+                                "ptr_to_str expects 1 argument".to_string(),
+                            ));
+                        }
+                        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+                        let mut ir = ptr_ir;
+                        // Only do inttoptr if the arg is actually an integer (i64)
+                        // If it's already a pointer (str, malloc result, etc.), pass through
+                        let arg_type = self.infer_expr_type(&args[0]);
+                        if matches!(arg_type, vais_types::ResolvedType::I64) {
+                            let result = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = inttoptr i64 {} to i8*\n",
+                                result, ptr_val
+                            ));
+                            return Ok((result, ir));
+                        }
+                        // Already a pointer/str, no conversion needed
+                        return Ok((ptr_val, ir));
+                    }
+
                     // sizeof(expr) — compile-time constant size query
                     if name == "sizeof" && !args.is_empty() {
                         let arg_type = self.infer_expr_type(&args[0]);
