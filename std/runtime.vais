@@ -1121,3 +1121,287 @@ F task_group_named(name_ptr: i64) -> TaskGroup {
 F scoped_task() -> ScopedTask {
     ScopedTask::new()
 }
+
+# ============================================
+# Select - wait for first of N futures
+# ============================================
+# select takes up to 4 future/poll pairs and returns
+# the index (0-based) and result of the first one to complete.
+
+# SelectResult holds which future completed and its value
+S SelectResult {
+    index: i64,     # Which future completed (0-based)
+    value: i64      # Result value
+}
+
+X SelectResult {
+    F new(index: i64, value: i64) -> SelectResult {
+        SelectResult { index: index, value: value }
+    }
+}
+
+# select2: wait for the first of 2 futures to complete
+F select2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> SelectResult {
+    L 1 {
+        # Poll future 1
+        r1 := call_poll(pf1, fp1)
+        s1 := extract_poll_status(r1)
+        v1 := extract_poll_value(r1)
+        I s1 == 1 { R SelectResult::new(0, v1) }
+
+        # Poll future 2
+        r2 := call_poll(pf2, fp2)
+        s2 := extract_poll_status(r2)
+        v2 := extract_poll_value(r2)
+        I s2 == 1 { R SelectResult::new(1, v2) }
+    }
+    SelectResult::new(-1, 0)
+}
+
+# select3: wait for the first of 3 futures to complete
+F select3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> SelectResult {
+    L 1 {
+        r1 := call_poll(pf1, fp1)
+        s1 := extract_poll_status(r1)
+        v1 := extract_poll_value(r1)
+        I s1 == 1 { R SelectResult::new(0, v1) }
+
+        r2 := call_poll(pf2, fp2)
+        s2 := extract_poll_status(r2)
+        v2 := extract_poll_value(r2)
+        I s2 == 1 { R SelectResult::new(1, v2) }
+
+        r3 := call_poll(pf3, fp3)
+        s3 := extract_poll_status(r3)
+        v3 := extract_poll_value(r3)
+        I s3 == 1 { R SelectResult::new(2, v3) }
+    }
+    SelectResult::new(-1, 0)
+}
+
+# select4: wait for the first of 4 futures to complete
+F select4(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64, fp4: i64, pf4: i64) -> SelectResult {
+    L 1 {
+        r1 := call_poll(pf1, fp1)
+        s1 := extract_poll_status(r1)
+        v1 := extract_poll_value(r1)
+        I s1 == 1 { R SelectResult::new(0, v1) }
+
+        r2 := call_poll(pf2, fp2)
+        s2 := extract_poll_status(r2)
+        v2 := extract_poll_value(r2)
+        I s2 == 1 { R SelectResult::new(1, v2) }
+
+        r3 := call_poll(pf3, fp3)
+        s3 := extract_poll_status(r3)
+        v3 := extract_poll_value(r3)
+        I s3 == 1 { R SelectResult::new(2, v3) }
+
+        r4 := call_poll(pf4, fp4)
+        s4 := extract_poll_status(r4)
+        v4 := extract_poll_value(r4)
+        I s4 == 1 { R SelectResult::new(3, v4) }
+    }
+    SelectResult::new(-1, 0)
+}
+
+# ============================================
+# Join - wait for all N futures to complete
+# ============================================
+# join waits for all futures to complete and returns
+# the results in an allocated array.
+
+# JoinResult holds results of all completed futures
+S JoinResult {
+    results_ptr: i64,   # Pointer to i64 array of results
+    count: i64          # Number of results
+}
+
+X JoinResult {
+    F new(results_ptr: i64, count: i64) -> JoinResult {
+        JoinResult { results_ptr: results_ptr, count: count }
+    }
+
+    # Get result at index
+    F get(&self, index: i64) -> i64 {
+        I index >= 0 {
+            I index < self.count {
+                R load_i64(self.results_ptr + index * 8)
+            }
+        }
+        0
+    }
+
+    # Free the results array
+    F cleanup(&self) -> i64 {
+        I self.results_ptr != 0 {
+            free(self.results_ptr)
+        }
+        0
+    }
+}
+
+# join2: wait for both futures to complete
+F join2(fp1: i64, pf1: i64, fp2: i64, pf2: i64) -> JoinResult {
+    results := malloc(16)  # 2 * 8 bytes
+    done1 := mut 0
+    done2 := mut 0
+    v1 := mut 0
+    v2 := mut 0
+
+    L done1 == 0 {
+        L done2 == 0 {
+            I done1 == 0 {
+                r1 := call_poll(pf1, fp1)
+                s1 := extract_poll_status(r1)
+                I s1 == 1 {
+                    v1 = extract_poll_value(r1)
+                    done1 = 1
+                }
+            }
+
+            I done2 == 0 {
+                r2 := call_poll(pf2, fp2)
+                s2 := extract_poll_status(r2)
+                I s2 == 1 {
+                    v2 = extract_poll_value(r2)
+                    done2 = 1
+                }
+            }
+
+            I done1 == 1 {
+                I done2 == 1 { B }
+            }
+        }
+    }
+
+    store_i64(results, v1)
+    store_i64(results + 8, v2)
+    JoinResult::new(results, 2)
+}
+
+# join3: wait for all 3 futures to complete
+F join3(fp1: i64, pf1: i64, fp2: i64, pf2: i64, fp3: i64, pf3: i64) -> JoinResult {
+    results := malloc(24)  # 3 * 8 bytes
+    done1 := mut 0
+    done2 := mut 0
+    done3 := mut 0
+    v1 := mut 0
+    v2 := mut 0
+    v3 := mut 0
+
+    L 1 {
+        I done1 == 0 {
+            r1 := call_poll(pf1, fp1)
+            s1 := extract_poll_status(r1)
+            I s1 == 1 { v1 = extract_poll_value(r1); done1 = 1 }
+        }
+        I done2 == 0 {
+            r2 := call_poll(pf2, fp2)
+            s2 := extract_poll_status(r2)
+            I s2 == 1 { v2 = extract_poll_value(r2); done2 = 1 }
+        }
+        I done3 == 0 {
+            r3 := call_poll(pf3, fp3)
+            s3 := extract_poll_status(r3)
+            I s3 == 1 { v3 = extract_poll_value(r3); done3 = 1 }
+        }
+
+        I done1 == 1 { I done2 == 1 { I done3 == 1 { B } } }
+    }
+
+    store_i64(results, v1)
+    store_i64(results + 8, v2)
+    store_i64(results + 16, v3)
+    JoinResult::new(results, 3)
+}
+
+# ============================================
+# Waker - callback-based wake mechanism
+# ============================================
+# Waker allows a future to register a callback that
+# will be called when the future should be re-polled.
+
+S Waker {
+    wake_fn: i64,       # Function pointer to wake callback
+    task_ptr: i64,      # Pointer to the task to wake
+    runtime_ptr: i64    # Pointer to the runtime
+}
+
+X Waker {
+    F new(wake_fn: i64, task_ptr: i64, runtime_ptr: i64) -> Waker {
+        Waker {
+            wake_fn: wake_fn,
+            task_ptr: task_ptr,
+            runtime_ptr: runtime_ptr
+        }
+    }
+
+    # Wake the associated task (mark as TASK_READY)
+    F wake(&self) -> i64 {
+        I self.task_ptr != 0 {
+            # Set task status to TASK_READY
+            store_i64(self.task_ptr + 24, TASK_READY)
+        }
+        0
+    }
+
+    # Wake by reference (non-consuming)
+    F wake_by_ref(&self) -> i64 {
+        self.wake()
+    }
+}
+
+# Create a waker for the current task in the reactor
+F create_waker() -> Waker {
+    rt := get_reactor()
+    current := load_i64(rt + 32)  # current_task field
+    Waker::new(0, current, rt)
+}
+
+# ============================================
+# Timeout helper - wraps a future with deadline
+# ============================================
+
+S Timeout {
+    inner_fp: i64,      # Inner future pointer
+    inner_pf: i64,      # Inner poll function
+    deadline_ms: i64,   # Absolute deadline (ms since epoch)
+    started: i64        # Whether we've started the timer
+}
+
+X Timeout {
+    F new(inner_fp: i64, inner_pf: i64, timeout_ms: i64) -> Timeout {
+        Timeout {
+            inner_fp: inner_fp,
+            inner_pf: inner_pf,
+            deadline_ms: time_now_ms() + timeout_ms,
+            started: 0
+        }
+    }
+
+    # Poll: returns inner result if ready, -1 if timeout
+    F poll(&self) -> i64 {
+        # Check timeout
+        now := time_now_ms()
+        I now >= self.deadline_ms {
+            R -1  # Timeout
+        }
+
+        # Poll inner future
+        r := call_poll(self.inner_pf, self.inner_fp)
+        s := extract_poll_status(r)
+        v := extract_poll_value(r)
+
+        I s == 1 {
+            R v  # Ready
+        }
+
+        0  # Pending (encoded as 0, caller must check status)
+    }
+}
+
+# Create a timeout wrapper
+F with_timeout(inner_fp: i64, inner_pf: i64, timeout_ms: i64) -> Timeout {
+    Timeout::new(inner_fp, inner_pf, timeout_ms)
+}

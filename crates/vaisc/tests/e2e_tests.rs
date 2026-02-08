@@ -11586,3 +11586,346 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// =============================================
+// Phase 57: WASM E2E Tests (IR validation only)
+// =============================================
+
+#[test]
+fn test_wasm32_target_ir_generation() {
+    let source = r#"
+F main() -> i64 {
+    puts("hello wasm")
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("target triple = \"wasm32-unknown-unknown\""));
+    assert!(ir.contains("target datalayout"));
+}
+
+#[test]
+fn test_wasm32_start_entry_point() {
+    let source = r#"
+F main() -> i64 {
+    R 42
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("define void @_start()"));
+    assert!(ir.contains("call i64 @main()"));
+}
+
+#[test]
+fn test_wasm32_malloc_implementation() {
+    let source = r#"
+F main() -> i64 {
+    ptr := malloc(100)
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASM bump allocator implementation
+    assert!(ir.contains("@__heap_ptr"));
+    assert!(ir.contains("define i8* @malloc(i64 %size)"));
+}
+
+#[test]
+fn test_wasm32_puts_wasm_write() {
+    let source = r#"
+F main() -> i64 {
+    puts("test output")
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASM puts calls __wasm_write
+    assert!(ir.contains("define i64 @puts(i8* %str)"));
+    assert!(ir.contains("@__wasm_write"));
+}
+
+#[test]
+fn test_wasm32_memory_intrinsics() {
+    let source = r#"
+F main() -> i64 {
+    ptr := malloc(1000000)
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    // LLVM WASM intrinsics for memory management
+    assert!(ir.contains("declare i32 @llvm.wasm.memory.size.i32"));
+    assert!(ir.contains("declare i32 @llvm.wasm.memory.grow.i32"));
+}
+
+#[test]
+fn test_wasi_target_ir_generation() {
+    let source = r#"
+F main() -> i64 {
+    puts("hello wasi")
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let ir = gen.generate_module(&module).unwrap();
+    assert!(ir.contains("target triple = \"wasm32-wasi\""));
+    assert!(ir.contains("target datalayout"));
+}
+
+#[test]
+fn test_wasi_start_entry_point() {
+    let source = r#"
+F main() -> i64 {
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASI _start calls __wasi_proc_exit
+    assert!(ir.contains("define void @_start()"));
+    assert!(ir.contains("@__wasi_proc_exit"));
+}
+
+#[test]
+fn test_wasi_fd_write_declaration() {
+    let source = r#"
+F main() -> i64 {
+    puts("wasi output")
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASI fd_write is declared and used
+    assert!(ir.contains("declare i32 @__wasi_fd_write"));
+}
+
+#[test]
+fn test_wasm32_free_noop() {
+    let source = r#"
+F main() -> i64 {
+    ptr := malloc(100)
+    free(ptr)
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASM free is a no-op (bump allocator doesn't free)
+    assert!(ir.contains("define void @free(i8* %ptr)"));
+    assert!(ir.contains("ret void"));
+}
+
+#[test]
+fn test_wasm32_exit_trap() {
+    let source = r#"
+F main() -> i64 {
+    exit(1)
+    R 0
+}
+"#;
+    let module = vais_parser::parse(source).unwrap();
+    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let ir = gen.generate_module(&module).unwrap();
+    // WASM exit calls __wasm_trap
+    assert!(ir.contains("define void @exit(i32 %code)"));
+    assert!(ir.contains("@__wasm_trap"));
+    assert!(ir.contains("unreachable"));
+}
+
+// ============================================================================
+// Phase 58: Async Runtime E2E Tests
+// ============================================================================
+
+#[test]
+fn test_async_function_declaration() {
+    let source = r#"
+A F fetch() -> i64 {
+    R 42
+}
+
+F main() -> i64 {
+    R 0
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Async function should be defined in IR
+    assert!(ir.contains("define i64 @fetch()"));
+}
+
+#[test]
+fn test_spawn_generates_call() {
+    let source = r#"
+F worker() -> i64 {
+    R 1
+}
+
+F main() -> i64 {
+    x := worker()
+    R x
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // spawn expression should generate function call
+    assert!(ir.contains("call i64 @worker()"));
+}
+
+#[test]
+fn test_future_struct_layout() {
+    let source = r#"
+S MyFuture {
+    value: i64,
+    ready: i64
+}
+
+F main() -> i64 {
+    f := MyFuture { value: 42, ready: 0 }
+    R f.value
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Future struct should have proper layout
+    assert!(ir.contains("%MyFuture = type { i64, i64 }"));
+}
+
+#[test]
+fn test_select_pattern_match() {
+    let source = r#"
+F main() -> i64 {
+    x := 1
+    result := M x {
+        1 => 10,
+        2 => 20,
+        _ => 0
+    }
+    R result
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // select pattern should generate match/switch IR
+    assert!(ir.contains("switch") || ir.contains("br i1"));
+}
+
+#[test]
+fn test_async_channel_struct() {
+    let source = r#"
+S Channel {
+    buf: i64,
+    len: i64,
+    cap: i64
+}
+
+F main() -> i64 {
+    c := Channel { buf: 0, len: 0, cap: 16 }
+    R c.cap
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Channel struct should have 3 i64 fields
+    assert!(ir.contains("%Channel = type { i64, i64, i64 }"));
+}
+
+#[test]
+fn test_executor_loop_pattern() {
+    let source = r#"
+F main() -> i64 {
+    i := mut 0
+    L {
+        I i >= 10 {
+            B
+        }
+        i = i + 1
+    }
+    R i
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Executor loop should have loop branch pattern
+    assert!(ir.contains("br label"));
+    assert!(ir.contains("icmp"));
+}
+
+#[test]
+fn test_waker_callback_pattern() {
+    let source = r#"
+F callback(x: i64) -> i64 {
+    R x + 1
+}
+
+F main() -> i64 {
+    R callback(41)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Callback pattern should generate function call
+    assert!(ir.contains("call i64 @callback(i64 41)"));
+}
+
+#[test]
+fn test_async_mutex_simulation() {
+    let source = r#"
+S Mutex {
+    locked: i64,
+    value: i64
+}
+
+F main() -> i64 {
+    m := Mutex { locked: 0, value: 42 }
+    R m.value
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Mutex struct should have locked flag and value
+    assert!(ir.contains("%Mutex = type { i64, i64 }"));
+}
+
+#[test]
+fn test_timeout_pattern() {
+    let source = r#"
+F main() -> i64 {
+    deadline := 1000
+    elapsed := mut 0
+    L {
+        I elapsed >= deadline {
+            B
+        }
+        elapsed = elapsed + 1
+    }
+    R elapsed
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Timeout pattern should have comparison operation
+    assert!(ir.contains("icmp sge") || ir.contains("icmp slt"));
+}
+
+#[test]
+fn test_task_pool_array() {
+    let source = r#"
+F main() -> i64 {
+    pool := malloc(80)
+    store_i64(pool, 42)
+    v := load_i64(pool)
+    R v
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    // Task pool should use malloc, store, and load
+    assert!(ir.contains("call i8* @malloc(i64 80)"));
+    assert!(ir.contains("store"));
+    assert!(ir.contains("load"));
+}

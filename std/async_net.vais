@@ -1,0 +1,534 @@
+# std/async_net.vais
+# Async Network I/O module for Vais
+# Provides high-level async TCP/UDP networking APIs with non-blocking operations
+
+# Socket constants
+C AF_INET: i64 = 2
+C SOCK_STREAM: i64 = 1
+C SOCK_DGRAM: i64 = 2
+C SOCKADDR_IN_SIZE: i64 = 16
+C IPPROTO_TCP: i64 = 6
+C IPPROTO_UDP: i64 = 17
+
+# Socket options
+#[cfg(target_os = "macos")]
+C SOL_SOCKET: i64 = 65535
+#[cfg(target_os = "linux")]
+C SOL_SOCKET: i64 = 1
+
+C SO_REUSEADDR: i64 = 2
+C SO_BROADCAST: i64 = 6
+C SO_KEEPALIVE: i64 = 8
+
+# fcntl constants for non-blocking mode
+C F_GETFL: i64 = 3
+C F_SETFL: i64 = 4
+C O_NONBLOCK: i64 = 4
+
+# Error codes
+C EAGAIN: i64 = 35
+C EWOULDBLOCK: i64 = 35
+C EINPROGRESS: i64 = 36
+
+# Buffer sizes
+C DEFAULT_READ_BUF_SIZE: i64 = 8192
+C MAX_UDP_PACKET: i64 = 65536
+
+# External C functions
+X F socket(domain: i64, type: i64, protocol: i64) -> i64
+X F bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F listen(sockfd: i64, backlog: i64) -> i64
+X F accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F connect(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F sendto(sockfd: i64, buf: i64, len: i64, flags: i64, dest_addr: i64, addrlen: i64) -> i64
+X F recvfrom(sockfd: i64, buf: i64, len: i64, flags: i64, src_addr: i64, addrlen: i64) -> i64
+X F close(fd: i64) -> i64
+X F setsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
+X F getsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
+X F inet_pton(af: i64, src: i64, dst: i64) -> i64
+X F htons(hostshort: i64) -> i64
+X F ntohs(netshort: i64) -> i64
+X F memset(ptr: i64, value: i64, size: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F fcntl(fd: i64, cmd: i64, arg: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> ()
+X F strlen(s: str) -> i64
+
+# Helper: Create sockaddr_in structure
+F make_sockaddr_in(host: str, port: i64) -> i64 {
+    addr := malloc(16)
+    memset(addr, 0, 16)
+
+    # sin_family (AF_INET) at offset 1 (byte)
+    store_i8(addr + 1, 2)
+
+    # sin_port at offset 2 (u16, network byte order)
+    port_net := htons(port)
+    store_i16(addr + 2, port_net)
+
+    # sin_addr at offset 4 (u32, network byte order)
+    ip_buf := malloc(4)
+    inet_result := inet_pton(AF_INET, host, ip_buf)
+    I inet_result <= 0 {
+        free(ip_buf)
+        free(addr)
+        R 0
+    }
+
+    ip_val := load_i32(ip_buf)
+    store_i32(addr + 4, ip_val)
+    free(ip_buf)
+
+    R addr
+}
+
+# Helper: Set socket to non-blocking mode
+F set_fd_nonblocking(fd: i64, enable: i64) -> i64 {
+    flags := fcntl(fd, F_GETFL, 0)
+    I flags < 0 {
+        R -1
+    }
+
+    new_flags := I enable != 0 { flags | O_NONBLOCK } E { flags & ~O_NONBLOCK }
+    R fcntl(fd, F_SETFL, new_flags)
+}
+
+# Helper: Check if error is recoverable (EAGAIN/EWOULDBLOCK)
+F is_would_block(errno: i64) -> i64 {
+    R I errno == EAGAIN || errno == EWOULDBLOCK { 1 } E { 0 }
+}
+
+# ============================================================================
+# AsyncTcpListener - Async TCP server
+# ============================================================================
+
+S AsyncTcpListener {
+    fd: i64,
+    port: i64,
+    is_listening: i64,
+    backlog: i64
+}
+
+X AsyncTcpListener {
+    # Create and bind async TCP listener
+    F bind(host: str, port: i64) -> AsyncTcpListener {
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            R AsyncTcpListener { fd: -1, port: 0, is_listening: 0, backlog: 128 }
+        }
+
+        # Set SO_REUSEADDR
+        optval := malloc(8)
+        store_i32(optval, 1)
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+        free(optval)
+
+        # Set non-blocking
+        set_fd_nonblocking(fd, 1)
+
+        # Bind
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            close(fd)
+            R AsyncTcpListener { fd: -1, port: 0, is_listening: 0, backlog: 128 }
+        }
+
+        bind_result := bind(fd, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        I bind_result < 0 {
+            close(fd)
+            R AsyncTcpListener { fd: -1, port: 0, is_listening: 0, backlog: 128 }
+        }
+
+        # Listen with backlog 128
+        listen_result := listen(fd, 128)
+        I listen_result < 0 {
+            close(fd)
+            R AsyncTcpListener { fd: -1, port: 0, is_listening: 0, backlog: 128 }
+        }
+
+        R AsyncTcpListener { fd: fd, port: port, is_listening: 1, backlog: 128 }
+    }
+
+    # Accept incoming connection (non-blocking)
+    F accept() -> AsyncTcpStream {
+        I is_listening == 0 {
+            R AsyncTcpStream {
+                fd: -1,
+                remote_host: "0.0.0.0",
+                remote_port: 0,
+                is_connected: 0,
+                read_buf: 0,
+                read_buf_len: 0,
+                read_buf_cap: 0
+            }
+        }
+
+        client_addr := malloc(16)
+        client_fd := accept(fd, client_addr, SOCKADDR_IN_SIZE)
+
+        I client_fd < 0 {
+            free(client_addr)
+            R AsyncTcpStream {
+                fd: -1,
+                remote_host: "0.0.0.0",
+                remote_port: 0,
+                is_connected: 0,
+                read_buf: 0,
+                read_buf_len: 0,
+                read_buf_cap: 0
+            }
+        }
+
+        # Extract remote port
+        remote_port_net := load_i16(client_addr + 2)
+        remote_port := ntohs(remote_port_net)
+        free(client_addr)
+
+        # Set client to non-blocking
+        set_fd_nonblocking(client_fd, 1)
+
+        # Allocate read buffer
+        buf := malloc(DEFAULT_READ_BUF_SIZE)
+
+        R AsyncTcpStream {
+            fd: client_fd,
+            remote_host: "client",
+            remote_port: remote_port,
+            is_connected: 1,
+            read_buf: buf,
+            read_buf_len: 0,
+            read_buf_cap: DEFAULT_READ_BUF_SIZE
+        }
+    }
+
+    # Close listener
+    F close() -> i64 {
+        I is_listening == 0 {
+            R 0
+        }
+
+        result := close(fd)
+        is_listening := 0
+        R result
+    }
+
+    # Get local port
+    F local_port() -> i64 {
+        R port
+    }
+}
+
+# ============================================================================
+# AsyncTcpStream - Async TCP connection
+# ============================================================================
+
+S AsyncTcpStream {
+    fd: i64,
+    remote_host: str,
+    remote_port: i64,
+    is_connected: i64,
+    read_buf: i64,
+    read_buf_len: i64,
+    read_buf_cap: i64
+}
+
+X AsyncTcpStream {
+    # Connect to remote host asynchronously
+    F connect(host: str, port: i64) -> AsyncTcpStream {
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            R AsyncTcpStream {
+                fd: -1,
+                remote_host: host,
+                remote_port: port,
+                is_connected: 0,
+                read_buf: 0,
+                read_buf_len: 0,
+                read_buf_cap: 0
+            }
+        }
+
+        # Set non-blocking before connect
+        set_fd_nonblocking(fd, 1)
+
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            close(fd)
+            R AsyncTcpStream {
+                fd: -1,
+                remote_host: host,
+                remote_port: port,
+                is_connected: 0,
+                read_buf: 0,
+                read_buf_len: 0,
+                read_buf_cap: 0
+            }
+        }
+
+        connect_result := connect(fd, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        # For non-blocking connect, EINPROGRESS is expected
+        # In real async, we'd poll/select for writability
+        # Here we simplify: if connect returns 0 or EINPROGRESS, consider it "connecting"
+        is_conn := I connect_result == 0 { 1 } E { 0 }
+
+        # Allocate read buffer
+        buf := malloc(DEFAULT_READ_BUF_SIZE)
+
+        R AsyncTcpStream {
+            fd: fd,
+            remote_host: host,
+            remote_port: port,
+            is_connected: is_conn,
+            read_buf: buf,
+            read_buf_len: 0,
+            read_buf_cap: DEFAULT_READ_BUF_SIZE
+        }
+    }
+
+    # Read data asynchronously (non-blocking)
+    F read(buf: i64, len: i64) -> i64 {
+        I is_connected == 0 {
+            R -1
+        }
+
+        R recv(fd, buf, len, 0)
+    }
+
+    # Write data asynchronously (non-blocking)
+    F write(data: i64, len: i64) -> i64 {
+        I is_connected == 0 {
+            R -1
+        }
+
+        R send(fd, data, len, 0)
+    }
+
+    # Write string convenience function
+    F write_str(s: str) -> i64 {
+        I is_connected == 0 {
+            R -1
+        }
+
+        len := strlen(s)
+        R send(fd, s, len, 0)
+    }
+
+    # Read all available data into internal buffer
+    F read_all() -> i64 {
+        I is_connected == 0 {
+            R -1
+        }
+
+        total := 0
+        L {
+            # Check if we need to grow buffer
+            I read_buf_len >= read_buf_cap {
+                new_cap := read_buf_cap * 2
+                new_buf := malloc(new_cap)
+                I read_buf_len > 0 {
+                    memcpy(new_buf, read_buf, read_buf_len)
+                }
+                free(read_buf)
+                read_buf := new_buf
+                read_buf_cap := new_cap
+            }
+
+            available := read_buf_cap - read_buf_len
+            n := recv(fd, read_buf + read_buf_len, available, 0)
+
+            I n > 0 {
+                read_buf_len := read_buf_len + n
+                total := total + n
+            } E I n == 0 {
+                # Connection closed
+                is_connected := 0
+                B
+            } E {
+                # Error or would block
+                B
+            }
+        }
+
+        R total
+    }
+
+    # Close connection
+    F close() -> i64 {
+        I is_connected == 0 {
+            R 0
+        }
+
+        result := close(fd)
+        is_connected := 0
+
+        I read_buf != 0 {
+            free(read_buf)
+            read_buf := 0
+            read_buf_len := 0
+            read_buf_cap := 0
+        }
+
+        R result
+    }
+
+    # Check if connection is open
+    F is_open() -> i64 {
+        R is_connected
+    }
+
+    # Set non-blocking mode
+    F set_nonblocking(flag: i64) -> i64 {
+        R set_fd_nonblocking(fd, flag)
+    }
+}
+
+# ============================================================================
+# AsyncUdpSocket - Async UDP socket
+# ============================================================================
+
+S AsyncUdpSocket {
+    fd: i64,
+    local_port: i64,
+    is_bound: i64
+}
+
+X AsyncUdpSocket {
+    # Bind UDP socket asynchronously
+    F bind(host: str, port: i64) -> AsyncUdpSocket {
+        fd := socket(AF_INET, SOCK_DGRAM, 0)
+        I fd < 0 {
+            R AsyncUdpSocket { fd: -1, local_port: 0, is_bound: 0 }
+        }
+
+        # Set non-blocking
+        set_fd_nonblocking(fd, 1)
+
+        # Set SO_REUSEADDR
+        optval := malloc(8)
+        store_i32(optval, 1)
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+        free(optval)
+
+        # Bind
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            close(fd)
+            R AsyncUdpSocket { fd: -1, local_port: 0, is_bound: 0 }
+        }
+
+        bind_result := bind(fd, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        I bind_result < 0 {
+            close(fd)
+            R AsyncUdpSocket { fd: -1, local_port: 0, is_bound: 0 }
+        }
+
+        R AsyncUdpSocket { fd: fd, local_port: port, is_bound: 1 }
+    }
+
+    # Send datagram to destination
+    F send_to(data: i64, len: i64, host: str, port: i64) -> i64 {
+        I is_bound == 0 {
+            R -1
+        }
+
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            R -1
+        }
+
+        result := sendto(fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        R result
+    }
+
+    # Receive datagram (source address simplified)
+    F recv_from(buf: i64, len: i64) -> i64 {
+        I is_bound == 0 {
+            R -1
+        }
+
+        src_addr := malloc(16)
+        result := recvfrom(fd, buf, len, 0, src_addr, SOCKADDR_IN_SIZE)
+        free(src_addr)
+
+        R result
+    }
+
+    # Close socket
+    F close() -> i64 {
+        I is_bound == 0 {
+            R 0
+        }
+
+        result := close(fd)
+        is_bound := 0
+        R result
+    }
+
+    # Enable/disable broadcast
+    F set_broadcast(enable: i64) -> i64 {
+        I is_bound == 0 {
+            R -1
+        }
+
+        optval := malloc(8)
+        store_i32(optval, I enable != 0 { 1 } E { 0 })
+        result := setsockopt(fd, SOL_SOCKET, SO_BROADCAST, optval, 4)
+        free(optval)
+
+        R result
+    }
+}
+
+# ============================================================================
+# Helper functions
+# ============================================================================
+
+# Convenience: Create async TCP connection
+F async_tcp_connect(host: str, port: i64) -> AsyncTcpStream {
+    stream := AsyncTcpStream::connect(host, port)
+    R stream
+}
+
+# Convenience: Create async TCP listener
+F async_tcp_listen(host: str, port: i64) -> AsyncTcpListener {
+    listener := AsyncTcpListener::bind(host, port)
+    R listener
+}
+
+# Convenience: Create async UDP socket
+F async_udp_bind(host: str, port: i64) -> AsyncUdpSocket {
+    socket := AsyncUdpSocket::bind(host, port)
+    R socket
+}
+
+# Simplified DNS resolution (returns 1 for success, 0 for failure)
+# In real implementation, this would do actual DNS lookup
+F async_resolve(host: str) -> i64 {
+    # Simple check: if it looks like an IP address (contains dots), return success
+    # Otherwise, simulate DNS lookup success
+    len := strlen(host)
+    I len == 0 {
+        R 0
+    }
+
+    # Check for localhost
+    I len == 9 {
+        # Simple string comparison for "localhost"
+        # In real code, use proper string comparison
+        R 1
+    }
+
+    # Assume resolution succeeds for any non-empty host
+    R 1
+}

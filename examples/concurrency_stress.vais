@@ -1,0 +1,585 @@
+# Concurrency Stress Test - Tests async runtime and concurrency primitives
+# All tests are simulated in-memory (no real OS threads/network)
+
+# Constants
+C MAX_TASKS: i64 = 100
+C POOL_SIZE: i64 = 50
+C RING_BUFFER_SIZE: i64 = 256
+C LOCK_CONTENTION_TASKS: i64 = 20
+
+# Task pool structure for spawn/join simulation
+S TaskPool {
+    tasks: i64,       # pointer to task_id array
+    count: i64,
+    capacity: i64,
+    completed: i64
+}
+
+X TaskPool {
+    F new(cap: i64) -> TaskPool {
+        tasks := malloc(cap * 8)
+        TaskPool { tasks: tasks, count: 0, capacity: cap, completed: 0 }
+    }
+
+    F submit(&mut self, task_id: i64) -> i64 {
+        I self.count >= self.capacity { R -1 }
+        store_i64(self.tasks + self.count * 8, task_id)
+        self.count = self.count + 1
+        R 0
+    }
+
+    F process(&mut self) -> i64 {
+        i := mut 0
+        processed := mut 0
+        L {
+            I i >= self.count { B }
+            task_id := load_i64(self.tasks + i * 8)
+            # Simulate task execution
+            result := task_id * 2
+            I result > 0 {
+                processed = processed + 1
+            }
+            i = i + 1
+        }
+        self.completed = processed
+        R processed
+    }
+
+    F destroy(&mut self) -> i64 {
+        free(self.tasks)
+        R 0
+    }
+}
+
+# Select/Future structure for timeout simulation
+S FutureSet {
+    futures: i64,     # pointer to future_id array
+    states: i64,      # pointer to state array (0=pending, 1=ready)
+    count: i64,
+    capacity: i64
+}
+
+X FutureSet {
+    F new(cap: i64) -> FutureSet {
+        futures := malloc(cap * 8)
+        states := malloc(cap * 8)
+        # Initialize all states to pending (0)
+        i := mut 0
+        L {
+            I i >= cap { B }
+            store_i64(states + i * 8, 0)
+            i = i + 1
+        }
+        FutureSet { futures: futures, states: states, count: 0, capacity: cap }
+    }
+
+    F add(&mut self, future_id: i64) -> i64 {
+        I self.count >= self.capacity { R -1 }
+        store_i64(self.futures + self.count * 8, future_id)
+        self.count = self.count + 1
+        R 0
+    }
+
+    F mark_ready(&mut self, index: i64) -> i64 {
+        I index >= self.count { R -1 }
+        store_i64(self.states + index * 8, 1)
+        R 0
+    }
+
+    F select_ready(&mut self) -> i64 {
+        # Returns index of first ready future, or -1 if none
+        i := mut 0
+        L {
+            I i >= self.count { B }
+            state := load_i64(self.states + i * 8)
+            I state == 1 { R i }
+            i = i + 1
+        }
+        R -1
+    }
+
+    F destroy(&mut self) -> i64 {
+        free(self.futures)
+        free(self.states)
+        R 0
+    }
+}
+
+# Connection pool for concurrent connection simulation
+S ConnectionPool {
+    fds: i64,         # file descriptor array
+    active: i64,      # active status array
+    count: i64,
+    capacity: i64
+}
+
+X ConnectionPool {
+    F new(cap: i64) -> ConnectionPool {
+        fds := malloc(cap * 8)
+        active := malloc(cap * 8)
+        # Initialize all as inactive
+        i := mut 0
+        L {
+            I i >= cap { B }
+            store_i64(active + i * 8, 0)
+            i = i + 1
+        }
+        ConnectionPool { fds: fds, active: active, count: 0, capacity: cap }
+    }
+
+    F acquire(&mut self) -> i64 {
+        # Find first inactive slot
+        i := mut 0
+        L {
+            I i >= self.capacity { B }
+            is_active := load_i64(self.active + i * 8)
+            I is_active == 0 {
+                # Activate this slot
+                store_i64(self.active + i * 8, 1)
+                fd := 100 + i
+                store_i64(self.fds + i * 8, fd)
+                self.count = self.count + 1
+                R fd
+            }
+            i = i + 1
+        }
+        R -1
+    }
+
+    F release(&mut self, fd: i64) -> i64 {
+        # Find and deactivate matching fd
+        i := mut 0
+        L {
+            I i >= self.capacity { B }
+            stored_fd := load_i64(self.fds + i * 8)
+            I stored_fd == fd {
+                store_i64(self.active + i * 8, 0)
+                self.count = self.count - 1
+                R 0
+            }
+            i = i + 1
+        }
+        R -1
+    }
+
+    F active_count(&self) -> i64 {
+        R self.count
+    }
+
+    F destroy(&mut self) -> i64 {
+        free(self.fds)
+        free(self.active)
+        R 0
+    }
+}
+
+# Mutex simulation for contention testing
+S AsyncMutex {
+    locked: i64,
+    waiters: i64,
+    lock_count: i64
+}
+
+X AsyncMutex {
+    F new() -> AsyncMutex {
+        AsyncMutex { locked: 0, waiters: 0, lock_count: 0 }
+    }
+
+    F try_lock(&mut self) -> i64 {
+        I self.locked == 1 {
+            self.waiters = self.waiters + 1
+            R 0
+        }
+        self.locked = 1
+        self.lock_count = self.lock_count + 1
+        R 1
+    }
+
+    F unlock(&mut self) -> i64 {
+        I self.locked == 0 { R -1 }
+        self.locked = 0
+        I self.waiters > 0 {
+            self.waiters = self.waiters - 1
+        }
+        R 0
+    }
+
+    F get_lock_count(&self) -> i64 {
+        R self.lock_count
+    }
+}
+
+# Ring buffer for reactor event queue
+S RingBuffer {
+    data: i64,
+    head: i64,
+    tail: i64,
+    capacity: i64,
+    size: i64
+}
+
+X RingBuffer {
+    F new(cap: i64) -> RingBuffer {
+        data := malloc(cap * 8)
+        RingBuffer { data: data, head: 0, tail: 0, capacity: cap, size: 0 }
+    }
+
+    F push(&mut self, value: i64) -> i64 {
+        I self.size >= self.capacity { R -1 }
+        store_i64(self.data + self.tail * 8, value)
+        self.tail = (self.tail + 1) % self.capacity
+        self.size = self.size + 1
+        R 0
+    }
+
+    F pop(&mut self) -> i64 {
+        I self.size == 0 { R -1 }
+        value := load_i64(self.data + self.head * 8)
+        self.head = (self.head + 1) % self.capacity
+        self.size = self.size - 1
+        R value
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } E { 0 }
+    }
+
+    F is_full(&self) -> i64 {
+        I self.size >= self.capacity { 1 } E { 0 }
+    }
+
+    F get_size(&self) -> i64 {
+        R self.size
+    }
+
+    F destroy(&mut self) -> i64 {
+        free(self.data)
+        R 0
+    }
+}
+
+# Test 1: Spawn many tasks and join all
+F test_spawn_many() -> i64 {
+    puts("Test 1: Spawning 100+ tasks")
+
+    pool := mut TaskPool::new(MAX_TASKS)
+
+    # Submit 100 tasks
+    i := mut 0
+    L {
+        I i >= MAX_TASKS { B }
+        result := pool.submit(i)
+        I result < 0 {
+            puts("  ERROR: Failed to submit task")
+            cleanup := pool.destroy()
+            R 0
+        }
+        i = i + 1
+    }
+
+    # Process all tasks
+    processed := pool.process()
+    success := I processed == MAX_TASKS { 1 } E { 0 }
+
+    cleanup := pool.destroy()
+    R success
+}
+
+# Test 2: Select with timeout simulation
+F test_select_timeout() -> i64 {
+    puts("Test 2: Select with timeout")
+
+    fset := mut FutureSet::new(10)
+
+    # Add 5 futures
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        result := fset.add(1000 + i)
+        I result < 0 {
+            puts("  ERROR: Failed to add future")
+            cleanup := fset.destroy()
+            R 0
+        }
+        i = i + 1
+    }
+
+    # Simulate: mark future 2 as ready
+    mark_result := fset.mark_ready(2)
+
+    # Select should find ready future
+    ready_idx := fset.select_ready()
+    success := I ready_idx == 2 { 1 } E { 0 }
+
+    cleanup := fset.destroy()
+    R success
+}
+
+# Test 3: Concurrent connection pool
+F test_concurrent_connections() -> i64 {
+    puts("Test 3: Concurrent connections")
+
+    pool := mut ConnectionPool::new(POOL_SIZE)
+
+    # Acquire 30 connections
+    acquired := mut 0
+    i := mut 0
+    L {
+        I i >= 30 { B }
+        fd := pool.acquire()
+        I fd >= 0 {
+            acquired = acquired + 1
+        }
+        i = i + 1
+    }
+
+    active := pool.active_count()
+    I active != 30 {
+        puts("  ERROR: Expected 30 active connections")
+        cleanup := pool.destroy()
+        R 0
+    }
+
+    # Release 10 connections
+    released := mut 0
+    j := mut 0
+    L {
+        I j >= 10 { B }
+        fd := 100 + j
+        result := pool.release(fd)
+        I result == 0 {
+            released = released + 1
+        }
+        j = j + 1
+    }
+
+    final_active := pool.active_count()
+    success := I final_active == 20 { 1 } E { 0 }
+
+    cleanup := pool.destroy()
+    R success
+}
+
+# Test 4: Async mutex contention
+F test_mutex_contention() -> i64 {
+    puts("Test 4: Mutex contention")
+
+    mtx := mut AsyncMutex::new()
+
+    # Simulate 20 tasks trying to acquire lock
+    successful_locks := mut 0
+    total_waiters := mut 0
+
+    i := mut 0
+    L {
+        I i >= LOCK_CONTENTION_TASKS { B }
+
+        # Try to acquire
+        locked := mtx.try_lock()
+        I locked == 1 {
+            successful_locks = successful_locks + 1
+            # Do some "work"
+            work_result := i * 2
+            # Release
+            unlock_result := mtx.unlock()
+        } E {
+            total_waiters = total_waiters + 1
+        }
+
+        i = i + 1
+    }
+
+    lock_count := mtx.get_lock_count()
+
+    # Should have multiple successful locks and some waiters
+    success := I lock_count > 0 { 1 } E { 0 }
+    R success
+}
+
+# Test 5: Reactor event saturation
+F test_reactor_saturation() -> i64 {
+    puts("Test 5: Reactor event saturation")
+
+    rb := mut RingBuffer::new(RING_BUFFER_SIZE)
+
+    # Fill the ring buffer completely
+    pushed := mut 0
+    i := mut 0
+    L {
+        I i >= RING_BUFFER_SIZE { B }
+        result := rb.push(i)
+        I result == 0 {
+            pushed = pushed + 1
+        }
+        i = i + 1
+    }
+
+    I pushed != RING_BUFFER_SIZE {
+        puts("  ERROR: Failed to fill ring buffer")
+        cleanup := rb.destroy()
+        R 0
+    }
+
+    # Verify it's full
+    full := rb.is_full()
+    I full != 1 {
+        puts("  ERROR: Ring buffer should be full")
+        cleanup := rb.destroy()
+        R 0
+    }
+
+    # Consume half
+    consumed := mut 0
+    j := mut 0
+    L {
+        I j >= 128 { B }
+        value := rb.pop()
+        I value >= 0 {
+            consumed = consumed + 1
+        }
+        j = j + 1
+    }
+
+    I consumed != 128 {
+        puts("  ERROR: Failed to consume events")
+        cleanup := rb.destroy()
+        R 0
+    }
+
+    # Push more events
+    k := mut 0
+    L {
+        I k >= 64 { B }
+        result := rb.push(1000 + k)
+        k = k + 1
+    }
+
+    final_size := rb.get_size()
+    success := I final_size == 192 { 1 } E { 0 }
+
+    cleanup := rb.destroy()
+    R success
+}
+
+# Test 6: Mixed workload stress
+F test_mixed_workload() -> i64 {
+    puts("Test 6: Mixed workload stress")
+
+    # Combine multiple patterns
+    pool := mut TaskPool::new(50)
+    rb := mut RingBuffer::new(100)
+
+    # Phase 1: Submit tasks and queue events
+    i := mut 0
+    L {
+        I i >= 50 { B }
+        task_result := pool.submit(i)
+        event_result := rb.push(i * 10)
+        i = i + 1
+    }
+
+    # Phase 2: Process tasks
+    processed := pool.process()
+
+    # Phase 3: Consume events
+    consumed := mut 0
+    j := mut 0
+    L {
+        I j >= 25 { B }
+        value := rb.pop()
+        I value >= 0 {
+            consumed = consumed + 1
+        }
+        j = j + 1
+    }
+
+    # Verify results
+    success := I processed == 50 { I consumed == 25 { 1 } E { 0 } } E { 0 }
+
+    cleanup1 := pool.destroy()
+    cleanup2 := rb.destroy()
+
+    R success
+}
+
+# Main function - runs all tests
+F main() -> i64 {
+    puts("=== Vais Concurrency Stress Test ===")
+    puts("")
+
+    passed := mut 0
+    total := mut 6
+
+    # Test 1
+    result1 := test_spawn_many()
+    I result1 == 1 {
+        puts("  PASS: Spawn many tasks")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Spawn many tasks")
+    }
+    puts("")
+
+    # Test 2
+    result2 := test_select_timeout()
+    I result2 == 1 {
+        puts("  PASS: Select with timeout")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Select with timeout")
+    }
+    puts("")
+
+    # Test 3
+    result3 := test_concurrent_connections()
+    I result3 == 1 {
+        puts("  PASS: Concurrent connections")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Concurrent connections")
+    }
+    puts("")
+
+    # Test 4
+    result4 := test_mutex_contention()
+    I result4 == 1 {
+        puts("  PASS: Mutex contention")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Mutex contention")
+    }
+    puts("")
+
+    # Test 5
+    result5 := test_reactor_saturation()
+    I result5 == 1 {
+        puts("  PASS: Reactor event saturation")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Reactor event saturation")
+    }
+    puts("")
+
+    # Test 6
+    result6 := test_mixed_workload()
+    I result6 == 1 {
+        puts("  PASS: Mixed workload stress")
+        passed = passed + 1
+    } E {
+        puts("  FAIL: Mixed workload stress")
+    }
+    puts("")
+
+    puts("=== Summary ===")
+    puts("Tests passed: (see above)")
+    puts("Total tests: 6")
+    puts("")
+
+    I passed == total {
+        puts("All tests passed!")
+        R 0
+    } E {
+        puts("Some tests failed")
+        R 1
+    }
+}

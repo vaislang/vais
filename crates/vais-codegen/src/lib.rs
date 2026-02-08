@@ -1340,9 +1340,16 @@ impl CodeGenerator {
             ir.push_str(&drop_ir);
         }
 
+        // Add WASM runtime for main module
+        if is_main_module && self.target.is_wasm() {
+            ir.push_str(&self.generate_wasm_runtime());
+        }
+
         if is_main_module {
             // Main module defines all helper functions
-            ir.push_str(&self.generate_helper_functions());
+            if !matches!(self.target, TargetTriple::Wasm32Unknown) {
+                ir.push_str(&self.generate_helper_functions());
+            }
         } else {
             // Non-main modules declare builtin helpers as extern
             // (these are defined by generate_helper_functions() in the main module)
@@ -1368,7 +1375,9 @@ impl CodeGenerator {
             if is_main_module {
                 ir.push_str(&self.generate_string_helper_functions());
             }
-            ir.push_str(&self.generate_string_extern_declarations());
+            if !self.target.is_wasm() {
+                ir.push_str(&self.generate_string_extern_declarations());
+            }
         }
 
         if !self.contract_string_constants.is_empty() {
@@ -1376,13 +1385,15 @@ impl CodeGenerator {
             ir.push_str(&self.generate_contract_string_constants());
         }
 
-        if self.debug_info.is_enabled() {
+        if self.debug_info.is_enabled() && !self.target.is_wasm() {
             ir.push_str("\n; Debug intrinsics\n");
             ir.push_str("declare void @llvm.dbg.declare(metadata, metadata, metadata)\n");
             ir.push_str("declare void @llvm.dbg.value(metadata, metadata, metadata)\n");
         }
 
-        ir.push_str(&self.debug_info.finalize());
+        if !self.target.is_wasm() {
+            ir.push_str(&self.debug_info.finalize());
+        }
 
         Ok(ir)
     }
@@ -1995,13 +2006,26 @@ impl CodeGenerator {
             ir.push_str(&drop_ir);
         }
 
-        // Add helper functions for memory operations
-        ir.push_str(&self.generate_helper_functions());
+        // Add WASM runtime functions if targeting WebAssembly
+        if self.target.is_wasm() {
+            ir.push_str(&self.generate_wasm_runtime());
+        }
+
+        // Add helper functions for memory operations (skip for wasm32-unknown-unknown,
+        // which provides its own implementations)
+        if !matches!(self.target, TargetTriple::Wasm32Unknown) {
+            ir.push_str(&self.generate_helper_functions());
+        } else {
+            // For wasm32-unknown-unknown, only emit minimal helpers that don't conflict
+            ir.push_str("\n; Minimal helpers for WASM\n");
+        }
 
         // Add string helper functions if needed
         if self.needs_string_helpers {
             ir.push_str(&self.generate_string_helper_functions());
-            ir.push_str(&self.generate_string_extern_declarations());
+            if !self.target.is_wasm() {
+                ir.push_str(&self.generate_string_extern_declarations());
+            }
         }
 
         // Add contract runtime declarations if any contracts are present
@@ -2011,14 +2035,16 @@ impl CodeGenerator {
         }
 
         // Add debug intrinsic declaration if debug info is enabled
-        if self.debug_info.is_enabled() {
+        if self.debug_info.is_enabled() && !self.target.is_wasm() {
             ir.push_str("\n; Debug intrinsics\n");
             ir.push_str("declare void @llvm.dbg.declare(metadata, metadata, metadata)\n");
             ir.push_str("declare void @llvm.dbg.value(metadata, metadata, metadata)\n");
         }
 
         // Add debug metadata at the end
-        ir.push_str(&self.debug_info.finalize());
+        if !self.target.is_wasm() {
+            ir.push_str(&self.debug_info.finalize());
+        }
 
         // Add ABI version metadata
         // ABI version is stored in @__vais_abi_version global constant
@@ -2358,13 +2384,22 @@ impl CodeGenerator {
             ir.push_str(&drop_ir);
         }
 
+        // Add WASM runtime if targeting WebAssembly
+        if self.target.is_wasm() {
+            ir.push_str(&self.generate_wasm_runtime());
+        }
+
         // Add helper functions
-        ir.push_str(&self.generate_helper_functions());
+        if !matches!(self.target, TargetTriple::Wasm32Unknown) {
+            ir.push_str(&self.generate_helper_functions());
+        }
 
         // Add string helper functions if needed
         if self.needs_string_helpers {
             ir.push_str(&self.generate_string_helper_functions());
-            ir.push_str(&self.generate_string_extern_declarations());
+            if !self.target.is_wasm() {
+                ir.push_str(&self.generate_string_extern_declarations());
+            }
         }
 
         // Add contract runtime declarations if any contracts are present
@@ -2374,14 +2409,16 @@ impl CodeGenerator {
         }
 
         // Add debug intrinsics if debug info is enabled
-        if self.debug_info.is_enabled() {
+        if self.debug_info.is_enabled() && !self.target.is_wasm() {
             ir.push_str("\n; Debug intrinsics\n");
             ir.push_str("declare void @llvm.dbg.declare(metadata, metadata, metadata)\n");
             ir.push_str("declare void @llvm.dbg.value(metadata, metadata, metadata)\n");
         }
 
         // Add debug metadata
-        ir.push_str(&self.debug_info.finalize());
+        if !self.target.is_wasm() {
+            ir.push_str(&self.debug_info.finalize());
+        }
 
         // Add ABI version metadata
         // ABI version is stored in @__vais_abi_version global constant

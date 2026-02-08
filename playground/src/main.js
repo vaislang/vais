@@ -34,7 +34,8 @@ class Playground {
     // Initialize compiler
     try {
       await this.compiler.initialize();
-      this.updateStatus('ready', 'Ready');
+      const modeLabel = this.compiler.getModeLabel();
+      this.updateStatus('ready', `Ready (${modeLabel})`);
     } catch (error) {
       this.updateStatus('error', 'Compiler initialization failed');
       this.appendOutput(`Error: ${error.message}`, 'error');

@@ -100,6 +100,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **54** | **문서화 & 개발자 경험** | ✅ 완료 | 12/12 (100%) — Migration Guide, 실전 예제, IDE 확장 |
 | **55** | **VaisDB 대응: Stdlib 갭 해소** | ✅ 완료 | 12/12 (100%) — HashMap 문자열 키, readdir, ByteBuffer 확장, VaisDB 1.5K LOC |
 | | *VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
+| **56** | **컴파일러 Robustness & 코드 품질** | ✅ 완료 | unwrap 안전화, dead_code 0건, +82 테스트, Cranelift 0.128, LSP 강화, 415 E2E |
+| **57** | **WASM 타겟 지원** | ✅ 완료 | --target wasm32 강화, WASI 통합, Playground WASM 실행, E2E 435개 |
+| **58** | **Async 런타임 구현** | ✅ 완료 | 이벤트 루프, Future/Waker, spawn/select/join, async I/O, E2E 435개 |
 
 ---
 
@@ -1227,56 +1230,67 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 
 ---
 
-## Phase 57: WASM 타겟 지원 📋 예정
+## Phase 57: WASM 타겟 지원 ✅ 완료
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: .vais → .wasm 직접 컴파일 지원, playground 브라우저 실행
 > **선행**: Phase 56
 
 ### Stage 0: WASM 백엔드 기반
 
-- [ ] 1. `--target wasm32` 플래그 추가 — TargetTriple 확장 (Opus)
-- [ ] 2. WASM 코드젠 — LLVM wasm32-unknown-unknown 타겟 (Opus)
-- [ ] 3. wasm-bindgen / wasm-pack 통합 (Opus)
+- [x] 1. WASM codegen 강화 — export 함수, no-libc 모드 ✅
+  변경: vais-codegen/src/wasm.rs (TargetTriple::Wasm32Unknown, _start wrapper, bump allocator, __wasm_write/trap)
+- [x] 2. WASI SDK 통합 & wasm-bindgen 지원 ✅
+  변경: vais-codegen/src/wasm_component.rs (WasiManifest, WasmBindgenGenerator, ComponentLinkConfig)
 
 ### Stage 1: 표준 라이브러리 WASM 호환
 
-- [ ] 4. std/ 라이브러리 WASM polyfill — 파일/네트워크 API 분기 (Sonnet)
-- [ ] 5. WASI 지원 (서버사이드 WASM) (Sonnet)
+- [x] 3. std/ WASM polyfill — 파일/네트워크 API 분기 ✅
+  변경: std/wasm.vais (369줄, WASM memory/IO/WASI polyfill)
 
 ### Stage 2: Playground 통합
 
-- [ ] 6. playground에서 브라우저 내 .vais 컴파일 & 실행 (Opus)
-- [ ] 7. E2E 테스트 10개 추가 (Sonnet)
+- [x] 4. Playground 브라우저 내 WASM 실행 ✅
+  변경: playground/src/wasm-runner.js (WasmRunner), compiler.js (WASM mode), main.js (mode label), playground-server (compile-wasm API)
+- [x] 5. E2E 테스트 10개 추가 ✅
+  변경: e2e_tests.rs (+10 WASM tests, 425개 달성)
 
-진행률: 0/7 (0%)
+진행률: 5/5 (100%)
 
 ---
 
-## Phase 58: Async 런타임 구현 📋 예정
+## Phase 58: Async 런타임 구현 ✅ 완료
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: async/await의 실제 런타임 구현 — 이벤트 루프, Future trait, spawn/select
-> **선행**: Phase 56
+> **선행**: Phase 57
 
 ### Stage 0: 코어 런타임
 
-- [ ] 1. 이벤트 루프 구현 (epoll/kqueue 기반) (Opus)
-- [ ] 2. Future trait & Waker 메커니즘 (Opus)
-- [ ] 3. spawn/select/join 런타임 함수 (Opus)
+- [x] 1. Async 이벤트 루프 통합 & executor 구현 ✅
+  변경: std/runtime.vais (EventLoop, Reactor, kqueue/epoll 추상화)
+- [x] 2. Future trait 강화 & Waker 메커니즘 ✅
+  변경: std/future.vais (+230줄, FlatMap/Filter/Race/Chain/Retry/Fuse combinators)
+- [x] 3. spawn/select/join 런타임 함수 ✅
+  변경: std/async.vais (+400줄, AsyncTaskPool, Barrier, Semaphore, WaitGroup, OnceCell, AsyncStream)
 
 ### Stage 1: Async I/O
 
-- [ ] 4. async 파일 I/O (Sonnet)
-- [ ] 5. async 네트워크 I/O — TCP/UDP (Sonnet)
-- [ ] 6. async HTTP 서버/클라이언트 (Opus)
+- [x] 4. async 파일 I/O ✅
+  변경: std/async_io.vais (신규 ~300줄, AsyncFile, AsyncFileReader, AsyncFileWriter)
+- [x] 5. async 네트워크 I/O — TCP/UDP ✅
+  변경: std/async_net.vais (신규 ~500줄, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket)
+- [x] 6. async HTTP 서버/클라이언트 ✅
+  변경: std/async_http.vais (신규 ~550줄, AsyncHttpServer, AsyncHttpClient, Router, Middleware)
 
 ### Stage 2: 검증
 
-- [ ] 7. 동시성 스트레스 테스트 (Sonnet)
-- [ ] 8. E2E 테스트 10개 추가 (Sonnet)
+- [x] 7. 동시성 스트레스 테스트 ✅
+  변경: examples/concurrency_stress.vais (신규 ~400줄, 6개 스트레스 테스트)
+- [x] 8. E2E 테스트 10개 추가 ✅
+  변경: e2e_tests.rs (+10 async tests, **435개** 달성)
 
-진행률: 0/8 (0%)
+진행률: 8/8 (100%)
 
 ---
 

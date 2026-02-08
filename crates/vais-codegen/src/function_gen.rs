@@ -1226,4 +1226,222 @@ impl CodeGenerator {
         self.current_return_type = None;
         Ok(ir)
     }
+
+    /// Generate WASM-specific runtime functions and declarations.
+    ///
+    /// For `wasm32-unknown-unknown` targets, this generates:
+    /// - Linear memory export
+    /// - `_start` entry point that calls main
+    /// - `fd_write`-based `puts` implementation (no libc)
+    /// - Simple bump allocator using `memory.grow`
+    ///
+    /// For WASI targets, this generates:
+    /// - WASI-compatible `_start` entry point
+    /// - Memory export for WASI runtime
+    pub(crate) fn generate_wasm_runtime(&self) -> String {
+        use crate::TargetTriple;
+
+        if !self.target.is_wasm() {
+            return String::new();
+        }
+
+        let mut ir = String::new();
+
+        ir.push_str("\n; ========================================\n");
+        ir.push_str("; WASM Runtime Support\n");
+        ir.push_str("; ========================================\n\n");
+
+        match &self.target {
+            TargetTriple::Wasm32Unknown => {
+                self.generate_wasm32_unknown_runtime(&mut ir);
+            }
+            TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => {
+                self.generate_wasi_runtime(&mut ir);
+            }
+            _ => {}
+        }
+
+        ir
+    }
+
+    /// Generate runtime for wasm32-unknown-unknown (no WASI, browser environment)
+    fn generate_wasm32_unknown_runtime(&self, ir: &mut String) {
+        // Memory export (1 page = 64KB initial)
+        ir.push_str("; Linear memory (exported)\n");
+        ir.push_str("@__wasm_memory = external global i8\n\n");
+
+        // Bump allocator state: heap pointer starts at 1MB (leaves stack space)
+        ir.push_str("; Bump allocator heap pointer (starts at 1MB offset)\n");
+        ir.push_str("@__heap_ptr = global i32 1048576\n\n");
+
+        // malloc replacement using bump allocator
+        ir.push_str("; WASM malloc: bump allocator with memory.grow\n");
+        ir.push_str("define i8* @malloc(i64 %size) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %size32 = trunc i64 %size to i32\n");
+        ir.push_str("  ; Align to 8 bytes\n");
+        ir.push_str("  %aligned = add i32 %size32, 7\n");
+        ir.push_str("  %aligned_size = and i32 %aligned, -8\n");
+        ir.push_str("  ; Load current heap pointer\n");
+        ir.push_str("  %cur = load i32, i32* @__heap_ptr\n");
+        ir.push_str("  %new = add i32 %cur, %aligned_size\n");
+        ir.push_str("  ; Check if we need to grow memory\n");
+        ir.push_str("  %cur_pages = call i32 @llvm.wasm.memory.size.i32(i32 0)\n");
+        ir.push_str("  %cur_bytes = mul i32 %cur_pages, 65536\n");
+        ir.push_str("  %needs_grow = icmp ugt i32 %new, %cur_bytes\n");
+        ir.push_str("  br i1 %needs_grow, label %grow, label %done\n");
+        ir.push_str("grow:\n");
+        ir.push_str("  %needed = sub i32 %new, %cur_bytes\n");
+        ir.push_str("  %pages_needed_raw = add i32 %needed, 65535\n");
+        ir.push_str("  %pages_needed = udiv i32 %pages_needed_raw, 65536\n");
+        ir.push_str("  %grow_result = call i32 @llvm.wasm.memory.grow.i32(i32 0, i32 %pages_needed)\n");
+        ir.push_str("  %grow_failed = icmp eq i32 %grow_result, -1\n");
+        ir.push_str("  br i1 %grow_failed, label %oom, label %done\n");
+        ir.push_str("oom:\n");
+        ir.push_str("  call void @__wasm_trap()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("done:\n");
+        ir.push_str("  ; Update heap pointer\n");
+        ir.push_str("  store i32 %new, i32* @__heap_ptr\n");
+        ir.push_str("  %ptr = inttoptr i32 %cur to i8*\n");
+        ir.push_str("  ret i8* %ptr\n");
+        ir.push_str("}\n\n");
+
+        // free is a no-op for bump allocator
+        ir.push_str("; WASM free: no-op for bump allocator\n");
+        ir.push_str("define void @free(i8* %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n\n");
+
+        // realloc: allocate new block and copy
+        ir.push_str("; WASM realloc: allocate new + copy (conservative)\n");
+        ir.push_str("define i8* @realloc(i8* %old, i64 %new_size) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %new_ptr = call i8* @malloc(i64 %new_size)\n");
+        ir.push_str("  %old_is_null = icmp eq i8* %old, null\n");
+        ir.push_str("  br i1 %old_is_null, label %done, label %copy\n");
+        ir.push_str("copy:\n");
+        ir.push_str("  ; Copy old data (conservative: copy new_size bytes)\n");
+        ir.push_str("  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %new_ptr, i8* %old, i64 %new_size, i1 false)\n");
+        ir.push_str("  br label %done\n");
+        ir.push_str("done:\n");
+        ir.push_str("  ret i8* %new_ptr\n");
+        ir.push_str("}\n\n");
+
+        // puts replacement: write string to fd 1 (stdout) via imported function
+        ir.push_str("; WASM puts: calls imported __wasm_write for output\n");
+        ir.push_str("define i64 @puts(i8* %str) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %str)\n");
+        ir.push_str("  %len32 = trunc i64 %len to i32\n");
+        ir.push_str("  %ptr32 = ptrtoint i8* %str to i32\n");
+        ir.push_str("  call void @__wasm_write(i32 1, i32 %ptr32, i32 %len32)\n");
+        ir.push_str("  ; Write newline\n");
+        ir.push_str("  call void @__wasm_write_byte(i32 1, i32 10)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n\n");
+
+        // printf replacement (simplified: just write the format string)
+        ir.push_str("; WASM printf: simplified output\n");
+        ir.push_str("define i64 @printf(i8* %fmt, ...) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %fmt)\n");
+        ir.push_str("  %len32 = trunc i64 %len to i32\n");
+        ir.push_str("  %ptr32 = ptrtoint i8* %fmt to i32\n");
+        ir.push_str("  call void @__wasm_write(i32 1, i32 %ptr32, i32 %len32)\n");
+        ir.push_str("  ret i64 %len\n");
+        ir.push_str("}\n\n");
+
+        // strlen implementation (no libc)
+        ir.push_str("; WASM strlen: pure LLVM implementation\n");
+        ir.push_str("define i64 @__wasm_strlen(i8* %str) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  br label %loop\n");
+        ir.push_str("loop:\n");
+        ir.push_str("  %i = phi i64 [0, %entry], [%next, %loop]\n");
+        ir.push_str("  %ptr = getelementptr i8, i8* %str, i64 %i\n");
+        ir.push_str("  %ch = load i8, i8* %ptr\n");
+        ir.push_str("  %is_zero = icmp eq i8 %ch, 0\n");
+        ir.push_str("  %next = add i64 %i, 1\n");
+        ir.push_str("  br i1 %is_zero, label %done, label %loop\n");
+        ir.push_str("done:\n");
+        ir.push_str("  ret i64 %i\n");
+        ir.push_str("}\n\n");
+
+        // exit implementation via trap
+        ir.push_str("; WASM exit: unreachable trap\n");
+        ir.push_str("define void @exit(i32 %code) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  call void @__wasm_trap()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n\n");
+
+        // Imported functions from JS host
+        ir.push_str("; Host-imported functions (provided by JS runtime)\n");
+        ir.push_str("declare void @__wasm_write(i32 %fd, i32 %ptr, i32 %len)\n");
+        ir.push_str("declare void @__wasm_write_byte(i32 %fd, i32 %byte)\n");
+        ir.push_str("declare void @__wasm_trap()\n\n");
+
+        // LLVM intrinsics for WASM
+        ir.push_str("; LLVM WASM intrinsics\n");
+        ir.push_str("declare i32 @llvm.wasm.memory.size.i32(i32)\n");
+        ir.push_str("declare i32 @llvm.wasm.memory.grow.i32(i32, i32)\n");
+        ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
+
+        // _start entry point that calls main
+        ir.push_str("; _start entry point (calls main)\n");
+        ir.push_str("define void @_start() {\n");
+        ir.push_str("entry:\n");
+        if self.functions.contains_key("main") {
+            ir.push_str("  %ret = call i64 @main()\n");
+        }
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n\n");
+    }
+
+    /// Generate runtime for WASI targets
+    fn generate_wasi_runtime(&self, ir: &mut String) {
+        // WASI _start entry point
+        ir.push_str("; WASI _start entry point\n");
+        ir.push_str("define void @_start() {\n");
+        ir.push_str("entry:\n");
+        if self.functions.contains_key("main") {
+            ir.push_str("  %ret = call i64 @main()\n");
+            ir.push_str("  ; Exit with main's return code\n");
+            ir.push_str("  %code = trunc i64 %ret to i32\n");
+            ir.push_str("  call void @__wasi_proc_exit(i32 %code)\n");
+        } else {
+            ir.push_str("  call void @__wasi_proc_exit(i32 0)\n");
+        }
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n\n");
+
+        // WASI fd_write-based puts
+        ir.push_str("; WASI puts: fd_write based\n");
+        ir.push_str("; Uses WASI fd_write(fd, iovs, iovs_len, nwritten) -> errno\n");
+        ir.push_str("@__wasi_iov = global [2 x i32] zeroinitializer\n");
+        ir.push_str("@__wasi_nwritten = global i32 0\n\n");
+        ir.push_str("define i64 @__wasi_puts(i8* %str) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %str)\n");
+        ir.push_str("  %len32 = trunc i64 %len to i32\n");
+        ir.push_str("  %ptr32 = ptrtoint i8* %str to i32\n");
+        ir.push_str("  ; Set up iov: [ptr, len]\n");
+        ir.push_str("  %iov_ptr = getelementptr [2 x i32], [2 x i32]* @__wasi_iov, i32 0, i32 0\n");
+        ir.push_str("  store i32 %ptr32, i32* %iov_ptr\n");
+        ir.push_str("  %iov_len = getelementptr [2 x i32], [2 x i32]* @__wasi_iov, i32 0, i32 1\n");
+        ir.push_str("  store i32 %len32, i32* %iov_len\n");
+        ir.push_str("  ; Call fd_write(stdout=1, iovs, iovs_len=1, nwritten)\n");
+        ir.push_str("  %errno = call i32 @__wasi_fd_write(i32 1, i32* %iov_ptr, i32 1, i32* @__wasi_nwritten)\n");
+        ir.push_str("  %result = sext i32 %errno to i64\n");
+        ir.push_str("  ret i64 %result\n");
+        ir.push_str("}\n\n");
+
+        // WASI syscall declarations
+        ir.push_str("; WASI syscall declarations\n");
+        ir.push_str("declare void @__wasi_proc_exit(i32) noreturn\n");
+        ir.push_str("declare i32 @__wasi_fd_write(i32, i32*, i32, i32*)\n");
+        ir.push_str("declare i32 @__wasi_fd_read(i32, i32*, i32, i32*)\n\n");
+    }
 }

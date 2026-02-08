@@ -1,19 +1,29 @@
 // Compiler interface for Vais
-// Supports both server-side compilation (via REST API) and mock mode (fallback)
+// Supports server-side compilation, WASM execution, and mock mode (fallback)
+
+import { WasmRunner } from './wasm-runner.js';
 
 const DEFAULT_API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:8080'
   : 'https://api.vaislang.dev';
+
+// Compilation modes
+const MODE_SERVER = 'server';
+const MODE_WASM = 'wasm';
+const MODE_MOCK = 'mock';
 
 export class VaisCompiler {
   constructor(apiUrl) {
     this.apiUrl = apiUrl || DEFAULT_API_URL;
     this.isReady = false;
     this.serverAvailable = false;
+    this.wasmAvailable = false;
+    this.wasmRunner = new WasmRunner();
+    this.mode = MODE_MOCK;
   }
 
   async initialize() {
-    // Check if the server is available
+    // Try server first
     try {
       const response = await fetch(`${this.apiUrl}/api/health`, {
         signal: AbortSignal.timeout(2000),
@@ -21,15 +31,55 @@ export class VaisCompiler {
       if (response.ok) {
         const data = await response.json();
         this.serverAvailable = true;
+        this.mode = MODE_SERVER;
         console.log(`Connected to Vais Playground server v${data.version}`);
       }
     } catch {
       this.serverAvailable = false;
-      console.warn('Playground server not available, using mock mode');
+      console.warn('Playground server not available');
+    }
+
+    // If no server, check if WASM compilation endpoint is available
+    if (!this.serverAvailable) {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/compile-wasm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'F main()->i64{0}', target: 'wasm32' }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (response.ok) {
+          this.wasmAvailable = true;
+          this.mode = MODE_WASM;
+          console.log('WASM compilation available');
+        }
+      } catch {
+        // WASM compilation not available either
+      }
+    }
+
+    if (!this.serverAvailable && !this.wasmAvailable) {
+      this.mode = MODE_MOCK;
+      console.warn('Using mock mode (server and WASM both unavailable)');
     }
 
     this.isReady = true;
     return true;
+  }
+
+  /** Get current compilation mode */
+  getMode() {
+    return this.mode;
+  }
+
+  /** Get mode display string */
+  getModeLabel() {
+    switch (this.mode) {
+      case MODE_SERVER: return 'Server';
+      case MODE_WASM: return 'WASM';
+      case MODE_MOCK: return 'Preview';
+      default: return 'Unknown';
+    }
   }
 
   async compile(sourceCode) {
@@ -56,7 +106,87 @@ export class VaisCompiler {
     if (this.serverAvailable) {
       return this.serverCompile(sourceCode, { execute: true, emit_ir: false });
     }
+    if (this.wasmAvailable) {
+      return this.wasmCompileAndRun(sourceCode);
+    }
     return this.mockCompileAndRun(sourceCode);
+  }
+
+  // --- WASM compilation mode ---
+  // Server compiles to WASM, then we execute in browser
+
+  async wasmCompileAndRun(sourceCode) {
+    try {
+      // Step 1: Server-side compilation to WASM binary
+      const response = await fetch(`${this.apiUrl}/api/compile-wasm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: sourceCode,
+          target: 'wasm32',
+          optimize: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          errors: errorData.errors || [{ line: 0, column: 0, message: `Server error: ${response.status}` }],
+          warnings: [],
+          output: null,
+        };
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        return {
+          success: false,
+          errors: data.errors || [],
+          warnings: data.warnings || [],
+          output: null,
+          compileTimeMs: data.compile_time_ms,
+        };
+      }
+
+      // Step 2: Decode the WASM binary (base64 encoded from server)
+      const wasmBinary = base64ToArrayBuffer(data.wasm_binary);
+      const compileTimeMs = data.compile_time_ms || 0;
+
+      // Step 3: Execute in browser
+      const execStart = performance.now();
+      const result = await this.wasmRunner.execute(wasmBinary, {
+        timeout: 10000,
+      });
+      const execTimeMs = Math.round(performance.now() - execStart);
+
+      let output = result.output || '';
+      output += `\n\n[WASM mode — compiled in ${compileTimeMs}ms, executed in ${execTimeMs}ms]`;
+
+      return {
+        success: result.success,
+        errors: [],
+        warnings: data.warnings || [],
+        output: output,
+        exitCode: result.exitCode,
+        compileTimeMs: compileTimeMs + execTimeMs,
+      };
+    } catch (error) {
+      // If WASM mode fails, fall back to mock
+      if (error.name === 'TimeoutError' || error.name === 'TypeError') {
+        this.wasmAvailable = false;
+        this.mode = MODE_MOCK;
+        return this.mockCompileAndRun(sourceCode);
+      }
+      return {
+        success: false,
+        errors: [{ line: 0, column: 0, message: `WASM error: ${error.message}` }],
+        warnings: [],
+        output: null,
+      };
+    }
   }
 
   async serverCompile(sourceCode, options = {}) {
@@ -85,9 +215,14 @@ export class VaisCompiler {
         compileTimeMs: data.compile_time_ms,
       };
     } catch (error) {
-      // Server became unavailable, fall back to mock
+      // Server became unavailable, fall back
       if (error.name === 'TimeoutError' || error.name === 'TypeError') {
         this.serverAvailable = false;
+        if (this.wasmAvailable) {
+          this.mode = MODE_WASM;
+          return this.wasmCompileAndRun(sourceCode);
+        }
+        this.mode = MODE_MOCK;
         return this.mockCompileAndRun(sourceCode);
       }
       return {
@@ -243,6 +378,16 @@ export class VaisCompiler {
   formatWarning(warning) {
     return `Warning at line ${warning.line}, column ${warning.column}: ${warning.message}`;
   }
+}
+
+// Utility: decode base64 to ArrayBuffer
+function base64ToArrayBuffer(base64) {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
 }
 
 export default VaisCompiler;

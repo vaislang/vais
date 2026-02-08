@@ -1,0 +1,411 @@
+# std/async_io.vais - Async File I/O
+# Provides asynchronous file operations with buffering support
+# Uses non-blocking I/O for concurrent file access
+
+# File mode constants
+C ASYNC_READ: i64 = 0
+C ASYNC_WRITE: i64 = 577     # O_WRONLY | O_CREAT | O_TRUNC
+C ASYNC_APPEND: i64 = 521    # O_WRONLY | O_CREAT | O_APPEND
+
+# Buffer size constants
+C ASYNC_BUF_SIZE: i64 = 4096
+C ASYNC_LINE_BUF_SIZE: i64 = 1024
+
+# External C functions for file I/O
+extern F open(path: str, flags: i64, mode: i64) -> i64
+extern F read(fd: i64, buf: i64, count: i64) -> i64
+extern F write(fd: i64, buf: i64, count: i64) -> i64
+extern F close(fd: i64) -> i64
+extern F lseek(fd: i64, offset: i64, whence: i64) -> i64
+
+# AsyncFile - Async file handle
+S AsyncFile {
+    fd: i64,
+    path: str,
+    mode: i64,
+    is_open: i64
+}
+
+X AsyncFile {
+    # Open file asynchronously
+    # mode: 0=read, 1=write, 2=append
+    F open(path: str, mode: i64) -> AsyncFile {
+        flags := I mode == 0 {
+            0
+        } E I mode == 1 {
+            577
+        } E {
+            521
+        }
+
+        fd := open(path, flags, 420)
+
+        AsyncFile {
+            fd: fd,
+            path: path,
+            mode: mode,
+            is_open: I fd >= 0 { 1 } E { 0 }
+        }
+    }
+
+    # Read data into buffer
+    F read(@, buf: i64, len: i64) -> i64 {
+        I @.is_open == 0 {
+            R -1
+        }
+
+        read(@.fd, buf, len)
+    }
+
+    # Write data from buffer
+    F write(@, buf: i64, len: i64) -> i64 {
+        I @.is_open == 0 {
+            R -1
+        }
+
+        write(@.fd, buf, len)
+    }
+
+    # Close file
+    F close(@) -> i64 {
+        I @.is_open == 0 {
+            R 0
+        }
+
+        result := close(@.fd)
+        @.is_open = 0
+        result
+    }
+
+    # Read entire file content
+    F read_all(@) -> str {
+        I @.is_open == 0 {
+            R ""
+        }
+
+        # Seek to end to get file size
+        current := lseek(@.fd, 0, 1)
+        size := lseek(@.fd, 0, 2)
+        lseek(@.fd, current, 0)
+
+        I size <= 0 {
+            R ""
+        }
+
+        # Allocate buffer
+        buf := malloc(size + 1)
+
+        # Read all data
+        bytes_read := read(@.fd, buf, size)
+
+        I bytes_read <= 0 {
+            free(buf)
+            R ""
+        }
+
+        # Null terminate
+        store_byte(buf + bytes_read, 0)
+
+        # Convert to string
+        result := ptr_to_str(buf)
+        free(buf)
+        result
+    }
+
+    # Write entire string to file
+    F write_all(@, data: str) -> i64 {
+        I @.is_open == 0 {
+            R -1
+        }
+
+        len := strlen(data)
+        ptr := str_to_ptr(data)
+
+        write(@.fd, ptr, len)
+    }
+}
+
+# AsyncFileReader - Buffered line reader
+S AsyncFileReader {
+    file: AsyncFile,
+    buffer: i64,
+    buf_pos: i64,
+    buf_len: i64
+}
+
+X AsyncFileReader {
+    # Create new reader
+    F new(file: AsyncFile) -> AsyncFileReader {
+        AsyncFileReader {
+            file: file,
+            buffer: malloc(ASYNC_LINE_BUF_SIZE),
+            buf_pos: 0,
+            buf_len: 0
+        }
+    }
+
+    # Read next line
+    F read_line(@) -> str {
+        I @.file.is_open == 0 {
+            R ""
+        }
+
+        line_buf := malloc(ASYNC_LINE_BUF_SIZE)
+        line_pos := mut 0
+
+        L {
+            # Refill buffer if empty
+            I @.buf_pos >= @.buf_len {
+                @.buf_len = @.file.read(@.buffer, ASYNC_LINE_BUF_SIZE)
+                @.buf_pos = 0
+
+                I @.buf_len <= 0 {
+                    B
+                }
+            }
+
+            # Read until newline or end of buffer
+            found_newline := mut 0
+            L {
+                I @.buf_pos >= @.buf_len {
+                    B
+                }
+
+                ch := load_byte(@.buffer + @.buf_pos)
+                @.buf_pos = @.buf_pos + 1
+
+                I ch == 10 {
+                    found_newline = 1
+                    B
+                }
+
+                store_byte(line_buf + line_pos, ch)
+                line_pos = line_pos + 1
+
+                I line_pos >= ASYNC_LINE_BUF_SIZE - 1 {
+                    B
+                }
+            }
+
+            I found_newline == 1 {
+                B
+            }
+
+            I @.buf_len <= 0 {
+                B
+            }
+        }
+
+        # Null terminate
+        store_byte(line_buf + line_pos, 0)
+
+        result := ptr_to_str(line_buf)
+        free(line_buf)
+        result
+    }
+
+    # Check if more data available
+    F has_next(@) -> i64 {
+        I @.file.is_open == 0 {
+            R 0
+        }
+
+        I @.buf_pos < @.buf_len {
+            R 1
+        }
+
+        # Try to read one byte ahead
+        test_buf := malloc(1)
+        n := @.file.read(test_buf, 1)
+        free(test_buf)
+
+        I n > 0 {
+            # Seek back
+            lseek(@.file.fd, -1, 1)
+            1
+        } E {
+            0
+        }
+    }
+
+    # Clean up
+    F close(@) -> i64 {
+        I @.buffer != 0 {
+            free(@.buffer)
+            @.buffer = 0
+        }
+
+        @.file.close()
+    }
+}
+
+# AsyncFileWriter - Buffered writer
+S AsyncFileWriter {
+    file: AsyncFile,
+    buffer: i64,
+    buf_pos: i64,
+    capacity: i64
+}
+
+X AsyncFileWriter {
+    # Create new writer
+    F new(file: AsyncFile) -> AsyncFileWriter {
+        AsyncFileWriter {
+            file: file,
+            buffer: malloc(ASYNC_BUF_SIZE),
+            buf_pos: 0,
+            capacity: ASYNC_BUF_SIZE
+        }
+    }
+
+    # Write data to buffer
+    F write(@, data: str) -> i64 {
+        I @.file.is_open == 0 {
+            R -1
+        }
+
+        len := strlen(data)
+        ptr := str_to_ptr(data)
+
+        total_written := mut 0
+        remaining := mut len
+        src_pos := mut 0
+
+        L {
+            I remaining <= 0 {
+                B
+            }
+
+            # Flush if buffer is full
+            I @.buf_pos >= @.capacity {
+                flush_result := @.flush()
+                I flush_result < 0 {
+                    R flush_result
+                }
+            }
+
+            # Copy to buffer
+            available := @.capacity - @.buf_pos
+            to_copy := I remaining < available { remaining } E { available }
+
+            i := mut 0
+            L {
+                I i >= to_copy {
+                    B
+                }
+
+                ch := load_byte(ptr + src_pos + i)
+                store_byte(@.buffer + @.buf_pos + i, ch)
+                i = i + 1
+            }
+
+            @.buf_pos = @.buf_pos + to_copy
+            src_pos = src_pos + to_copy
+            remaining = remaining - to_copy
+            total_written = total_written + to_copy
+        }
+
+        total_written
+    }
+
+    # Flush buffer to file
+    F flush(@) -> i64 {
+        I @.buf_pos <= 0 {
+            R 0
+        }
+
+        I @.file.is_open == 0 {
+            R -1
+        }
+
+        bytes_written := @.file.write(@.buffer, @.buf_pos)
+
+        I bytes_written > 0 {
+            @.buf_pos = 0
+        }
+
+        bytes_written
+    }
+
+    # Clean up
+    F close(@) -> i64 {
+        flush_result := @.flush()
+
+        I @.buffer != 0 {
+            free(@.buffer)
+            @.buffer = 0
+        }
+
+        file_close := @.file.close()
+
+        I flush_result < 0 { flush_result } E { file_close }
+    }
+}
+
+# Helper: async read entire file
+F async_read_file(path: str) -> str {
+    file := AsyncFile.open(path, 0)
+
+    I file.is_open == 0 {
+        R ""
+    }
+
+    content := file.read_all()
+    file.close()
+    content
+}
+
+# Helper: async write entire file
+F async_write_file(path: str, content: str) -> i64 {
+    file := AsyncFile.open(path, 1)
+
+    I file.is_open == 0 {
+        R -1
+    }
+
+    result := file.write_all(content)
+    file.close()
+    result
+}
+
+# Helper: async copy file
+F async_copy_file(src: str, dst: str) -> i64 {
+    src_file := AsyncFile.open(src, 0)
+
+    I src_file.is_open == 0 {
+        R -1
+    }
+
+    dst_file := AsyncFile.open(dst, 1)
+
+    I dst_file.is_open == 0 {
+        src_file.close()
+        R -1
+    }
+
+    buffer := malloc(ASYNC_BUF_SIZE)
+    total_copied := mut 0
+
+    L {
+        bytes_read := src_file.read(buffer, ASYNC_BUF_SIZE)
+
+        I bytes_read <= 0 {
+            B
+        }
+
+        bytes_written := dst_file.write(buffer, bytes_read)
+
+        I bytes_written < 0 {
+            total_copied = -1
+            B
+        }
+
+        total_copied = total_copied + bytes_written
+    }
+
+    free(buffer)
+    src_file.close()
+    dst_file.close()
+
+    total_copied
+}

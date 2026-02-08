@@ -117,6 +117,31 @@ struct CompileRequest {
     execute: bool,
 }
 
+#[derive(Deserialize)]
+struct CompileWasmRequest {
+    source: String,
+    #[serde(default = "default_wasm32")]
+    target: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    optimize: bool,
+}
+
+fn default_wasm32() -> String {
+    "wasm32".to_string()
+}
+
+#[derive(Serialize)]
+struct CompileWasmResponse {
+    success: bool,
+    errors: Vec<DiagnosticItem>,
+    warnings: Vec<DiagnosticItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wasm_binary: Option<String>, // base64-encoded .wasm
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compile_time_ms: Option<u64>,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -197,6 +222,7 @@ async fn main() {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/compile", post(compile))
+        .route("/api/compile-wasm", post(compile_wasm))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -287,6 +313,211 @@ async fn compile(
     .unwrap_or_else(|e| make_error_response(format!("Internal error: {}", e)));
 
     Ok(Json(result))
+}
+
+async fn compile_wasm(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(req): Json<CompileWasmRequest>,
+) -> Result<Json<CompileWasmResponse>, (StatusCode, Json<CompileWasmResponse>)> {
+    // Rate limiting
+    {
+        let mut limiter = state.rate_limiter.lock().await;
+        if !limiter.check(addr.ip()) {
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(CompileWasmResponse {
+                    success: false,
+                    errors: vec![DiagnosticItem {
+                        line: 0,
+                        column: 0,
+                        message: "Rate limit exceeded".to_string(),
+                        severity: Some("error".to_string()),
+                    }],
+                    warnings: vec![],
+                    wasm_binary: None,
+                    compile_time_ms: None,
+                }),
+            ));
+        }
+    }
+
+    if req.source.len() > state.config.max_source_bytes {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(CompileWasmResponse {
+                success: false,
+                errors: vec![DiagnosticItem {
+                    line: 0,
+                    column: 0,
+                    message: format!(
+                        "Source too large: {} bytes (max {})",
+                        req.source.len(),
+                        state.config.max_source_bytes
+                    ),
+                    severity: Some("error".to_string()),
+                }],
+                warnings: vec![],
+                wasm_binary: None,
+                compile_time_ms: None,
+            }),
+        ));
+    }
+
+    let _permit = state.compile_semaphore.acquire().await.map_err(|_| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(CompileWasmResponse {
+                success: false,
+                errors: vec![DiagnosticItem {
+                    line: 0,
+                    column: 0,
+                    message: "Server busy".to_string(),
+                    severity: Some("error".to_string()),
+                }],
+                warnings: vec![],
+                wasm_binary: None,
+                compile_time_ms: None,
+            }),
+        )
+    })?;
+
+    let source = req.source.clone();
+    let target = req.target.clone();
+
+    let result = tokio::task::spawn_blocking(move || compile_to_wasm(&source, &target))
+        .await
+        .unwrap_or_else(|e| CompileWasmResponse {
+            success: false,
+            errors: vec![DiagnosticItem {
+                line: 0,
+                column: 0,
+                message: format!("Internal error: {}", e),
+                severity: Some("error".to_string()),
+            }],
+            warnings: vec![],
+            wasm_binary: None,
+            compile_time_ms: None,
+        });
+
+    Ok(Json(result))
+}
+
+fn compile_to_wasm(source: &str, target: &str) -> CompileWasmResponse {
+    use base64::Engine;
+    let start = std::time::Instant::now();
+
+    let tmp_dir = match tempfile::tempdir() {
+        Ok(d) => d,
+        Err(e) => {
+            return CompileWasmResponse {
+                success: false,
+                errors: vec![DiagnosticItem {
+                    line: 0,
+                    column: 0,
+                    message: format!("Failed to create temp dir: {}", e),
+                    severity: Some("error".to_string()),
+                }],
+                warnings: vec![],
+                wasm_binary: None,
+                compile_time_ms: None,
+            }
+        }
+    };
+
+    let source_path = tmp_dir.path().join("playground.vais");
+    let wasm_path = tmp_dir.path().join("playground.wasm");
+
+    if let Err(e) = std::fs::write(&source_path, source) {
+        return CompileWasmResponse {
+            success: false,
+            errors: vec![DiagnosticItem {
+                line: 0,
+                column: 0,
+                message: format!("Failed to write source: {}", e),
+                severity: Some("error".to_string()),
+            }],
+            warnings: vec![],
+            wasm_binary: None,
+            compile_time_ms: None,
+        };
+    }
+
+    // Determine target triple
+    let target_triple = match target {
+        "wasm32" | "wasm32-unknown-unknown" => "wasm32-unknown-unknown",
+        "wasi" | "wasm32-wasi" => "wasm32-wasi",
+        _ => "wasm32-unknown-unknown",
+    };
+
+    // Compile using vaisc CLI with WASM target
+    let compile_output = Command::new("vaisc")
+        .arg(source_path.to_str().unwrap())
+        .arg("-o")
+        .arg(wasm_path.to_str().unwrap())
+        .arg("--target")
+        .arg(target_triple)
+        .output();
+
+    let compile_output = match compile_output {
+        Ok(o) => o,
+        Err(e) => {
+            return CompileWasmResponse {
+                success: false,
+                errors: vec![DiagnosticItem {
+                    line: 0,
+                    column: 0,
+                    message: format!("Failed to run vaisc: {}", e),
+                    severity: Some("error".to_string()),
+                }],
+                warnings: vec![],
+                wasm_binary: None,
+                compile_time_ms: None,
+            }
+        }
+    };
+
+    if !compile_output.status.success() {
+        let stderr = String::from_utf8_lossy(&compile_output.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&compile_output.stdout).to_string();
+        let msg = if !stderr.is_empty() { &stderr } else { &stdout };
+        return CompileWasmResponse {
+            success: false,
+            errors: parse_compiler_errors(msg),
+            warnings: vec![],
+            wasm_binary: None,
+            compile_time_ms: Some(start.elapsed().as_millis() as u64),
+        };
+    }
+
+    // Read the .wasm binary and base64-encode it
+    let wasm_bytes = match std::fs::read(&wasm_path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return CompileWasmResponse {
+                success: false,
+                errors: vec![DiagnosticItem {
+                    line: 0,
+                    column: 0,
+                    message: format!("Failed to read WASM output: {}", e),
+                    severity: Some("error".to_string()),
+                }],
+                warnings: vec![],
+                wasm_binary: None,
+                compile_time_ms: Some(start.elapsed().as_millis() as u64),
+            }
+        }
+    };
+
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&wasm_bytes);
+
+    CompileWasmResponse {
+        success: true,
+        errors: vec![],
+        warnings: vec![],
+        wasm_binary: Some(encoded),
+        compile_time_ms: Some(start.elapsed().as_millis() as u64),
+    }
 }
 
 fn compile_and_run(

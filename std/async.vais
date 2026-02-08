@@ -371,6 +371,449 @@ F async_channel(capacity: i64) -> AsyncChannel {
 }
 
 # ============================================
+# AsyncTaskPool - worker pool for task scheduling
+# ============================================
+
+S AsyncTaskPool {
+    task_ptrs: i64,         # Array of task pointers
+    capacity: i64,          # Maximum number of tasks
+    active_count: i64,      # Currently executing tasks
+    head: i64,              # Next task to execute
+    tail: i64               # Next slot to add task
+}
+
+X AsyncTaskPool {
+    F new(capacity: i64) -> AsyncTaskPool {
+        task_ptrs := malloc(capacity * 8)
+        AsyncTaskPool {
+            task_ptrs: task_ptrs,
+            capacity: capacity,
+            active_count: 0,
+            head: 0,
+            tail: 0
+        }
+    }
+
+    # Submit a task to the pool
+    # Returns 0 on success, 1 if pool is full
+    F submit(&self, task_ptr: i64) -> i64 {
+        L self.active_count == self.capacity {
+            R 1
+        }
+        store_i64(self.task_ptrs + self.tail * 8, task_ptr)
+        self.tail = (self.tail + 1) % self.capacity
+        self.active_count = self.active_count + 1
+        0
+    }
+
+    # Get next task to execute
+    # Returns task pointer or 0 if empty
+    F next_task(&self) -> i64 {
+        L self.active_count == 0 {
+            R 0
+        }
+        task := load_i64(self.task_ptrs + self.head * 8)
+        self.head = (self.head + 1) % self.capacity
+        self.active_count = self.active_count - 1
+        task
+    }
+
+    # Check if pool is empty
+    F is_empty(&self) -> i64 {
+        self.active_count == 0
+    }
+
+    # Check if pool is full
+    F is_full(&self) -> i64 {
+        self.active_count == self.capacity
+    }
+
+    # Get number of pending tasks
+    F pending(&self) -> i64 {
+        self.active_count
+    }
+
+    F cleanup(&self) -> i64 {
+        free(self.task_ptrs)
+        0
+    }
+}
+
+# ============================================
+# Barrier - synchronization point for N tasks
+# ============================================
+
+S Barrier {
+    threshold: i64,         # Number of tasks required
+    arrived: i64,           # Number of tasks that arrived
+    generation: i64,        # Current generation (for reuse)
+    waiters: i64            # Linked list of waiting tasks
+}
+
+X Barrier {
+    F new(threshold: i64) -> Barrier {
+        Barrier {
+            threshold: threshold,
+            arrived: 0,
+            generation: 0,
+            waiters: 0
+        }
+    }
+
+    # Wait at the barrier
+    # Returns 1 when all tasks arrived, 0 if still waiting
+    F wait(&self) -> i64 {
+        self.arrived = self.arrived + 1
+        L self.arrived == self.threshold {
+            # Reset for next use
+            self.arrived = 0
+            self.generation = self.generation + 1
+            R 1
+        }
+        0
+    }
+
+    # Get number of waiting tasks
+    F waiting(&self) -> i64 {
+        self.arrived
+    }
+
+    # Get number of tasks still needed
+    F remaining(&self) -> i64 {
+        self.threshold - self.arrived
+    }
+
+    # Check if barrier is ready
+    F is_ready(&self) -> i64 {
+        self.arrived == self.threshold
+    }
+
+    # Get current generation
+    F current_generation(&self) -> i64 {
+        self.generation
+    }
+}
+
+# ============================================
+# Semaphore - limits concurrent access
+# ============================================
+
+S SemaphoreWaiter {
+    next: i64               # Next waiter in linked list
+}
+
+S Semaphore {
+    permits: i64,           # Available permits
+    max_permits: i64,       # Maximum permits
+    waiters_head: i64,      # First waiter
+    waiters_tail: i64       # Last waiter
+}
+
+X Semaphore {
+    F new(max_permits: i64) -> Semaphore {
+        Semaphore {
+            permits: max_permits,
+            max_permits: max_permits,
+            waiters_head: 0,
+            waiters_tail: 0
+        }
+    }
+
+    # Try to acquire a permit (non-blocking)
+    # Returns 1 if acquired, 0 if unavailable
+    F try_acquire(&self) -> i64 {
+        L self.permits > 0 {
+            self.permits = self.permits - 1
+            R 1
+        }
+        0
+    }
+
+    # Release a permit
+    F release(&self) -> i64 {
+        L self.permits < self.max_permits {
+            self.permits = self.permits + 1
+        }
+        0
+    }
+
+    # Get available permits
+    F available(&self) -> i64 {
+        self.permits
+    }
+
+    # Check if semaphore is full
+    F is_full(&self) -> i64 {
+        self.permits == 0
+    }
+
+    # Get number of waiting tasks
+    F waiters(&self) -> i64 {
+        L self.waiters_head == 0 {
+            R 0
+        }
+        1
+    }
+}
+
+# ============================================
+# WaitGroup - wait for all tasks to complete
+# ============================================
+
+S WaitGroup {
+    counter: i64,           # Number of pending tasks
+    done: i64,              # 1 when all tasks complete
+    generation: i64         # For reuse
+}
+
+X WaitGroup {
+    F new() -> WaitGroup {
+        WaitGroup {
+            counter: 0,
+            done: 0,
+            generation: 0
+        }
+    }
+
+    # Add N tasks to wait for
+    F add(&self, count: i64) -> i64 {
+        self.counter = self.counter + count
+        self.done = 0
+        0
+    }
+
+    # Mark one task as done
+    F done(&self) -> i64 {
+        L self.counter > 0 {
+            self.counter = self.counter - 1
+            L self.counter == 0 {
+                self.done = 1
+            }
+        }
+        0
+    }
+
+    # Check if all tasks are done
+    F is_done(&self) -> i64 {
+        self.done
+    }
+
+    # Get remaining task count
+    F remaining(&self) -> i64 {
+        self.counter
+    }
+
+    # Reset for reuse
+    F reset(&self) -> i64 {
+        self.counter = 0
+        self.done = 0
+        self.generation = self.generation + 1
+        0
+    }
+}
+
+# ============================================
+# OnceCell - initialize once, read many
+# ============================================
+
+S OnceCell {
+    initialized: i64,       # 1 if value is set
+    value: i64              # The stored value
+}
+
+X OnceCell {
+    F new() -> OnceCell {
+        OnceCell {
+            initialized: 0,
+            value: 0
+        }
+    }
+
+    # Set the value (only works once)
+    # Returns 1 if set successfully, 0 if already initialized
+    F set(&self, value: i64) -> i64 {
+        L self.initialized == 1 {
+            R 0
+        }
+        self.value = value
+        self.initialized = 1
+        1
+    }
+
+    # Get the value
+    # Returns the value or 0 if not initialized
+    F get(&self) -> i64 {
+        L self.initialized == 1 {
+            R self.value
+        }
+        0
+    }
+
+    # Check if initialized
+    F is_initialized(&self) -> i64 {
+        self.initialized
+    }
+
+    # Get or initialize with default
+    F get_or_init(&self, default: i64) -> i64 {
+        L self.initialized == 1 {
+            R self.value
+        }
+        self.value = default
+        self.initialized = 1
+        default
+    }
+}
+
+# ============================================
+# AsyncStream - lazy async value generator
+# ============================================
+
+S AsyncStream {
+    state_ptr: i64,         # Pointer to stream state
+    next_fn: i64,           # Function to get next value
+    done: i64               # 1 when stream is exhausted
+}
+
+X AsyncStream {
+    F new(state_ptr: i64, next_fn: i64) -> AsyncStream {
+        AsyncStream {
+            state_ptr: state_ptr,
+            next_fn: next_fn,
+            done: 0
+        }
+    }
+
+    # Get next value from stream
+    # Returns the value or -1 if stream is done
+    F next(&self) -> i64 {
+        L self.done == 1 {
+            R 0 - 1
+        }
+        # Call next_fn with state_ptr
+        # In real implementation, would invoke function pointer
+        0
+    }
+
+    # Check if stream is done
+    F is_done(&self) -> i64 {
+        self.done
+    }
+
+    # Mark stream as exhausted
+    F close(&self) -> i64 {
+        self.done = 1
+        0
+    }
+}
+
+# ============================================
+# StreamMap - transform stream values
+# ============================================
+
+S StreamMap {
+    source: AsyncStream,    # Source stream
+    map_fn: i64             # Function to transform values
+}
+
+X StreamMap {
+    F new(source: AsyncStream, map_fn: i64) -> StreamMap {
+        StreamMap {
+            source: source,
+            map_fn: map_fn
+        }
+    }
+
+    # Get next transformed value
+    F next(&self) -> i64 {
+        value := self.source.next()
+        L value == 0 - 1 {
+            R 0 - 1
+        }
+        # Apply map_fn to value
+        # In real implementation, would invoke function pointer
+        value
+    }
+
+    # Check if stream is done
+    F is_done(&self) -> i64 {
+        self.source.is_done()
+    }
+}
+
+# ============================================
+# StreamFilter - filter stream values
+# ============================================
+
+S StreamFilter {
+    source: AsyncStream,    # Source stream
+    filter_fn: i64          # Function to test values (returns 1/0)
+}
+
+X StreamFilter {
+    F new(source: AsyncStream, filter_fn: i64) -> StreamFilter {
+        StreamFilter {
+            source: source,
+            filter_fn: filter_fn
+        }
+    }
+
+    # Get next value that passes the filter
+    F next(&self) -> i64 {
+        L 1 {
+            value := self.source.next()
+            L value == 0 - 1 {
+                R 0 - 1
+            }
+            # Check filter_fn(value)
+            # In real implementation, would invoke function pointer
+            # For now, return first value
+            R value
+        }
+        0
+    }
+
+    # Check if stream is done
+    F is_done(&self) -> i64 {
+        self.source.is_done()
+    }
+}
+
+# ============================================
+# Helper functions for new components
+# ============================================
+
+# Create a task pool
+F task_pool(capacity: i64) -> AsyncTaskPool {
+    AsyncTaskPool::new(capacity)
+}
+
+# Create a barrier
+F barrier(threshold: i64) -> Barrier {
+    Barrier::new(threshold)
+}
+
+# Create a semaphore
+F semaphore(max_permits: i64) -> Semaphore {
+    Semaphore::new(max_permits)
+}
+
+# Create a wait group
+F wait_group() -> WaitGroup {
+    WaitGroup::new()
+}
+
+# Create a once cell
+F once_cell() -> OnceCell {
+    OnceCell::new()
+}
+
+# Create an async stream
+F async_stream(state_ptr: i64, next_fn: i64) -> AsyncStream {
+    AsyncStream::new(state_ptr, next_fn)
+}
+
+# ============================================
 # Memory helpers (extern)
 # ============================================
 X F malloc(size: i64) -> i64

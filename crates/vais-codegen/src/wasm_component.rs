@@ -9,10 +9,52 @@
 //! - Component interface generation from Vais module signatures
 //! - Component linking configuration
 //! - wasi-preview2 integration
+//! - wasm-bindgen JavaScript/TypeScript binding generation
+//! - WASI manifest management for imports/exports
+//!
+//! # Example
+//!
+//! ```rust
+//! use vais_codegen::wasm_component::{
+//!     WasmBindgenGenerator, WasiManifest, ComponentLinkConfig,
+//!     WitFunction, WitParam, WitResult, WitType
+//! };
+//!
+//! // Create a WASI manifest
+//! let mut manifest = WasiManifest::new();
+//! manifest.add_import("wasi:filesystem/types");
+//! manifest.add_import("wasi:cli/stdio");
+//! manifest.add_export("main", &WitType::S32);
+//!
+//! // Generate WIT content
+//! let wit_content = manifest.to_wit_string();
+//!
+//! // Generate JavaScript bindings
+//! let generator = WasmBindgenGenerator::new("my_module");
+//! let functions = vec![
+//!     WitFunction {
+//!         name: "add".to_string(),
+//!         params: vec![
+//!             WitParam { name: "a".to_string(), ty: WitType::S32 },
+//!             WitParam { name: "b".to_string(), ty: WitType::S32 },
+//!         ],
+//!         results: Some(WitResult::Anon(WitType::S32)),
+//!         docs: Some("Add two numbers".to_string()),
+//!     }
+//! ];
+//! let js_bindings = generator.generate_js_bindings(&functions);
+//! let ts_declarations = generator.generate_ts_declarations(&functions);
+//!
+//! // Configure component linking with WASI
+//! let config = ComponentLinkConfig::new()
+//!     .with_wasi_manifest(manifest)
+//!     .with_adapter("wasi_snapshot_preview1.wasm");
+//! ```
 //!
 //! References:
 //! - Component Model spec: https://github.com/WebAssembly/component-model
 //! - WIT IDL spec: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
+//! - wasm-bindgen: https://rustwasm.github.io/wasm-bindgen/
 
 use std::collections::HashMap;
 use std::fmt;
@@ -663,6 +705,326 @@ pub fn vais_type_to_wit(ty: &ResolvedType) -> Option<WitType> {
     }
 }
 
+/// WASI manifest for managing WASI interface imports/exports
+#[derive(Debug, Clone)]
+pub struct WasiManifest {
+    /// WASI interface imports (e.g., "wasi:filesystem/types")
+    pub imports: Vec<String>,
+    /// WASI exports (name -> WIT type)
+    pub exports: HashMap<String, WitType>,
+}
+
+impl WasiManifest {
+    /// Create a new WASI manifest
+    pub fn new() -> Self {
+        Self {
+            imports: Vec::new(),
+            exports: HashMap::new(),
+        }
+    }
+
+    /// Add a WASI import interface
+    pub fn add_import(&mut self, interface: &str) {
+        if !self.imports.contains(&interface.to_string()) {
+            self.imports.push(interface.to_string());
+        }
+    }
+
+    /// Add a WASI export
+    pub fn add_export(&mut self, name: &str, wit_type: &WitType) {
+        self.exports.insert(name.to_string(), wit_type.clone());
+    }
+
+    /// Generate WIT file content from the manifest
+    pub fn to_wit_string(&self) -> String {
+        let mut output = String::new();
+
+        // Imports
+        if !self.imports.is_empty() {
+            output.push_str("// WASI Imports\n");
+            for import in &self.imports {
+                output.push_str(&format!("import {};\n", import));
+            }
+            output.push('\n');
+        }
+
+        // Exports
+        if !self.exports.is_empty() {
+            output.push_str("// WASI Exports\n");
+            for (name, wit_type) in &self.exports {
+                output.push_str(&format!("export {}: {};\n", name, wit_type));
+            }
+            output.push('\n');
+        }
+
+        output
+    }
+}
+
+impl Default for WasiManifest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// wasm-bindgen generator for creating JavaScript bindings
+#[derive(Debug, Clone)]
+pub struct WasmBindgenGenerator {
+    /// Module name for generated bindings
+    pub module_name: String,
+}
+
+impl WasmBindgenGenerator {
+    /// Create a new wasm-bindgen generator
+    pub fn new(module_name: &str) -> Self {
+        Self {
+            module_name: module_name.to_string(),
+        }
+    }
+
+    /// Generate JavaScript glue code from WIT functions
+    pub fn generate_js_bindings(&self, funcs: &[WitFunction]) -> String {
+        let mut output = String::new();
+
+        output.push_str(&format!(
+            "// Generated JavaScript bindings for {}\n\n",
+            self.module_name
+        ));
+
+        output.push_str("export class VaisModule {\n");
+        output.push_str("  constructor(instance) {\n");
+        output.push_str("    this.instance = instance;\n");
+        output.push_str("    this.exports = instance.exports;\n");
+        output.push_str("  }\n\n");
+
+        for func in funcs {
+            let params = func
+                .params
+                .iter()
+                .map(|p| p.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            output.push_str(&format!("  {}({}) {{\n", func.name, params));
+
+            // Add documentation if available
+            if let Some(docs) = &func.docs {
+                output.push_str(&format!("    // {}\n", docs));
+            }
+
+            // Generate parameter conversion
+            for param in &func.params {
+                if self.needs_conversion(&param.ty) {
+                    output.push_str(&format!(
+                        "    const _{} = this._convert_{}({});\n",
+                        param.name,
+                        self.wit_type_to_js_type(&param.ty),
+                        param.name
+                    ));
+                }
+            }
+
+            // Call the WASM function
+            let call_params = func
+                .params
+                .iter()
+                .map(|p| {
+                    if self.needs_conversion(&p.ty) {
+                        format!("_{}", p.name)
+                    } else {
+                        p.name.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            output.push_str(&format!(
+                "    const result = this.exports.{}({});\n",
+                func.name, call_params
+            ));
+
+            // Generate result conversion
+            if let Some(results) = &func.results {
+                match results {
+                    WitResult::Anon(ty) => {
+                        if self.needs_conversion(ty) {
+                            output.push_str(&format!(
+                                "    return this._convert_from_{}(result);\n",
+                                self.wit_type_to_js_type(ty)
+                            ));
+                        } else {
+                            output.push_str("    return result;\n");
+                        }
+                    }
+                    WitResult::Named(params) => {
+                        output.push_str("    return {\n");
+                        for (i, param) in params.iter().enumerate() {
+                            output.push_str(&format!(
+                                "      {}: result[{}],\n",
+                                param.name, i
+                            ));
+                        }
+                        output.push_str("    };\n");
+                    }
+                }
+            } else {
+                output.push_str("    return result;\n");
+            }
+
+            output.push_str("  }\n\n");
+        }
+
+        // Add helper conversion methods
+        output.push_str("  // Type conversion helpers\n");
+        output.push_str("  _convert_string(str) {\n");
+        output.push_str("    const encoder = new TextEncoder();\n");
+        output.push_str("    return encoder.encode(str);\n");
+        output.push_str("  }\n\n");
+
+        output.push_str("  _convert_from_string(ptr) {\n");
+        output.push_str("    const decoder = new TextDecoder();\n");
+        output.push_str("    return decoder.decode(ptr);\n");
+        output.push_str("  }\n\n");
+
+        output.push_str("  _convert_list(array) {\n");
+        output.push_str("    return array;\n");
+        output.push_str("  }\n\n");
+
+        output.push_str("  _convert_from_list(ptr) {\n");
+        output.push_str("    return ptr;\n");
+        output.push_str("  }\n");
+
+        output.push_str("}\n\n");
+
+        // Add module loader
+        output.push_str(&format!(
+            "export async function load{}() {{\n",
+            self.module_name
+        ));
+        output.push_str(&format!(
+            "  const response = await fetch('{}.wasm');\n",
+            self.module_name
+        ));
+        output.push_str("  const bytes = await response.arrayBuffer();\n");
+        output.push_str("  const module = await WebAssembly.compile(bytes);\n");
+        output.push_str("  const instance = await WebAssembly.instantiate(module, {});\n");
+        output.push_str("  return new VaisModule(instance);\n");
+        output.push_str("}\n");
+
+        output
+    }
+
+    /// Generate TypeScript type declarations from WIT functions
+    pub fn generate_ts_declarations(&self, funcs: &[WitFunction]) -> String {
+        let mut output = String::new();
+
+        output.push_str(&format!(
+            "// Generated TypeScript declarations for {}\n\n",
+            self.module_name
+        ));
+
+        output.push_str("export class VaisModule {\n");
+        output.push_str("  constructor(instance: WebAssembly.Instance);\n\n");
+
+        for func in funcs {
+            // Add documentation if available
+            if let Some(docs) = &func.docs {
+                output.push_str(&format!("  /**\n   * {}\n   */\n", docs));
+            }
+
+            // Generate parameter types
+            let params = func
+                .params
+                .iter()
+                .map(|p| format!("{}: {}", p.name, self.wit_type_to_ts_type(&p.ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            // Generate return type
+            let return_type = if let Some(results) = &func.results {
+                match results {
+                    WitResult::Anon(ty) => self.wit_type_to_ts_type(ty),
+                    WitResult::Named(params) => {
+                        let fields = params
+                            .iter()
+                            .map(|p| format!("{}: {}", p.name, self.wit_type_to_ts_type(&p.ty)))
+                            .collect::<Vec<_>>()
+                            .join("; ");
+                        format!("{{ {} }}", fields)
+                    }
+                }
+            } else {
+                "void".to_string()
+            };
+
+            output.push_str(&format!("  {}({}): {};\n\n", func.name, params, return_type));
+        }
+
+        output.push_str("}\n\n");
+
+        // Add module loader declaration
+        output.push_str(&format!(
+            "export function load{}(): Promise<VaisModule>;\n",
+            self.module_name
+        ));
+
+        output
+    }
+
+    /// Convert WIT type to JavaScript type name
+    fn wit_type_to_js_type(&self, ty: &WitType) -> String {
+        match ty {
+            WitType::String => "string".to_string(),
+            WitType::List(_) => "list".to_string(),
+            _ => "value".to_string(),
+        }
+    }
+
+    /// Convert WIT type to TypeScript type
+    fn wit_type_to_ts_type(&self, ty: &WitType) -> String {
+        match ty {
+            WitType::Bool => "boolean".to_string(),
+            WitType::U8 | WitType::U16 | WitType::U32 | WitType::U64 => "number".to_string(),
+            WitType::S8 | WitType::S16 | WitType::S32 | WitType::S64 => "number".to_string(),
+            WitType::F32 | WitType::F64 => "number".to_string(),
+            WitType::Char => "string".to_string(),
+            WitType::String => "string".to_string(),
+            WitType::List(inner) => format!("Array<{}>", self.wit_type_to_ts_type(inner)),
+            WitType::Option_(inner) => format!("{} | null", self.wit_type_to_ts_type(inner)),
+            WitType::Result_ { ok, err } => {
+                let ok_type = ok
+                    .as_ref()
+                    .map(|t| self.wit_type_to_ts_type(t))
+                    .unwrap_or_else(|| "void".to_string());
+                let err_type = err
+                    .as_ref()
+                    .map(|t| self.wit_type_to_ts_type(t))
+                    .unwrap_or_else(|| "Error".to_string());
+                format!("{{ ok: {} }} | {{ err: {} }}", ok_type, err_type)
+            }
+            WitType::Tuple(types) => {
+                let inner = types
+                    .iter()
+                    .map(|t| self.wit_type_to_ts_type(t))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("[{}]", inner)
+            }
+            WitType::Record(name)
+            | WitType::Variant(name)
+            | WitType::Enum(name)
+            | WitType::Flags(name)
+            | WitType::Resource(name)
+            | WitType::Named(name) => name.clone(),
+        }
+    }
+
+    /// Check if a WIT type needs conversion between JS and WASM
+    fn needs_conversion(&self, ty: &WitType) -> bool {
+        matches!(ty, WitType::String | WitType::List(_))
+    }
+}
+
 /// Component linking configuration for wasi-preview2
 #[derive(Debug, Clone)]
 pub struct ComponentLinkConfig {
@@ -676,6 +1038,8 @@ pub struct ComponentLinkConfig {
     pub component_imports: HashMap<String, String>,
     /// Additional component-level exports
     pub component_exports: HashMap<String, String>,
+    /// WASI manifest for managing WASI interfaces
+    pub wasi_manifest: Option<WasiManifest>,
 }
 
 impl Default for ComponentLinkConfig {
@@ -686,6 +1050,7 @@ impl Default for ComponentLinkConfig {
             command_mode: true,
             component_imports: HashMap::new(),
             component_exports: HashMap::new(),
+            wasi_manifest: None,
         }
     }
 }
@@ -724,6 +1089,17 @@ impl ComponentLinkConfig {
     /// Add component export
     pub fn add_export(&mut self, name: String, interface: String) {
         self.component_exports.insert(name, interface);
+    }
+
+    /// Set WASI manifest
+    pub fn with_wasi_manifest(mut self, manifest: WasiManifest) -> Self {
+        self.wasi_manifest = Some(manifest);
+        self
+    }
+
+    /// Get mutable reference to WASI manifest (creates one if not present)
+    pub fn wasi_manifest_mut(&mut self) -> &mut WasiManifest {
+        self.wasi_manifest.get_or_insert_with(WasiManifest::new)
     }
 
     /// Generate wasm-tools component-link flags
@@ -934,5 +1310,155 @@ mod tests {
             vais_type_to_wit(&option_type),
             Some(WitType::Option_(Box::new(WitType::String)))
         );
+    }
+
+    #[test]
+    fn test_wasi_manifest_creation() {
+        let mut manifest = WasiManifest::new();
+
+        manifest.add_import("wasi:filesystem/types");
+        manifest.add_import("wasi:cli/stdio");
+        manifest.add_export("process", &WitType::S32);
+
+        assert_eq!(manifest.imports.len(), 2);
+        assert_eq!(manifest.exports.len(), 1);
+
+        let wit = manifest.to_wit_string();
+        assert!(wit.contains("import wasi:filesystem/types"));
+        assert!(wit.contains("import wasi:cli/stdio"));
+        assert!(wit.contains("export process: s32"));
+    }
+
+    #[test]
+    fn test_wasi_manifest_duplicate_imports() {
+        let mut manifest = WasiManifest::new();
+
+        manifest.add_import("wasi:filesystem/types");
+        manifest.add_import("wasi:filesystem/types");
+
+        // Should only add once
+        assert_eq!(manifest.imports.len(), 1);
+    }
+
+    #[test]
+    fn test_wasm_bindgen_generator_js() {
+        let generator = WasmBindgenGenerator::new("calculator");
+
+        let functions = vec![WitFunction {
+            name: "add".to_string(),
+            params: vec![
+                WitParam {
+                    name: "a".to_string(),
+                    ty: WitType::S32,
+                },
+                WitParam {
+                    name: "b".to_string(),
+                    ty: WitType::S32,
+                },
+            ],
+            results: Some(WitResult::Anon(WitType::S32)),
+            docs: Some("Add two numbers".to_string()),
+        }];
+
+        let js_code = generator.generate_js_bindings(&functions);
+
+        assert!(js_code.contains("class VaisModule"));
+        assert!(js_code.contains("add(a, b)"));
+        assert!(js_code.contains("this.exports.add(a, b)"));
+        assert!(js_code.contains("loadcalculator"));
+    }
+
+    #[test]
+    fn test_wasm_bindgen_generator_ts() {
+        let generator = WasmBindgenGenerator::new("math");
+
+        let functions = vec![WitFunction {
+            name: "multiply".to_string(),
+            params: vec![
+                WitParam {
+                    name: "x".to_string(),
+                    ty: WitType::F64,
+                },
+                WitParam {
+                    name: "y".to_string(),
+                    ty: WitType::F64,
+                },
+            ],
+            results: Some(WitResult::Anon(WitType::F64)),
+            docs: Some("Multiply two numbers".to_string()),
+        }];
+
+        let ts_code = generator.generate_ts_declarations(&functions);
+
+        assert!(ts_code.contains("class VaisModule"));
+        assert!(ts_code.contains("multiply(x: number, y: number): number"));
+        assert!(ts_code.contains("loadmath(): Promise<VaisModule>"));
+    }
+
+    #[test]
+    fn test_wasm_bindgen_string_conversion() {
+        let generator = WasmBindgenGenerator::new("strings");
+
+        let functions = vec![WitFunction {
+            name: "greet".to_string(),
+            params: vec![WitParam {
+                name: "name".to_string(),
+                ty: WitType::String,
+            }],
+            results: Some(WitResult::Anon(WitType::String)),
+            docs: None,
+        }];
+
+        let js_code = generator.generate_js_bindings(&functions);
+
+        assert!(js_code.contains("_convert_string"));
+        assert!(js_code.contains("_convert_from_string"));
+    }
+
+    #[test]
+    fn test_wasm_bindgen_complex_types() {
+        let generator = WasmBindgenGenerator::new("complex");
+
+        let functions = vec![WitFunction {
+            name: "process".to_string(),
+            params: vec![WitParam {
+                name: "items".to_string(),
+                ty: WitType::List(Box::new(WitType::U32)),
+            }],
+            results: Some(WitResult::Anon(WitType::Option_(Box::new(WitType::U32)))),
+            docs: None,
+        }];
+
+        let ts_code = generator.generate_ts_declarations(&functions);
+
+        assert!(ts_code.contains("items: Array<number>"));
+        assert!(ts_code.contains("number | null"));
+    }
+
+    #[test]
+    fn test_component_link_config_with_wasi_manifest() {
+        let mut manifest = WasiManifest::new();
+        manifest.add_import("wasi:cli/stdio");
+
+        let config = ComponentLinkConfig::new()
+            .with_wasi_manifest(manifest)
+            .with_adapter("wasi_snapshot_preview1.wasm");
+
+        assert!(config.wasi_manifest.is_some());
+        let wasi = config.wasi_manifest.as_ref().unwrap();
+        assert_eq!(wasi.imports.len(), 1);
+    }
+
+    #[test]
+    fn test_component_link_config_wasi_manifest_mut() {
+        let mut config = ComponentLinkConfig::new();
+
+        let manifest = config.wasi_manifest_mut();
+        manifest.add_import("wasi:filesystem/types");
+        manifest.add_export("main", &WitType::S32);
+
+        assert!(config.wasi_manifest.is_some());
+        assert_eq!(config.wasi_manifest.as_ref().unwrap().imports.len(), 1);
+        assert_eq!(config.wasi_manifest.as_ref().unwrap().exports.len(), 1);
     }
 }

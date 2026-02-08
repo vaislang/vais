@@ -1,0 +1,336 @@
+# std/wasm - WebAssembly runtime utilities and polyfills
+# Provides WASM-specific memory management, I/O, and WASI bindings
+
+# WASM environment detection
+C WASM_TARGET: i64 = 1
+
+# WASM memory page size (64KB)
+C WASM_PAGE_SIZE: i64 = 65536
+
+# Standard file descriptors (WASI-compatible)
+C WASM_STDIN: i64 = 0
+C WASM_STDOUT: i64 = 1
+C WASM_STDERR: i64 = 2
+
+# WASM import namespace constants
+C WASI_NS: i64 = 0  # wasi_snapshot_preview1
+C ENV_NS: i64 = 1   # env (custom host functions)
+
+# ==============================================================================
+# WASM Memory Management
+# ==============================================================================
+
+# Get current memory size in pages (each page = 64KB)
+X F memory_size() -> i64
+
+F wasm_memory_size() -> i64 {
+    R memory_size()
+}
+
+# Grow memory by N pages, returns previous size or -1 on failure
+X F memory_grow(pages: i64) -> i64
+
+F wasm_memory_grow(pages: i64) -> i64 {
+    R memory_grow(pages)
+}
+
+# Simple bump allocator for WASM heap
+# Global heap pointer (initialized to end of static data)
+C HEAP_START: i64 = 1048576  # 1MB offset for static data
+mut heap_ptr: i64 = HEAP_START
+
+F wasm_heap_alloc(size: i64) -> i64 {
+    # Align to 8-byte boundary
+    aligned_size := (size + 7) & -8
+
+    # Get current heap pointer
+    current := heap_ptr
+    new_ptr := current + aligned_size
+
+    # Check if we need to grow memory
+    current_pages := wasm_memory_size()
+    required_bytes := new_ptr
+    required_pages := (required_bytes + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE
+
+    I required_pages > current_pages {
+        growth := required_pages - current_pages
+        result := wasm_memory_grow(growth)
+        I result == -1 {
+            R 0  # Allocation failed
+        }
+    }
+
+    # Update heap pointer
+    heap_ptr = new_ptr
+    R current
+}
+
+F wasm_heap_reset() {
+    heap_ptr = HEAP_START
+}
+
+# ==============================================================================
+# WASM I/O Functions (Host Imports)
+# ==============================================================================
+
+# Host-provided I/O functions
+X F wasm_write_host(fd: i64, ptr: i64, len: i64) -> i64
+X F wasm_read_host(fd: i64, ptr: i64, len: i64) -> i64
+X F wasm_log_host(ptr: i64, len: i64)
+
+# Write data to file descriptor
+F wasm_write(fd: i64, ptr: i64, len: i64) -> i64 {
+    R wasm_write_host(fd, ptr, len)
+}
+
+# Read data from file descriptor
+F wasm_read(fd: i64, ptr: i64, len: i64) -> i64 {
+    R wasm_read_host(fd, ptr, len)
+}
+
+# Console log (uses host-provided logging)
+F wasm_log(msg: str) -> i64 {
+    # Convert str to ptr and len
+    ptr := str_to_ptr(msg)
+    len := strlen(msg)
+    wasm_log_host(ptr, len)
+    R len
+}
+
+F wasm_println(msg: str) -> i64 {
+    R wasm_log(msg)
+}
+
+# ==============================================================================
+# WASM Table and Export Management
+# ==============================================================================
+
+# Function table for indirect calls
+X F table_set(index: i64, func_ptr: i64)
+X F table_get(index: i64) -> i64
+X F table_size() -> i64
+X F table_grow(delta: i64, init: i64) -> i64
+
+F wasm_table_set(index: i64, func_ptr: i64) {
+    table_set(index, func_ptr)
+}
+
+F wasm_table_get(index: i64) -> i64 {
+    R table_get(index)
+}
+
+F wasm_table_size() -> i64 {
+    R table_size()
+}
+
+# Export function to host (placeholder - requires compiler support)
+F wasm_export_function(name: str, ptr: i64) -> i64 {
+    # This would require compiler-level export directives
+    # For now, return success
+    R 0
+}
+
+# ==============================================================================
+# WASI System Interface
+# ==============================================================================
+
+# WASI error codes
+C WASI_ESUCCESS: i64 = 0
+C WASI_EBADF: i64 = 8
+C WASI_EINVAL: i64 = 28
+C WASI_EIO: i64 = 29
+
+# WASI file descriptor operations
+X F wasi_fd_write(fd: i64, iovs_ptr: i64, iovs_len: i64, nwritten_ptr: i64) -> i64
+X F wasi_fd_read(fd: i64, iovs_ptr: i64, iovs_len: i64, nread_ptr: i64) -> i64
+X F wasi_fd_close(fd: i64) -> i64
+X F wasi_fd_seek(fd: i64, offset: i64, whence: i64, newoffset_ptr: i64) -> i64
+
+# WASI process operations
+X F wasi_proc_exit(code: i64)
+X F wasi_args_sizes_get(argc_ptr: i64, argv_buf_size_ptr: i64) -> i64
+X F wasi_args_get(argv_ptr: i64, argv_buf_ptr: i64) -> i64
+
+# Simplified fd_write wrapper (single buffer)
+F wasi_write(fd: i64, buf: i64, len: i64) -> i64 {
+    # Create iovec structure: [ptr: i64, len: i64]
+    iov := wasm_heap_alloc(16)
+    store_i64(iov, buf)
+    store_i64(iov + 8, len)
+
+    # nwritten output
+    nwritten := wasm_heap_alloc(8)
+    store_i64(nwritten, 0)
+
+    # Call WASI fd_write
+    result := wasi_fd_write(fd, iov, 1, nwritten)
+
+    I result == WASI_ESUCCESS {
+        R load_i64(nwritten)
+    }
+    R -1
+}
+
+# Simplified fd_read wrapper (single buffer)
+F wasi_read(fd: i64, buf: i64, len: i64) -> i64 {
+    # Create iovec structure
+    iov := wasm_heap_alloc(16)
+    store_i64(iov, buf)
+    store_i64(iov + 8, len)
+
+    # nread output
+    nread := wasm_heap_alloc(8)
+    store_i64(nread, 0)
+
+    result := wasi_fd_read(fd, iov, 1, nread)
+
+    I result == WASI_ESUCCESS {
+        R load_i64(nread)
+    }
+    R -1
+}
+
+# Exit process with code
+F wasi_exit(code: i64) {
+    wasi_proc_exit(code)
+}
+
+# Get command-line argument count
+F wasi_args_count() -> i64 {
+    argc_ptr := wasm_heap_alloc(8)
+    argv_size_ptr := wasm_heap_alloc(8)
+
+    result := wasi_args_sizes_get(argc_ptr, argv_size_ptr)
+
+    I result == WASI_ESUCCESS {
+        R load_i64(argc_ptr)
+    }
+    R 0
+}
+
+# ==============================================================================
+# WASM File System Polyfill
+# ==============================================================================
+
+# Polyfill for std/file.vais operations in WASM
+S WasmFile {
+    fd: i64,
+    path: str,
+    is_open: i64
+}
+
+F wasm_file_open(path: str, mode: str) -> WasmFile {
+    # In real WASM, this would call wasi_path_open
+    # For now, return dummy file with fd=-1
+    R WasmFile { fd: -1, path: path, is_open: 0 }
+}
+
+F wasm_file_read(file: WasmFile, buf: i64, len: i64) -> i64 {
+    I file.is_open == 0 {
+        R -1
+    }
+    R wasi_read(file.fd, buf, len)
+}
+
+F wasm_file_write(file: WasmFile, buf: i64, len: i64) -> i64 {
+    I file.is_open == 0 {
+        R -1
+    }
+    R wasi_write(file.fd, buf, len)
+}
+
+F wasm_file_close(file: WasmFile) -> i64 {
+    I file.is_open == 0 {
+        R -1
+    }
+    R wasi_fd_close(file.fd)
+}
+
+# ==============================================================================
+# WASM Network Polyfill (Placeholder)
+# ==============================================================================
+
+# Network operations require host-provided imports or WASI-sockets proposal
+# These are placeholders that would delegate to host functions
+
+S WasmSocket {
+    handle: i64,
+    is_connected: i64
+}
+
+X F wasm_socket_create(domain: i64, type_: i64, protocol: i64) -> i64
+X F wasm_socket_connect(handle: i64, addr_ptr: i64, addr_len: i64) -> i64
+X F wasm_socket_send(handle: i64, buf: i64, len: i64, flags: i64) -> i64
+X F wasm_socket_recv(handle: i64, buf: i64, len: i64, flags: i64) -> i64
+X F wasm_socket_close(handle: i64) -> i64
+
+F wasm_net_socket(domain: i64, type_: i64, protocol: i64) -> WasmSocket {
+    handle := wasm_socket_create(domain, type_, protocol)
+    R WasmSocket { handle: handle, is_connected: 0 }
+}
+
+F wasm_net_connect(socket: WasmSocket, addr_ptr: i64, addr_len: i64) -> i64 {
+    result := wasm_socket_connect(socket.handle, addr_ptr, addr_len)
+    I result == 0 {
+        # Update is_connected (requires mut - using temp variable pattern)
+        R 0
+    }
+    R -1
+}
+
+F wasm_net_send(socket: WasmSocket, buf: i64, len: i64) -> i64 {
+    I socket.is_connected == 0 {
+        R -1
+    }
+    R wasm_socket_send(socket.handle, buf, len, 0)
+}
+
+F wasm_net_recv(socket: WasmSocket, buf: i64, len: i64) -> i64 {
+    I socket.is_connected == 0 {
+        R -1
+    }
+    R wasm_socket_recv(socket.handle, buf, len, 0)
+}
+
+F wasm_net_close(socket: WasmSocket) -> i64 {
+    R wasm_socket_close(socket.handle)
+}
+
+# ==============================================================================
+# WASM Performance Utilities
+# ==============================================================================
+
+# High-resolution timer (requires host import)
+X F wasm_now() -> i64  # Returns microseconds since epoch
+
+F wasm_timestamp() -> i64 {
+    R wasm_now()
+}
+
+# Random number generation (requires host import or WASI random_get)
+X F wasi_random_get(buf: i64, len: i64) -> i64
+
+F wasm_random() -> i64 {
+    buf := wasm_heap_alloc(8)
+    result := wasi_random_get(buf, 8)
+    I result == WASI_ESUCCESS {
+        R load_i64(buf)
+    }
+    R 0
+}
+
+# ==============================================================================
+# WASM Environment Query
+# ==============================================================================
+
+F wasm_is_wasm() -> i64 {
+    R WASM_TARGET
+}
+
+F wasm_page_size() -> i64 {
+    R WASM_PAGE_SIZE
+}
+
+F wasm_heap_usage() -> i64 {
+    R heap_ptr - HEAP_START
+}
