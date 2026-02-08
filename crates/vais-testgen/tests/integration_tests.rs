@@ -283,12 +283,12 @@ fn test_shrinker_shrink_tuple() {
 
 #[test]
 fn test_type_hint_from_str() {
-    assert_eq!(TypeHint::from_str("i64"), TypeHint::I64);
-    assert_eq!(TypeHint::from_str("i32"), TypeHint::I32);
-    assert_eq!(TypeHint::from_str("f64"), TypeHint::F64);
-    assert_eq!(TypeHint::from_str("bool"), TypeHint::Bool);
-    assert_eq!(TypeHint::from_str("str"), TypeHint::Str);
-    assert_eq!(TypeHint::from_str("unknown"), TypeHint::Unknown);
+    assert_eq!(TypeHint::parse_type("i64"), TypeHint::I64);
+    assert_eq!(TypeHint::parse_type("i32"), TypeHint::I32);
+    assert_eq!(TypeHint::parse_type("f64"), TypeHint::F64);
+    assert_eq!(TypeHint::parse_type("bool"), TypeHint::Bool);
+    assert_eq!(TypeHint::parse_type("str"), TypeHint::Str);
+    assert_eq!(TypeHint::parse_type("unknown"), TypeHint::Unknown);
 }
 
 #[test]

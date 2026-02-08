@@ -71,7 +71,7 @@ pub enum TypeHint {
 
 impl TypeHint {
     /// Parse a Vais type string into a TypeHint.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_type(s: &str) -> Self {
         match s.trim() {
             "i64" => TypeHint::I64,
             "i32" => TypeHint::I32,

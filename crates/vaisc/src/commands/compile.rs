@@ -11,6 +11,7 @@ use crate::incremental;
 use crate::package;
 use crate::runtime::{find_runtime_file, find_http_runtime, find_thread_runtime, find_sync_runtime, find_gc_library, get_runtime_for_module};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn compile_per_module(
     final_ast: &vais_ast::Module,
     checker: &TypeChecker,

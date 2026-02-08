@@ -49,9 +49,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Set parameter names
         for (i, param) in func.params.iter().enumerate() {
-            fn_value.get_nth_param(i as u32).map(|p| {
+            if let Some(p) = fn_value.get_nth_param(i as u32) {
                 p.set_name(&param.name.node);
-            });
+            }
         }
 
         Ok(fn_value)

@@ -95,6 +95,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **41** | **v2.0 언어 진화** | ✅ 완료 | 7/7 Stage — 에러복구/클로저/에러타입/이터레이터/패키지/E2E 301개/성능CI |
 | **42** | **인크리멘탈 컴파일** | ✅ 완료 | Stage 0~5 전부 — 571ms→96ms (5.9x), 312 E2E |
 | **43** | **Codegen 품질 개선** | ✅ 완료 | match phi node 수정, clippy 0건, 315 E2E |
+| 44~52 | Nested Struct ~ 표준 라이브러리 확충 | ✅ 완료 | 315→392 E2E |
+| **53** | **테스트 & CI 강화** | ✅ 완료 | 5개 crate 통합 테스트, CI 확장, --coverage, clippy 0건, 396 E2E |
 | | *VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -168,6 +170,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 50** | 패키지 매니저 완성 | ✅ 완료 — workspace, feature flags, build scripts, vendor/pkg/metadata | 372 |
 | **Phase 51** | 대형 파일 리팩토링 | ✅ 완료 — vais-types 84%, vaisc 90%, inkwell 92%, lsp 37% 감소 | 372 |
 | **Phase 52** | 표준 라이브러리 확충 | ✅ 완료 — path/channel/datetime/args 4개 std 모듈 | 392 |
+| **Phase 53** | 테스트 & CI 강화 | ✅ 완료 — 5개 crate 통합 테스트, CI 확장, --coverage 플래그 | 396 |
+| **Hotfix** | CI 안정화 | ✅ 완료 — generator.rs 테스트 import 수정, clippy 경고 7건→0건 | 396 |
 
 ---
 

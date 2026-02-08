@@ -633,12 +633,10 @@ fn main() {
                     vais_codegen::optimize::LtoMode::None
                 } else if let Some(mode_str) = lto.as_deref() {
                     vais_codegen::optimize::LtoMode::parse(mode_str)
+                } else if opt_level >= 2 {
+                    vais_codegen::optimize::LtoMode::Thin
                 } else {
-                    if opt_level >= 2 {
-                        vais_codegen::optimize::LtoMode::Thin
-                    } else {
-                        vais_codegen::optimize::LtoMode::None
-                    }
+                    vais_codegen::optimize::LtoMode::None
                 };
 
                 // Parse PGO mode (mutually exclusive: generate vs use)

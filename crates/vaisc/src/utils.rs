@@ -21,7 +21,6 @@ pub(crate) fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
 }
 
 /// Load plugins from configuration and CLI arguments
-
 pub(crate) fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     registry.set_allow_plugins(allow_plugins);
@@ -115,7 +114,6 @@ pub(crate) fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugi
 /// 1. Build with instrumentation (--profile-generate)
 /// 2. Run to collect profile data
 /// 3. Merge profiles and rebuild with optimization (--profile-use)
-
 pub(crate) fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str) {
     use vais_types::TypeError;
 

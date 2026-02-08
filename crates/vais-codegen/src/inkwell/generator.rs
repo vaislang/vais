@@ -299,6 +299,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vais_ast::{Literal, Type};
 
     #[test]
     fn test_create_generator() {

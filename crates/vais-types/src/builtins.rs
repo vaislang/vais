@@ -2042,6 +2042,7 @@ impl TypeChecker {
         }
 
         // ===== System functions (env/process/signal) =====
+        #[allow(clippy::type_complexity)]
         let sys_fns: Vec<(
             &str,
             Vec<(String, ResolvedType, bool)>,
