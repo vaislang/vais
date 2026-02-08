@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770558471982,
+  "lastUpdate": 1770559991395,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -12767,6 +12767,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1817448,
             "range": "± 19422",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "0b47796265862e6506b751e6bca873607e447040",
+          "message": "fix: unify URLs to vais.dev, fix redirect rules and accessibility\n\n- P1: vercel.json redirects to external domains → rewrites for same-site paths\n- P1: Unify all docs URLs to vais.dev/docs/ (from github.io variants)\n- P2: Docker image name aligned (README now matches homepage)\n- P2: Mobile nav toggle: add aria-expanded/aria-controls for screen readers\n- P3: Add missing rel=\"noopener\" on playground new-tab link\n- Fix trailing slash consistency on /playground/ and /docs/ links\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-08T23:06:26+09:00",
+          "tree_id": "3a92c4d58a29319ff54d64f4d8c90f505d0e54e2",
+          "url": "https://github.com/vaislang/vais/commit/0b47796265862e6506b751e6bca873607e447040"
+        },
+        "date": 1770559990903,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2401,
+            "range": "± 66",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5357,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5816,
+            "range": "± 216",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10872,
+            "range": "± 105",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17901,
+            "range": "± 107",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33573,
+            "range": "± 127",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29759,
+            "range": "± 153",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 65559,
+            "range": "± 335",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 289746,
+            "range": "± 1532",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 440656,
+            "range": "± 2059",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 107608,
+            "range": "± 803",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 753013,
+            "range": "± 2022",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 162952,
+            "range": "± 922",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 189591,
+            "range": "± 1473",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 198942,
+            "range": "± 2208",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 240732,
+            "range": "± 982",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 517468,
+            "range": "± 3607",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 725429,
+            "range": "± 3488",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 397975,
+            "range": "± 7008",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1145004,
+            "range": "± 12808",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38522,
+            "range": "± 249",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 197837,
+            "range": "± 1577",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 380642,
+            "range": "± 8560",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1850601,
+            "range": "± 45623",
             "unit": "ns/iter"
           }
         ]
