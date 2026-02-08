@@ -10,7 +10,7 @@ description = "JIT compiler for Vais using Cranelift"
 # Cranelift JIT
 cranelift = "0.115"
 cranelift-jit = "0.115"
-cranelift-module = "0.115"
+cranelift-module = "0.128"
 cranelift-native = "0.115"
 cranelift-codegen = "0.115"
 
