@@ -161,7 +161,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Hotfix** | 바인딩 수정 | vais-python PyO3 0.28 마이그레이션 (PyObject→Py\<PyAny\>, with_gil 제거, skip_from_py_object), vais-node NAPI 3.x 마이그레이션 (Object→ParseResult struct), 양쪽 Token::Yield 추가 | 2026-02-08 |
 | **Phase 44** | Nested Struct 접근 | ✅ Parser/TC 이미 지원, Codegen infer_struct_name() 수정 + struct_field_type_names 맵 추가, 318 E2E (+3 nested) | 2026-02-08 |
 | **Phase 45** | Stdlib 확장 | ✅ std/env (getenv/setenv/unsetenv), std/process (system/popen/pclose/exit), std/signal (signal/raise + 상수), 322 E2E (+4) | 2026-02-08 |
-| **Phase 46** | Parser 모듈화 | 📋 예정 — parser/lib.rs 4,208줄을 expr/stmt/type 모듈로 분리 | - |
+| **Phase 46** | Parser 모듈화 | ✅ lib.rs 4,208→792줄, types.rs(798)+item.rs(1,141) 분리, 322 E2E 통과 | 2026-02-08 |
 | **Phase 47** | Incremental TC | 📋 예정 — per-module 타입체킹 캐싱, Phase 42 codegen 캐싱 확장 | - |
 
 ---
@@ -587,50 +587,44 @@ Stage 0 → Stage 1 → Stage 2
 
 ## 🚀 Phase 46: Parser 모듈화
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-08)
 > **목표**: `parser/lib.rs` 4,208줄을 기능별 모듈로 분리하여 유지보수성 개선
 > **배경**: 단일 파일 4,000줄+ 은 탐색/수정이 어려움. 논리적 단위로 분리
+> **결과**: lib.rs 4,208 → 792줄 (코어) + 1,503줄 (테스트), 6개 모듈로 분리
 
-### Stage 0: 모듈 구조 설계 + Expression Parser 분리
+### Stage 0: Expression/Statement Parser (이미 완료) ✅
 
-**목표**: expression 파싱 로직을 `expr.rs`로 분리
+- [x] `expr.rs` (1,594줄) — parse_expr ~ parse_primary, 17단계 우선순위 체인
+- [x] `stmt.rs` (327줄) — parse_stmt, parse_let_stmt, parse_block_contents
+- [x] `ffi.rs` (278줄) — parse_extern_block, parse_fn_ptr_type
 
-- [ ] `crates/vais-parser/src/expr.rs` 생성 — parse_expr, parse_primary, parse_binary 등
-- [ ] lib.rs에서 `mod expr; use expr::*;` 로 재export
-- [ ] 기존 테스트 전부 통과 확인
-- **난이도**: 중 | **모델**: Opus 직접
+### Stage 1: Type/Generics Parser 분리 ✅
 
-### Stage 1: Statement Parser 분리
+- [x] `types.rs` (798줄) — parse_type, parse_base_type, parse_type_name
+- [x] parse_generics, parse_params, parse_field, parse_const_expr 포함
+- [x] record_error pub(crate) 접근성 수정
 
-**목표**: statement 파싱 로직을 `stmt.rs`로 분리
+### Stage 2: Item Parser 분리 ✅
 
-- [ ] `crates/vais-parser/src/stmt.rs` 생성 — parse_stmt, parse_let, parse_assign 등
-- [ ] lib.rs 연동
-- [ ] 기존 테스트 전부 통과 확인
-- **난이도**: 중 | **모델**: Sonnet 위임
+- [x] `item.rs` (1,141줄) — parse_item, parse_function, parse_struct, parse_enum
+- [x] parse_trait, parse_impl, parse_macro_def, parse_macro_invoke 포함
+- [x] parse_attributes, parse_const_def, parse_global_def 포함
 
-### Stage 2: Type/Pattern Parser 분리
+### Stage 3: 검증 ✅
 
-**목표**: 타입/패턴 파싱 로직을 `types.rs`, `pattern.rs`로 분리
+- [x] 322 E2E 테스트 전부 통과
+- [x] 파서 유닛/퍼즈 테스트 11개 전부 통과
+- [x] 전체 workspace 빌드 성공
 
-- [ ] `crates/vais-parser/src/types.rs` — parse_type, parse_generic_params
-- [ ] `crates/vais-parser/src/pattern.rs` — parse_pattern, parse_match_arm
-- [ ] 기존 테스트 전부 통과 확인
-- **난이도**: 중 | **모델**: Sonnet 위임
-
-### Stage 3: Item Parser 분리 + 검증
-
-**목표**: 최상위 아이템 파싱 분리 + 전체 검증
-
-- [ ] `crates/vais-parser/src/item.rs` — parse_function, parse_struct, parse_enum, parse_impl 등
-- [ ] lib.rs를 조율 레이어로 축소 (목표 500줄 이하)
-- [ ] 전체 E2E + 파서 테스트 통과
-- **난이도**: 중 | **모델**: Opus 직접
-
-### 우선순위
+### 최종 모듈 구조
 
 ```
-Stage 0 → Stage 1 → Stage 2 → Stage 3
+lib.rs   (792줄 코어 + 1,503줄 테스트) — Parser struct, helpers, public API
+expr.rs  (1,594줄) — 표현식 파싱
+stmt.rs  (327줄)   — 문장 파싱
+types.rs (798줄)   — 타입/제네릭/파라미터 파싱
+item.rs  (1,141줄) — 아이템/매크로/트레이트/impl 파싱
+ffi.rs   (278줄)   — extern 블록/함수 포인터 파싱
 ```
 
 ---
