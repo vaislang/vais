@@ -1,0 +1,303 @@
+# datetime.vais - Date and Time operations
+# Pure computation-based implementation for date/time handling
+
+# DateTime structure - represents a specific date and time
+S DateTime {
+    year: i64,      # Year (e.g., 2026)
+    month: i64,     # Month (1-12)
+    day: i64,       # Day of month (1-31)
+    hour: i64,      # Hour (0-23)
+    min: i64,       # Minute (0-59)
+    sec: i64,       # Second (0-59)
+    nanos: i64      # Nanoseconds (0-999999999)
+}
+
+# Duration structure - represents a time span
+S Duration {
+    secs: i64,      # Seconds component
+    nanos: i64      # Nanoseconds component (0-999999999)
+}
+
+# Helper function: check if a year is a leap year
+# Leap year rules: divisible by 4, except centuries unless divisible by 400
+F is_leap(year: i64) -> i64 {
+    I year % 400 == 0 { R 1 }
+    I year % 100 == 0 { R 0 }
+    I year % 4 == 0 { R 1 }
+    0
+}
+
+# Helper function: get number of days in a given month
+F days_in_month_for(year: i64, month: i64) -> i64 {
+    I month == 2 {
+        I is_leap(year) == 1 { 29 } E { 28 }
+    } E I month == 4 || month == 6 || month == 9 || month == 11 {
+        30
+    } E {
+        31
+    }
+}
+
+# Convert date/time components to Unix timestamp
+# Returns seconds since January 1, 1970 00:00:00 UTC
+F datetime_to_timestamp(year: i64, month: i64, day: i64, hour: i64, min: i64, sec: i64) -> i64 {
+    # Calculate total days from epoch (1970-01-01)
+    total_days := mut 0
+
+    # Add days for complete years from 1970 to year-1
+    y := mut 1970
+    L {
+        I y >= year { B }
+        total_days = total_days + 365 + is_leap(y)
+        y = y + 1
+    }
+
+    # Add days for complete months in the current year
+    m := mut 1
+    L {
+        I m >= month { B }
+        total_days = total_days + days_in_month_for(year, m)
+        m = m + 1
+    }
+
+    # Add remaining days (day is 1-indexed)
+    total_days = total_days + (day - 1)
+
+    # Convert to seconds and add time components
+    total_days * 86400 + hour * 3600 + min * 60 + sec
+}
+
+# Convert Unix timestamp to DateTime
+# Takes seconds since epoch and returns DateTime structure
+F timestamp_to_datetime(ts: i64) -> DateTime {
+    # Split timestamp into days and remaining seconds
+    total_days := mut ts / 86400
+    remaining_secs := ts % 86400
+
+    # Calculate time components from remaining seconds
+    hour := remaining_secs / 3600
+    min := (remaining_secs % 3600) / 60
+    sec := remaining_secs % 60
+
+    # Find the year
+    year := mut 1970
+    L {
+        days_in_year := 365 + is_leap(year)
+        I total_days < days_in_year { B }
+        total_days = total_days - days_in_year
+        year = year + 1
+    }
+
+    # Find the month
+    month := mut 1
+    L {
+        days_in_month := days_in_month_for(year, month)
+        I total_days < days_in_month { B }
+        total_days = total_days - days_in_month
+        month = month + 1
+    }
+
+    # Remaining days is the day of month (1-indexed)
+    day := total_days + 1
+
+    DateTime { year: year, month: month, day: day, hour: hour, min: min, sec: sec, nanos: 0 }
+}
+
+# DateTime implementation block
+X DateTime {
+    # Create a new DateTime with all components
+    F new(year: i64, month: i64, day: i64, hour: i64, min: i64, sec: i64) -> DateTime {
+        DateTime { year: year, month: month, day: day, hour: hour, min: min, sec: sec, nanos: 0 }
+    }
+
+    # Create a DateTime with only date (time is 00:00:00)
+    F date(year: i64, month: i64, day: i64) -> DateTime {
+        DateTime { year: year, month: month, day: day, hour: 0, min: 0, sec: 0, nanos: 0 }
+    }
+
+    # Getter methods
+    F year(&self) -> i64 { self.year }
+    F month(&self) -> i64 { self.month }
+    F day(&self) -> i64 { self.day }
+    F hour(&self) -> i64 { self.hour }
+    F minute(&self) -> i64 { self.min }
+    F second(&self) -> i64 { self.sec }
+
+    # Convert this DateTime to Unix timestamp
+    F to_timestamp(&self) -> i64 {
+        datetime_to_timestamp(self.year, self.month, self.day, self.hour, self.min, self.sec)
+    }
+
+    # Create DateTime from Unix timestamp
+    F from_timestamp(ts: i64) -> DateTime {
+        timestamp_to_datetime(ts)
+    }
+
+    # Check if the year is a leap year
+    F is_leap_year(&self) -> i64 {
+        is_leap(self.year)
+    }
+
+    # Get the number of days in the current month
+    F days_in_month(&self) -> i64 {
+        days_in_month_for(self.year, self.month)
+    }
+
+    # Calculate day of week using Zeller's congruence
+    # Returns: 0=Sunday, 1=Monday, ..., 6=Saturday
+    F day_of_week(&self) -> i64 {
+        y := mut self.year
+        m := mut self.month
+        d := self.day
+
+        # Zeller's congruence: treat Jan/Feb as months 13/14 of previous year
+        I m < 3 {
+            m = m + 12
+            y = y - 1
+        }
+
+        # Zeller's formula
+        q := d
+        k := y % 100
+        j := y / 100
+
+        h := (q + ((13 * (m + 1)) / 5) + k + (k / 4) + (j / 4) - (2 * j)) % 7
+
+        # Convert Zeller's output (0=Sat) to standard (0=Sun)
+        I h == 0 { 6 } E { h - 1 }
+    }
+
+    # Add days to this DateTime
+    F add_days(&self, days: i64) -> DateTime {
+        ts := self.to_timestamp()
+        new_ts := ts + days * 86400
+        timestamp_to_datetime(new_ts)
+    }
+
+    # Add hours to this DateTime
+    F add_hours(&self, hours: i64) -> DateTime {
+        ts := self.to_timestamp()
+        new_ts := ts + hours * 3600
+        timestamp_to_datetime(new_ts)
+    }
+
+    # Add minutes to this DateTime
+    F add_minutes(&self, minutes: i64) -> DateTime {
+        ts := self.to_timestamp()
+        new_ts := ts + minutes * 60
+        timestamp_to_datetime(new_ts)
+    }
+
+    # Add seconds to this DateTime
+    F add_seconds(&self, seconds: i64) -> DateTime {
+        ts := self.to_timestamp()
+        new_ts := ts + seconds
+        timestamp_to_datetime(new_ts)
+    }
+}
+
+# Duration implementation block
+X Duration {
+    # Create a new Duration from seconds and nanoseconds
+    F new(secs: i64, nanos: i64) -> Duration {
+        # Normalize nanoseconds to be in range [0, 999999999]
+        extra_secs := mut nanos / 1000000000
+        norm_nanos := nanos % 1000000000
+
+        I norm_nanos < 0 {
+            final_nanos := norm_nanos + 1000000000
+            extra_secs = extra_secs - 1
+            Duration { secs: secs + extra_secs, nanos: final_nanos }
+        } E {
+            Duration { secs: secs + extra_secs, nanos: norm_nanos }
+        }
+    }
+
+    # Create Duration from seconds only
+    F from_secs(secs: i64) -> Duration {
+        Duration { secs: secs, nanos: 0 }
+    }
+
+    # Create Duration from milliseconds
+    F from_millis(millis: i64) -> Duration {
+        secs := millis / 1000
+        nanos := (millis % 1000) * 1000000
+        Duration { secs: secs, nanos: nanos }
+    }
+
+    # Create Duration from microseconds
+    F from_micros(micros: i64) -> Duration {
+        secs := micros / 1000000
+        nanos := (micros % 1000000) * 1000
+        Duration { secs: secs, nanos: nanos }
+    }
+
+    # Create Duration from nanoseconds
+    F from_nanos(nanos: i64) -> Duration {
+        secs := nanos / 1000000000
+        norm_nanos := nanos % 1000000000
+        Duration { secs: secs, nanos: norm_nanos }
+    }
+
+    # Get total seconds (truncated)
+    F as_secs(&self) -> i64 {
+        self.secs
+    }
+
+    # Get total milliseconds
+    F as_millis(&self) -> i64 {
+        self.secs * 1000 + self.nanos / 1000000
+    }
+
+    # Get total microseconds
+    F as_micros(&self) -> i64 {
+        self.secs * 1000000 + self.nanos / 1000
+    }
+
+    # Get total nanoseconds
+    F as_nanos(&self) -> i64 {
+        self.secs * 1000000000 + self.nanos
+    }
+
+    # Get subsecond nanoseconds component
+    F subsec_nanos(&self) -> i64 {
+        self.nanos
+    }
+
+    # Get subsecond milliseconds component
+    F subsec_millis(&self) -> i64 {
+        self.nanos / 1000000
+    }
+
+    # Get subsecond microseconds component
+    F subsec_micros(&self) -> i64 {
+        self.nanos / 1000
+    }
+
+    # Add two durations
+    F add(&self, other: Duration) -> Duration {
+        total_secs := self.secs + other.secs
+        total_nanos := self.nanos + other.nanos
+        Duration.new(total_secs, total_nanos)
+    }
+
+    # Subtract duration (returns 0 if result would be negative)
+    F sub(&self, other: Duration) -> Duration {
+        I self.secs < other.secs {
+            Duration { secs: 0, nanos: 0 }
+        } E I self.secs == other.secs {
+            I self.nanos < other.nanos {
+                Duration { secs: 0, nanos: 0 }
+            } E {
+                Duration { secs: 0, nanos: self.nanos - other.nanos }
+            }
+        } E {
+            diff_secs := self.secs - other.secs
+            I self.nanos < other.nanos {
+                Duration { secs: diff_secs - 1, nanos: self.nanos + 1000000000 - other.nanos }
+            } E {
+                Duration { secs: diff_secs, nanos: self.nanos - other.nanos }
+            }
+        }
+    }
+}

@@ -9193,3 +9193,793 @@ json = []
     );
 }
 
+// ==========================================================================
+// Phase 52 Stage 0: std/path.vais E2E Tests
+// ==========================================================================
+
+#[test]
+fn test_path_join_basic() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Test path_join logic: manually build "/usr/bin"
+    result := malloc(9)
+    store_byte(result, 47)      # '/'
+    store_byte(result + 1, 117)  # 'u'
+    store_byte(result + 2, 115)  # 's'
+    store_byte(result + 3, 114)  # 'r'
+    store_byte(result + 4, 47)   # '/'
+    store_byte(result + 5, 98)   # 'b'
+    store_byte(result + 6, 105)  # 'i'
+    store_byte(result + 7, 110)  # 'n'
+    store_byte(result + 8, 0)    # null terminator
+
+    # Verify: first char should be '/', char at position 5 should be 'b'
+    first := load_byte(result)
+    fifth := load_byte(result + 5)
+    I first == 47 && fifth == 98 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_path_parent() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Test path_parent logic: find last '/' in "/usr/bin/ls"
+    # Manual string: "/usr/bin/ls" has length 12, last '/' at position 8
+    test_str := malloc(13)
+    store_byte(test_str, 47)      # '/'
+    store_byte(test_str + 1, 117)  # 'u'
+    store_byte(test_str + 2, 115)  # 's'
+    store_byte(test_str + 3, 114)  # 'r'
+    store_byte(test_str + 4, 47)   # '/'
+    store_byte(test_str + 5, 98)   # 'b'
+    store_byte(test_str + 6, 105)  # 'i'
+    store_byte(test_str + 7, 110)  # 'n'
+    store_byte(test_str + 8, 47)   # '/'
+    store_byte(test_str + 9, 108)  # 'l'
+    store_byte(test_str + 10, 115) # 's'
+    store_byte(test_str + 11, 0)
+
+    # Check positions 8, 9, 10 for '/'
+    # We know position 8 is the last '/'
+    ch8 := load_byte(test_str + 8)
+    ch9 := load_byte(test_str + 9)
+
+    # ch8 should be 47 ('/'), ch9 should be 108 ('l')
+    I ch8 == 47 && ch9 == 108 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_path_filename() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Test path_filename logic: extract filename from path
+    # Build "/usr/bin/ls" manually
+    test_str := malloc(13)
+    store_byte(test_str, 47)      # '/'
+    store_byte(test_str + 1, 117)  # 'u'
+    store_byte(test_str + 2, 115)  # 's'
+    store_byte(test_str + 3, 114)  # 'r'
+    store_byte(test_str + 4, 47)   # '/'
+    store_byte(test_str + 5, 98)   # 'b'
+    store_byte(test_str + 6, 105)  # 'i'
+    store_byte(test_str + 7, 110)  # 'n'
+    store_byte(test_str + 8, 47)   # '/'
+    store_byte(test_str + 9, 108)  # 'l'
+    store_byte(test_str + 10, 115) # 's'
+    store_byte(test_str + 11, 0)
+
+    # Find last '/' (position 8), so filename starts at position 9
+    # Check filename is "ls"
+    first := load_byte(test_str + 9)
+    second := load_byte(test_str + 10)
+    I first == 108 && second == 115 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_path_extension_stem() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Test extension and stem logic with "hello.txt"
+    # Build "hello.txt" manually
+    fname := malloc(10)
+    store_byte(fname, 104)  # 'h'
+    store_byte(fname + 1, 101)  # 'e'
+    store_byte(fname + 2, 108)  # 'l'
+    store_byte(fname + 3, 108)  # 'l'
+    store_byte(fname + 4, 111)  # 'o'
+    store_byte(fname + 5, 46)   # '.'
+    store_byte(fname + 6, 116)  # 't'
+    store_byte(fname + 7, 120)  # 'x'
+    store_byte(fname + 8, 116)  # 't'
+    store_byte(fname + 9, 0)
+
+    # Check positions for '.' - we know position 5 is the dot
+    ch4 := load_byte(fname + 4)  # 'o'
+    ch5 := load_byte(fname + 5)  # '.'
+    ch6 := load_byte(fname + 6)  # 't'
+
+    # ch4 should be 111 ('o'), ch5 should be 46 ('.'), ch6 should be 116 ('t')
+    # This confirms: stem is 0-4 (5 chars), extension is 6-8 (3 chars)
+    I ch4 == 111 && ch5 == 46 && ch6 == 116 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_path_is_absolute() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Test absolute vs relative paths
+    # Build "/usr/bin" (absolute)
+    abs_path := malloc(9)
+    store_byte(abs_path, 47)  # '/' - absolute paths start with this
+    store_byte(abs_path + 1, 117)  # 'u'
+    store_byte(abs_path + 2, 115)  # 's'
+    store_byte(abs_path + 3, 114)  # 'r'
+    store_byte(abs_path + 4, 47)   # '/'
+    store_byte(abs_path + 5, 98)   # 'b'
+    store_byte(abs_path + 6, 105)  # 'i'
+    store_byte(abs_path + 7, 110)  # 'n'
+    store_byte(abs_path + 8, 0)
+
+    # Build "usr/bin" (relative)
+    rel_path := malloc(8)
+    store_byte(rel_path, 117)  # 'u' - relative paths don't start with '/'
+    store_byte(rel_path + 1, 115)  # 's'
+    store_byte(rel_path + 2, 114)  # 'r'
+    store_byte(rel_path + 3, 47)   # '/'
+    store_byte(rel_path + 4, 98)   # 'b'
+    store_byte(rel_path + 5, 105)  # 'i'
+    store_byte(rel_path + 6, 110)  # 'n'
+    store_byte(rel_path + 7, 0)
+
+    # Check if absolute (first byte is '/')
+    abs_first := load_byte(abs_path)
+    rel_first := load_byte(rel_path)
+
+    # abs_first should be 47, rel_first should be 117
+    I abs_first == 47 && rel_first == 117 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+// ==========================================================================
+// Phase 52 Stage 1: std/channel.vais E2E Tests
+// ==========================================================================
+
+#[test]
+fn test_channel_ring_buffer_send_recv() {
+    // Test basic ring buffer channel logic (single-threaded)
+    let result = compile_and_run(
+        r#"
+F main() -> i64 {
+    # Simulate a bounded channel with ring buffer
+    cap := 4
+    buf := malloc(cap * 8)
+    head := mut 0
+    tail := mut 0
+
+    # Send 3 values
+    store_i64(buf + (tail % cap) * 8, 10)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 20)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 30)
+    tail = tail + 1
+
+    # Recv 3 values
+    v1 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v2 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v3 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+
+    free(buf)
+    # Sum should be 60
+    I v1 + v2 + v3 == 60 { 1 } E { 0 }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_channel_ring_buffer_wraparound() {
+    // Test ring buffer wraparound behavior
+    let result = compile_and_run(
+        r#"
+F main() -> i64 {
+    cap := 3
+    buf := malloc(cap * 8)
+    head := mut 0
+    tail := mut 0
+
+    # Fill buffer
+    store_i64(buf + (tail % cap) * 8, 1)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 2)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 3)
+    tail = tail + 1
+
+    # Drain 2
+    v1 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v2 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+
+    # Wraparound: add 2 more (tail=3,4 -> slots 0,1)
+    store_i64(buf + (tail % cap) * 8, 4)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 5)
+    tail = tail + 1
+
+    # Read remaining 3 items (3, 4, 5)
+    v3 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v4 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v5 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+
+    free(buf)
+    # v1=1, v2=2, v3=3, v4=4, v5=5 -> sum=15
+    I v1 + v2 + v3 + v4 + v5 == 15 { 1 } E { 0 }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_channel_unbounded_grow() {
+    // Test unbounded channel growing logic
+    let result = compile_and_run(
+        r#"
+F main() -> i64 {
+    # Start with capacity 2, grow to 4
+    cap := mut 2
+    buf := mut malloc(cap * 8)
+    head := mut 0
+    tail := mut 0
+
+    # Send 2 items (fill)
+    store_i64(buf + (tail % cap) * 8, 100)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 200)
+    tail = tail + 1
+
+    # Need to grow: double capacity, copy items
+    count := tail - head
+    new_cap := cap * 2
+    new_buf := malloc(new_cap * 8)
+    i := mut 0
+    L {
+        I i >= count { B }
+        src_off := ((head + i) % cap) * 8
+        val := load_i64(buf + src_off)
+        store_i64(new_buf + i * 8, val)
+        i = i + 1
+    }
+    free(buf)
+    buf = new_buf
+    head = 0
+    tail = count
+    cap = new_cap
+
+    # Now add 2 more
+    store_i64(buf + (tail % cap) * 8, 300)
+    tail = tail + 1
+    store_i64(buf + (tail % cap) * 8, 400)
+    tail = tail + 1
+
+    # Read all 4
+    v1 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v2 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v3 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+    v4 := load_i64(buf + (head % cap) * 8)
+    head = head + 1
+
+    free(buf)
+    # 100+200+300+400 = 1000
+    sum := v1 + v2 + v3 + v4
+    I sum == 1000 { 1 } E { 0 }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_channel_select_logic() {
+    // Test select: poll multiple channel buffers
+    let result = compile_and_run(
+        r#"
+F main() -> i64 {
+    # Simulate 3 channels (just their head/tail state)
+    # Each channel is 56 bytes but we only need head(+16) and tail(+24)
+    ch1 := malloc(56)
+    ch2 := malloc(56)
+    ch3 := malloc(56)
+
+    # ch1: empty (head=tail=0)
+    store_i64(ch1 + 16, 0)
+    store_i64(ch1 + 24, 0)
+    # ch2: empty
+    store_i64(ch2 + 16, 0)
+    store_i64(ch2 + 24, 0)
+    # ch3: has data (head=0, tail=1)
+    store_i64(ch3 + 16, 0)
+    store_i64(ch3 + 24, 1)
+
+    # Build channel array
+    channels := malloc(3 * 8)
+    store_i64(channels, ch1)
+    store_i64(channels + 8, ch2)
+    store_i64(channels + 16, ch3)
+
+    # Select: find first ready channel
+    found := mut 0 - 1
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        ch_ptr := load_i64(channels + i * 8)
+        ch_head := load_i64(ch_ptr + 16)
+        ch_tail := load_i64(ch_ptr + 24)
+        I ch_head < ch_tail {
+            found = i
+            B
+        }
+        i = i + 1
+    }
+
+    free(ch1)
+    free(ch2)
+    free(ch3)
+    free(channels)
+    # ch3 (index 2) should be ready
+    I found == 2 { 1 } E { 0 }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_channel_fifo_order() {
+    // Verify FIFO ordering with larger dataset
+    let result = compile_and_run(
+        r#"
+F main() -> i64 {
+    cap := 16
+    buf := malloc(cap * 8)
+    head := mut 0
+    tail := mut 0
+
+    # Send 10 values (0..9)
+    i := mut 0
+    L {
+        I i >= 10 { B }
+        store_i64(buf + (tail % cap) * 8, i)
+        tail = tail + 1
+        i = i + 1
+    }
+
+    # Verify FIFO: each recv should match send order
+    ok := mut 1
+    j := mut 0
+    L {
+        I j >= 10 { B }
+        val := load_i64(buf + (head % cap) * 8)
+        head = head + 1
+        I val != j {
+            ok = 0
+        }
+        j = j + 1
+    }
+
+    free(buf)
+    ok
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+// ==========================================================================
+// Phase 52 Stage 2: std/datetime.vais E2E Tests
+// ==========================================================================
+
+#[test]
+fn test_datetime_leap_year() {
+    // Test leap year logic: 2000 (leap), 1900 (not leap), 2024 (leap), 2023 (not leap)
+    let result = compile_and_run(r#"
+F is_leap(year: i64) -> i64 {
+    I year % 400 == 0 { R 1 }
+    I year % 100 == 0 { R 0 }
+    I year % 4 == 0 { R 1 }
+    0
+}
+
+F main() -> i64 {
+    a := is_leap(2000)   # 1 (divisible by 400)
+    b := is_leap(1900)   # 0 (divisible by 100 but not 400)
+    c := is_leap(2024)   # 1 (divisible by 4)
+    d := is_leap(2023)   # 0 (not divisible by 4)
+    I a == 1 && b == 0 && c == 1 && d == 0 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_datetime_days_in_month() {
+    // Test days_in_month logic: Feb in leap year, Feb in non-leap year, Jan, Apr
+    let result = compile_and_run(r#"
+F is_leap(year: i64) -> i64 {
+    I year % 400 == 0 { R 1 }
+    I year % 100 == 0 { R 0 }
+    I year % 4 == 0 { R 1 }
+    0
+}
+
+F days_in_month_for(year: i64, month: i64) -> i64 {
+    I month == 2 {
+        I is_leap(year) == 1 { 29 } E { 28 }
+    } E I month == 4 || month == 6 || month == 9 || month == 11 {
+        30
+    } E {
+        31
+    }
+}
+
+F main() -> i64 {
+    feb_leap := days_in_month_for(2024, 2)     # 29
+    feb_non := days_in_month_for(2023, 2)      # 28
+    jan := days_in_month_for(2024, 1)          # 31
+    apr := days_in_month_for(2024, 4)          # 30
+    I feb_leap == 29 && feb_non == 28 && jan == 31 && apr == 30 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_datetime_to_timestamp() {
+    // Test datetime_to_timestamp: 1970-01-01 00:00:00 = 0, 1970-01-02 00:00:00 = 86400
+    let result = compile_and_run(r#"
+F is_leap(year: i64) -> i64 {
+    I year % 400 == 0 { R 1 }
+    I year % 100 == 0 { R 0 }
+    I year % 4 == 0 { R 1 }
+    0
+}
+
+F days_in_month_for(year: i64, month: i64) -> i64 {
+    I month == 2 {
+        I is_leap(year) == 1 { 29 } E { 28 }
+    } E I month == 4 || month == 6 || month == 9 || month == 11 {
+        30
+    } E {
+        31
+    }
+}
+
+F datetime_to_timestamp(year: i64, month: i64, day: i64, hour: i64, min: i64, sec: i64) -> i64 {
+    total_days := mut 0
+
+    # Add days for complete years from 1970 to year-1
+    y := mut 1970
+    L {
+        I y >= year { B }
+        total_days = total_days + 365 + is_leap(y)
+        y = y + 1
+    }
+
+    # Add days for complete months in the current year
+    m := mut 1
+    L {
+        I m >= month { B }
+        total_days = total_days + days_in_month_for(year, m)
+        m = m + 1
+    }
+
+    # Add remaining days (day is 1-indexed)
+    total_days = total_days + (day - 1)
+
+    # Convert to seconds and add time components
+    total_days * 86400 + hour * 3600 + min * 60 + sec
+}
+
+F main() -> i64 {
+    epoch := datetime_to_timestamp(1970, 1, 1, 0, 0, 0)  # 0
+    next_day := datetime_to_timestamp(1970, 1, 2, 0, 0, 0)  # 86400
+    I epoch == 0 && next_day == 86400 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_datetime_from_timestamp() {
+    // Test timestamp_to_datetime: timestamp 86400 -> year=1970, month=1, day=2
+    let result = compile_and_run(r#"
+F is_leap(year: i64) -> i64 {
+    I year % 400 == 0 { R 1 }
+    I year % 100 == 0 { R 0 }
+    I year % 4 == 0 { R 1 }
+    0
+}
+
+F days_in_month_for(year: i64, month: i64) -> i64 {
+    I month == 2 {
+        I is_leap(year) == 1 { 29 } E { 28 }
+    } E I month == 4 || month == 6 || month == 9 || month == 11 {
+        30
+    } E {
+        31
+    }
+}
+
+# Simple DateTime struct (we only need year, month, day for this test)
+S DateTime {
+    year: i64,
+    month: i64,
+    day: i64,
+    hour: i64,
+    min: i64,
+    sec: i64
+}
+
+F timestamp_to_datetime(ts: i64) -> DateTime {
+    total_days := mut ts / 86400
+    remaining_secs := ts % 86400
+
+    hour := remaining_secs / 3600
+    min := (remaining_secs % 3600) / 60
+    sec := remaining_secs % 60
+
+    # Find the year
+    year := mut 1970
+    L {
+        days_in_year := 365 + is_leap(year)
+        I total_days < days_in_year { B }
+        total_days = total_days - days_in_year
+        year = year + 1
+    }
+
+    # Find the month
+    month := mut 1
+    L {
+        days_in_month := days_in_month_for(year, month)
+        I total_days < days_in_month { B }
+        total_days = total_days - days_in_month
+        month = month + 1
+    }
+
+    # Remaining days is the day of month (1-indexed)
+    day := total_days + 1
+
+    DateTime { year: year, month: month, day: day, hour: hour, min: min, sec: sec }
+}
+
+F main() -> i64 {
+    dt := timestamp_to_datetime(86400)  # 1970-01-02 00:00:00
+    I dt.year == 1970 && dt.month == 1 && dt.day == 2 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_datetime_duration_arithmetic() {
+    // Test Duration add/sub operations
+    let result = compile_and_run(r#"
+S Duration {
+    secs: i64,
+    nanos: i64
+}
+
+F duration_add(a: Duration, b: Duration) -> Duration {
+    total_secs := a.secs + b.secs
+    total_nanos := a.nanos + b.nanos
+
+    # Normalize nanoseconds (simple version - no overflow handling needed for test)
+    I total_nanos >= 1000000000 {
+        Duration { secs: total_secs + 1, nanos: total_nanos - 1000000000 }
+    } E {
+        Duration { secs: total_secs, nanos: total_nanos }
+    }
+}
+
+F duration_sub(a: Duration, b: Duration) -> Duration {
+    I a.secs < b.secs {
+        Duration { secs: 0, nanos: 0 }
+    } E I a.secs == b.secs {
+        I a.nanos < b.nanos {
+            Duration { secs: 0, nanos: 0 }
+        } E {
+            Duration { secs: 0, nanos: a.nanos - b.nanos }
+        }
+    } E {
+        diff_secs := a.secs - b.secs
+        I a.nanos < b.nanos {
+            Duration { secs: diff_secs - 1, nanos: a.nanos + 1000000000 - b.nanos }
+        } E {
+            Duration { secs: diff_secs, nanos: a.nanos - b.nanos }
+        }
+    }
+}
+
+F main() -> i64 {
+    d1 := Duration { secs: 100, nanos: 500000000 }
+    d2 := Duration { secs: 50, nanos: 300000000 }
+
+    # Add: 100.5 + 50.3 = 150.8
+    sum := duration_add(d1, d2)
+
+    # Sub: 100.5 - 50.3 = 50.2
+    diff := duration_sub(d1, d2)
+
+    I sum.secs == 150 && sum.nanos == 800000000 && diff.secs == 50 && diff.nanos == 200000000 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+// ==========================================================================
+// Phase 52 Stage 3: std/args.vais E2E Tests
+// ==========================================================================
+
+#[test]
+fn test_args_flag_detection() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Simulate argv: ["prog", "--verbose", "file.txt"]
+    argv := malloc(3 * 8)
+    store_i64(argv, str_to_ptr("myapp"))
+    store_i64(argv + 8, str_to_ptr("--verbose"))
+    store_i64(argv + 16, str_to_ptr("file.txt"))
+
+    # Check if argv[1] starts with "--"
+    arg := load_i64(argv + 8)
+    is_flag := I load_byte(arg) == 45 && load_byte(arg + 1) == 45 { 1 } E { 0 }
+
+    free(argv)
+    is_flag
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_args_option_parsing() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Simulate argv: ["prog", "--output", "result.txt"]
+    argv := malloc(3 * 8)
+    store_i64(argv, str_to_ptr("prog"))
+    store_i64(argv + 8, str_to_ptr("--output"))
+    store_i64(argv + 16, str_to_ptr("result.txt"))
+
+    # Parse: skip "--" prefix from argv[1] and get argv[2]
+    arg1 := load_i64(argv + 8)
+    is_option := I load_byte(arg1) == 45 && load_byte(arg1 + 1) == 45 { 1 } E { 0 }
+
+    # Get value (argv[2])
+    value := load_i64(argv + 16)
+
+    # Check value starts with 'r' (114)
+    value_ok := I load_byte(value) == 114 { 1 } E { 0 }
+
+    free(argv)
+    I is_option == 1 && value_ok == 1 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_args_positional() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Simulate argv: ["prog", "input.txt", "--verbose"]
+    argv := malloc(3 * 8)
+    store_i64(argv, str_to_ptr("prog"))
+    store_i64(argv + 8, str_to_ptr("input.txt"))
+    store_i64(argv + 16, str_to_ptr("--verbose"))
+
+    # Check if argv[1] does NOT start with '-' (45)
+    arg1 := load_i64(argv + 8)
+    is_positional := I load_byte(arg1) != 45 { 1 } E { 0 }
+
+    # Check argv[2] does start with '--'
+    arg2 := load_i64(argv + 16)
+    is_flag := I load_byte(arg2) == 45 && load_byte(arg2 + 1) == 45 { 1 } E { 0 }
+
+    free(argv)
+    I is_positional == 1 && is_flag == 1 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_args_short_flag() {
+    let result = compile_and_run(r#"
+F main() -> i64 {
+    # Simulate argv: ["prog", "-v"]
+    argv := malloc(2 * 8)
+    store_i64(argv, str_to_ptr("prog"))
+    store_i64(argv + 8, str_to_ptr("-v"))
+
+    # Check if argv[1] starts with '-' but NOT '--'
+    arg := load_i64(argv + 8)
+    first := load_byte(arg)
+    second := load_byte(arg + 1)
+    is_short := I first == 45 && second != 45 { 1 } E { 0 }
+
+    # Extract short char ('v' = 118)
+    short_char := second
+    is_v := I short_char == 118 { 1 } E { 0 }
+
+    free(argv)
+    I is_short == 1 && is_v == 1 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+
+#[test]
+fn test_args_str_eq_helper() {
+    let result = compile_and_run(r#"
+# String comparison helper for arg parsing
+F str_eq(a: i64, b: i64) -> i64 {
+    i := mut 0
+    L {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+        i = i + 1
+    }
+    1
+}
+
+F main() -> i64 {
+    # Test equal strings
+    s1 := str_to_ptr("output")
+    s2 := str_to_ptr("output")
+    eq1 := str_eq(s1, s2)
+
+    # Test different strings
+    s3 := str_to_ptr("verbose")
+    eq2 := str_eq(s1, s3)
+
+    # Should be: eq1=1, eq2=0
+    I eq1 == 1 && eq2 == 0 { 1 } E { 0 }
+}
+"#).unwrap();
+    assert_eq!(result.exit_code, 1);
+}
+

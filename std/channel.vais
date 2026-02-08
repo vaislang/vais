@@ -1,0 +1,500 @@
+# channel.vais - CSP-style channel communication
+#
+# Provides bounded and unbounded channels for concurrent message passing.
+# Bounded channels use ring buffers with mutex/condvar synchronization.
+# Unbounded channels use a linked-list backed queue.
+# Also provides channel_select for multi-channel polling.
+#
+# Note: Basic Channel<T>, Sender<T>, Receiver<T> are defined in std/sync.vais.
+# This module adds unbounded channels and select functionality.
+
+# ============================================
+# Unbounded Channel — dynamically growing queue
+# ============================================
+
+S UnboundedSender {
+    channel_ptr: i64
+}
+
+S UnboundedReceiver {
+    channel_ptr: i64
+}
+
+S UnboundedChannel {
+    buffer: i64,       # Pointer to dynamically allocated array
+    capacity: i64,     # Current capacity
+    head: i64,         # Read index
+    tail: i64,         # Write index
+    mutex: i64,        # OS mutex handle
+    not_empty: i64,    # Condvar: signaled when item added
+    closed: i64        # 0 = open, 1 = closed
+}
+
+X UnboundedChannel {
+    F new() -> UnboundedChannel {
+        cap := 64
+        buffer := malloc(cap * 8)
+        mutex := __mutex_create()
+        not_empty := __condvar_create()
+
+        UnboundedChannel {
+            buffer: buffer,
+            capacity: cap,
+            head: 0,
+            tail: 0,
+            mutex: mutex,
+            not_empty: not_empty,
+            closed: 0
+        }
+    }
+
+    # Send a message (never blocks — grows buffer if needed)
+    F send(&self, value: i64) -> i64 {
+        __mutex_lock(self.mutex)
+
+        I self.closed == 1 {
+            __mutex_unlock(self.mutex)
+            R -1
+        }
+
+        # Grow if needed
+        count := self.tail - self.head
+        I count >= self.capacity {
+            old_cap := self.capacity
+            new_cap := old_cap * 2
+            new_buf := malloc(new_cap * 8)
+
+            # Copy existing items
+            i := 0
+            L {
+                I i >= count { B }
+                src_off := ((self.head + i) % old_cap) * 8
+                val := load_i64(self.buffer + src_off)
+                store_i64(new_buf + i * 8, val)
+                i = i + 1
+            }
+
+            free(self.buffer)
+            self.buffer = new_buf
+            self.head = 0
+            self.tail = count
+            self.capacity = new_cap
+        }
+
+        # Store value
+        offset := (self.tail % self.capacity) * 8
+        store_i64(self.buffer + offset, value)
+        self.tail = self.tail + 1
+
+        __condvar_signal(self.not_empty)
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Receive a message (blocks if empty, returns -1 if closed and empty)
+    F recv(&self) -> i64 {
+        __mutex_lock(self.mutex)
+
+        L {
+            I self.head < self.tail { B }
+            I self.closed == 1 {
+                __mutex_unlock(self.mutex)
+                R -1
+            }
+            __condvar_wait(self.not_empty, self.mutex)
+        }
+
+        offset := (self.head % self.capacity) * 8
+        value := load_i64(self.buffer + offset)
+        self.head = self.head + 1
+
+        __mutex_unlock(self.mutex)
+        value
+    }
+
+    # Try to receive without blocking (returns -1 if empty)
+    F try_recv(&self) -> i64 {
+        result := __mutex_try_lock(self.mutex)
+        I result == 0 {
+            R -1
+        }
+
+        I self.head >= self.tail {
+            __mutex_unlock(self.mutex)
+            R -1
+        }
+
+        offset := (self.head % self.capacity) * 8
+        value := load_i64(self.buffer + offset)
+        self.head = self.head + 1
+
+        __mutex_unlock(self.mutex)
+        value
+    }
+
+    # Close the channel
+    F close(&self) -> i64 {
+        __mutex_lock(self.mutex)
+        self.closed = 1
+        __condvar_broadcast(self.not_empty)
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.head >= self.tail { 1 } E { 0 }
+    }
+
+    # Get number of pending messages
+    F len(&self) -> i64 {
+        self.tail - self.head
+    }
+
+    # Check if channel is closed
+    F is_closed(&self) -> i64 {
+        self.closed
+    }
+
+    # Free channel resources
+    F drop(&self) -> i64 {
+        free(self.buffer)
+        __mutex_destroy(self.mutex)
+        __condvar_destroy(self.not_empty)
+        0
+    }
+}
+
+X UnboundedSender {
+    F new(ch: i64) -> UnboundedSender {
+        UnboundedSender { channel_ptr: ch }
+    }
+
+    F send(&self, value: i64) -> i64 {
+        ch_ptr := self.channel_ptr
+        # Inline channel send logic
+        __mutex_lock(load_i64(ch_ptr + 32))
+
+        I load_i64(ch_ptr + 48) == 1 {
+            __mutex_unlock(load_i64(ch_ptr + 32))
+            R -1
+        }
+
+        head := load_i64(ch_ptr + 16)
+        tail := load_i64(ch_ptr + 24)
+        cap := load_i64(ch_ptr + 8)
+        count := tail - head
+
+        I count >= cap {
+            # Grow
+            old_cap := cap
+            new_cap := old_cap * 2
+            new_buf := malloc(new_cap * 8)
+            i := 0
+            L {
+                I i >= count { B }
+                src_off := ((head + i) % old_cap) * 8
+                val := load_i64(load_i64(ch_ptr) + src_off)
+                store_i64(new_buf + i * 8, val)
+                i = i + 1
+            }
+            free(load_i64(ch_ptr))
+            store_i64(ch_ptr, new_buf)
+            store_i64(ch_ptr + 16, 0)
+            store_i64(ch_ptr + 24, count)
+            store_i64(ch_ptr + 8, new_cap)
+            head = 0
+            tail = count
+            cap = new_cap
+        }
+
+        offset := (tail % cap) * 8
+        store_i64(load_i64(ch_ptr) + offset, value)
+        store_i64(ch_ptr + 24, tail + 1)
+
+        __condvar_signal(load_i64(ch_ptr + 40))
+        __mutex_unlock(load_i64(ch_ptr + 32))
+        0
+    }
+}
+
+X UnboundedReceiver {
+    F new(ch: i64) -> UnboundedReceiver {
+        UnboundedReceiver { channel_ptr: ch }
+    }
+
+    F recv(&self) -> i64 {
+        ch_ptr := self.channel_ptr
+        __mutex_lock(load_i64(ch_ptr + 32))
+
+        L {
+            I load_i64(ch_ptr + 16) < load_i64(ch_ptr + 24) { B }
+            I load_i64(ch_ptr + 48) == 1 {
+                __mutex_unlock(load_i64(ch_ptr + 32))
+                R -1
+            }
+            __condvar_wait(load_i64(ch_ptr + 40), load_i64(ch_ptr + 32))
+        }
+
+        head := load_i64(ch_ptr + 16)
+        cap := load_i64(ch_ptr + 8)
+        offset := (head % cap) * 8
+        value := load_i64(load_i64(ch_ptr) + offset)
+        store_i64(ch_ptr + 16, head + 1)
+
+        __mutex_unlock(load_i64(ch_ptr + 32))
+        value
+    }
+
+    F try_recv(&self) -> i64 {
+        ch_ptr := self.channel_ptr
+        result := __mutex_try_lock(load_i64(ch_ptr + 32))
+        I result == 0 { R -1 }
+
+        I load_i64(ch_ptr + 16) >= load_i64(ch_ptr + 24) {
+            __mutex_unlock(load_i64(ch_ptr + 32))
+            R -1
+        }
+
+        head := load_i64(ch_ptr + 16)
+        cap := load_i64(ch_ptr + 8)
+        offset := (head % cap) * 8
+        value := load_i64(load_i64(ch_ptr) + offset)
+        store_i64(ch_ptr + 16, head + 1)
+
+        __mutex_unlock(load_i64(ch_ptr + 32))
+        value
+    }
+}
+
+# ============================================
+# Channel Select — poll multiple channels
+# ============================================
+
+# ChannelSet: holds an array of channel pointers for select
+S ChannelSet {
+    channels: i64,     # Pointer to array of channel ptrs
+    count: i64,        # Number of channels
+    capacity: i64      # Allocated capacity
+}
+
+X ChannelSet {
+    F new() -> ChannelSet {
+        cap := 8
+        channels := malloc(cap * 8)
+        ChannelSet { channels: channels, count: 0, capacity: cap }
+    }
+
+    # Add a channel (pointer to an UnboundedChannel) to the set
+    F add(&self, ch_ptr: i64) -> i64 {
+        I self.count >= self.capacity {
+            new_cap := self.capacity * 2
+            new_buf := malloc(new_cap * 8)
+            memcpy(new_buf, self.channels, self.count * 8)
+            free(self.channels)
+            self.channels = new_buf
+            self.capacity = new_cap
+        }
+        store_i64(self.channels + self.count * 8, ch_ptr)
+        self.count = self.count + 1
+        self.count
+    }
+
+    # Poll all channels, return index of first ready channel (-1 if none)
+    F try_select(&self) -> i64 {
+        i := 0
+        L {
+            I i >= self.count { B }
+            ch_ptr := load_i64(self.channels + i * 8)
+            # Check if channel has data: head < tail
+            head := load_i64(ch_ptr + 16)
+            tail := load_i64(ch_ptr + 24)
+            I head < tail {
+                R i
+            }
+            i = i + 1
+        }
+        0 - 1
+    }
+
+    # Blocking select: spin-poll until one channel has data
+    # Returns index of ready channel
+    F select(&self) -> i64 {
+        L {
+            idx := @.try_select()
+            I idx >= 0 {
+                R idx
+            }
+            # Brief sleep to avoid busy-wait (100 microseconds)
+            usleep(100)
+        }
+        0 - 1
+    }
+
+    F drop(&self) -> i64 {
+        free(self.channels)
+        0
+    }
+}
+
+# ============================================
+# Convenience functions
+# ============================================
+
+# Create an unbounded channel, return pointer to malloc'd UnboundedChannel
+F unbounded_channel() -> i64 {
+    cap := 64
+    ch := malloc(56)  # 7 fields * 8 bytes
+    buffer := malloc(cap * 8)
+    mutex := __mutex_create()
+    not_empty := __condvar_create()
+
+    store_i64(ch, buffer)          # buffer
+    store_i64(ch + 8, cap)         # capacity
+    store_i64(ch + 16, 0)          # head
+    store_i64(ch + 24, 0)          # tail
+    store_i64(ch + 32, mutex)      # mutex
+    store_i64(ch + 40, not_empty)  # not_empty condvar
+    store_i64(ch + 48, 0)          # closed
+
+    ch
+}
+
+# Send to unbounded channel (pointer-based API)
+F channel_send(ch: i64, value: i64) -> i64 {
+    __mutex_lock(load_i64(ch + 32))
+
+    I load_i64(ch + 48) == 1 {
+        __mutex_unlock(load_i64(ch + 32))
+        R -1
+    }
+
+    head := load_i64(ch + 16)
+    tail := load_i64(ch + 24)
+    cap := load_i64(ch + 8)
+    count := tail - head
+
+    I count >= cap {
+        old_cap := cap
+        new_cap := old_cap * 2
+        new_buf := malloc(new_cap * 8)
+        i := 0
+        L {
+            I i >= count { B }
+            src_off := ((head + i) % old_cap) * 8
+            val := load_i64(load_i64(ch) + src_off)
+            store_i64(new_buf + i * 8, val)
+            i = i + 1
+        }
+        free(load_i64(ch))
+        store_i64(ch, new_buf)
+        store_i64(ch + 16, 0)
+        store_i64(ch + 24, count)
+        store_i64(ch + 8, new_cap)
+        head = 0
+        tail = count
+        cap = new_cap
+    }
+
+    offset := (tail % cap) * 8
+    store_i64(load_i64(ch) + offset, value)
+    store_i64(ch + 24, tail + 1)
+
+    __condvar_signal(load_i64(ch + 40))
+    __mutex_unlock(load_i64(ch + 32))
+    0
+}
+
+# Receive from unbounded channel (blocks, returns -1 on closed+empty)
+F channel_recv(ch: i64) -> i64 {
+    __mutex_lock(load_i64(ch + 32))
+
+    L {
+        I load_i64(ch + 16) < load_i64(ch + 24) { B }
+        I load_i64(ch + 48) == 1 {
+            __mutex_unlock(load_i64(ch + 32))
+            R -1
+        }
+        __condvar_wait(load_i64(ch + 40), load_i64(ch + 32))
+    }
+
+    head := load_i64(ch + 16)
+    cap := load_i64(ch + 8)
+    offset := (head % cap) * 8
+    value := load_i64(load_i64(ch) + offset)
+    store_i64(ch + 16, head + 1)
+
+    __mutex_unlock(load_i64(ch + 32))
+    value
+}
+
+# Try receive from unbounded channel (non-blocking, returns -1 if empty)
+F channel_try_recv(ch: i64) -> i64 {
+    result := __mutex_try_lock(load_i64(ch + 32))
+    I result == 0 { R -1 }
+
+    I load_i64(ch + 16) >= load_i64(ch + 24) {
+        __mutex_unlock(load_i64(ch + 32))
+        R -1
+    }
+
+    head := load_i64(ch + 16)
+    cap := load_i64(ch + 8)
+    offset := (head % cap) * 8
+    value := load_i64(load_i64(ch) + offset)
+    store_i64(ch + 16, head + 1)
+
+    __mutex_unlock(load_i64(ch + 32))
+    value
+}
+
+# Close channel
+F channel_close(ch: i64) -> i64 {
+    __mutex_lock(load_i64(ch + 32))
+    store_i64(ch + 48, 1)
+    __condvar_broadcast(load_i64(ch + 40))
+    __mutex_unlock(load_i64(ch + 32))
+    0
+}
+
+# Get number of pending messages
+F channel_len(ch: i64) -> i64 {
+    load_i64(ch + 24) - load_i64(ch + 16)
+}
+
+# Check if channel is empty
+F channel_is_empty(ch: i64) -> i64 {
+    I load_i64(ch + 16) >= load_i64(ch + 24) { 1 } E { 0 }
+}
+
+# Select: poll multiple channels, return index of first ready (-1 if none)
+F channel_select(channels: i64, count: i64) -> i64 {
+    i := 0
+    L {
+        I i >= count { B }
+        ch_ptr := load_i64(channels + i * 8)
+        head := load_i64(ch_ptr + 16)
+        tail := load_i64(ch_ptr + 24)
+        I head < tail {
+            R i
+        }
+        i = i + 1
+    }
+    0 - 1
+}
+
+# ============================================
+# External functions (from sync_runtime.c)
+# ============================================
+
+X F __mutex_create() -> i64
+X F __mutex_destroy(handle: i64) -> i64
+X F __mutex_lock(handle: i64) -> i64
+X F __mutex_try_lock(handle: i64) -> i64
+X F __mutex_unlock(handle: i64) -> i64
+X F __condvar_create() -> i64
+X F __condvar_destroy(handle: i64) -> i64
+X F __condvar_wait(condvar: i64, mutex: i64) -> i64
+X F __condvar_broadcast(handle: i64) -> i64
+X F __condvar_signal(handle: i64) -> i64
+X F usleep(micros: i64) -> i64

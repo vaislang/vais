@@ -19,5 +19,16 @@ mod builtins;
 mod generator;
 mod types;
 
+// Code generation modules (split from generator.rs)
+mod gen_declaration;
+mod gen_function;
+mod gen_expr;
+mod gen_stmt;
+mod gen_aggregate;
+mod gen_types;
+mod gen_advanced;
+mod gen_match;
+mod gen_special;
+
 pub use generator::InkwellCodeGenerator;
 pub use types::TypeMapper;

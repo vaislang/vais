@@ -8,5 +8,11 @@ mod backend;
 mod diagnostics;
 mod semantic;
 
+// Backend module extensions
+mod analysis;
+mod folding;
+mod hints;
+mod symbol_analysis;
+
 // Re-export the backend for use in tests and as a library
 pub use backend::VaisBackend;

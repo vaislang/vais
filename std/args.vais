@@ -1,0 +1,413 @@
+# args.vais - CLI argument parsing
+# Provides a simple argument parser for CLI tools
+
+# Argument types
+C ARG_FLAG: i64 = 0        # --verbose (boolean, no value)
+C ARG_OPTION: i64 = 1      # --output file.txt (requires value)
+C ARG_POSITIONAL: i64 = 2  # <filename> (position-based)
+
+# ArgSpec: describes one argument
+# Layout: 40 bytes
+# [0]  kind: i64 (ARG_FLAG/ARG_OPTION/ARG_POSITIONAL)
+# [8]  long_name: i64 (pointer to str, e.g. "output")
+# [16] short_name: i64 (single char as i64, e.g. 111 for 'o', 0 if none)
+# [24] help_text: i64 (pointer to str)
+# [32] default_val: i64 (pointer to default value str, or 0)
+
+S ArgParser {
+    name: i64,          # Program name (pointer)
+    description: i64,   # Description (pointer)
+    specs: i64,         # Pointer to array of ArgSpec (40 bytes each)
+    spec_count: i64,    # Number of specs
+    spec_cap: i64,      # Capacity
+    results: i64,       # Pointer to array of i64 (parsed values)
+    positional_idx: i64  # Next positional index
+}
+
+X ArgParser {
+    # Create a new ArgParser
+    F new(name: str, desc: str) -> ArgParser {
+        initial_cap := 8
+        specs := malloc(initial_cap * 40)
+        results := malloc(initial_cap * 8)
+        ArgParser {
+            name: str_to_ptr(name),
+            description: str_to_ptr(desc),
+            specs: specs,
+            spec_count: 0,
+            spec_cap: initial_cap,
+            results: results,
+            positional_idx: 0
+        }
+    }
+
+    # Internal: grow specs array if needed
+    F ensure_capacity(&self) -> i64 {
+        I self.spec_count >= self.spec_cap {
+            new_cap := self.spec_cap * 2
+            new_specs := malloc(new_cap * 40)
+            new_results := malloc(new_cap * 8)
+
+            # Copy old specs
+            memcpy(new_specs, self.specs, self.spec_count * 40)
+            # Copy old results
+            memcpy(new_results, self.results, self.spec_count * 8)
+
+            free(self.specs)
+            free(self.results)
+            self.specs = new_specs
+            self.results = new_results
+            self.spec_cap = new_cap
+            0
+        } E {
+            0
+        }
+    }
+
+    # Add a flag (--verbose, -v)
+    F add_flag(&self, long: str, short: i64, help: str) -> i64 {
+        @.ensure_capacity()
+
+        spec_ptr := self.specs + self.spec_count * 40
+        store_i64(spec_ptr, ARG_FLAG)
+        store_i64(spec_ptr + 8, str_to_ptr(long))
+        store_i64(spec_ptr + 16, short)
+        store_i64(spec_ptr + 24, str_to_ptr(help))
+        store_i64(spec_ptr + 32, 0)  # No default for flag
+
+        # Initialize result to 0 (not set)
+        store_i64(self.results + self.spec_count * 8, 0)
+
+        self.spec_count = self.spec_count + 1
+        0
+    }
+
+    # Add an option with value (--output file, -o file)
+    F add_option(&self, long: str, short: i64, help: str, default_val: str) -> i64 {
+        @.ensure_capacity()
+
+        spec_ptr := self.specs + self.spec_count * 40
+        store_i64(spec_ptr, ARG_OPTION)
+        store_i64(spec_ptr + 8, str_to_ptr(long))
+        store_i64(spec_ptr + 16, short)
+        store_i64(spec_ptr + 24, str_to_ptr(help))
+        store_i64(spec_ptr + 32, str_to_ptr(default_val))
+
+        # Initialize result to default value
+        store_i64(self.results + self.spec_count * 8, str_to_ptr(default_val))
+
+        self.spec_count = self.spec_count + 1
+        0
+    }
+
+    # Add a positional argument
+    F add_positional(&self, name: str, help: str) -> i64 {
+        @.ensure_capacity()
+
+        spec_ptr := self.specs + self.spec_count * 40
+        store_i64(spec_ptr, ARG_POSITIONAL)
+        store_i64(spec_ptr + 8, str_to_ptr(name))
+        store_i64(spec_ptr + 16, 0)  # No short name for positional
+        store_i64(spec_ptr + 24, str_to_ptr(help))
+        store_i64(spec_ptr + 32, 0)  # No default
+
+        # Initialize result to 0 (not set)
+        store_i64(self.results + self.spec_count * 8, 0)
+
+        self.spec_count = self.spec_count + 1
+        0
+    }
+
+    # Internal: compare two strings for equality
+    F str_eq_internal(&self, a: i64, b: i64) -> i64 {
+        i := mut 0
+        L {
+            ca := load_byte(a + i)
+            cb := load_byte(b + i)
+            I ca != cb { R 0 }
+            I ca == 0 { R 1 }
+            i = i + 1
+        }
+        1
+    }
+
+    # Internal: find spec by long name
+    F find_spec_by_long(&self, long_name: i64) -> i64 {
+        i := mut 0
+        L {
+            I i >= self.spec_count { R -1 }
+            spec_ptr := self.specs + i * 40
+            spec_long := load_i64(spec_ptr + 8)
+            I @.str_eq_internal(spec_long, long_name) { R i }
+            i = i + 1
+        }
+        -1
+    }
+
+    # Internal: find spec by short name (single char)
+    F find_spec_by_short(&self, short_char: i64) -> i64 {
+        i := mut 0
+        L {
+            I i >= self.spec_count { R -1 }
+            spec_ptr := self.specs + i * 40
+            spec_short := load_i64(spec_ptr + 16)
+            I spec_short == short_char { R i }
+            i = i + 1
+        }
+        -1
+    }
+
+    # Parse arguments from argc/argv
+    # argv is pointer to array of string pointers
+    # Returns 0 on success, -1 on error
+    F parse(&self, argc: i64, argv: i64) -> i64 {
+        # Reset positional index
+        self.positional_idx = 0
+
+        # Skip argv[0] (program name)
+        arg_idx := mut 1
+        L {
+            I arg_idx >= argc { B }
+
+            arg_ptr := load_i64(argv + arg_idx * 8)
+            first_byte := load_byte(arg_ptr)
+
+            # Check if starts with "--" (long option)
+            I first_byte == 45 && load_byte(arg_ptr + 1) == 45 {
+                # Long option: skip "--"
+                name_ptr := arg_ptr + 2
+                spec_idx := @.find_spec_by_long(name_ptr)
+
+                I spec_idx < 0 {
+                    # Unknown option
+                    R -1
+                }
+
+                spec_ptr := self.specs + spec_idx * 40
+                kind := load_i64(spec_ptr)
+
+                I kind == ARG_FLAG {
+                    # Set flag to 1
+                    store_i64(self.results + spec_idx * 8, 1);
+                    0
+                } E I kind == ARG_OPTION {
+                    # Get next argument as value
+                    arg_idx = arg_idx + 1
+                    I arg_idx >= argc { R -1 }  # Missing value
+                    value_ptr := load_i64(argv + arg_idx * 8)
+                    store_i64(self.results + spec_idx * 8, value_ptr);
+                    0
+                } E {
+                    0
+                }
+            } E I first_byte == 45 && load_byte(arg_ptr + 1) != 45 {
+                # Short option: single char after '-'
+                short_char := load_byte(arg_ptr + 1)
+                spec_idx := @.find_spec_by_short(short_char)
+
+                I spec_idx < 0 {
+                    # Unknown option
+                    R -1
+                }
+
+                spec_ptr := self.specs + spec_idx * 40
+                kind := load_i64(spec_ptr)
+
+                I kind == ARG_FLAG {
+                    # Set flag to 1
+                    store_i64(self.results + spec_idx * 8, 1);
+                    0
+                } E I kind == ARG_OPTION {
+                    # Get next argument as value
+                    arg_idx = arg_idx + 1
+                    I arg_idx >= argc { R -1 }  # Missing value
+                    value_ptr := load_i64(argv + arg_idx * 8)
+                    store_i64(self.results + spec_idx * 8, value_ptr);
+                    0
+                } E {
+                    0
+                }
+            } E {
+                # Positional argument
+                # Find next positional spec
+                pos_spec_idx := mut -1
+                i := mut 0
+                pos_count := mut 0
+                L {
+                    I i >= self.spec_count { B }
+                    spec_ptr := self.specs + i * 40
+                    kind := load_i64(spec_ptr)
+                    I kind == ARG_POSITIONAL {
+                        I pos_count == self.positional_idx {
+                            pos_spec_idx = i;
+                            B
+                        };
+                        pos_count = pos_count + 1;
+                        0
+                    } E {
+                        0
+                    };
+                    i = i + 1
+                }
+
+                I pos_spec_idx >= 0 {
+                    store_i64(self.results + pos_spec_idx * 8, arg_ptr);
+                    self.positional_idx = self.positional_idx + 1;
+                    0
+                } E {
+                    # Too many positional arguments
+                    R -1
+                }
+            }
+
+            arg_idx = arg_idx + 1
+        }
+        0
+    }
+
+    # Get flag value (1 if set, 0 if not)
+    F get_flag(&self, long: str) -> i64 {
+        spec_idx := @.find_spec_by_long(str_to_ptr(long))
+        I spec_idx < 0 { R 0 }
+        load_i64(self.results + spec_idx * 8)
+    }
+
+    # Get option value (pointer to value string, or default)
+    F get_option(&self, long: str) -> i64 {
+        spec_idx := @.find_spec_by_long(str_to_ptr(long))
+        I spec_idx < 0 { R 0 }
+        load_i64(self.results + spec_idx * 8)
+    }
+
+    # Get positional argument by index
+    F get_positional(&self, index: i64) -> i64 {
+        # Find the index-th positional spec
+        i := mut 0
+        pos_count := mut 0
+        L {
+            I i >= self.spec_count { R 0 }
+            spec_ptr := self.specs + i * 40
+            kind := load_i64(spec_ptr)
+            I kind == ARG_POSITIONAL {
+                I pos_count == index {
+                    R load_i64(self.results + i * 8)
+                };
+                pos_count = pos_count + 1;
+                0
+            } E {
+                0
+            };
+            i = i + 1
+        }
+        0
+    }
+
+    # Print auto-generated help text
+    F print_help(&self) -> i64 {
+        # Print program name and description
+        puts_ptr(self.name)
+        puts_ptr(self.description)
+        puts_ptr("")
+
+        # Print usage
+        puts_ptr("Usage:")
+        puts_ptr("  ")
+        puts_ptr(self.name)
+
+        # Print options
+        i := mut 0
+        L {
+            I i >= self.spec_count { B }
+            spec_ptr := self.specs + i * 40
+            kind := load_i64(spec_ptr)
+            long_name := load_i64(spec_ptr + 8)
+
+            I kind == ARG_FLAG || kind == ARG_OPTION {
+                puts_ptr(" [--")
+                puts_ptr(long_name)
+                I kind == ARG_OPTION {
+                    puts_ptr(" <value>");
+                    0
+                } E {
+                    0
+                };
+                puts_ptr("]");
+                0
+            } E I kind == ARG_POSITIONAL {
+                puts_ptr(" <")
+                puts_ptr(long_name)
+                puts_ptr(">")
+                0
+            } E {
+                0
+            };
+
+            i = i + 1
+        }
+        puts_ptr("")
+        puts_ptr("")
+
+        # Print detailed help
+        puts_ptr("Options:")
+        i = 0
+        L {
+            I i >= self.spec_count { B }
+            spec_ptr := self.specs + i * 40
+            kind := load_i64(spec_ptr)
+
+            I kind == ARG_FLAG || kind == ARG_OPTION {
+                long_name := load_i64(spec_ptr + 8)
+                short_name := load_i64(spec_ptr + 16)
+                help_text := load_i64(spec_ptr + 24)
+
+                puts_ptr("  ")
+                I short_name != 0 {
+                    puts_ptr("-")
+                    # Print single char
+                    buf := malloc(2)
+                    store_byte(buf, short_name)
+                    store_byte(buf + 1, 0)
+                    puts_ptr(buf)
+                    free(buf)
+                    puts_ptr(", ");
+                    0
+                } E {
+                    0
+                };
+                puts_ptr("--")
+                puts_ptr(long_name)
+                puts_ptr("  ")
+                puts_ptr(help_text)
+                puts_ptr("")
+                0
+            } E {
+                0
+            };
+
+            i = i + 1
+        }
+
+        0
+    }
+
+    # Free resources
+    F drop(&self) -> i64 {
+        free(self.specs)
+        free(self.results)
+        self.specs = 0
+        self.results = 0
+        self.spec_count = 0
+        self.spec_cap = 0
+        0
+    }
+}
+
+# Convenience functions for simulating argc/argv in tests
+F args_create_argv(count: i64) -> i64 {
+    malloc(count * 8)
+}
+
+F args_set_arg(argv: i64, index: i64, value: str) -> i64 {
+    store_i64(argv + index * 8, str_to_ptr(value));
+    0
+}

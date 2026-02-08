@@ -1,0 +1,589 @@
+# path.vais - Path manipulation library
+# Provides path operations (join, parent, filename, extension, stem)
+
+S Path {
+    data: i64,    # Pointer to null-terminated path string
+    len: i64      # Length of path string
+}
+
+X Path {
+    # Create Path from string pointer
+    F from(s: i64) -> Path {
+        len := strlen(s)
+        data := malloc(len + 1)
+        memcpy(data, s, len + 1)
+        Path { data: data, len: len }
+    }
+
+    # Create Path from string literal
+    F from_str(s: str) -> Path {
+        ptr := str_to_ptr(s)
+        len := strlen(ptr)
+        data := malloc(len + 1)
+        memcpy(data, ptr, len + 1)
+        Path { data: data, len: len }
+    }
+
+    # Get path as pointer (for passing to C functions)
+    F as_ptr(&self) -> i64 {
+        self.data
+    }
+
+    # Get path length
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    # Join two paths: "/usr" + "bin" => "/usr/bin"
+    F join(&self, other: str) -> Path {
+        other_ptr := str_to_ptr(other)
+        other_len := strlen(other_ptr)
+        # If other starts with '/', return Path::from_str(other)
+        I load_byte(other_ptr) == 47 {
+            R Path.from_str(other)
+        }
+
+        # Check if self ends with '/'
+        ends_with_slash := 0
+        I self.len > 0 {
+            I load_byte(self.data + self.len - 1) == 47 {
+                ends_with_slash = 1
+            }
+        }
+
+        # Calculate new length
+        new_len := 0
+        I ends_with_slash {
+            new_len = self.len + other_len
+        } E {
+            new_len = self.len + 1 + other_len
+        }
+
+        # Allocate and build new path
+        data := malloc(new_len + 1)
+        memcpy(data, self.data, self.len)
+
+        I ends_with_slash {
+            memcpy(data + self.len, other_ptr, other_len + 1)
+        } E {
+            store_byte(data + self.len, 47)
+            memcpy(data + self.len + 1, other_ptr, other_len + 1)
+        }
+
+        Path { data: data, len: new_len }
+    }
+
+    # Get parent directory: "/usr/bin/ls" => "/usr/bin"
+    F parent(&self) -> Path {
+        # Find last '/' using backward scan
+        pos := -1
+        i := self.len - 1
+        L {
+            I i < 0 { B }
+            I load_byte(self.data + i) == 47 {
+                pos = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If no '/', return Path with "."
+        I pos == -1 {
+            data := malloc(2)
+            store_byte(data, 46)
+            store_byte(data + 1, 0)
+            R Path { data: data, len: 1 }
+        }
+
+        # If '/' is at position 0, return Path with "/"
+        I pos == 0 {
+            data := malloc(2)
+            store_byte(data, 47)
+            store_byte(data + 1, 0)
+            R Path { data: data, len: 1 }
+        }
+
+        # Return substring up to last '/'
+        data := malloc(pos + 1)
+        memcpy(data, self.data, pos)
+        store_byte(data + pos, 0)
+        Path { data: data, len: pos }
+    }
+
+    # Get filename: "/usr/bin/ls" => "ls"
+    F filename(&self) -> Path {
+        # Find last '/'
+        pos := -1
+        i := self.len - 1
+        L {
+            I i < 0 { B }
+            I load_byte(self.data + i) == 47 {
+                pos = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If no '/', return copy of self
+        I pos == -1 {
+            R Path.from(self.data)
+        }
+
+        # Return substring after last '/'
+        start := pos + 1
+        new_len := self.len - start
+        data := malloc(new_len + 1)
+        memcpy(data, self.data + start, new_len)
+        store_byte(data + new_len, 0)
+        Path { data: data, len: new_len }
+    }
+
+    # Get file extension: "hello.txt" => "txt", "archive.tar.gz" => "gz"
+    F extension(&self) -> Path {
+        # Get filename first
+        fname := @.filename()
+
+        # Find last '.' in filename
+        pos := -1
+        i := fname.len - 1
+        L {
+            I i < 0 { B }
+            I load_byte(fname.data + i) == 46 {
+                pos = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If no '.', return empty Path
+        I pos == -1 || pos == 0 {
+            data := malloc(1)
+            store_byte(data, 0)
+            R Path { data: data, len: 0 }
+        }
+
+        # Return substring after last '.'
+        start := pos + 1
+        new_len := fname.len - start
+        data := malloc(new_len + 1)
+        memcpy(data, fname.data + start, new_len)
+        store_byte(data + new_len, 0)
+        Path { data: data, len: new_len }
+    }
+
+    # Get stem (filename without extension): "hello.txt" => "hello"
+    F stem(&self) -> Path {
+        # Get filename
+        fname := @.filename()
+
+        # Find last '.' in filename
+        pos := -1
+        i := fname.len - 1
+        L {
+            I i < 0 { B }
+            I load_byte(fname.data + i) == 46 {
+                pos = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If no '.', return filename
+        I pos == -1 || pos == 0 {
+            R fname
+        }
+
+        # Return substring before last '.'
+        data := malloc(pos + 1)
+        memcpy(data, fname.data, pos)
+        store_byte(data + pos, 0)
+        Path { data: data, len: pos }
+    }
+
+    # Check if path is absolute (starts with '/')
+    F is_absolute(&self) -> i64 {
+        I self.len > 0 {
+            I load_byte(self.data) == 47 { 1 } E { 0 }
+        } E {
+            0
+        }
+    }
+
+    # Check if path is relative (not absolute)
+    F is_relative(&self) -> i64 {
+        I @.is_absolute() { 0 } E { 1 }
+    }
+
+    # Free the path memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        0
+    }
+}
+
+# PathBuf - mutable path (like String)
+S PathBuf {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X PathBuf {
+    F new() -> PathBuf {
+        cap := 64
+        data := malloc(cap)
+        store_byte(data, 0)
+        PathBuf { data: data, len: 0, cap: cap }
+    }
+
+    F from(s: str) -> PathBuf {
+        ptr := str_to_ptr(s)
+        len := strlen(ptr)
+        cap := len + 64
+        data := malloc(cap)
+        memcpy(data, ptr, len + 1)
+        PathBuf { data: data, len: len, cap: cap }
+    }
+
+    F push(&self, component: str) -> i64 {
+        comp_ptr := str_to_ptr(component)
+        comp_len := strlen(comp_ptr)
+
+        # Check if component starts with '/'
+        I load_byte(comp_ptr) == 47 {
+            # Replace entire path with component
+            I comp_len >= self.cap {
+                free(self.data)
+                self.cap = comp_len + 64
+                self.data = malloc(self.cap)
+            }
+            memcpy(self.data, comp_ptr, comp_len + 1)
+            self.len = comp_len
+            R 0
+        }
+
+        # Check if we need to add separator
+        needs_sep := 0
+        I self.len > 0 {
+            I load_byte(self.data + self.len - 1) != 47 {
+                needs_sep = 1
+            }
+        }
+
+        # Calculate required size
+        new_len := 0
+        I needs_sep {
+            new_len = self.len + 1 + comp_len
+        } E {
+            new_len = self.len + comp_len
+        }
+
+        # Grow if needed
+        I new_len >= self.cap {
+            new_cap := self.cap * 2
+            L {
+                I new_cap > new_len { B }
+                new_cap = new_cap * 2
+            }
+            new_data := malloc(new_cap)
+            memcpy(new_data, self.data, self.len)
+            free(self.data)
+            self.data = new_data
+            self.cap = new_cap
+        }
+
+        # Append separator if needed
+        I needs_sep {
+            store_byte(self.data + self.len, 47)
+            self.len = self.len + 1
+        }
+
+        # Append component
+        memcpy(self.data + self.len, comp_ptr, comp_len + 1)
+        self.len = self.len + comp_len
+        0
+    }
+
+    F pop(&self) -> i64 {
+        # Find last '/'
+        pos := -1
+        i := self.len - 1
+        L {
+            I i < 0 { B }
+            I load_byte(self.data + i) == 47 {
+                pos = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If no '/', clear path
+        I pos == -1 {
+            self.len = 0
+            store_byte(self.data, 0)
+            R 0
+        }
+
+        # Truncate at last '/'
+        self.len = pos
+        store_byte(self.data + pos, 0)
+        0
+    }
+
+    F as_path(&self) -> Path {
+        Path { data: self.data, len: self.len }
+    }
+
+    F set_extension(&self, ext: str) -> i64 {
+        ext_ptr := str_to_ptr(ext)
+        # Find last '.' after last '/'
+        last_slash := -1
+        last_dot := -1
+        i := self.len - 1
+        L {
+            I i < 0 { B }
+            ch := load_byte(self.data + i)
+            I ch == 46 && last_dot == -1 {
+                last_dot = i
+            }
+            I ch == 47 {
+                last_slash = i
+                B
+            }
+            i = i - 1
+        }
+
+        # If dot found after last slash, truncate there
+        I last_dot > last_slash {
+            self.len = last_dot
+        }
+
+        # Add '.' if extension is non-empty
+        ext_len := strlen(ext_ptr)
+        I ext_len > 0 {
+            # Ensure capacity
+            new_len := self.len + 1 + ext_len
+            I new_len >= self.cap {
+                new_cap := self.cap * 2
+                L {
+                    I new_cap > new_len { B }
+                    new_cap = new_cap * 2
+                }
+                new_data := malloc(new_cap)
+                memcpy(new_data, self.data, self.len)
+                free(self.data)
+                self.data = new_data
+                self.cap = new_cap
+            }
+
+            # Add '.' and extension
+            store_byte(self.data + self.len, 46)
+            self.len = self.len + 1
+            memcpy(self.data + self.len, ext_ptr, ext_len + 1)
+            self.len = self.len + ext_len
+        } E {
+            store_byte(self.data + self.len, 0)
+        }
+        0
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F drop(&self) -> i64 {
+        free(self.data)
+        0
+    }
+}
+
+# Standalone functions
+F path_join(a: str, b: str) -> i64 {
+    a_ptr := str_to_ptr(a)
+    b_ptr := str_to_ptr(b)
+    a_len := strlen(a_ptr)
+    b_len := strlen(b_ptr)
+
+    # If b starts with '/', return copy of b
+    I load_byte(b_ptr) == 47 {
+        result := malloc(b_len + 1)
+        memcpy(result, b_ptr, b_len + 1)
+        R result
+    }
+
+    # Check if a ends with '/'
+    ends_with_slash := 0
+    I a_len > 0 {
+        I load_byte(a_ptr + a_len - 1) == 47 {
+            ends_with_slash = 1
+        }
+    }
+
+    # Calculate new length
+    new_len := 0
+    I ends_with_slash {
+        new_len = a_len + b_len
+    } E {
+        new_len = a_len + 1 + b_len
+    }
+
+    # Allocate and build new path
+    result := malloc(new_len + 1)
+    memcpy(result, a_ptr, a_len)
+
+    I ends_with_slash {
+        memcpy(result + a_len, b_ptr, b_len + 1)
+    } E {
+        store_byte(result + a_len, 47)
+        memcpy(result + a_len + 1, b_ptr, b_len + 1)
+    }
+
+    result
+}
+
+F path_parent(path: str) -> i64 {
+    ptr := str_to_ptr(path)
+    len := strlen(ptr)
+
+    # Find last '/'
+    pos := -1
+    i := len - 1
+    L {
+        I i < 0 { B }
+        I load_byte(ptr + i) == 47 {
+            pos = i
+            B
+        }
+        i = i - 1
+    }
+
+    # If no '/', return "."
+    I pos == -1 {
+        result := malloc(2)
+        store_byte(result, 46)
+        store_byte(result + 1, 0)
+        R result
+    }
+
+    # If '/' is at position 0, return "/"
+    I pos == 0 {
+        result := malloc(2)
+        store_byte(result, 47)
+        store_byte(result + 1, 0)
+        R result
+    }
+
+    # Return substring up to last '/'
+    result := malloc(pos + 1)
+    memcpy(result, ptr, pos)
+    store_byte(result + pos, 0)
+    result
+}
+
+F path_filename(path: str) -> i64 {
+    ptr := str_to_ptr(path)
+    len := strlen(ptr)
+
+    # Find last '/'
+    pos := -1
+    i := len - 1
+    L {
+        I i < 0 { B }
+        I load_byte(ptr + i) == 47 {
+            pos = i
+            B
+        }
+        i = i - 1
+    }
+
+    # If no '/', return copy of path
+    I pos == -1 {
+        result := malloc(len + 1)
+        memcpy(result, ptr, len + 1)
+        R result
+    }
+
+    # Return substring after last '/'
+    start := pos + 1
+    new_len := len - start
+    result := malloc(new_len + 1)
+    memcpy(result, ptr + start, new_len)
+    store_byte(result + new_len, 0)
+    result
+}
+
+F path_extension(path: str) -> i64 {
+    # Get filename first
+    fname := path_filename(path)
+    fname_len := strlen(fname)
+
+    # Find last '.' in filename
+    pos := -1
+    i := fname_len - 1
+    L {
+        I i < 0 { B }
+        I load_byte(fname + i) == 46 {
+            pos = i
+            B
+        }
+        i = i - 1
+    }
+
+    # If no '.', return empty string
+    I pos == -1 || pos == 0 {
+        result := malloc(1)
+        store_byte(result, 0)
+        R result
+    }
+
+    # Return substring after last '.'
+    start := pos + 1
+    new_len := fname_len - start
+    result := malloc(new_len + 1)
+    memcpy(result, fname + start, new_len)
+    store_byte(result + new_len, 0)
+    result
+}
+
+F path_stem(path: str) -> i64 {
+    # Get filename
+    fname := path_filename(path)
+    fname_len := strlen(fname)
+
+    # Find last '.' in filename
+    pos := -1
+    i := fname_len - 1
+    L {
+        I i < 0 { B }
+        I load_byte(fname + i) == 46 {
+            pos = i
+            B
+        }
+        i = i - 1
+    }
+
+    # If no '.', return filename
+    I pos == -1 || pos == 0 {
+        R fname
+    }
+
+    # Return substring before last '.'
+    result := malloc(pos + 1)
+    memcpy(result, fname, pos)
+    store_byte(result + pos, 0)
+    result
+}
+
+F path_is_absolute(path: str) -> i64 {
+    ptr := str_to_ptr(path)
+    len := strlen(ptr)
+    I len > 0 {
+        I load_byte(ptr) == 47 { 1 } E { 0 }
+    } E {
+        0
+    }
+}
+
+F path_separator() -> i64 {
+    47  # '/' on Unix
+}

@@ -9,6 +9,12 @@ mod backend;
 mod diagnostics;
 mod semantic;
 
+// Backend module extensions
+mod analysis;
+mod folding;
+mod hints;
+mod symbol_analysis;
+
 use backend::VaisBackend;
 
 #[tokio::main]
