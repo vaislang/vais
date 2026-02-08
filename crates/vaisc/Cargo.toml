@@ -46,7 +46,7 @@ toml = "0.9"
 notify = "8"
 
 # Registry support
-ureq = { version = "2.12", features = ["gzip", "json"] }
+ureq = { version = "3.2", features = ["gzip", "json"] }
 flate2 = { workspace = true }
 tar = { workspace = true }
 dirs = "6"
