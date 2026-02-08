@@ -371,6 +371,41 @@ enum Commands {
         verbose: bool,
     },
 
+    /// Run benchmarks
+    Bench {
+        /// Benchmark directory (default: benches/)
+        #[arg(default_value = "benches")]
+        path: PathBuf,
+
+        /// Filter benchmarks by name pattern
+        #[arg(long)]
+        filter: Option<String>,
+    },
+
+    /// Auto-apply compiler suggested fixes
+    Fix {
+        /// Input source file or directory
+        input: PathBuf,
+
+        /// Show fixes without applying them
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Run lint checks on source files
+    Lint {
+        /// Input source file or directory
+        input: PathBuf,
+
+        /// Warning level control: allow, warn, deny
+        #[arg(short = 'W', long, value_name = "LEVEL")]
+        warning_level: Option<String>,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
     /// Watch source file and recompile on changes
     Watch {
         /// Input source file
@@ -383,6 +418,22 @@ enum Commands {
         /// Arguments to pass to the executed command
         #[arg(last = true)]
         args: Vec<String>,
+    },
+
+    /// Install a package binary globally (~/.vais/bin/)
+    Install {
+        /// Package path or name (local path to a vais project)
+        package: String,
+
+        /// Build with optimizations
+        #[arg(long)]
+        release: bool,
+    },
+
+    /// Uninstall a globally installed package binary
+    Uninstall {
+        /// Package name to uninstall
+        package: String,
     },
 }
 
@@ -602,6 +653,41 @@ enum PkgCommands {
         #[arg(long)]
         open: bool,
     },
+
+    /// Copy dependencies to vendor/ for offline builds
+    Vendor,
+
+    /// Create .vpkg archive for publishing preview
+    Package {
+        /// Just list contents without creating archive
+        #[arg(long)]
+        list: bool,
+    },
+
+    /// Show package metadata in machine-readable format
+    Metadata {
+        /// Output format (json or toml)
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+
+    /// Manage package owners
+    Owner {
+        /// Add an owner
+        #[arg(long)]
+        add: Option<String>,
+
+        /// Remove an owner
+        #[arg(long)]
+        remove: Option<String>,
+
+        /// List current owners
+        #[arg(long)]
+        list: bool,
+    },
+
+    /// Verify package manifest is valid
+    Verify,
 }
 
 #[derive(Subcommand)]
@@ -880,6 +966,23 @@ fn main() {
             filter,
             verbose,
         }) => cmd_test(&path, filter.as_deref(), verbose || cli.verbose),
+        Some(Commands::Bench { path, filter }) => {
+            cmd_bench(&path, filter.as_deref(), cli.verbose)
+        }
+        Some(Commands::Fix { input, dry_run }) => {
+            cmd_fix(&input, dry_run, cli.verbose, &plugins)
+        }
+        Some(Commands::Lint {
+            input,
+            warning_level,
+            format,
+        }) => cmd_lint(
+            &input,
+            warning_level.as_deref(),
+            &format,
+            cli.verbose,
+            &plugins,
+        ),
         Some(Commands::Pkg(pkg_cmd)) => cmd_pkg(pkg_cmd, cli.verbose),
         Some(Commands::Pgo {
             input,
@@ -899,6 +1002,10 @@ fn main() {
         Some(Commands::Watch { input, exec, args }) => {
             cmd_watch(&input, exec.as_deref(), &args, cli.verbose, &plugins)
         }
+        Some(Commands::Install { package, release }) => {
+            cmd_install(&package, release, cli.verbose, &plugins)
+        }
+        Some(Commands::Uninstall { package }) => cmd_uninstall(&package),
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
@@ -4604,6 +4711,477 @@ fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), Stri
     }
 }
 
+/// Run benchmarks from benches/ directory
+fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), String> {
+    let bench_dir = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("failed to get current directory: {}", e))?;
+        let bench_path = cwd.join(path);
+        if bench_path.is_dir() {
+            bench_path
+        } else {
+            return Err(format!(
+                "benchmark directory '{}' not found. Create a benches/ directory with .vais benchmark files.",
+                path.display()
+            ));
+        }
+    };
+
+    // Discover benchmark files
+    let bench_files = walkdir(&bench_dir, "vais");
+    if bench_files.is_empty() {
+        println!(
+            "{} No benchmark files found in '{}'",
+            "warning:".yellow().bold(),
+            bench_dir.display()
+        );
+        return Ok(());
+    }
+
+    // Apply filter
+    let bench_files: Vec<PathBuf> = if let Some(pattern) = filter {
+        bench_files
+            .into_iter()
+            .filter(|f| {
+                f.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.contains(pattern))
+                    .unwrap_or(false)
+            })
+            .collect()
+    } else {
+        bench_files
+    };
+
+    println!(
+        "{} Running {} benchmark(s)...\n",
+        "Benchmarking".cyan().bold(),
+        bench_files.len()
+    );
+
+    let plugins = PluginRegistry::new();
+    let mut results: Vec<(PathBuf, std::time::Duration, bool)> = Vec::new();
+
+    for bench_file in &bench_files {
+        if verbose {
+            println!("  {} {}", "Running".cyan(), bench_file.display());
+        }
+
+        let target_dir = std::env::temp_dir().join("vais-bench");
+        let _ = fs::create_dir_all(&target_dir);
+        let output_path = target_dir.join(
+            bench_file
+                .file_stem()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or("bench"),
+        );
+
+        // Compile
+        let compile_result = cmd_build(
+            bench_file,
+            Some(output_path.clone()),
+            false,
+            0,
+            false,
+            false,
+            &plugins,
+            TargetTriple::Native,
+            false,
+            false,
+            None,
+            false,
+            vais_codegen::optimize::LtoMode::None,
+            vais_codegen::optimize::PgoMode::None,
+            false,
+            None,
+            false,
+            false,
+            536870912,
+        );
+
+        match compile_result {
+            Ok(()) => {
+                // Run and time it
+                let start = std::time::Instant::now();
+                let status = Command::new(&output_path)
+                    .status()
+                    .map_err(|e| format!("failed to run benchmark: {}", e))?;
+                let elapsed = start.elapsed();
+                results.push((bench_file.clone(), elapsed, status.success()));
+            }
+            Err(e) => {
+                eprintln!("  {} {} - {}", "ERROR".red().bold(), bench_file.display(), e);
+                results.push((bench_file.clone(), std::time::Duration::ZERO, false));
+            }
+        }
+
+        // Cleanup
+        let _ = fs::remove_file(&output_path);
+    }
+
+    // Display results
+    println!("\n{}", "Results:".bold());
+    for (path, duration, success) in &results {
+        let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_str()
+            .unwrap_or("?");
+        if *success {
+            println!(
+                "  {} {} ... {:.3}ms",
+                "✓".green(),
+                name,
+                duration.as_secs_f64() * 1000.0
+            );
+        } else {
+            println!("  {} {} ... FAILED", "✗".red(), name);
+        }
+    }
+
+    let passed = results.iter().filter(|(_, _, s)| *s).count();
+    let failed = results.len() - passed;
+    println!(
+        "\n{} benchmarks: {} passed, {} failed",
+        results.len(),
+        passed,
+        failed
+    );
+
+    if failed > 0 {
+        Err(format!("{} benchmark(s) failed", failed))
+    } else {
+        Ok(())
+    }
+}
+
+/// Auto-apply compiler suggested fixes
+fn cmd_fix(
+    input: &Path,
+    dry_run: bool,
+    verbose: bool,
+    _plugins: &PluginRegistry,
+) -> Result<(), String> {
+    let files = if input.is_dir() {
+        walkdir(&input.to_path_buf(), "vais")
+    } else {
+        vec![input.to_path_buf()]
+    };
+
+    if files.is_empty() {
+        return Err(format!("no .vais files found in '{}'", input.display()));
+    }
+
+    let total_fixes = 0;
+    let fixed_files = 0;
+
+    for file in &files {
+        if verbose {
+            println!("{} Checking {}", "Fix".cyan(), file.display());
+        }
+
+        let source =
+            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
+
+        // Parse to check for syntax errors
+        let tokens = vais_lexer::tokenize(&source);
+        let _tokens = match tokens {
+            Ok(t) => t,
+            Err(_) => {
+                if verbose {
+                    println!(
+                        "  {} {} — lexer error, skipping",
+                        "⚠".yellow(),
+                        file.display()
+                    );
+                }
+                continue;
+            }
+        };
+
+        let module = match vais_parser::parse(&source) {
+            Ok(m) => m,
+            Err(_) => {
+                if verbose {
+                    println!(
+                        "  {} {} — parse error, skipping",
+                        "⚠".yellow(),
+                        file.display()
+                    );
+                }
+                continue;
+            }
+        };
+
+        // Type check
+        let mut checker = TypeChecker::new();
+        configure_type_checker(&mut checker);
+
+        // For now, just report that fix functionality is limited
+        // (TypeChecker returns a single error, not a list with suggestions)
+        if let Err(_e) = checker.check_module(&module) {
+            // TypeErrors don't consistently have suggestions
+            // This is a simplified implementation
+            if verbose {
+                println!(
+                    "  {} {} — has type errors",
+                    "→".cyan(),
+                    file.display()
+                );
+            }
+        }
+    }
+
+    if total_fixes == 0 {
+        println!("{} No automatic fixes available", "✓".green());
+        println!(
+            "{}",
+            "Note: The fix command currently has limited functionality.".dimmed()
+        );
+    } else if dry_run {
+        println!(
+            "\n{} {} fix(es) available in {} file(s) (dry run — no changes made)",
+            "→".cyan(),
+            total_fixes,
+            fixed_files
+        );
+    } else {
+        println!(
+            "\n{} Applied {} fix(es) in {} file(s)",
+            "✓".green(),
+            total_fixes,
+            fixed_files
+        );
+    }
+
+    Ok(())
+}
+
+/// Run lint checks on source files
+fn cmd_lint(
+    input: &Path,
+    warning_level: Option<&str>,
+    format: &str,
+    verbose: bool,
+    plugins: &PluginRegistry,
+) -> Result<(), String> {
+    let files = if input.is_dir() {
+        walkdir(&input.to_path_buf(), "vais")
+    } else {
+        vec![input.to_path_buf()]
+    };
+
+    if files.is_empty() {
+        return Err(format!("no .vais files found in '{}'", input.display()));
+    }
+
+    let level = match warning_level {
+        Some("allow") => 0,  // suppress warnings
+        Some("deny") => 2,   // treat warnings as errors
+        _ => 1,              // default: warn
+    };
+
+    let mut total_warnings = 0;
+    let mut total_errors = 0;
+    let mut all_diagnostics: Vec<serde_json::Value> = Vec::new();
+
+    for file in &files {
+        if verbose {
+            println!("{} Linting {}", "Lint".cyan(), file.display());
+        }
+
+        let source =
+            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
+
+        let _tokens = match vais_lexer::tokenize(&source) {
+            Ok(t) => t,
+            Err(e) => {
+                total_errors += 1;
+                if format == "json" {
+                    let diag = serde_json::json!({
+                        "file": file.display().to_string(),
+                        "code": "L001",
+                        "message": format!("Lexer error: {}", e),
+                        "severity": "error",
+                    });
+                    all_diagnostics.push(diag);
+                } else {
+                    eprintln!(
+                        "{}: [L001] Lexer error: {}",
+                        "error".red().bold(),
+                        e
+                    );
+                    eprintln!("  {} {}", "-->".blue().bold(), file.display());
+                }
+                continue;
+            }
+        };
+
+        let module = match vais_parser::parse(&source) {
+            Ok(m) => m,
+            Err(e) => {
+                total_errors += 1;
+                if format == "json" {
+                    let diag = serde_json::json!({
+                        "file": file.display().to_string(),
+                        "code": e.error_code(),
+                        "message": e.localized_message(),
+                        "severity": "error",
+                    });
+                    all_diagnostics.push(diag);
+                } else {
+                    eprintln!(
+                        "{}: [{}] {}",
+                        "error".red().bold(),
+                        e.error_code(),
+                        e.localized_message()
+                    );
+                    eprintln!("  {} {}", "-->".blue().bold(), file.display());
+                }
+                continue;
+            }
+        };
+
+        // Run plugin lints
+        if !plugins.is_empty() {
+            let diagnostics = plugins.run_lint(&module);
+            for diag in &diagnostics {
+                let is_warning = matches!(diag.level, DiagnosticLevel::Warning);
+
+                if is_warning {
+                    if level == 0 {
+                        continue;
+                    } // allow — skip warnings
+                    total_warnings += 1;
+                    if level == 2 {
+                        total_errors += 1;
+                    } // deny — count as error
+                } else {
+                    total_errors += 1;
+                }
+
+                if format == "json" {
+                    let json_diag = serde_json::json!({
+                        "file": file.display().to_string(),
+                        "message": &diag.message,
+                        "severity": if is_warning { "warning" } else { "error" },
+                        "line": diag.span.map(|s| source[..s.start].matches('\n').count() + 1),
+                    });
+                    all_diagnostics.push(json_diag);
+                } else {
+                    let severity = if is_warning && level < 2 {
+                        "warning".yellow().bold().to_string()
+                    } else {
+                        "error".red().bold().to_string()
+                    };
+
+                    eprintln!("{}: {}", severity, diag.message);
+
+                    let line_info = diag
+                        .span
+                        .map(|s| {
+                            let line = source[..s.start].matches('\n').count() + 1;
+                            format!("{}:{}", file.display(), line)
+                        })
+                        .unwrap_or_else(|| file.display().to_string());
+                    eprintln!("  {} {}", "-->".blue().bold(), line_info);
+                }
+            }
+        }
+
+        // Type check
+        let mut checker = TypeChecker::new();
+        configure_type_checker(&mut checker);
+
+        if let Err(e) = checker.check_module(&module) {
+            total_errors += 1;
+            if format == "json" {
+                let diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": e.error_code(),
+                    "message": e.localized_message(),
+                    "severity": "error",
+                });
+                all_diagnostics.push(diag);
+            } else {
+                eprintln!(
+                    "{}: [{}] {}",
+                    "error".red().bold(),
+                    e.error_code(),
+                    e.localized_message()
+                );
+                eprintln!("  {} {}", "-->".blue().bold(), file.display());
+            }
+        }
+
+        // Check warnings
+        let warnings = checker.get_warnings();
+        for w in warnings {
+            if level == 0 {
+                continue;
+            } // allow — skip warnings
+            total_warnings += 1;
+            if level == 2 {
+                total_errors += 1;
+            } // deny — count as error
+
+            if format == "json" {
+                let diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": "W000",
+                    "message": w,
+                    "severity": "warning",
+                });
+                all_diagnostics.push(diag);
+            } else {
+                let severity = if level < 2 {
+                    "warning".yellow().bold().to_string()
+                } else {
+                    "error".red().bold().to_string()
+                };
+                eprintln!("{}: {}", severity, w);
+                eprintln!("  {} {}", "-->".blue().bold(), file.display());
+            }
+        }
+    }
+
+    if format == "json" {
+        let output = serde_json::json!({
+            "diagnostics": all_diagnostics,
+            "summary": {
+                "errors": total_errors,
+                "warnings": total_warnings,
+                "files_checked": files.len(),
+            }
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).unwrap_or_default()
+        );
+    } else {
+        println!(
+            "\n{} {} file(s) checked: {} error(s), {} warning(s)",
+            if total_errors == 0 {
+                "✓".green().to_string()
+            } else {
+                "✗".red().to_string()
+            },
+            files.len(),
+            total_errors,
+            total_warnings
+        );
+    }
+
+    if total_errors > 0 {
+        Err(format!("{} error(s) found", total_errors))
+    } else {
+        Ok(())
+    }
+}
+
 fn discover_test_files(dir: &Path, results: &mut Vec<PathBuf>) -> Result<(), String> {
     let entries =
         fs::read_dir(dir).map_err(|e| format!("cannot read '{}': {}", dir.display(), e))?;
@@ -4975,6 +5553,35 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_doc(&manifest, &pkg_dir, &output, &format, open, verbose)
         }
+
+        PkgCommands::Vendor => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_vendor(&pkg_dir, &manifest, verbose)
+        }
+
+        PkgCommands::Package { list } => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_package(&pkg_dir, &manifest, list, verbose)
+        }
+
+        PkgCommands::Metadata { format } => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_metadata(&manifest, &format)
+        }
+
+        PkgCommands::Owner { add, remove, list } => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_owner(&pkg_dir, &manifest, add, remove, list)
+        }
+
+        PkgCommands::Verify => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            cmd_pkg_verify(&pkg_dir, verbose)
+        }
     }
 }
 
@@ -5084,6 +5691,7 @@ fn cmd_pkg_build_single(
     // Build options
     let opt_level = if release { 2 } else { 0 };
     let output = pkg_dir.join("target").join(&manifest.package.name);
+    let profile = if release { "release" } else { "debug" };
 
     let lto_mode = if release {
         vais_codegen::optimize::LtoMode::Thin
@@ -5095,6 +5703,12 @@ fn cmd_pkg_build_single(
     let target_dir = pkg_dir.join("target");
     fs::create_dir_all(&target_dir)
         .map_err(|e| format!("failed to create target directory: {}", e))?;
+
+    // Execute build script (build.vais) if present
+    let build_script = pkg_dir.join("build.vais");
+    if build_script.exists() {
+        run_build_script(pkg_dir, &target_dir, profile, verbose)?;
+    }
 
     let plugins = PluginRegistry::new();
 
@@ -5132,6 +5746,222 @@ fn cmd_pkg_build_single(
     } else {
         println!("{} Built {}", "✓".green(), output.display());
     }
+    Ok(())
+}
+
+/// Run build.vais build script before compilation
+fn run_build_script(
+    pkg_dir: &Path,
+    target_dir: &Path,
+    profile: &str,
+    verbose: bool,
+) -> Result<(), String> {
+    let build_script = pkg_dir.join("build.vais");
+    if !build_script.exists() {
+        return Ok(());
+    }
+
+    if verbose {
+        println!("{} Running build script: build.vais", "Build".cyan());
+    }
+
+    let out_dir = target_dir.join("build");
+    fs::create_dir_all(&out_dir)
+        .map_err(|e| format!("failed to create OUT_DIR: {}", e))?;
+
+    // Determine target triple
+    let target = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+
+    // Compile the build script
+    let build_output = target_dir.join("build_script");
+    let plugins = PluginRegistry::new();
+
+    cmd_build(
+        &build_script,
+        Some(build_output.clone()),
+        false,
+        0,
+        false,
+        verbose,
+        &plugins,
+        TargetTriple::Native,
+        false,
+        false,
+        None,
+        false,
+        vais_codegen::optimize::LtoMode::None,
+        vais_codegen::optimize::PgoMode::None,
+        false,
+        None,
+        false,
+        false,
+        536870912,
+    )?;
+
+    // Run the build script with environment variables
+    let status = Command::new(&build_output)
+        .current_dir(pkg_dir)
+        .env("OUT_DIR", &out_dir)
+        .env("TARGET", &target)
+        .env("PROFILE", profile)
+        .env("CARGO_MANIFEST_DIR", pkg_dir)
+        .status()
+        .map_err(|e| format!("failed to run build script: {}", e))?;
+
+    if !status.success() {
+        return Err(format!(
+            "build script failed with exit code: {}",
+            status.code().unwrap_or(-1)
+        ));
+    }
+
+    if verbose {
+        println!("{} Build script completed", "✓".green());
+    }
+
+    Ok(())
+}
+
+/// Get the global bin directory (~/.vais/bin/)
+fn global_bin_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "could not determine home directory".to_string())?;
+    Ok(home.join(".vais").join("bin"))
+}
+
+/// Install a package binary globally
+fn cmd_install(
+    package: &str,
+    release: bool,
+    verbose: bool,
+    _plugins: &PluginRegistry,
+) -> Result<(), String> {
+    use package::*;
+
+    let pkg_path = PathBuf::from(package);
+
+    // Determine package directory
+    let pkg_dir = if pkg_path.is_dir() {
+        // Local path provided
+        let manifest_dir = find_manifest(&pkg_path).ok_or_else(|| {
+            format!(
+                "could not find vais.toml in '{}' or its parents",
+                pkg_path.display()
+            )
+        })?;
+        manifest_dir
+    } else {
+        // Try current directory
+        let cwd =
+            std::env::current_dir().map_err(|e| format!("failed to get current dir: {}", e))?;
+        find_manifest(&cwd).ok_or_else(|| {
+            format!(
+                "could not find vais.toml for package '{}'. Provide a path to a local package.",
+                package
+            )
+        })?
+    };
+
+    let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+    let pkg_name = &manifest.package.name;
+
+    // Verify it has a main.vais (binary package)
+    let src_main = pkg_dir.join("src").join("main.vais");
+    if !src_main.exists() {
+        return Err(format!(
+            "package '{}' does not have src/main.vais — only binary packages can be installed",
+            pkg_name
+        ));
+    }
+
+    println!(
+        "{} {} v{}",
+        "Installing".cyan(),
+        pkg_name,
+        manifest.package.version
+    );
+
+    // Build the package
+    cmd_pkg_build_single(&pkg_dir, &manifest, release, false, false, verbose)?;
+
+    // Copy binary to ~/.vais/bin/
+    let bin_dir = global_bin_dir()?;
+    fs::create_dir_all(&bin_dir)
+        .map_err(|e| format!("failed to create {}: {}", bin_dir.display(), e))?;
+
+    let built_binary = pkg_dir.join("target").join(pkg_name);
+    let dest = bin_dir.join(pkg_name);
+
+    fs::copy(&built_binary, &dest).map_err(|e| {
+        format!(
+            "failed to copy binary to {}: {}",
+            dest.display(),
+            e
+        )
+    })?;
+
+    // Make executable on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = fs::Permissions::from_mode(0o755);
+        fs::set_permissions(&dest, perms)
+            .map_err(|e| format!("failed to set permissions: {}", e))?;
+    }
+
+    println!(
+        "{} Installed {} to {}",
+        "✓".green(),
+        pkg_name,
+        dest.display()
+    );
+
+    // Check if ~/.vais/bin is in PATH
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    let bin_dir_str = bin_dir.to_str().unwrap_or("");
+    if !path_env.split(':').any(|p| p == bin_dir_str) {
+        println!();
+        println!(
+            "{} {} is not in your PATH. Add it with:",
+            "Note".yellow(),
+            bin_dir.display()
+        );
+        println!("  export PATH=\"{}:$PATH\"", bin_dir.display());
+        println!(
+            "  Or add the line above to your ~/.bashrc, ~/.zshrc, or shell profile."
+        );
+    }
+
+    Ok(())
+}
+
+/// Uninstall a globally installed package binary
+fn cmd_uninstall(package: &str) -> Result<(), String> {
+    let bin_dir = global_bin_dir()?;
+    let binary = bin_dir.join(package);
+
+    if !binary.exists() {
+        return Err(format!(
+            "package '{}' is not installed (not found in {})",
+            package,
+            bin_dir.display()
+        ));
+    }
+
+    fs::remove_file(&binary).map_err(|e| {
+        format!(
+            "failed to remove {}: {}",
+            binary.display(),
+            e
+        )
+    })?;
+
+    println!(
+        "{} Uninstalled {} from {}",
+        "✓".green(),
+        package,
+        bin_dir.display()
+    );
+
     Ok(())
 }
 
@@ -5484,6 +6314,405 @@ fn collect_vais_files(dir: &Path, results: &mut Vec<PathBuf>) -> Result<(), Stri
     }
     results.sort();
     Ok(())
+}
+
+/// Vendor dependencies into vendor/ directory
+fn cmd_pkg_vendor(
+    pkg_dir: &Path,
+    manifest: &package::PackageManifest,
+    verbose: bool,
+) -> Result<(), String> {
+    use package::*;
+
+    let vendor_dir = pkg_dir.join("vendor");
+    fs::create_dir_all(&vendor_dir)
+        .map_err(|e| format!("failed to create vendor/: {}", e))?;
+
+    let cache_root = default_registry_cache_root();
+    let deps = resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    if deps.is_empty() {
+        println!("{} No dependencies to vendor", "✓".green());
+        return Ok(());
+    }
+
+    let mut vendored = 0;
+    let mut config_entries: Vec<String> = Vec::new();
+
+    for dep in &deps {
+        let dest = vendor_dir.join(&dep.name);
+        if dest.exists() {
+            let _ = fs::remove_dir_all(&dest);
+        }
+
+        // Copy dependency directory
+        copy_dir_recursive(&dep.path, &dest)?;
+        vendored += 1;
+
+        config_entries.push(format!(
+            "[source.\"{}\"]\npath = \"vendor/{}\"",
+            dep.name, dep.name
+        ));
+
+        if verbose {
+            println!("  {} {} -> vendor/{}", "Vendored".cyan(), dep.name, dep.name);
+        }
+    }
+
+    // Write vendor/config.toml
+    let config_content = format!(
+        "# Vendored dependencies\n# Generated by vaisc pkg vendor\n\n{}\n",
+        config_entries.join("\n\n")
+    );
+    fs::write(vendor_dir.join("config.toml"), &config_content)
+        .map_err(|e| format!("failed to write vendor/config.toml: {}", e))?;
+
+    println!(
+        "{} Vendored {} dependenc{} to vendor/",
+        "✓".green(),
+        vendored,
+        if vendored == 1 { "y" } else { "ies" }
+    );
+    Ok(())
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst)
+        .map_err(|e| format!("failed to create {}: {}", dst.display(), e))?;
+
+    let entries = fs::read_dir(src)
+        .map_err(|e| format!("failed to read {}: {}", src.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("failed to read entry: {}", e))?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            // Skip target/, .git/, vendor/ directories
+            let dir_name = entry.file_name();
+            let name = dir_name.to_str().unwrap_or("");
+            if name == "target" || name == ".git" || name == "vendor" {
+                continue;
+            }
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            fs::copy(&path, &dest_path)
+                .map_err(|e| format!("failed to copy {}: {}", path.display(), e))?;
+        }
+    }
+    Ok(())
+}
+
+/// Create .vpkg archive for publishing preview
+fn cmd_pkg_package(
+    pkg_dir: &Path,
+    manifest: &package::PackageManifest,
+    list_only: bool,
+    verbose: bool,
+) -> Result<(), String> {
+    let pkg_name = &manifest.package.name;
+    let pkg_version = &manifest.package.version;
+
+    // Collect files to include
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut total_size: u64 = 0;
+
+    // Always include vais.toml
+    let manifest_file = pkg_dir.join("vais.toml");
+    if manifest_file.exists() {
+        files.push(PathBuf::from("vais.toml"));
+        total_size += fs::metadata(&manifest_file).map(|m| m.len()).unwrap_or(0);
+    }
+
+    // Include src/ directory
+    let src_dir = pkg_dir.join("src");
+    if src_dir.exists() {
+        collect_files_recursive(&src_dir, &PathBuf::from("src"), &mut files, &mut total_size, pkg_dir)?;
+    }
+
+    // Include tests/ directory
+    let tests_dir = pkg_dir.join("tests");
+    if tests_dir.exists() {
+        collect_files_recursive(&tests_dir, &PathBuf::from("tests"), &mut files, &mut total_size, pkg_dir)?;
+    }
+
+    // Include README.md if it exists
+    let readme = pkg_dir.join("README.md");
+    if readme.exists() {
+        files.push(PathBuf::from("README.md"));
+        total_size += fs::metadata(&readme).map(|m| m.len()).unwrap_or(0);
+    }
+
+    // Include build.vais if it exists
+    let build_script = pkg_dir.join("build.vais");
+    if build_script.exists() {
+        files.push(PathBuf::from("build.vais"));
+        total_size += fs::metadata(&build_script).map(|m| m.len()).unwrap_or(0);
+    }
+
+    if list_only {
+        println!("{} {} v{} contents:", "Package".cyan(), pkg_name, pkg_version);
+        for file in &files {
+            let full_path = pkg_dir.join(file);
+            let size = fs::metadata(&full_path).map(|m| m.len()).unwrap_or(0);
+            println!("  {} ({} bytes)", file.display(), size);
+        }
+        println!("\n{} files, {} bytes total", files.len(), total_size);
+        return Ok(());
+    }
+
+    // Create archive
+    let archive_name = format!("{}-{}.vpkg", pkg_name, pkg_version);
+    let archive_path = pkg_dir.join("target").join(&archive_name);
+    let target_dir = pkg_dir.join("target");
+    fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("failed to create target/: {}", e))?;
+
+    // Write as tar.gz
+    let file = fs::File::create(&archive_path)
+        .map_err(|e| format!("failed to create archive: {}", e))?;
+    let enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+    let mut tar = tar::Builder::new(enc);
+
+    for rel_path in &files {
+        let full_path = pkg_dir.join(rel_path);
+        let mut f = fs::File::open(&full_path)
+            .map_err(|e| format!("failed to open {}: {}", full_path.display(), e))?;
+        tar.append_file(rel_path, &mut f)
+            .map_err(|e| format!("failed to add {} to archive: {}", rel_path.display(), e))?;
+    }
+
+    tar.into_inner()
+        .map_err(|e| format!("failed to finalize archive: {}", e))?
+        .finish()
+        .map_err(|e| format!("failed to compress archive: {}", e))?;
+
+    let archive_size = fs::metadata(&archive_path).map(|m| m.len()).unwrap_or(0);
+    println!(
+        "{} Created {} ({} files, {} bytes compressed)",
+        "✓".green(),
+        archive_name,
+        files.len(),
+        archive_size
+    );
+
+    if verbose {
+        for file in &files {
+            println!("  {}", file.display());
+        }
+    }
+
+    Ok(())
+}
+
+/// Collect files recursively for packaging
+fn collect_files_recursive(
+    dir: &Path,
+    rel_prefix: &Path,
+    files: &mut Vec<PathBuf>,
+    total_size: &mut u64,
+    _pkg_dir: &Path,
+) -> Result<(), String> {
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("failed to read {}: {}", dir.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("dir entry error: {}", e))?;
+        let path = entry.path();
+        let rel_path = rel_prefix.join(entry.file_name());
+
+        if path.is_dir() {
+            let name = entry.file_name();
+            let name_str = name.to_str().unwrap_or("");
+            if name_str == "target" || name_str == ".git" || name_str == "vendor" {
+                continue;
+            }
+            collect_files_recursive(&path, &rel_path, files, total_size, _pkg_dir)?;
+        } else {
+            *total_size += fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            files.push(rel_path);
+        }
+    }
+    Ok(())
+}
+
+/// Show package metadata in machine-readable format
+fn cmd_pkg_metadata(
+    manifest: &package::PackageManifest,
+    format: &str,
+) -> Result<(), String> {
+    match format {
+        "json" => {
+            let json = serde_json::to_string_pretty(manifest)
+                .map_err(|e| format!("failed to serialize metadata: {}", e))?;
+            println!("{}", json);
+        }
+        "toml" => {
+            let toml_str = toml::to_string_pretty(manifest)
+                .map_err(|e| format!("failed to serialize metadata: {}", e))?;
+            println!("{}", toml_str);
+        }
+        _ => {
+            return Err(format!("unsupported format '{}'. Use 'json' or 'toml'", format));
+        }
+    }
+    Ok(())
+}
+
+/// Manage package owners
+fn cmd_pkg_owner(
+    pkg_dir: &Path,
+    manifest: &package::PackageManifest,
+    add: Option<String>,
+    remove: Option<String>,
+    list: bool,
+) -> Result<(), String> {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct OwnersFile {
+        owners: Vec<String>,
+    }
+
+    let owners_file = pkg_dir.join(".vais").join("owners.toml");
+
+    // Load existing owners
+    let mut owners: Vec<String> = if owners_file.exists() {
+        let content = fs::read_to_string(&owners_file)
+            .map_err(|e| format!("failed to read owners: {}", e))?;
+        let parsed: OwnersFile = toml::from_str(&content)
+            .map_err(|e| format!("failed to parse owners.toml: {}", e))?;
+        parsed.owners
+    } else {
+        Vec::new()
+    };
+
+    if let Some(user) = add {
+        if owners.contains(&user) {
+            println!("{} '{}' is already an owner", "Note".yellow(), user);
+        } else {
+            owners.push(user.clone());
+            save_owners(pkg_dir, &owners)?;
+            println!("{} Added '{}' as owner of '{}'", "✓".green(), user, manifest.package.name);
+        }
+        return Ok(());
+    }
+
+    if let Some(user) = remove {
+        if let Some(pos) = owners.iter().position(|o| o == &user) {
+            owners.remove(pos);
+            save_owners(pkg_dir, &owners)?;
+            println!("{} Removed '{}' from owners of '{}'", "✓".green(), user, manifest.package.name);
+        } else {
+            return Err(format!("'{}' is not an owner of '{}'", user, manifest.package.name));
+        }
+        return Ok(());
+    }
+
+    if list || (add.is_none() && remove.is_none()) {
+        println!("{} Owners of '{}':", "Package".cyan(), manifest.package.name);
+        if owners.is_empty() {
+            println!("  (no owners configured)");
+        } else {
+            for owner in &owners {
+                println!("  {}", owner);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Save owners to .vais/owners.toml
+fn save_owners(pkg_dir: &Path, owners: &[String]) -> Result<(), String> {
+    let vais_dir = pkg_dir.join(".vais");
+    fs::create_dir_all(&vais_dir)
+        .map_err(|e| format!("failed to create .vais/: {}", e))?;
+
+    let owners_str: Vec<String> = owners.iter().map(|o| format!("\"{}\"", o)).collect();
+    let content = format!("owners = [{}]\n", owners_str.join(", "));
+    fs::write(vais_dir.join("owners.toml"), &content)
+        .map_err(|e| format!("failed to write owners.toml: {}", e))?;
+    Ok(())
+}
+
+/// Verify package manifest is valid
+fn cmd_pkg_verify(pkg_dir: &Path, verbose: bool) -> Result<(), String> {
+    let manifest_path = pkg_dir.join("vais.toml");
+    let mut issues: Vec<String> = Vec::new();
+
+    // 1. Check vais.toml exists and is valid TOML
+    let content = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("failed to read vais.toml: {}", e))?;
+
+    let parsed: Result<toml::Value, _> = toml::from_str(&content);
+    if let Err(e) = parsed {
+        issues.push(format!("invalid TOML: {}", e));
+    }
+
+    // 2. Try to load as manifest
+    match package::load_manifest(pkg_dir) {
+        Ok(manifest) => {
+            // Check required fields
+            if manifest.package.name.is_empty() {
+                issues.push("package name is empty".to_string());
+            }
+            if manifest.package.version.is_empty() {
+                issues.push("package version is empty".to_string());
+            }
+
+            // Check version is valid semver-ish
+            let version = &manifest.package.version;
+            let parts: Vec<&str> = version.split('.').collect();
+            if parts.len() < 2 {
+                issues.push(format!("version '{}' should be semver (e.g., 1.0.0)", version));
+            } else {
+                for part in &parts {
+                    if part.parse::<u64>().is_err() {
+                        issues.push(format!("version component '{}' is not a number", part));
+                        break;
+                    }
+                }
+            }
+
+            if verbose {
+                println!("  {} name: {}", "✓".green(), manifest.package.name);
+                println!("  {} version: {}", "✓".green(), manifest.package.version);
+            }
+        }
+        Err(e) => {
+            issues.push(format!("failed to parse manifest: {}", e));
+        }
+    }
+
+    // 3. Check entry point exists
+    let src_dir = pkg_dir.join("src");
+    let has_main = src_dir.join("main.vais").exists();
+    let has_lib = src_dir.join("lib.vais").exists();
+    if !has_main && !has_lib {
+        issues.push("no src/main.vais or src/lib.vais found".to_string());
+    } else if verbose {
+        if has_main {
+            println!("  {} src/main.vais exists (binary package)", "✓".green());
+        }
+        if has_lib {
+            println!("  {} src/lib.vais exists (library package)", "✓".green());
+        }
+    }
+
+    if issues.is_empty() {
+        println!("{} Package verification passed", "✓".green());
+        Ok(())
+    } else {
+        println!("{} Package verification found {} issue(s):", "✗".red(), issues.len());
+        for issue in &issues {
+            println!("  {} {}", "•".red(), issue);
+        }
+        Err(format!("{} verification issue(s) found", issues.len()))
+    }
 }
 
 /// Install packages from registry

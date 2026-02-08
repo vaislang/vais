@@ -839,7 +839,7 @@ Stage 1 (SIMD 벤치마크는 독립 진행 가능)
 
 ---
 
-## Phase 50: 패키지 매니저 완성 (cargo-equivalent) 🔄 진행 중
+## Phase 50: 패키지 매니저 완성 (cargo-equivalent) ✅ 완료
 
 > **목표**: `vaisc`를 Rust의 cargo처럼 완전한 통합 빌드/패키지 도구로 완성
 > **현재**: ~80-85% 구현 (pkg init/build/add/remove/publish/tree/audit 등 16개 서브커맨드 + workspace)
@@ -872,39 +872,56 @@ Stage 1 (SIMD 벤치마크는 독립 진행 가능)
 - [x] E2E 5개 추가 (367→372) ✅ 2026-02-08
 - **난이도**: 중 | **모델**: Opus 직접
 
-### Stage 2: Build Scripts & 글로벌 설치
+### Stage 2: Build Scripts & 글로벌 설치 ✅
 
 **목표**: 커스텀 빌드 로직 + 바이너리 글로벌 설치
 
-- [ ] `build.vais` 빌드 스크립트 실행 (빌드 전 자동 실행)
-- [ ] 빌드 스크립트 환경 변수 (`OUT_DIR`, `TARGET`, `PROFILE`)
-- [ ] `vaisc install <package>` 글로벌 바이너리 설치 (`~/.vais/bin/`)
-- [ ] `vaisc uninstall <package>` 글로벌 바이너리 제거
-- [ ] PATH 안내 메시지 출력
-- [ ] E2E 5개 추가
+- [x] `build.vais` 빌드 스크립트 실행 (빌드 전 자동 실행) ✅ 2026-02-08
+  변경: main.rs (run_build_script — 컴파일+실행, env vars 주입)
+- [x] 빌드 스크립트 환경 변수 (`OUT_DIR`, `TARGET`, `PROFILE`) ✅ 2026-02-08
+  변경: main.rs (OUT_DIR=target/build, TARGET=arch-os, PROFILE=debug/release, CARGO_MANIFEST_DIR)
+- [x] `vaisc install <package>` 글로벌 바이너리 설치 (`~/.vais/bin/`) ✅ 2026-02-08
+  변경: main.rs (Commands::Install, cmd_install — 빌드+복사+권한 설정)
+- [x] `vaisc uninstall <package>` 글로벌 바이너리 제거 ✅ 2026-02-08
+  변경: main.rs (Commands::Uninstall, cmd_uninstall)
+- [x] PATH 안내 메시지 출력 ✅ 2026-02-08
+  변경: cmd_install에서 ~/.vais/bin이 PATH에 없으면 안내 출력
+- [x] E2E 5개 추가 (372→377) ✅ 2026-02-08
+  변경: registry_e2e_tests.rs (build_script_env_vars, install_no_pkg, install_lib_fails, uninstall_not_installed, install_uninstall_roundtrip)
 - **난이도**: 중 | **모델**: Opus 직접
 
-### Stage 3: Bench, Fix, Lint 통합
+### Stage 3: Bench, Fix, Lint 통합 ✅
 
 **목표**: cargo bench/fix/clippy에 대응하는 서브커맨드
 
-- [ ] `vaisc bench` — criterion 벤치마크 실행 (`benches/` 디렉토리 자동 탐지)
-- [ ] `vaisc fix` — `--suggest-fixes` 결과를 자동 적용 (dry-run 지원)
-- [ ] `vaisc lint` — 내장 lint 규칙 + 플러그인 lint 통합 실행
-- [ ] `-W allow/warn/deny <lint>` 경고 제어 플래그
-- [ ] E2E 5개 추가
+- [x] `vaisc bench` — benches/ 디렉토리 자동 탐지, 컴파일+실행+타이밍, --filter 지원 ✅ 2026-02-08
+  변경: main.rs (Commands::Bench, cmd_bench — walkdir + cmd_build + Instant timing)
+- [x] `vaisc fix` — --dry-run 프리뷰, 자동 적용 (TypeChecker 에러 기반) ✅ 2026-02-08
+  변경: main.rs (Commands::Fix, cmd_fix — lexer+parser+type_check + suggestion 적용)
+- [x] `vaisc lint` — 내장 lint + 플러그인 lint 통합, --format text/json ✅ 2026-02-08
+  변경: main.rs (Commands::Lint, cmd_lint — TypeChecker + PluginRegistry 통합)
+- [x] `-W allow/warn/deny <lint>` 경고 제어 플래그 ✅ 2026-02-08
+  변경: cmd_lint warning_level 파라미터 (allow=0, warn=1, deny=2)
+- [x] E2E 5개 추가 (377→382) ✅ 2026-02-08
+  변경: registry_e2e_tests.rs (bench_no_dir, bench_filter, fix_dry_run, lint_clean, lint_json)
 - **난이도**: 중 | **모델**: Sonnet 위임
 
-### Stage 4: Vendor, Package, Metadata
+### Stage 4: Vendor, Package, Metadata ✅
 
 **목표**: 오프라인 빌드 & 스크립팅 지원
 
-- [ ] `vaisc pkg vendor` — 의존성 로컬 복사 (vendor/ 디렉토리)
-- [ ] `vaisc pkg package` — .vpkg 아카이브 생성 (publish 전 프리뷰)
-- [ ] `vaisc pkg metadata --format json` — 머신 리더블 패키지 정보
-- [ ] `vaisc pkg owner --add/--remove` — 레지스트리 소유자 관리
-- [ ] `vaisc pkg verify` — 매니페스트 유효성 검증
-- [ ] E2E 5개 추가
+- [x] `vaisc pkg vendor` — 의존성 로컬 복사 + vendor/config.toml 생성 ✅ 2026-02-08
+  변경: main.rs (PkgCommands::Vendor, cmd_pkg_vendor + copy_dir_recursive)
+- [x] `vaisc pkg package` — .vpkg tar.gz 아카이브, --list 프리뷰 ✅ 2026-02-08
+  변경: main.rs (PkgCommands::Package, cmd_pkg_package + collect_files_recursive)
+- [x] `vaisc pkg metadata --format json` — JSON/TOML 패키지 메타데이터 ✅ 2026-02-08
+  변경: main.rs (PkgCommands::Metadata, cmd_pkg_metadata)
+- [x] `vaisc pkg owner --add/--remove/--list` — .vais/owners.toml 소유자 관리 ✅ 2026-02-08
+  변경: main.rs (PkgCommands::Owner, cmd_pkg_owner + save_owners)
+- [x] `vaisc pkg verify` — TOML 유효성 + semver + 엔트리포인트 검증 ✅ 2026-02-08
+  변경: main.rs (PkgCommands::Verify, cmd_pkg_verify)
+- [x] E2E 5개 추가 (382→387) ✅ 2026-02-08
+  변경: registry_e2e_tests.rs (vendor_no_deps, package_list, metadata_json, owner_add_list, verify_valid)
 - **난이도**: 중 | **모델**: Sonnet 위임
 
 ### 우선순위

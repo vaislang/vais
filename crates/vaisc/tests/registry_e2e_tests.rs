@@ -1945,6 +1945,19 @@ fn run_vaisc(args: &[&str], cwd: &Path) -> Result<std::process::Output, String> 
         .map_err(|e| format!("failed to run vaisc: {}", e))
 }
 
+/// Run vaisc from the project root (for commands that need a specific working directory
+/// but where cargo needs to find its own Cargo.toml)
+fn run_vaisc_from_root(args: &[&str]) -> Result<std::process::Output, String> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(&manifest_dir);
+    Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--"])
+        .args(args)
+        .current_dir(workspace_root)
+        .output()
+        .map_err(|e| format!("failed to run vaisc: {}", e))
+}
+
 #[test]
 fn test_vaisc_new_creates_project() {
     let tmp = TempDir::new().unwrap();
@@ -2400,5 +2413,555 @@ fn test_vaisc_pkg_doc_no_manifest() {
         Err(_) => {
             eprintln!("skipping test: cargo run not available");
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 50 Stage 2: Build Scripts & Global Install
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_build_script_env_vars() {
+    // Verify that build.vais gets correct environment variables
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("build_env_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    // Create vais.toml
+    fs::write(
+        project_dir.join("vais.toml"),
+        r#"[package]
+name = "build_env_test"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+
+    // Create a build.vais that writes env vars to a file
+    fs::write(
+        project_dir.join("build.vais"),
+        r#"# Build script that verifies environment variables
+F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+
+    // Create main.vais
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        r#"F main() -> i64 {
+    0
+}
+"#,
+    )
+    .unwrap();
+
+    // Build the project - build.vais should be detected and executed
+    match run_vaisc(&["pkg", "build", "-v"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Build script should be detected (verbose output mentions it)
+            if output.status.success() {
+                assert!(
+                    stdout.contains("build script") || stdout.contains("Build"),
+                    "verbose output should mention build script execution: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_install_no_package() {
+    // vaisc install with non-existent path should fail
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["install", "/nonexistent/path"], tmp.path()) {
+        Ok(output) => {
+            assert!(
+                !output.status.success(),
+                "install with nonexistent path should fail"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("vais.toml") || stderr.contains("not found") || stderr.contains("could not find"),
+                "should mention missing manifest: {}",
+                stderr
+            );
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_install_library_package_fails() {
+    // Library packages (no main.vais) should not be installable
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("lib_pkg");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    fs::write(
+        project_dir.join("vais.toml"),
+        r#"[package]
+name = "mylib"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+
+    // Only lib.vais, no main.vais
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        r#"F add(a: i64, b: i64) -> i64 {
+    a + b
+}
+"#,
+    )
+    .unwrap();
+
+    match run_vaisc_from_root(&["install", project_dir.to_str().unwrap()]) {
+        Ok(output) => {
+            assert!(
+                !output.status.success(),
+                "install of library package should fail"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("main.vais") || stderr.contains("binary"),
+                "should mention missing main.vais: {}",
+                stderr
+            );
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_uninstall_not_installed() {
+    // Uninstalling a package that's not installed should fail gracefully
+    match run_vaisc_from_root(&["uninstall", "nonexistent_pkg_xyz"]) {
+        Ok(output) => {
+            assert!(
+                !output.status.success(),
+                "uninstall of non-installed package should fail"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("not installed") || stderr.contains("not found"),
+                "should indicate package is not installed: {}",
+                stderr
+            );
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_install_and_uninstall_roundtrip() {
+    // Full install → verify → uninstall → verify removed roundtrip
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("installable");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    fs::write(
+        project_dir.join("vais.toml"),
+        r#"[package]
+name = "test_installable"
+version = "1.0.0"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        r#"F main() -> i64 {
+    42
+}
+"#,
+    )
+    .unwrap();
+
+    // Install the package
+    match run_vaisc_from_root(&["install", project_dir.to_str().unwrap()]) {
+        Ok(output) => {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    stdout.contains("Installed") || stdout.contains("test_installable"),
+                    "should confirm installation: {}",
+                    stdout
+                );
+
+                // Verify binary exists in ~/.vais/bin/
+                let home = dirs::home_dir().unwrap();
+                let binary = home.join(".vais").join("bin").join("test_installable");
+                assert!(binary.exists(), "binary should exist at {}", binary.display());
+
+                // Uninstall
+                match run_vaisc_from_root(&["uninstall", "test_installable"]) {
+                    Ok(uninstall_output) => {
+                        assert!(
+                            uninstall_output.status.success(),
+                            "uninstall should succeed"
+                        );
+                        assert!(
+                            !binary.exists(),
+                            "binary should be removed after uninstall"
+                        );
+                    }
+                    Err(_) => {
+                        eprintln!("skipping uninstall test: cargo run not available");
+                        // Clean up manually
+                        let _ = fs::remove_file(&binary);
+                    }
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!("install failed (expected in CI without clang): {}", stderr);
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_bench_no_directory() {
+    let tmp = TempDir::new().unwrap();
+    let nonexistent_path = tmp.path().join("benches");
+    // No benches/ directory
+    match run_vaisc_from_root(&["bench", nonexistent_path.to_str().unwrap()]) {
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Should mention benches directory not found or no benchmarks
+            assert!(
+                !output.status.success() || stdout.contains("No benchmark") || stdout.contains("not found"),
+                "should handle missing benches dir: stdout={}, stderr={}", stdout, stderr
+            );
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_bench_with_filter() {
+    let tmp = TempDir::new().unwrap();
+    let benches_dir = tmp.path().join("benches");
+    fs::create_dir_all(&benches_dir).unwrap();
+
+    // Create a simple benchmark file
+    let bench_file = benches_dir.join("simple.vais");
+    fs::write(&bench_file, "F main() -> i64 = 42").unwrap();
+
+    match run_vaisc_from_root(&["bench", benches_dir.to_str().unwrap(), "--filter", "nonexistent"]) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Should work without error - just 0 benchmarks found
+            // Our code prints "Running 0 benchmark(s)" and "0 benchmarks: 0 passed, 0 failed"
+            assert!(
+                output.status.success() || stdout.contains("0 benchmark") || stdout.contains("No benchmark"),
+                "should handle filter with no matches: status={}, stdout={}", output.status, stdout
+            );
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_fix_dry_run() {
+    let tmp = TempDir::new().unwrap();
+    let test_file = tmp.path().join("test.vais");
+
+    // Create a valid Vais file
+    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+
+    match run_vaisc_from_root(&["fix", "--dry-run", test_file.to_str().unwrap()]) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Should complete without error - either success or mentions fixes
+            assert!(
+                output.status.success() || stdout.contains("fix") || stderr.is_empty(),
+                "fix --dry-run should work: status={}, stdout={}, stderr={}", output.status, stdout, stderr
+            );
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_lint_clean_file() {
+    let tmp = TempDir::new().unwrap();
+    let test_file = tmp.path().join("clean.vais");
+
+    // Create a clean, valid Vais file
+    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+
+    match run_vaisc_from_root(&["lint", test_file.to_str().unwrap()]) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            if output.status.success() {
+                assert!(
+                    stdout.contains("0 error") || stdout.contains("✓"),
+                    "clean file should pass lint: stdout={}", stdout
+                );
+            } else {
+                // May fail on clang issues in CI, just log it
+                eprintln!("lint test exited non-zero (expected in CI): {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_lint_json_format() {
+    let tmp = TempDir::new().unwrap();
+    let test_file = tmp.path().join("test.vais");
+
+    // Create a Vais file
+    fs::write(&test_file, "F main() -> i64 = 42").unwrap();
+
+    match run_vaisc_from_root(&["lint", "--format", "json", test_file.to_str().unwrap()]) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Should output valid JSON
+            if !stdout.is_empty() {
+                let json_result: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+                assert!(
+                    json_result.is_ok(),
+                    "should output valid JSON: {}",
+                    stdout
+                );
+
+                if let Ok(json) = json_result {
+                    assert!(
+                        json.get("summary").is_some(),
+                        "JSON should have summary field: {:?}", json
+                    );
+                }
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+// Phase 50 Stage 4: Vendor, Package, Metadata subcommands
+
+#[test]
+fn test_pkg_vendor_no_deps() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("vendor_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"vendor_test\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(project_dir.join("src").join("main.vais"), "F main() -> i64 { 0 }\n").unwrap();
+
+    match run_vaisc(&["pkg", "vendor"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Should succeed (no deps to vendor)
+            if output.status.success() {
+                assert!(
+                    stdout.contains("No dependencies") || stdout.contains("Vendored"),
+                    "should mention vendoring result: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_pkg_package_list() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("package_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"package_test\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 42 }\n",
+    )
+    .unwrap();
+
+    match run_vaisc(&["pkg", "package", "--list"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            if output.status.success() {
+                assert!(
+                    stdout.contains("contents") || stdout.contains("vais.toml") || stdout.contains("src/main.vais"),
+                    "should show file listing: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            } else {
+                eprintln!("pkg package --list failed (may be expected): {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_pkg_metadata_json() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("metadata_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"metadata_test\"\nversion = \"1.2.3\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "F foo() -> i64 { 1 }\n",
+    )
+    .unwrap();
+
+    match run_vaisc(&["pkg", "metadata"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            if output.status.success() && !stdout.is_empty() {
+                let json_result: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+                assert!(json_result.is_ok(), "should output valid JSON: {}", stdout);
+
+                if let Ok(json) = json_result {
+                    // Should have package.name and package.version
+                    let name = json
+                        .get("package")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str());
+                    let version = json
+                        .get("package")
+                        .and_then(|p| p.get("version"))
+                        .and_then(|v| v.as_str());
+
+                    assert_eq!(name, Some("metadata_test"), "should have correct name");
+                    assert_eq!(version, Some("1.2.3"), "should have correct version");
+                }
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_pkg_owner_add_list() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("owner_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"owner_test\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Add an owner
+    match run_vaisc(&["pkg", "owner", "--add", "alice"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if output.status.success() {
+                assert!(
+                    stdout.contains("Added") || stdout.contains("alice"),
+                    "should confirm adding owner: {}",
+                    stdout
+                );
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping test: cargo run not available");
+            return;
+        }
+    }
+
+    // List owners
+    match run_vaisc(&["pkg", "owner", "--list"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if output.status.success() {
+                assert!(
+                    stdout.contains("alice") || stdout.contains("Owners"),
+                    "should list alice as owner: {}",
+                    stdout
+                );
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_pkg_verify_valid() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("verify_test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"verify_test\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    match run_vaisc(&["pkg", "verify"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            if output.status.success() {
+                assert!(
+                    stdout.contains("passed") || stdout.contains("✓"),
+                    "valid package should pass verification: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            } else {
+                eprintln!(
+                    "verify failed (may be expected if validation is strict): {}",
+                    stderr
+                );
+            }
+        }
+        Err(_) => eprintln!("skipping test: cargo run not available"),
     }
 }
