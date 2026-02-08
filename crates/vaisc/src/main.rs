@@ -408,10 +408,18 @@ enum PkgCommands {
         /// Enable hot reload mode (generate dylib)
         #[arg(long)]
         hot: bool,
+
+        /// Build all workspace members
+        #[arg(long)]
+        workspace: bool,
     },
 
     /// Type-check the package without compiling
-    Check,
+    Check {
+        /// Check all workspace members
+        #[arg(long)]
+        workspace: bool,
+    },
 
     /// Add a dependency
     Add {
@@ -4702,7 +4710,12 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             release,
             debug,
             hot,
+            workspace,
         } => {
+            if workspace {
+                return cmd_pkg_build_workspace(&cwd, release, debug, hot, verbose);
+            }
+
             // Find manifest
             let pkg_dir = find_manifest(&cwd).ok_or_else(|| {
                 "could not find vais.toml in current directory or parents".to_string()
@@ -4710,117 +4723,28 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
 
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
-            if verbose {
-                println!("{} {}", "Building".cyan(), manifest.package.name);
+            // Auto-detect workspace: if manifest has [workspace], build all members
+            if manifest.workspace.is_some() {
+                return cmd_pkg_build_workspace(&pkg_dir, release, debug, hot, verbose);
             }
 
-            // Resolve dependencies (path + registry)
-            let cache_root = package::default_registry_cache_root();
-            let deps = resolve_all_dependencies(&manifest, &pkg_dir, cache_root.as_deref())
-                .map_err(|e| e.to_string())?;
-
-            if verbose && !deps.is_empty() {
-                println!("{} dependencies:", "Resolved".cyan());
-                for dep in &deps {
-                    println!("  {} -> {}", dep.name, dep.path.display());
-                }
-            }
-
-            // Collect dependency source search paths for import resolution
-            let dep_search_paths: Vec<PathBuf> = deps
-                .iter()
-                .filter_map(|dep| {
-                    // Check for src/ directory in the dependency
-                    let src_dir = dep.path.join("src");
-                    if src_dir.exists() {
-                        Some(src_dir)
-                    } else if dep.path.exists() {
-                        // Use the dependency root directly if no src/
-                        Some(dep.path.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            // Determine entry point
-            let src_dir = pkg_dir.join("src");
-            let entry = if src_dir.join("main.vais").exists() {
-                src_dir.join("main.vais")
-            } else if src_dir.join("lib.vais").exists() {
-                src_dir.join("lib.vais")
-            } else {
-                return Err("no main.vais or lib.vais found in src/".to_string());
-            };
-
-            // Set dependency search paths as environment variable for import resolution
-            if !dep_search_paths.is_empty() {
-                let paths_str: Vec<String> = dep_search_paths
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect();
-                std::env::set_var("VAIS_DEP_PATHS", paths_str.join(":"));
-            }
-
-            // Build options
-            let opt_level = if release { 2 } else { 0 };
-            let output = pkg_dir.join("target").join(&manifest.package.name);
-
-            // Auto-enable ThinLTO for release builds
-            let lto_mode = if release {
-                vais_codegen::optimize::LtoMode::Thin
-            } else {
-                vais_codegen::optimize::LtoMode::None
-            };
-
-            // Create target directory
-            let target_dir = pkg_dir.join("target");
-            fs::create_dir_all(&target_dir)
-                .map_err(|e| format!("failed to create target directory: {}", e))?;
-
-            // Load empty plugin registry for build
-            let plugins = PluginRegistry::new();
-
-            // Build using existing infrastructure with automatic ThinLTO for release builds
-            cmd_build(
-                &entry,
-                Some(output.clone()),
-                false,
-                opt_level,
-                debug,
-                verbose,
-                &plugins,
-                TargetTriple::Native,
-                false,
-                false,
-                None,
-                hot,
-                lto_mode,
-                vais_codegen::optimize::PgoMode::None,
-                false,
-                None,  // parallel_config
-                false, // use_inkwell
-                false, // per_module
-                536870912, // cache_limit (512MB default)
-            )?;
-
-            if hot {
-                println!(
-                    "{} Built hot-reload dylib {}",
-                    "✓".green(),
-                    output.display()
-                );
-            } else {
-                println!("{} Built {}", "✓".green(), output.display());
-            }
-            Ok(())
+            cmd_pkg_build_single(&pkg_dir, &manifest, release, debug, hot, verbose)
         }
 
-        PkgCommands::Check => {
+        PkgCommands::Check { workspace } => {
+            if workspace {
+                return cmd_pkg_check_workspace(&cwd, verbose);
+            }
+
             let pkg_dir =
                 find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+
+            // Auto-detect workspace
+            if manifest.workspace.is_some() {
+                return cmd_pkg_check_workspace(&pkg_dir, verbose);
+            }
 
             let src_dir = pkg_dir.join("src");
             let entry = if src_dir.join("main.vais").exists() {
@@ -4978,6 +4902,269 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_doc(&manifest, &pkg_dir, &output, &format, open, verbose)
         }
+    }
+}
+
+/// Build a single package (non-workspace)
+fn cmd_pkg_build_single(
+    pkg_dir: &Path,
+    manifest: &package::PackageManifest,
+    release: bool,
+    debug: bool,
+    hot: bool,
+    verbose: bool,
+) -> Result<(), String> {
+    use package::*;
+
+    if verbose {
+        println!("{} {}", "Building".cyan(), manifest.package.name);
+    }
+
+    // Resolve dependencies (path + registry)
+    let cache_root = package::default_registry_cache_root();
+    let deps = resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    if verbose && !deps.is_empty() {
+        println!("{} dependencies:", "Resolved".cyan());
+        for dep in &deps {
+            println!("  {} -> {}", dep.name, dep.path.display());
+        }
+    }
+
+    // Collect dependency source search paths for import resolution
+    let dep_search_paths: Vec<PathBuf> = deps
+        .iter()
+        .filter_map(|dep| {
+            let src_dir = dep.path.join("src");
+            if src_dir.exists() {
+                Some(src_dir)
+            } else if dep.path.exists() {
+                Some(dep.path.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Determine entry point
+    let src_dir = pkg_dir.join("src");
+    let is_lib = !src_dir.join("main.vais").exists() && src_dir.join("lib.vais").exists();
+    let entry = if src_dir.join("main.vais").exists() {
+        src_dir.join("main.vais")
+    } else if src_dir.join("lib.vais").exists() {
+        src_dir.join("lib.vais")
+    } else {
+        return Err("no main.vais or lib.vais found in src/".to_string());
+    };
+
+    // Set dependency search paths as environment variable for import resolution
+    if !dep_search_paths.is_empty() {
+        let paths_str: Vec<String> = dep_search_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        std::env::set_var("VAIS_DEP_PATHS", paths_str.join(":"));
+    }
+
+    // Build options
+    let opt_level = if release { 2 } else { 0 };
+    let output = pkg_dir.join("target").join(&manifest.package.name);
+
+    let lto_mode = if release {
+        vais_codegen::optimize::LtoMode::Thin
+    } else {
+        vais_codegen::optimize::LtoMode::None
+    };
+
+    // Create target directory
+    let target_dir = pkg_dir.join("target");
+    fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("failed to create target directory: {}", e))?;
+
+    let plugins = PluginRegistry::new();
+
+    // Library packages: emit IR only (no linking), binary packages: full build
+    cmd_build(
+        &entry,
+        Some(output.clone()),
+        is_lib,  // emit_ir = true for library packages
+        opt_level,
+        debug,
+        verbose,
+        &plugins,
+        TargetTriple::Native,
+        false,
+        false,
+        None,
+        hot,
+        lto_mode,
+        vais_codegen::optimize::PgoMode::None,
+        false,
+        None,
+        false,
+        false,
+        536870912,
+    )?;
+
+    if is_lib {
+        println!("{} Built library {}", "✓".green(), output.display());
+    } else if hot {
+        println!(
+            "{} Built hot-reload dylib {}",
+            "✓".green(),
+            output.display()
+        );
+    } else {
+        println!("{} Built {}", "✓".green(), output.display());
+    }
+    Ok(())
+}
+
+/// Build all workspace members
+fn cmd_pkg_build_workspace(
+    start_dir: &Path,
+    release: bool,
+    debug: bool,
+    hot: bool,
+    verbose: bool,
+) -> Result<(), String> {
+    use package::*;
+
+    let ws_root = find_workspace_root(start_dir).ok_or_else(|| {
+        "could not find workspace root (vais.toml with [workspace] section)".to_string()
+    })?;
+
+    let mut workspace =
+        resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
+
+    // Resolve inter-workspace path dependencies
+    resolve_inter_workspace_deps(&mut workspace);
+
+    let member_count = workspace.members.len();
+    println!(
+        "{} Building workspace with {} member{}",
+        "Workspace".cyan(),
+        member_count,
+        if member_count == 1 { "" } else { "s" }
+    );
+
+    let mut built = 0;
+    let mut failed = 0;
+
+    for member in &workspace.members {
+        let name = &member.manifest.package.name;
+        if name.is_empty() {
+            continue;
+        }
+
+        if verbose {
+            println!(
+                "\n{} Building member: {} ({})",
+                ">>".cyan(),
+                name,
+                member.path.display()
+            );
+        }
+
+        match cmd_pkg_build_single(&member.path, &member.manifest, release, debug, hot, verbose) {
+            Ok(()) => {
+                built += 1;
+            }
+            Err(e) => {
+                eprintln!("{} Failed to build '{}': {}", "✗".red(), name, e);
+                failed += 1;
+            }
+        }
+    }
+
+    if failed > 0 {
+        Err(format!(
+            "workspace build: {} succeeded, {} failed",
+            built, failed
+        ))
+    } else {
+        println!(
+            "\n{} Built {} workspace member{}",
+            "✓".green(),
+            built,
+            if built == 1 { "" } else { "s" }
+        );
+        Ok(())
+    }
+}
+
+/// Type-check all workspace members
+fn cmd_pkg_check_workspace(start_dir: &Path, verbose: bool) -> Result<(), String> {
+    use package::*;
+
+    let ws_root = find_workspace_root(start_dir).ok_or_else(|| {
+        "could not find workspace root (vais.toml with [workspace] section)".to_string()
+    })?;
+
+    let mut workspace =
+        resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
+
+    resolve_inter_workspace_deps(&mut workspace);
+
+    let member_count = workspace.members.len();
+    println!(
+        "{} Checking workspace with {} member{}",
+        "Workspace".cyan(),
+        member_count,
+        if member_count == 1 { "" } else { "s" }
+    );
+
+    let mut checked = 0;
+    let mut failed = 0;
+
+    for member in &workspace.members {
+        let name = &member.manifest.package.name;
+        if name.is_empty() {
+            continue;
+        }
+
+        let src_dir = member.path.join("src");
+        let entry = if src_dir.join("main.vais").exists() {
+            src_dir.join("main.vais")
+        } else if src_dir.join("lib.vais").exists() {
+            src_dir.join("lib.vais")
+        } else {
+            if verbose {
+                println!("{} Skipping '{}' (no src/main.vais or src/lib.vais)", ">>".cyan(), name);
+            }
+            continue;
+        };
+
+        if verbose {
+            println!("{} Checking member: {}", ">>".cyan(), name);
+        }
+
+        let plugins = PluginRegistry::new();
+        match cmd_check(&entry, verbose, &plugins) {
+            Ok(()) => {
+                checked += 1;
+            }
+            Err(e) => {
+                eprintln!("{} Failed to check '{}': {}", "✗".red(), name, e);
+                failed += 1;
+            }
+        }
+    }
+
+    if failed > 0 {
+        Err(format!(
+            "workspace check: {} passed, {} failed",
+            checked, failed
+        ))
+    } else {
+        println!(
+            "{} {} workspace member{} type-check correctly",
+            "✓".green(),
+            checked,
+            if checked == 1 { "" } else { "s" }
+        );
+        Ok(())
     }
 }
 

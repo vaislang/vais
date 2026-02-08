@@ -50,7 +50,7 @@ ureq = { version = "2.12", features = ["gzip", "json"] }
 flate2 = { workspace = true }
 tar = { workspace = true }
 dirs = "6"
+glob = "0.3"
 
 [dev-dependencies]
 tempfile = "3.10"
-glob = "0.3"

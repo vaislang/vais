@@ -8721,3 +8721,254 @@ F main() -> i64 {
             "Should not contain macOS constants (value 30) when targeting Linux");
 }
 
+// ==========================================================================
+// Phase 50 Stage 0: Workspace E2E Tests
+// ==========================================================================
+
+/// Helper: get vaisc binary path
+fn vaisc_bin() -> std::path::PathBuf {
+    let mut path = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    path.push("vaisc");
+    if !path.exists() {
+        path = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        path.push("vaisc");
+    }
+    path
+}
+
+#[test]
+fn test_workspace_manifest_parsing_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        r#"[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+utils = "1.0.0"
+"#,
+    )
+    .unwrap();
+
+    let member_dir = tmp.path().join("crates").join("my-lib");
+    fs::create_dir_all(member_dir.join("src")).unwrap();
+    fs::write(
+        member_dir.join("vais.toml"),
+        "[package]\nname = \"my-lib\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member_dir.join("src/lib.vais"),
+        "F greet() -> i64 { 42 }\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "check", "--workspace"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "workspace check failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+    assert!(
+        stdout.contains("Workspace") || stdout.contains("workspace"),
+        "output should mention workspace: {}", stdout
+    );
+}
+
+#[test]
+fn test_workspace_build_multiple_members_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        "[workspace]\nmembers = [\"packages/*\"]\n",
+    )
+    .unwrap();
+
+    for name in &["alpha", "beta"] {
+        let dir = tmp.path().join("packages").join(name);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(
+            dir.join("vais.toml"),
+            format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n", name),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("src/main.vais"),
+            "F main() -> i64 {\n    puts(\"Hello!\")\n    0\n}\n",
+        )
+        .unwrap();
+    }
+
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--workspace"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "workspace build failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+    assert!(
+        stdout.contains("2 workspace member"),
+        "should report 2 members: {}", stdout
+    );
+}
+
+#[test]
+fn test_workspace_shared_deps_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        "[workspace]\nmembers = [\"libs/*\"]\n\n[workspace.dependencies]\nshared-ver = \"3.0.0\"\n",
+    )
+    .unwrap();
+
+    let dir = tmp.path().join("libs").join("consumer");
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(
+        dir.join("vais.toml"),
+        "[package]\nname = \"consumer\"\nversion = \"0.1.0\"\n\n[dependencies]\nshared-ver = { workspace = true }\n",
+    )
+    .unwrap();
+    fs::write(dir.join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
+
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "check", "--workspace"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "workspace check with shared deps failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_workspace_inter_member_path_deps_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        "[workspace]\nmembers = [\"crates/*\"]\n",
+    )
+    .unwrap();
+
+    // lib-core
+    let core_dir = tmp.path().join("crates").join("lib-core");
+    fs::create_dir_all(core_dir.join("src")).unwrap();
+    fs::write(
+        core_dir.join("vais.toml"),
+        "[package]\nname = \"lib-core\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        core_dir.join("src/lib.vais"),
+        "F core_add(a: i64, b: i64) -> i64 { a + b }\n",
+    )
+    .unwrap();
+
+    // my-app depends on lib-core by path
+    let app_dir = tmp.path().join("crates").join("my-app");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    fs::write(
+        app_dir.join("vais.toml"),
+        "[package]\nname = \"my-app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib-core = { path = \"../lib-core\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app_dir.join("src/main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build", "--workspace"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "workspace build with inter-member deps failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+}
+
+#[test]
+fn test_workspace_auto_detect_e2e() {
+    let tmp = TempDir::new().unwrap();
+
+    fs::write(
+        tmp.path().join("vais.toml"),
+        "[workspace]\nmembers = [\"apps/*\"]\n",
+    )
+    .unwrap();
+
+    let app_dir = tmp.path().join("apps").join("hello");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    fs::write(
+        app_dir.join("vais.toml"),
+        "[package]\nname = \"hello\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app_dir.join("src/main.vais"),
+        "F main() -> i64 {\n    puts(\"Hello workspace!\")\n    0\n}\n",
+    )
+    .unwrap();
+
+    // Run without --workspace flag - auto-detect
+    let output = std::process::Command::new(vaisc_bin())
+        .args(["pkg", "build"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("failed to run vaisc");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "auto-detect workspace build failed. stdout: {}, stderr: {}",
+        stdout, stderr
+    );
+    assert!(
+        stdout.contains("Workspace") || stdout.contains("workspace"),
+        "auto-detected workspace should mention workspace: {}", stdout
+    );
+}
+

@@ -3,7 +3,7 @@
 
 > **버전**: 1.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-07
+> **최종 업데이트**: 2026-02-08
 
 ---
 
@@ -835,6 +835,259 @@ Stage 0 ✅ → Stage 1 ✅ → Stage 2 ✅
 ```
 Stage 0 → Stage 2 (플랫폼 호환 우선)
 Stage 1 (SIMD 벤치마크는 독립 진행 가능)
+```
+
+---
+
+## Phase 50: 패키지 매니저 완성 (cargo-equivalent) 🔄 진행 중
+
+> **목표**: `vaisc`를 Rust의 cargo처럼 완전한 통합 빌드/패키지 도구로 완성
+> **현재**: ~80-85% 구현 (pkg init/build/add/remove/publish/tree/audit 등 16개 서브커맨드 + workspace)
+> **선행**: Phase 49
+
+### Stage 0: Workspace 지원 ✅
+
+**목표**: 모노레포 멀티 패키지 관리 (`[workspace]` in vais.toml)
+
+- [x] vais.toml `[workspace]` 섹션 파싱 (members 글로브 패턴) ✅ 2026-02-08
+- [x] workspace 루트 자동 탐지 (상위 디렉토리 순회) ✅ 2026-02-08
+- [x] workspace 전체 빌드/테스트/체크 (`vaisc pkg build --workspace`) ✅ 2026-02-08
+- [x] workspace 패키지 간 path 의존성 자동 해석 ✅ 2026-02-08
+- [x] workspace 공유 의존성 버전 통합 (`[workspace.dependencies]`) ✅ 2026-02-08
+- [x] E2E 5개 추가 (362→367) ✅ 2026-02-08
+- **난이도**: 상 | **모델**: Opus 직접
+
+### Stage 1: Feature Flags
+
+**목표**: 조건부 의존성 및 선택적 기능 (`#[cfg(feature = "...")]`)
+
+- [ ] vais.toml `[features]` 섹션 파싱 (default features 포함)
+- [ ] feature 기반 조건부 컴파일 (`#[cfg(feature = "serde")]`)
+- [ ] 의존성의 optional feature 활성화 (`dep = { version = "1.0", features = ["json"] }`)
+- [ ] `vaisc pkg build --features "a,b"` / `--all-features` / `--no-default-features`
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 2: Build Scripts & 글로벌 설치
+
+**목표**: 커스텀 빌드 로직 + 바이너리 글로벌 설치
+
+- [ ] `build.vais` 빌드 스크립트 실행 (빌드 전 자동 실행)
+- [ ] 빌드 스크립트 환경 변수 (`OUT_DIR`, `TARGET`, `PROFILE`)
+- [ ] `vaisc install <package>` 글로벌 바이너리 설치 (`~/.vais/bin/`)
+- [ ] `vaisc uninstall <package>` 글로벌 바이너리 제거
+- [ ] PATH 안내 메시지 출력
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 3: Bench, Fix, Lint 통합
+
+**목표**: cargo bench/fix/clippy에 대응하는 서브커맨드
+
+- [ ] `vaisc bench` — criterion 벤치마크 실행 (`benches/` 디렉토리 자동 탐지)
+- [ ] `vaisc fix` — `--suggest-fixes` 결과를 자동 적용 (dry-run 지원)
+- [ ] `vaisc lint` — 내장 lint 규칙 + 플러그인 lint 통합 실행
+- [ ] `-W allow/warn/deny <lint>` 경고 제어 플래그
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 4: Vendor, Package, Metadata
+
+**목표**: 오프라인 빌드 & 스크립팅 지원
+
+- [ ] `vaisc pkg vendor` — 의존성 로컬 복사 (vendor/ 디렉토리)
+- [ ] `vaisc pkg package` — .vpkg 아카이브 생성 (publish 전 프리뷰)
+- [ ] `vaisc pkg metadata --format json` — 머신 리더블 패키지 정보
+- [ ] `vaisc pkg owner --add/--remove` — 레지스트리 소유자 관리
+- [ ] `vaisc pkg verify` — 매니페스트 유효성 검증
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### 우선순위
+
+```
+Stage 0 (workspace) → Stage 1 (features) → Stage 2 (build scripts)
+Stage 3 (bench/fix/lint) — 독립 진행 가능
+Stage 4 (vendor/package) — 독립 진행 가능
+```
+
+---
+
+## Phase 51: 대형 파일 리팩토링 📋 예정
+
+> **목표**: 5,000줄 이상 파일을 모듈 분리하여 유지보수성 개선
+> **선행**: Phase 50 (독립 진행 가능)
+
+### Stage 0: vais-types/src/lib.rs 모듈 분리 (7,701줄)
+
+- [ ] check_expr 관련 로직 → checker_expr.rs 추출
+- [ ] check_item 관련 로직 → checker_item.rs 추출
+- [ ] 빌트인 함수 등록 → builtins.rs 추출
+- [ ] 테스트 코드 → tests/ 디렉토리 이동
+- [ ] lib.rs 1,000줄 이하로 축소
+- [ ] 전체 테스트 통과 확인
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 1: vaisc/src/main.rs 모듈 분리 (6,659줄)
+
+- [ ] 서브커맨드별 분리 (cmd_build, cmd_run, cmd_test 등 → commands/ 디렉토리)
+- [ ] REPL 로직 → repl.rs 추출
+- [ ] 컴파일 파이프라인 → compile.rs 추출
+- [ ] lib.rs 1,000줄 이하로 축소
+- [ ] 전체 테스트 통과 확인
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 2: inkwell/generator.rs 모듈 분리 (5,694줄)
+
+- [ ] 표현식 생성 → expr_gen.rs 추출
+- [ ] 문장 생성 → stmt_gen.rs 추출
+- [ ] 타입 생성 → type_gen.rs 추출
+- [ ] 전체 테스트 통과 확인
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 3: vais-lsp/src/backend.rs 모듈 분리 (4,653줄)
+
+- [ ] completion → handlers/completion.rs
+- [ ] hover/goto → handlers/navigation.rs
+- [ ] diagnostics → handlers/diagnostics.rs
+- [ ] 전체 테스트 통과 확인
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### 우선순위
+
+```
+Stage 0 (types) → Stage 1 (main) → Stage 2 (generator) → Stage 3 (LSP)
+```
+
+---
+
+## Phase 52: 표준 라이브러리 확충 📋 예정
+
+> **목표**: 실용 프로그래밍에 필요한 핵심 std 모듈 추가
+> **선행**: Phase 50
+
+### Stage 0: std/path.vais — 경로 조작
+
+- [ ] Path 구조체 (join, parent, filename, extension, stem)
+- [ ] 절대/상대 경로 변환 (canonicalize, is_absolute)
+- [ ] 플랫폼별 경로 구분자 (`/` vs `\`)
+- [ ] PathBuf (가변 경로)
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 1: std/channel.vais — CSP 동시성
+
+- [ ] Channel<T> (bounded/unbounded)
+- [ ] send/recv 블로킹 API
+- [ ] try_send/try_recv 논블로킹 API
+- [ ] select! 다중 채널 대기 (매크로 또는 함수)
+- [ ] E2E 5개 추가
+- **난이도**: 상 | **모델**: Opus 직접
+
+### Stage 2: std/datetime.vais — 날짜/시간
+
+- [ ] DateTime 구조체 (year, month, day, hour, min, sec, nanos)
+- [ ] Duration 산술 (add, sub, mul)
+- [ ] RFC3339/ISO8601 파싱 및 포맷팅
+- [ ] 타임존 지원 (UTC, 오프셋 기반)
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 3: std/args.vais — CLI 인자 파싱
+
+- [ ] ArgParser 구조체 (flag, option, positional)
+- [ ] 자동 help 생성
+- [ ] 서브커맨드 지원
+- [ ] 타입 변환 (str → i64, bool 등)
+- [ ] E2E 5개 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### 우선순위
+
+```
+Stage 0 (path) → Stage 2 (datetime) — 파일 시스템 필수
+Stage 1 (channel) — 동시성 패턴 확장
+Stage 3 (args) — CLI 도구 개발 지원
+```
+
+---
+
+## Phase 53: 테스트 & CI 강화 📋 예정
+
+> **목표**: 미테스트 crate 커버리지 추가, CI 파이프라인 확장
+> **선행**: Phase 51
+
+### Stage 0: 미테스트 Crate 커버리지
+
+- [ ] vais-ast 통합 테스트 추가
+- [ ] vais-security 통합 테스트 추가
+- [ ] vais-supply-chain 통합 테스트 추가
+- [ ] vais-i18n 통합 테스트 추가
+- [ ] vais-testgen 통합 테스트 추가
+- [ ] 13개 미테스트 crate 중 5개 이상 커버
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 1: CI 파이프라인 확장
+
+- [ ] ThreadSanitizer (tsan.yml) 추가
+- [ ] `cargo audit` 보안 감사 워크플로우 추가
+- [ ] Dependabot/Renovate 자동 의존성 업데이트
+- [ ] 코드 커버리지 리포팅 (llvm-cov → Codecov)
+- [ ] E2E 프로젝트 통합 테스트 (examples/ 컴파일+실행)
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 2: --coverage 플래그 구현
+
+- [ ] `vaisc build --coverage` LLVM Source-Based Coverage 계측
+- [ ] `vaisc test --coverage` 테스트 후 커버리지 리포트 생성
+- [ ] lcov/html 리포트 출력
+- [ ] E2E 3개 추가
+- **난이도**: 상 | **모델**: Opus 직접
+
+### 우선순위
+
+```
+Stage 0 (crate 테스트) → Stage 1 (CI) → Stage 2 (coverage)
+```
+
+---
+
+## Phase 54: 문서화 & 개발자 경험 📋 예정
+
+> **목표**: 온보딩 문서, cookbook, IDE 마켓플레이스 게시
+> **선행**: Phase 52
+
+### Stage 0: Migration Guide & Cookbook
+
+- [ ] docs-site/src/guides/migration-from-rust.md (Rust → Vais 이전 가이드)
+- [ ] docs-site/src/guides/migration-from-c.md (C/C++ → Vais 이전 가이드)
+- [ ] docs-site/src/guides/cookbook.md (20+ 레시피: 에러 처리, async, FFI, 컬렉션 등)
+- [ ] docs-site/src/guides/performance.md (프로파일링 & 최적화 가이드)
+- [ ] docs-site/src/troubleshooting.md (FAQ & 자주 발생하는 컴파일 에러)
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 1: 실전 예제 프로젝트
+
+- [ ] examples/projects/todo-api/ — REST API + SQLite CRUD
+- [ ] examples/projects/grep-vais/ — 재귀 파일 검색 CLI
+- [ ] examples/projects/chat-server/ — WebSocket 채팅 서버
+- [ ] examples/projects/data-pipeline/ — CSV→Transform→SQLite ETL
+- [ ] 각 프로젝트 README.md 포함
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 2: IDE 확장 개선 & 게시
+
+- [ ] VSCode 확장 마켓플레이스 게시 준비 (package.json, README, icon)
+- [ ] VSCode 스니펫 확충 (trait impl, match arms, async fn 등 20+)
+- [ ] VSCode task/problem matcher 추가
+- [ ] IntelliJ 플러그인 실행 구성 추가
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### 우선순위
+
+```
+Stage 0 (문서) → Stage 1 (예제) — 온보딩 우선
+Stage 2 (IDE) — 독립 진행 가능
 ```
 
 ---

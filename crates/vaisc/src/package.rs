@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 /// Package manifest (vais.toml)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManifest {
+    #[serde(default)]
     pub package: PackageInfo,
     #[serde(default)]
     pub dependencies: HashMap<String, Dependency>,
@@ -19,12 +20,49 @@ pub struct PackageManifest {
     pub native_dependencies: HashMap<String, NativeDependency>,
     #[serde(default)]
     pub build: BuildConfig,
+    /// Workspace configuration (only in workspace root)
+    #[serde(default)]
+    pub workspace: Option<WorkspaceConfig>,
+}
+
+/// Workspace configuration section
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceConfig {
+    /// Member package paths (supports glob patterns like "crates/*")
+    #[serde(default)]
+    pub members: Vec<String>,
+    /// Shared dependency versions for workspace members
+    #[serde(default)]
+    pub dependencies: HashMap<String, Dependency>,
+}
+
+/// A resolved workspace with all member packages
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ResolvedWorkspace {
+    /// Root directory of the workspace
+    pub root: PathBuf,
+    /// Root manifest
+    pub root_manifest: PackageManifest,
+    /// Resolved member packages (directory path, manifest)
+    pub members: Vec<WorkspaceMember>,
+}
+
+/// A member of a workspace
+#[derive(Debug, Clone)]
+pub struct WorkspaceMember {
+    /// Directory containing the member's vais.toml
+    pub path: PathBuf,
+    /// Parsed manifest with workspace dependencies resolved
+    pub manifest: PackageManifest,
 }
 
 /// Package information section
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PackageInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub version: String,
     #[serde(default)]
     pub authors: Vec<String>,
@@ -56,6 +94,9 @@ pub struct DetailedDependency {
     /// Registry name (None = default registry)
     #[serde(default)]
     pub registry: Option<String>,
+    /// Use workspace dependency definition
+    #[serde(default)]
+    pub workspace: Option<bool>,
 }
 
 /// Native (C/system) dependency specification
@@ -241,6 +282,7 @@ pub fn init_package(dir: &Path, name: Option<&str>) -> PackageResult<()> {
         dev_dependencies: HashMap::new(),
         native_dependencies: HashMap::new(),
         build: BuildConfig::default(),
+        workspace: None,
     };
 
     let content = toml::to_string_pretty(&manifest).map_err(|e| PackageError::ParseError {
@@ -473,6 +515,7 @@ fn resolve_deps_recursive(
                     dev_dependencies: HashMap::new(),
                     native_dependencies: HashMap::new(),
                     build: BuildConfig::default(),
+                    workspace: None,
                 }
             }
         };
@@ -524,6 +567,7 @@ pub fn add_dependency(
             version: version.map(String::from),
             features: Vec::new(),
             registry: None,
+            workspace: None,
         })
     } else if let Some(v) = version {
         // Registry dependency with version
@@ -581,6 +625,210 @@ pub fn remove_dependency(manifest_path: &Path, name: &str) -> PackageResult<()> 
     })?;
 
     Ok(())
+}
+
+/// Find workspace root by searching for a vais.toml with [workspace] section
+pub fn find_workspace_root(start: &Path) -> Option<PathBuf> {
+    let mut current = start.to_path_buf();
+
+    loop {
+        let manifest_path = current.join("vais.toml");
+        if manifest_path.exists() {
+            if let Ok(content) = fs::read_to_string(&manifest_path) {
+                if let Ok(manifest) = toml::from_str::<PackageManifest>(&content) {
+                    if manifest.workspace.is_some() {
+                        return Some(current);
+                    }
+                }
+            }
+        }
+
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+/// Resolve all workspace members from glob patterns
+pub fn resolve_workspace_members(workspace_root: &Path) -> PackageResult<ResolvedWorkspace> {
+    let manifest = load_manifest(workspace_root)?;
+
+    let workspace_config = manifest.workspace.as_ref().ok_or_else(|| {
+        PackageError::ParseError {
+            path: workspace_root.join("vais.toml"),
+            message: "no [workspace] section found".to_string(),
+        }
+    })?;
+
+    let mut members = Vec::new();
+
+    for pattern in &workspace_config.members {
+        let full_pattern = workspace_root.join(pattern).display().to_string();
+
+        let matched_dirs: Vec<PathBuf> = glob::glob(&full_pattern)
+            .map_err(|e| PackageError::ParseError {
+                path: workspace_root.join("vais.toml"),
+                message: format!("invalid glob pattern '{}': {}", pattern, e),
+            })?
+            .filter_map(|entry| entry.ok())
+            .filter(|p| p.is_dir() && p.join("vais.toml").exists())
+            .collect();
+
+        for member_dir in matched_dirs {
+            let mut member_manifest = load_manifest(&member_dir)?;
+
+            // Resolve workspace = true dependencies
+            resolve_workspace_deps(&mut member_manifest, workspace_config);
+
+            members.push(WorkspaceMember {
+                path: member_dir,
+                manifest: member_manifest,
+            });
+        }
+    }
+
+    // Also check if workspace root itself is a package (has [package] section with name)
+    if !manifest.package.name.is_empty() {
+        let mut root_manifest = manifest.clone();
+        resolve_workspace_deps(&mut root_manifest, workspace_config);
+        // Only add if not already in members
+        let root_canonical = workspace_root
+            .canonicalize()
+            .unwrap_or_else(|_| workspace_root.to_path_buf());
+        let already_added = members.iter().any(|m| {
+            m.path
+                .canonicalize()
+                .unwrap_or_else(|_| m.path.clone())
+                == root_canonical
+        });
+        if !already_added {
+            members.insert(
+                0,
+                WorkspaceMember {
+                    path: workspace_root.to_path_buf(),
+                    manifest: root_manifest,
+                },
+            );
+        }
+    }
+
+    Ok(ResolvedWorkspace {
+        root: workspace_root.to_path_buf(),
+        root_manifest: manifest,
+        members,
+    })
+}
+
+/// Resolve dependencies with `workspace = true` using workspace-level dependency definitions
+fn resolve_workspace_deps(manifest: &mut PackageManifest, workspace_config: &WorkspaceConfig) {
+    let ws_deps = &workspace_config.dependencies;
+
+    let mut resolved_deps = HashMap::new();
+    for (name, dep) in &manifest.dependencies {
+        if let Dependency::Detailed(d) = dep {
+            if d.workspace == Some(true) {
+                // Look up in workspace dependencies
+                if let Some(ws_dep) = ws_deps.get(name) {
+                    resolved_deps.insert(name.clone(), ws_dep.clone());
+                    continue;
+                }
+            }
+        }
+        resolved_deps.insert(name.clone(), dep.clone());
+    }
+    manifest.dependencies = resolved_deps;
+}
+
+/// Resolve path dependencies between workspace members automatically.
+/// If a member depends on another member by name (without path), add the path.
+pub fn resolve_inter_workspace_deps(workspace: &mut ResolvedWorkspace) {
+    // Build a name -> path map of all members
+    let member_paths: HashMap<String, PathBuf> = workspace
+        .members
+        .iter()
+        .map(|m| (m.manifest.package.name.clone(), m.path.clone()))
+        .collect();
+
+    for member in &mut workspace.members {
+        let member_base = member.path.clone();
+        let mut updated_deps = HashMap::new();
+
+        for (name, dep) in &member.manifest.dependencies {
+            match dep {
+                Dependency::Version(_) | Dependency::Detailed(DetailedDependency { path: None, .. }) => {
+                    // Check if this dependency name matches a workspace member
+                    if let Some(dep_path) = member_paths.get(name) {
+                        // Calculate relative path from this member to the dependency
+                        let rel_path = pathdiff_relative(&member_base, dep_path);
+                        updated_deps.insert(
+                            name.clone(),
+                            Dependency::Detailed(DetailedDependency {
+                                path: Some(rel_path),
+                                version: match dep {
+                                    Dependency::Version(v) => Some(v.clone()),
+                                    Dependency::Detailed(d) => d.version.clone(),
+                                },
+                                features: match dep {
+                                    Dependency::Detailed(d) => d.features.clone(),
+                                    _ => Vec::new(),
+                                },
+                                registry: None,
+                                workspace: None,
+                            }),
+                        );
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+            updated_deps.insert(name.clone(), dep.clone());
+        }
+
+        member.manifest.dependencies = updated_deps;
+    }
+}
+
+/// Compute relative path from `from_dir` to `to_dir`
+fn pathdiff_relative(from: &Path, to: &Path) -> String {
+    // Use canonicalized paths for accuracy
+    let from_abs = from
+        .canonicalize()
+        .unwrap_or_else(|_| from.to_path_buf());
+    let to_abs = to
+        .canonicalize()
+        .unwrap_or_else(|_| to.to_path_buf());
+
+    // Find common prefix
+    let from_parts: Vec<_> = from_abs.components().collect();
+    let to_parts: Vec<_> = to_abs.components().collect();
+
+    let common_len = from_parts
+        .iter()
+        .zip(to_parts.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let up_count = from_parts.len() - common_len;
+    let mut result = String::new();
+    for _ in 0..up_count {
+        if !result.is_empty() {
+            result.push('/');
+        }
+        result.push_str("..");
+    }
+
+    for part in &to_parts[common_len..] {
+        if !result.is_empty() {
+            result.push('/');
+        }
+        result.push_str(&part.as_os_str().to_string_lossy());
+    }
+
+    if result.is_empty() {
+        ".".to_string()
+    } else {
+        result
+    }
 }
 
 #[cfg(test)]
@@ -923,5 +1171,208 @@ some-registry-pkg = "1.0.0"
         // Without cache_root, registry deps should be skipped (not cause an error)
         let deps = resolve_all_dependencies(&manifest, &main_dir, None).unwrap();
         assert_eq!(deps.len(), 0);
+    }
+
+    #[test]
+    fn test_workspace_manifest_parsing() {
+        let dir = tempdir().unwrap();
+        let toml_content = r#"
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+json = "1.0.0"
+
+[package]
+name = "workspace-root"
+version = "0.1.0"
+"#;
+        fs::write(dir.path().join("vais.toml"), toml_content).unwrap();
+
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert!(manifest.workspace.is_some());
+
+        let ws = manifest.workspace.as_ref().unwrap();
+        assert_eq!(ws.members, vec!["crates/*"]);
+        assert!(ws.dependencies.contains_key("json"));
+    }
+
+    #[test]
+    fn test_find_workspace_root() {
+        let root = tempdir().unwrap();
+
+        // Create workspace root
+        let ws_toml = r#"
+[workspace]
+members = ["crates/*"]
+
+[package]
+name = "ws-root"
+version = "0.1.0"
+"#;
+        fs::write(root.path().join("vais.toml"), ws_toml).unwrap();
+
+        // Create a member directory
+        let member_dir = root.path().join("crates").join("my-lib");
+        fs::create_dir_all(&member_dir).unwrap();
+        let member_toml = r#"
+[package]
+name = "my-lib"
+version = "0.1.0"
+"#;
+        fs::write(member_dir.join("vais.toml"), member_toml).unwrap();
+
+        // Should find workspace root from member directory
+        let found = find_workspace_root(&member_dir);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), root.path().to_path_buf());
+    }
+
+    #[test]
+    fn test_resolve_workspace_members() {
+        let root = tempdir().unwrap();
+
+        // Create workspace root
+        let ws_toml = r#"
+[workspace]
+members = ["crates/*"]
+"#;
+        fs::write(root.path().join("vais.toml"), ws_toml).unwrap();
+
+        // Create two member packages
+        for name in &["lib-a", "lib-b"] {
+            let dir = root.path().join("crates").join(name);
+            fs::create_dir_all(dir.join("src")).unwrap();
+            let toml = format!(
+                r#"[package]
+name = "{}"
+version = "0.1.0"
+"#,
+                name
+            );
+            fs::write(dir.join("vais.toml"), toml).unwrap();
+            fs::write(
+                dir.join("src/lib.vais"),
+                format!("# {}\nF greet() -> i64 {{ 0 }}\n", name),
+            )
+            .unwrap();
+        }
+
+        let workspace = resolve_workspace_members(root.path()).unwrap();
+        assert_eq!(workspace.members.len(), 2);
+
+        let names: Vec<&str> = workspace
+            .members
+            .iter()
+            .map(|m| m.manifest.package.name.as_str())
+            .collect();
+        assert!(names.contains(&"lib-a"));
+        assert!(names.contains(&"lib-b"));
+    }
+
+    #[test]
+    fn test_workspace_dependency_resolution() {
+        let root = tempdir().unwrap();
+
+        // Create workspace root with shared dependency version
+        let ws_toml = r#"
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+json = "2.0.0"
+"#;
+        fs::write(root.path().join("vais.toml"), ws_toml).unwrap();
+
+        // Create a member that uses workspace = true
+        let dir = root.path().join("crates").join("my-app");
+        fs::create_dir_all(dir.join("src")).unwrap();
+        let member_toml = r#"
+[package]
+name = "my-app"
+version = "0.1.0"
+
+[dependencies]
+json = { workspace = true }
+"#;
+        fs::write(dir.join("vais.toml"), member_toml).unwrap();
+        fs::write(dir.join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
+
+        let workspace = resolve_workspace_members(root.path()).unwrap();
+        assert_eq!(workspace.members.len(), 1);
+
+        // The dependency should be resolved from workspace
+        let member = &workspace.members[0];
+        let json_dep = member.manifest.dependencies.get("json").unwrap();
+        match json_dep {
+            Dependency::Version(v) => assert_eq!(v, "2.0.0"),
+            _ => panic!("expected Version dependency, got {:?}", json_dep),
+        }
+    }
+
+    #[test]
+    fn test_inter_workspace_path_deps() {
+        let root = tempdir().unwrap();
+
+        // Create workspace root
+        let ws_toml = r#"
+[workspace]
+members = ["crates/*"]
+"#;
+        fs::write(root.path().join("vais.toml"), ws_toml).unwrap();
+
+        // Create lib-core
+        let core_dir = root.path().join("crates").join("lib-core");
+        fs::create_dir_all(core_dir.join("src")).unwrap();
+        fs::write(
+            core_dir.join("vais.toml"),
+            r#"[package]
+name = "lib-core"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::write(core_dir.join("src/lib.vais"), "F core_fn() -> i64 { 42 }\n").unwrap();
+
+        // Create my-app that depends on lib-core (by name, no path)
+        let app_dir = root.path().join("crates").join("my-app");
+        fs::create_dir_all(app_dir.join("src")).unwrap();
+        fs::write(
+            app_dir.join("vais.toml"),
+            r#"[package]
+name = "my-app"
+version = "0.1.0"
+
+[dependencies]
+lib-core = "0.1.0"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            app_dir.join("src/main.vais"),
+            "F main() -> i64 { 0 }\n",
+        )
+        .unwrap();
+
+        let mut workspace = resolve_workspace_members(root.path()).unwrap();
+        resolve_inter_workspace_deps(&mut workspace);
+
+        // Find my-app member
+        let app_member = workspace
+            .members
+            .iter()
+            .find(|m| m.manifest.package.name == "my-app")
+            .unwrap();
+
+        // lib-core dependency should now have a path
+        let dep = app_member.manifest.dependencies.get("lib-core").unwrap();
+        match dep {
+            Dependency::Detailed(d) => {
+                assert!(d.path.is_some(), "expected path to be set for workspace member dep");
+                let path = d.path.as_ref().unwrap();
+                assert!(path.contains("lib-core"), "path should reference lib-core: {}", path);
+            }
+            _ => panic!("expected Detailed dependency with path"),
+        }
     }
 }
