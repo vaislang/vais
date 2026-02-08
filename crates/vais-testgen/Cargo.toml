@@ -9,6 +9,6 @@ license.workspace = true
 vais-ast = { path = "../vais-ast" }
 vais-parser = { path = "../vais-parser" }
 
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies]
