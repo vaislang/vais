@@ -738,7 +738,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_stmts_as_expr(then_stmts)?;
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(then_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(then_val)]);
 
         // Else block
         self.builder.switch_to_block(else_block);
@@ -748,7 +750,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         } else {
             self.builder.ins().iconst(types::I64, 0)
         };
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(else_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(else_val)]);
 
         // Merge block
         self.builder.switch_to_block(merge_block);
@@ -807,12 +811,16 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_expr(then_expr)?;
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(then_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(then_val)]);
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
         let else_val = self.compile_expr(else_expr)?;
-        self.builder.ins().jump(merge_block, &[BlockArg::Value(else_val)]);
+        self.builder
+            .ins()
+            .jump(merge_block, &[BlockArg::Value(else_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);

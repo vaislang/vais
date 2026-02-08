@@ -569,7 +569,8 @@ mod tests {
         common_subexpression_elimination(&mut body);
 
         // t2 assignment should still be Mul, not replaced
-        if let Statement::Assign(_, Rvalue::BinaryOp(op, _, _)) = &body.basic_blocks[0].statements[1]
+        if let Statement::Assign(_, Rvalue::BinaryOp(op, _, _)) =
+            &body.basic_blocks[0].statements[1]
         {
             assert_eq!(*op, BinOp::Mul);
         } else {

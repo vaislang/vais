@@ -859,10 +859,7 @@ impl WasmBindgenGenerator {
                     WitResult::Named(params) => {
                         output.push_str("    return {\n");
                         for (i, param) in params.iter().enumerate() {
-                            output.push_str(&format!(
-                                "      {}: result[{}],\n",
-                                param.name, i
-                            ));
+                            output.push_str(&format!("      {}: result[{}],\n", param.name, i));
                         }
                         output.push_str("    };\n");
                     }
@@ -957,7 +954,10 @@ impl WasmBindgenGenerator {
                 "void".to_string()
             };
 
-            output.push_str(&format!("  {}({}): {};\n\n", func.name, params, return_type));
+            output.push_str(&format!(
+                "  {}({}): {};\n\n",
+                func.name, params, return_type
+            ));
         }
 
         output.push_str("}\n\n");

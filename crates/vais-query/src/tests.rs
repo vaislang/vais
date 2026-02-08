@@ -217,7 +217,9 @@ fn test_query_invalidation_cascade() {
     let _tokens1 = db.tokenize("cascade.vais").unwrap();
     let _ast1 = db.parse("cascade.vais").unwrap();
     db.type_check("cascade.vais").unwrap();
-    let ir1 = db.generate_ir("cascade.vais", TargetTriple::Native).unwrap();
+    let ir1 = db
+        .generate_ir("cascade.vais", TargetTriple::Native)
+        .unwrap();
 
     // All queries should be cached
     assert!(db.is_cached("cascade.vais", "tokenize"));
@@ -237,7 +239,9 @@ fn test_query_invalidation_cascade() {
     // Re-run queries and verify they produce different results
     let tokens2 = db.tokenize("cascade.vais").unwrap();
     let ast2 = db.parse("cascade.vais").unwrap();
-    let ir2 = db.generate_ir("cascade.vais", TargetTriple::Native).unwrap();
+    let ir2 = db
+        .generate_ir("cascade.vais", TargetTriple::Native)
+        .unwrap();
 
     // IR content should differ (the constant value changed from 42 to 100)
     assert_ne!(*ir1, *ir2);
@@ -461,11 +465,15 @@ fn test_target_triple_cache_invalidation() {
     db.set_source_text("target_test.vais", SIMPLE_SOURCE);
 
     // Generate IR for native target
-    let ir_native = db.generate_ir("target_test.vais", TargetTriple::Native).unwrap();
+    let ir_native = db
+        .generate_ir("target_test.vais", TargetTriple::Native)
+        .unwrap();
     assert!(db.is_cached("target_test.vais", "generate_ir"));
 
     // Generate IR for a different target (this should compute new IR)
-    let ir_linux = db.generate_ir("target_test.vais", TargetTriple::X86_64Linux).unwrap();
+    let ir_linux = db
+        .generate_ir("target_test.vais", TargetTriple::X86_64Linux)
+        .unwrap();
 
     // Both IRs should exist but may differ in target-specific details
     assert!(ir_native.contains("define"));

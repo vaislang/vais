@@ -778,7 +778,10 @@ impl IncrementalCache {
             }
         });
 
-        for (file, func) in new_dirty_funcs.into_inner().expect("new_dirty_funcs mutex poisoned") {
+        for (file, func) in new_dirty_funcs
+            .into_inner()
+            .expect("new_dirty_funcs mutex poisoned")
+        {
             dirty_set.mark_function_dirty(file, func);
         }
 

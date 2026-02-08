@@ -11600,7 +11600,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     assert!(ir.contains("target triple = \"wasm32-unknown-unknown\""));
     assert!(ir.contains("target datalayout"));
@@ -11614,7 +11617,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     assert!(ir.contains("define void @_start()"));
     assert!(ir.contains("call i64 @main()"));
@@ -11629,7 +11635,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASM bump allocator implementation
     assert!(ir.contains("@__heap_ptr"));
@@ -11645,7 +11654,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASM puts calls __wasm_write
     assert!(ir.contains("define i64 @puts(i8* %str)"));
@@ -11661,7 +11673,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // LLVM WASM intrinsics for memory management
     assert!(ir.contains("declare i32 @llvm.wasm.memory.size.i32"));
@@ -11677,7 +11692,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::WasiPreview1,
+    );
     let ir = gen.generate_module(&module).unwrap();
     assert!(ir.contains("target triple = \"wasm32-wasi\""));
     assert!(ir.contains("target datalayout"));
@@ -11691,7 +11709,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::WasiPreview1,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASI _start calls __wasi_proc_exit
     assert!(ir.contains("define void @_start()"));
@@ -11707,7 +11728,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::WasiPreview1);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::WasiPreview1,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASI fd_write is declared and used
     assert!(ir.contains("declare i32 @__wasi_fd_write"));
@@ -11723,7 +11747,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASM free is a no-op (bump allocator doesn't free)
     assert!(ir.contains("define void @free(i8* %ptr)"));
@@ -11739,7 +11766,10 @@ F main() -> i64 {
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
-    let mut gen = vais_codegen::CodeGenerator::new_with_target("test", vais_codegen::TargetTriple::Wasm32Unknown);
+    let mut gen = vais_codegen::CodeGenerator::new_with_target(
+        "test",
+        vais_codegen::TargetTriple::Wasm32Unknown,
+    );
     let ir = gen.generate_module(&module).unwrap();
     // WASM exit calls __wasm_trap
     assert!(ir.contains("define void @exit(i32 %code)"));

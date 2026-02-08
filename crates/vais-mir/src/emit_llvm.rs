@@ -731,7 +731,8 @@ mod tests {
 
     #[test]
     fn test_emit_comparison_ops() {
-        let mut builder = MirBuilder::new("compare", vec![MirType::I64, MirType::I64], MirType::I64);
+        let mut builder =
+            MirBuilder::new("compare", vec![MirType::I64, MirType::I64], MirType::I64);
 
         let result = builder.new_local(MirType::I64, None);
         let param_a = Operand::Copy(Place::local(builder.param(0)));

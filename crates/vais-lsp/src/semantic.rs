@@ -332,9 +332,6 @@ F main() -> i64 {
             .collect();
 
         // Should find parameters 'x' and 'y'
-        assert!(
-            param_tokens.len() >= 2,
-            "Should find at least 2 parameters"
-        );
+        assert!(param_tokens.len() >= 2, "Should find at least 2 parameters");
     }
 }

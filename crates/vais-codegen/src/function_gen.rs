@@ -1294,7 +1294,9 @@ impl CodeGenerator {
         ir.push_str("  %needed = sub i32 %new, %cur_bytes\n");
         ir.push_str("  %pages_needed_raw = add i32 %needed, 65535\n");
         ir.push_str("  %pages_needed = udiv i32 %pages_needed_raw, 65536\n");
-        ir.push_str("  %grow_result = call i32 @llvm.wasm.memory.grow.i32(i32 0, i32 %pages_needed)\n");
+        ir.push_str(
+            "  %grow_result = call i32 @llvm.wasm.memory.grow.i32(i32 0, i32 %pages_needed)\n",
+        );
         ir.push_str("  %grow_failed = icmp eq i32 %grow_result, -1\n");
         ir.push_str("  br i1 %grow_failed, label %oom, label %done\n");
         ir.push_str("oom:\n");

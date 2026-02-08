@@ -1249,7 +1249,11 @@ pub(crate) fn cmd_pkg_doc(
             continue;
         }
 
-        let doc_file = format!("{}.{}", file.file_stem().unwrap_or_default().to_string_lossy(), ext);
+        let doc_file = format!(
+            "{}.{}",
+            file.file_stem().unwrap_or_default().to_string_lossy(),
+            ext
+        );
 
         if format == "html" {
             index_content.push_str(&format!(

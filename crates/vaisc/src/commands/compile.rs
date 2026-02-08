@@ -1084,11 +1084,7 @@ pub(crate) fn compile_to_wasi(
     if let Some(sysroot) = detect_wasi_sysroot() {
         args.insert(1, format!("--sysroot={}", sysroot));
         if verbose {
-            println!(
-                "  {} WASI sysroot: {}",
-                "info:".blue().bold(),
-                sysroot
-            );
+            println!("  {} WASI sysroot: {}", "info:".blue().bold(), sysroot);
         }
     }
 
