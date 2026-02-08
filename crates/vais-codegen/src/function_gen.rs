@@ -497,8 +497,11 @@ impl CodeGenerator {
         ir.push_str("  %3 = bitcast %struct.dirent* %1 to i8*\n");
         // On macOS (Darwin), d_name is at offset 21
         // On Linux, d_name is at offset 19
-        // For now, use offset 21 for macOS
-        ir.push_str("  %4 = getelementptr inbounds i8, i8* %3, i64 21\n");
+        let d_name_offset = if cfg!(target_os = "linux") { 19 } else { 21 };
+        ir.push_str(&format!(
+            "  %4 = getelementptr inbounds i8, i8* %3, i64 {}\n",
+            d_name_offset
+        ));
         ir.push_str("  %5 = ptrtoint i8* %4 to i64\n");
         ir.push_str("  ret i64 %5\n");
         ir.push_str("}\n");
