@@ -1,12 +1,12 @@
 //! Module import resolution and loading.
 
+use crate::error_formatter;
+use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use colored::Colorize;
 use vais_ast::{Item, Module, Spanned};
 use vais_query::QueryDatabase;
-use crate::error_formatter;
 
 pub(crate) fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
     items
@@ -141,7 +141,9 @@ pub(crate) fn load_module_with_imports_internal(
 
                         // Validate remapped indices will be within bounds after extending all_items
                         let future_total_len = offset + filtered_len;
-                        for (&original_idx, &remapped_idx) in sub_indices.iter().zip(remapped.iter()) {
+                        for (&original_idx, &remapped_idx) in
+                            sub_indices.iter().zip(remapped.iter())
+                        {
                             if remapped_idx >= future_total_len && verbose {
                                 eprintln!(
                                     "{}: Remapped index {} (original {} + offset {}) >= total items {} for module '{}'",
@@ -329,8 +331,13 @@ pub(crate) fn load_module_with_imports_parallel(
                 Item::Use(use_stmt) => {
                     let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
                     let mut sub_loading_stack = Vec::new();
-                    let sub_imported =
-                        load_module_with_imports(&sub_path, loaded, &mut sub_loading_stack, verbose, query_db)?;
+                    let sub_imported = load_module_with_imports(
+                        &sub_path,
+                        loaded,
+                        &mut sub_loading_stack,
+                        verbose,
+                        query_db,
+                    )?;
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
                     let offset = sub_items.len();
@@ -579,7 +586,10 @@ pub(crate) fn resolve_import_path(
 /// 2. Ensures the resolved path is within allowed directories
 /// 3. Prevents path traversal attacks (../)
 /// 4. Prevents symlink attacks
-pub(crate) fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<PathBuf, String> {
+pub(crate) fn validate_and_canonicalize_import(
+    path: &Path,
+    allowed_base: &Path,
+) -> Result<PathBuf, String> {
     // Canonicalize the path to resolve symlinks and get absolute path
     let canonical_path = path
         .canonicalize()

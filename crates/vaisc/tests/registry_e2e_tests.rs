@@ -1949,7 +1949,10 @@ fn run_vaisc(args: &[&str], cwd: &Path) -> Result<std::process::Output, String> 
 /// but where cargo needs to find its own Cargo.toml)
 fn run_vaisc_from_root(args: &[&str]) -> Result<std::process::Output, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(&manifest_dir);
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(&manifest_dir);
     Command::new("cargo")
         .args(["run", "--bin", "vaisc", "--"])
         .args(args)
@@ -2492,7 +2495,9 @@ fn test_install_no_package() {
             );
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
-                stderr.contains("vais.toml") || stderr.contains("not found") || stderr.contains("could not find"),
+                stderr.contains("vais.toml")
+                    || stderr.contains("not found")
+                    || stderr.contains("could not find"),
                 "should mention missing manifest: {}",
                 stderr
             );
@@ -2609,7 +2614,11 @@ version = "1.0.0"
                 // Verify binary exists in ~/.vais/bin/
                 let home = dirs::home_dir().unwrap();
                 let binary = home.join(".vais").join("bin").join("test_installable");
-                assert!(binary.exists(), "binary should exist at {}", binary.display());
+                assert!(
+                    binary.exists(),
+                    "binary should exist at {}",
+                    binary.display()
+                );
 
                 // Uninstall
                 match run_vaisc_from_root(&["uninstall", "test_installable"]) {
@@ -2618,10 +2627,7 @@ version = "1.0.0"
                             uninstall_output.status.success(),
                             "uninstall should succeed"
                         );
-                        assert!(
-                            !binary.exists(),
-                            "binary should be removed after uninstall"
-                        );
+                        assert!(!binary.exists(), "binary should be removed after uninstall");
                     }
                     Err(_) => {
                         eprintln!("skipping uninstall test: cargo run not available");
@@ -2651,8 +2657,12 @@ fn test_bench_no_directory() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // Should mention benches directory not found or no benchmarks
             assert!(
-                !output.status.success() || stdout.contains("No benchmark") || stdout.contains("not found"),
-                "should handle missing benches dir: stdout={}, stderr={}", stdout, stderr
+                !output.status.success()
+                    || stdout.contains("No benchmark")
+                    || stdout.contains("not found"),
+                "should handle missing benches dir: stdout={}, stderr={}",
+                stdout,
+                stderr
             );
         }
         Err(_) => eprintln!("skipping test: cargo run not available"),
@@ -2669,14 +2679,23 @@ fn test_bench_with_filter() {
     let bench_file = benches_dir.join("simple.vais");
     fs::write(&bench_file, "F main() -> i64 = 42").unwrap();
 
-    match run_vaisc_from_root(&["bench", benches_dir.to_str().unwrap(), "--filter", "nonexistent"]) {
+    match run_vaisc_from_root(&[
+        "bench",
+        benches_dir.to_str().unwrap(),
+        "--filter",
+        "nonexistent",
+    ]) {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // Should work without error - just 0 benchmarks found
             // Our code prints "Running 0 benchmark(s)" and "0 benchmarks: 0 passed, 0 failed"
             assert!(
-                output.status.success() || stdout.contains("0 benchmark") || stdout.contains("No benchmark"),
-                "should handle filter with no matches: status={}, stdout={}", output.status, stdout
+                output.status.success()
+                    || stdout.contains("0 benchmark")
+                    || stdout.contains("No benchmark"),
+                "should handle filter with no matches: status={}, stdout={}",
+                output.status,
+                stdout
             );
         }
         Err(_) => eprintln!("skipping test: cargo run not available"),
@@ -2698,7 +2717,10 @@ fn test_fix_dry_run() {
             // Should complete without error - either success or mentions fixes
             assert!(
                 output.status.success() || stdout.contains("fix") || stderr.is_empty(),
-                "fix --dry-run should work: status={}, stdout={}, stderr={}", output.status, stdout, stderr
+                "fix --dry-run should work: status={}, stdout={}, stderr={}",
+                output.status,
+                stdout,
+                stderr
             );
         }
         Err(_) => eprintln!("skipping test: cargo run not available"),
@@ -2721,7 +2743,8 @@ fn test_lint_clean_file() {
             if output.status.success() {
                 assert!(
                     stdout.contains("0 error") || stdout.contains("✓"),
-                    "clean file should pass lint: stdout={}", stdout
+                    "clean file should pass lint: stdout={}",
+                    stdout
                 );
             } else {
                 // May fail on clang issues in CI, just log it
@@ -2747,16 +2770,13 @@ fn test_lint_json_format() {
             // Should output valid JSON
             if !stdout.is_empty() {
                 let json_result: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
-                assert!(
-                    json_result.is_ok(),
-                    "should output valid JSON: {}",
-                    stdout
-                );
+                assert!(json_result.is_ok(), "should output valid JSON: {}", stdout);
 
                 if let Ok(json) = json_result {
                     assert!(
                         json.get("summary").is_some(),
-                        "JSON should have summary field: {:?}", json
+                        "JSON should have summary field: {:?}",
+                        json
                     );
                 }
             }
@@ -2777,7 +2797,11 @@ fn test_pkg_vendor_no_deps() {
         "[package]\nname = \"vendor_test\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    fs::write(project_dir.join("src").join("main.vais"), "F main() -> i64 { 0 }\n").unwrap();
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
 
     match run_vaisc(&["pkg", "vendor"], &project_dir) {
         Ok(output) => {
@@ -2820,7 +2844,9 @@ fn test_pkg_package_list() {
 
             if output.status.success() {
                 assert!(
-                    stdout.contains("contents") || stdout.contains("vais.toml") || stdout.contains("src/main.vais"),
+                    stdout.contains("contents")
+                        || stdout.contains("vais.toml")
+                        || stdout.contains("src/main.vais"),
                     "should show file listing: stdout={}, stderr={}",
                     stdout,
                     stderr

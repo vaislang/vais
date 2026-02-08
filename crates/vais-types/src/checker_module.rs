@@ -10,8 +10,8 @@ use crate::ownership;
 use crate::traits::TraitImpl;
 use crate::traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
 use crate::types::{
-    self, EffectAnnotation, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError,
-    TypeResult, UnionDef, VariantFieldTypes,
+    self, EffectAnnotation, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult,
+    UnionDef, VariantFieldTypes,
 };
 
 impl TypeChecker {
@@ -208,7 +208,10 @@ impl TypeChecker {
     ///
     /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
     /// Contract expressions must evaluate to bool.
-    pub(crate) fn extract_contracts(&mut self, f: &Function) -> TypeResult<Option<types::ContractSpec>> {
+    pub(crate) fn extract_contracts(
+        &mut self,
+        f: &Function,
+    ) -> TypeResult<Option<types::ContractSpec>> {
         use types::{ContractClause, ContractSpec};
 
         let mut spec = ContractSpec::default();
@@ -316,7 +319,10 @@ impl TypeChecker {
     }
 
     /// Register an extern function
-    pub(crate) fn register_extern_function(&mut self, func: &vais_ast::ExternFunction) -> TypeResult<()> {
+    pub(crate) fn register_extern_function(
+        &mut self,
+        func: &vais_ast::ExternFunction,
+    ) -> TypeResult<()> {
         let name = func.name.node.clone();
         if self.functions.contains_key(&name) {
             // Allow re-declaring extern functions that are already registered

@@ -2,17 +2,17 @@
 //!
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
 
+mod commands;
 #[allow(dead_code)]
 mod doc_gen;
 mod error_formatter;
+mod imports;
 #[allow(dead_code)]
 mod incremental;
 mod package;
 #[allow(dead_code)]
 mod registry;
 mod repl;
-mod commands;
-mod imports;
 mod runtime;
 mod utils;
 
@@ -722,7 +722,12 @@ fn main() {
             } else {
                 vais_codegen::optimize::CoverageMode::None
             };
-            commands::test::cmd_test(&path, filter.as_deref(), verbose || cli.verbose, &coverage_mode)
+            commands::test::cmd_test(
+                &path,
+                filter.as_deref(),
+                verbose || cli.verbose,
+                &coverage_mode,
+            )
         }
         Some(Commands::Bench { path, filter }) => {
             commands::test::cmd_bench(&path, filter.as_deref(), cli.verbose)
@@ -741,9 +746,7 @@ fn main() {
             cli.verbose,
             &plugins,
         ),
-        Some(Commands::Pkg(pkg_cmd)) => {
-            commands::pkg::cmd_pkg(pkg_cmd, cli.verbose)
-        }
+        Some(Commands::Pkg(pkg_cmd)) => commands::pkg::cmd_pkg(pkg_cmd, cli.verbose),
         Some(Commands::Pgo {
             input,
             output,
@@ -798,7 +801,7 @@ fn main() {
                             cli.inkwell
                         }
                     },
-                    false, // per_module
+                    false,     // per_module
                     536870912, // cache_limit (512MB default)
                 )
             } else {

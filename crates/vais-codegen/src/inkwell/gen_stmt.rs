@@ -13,7 +13,10 @@ use super::generator::{InkwellCodeGenerator, LoopContext};
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
-    pub(super) fn generate_block(&mut self, stmts: &[Spanned<Stmt>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_block(
+        &mut self,
+        stmts: &[Spanned<Stmt>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let mut last_value: BasicValueEnum =
             self.context.struct_type(&[], false).const_zero().into();
 
@@ -246,7 +249,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
-    pub(super) fn generate_if_else(&mut self, if_else: &IfElse) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_if_else(
+        &mut self,
+        if_else: &IfElse,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         match if_else {
             IfElse::Else(stmts) => self.generate_block(stmts),
             IfElse::ElseIf(cond, then_stmts, else_branch) => self.generate_if_expr(
@@ -608,7 +614,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(())
     }
 
-    pub(super) fn generate_break(&mut self, value: Option<&Expr>) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_break(
+        &mut self,
+        value: Option<&Expr>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let break_block = self
             .loop_stack
             .last()
@@ -643,5 +652,4 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     // ========== Array/Tuple/Index ==========
-
 }

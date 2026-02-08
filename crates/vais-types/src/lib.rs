@@ -267,7 +267,6 @@ impl TypeChecker {
     pub fn get_lifetime_inferencer(&self) -> &lifetime::LifetimeInferencer {
         &self.lifetime_inferencer
     }
-
 }
 
 impl Default for TypeChecker {

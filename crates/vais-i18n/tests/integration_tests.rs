@@ -11,7 +11,10 @@ fn test_i18n_creation() {
     // Should create with auto-detected locale
     // We can't assert the exact locale as it depends on the system
     let locale = i18n.locale();
-    assert!(matches!(locale, Locale::En | Locale::Ko | Locale::Ja | Locale::Zh));
+    assert!(matches!(
+        locale,
+        Locale::En | Locale::Ko | Locale::Ja | Locale::Zh
+    ));
 }
 
 #[test]
@@ -197,7 +200,10 @@ fn test_i18n_default() {
     let i18n = I18n::default();
     // Default should create with auto-detected locale
     let locale = i18n.locale();
-    assert!(matches!(locale, Locale::En | Locale::Ko | Locale::Ja | Locale::Zh));
+    assert!(matches!(
+        locale,
+        Locale::En | Locale::Ko | Locale::Ja | Locale::Zh
+    ));
 }
 
 #[test]

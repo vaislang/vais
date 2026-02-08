@@ -104,7 +104,11 @@ impl TypeChecker {
                 name: "sizeof".to_string(),
                 generics: vec!["T".to_string()],
                 generic_bounds: HashMap::new(),
-                params: vec![("val".to_string(), ResolvedType::Generic("T".to_string()), false)],
+                params: vec![(
+                    "val".to_string(),
+                    ResolvedType::Generic("T".to_string()),
+                    false,
+                )],
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
@@ -1461,10 +1465,8 @@ impl TypeChecker {
                     methods: HashMap::new(),
                 },
             );
-            self.exhaustiveness_checker.register_enum(
-                "Result",
-                vec!["Ok".to_string(), "Err".to_string()],
-            );
+            self.exhaustiveness_checker
+                .register_enum("Result", vec!["Ok".to_string(), "Err".to_string()]);
         }
 
         // Register built-in Option<T> enum
@@ -1484,10 +1486,8 @@ impl TypeChecker {
                     methods: HashMap::new(),
                 },
             );
-            self.exhaustiveness_checker.register_enum(
-                "Option",
-                vec!["None".to_string(), "Some".to_string()],
-            );
+            self.exhaustiveness_checker
+                .register_enum("Option", vec!["None".to_string(), "Some".to_string()]);
         }
     }
 
@@ -2082,11 +2082,7 @@ impl TypeChecker {
 
         // ===== System functions (env/process/signal) =====
         #[allow(clippy::type_complexity)]
-        let sys_fns: Vec<(
-            &str,
-            Vec<(String, ResolvedType, bool)>,
-            ResolvedType,
-        )> = vec![
+        let sys_fns: Vec<(&str, Vec<(String, ResolvedType, bool)>, ResolvedType)> = vec![
             (
                 "getenv",
                 vec![("name".to_string(), ResolvedType::Str, false)],

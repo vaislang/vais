@@ -58,7 +58,7 @@ crates/
 └── vais-node/         # Node.js bindings (NAPI)
 
 std/               # Standard library (.vais files)
-examples/          # Example programs (105+ files)
+examples/          # Example programs (168+ files)
 selfhost/          # Self-hosting compiler
 benches/           # Benchmark suite (criterion)
 playground/        # Web playground frontend
@@ -97,7 +97,7 @@ intellij-vais/     # IntelliJ plugin
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (128+)
+- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (415+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests

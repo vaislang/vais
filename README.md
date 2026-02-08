@@ -56,10 +56,10 @@ crates/
 ├── vais-lsp/      # Language Server Protocol
 └── vaisc/         # CLI compiler & REPL
 
-std/               # Standard library (47 modules)
+std/               # Standard library (68 modules)
 vscode-vais/       # VSCode extension
 docs/              # Documentation
-examples/          # Example programs (105+ files)
+examples/          # Example programs (168+ files)
 ```
 
 ## Building
@@ -130,7 +130,7 @@ Coverage is measured automatically on every push and pull request to `main` and 
 - [x] Parser (recursive descent)
 - [x] Type checker (generics, traits, type inference)
 - [x] Code generator (LLVM IR)
-- [x] Standard library (24 modules: Vec, HashMap, String, File, Net, etc.)
+- [x] Standard library (68 modules: Vec, HashMap, String, File, Net, etc.)
 - [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
 - [x] REPL (interactive environment)
 - [x] VSCode extension (syntax highlighting, LSP integration)

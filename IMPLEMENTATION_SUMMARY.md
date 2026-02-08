@@ -366,11 +366,11 @@ See `LANGUAGE_BINDINGS.md` for details.
 
 ## Project Statistics
 
-- **Total Crates**: 30+
-- **Lines of Code**: ~50,000+ (Rust compiler)
-- **Standard Library**: ~5,000+ lines (Vais)
-- **Examples**: 105+ example programs
-- **Tests**: 128+ E2E tests + unit tests
+- **Total Crates**: 28
+- **Lines of Code**: 172,162 (Rust compiler)
+- **Standard Library**: 68 modules (.vais files)
+- **Examples**: 168+ example programs
+- **Tests**: 415 E2E tests + unit tests
 - **Documentation**: Comprehensive mdBook site
 
 ## Tooling Ecosystem

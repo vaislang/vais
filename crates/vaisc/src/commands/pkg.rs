@@ -1,17 +1,17 @@
 //! Package management commands.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use clap::Subcommand;
-use colored::Colorize;
-use vais_codegen::TargetTriple;
-use vais_plugin::PluginRegistry;
+use crate::commands::build::cmd_build;
+use crate::commands::simple::cmd_check;
 use crate::doc_gen;
 use crate::package;
 use crate::registry;
-use crate::commands::build::cmd_build;
-use crate::commands::simple::cmd_check;
+use clap::Subcommand;
+use colored::Colorize;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use vais_codegen::TargetTriple;
+use vais_plugin::PluginRegistry;
 
 #[derive(Subcommand)]
 pub(crate) enum PkgCommands {
@@ -325,7 +325,11 @@ pub(crate) fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 // Set feature cfg values as env var for the build pipeline
                 std::env::set_var("VAIS_FEATURES", enabled_features.join(","));
                 if verbose {
-                    println!("{} features: {}", "Enabled".cyan(), enabled_features.join(", "));
+                    println!(
+                        "{} features: {}",
+                        "Enabled".cyan(),
+                        enabled_features.join(", ")
+                    );
                 }
             }
 
@@ -362,7 +366,11 @@ pub(crate) fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             if !enabled_features.is_empty() {
                 std::env::set_var("VAIS_FEATURES", enabled_features.join(","));
                 if verbose {
-                    println!("{} features: {}", "Enabled".cyan(), enabled_features.join(", "));
+                    println!(
+                        "{} features: {}",
+                        "Enabled".cyan(),
+                        enabled_features.join(", ")
+                    );
                 }
             }
 
@@ -524,31 +532,36 @@ pub(crate) fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         }
 
         PkgCommands::Vendor => {
-            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_vendor(&pkg_dir, &manifest, verbose)
         }
 
         PkgCommands::Package { list } => {
-            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_package(&pkg_dir, &manifest, list, verbose)
         }
 
         PkgCommands::Metadata { format } => {
-            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_metadata(&manifest, &format)
         }
 
         PkgCommands::Owner { add, remove, list } => {
-            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             cmd_pkg_owner(&pkg_dir, &manifest, add, remove, list)
         }
 
         PkgCommands::Verify => {
-            let pkg_dir = find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
             cmd_pkg_verify(&pkg_dir, verbose)
         }
     }
@@ -577,7 +590,12 @@ pub(crate) fn resolve_feature_flags(
     }
 
     let selected: Vec<String> = features_str
-        .map(|s| s.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
 
     // Validate that all selected features exist
@@ -685,7 +703,7 @@ pub(crate) fn cmd_pkg_build_single(
     cmd_build(
         &entry,
         Some(output.clone()),
-        is_lib,  // emit_ir = true for library packages
+        is_lib, // emit_ir = true for library packages
         opt_level,
         debug,
         verbose,
@@ -736,8 +754,7 @@ pub(crate) fn run_build_script(
     }
 
     let out_dir = target_dir.join("build");
-    fs::create_dir_all(&out_dir)
-        .map_err(|e| format!("failed to create OUT_DIR: {}", e))?;
+    fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create OUT_DIR: {}", e))?;
 
     // Determine target triple
     let target = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
@@ -862,13 +879,8 @@ pub(crate) fn cmd_install(
     let built_binary = pkg_dir.join("target").join(pkg_name);
     let dest = bin_dir.join(pkg_name);
 
-    fs::copy(&built_binary, &dest).map_err(|e| {
-        format!(
-            "failed to copy binary to {}: {}",
-            dest.display(),
-            e
-        )
-    })?;
+    fs::copy(&built_binary, &dest)
+        .map_err(|e| format!("failed to copy binary to {}: {}", dest.display(), e))?;
 
     // Make executable on Unix
     #[cfg(unix)]
@@ -897,9 +909,7 @@ pub(crate) fn cmd_install(
             bin_dir.display()
         );
         println!("  export PATH=\"{}:$PATH\"", bin_dir.display());
-        println!(
-            "  Or add the line above to your ~/.bashrc, ~/.zshrc, or shell profile."
-        );
+        println!("  Or add the line above to your ~/.bashrc, ~/.zshrc, or shell profile.");
     }
 
     Ok(())
@@ -918,13 +928,8 @@ pub(crate) fn cmd_uninstall(package: &str) -> Result<(), String> {
         ));
     }
 
-    fs::remove_file(&binary).map_err(|e| {
-        format!(
-            "failed to remove {}: {}",
-            binary.display(),
-            e
-        )
-    })?;
+    fs::remove_file(&binary)
+        .map_err(|e| format!("failed to remove {}: {}", binary.display(), e))?;
 
     println!(
         "{} Uninstalled {} from {}",
@@ -950,8 +955,7 @@ pub(crate) fn cmd_pkg_build_workspace(
         "could not find workspace root (vais.toml with [workspace] section)".to_string()
     })?;
 
-    let mut workspace =
-        resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
+    let mut workspace = resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
 
     // Resolve inter-workspace path dependencies
     resolve_inter_workspace_deps(&mut workspace);
@@ -1017,8 +1021,7 @@ pub(crate) fn cmd_pkg_check_workspace(start_dir: &Path, verbose: bool) -> Result
         "could not find workspace root (vais.toml with [workspace] section)".to_string()
     })?;
 
-    let mut workspace =
-        resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
+    let mut workspace = resolve_workspace_members(&ws_root).map_err(|e| e.to_string())?;
 
     resolve_inter_workspace_deps(&mut workspace);
 
@@ -1046,7 +1049,11 @@ pub(crate) fn cmd_pkg_check_workspace(start_dir: &Path, verbose: bool) -> Result
             src_dir.join("lib.vais")
         } else {
             if verbose {
-                println!("{} Skipping '{}' (no src/main.vais or src/lib.vais)", ">>".cyan(), name);
+                println!(
+                    "{} Skipping '{}' (no src/main.vais or src/lib.vais)",
+                    ">>".cyan(),
+                    name
+                );
             }
             continue;
         };
@@ -1296,8 +1303,7 @@ pub(crate) fn cmd_pkg_vendor(
     use package::*;
 
     let vendor_dir = pkg_dir.join("vendor");
-    fs::create_dir_all(&vendor_dir)
-        .map_err(|e| format!("failed to create vendor/: {}", e))?;
+    fs::create_dir_all(&vendor_dir).map_err(|e| format!("failed to create vendor/: {}", e))?;
 
     let cache_root = default_registry_cache_root();
     let deps = resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
@@ -1327,7 +1333,12 @@ pub(crate) fn cmd_pkg_vendor(
         ));
 
         if verbose {
-            println!("  {} {} -> vendor/{}", "Vendored".cyan(), dep.name, dep.name);
+            println!(
+                "  {} {} -> vendor/{}",
+                "Vendored".cyan(),
+                dep.name,
+                dep.name
+            );
         }
     }
 
@@ -1350,11 +1361,10 @@ pub(crate) fn cmd_pkg_vendor(
 
 /// Recursively copy a directory
 pub(crate) fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
-    fs::create_dir_all(dst)
-        .map_err(|e| format!("failed to create {}: {}", dst.display(), e))?;
+    fs::create_dir_all(dst).map_err(|e| format!("failed to create {}: {}", dst.display(), e))?;
 
-    let entries = fs::read_dir(src)
-        .map_err(|e| format!("failed to read {}: {}", src.display(), e))?;
+    let entries =
+        fs::read_dir(src).map_err(|e| format!("failed to read {}: {}", src.display(), e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("failed to read entry: {}", e))?;
@@ -1401,13 +1411,25 @@ pub(crate) fn cmd_pkg_package(
     // Include src/ directory
     let src_dir = pkg_dir.join("src");
     if src_dir.exists() {
-        collect_files_recursive(&src_dir, &PathBuf::from("src"), &mut files, &mut total_size, pkg_dir)?;
+        collect_files_recursive(
+            &src_dir,
+            &PathBuf::from("src"),
+            &mut files,
+            &mut total_size,
+            pkg_dir,
+        )?;
     }
 
     // Include tests/ directory
     let tests_dir = pkg_dir.join("tests");
     if tests_dir.exists() {
-        collect_files_recursive(&tests_dir, &PathBuf::from("tests"), &mut files, &mut total_size, pkg_dir)?;
+        collect_files_recursive(
+            &tests_dir,
+            &PathBuf::from("tests"),
+            &mut files,
+            &mut total_size,
+            pkg_dir,
+        )?;
     }
 
     // Include README.md if it exists
@@ -1425,7 +1447,12 @@ pub(crate) fn cmd_pkg_package(
     }
 
     if list_only {
-        println!("{} {} v{} contents:", "Package".cyan(), pkg_name, pkg_version);
+        println!(
+            "{} {} v{} contents:",
+            "Package".cyan(),
+            pkg_name,
+            pkg_version
+        );
         for file in &files {
             let full_path = pkg_dir.join(file);
             let size = fs::metadata(&full_path).map(|m| m.len()).unwrap_or(0);
@@ -1439,12 +1466,11 @@ pub(crate) fn cmd_pkg_package(
     let archive_name = format!("{}-{}.vpkg", pkg_name, pkg_version);
     let archive_path = pkg_dir.join("target").join(&archive_name);
     let target_dir = pkg_dir.join("target");
-    fs::create_dir_all(&target_dir)
-        .map_err(|e| format!("failed to create target/: {}", e))?;
+    fs::create_dir_all(&target_dir).map_err(|e| format!("failed to create target/: {}", e))?;
 
     // Write as tar.gz
-    let file = fs::File::create(&archive_path)
-        .map_err(|e| format!("failed to create archive: {}", e))?;
+    let file =
+        fs::File::create(&archive_path).map_err(|e| format!("failed to create archive: {}", e))?;
     let enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
     let mut tar = tar::Builder::new(enc);
 
@@ -1487,8 +1513,8 @@ pub(crate) fn collect_files_recursive(
     total_size: &mut u64,
     _pkg_dir: &Path,
 ) -> Result<(), String> {
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("failed to read {}: {}", dir.display(), e))?;
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("failed to read {}: {}", dir.display(), e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("dir entry error: {}", e))?;
@@ -1527,7 +1553,10 @@ pub(crate) fn cmd_pkg_metadata(
             println!("{}", toml_str);
         }
         _ => {
-            return Err(format!("unsupported format '{}'. Use 'json' or 'toml'", format));
+            return Err(format!(
+                "unsupported format '{}'. Use 'json' or 'toml'",
+                format
+            ));
         }
     }
     Ok(())
@@ -1554,8 +1583,8 @@ pub(crate) fn cmd_pkg_owner(
     let mut owners: Vec<String> = if owners_file.exists() {
         let content = fs::read_to_string(&owners_file)
             .map_err(|e| format!("failed to read owners: {}", e))?;
-        let parsed: OwnersFile = toml::from_str(&content)
-            .map_err(|e| format!("failed to parse owners.toml: {}", e))?;
+        let parsed: OwnersFile =
+            toml::from_str(&content).map_err(|e| format!("failed to parse owners.toml: {}", e))?;
         parsed.owners
     } else {
         Vec::new()
@@ -1567,7 +1596,12 @@ pub(crate) fn cmd_pkg_owner(
         } else {
             owners.push(user.clone());
             save_owners(pkg_dir, &owners)?;
-            println!("{} Added '{}' as owner of '{}'", "✓".green(), user, manifest.package.name);
+            println!(
+                "{} Added '{}' as owner of '{}'",
+                "✓".green(),
+                user,
+                manifest.package.name
+            );
         }
         return Ok(());
     }
@@ -1576,15 +1610,27 @@ pub(crate) fn cmd_pkg_owner(
         if let Some(pos) = owners.iter().position(|o| o == &user) {
             owners.remove(pos);
             save_owners(pkg_dir, &owners)?;
-            println!("{} Removed '{}' from owners of '{}'", "✓".green(), user, manifest.package.name);
+            println!(
+                "{} Removed '{}' from owners of '{}'",
+                "✓".green(),
+                user,
+                manifest.package.name
+            );
         } else {
-            return Err(format!("'{}' is not an owner of '{}'", user, manifest.package.name));
+            return Err(format!(
+                "'{}' is not an owner of '{}'",
+                user, manifest.package.name
+            ));
         }
         return Ok(());
     }
 
     if list || (add.is_none() && remove.is_none()) {
-        println!("{} Owners of '{}':", "Package".cyan(), manifest.package.name);
+        println!(
+            "{} Owners of '{}':",
+            "Package".cyan(),
+            manifest.package.name
+        );
         if owners.is_empty() {
             println!("  (no owners configured)");
         } else {
@@ -1600,8 +1646,7 @@ pub(crate) fn cmd_pkg_owner(
 /// Save owners to .vais/owners.toml
 pub(crate) fn save_owners(pkg_dir: &Path, owners: &[String]) -> Result<(), String> {
     let vais_dir = pkg_dir.join(".vais");
-    fs::create_dir_all(&vais_dir)
-        .map_err(|e| format!("failed to create .vais/: {}", e))?;
+    fs::create_dir_all(&vais_dir).map_err(|e| format!("failed to create .vais/: {}", e))?;
 
     let owners_str: Vec<String> = owners.iter().map(|o| format!("\"{}\"", o)).collect();
     let content = format!("owners = [{}]\n", owners_str.join(", "));
@@ -1639,7 +1684,10 @@ pub(crate) fn cmd_pkg_verify(pkg_dir: &Path, verbose: bool) -> Result<(), String
             let version = &manifest.package.version;
             let parts: Vec<&str> = version.split('.').collect();
             if parts.len() < 2 {
-                issues.push(format!("version '{}' should be semver (e.g., 1.0.0)", version));
+                issues.push(format!(
+                    "version '{}' should be semver (e.g., 1.0.0)",
+                    version
+                ));
             } else {
                 for part in &parts {
                     if part.parse::<u64>().is_err() {
@@ -1678,7 +1726,11 @@ pub(crate) fn cmd_pkg_verify(pkg_dir: &Path, verbose: bool) -> Result<(), String
         println!("{} Package verification passed", "✓".green());
         Ok(())
     } else {
-        println!("{} Package verification found {} issue(s):", "✗".red(), issues.len());
+        println!(
+            "{} Package verification found {} issue(s):",
+            "✗".red(),
+            issues.len()
+        );
         for issue in &issues {
             println!("  {} {}", "•".red(), issue);
         }
@@ -2576,4 +2628,3 @@ pub(crate) fn parse_package_spec(spec: &str) -> (String, String) {
         (spec.to_string(), "*".to_string())
     }
 }
-

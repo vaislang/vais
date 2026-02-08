@@ -2,8 +2,8 @@
 //!
 //! This module provides inlay hints for types and function parameters.
 
-use std::collections::HashMap;
 use ropey::Rope;
+use std::collections::HashMap;
 use tower_lsp::lsp_types::*;
 use vais_ast::{Expr, FunctionBody, IfElse, Item, Module, Spanned, Stmt, Type};
 

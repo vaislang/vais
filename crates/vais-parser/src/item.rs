@@ -445,7 +445,11 @@ impl Parser {
     }
 
     /// Parse constant definition: `C NAME: Type = value`
-    fn parse_const_def(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<ConstDef> {
+    fn parse_const_def(
+        &mut self,
+        is_pub: bool,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<ConstDef> {
         let name = self.parse_ident()?;
         self.expect(&Token::Colon)?;
         let ty = self.parse_type()?;

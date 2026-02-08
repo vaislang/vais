@@ -42,11 +42,7 @@ pub struct FeatureConfig {
 
 impl FeatureConfig {
     /// Resolve the full set of enabled features given user selections
-    pub fn resolve_features(
-        &self,
-        selected: &[String],
-        use_defaults: bool,
-    ) -> Vec<String> {
+    pub fn resolve_features(&self, selected: &[String], use_defaults: bool) -> Vec<String> {
         let mut enabled = std::collections::HashSet::new();
         let mut stack: Vec<String> = selected.to_vec();
 
@@ -710,12 +706,13 @@ pub fn find_workspace_root(start: &Path) -> Option<PathBuf> {
 pub fn resolve_workspace_members(workspace_root: &Path) -> PackageResult<ResolvedWorkspace> {
     let manifest = load_manifest(workspace_root)?;
 
-    let workspace_config = manifest.workspace.as_ref().ok_or_else(|| {
-        PackageError::ParseError {
+    let workspace_config = manifest
+        .workspace
+        .as_ref()
+        .ok_or_else(|| PackageError::ParseError {
             path: workspace_root.join("vais.toml"),
             message: "no [workspace] section found".to_string(),
-        }
-    })?;
+        })?;
 
     let mut members = Vec::new();
 
@@ -752,12 +749,9 @@ pub fn resolve_workspace_members(workspace_root: &Path) -> PackageResult<Resolve
         let root_canonical = workspace_root
             .canonicalize()
             .unwrap_or_else(|_| workspace_root.to_path_buf());
-        let already_added = members.iter().any(|m| {
-            m.path
-                .canonicalize()
-                .unwrap_or_else(|_| m.path.clone())
-                == root_canonical
-        });
+        let already_added = members
+            .iter()
+            .any(|m| m.path.canonicalize().unwrap_or_else(|_| m.path.clone()) == root_canonical);
         if !already_added {
             members.insert(
                 0,
@@ -812,7 +806,8 @@ pub fn resolve_inter_workspace_deps(workspace: &mut ResolvedWorkspace) {
 
         for (name, dep) in &member.manifest.dependencies {
             match dep {
-                Dependency::Version(_) | Dependency::Detailed(DetailedDependency { path: None, .. }) => {
+                Dependency::Version(_)
+                | Dependency::Detailed(DetailedDependency { path: None, .. }) => {
                     // Check if this dependency name matches a workspace member
                     if let Some(dep_path) = member_paths.get(name) {
                         // Calculate relative path from this member to the dependency
@@ -848,12 +843,8 @@ pub fn resolve_inter_workspace_deps(workspace: &mut ResolvedWorkspace) {
 /// Compute relative path from `from_dir` to `to_dir`
 fn pathdiff_relative(from: &Path, to: &Path) -> String {
     // Use canonicalized paths for accuracy
-    let from_abs = from
-        .canonicalize()
-        .unwrap_or_else(|_| from.to_path_buf());
-    let to_abs = to
-        .canonicalize()
-        .unwrap_or_else(|_| to.to_path_buf());
+    let from_abs = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
+    let to_abs = to.canonicalize().unwrap_or_else(|_| to.to_path_buf());
 
     // Find common prefix
     let from_parts: Vec<_> = from_abs.components().collect();
@@ -1405,11 +1396,7 @@ lib-core = "0.1.0"
 "#,
         )
         .unwrap();
-        fs::write(
-            app_dir.join("src/main.vais"),
-            "F main() -> i64 { 0 }\n",
-        )
-        .unwrap();
+        fs::write(app_dir.join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
         let mut workspace = resolve_workspace_members(root.path()).unwrap();
         resolve_inter_workspace_deps(&mut workspace);
@@ -1425,9 +1412,16 @@ lib-core = "0.1.0"
         let dep = app_member.manifest.dependencies.get("lib-core").unwrap();
         match dep {
             Dependency::Detailed(d) => {
-                assert!(d.path.is_some(), "expected path to be set for workspace member dep");
+                assert!(
+                    d.path.is_some(),
+                    "expected path to be set for workspace member dep"
+                );
                 let path = d.path.as_ref().unwrap();
-                assert!(path.contains("lib-core"), "path should reference lib-core: {}", path);
+                assert!(
+                    path.contains("lib-core"),
+                    "path should reference lib-core: {}",
+                    path
+                );
             }
             _ => panic!("expected Detailed dependency with path"),
         }
@@ -1489,7 +1483,10 @@ full = ["json", "async"]
                 let mut m = HashMap::new();
                 m.insert("json".to_string(), vec![]);
                 m.insert("async".to_string(), vec!["json".to_string()]);
-                m.insert("full".to_string(), vec!["json".to_string(), "async".to_string()]);
+                m.insert(
+                    "full".to_string(),
+                    vec!["json".to_string(), "async".to_string()],
+                );
                 m
             },
         };

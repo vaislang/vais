@@ -1,8 +1,8 @@
 //! Utility functions (walkdir, plugin loading, diagnostics).
 
+use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use colored::Colorize;
 use vais_plugin::{find_config, Diagnostic, DiagnosticLevel, PluginRegistry, PluginsConfig};
 
 pub(crate) fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
@@ -21,7 +21,11 @@ pub(crate) fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
 }
 
 /// Load plugins from configuration and CLI arguments
-pub(crate) fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -> PluginRegistry {
+pub(crate) fn load_plugins(
+    extra_plugins: &[PathBuf],
+    verbose: bool,
+    allow_plugins: bool,
+) -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     registry.set_allow_plugins(allow_plugins);
 

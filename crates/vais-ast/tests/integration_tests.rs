@@ -216,13 +216,18 @@ fn test_item_struct() {
     let s = Struct {
         name: sp_string("Point", 0, 5),
         generics: vec![],
-        fields: vec![
-            Field {
-                name: sp_string("x", 6, 7),
-                ty: spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 8, 11),
-                is_pub: true,
-            },
-        ],
+        fields: vec![Field {
+            name: sp_string("x", 6, 7),
+            ty: spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                8,
+                11,
+            ),
+            is_pub: true,
+        }],
         methods: vec![],
         is_pub: true,
         attributes: vec![],
@@ -251,9 +256,14 @@ fn test_item_enum() {
             },
             Variant {
                 name: sp_string("Some", 12, 16),
-                fields: VariantFields::Tuple(vec![
-                    spanned(Type::Named { name: "T".to_string(), generics: vec![] }, 17, 18)
-                ]),
+                fields: VariantFields::Tuple(vec![spanned(
+                    Type::Named {
+                        name: "T".to_string(),
+                        generics: vec![],
+                    },
+                    17,
+                    18,
+                )]),
             },
         ],
         is_pub: true,
@@ -276,13 +286,18 @@ fn test_item_union() {
     let u = Union {
         name: sp_string("Value", 0, 5),
         generics: vec![],
-        fields: vec![
-            Field {
-                name: sp_string("int_val", 6, 13),
-                ty: spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 14, 17),
-                is_pub: false,
-            },
-        ],
+        fields: vec![Field {
+            name: sp_string("int_val", 6, 13),
+            ty: spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                14,
+                17,
+            ),
+            is_pub: false,
+        }],
         is_pub: false,
     };
 
@@ -302,7 +317,14 @@ fn test_item_type_alias() {
     let ta = TypeAlias {
         name: sp_string("Int", 0, 3),
         generics: vec![],
-        ty: spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 4, 7),
+        ty: spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            4,
+            7,
+        ),
         is_pub: true,
     };
 
@@ -358,7 +380,14 @@ fn test_item_trait() {
 #[test]
 fn test_item_impl() {
     let impl_block = Impl {
-        target_type: spanned(Type::Named { name: "Point".to_string(), generics: vec![] }, 0, 5),
+        target_type: spanned(
+            Type::Named {
+                name: "Point".to_string(),
+                generics: vec![],
+            },
+            0,
+            5,
+        ),
         trait_name: None,
         generics: vec![],
         associated_types: vec![],
@@ -379,7 +408,14 @@ fn test_item_impl() {
 fn test_item_const() {
     let const_def = ConstDef {
         name: sp_string("PI", 0, 2),
-        ty: spanned(Type::Named { name: "f64".to_string(), generics: vec![] }, 3, 6),
+        ty: spanned(
+            Type::Named {
+                name: "f64".to_string(),
+                generics: vec![],
+            },
+            3,
+            6,
+        ),
         value: spanned(Expr::Float(3.14159), 7, 14),
         is_pub: true,
         attributes: vec![],
@@ -399,7 +435,14 @@ fn test_item_const() {
 fn test_item_global() {
     let global_def = GlobalDef {
         name: sp_string("COUNTER", 0, 7),
-        ty: spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 8, 11),
+        ty: spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            8,
+            11,
+        ),
         value: spanned(Expr::Int(0), 12, 13),
         is_pub: false,
         is_mutable: true,
@@ -424,7 +467,10 @@ fn test_item_error() {
     };
 
     match item {
-        Item::Error { message, skipped_tokens } => {
+        Item::Error {
+            message,
+            skipped_tokens,
+        } => {
             assert_eq!(message, "Parse error");
             assert_eq!(skipped_tokens.len(), 2);
         }
@@ -441,17 +487,29 @@ fn test_function_simple() {
     let func = Function {
         name: sp_string("add", 0, 3),
         generics: vec![],
-        params: vec![
-            Param {
-                name: sp_string("a", 4, 5),
-                ty: spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 6, 9),
-                is_mut: false,
-                is_vararg: false,
-                ownership: Ownership::Regular,
-                default_value: None,
+        params: vec![Param {
+            name: sp_string("a", 4, 5),
+            ty: spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                6,
+                9,
+            ),
+            is_mut: false,
+            is_vararg: false,
+            ownership: Ownership::Regular,
+            default_value: None,
+        }],
+        ret_type: Some(spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
             },
-        ],
-        ret_type: Some(spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 10, 13)),
+            10,
+            13,
+        )),
         body: FunctionBody::Expr(Box::new(spanned(Expr::Ident("a".to_string()), 14, 15))),
         is_pub: false,
         is_async: false,
@@ -465,10 +523,7 @@ fn test_function_simple() {
 
 #[test]
 fn test_function_with_generics() {
-    let gen_param = GenericParam::new_type(
-        sp_string("T", 0, 1),
-        vec![sp_string("Clone", 2, 7)],
-    );
+    let gen_param = GenericParam::new_type(sp_string("T", 0, 1), vec![sp_string("Clone", 2, 7)]);
 
     let func = Function {
         name: sp_string("identity", 0, 8),
@@ -507,10 +562,7 @@ fn test_function_async() {
 
 #[test]
 fn test_generic_param_type() {
-    let param = GenericParam::new_type(
-        sp_string("T", 0, 1),
-        vec![sp_string("Display", 2, 9)],
-    );
+    let param = GenericParam::new_type(sp_string("T", 0, 1), vec![sp_string("Display", 2, 9)]);
 
     assert_eq!(param.name.node, "T");
     assert_eq!(param.bounds.len(), 1);
@@ -523,7 +575,14 @@ fn test_generic_param_type() {
 fn test_generic_param_const() {
     let param = GenericParam::new_const(
         sp_string("N", 0, 1),
-        spanned(Type::Named { name: "usize".to_string(), generics: vec![] }, 2, 7),
+        spanned(
+            Type::Named {
+                name: "usize".to_string(),
+                generics: vec![],
+            },
+            2,
+            7,
+        ),
     );
 
     assert_eq!(param.name.node, "N");
@@ -532,10 +591,7 @@ fn test_generic_param_const() {
 
 #[test]
 fn test_generic_param_lifetime() {
-    let param = GenericParam::new_lifetime(
-        sp_string("'a", 0, 2),
-        vec!["'b".to_string()],
-    );
+    let param = GenericParam::new_lifetime(sp_string("'a", 0, 2), vec!["'b".to_string()]);
 
     assert_eq!(param.name.node, "'a");
     match param.kind {
@@ -549,11 +605,8 @@ fn test_generic_param_lifetime() {
 
 #[test]
 fn test_generic_param_variance() {
-    let param = GenericParam::new_type_with_variance(
-        sp_string("T", 0, 1),
-        vec![],
-        Variance::Covariant,
-    );
+    let param =
+        GenericParam::new_type_with_variance(sp_string("T", 0, 1), vec![], Variance::Covariant);
 
     assert!(param.is_covariant());
     assert!(!param.is_contravariant());
@@ -594,7 +647,7 @@ fn test_variant_unit() {
 
     assert_eq!(variant.name.node, "Unit");
     match variant.fields {
-        VariantFields::Unit => {},
+        VariantFields::Unit => {}
         _ => panic!("Expected Unit variant"),
     }
 }
@@ -603,9 +656,14 @@ fn test_variant_unit() {
 fn test_variant_tuple() {
     let variant = Variant {
         name: sp_string("Tuple", 0, 5),
-        fields: VariantFields::Tuple(vec![
-            spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 6, 9),
-        ]),
+        fields: VariantFields::Tuple(vec![spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            6,
+            9,
+        )]),
     };
 
     match variant.fields {
@@ -620,13 +678,18 @@ fn test_variant_tuple() {
 fn test_variant_struct() {
     let variant = Variant {
         name: sp_string("Struct", 0, 6),
-        fields: VariantFields::Struct(vec![
-            Field {
-                name: sp_string("field", 7, 12),
-                ty: spanned(Type::Named { name: "str".to_string(), generics: vec![] }, 13, 16),
-                is_pub: true,
-            },
-        ]),
+        fields: VariantFields::Struct(vec![Field {
+            name: sp_string("field", 7, 12),
+            ty: spanned(
+                Type::Named {
+                    name: "str".to_string(),
+                    generics: vec![],
+                },
+                13,
+                16,
+            ),
+            is_pub: true,
+        }]),
     };
 
     match variant.fields {
@@ -661,12 +724,10 @@ fn test_call_args_positional() {
 fn test_call_args_named() {
     let args = CallArgs::Named {
         positional: vec![spanned(Expr::Int(1), 0, 1)],
-        named: vec![
-            NamedArg {
-                name: sp_string("x", 2, 3),
-                value: spanned(Expr::Int(2), 4, 5),
-            },
-        ],
+        named: vec![NamedArg {
+            name: sp_string("x", 2, 3),
+            value: spanned(Expr::Int(2), 4, 5),
+        }],
     };
 
     match args {
@@ -702,13 +763,16 @@ fn test_type_named() {
 #[test]
 fn test_type_array() {
     let ty = Type::Array(Box::new(spanned(
-        Type::Named { name: "i64".to_string(), generics: vec![] },
+        Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        },
         0,
         3,
     )));
 
     match ty {
-        Type::Array(_) => {},
+        Type::Array(_) => {}
         _ => panic!("Expected Array type"),
     }
 }
@@ -716,8 +780,22 @@ fn test_type_array() {
 #[test]
 fn test_type_tuple() {
     let ty = Type::Tuple(vec![
-        spanned(Type::Named { name: "i64".to_string(), generics: vec![] }, 0, 3),
-        spanned(Type::Named { name: "str".to_string(), generics: vec![] }, 4, 7),
+        spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            0,
+            3,
+        ),
+        spanned(
+            Type::Named {
+                name: "str".to_string(),
+                generics: vec![],
+            },
+            4,
+            7,
+        ),
     ]);
 
     match ty {
@@ -731,13 +809,16 @@ fn test_type_tuple() {
 #[test]
 fn test_type_optional() {
     let ty = Type::Optional(Box::new(spanned(
-        Type::Named { name: "i64".to_string(), generics: vec![] },
+        Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        },
         0,
         3,
     )));
 
     match ty {
-        Type::Optional(_) => {},
+        Type::Optional(_) => {}
         _ => panic!("Expected Optional type"),
     }
 }
@@ -745,13 +826,16 @@ fn test_type_optional() {
 #[test]
 fn test_type_result() {
     let ty = Type::Result(Box::new(spanned(
-        Type::Named { name: "i64".to_string(), generics: vec![] },
+        Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        },
         0,
         3,
     )));
 
     match ty {
-        Type::Result(_) => {},
+        Type::Result(_) => {}
         _ => panic!("Expected Result type"),
     }
 }
@@ -759,13 +843,16 @@ fn test_type_result() {
 #[test]
 fn test_type_ref() {
     let ty = Type::Ref(Box::new(spanned(
-        Type::Named { name: "str".to_string(), generics: vec![] },
+        Type::Named {
+            name: "str".to_string(),
+            generics: vec![],
+        },
         0,
         3,
     )));
 
     match ty {
-        Type::Ref(_) => {},
+        Type::Ref(_) => {}
         _ => panic!("Expected Ref type"),
     }
 }
@@ -829,9 +916,10 @@ fn test_pattern_tuple() {
 fn test_pattern_struct() {
     let pat = Pattern::Struct {
         name: sp_string("Point", 0, 5),
-        fields: vec![
-            (sp_string("x", 6, 7), Some(spanned(Pattern::Ident("a".to_string()), 8, 9))),
-        ],
+        fields: vec![(
+            sp_string("x", 6, 7),
+            Some(spanned(Pattern::Ident("a".to_string()), 8, 9)),
+        )],
     };
 
     match pat {
@@ -887,7 +975,7 @@ fn test_stmt_expr() {
     let stmt = Stmt::Expr(Box::new(spanned(Expr::Int(42), 0, 2)));
 
     match stmt {
-        Stmt::Expr(_) => {},
+        Stmt::Expr(_) => {}
         _ => panic!("Expected Expr stmt"),
     }
 }
@@ -897,7 +985,7 @@ fn test_stmt_return() {
     let stmt = Stmt::Return(Some(Box::new(spanned(Expr::Int(42), 0, 2))));
 
     match stmt {
-        Stmt::Return(Some(_)) => {},
+        Stmt::Return(Some(_)) => {}
         _ => panic!("Expected Return stmt"),
     }
 }
@@ -907,7 +995,7 @@ fn test_stmt_break() {
     let stmt = Stmt::Break(None);
 
     match stmt {
-        Stmt::Break(None) => {},
+        Stmt::Break(None) => {}
         _ => panic!("Expected Break stmt"),
     }
 }
@@ -1004,12 +1092,20 @@ fn test_expr_unary_op() {
 fn test_expr_if() {
     let expr = Expr::If {
         cond: Box::new(spanned(Expr::Bool(true), 0, 4)),
-        then: vec![spanned(Stmt::Expr(Box::new(spanned(Expr::Int(1), 5, 6))), 5, 6)],
+        then: vec![spanned(
+            Stmt::Expr(Box::new(spanned(Expr::Int(1), 5, 6))),
+            5,
+            6,
+        )],
         else_: None,
     };
 
     match expr {
-        Expr::If { cond: _, then, else_ } => {
+        Expr::If {
+            cond: _,
+            then,
+            else_,
+        } => {
             assert_eq!(then.len(), 1);
             assert!(else_.is_none());
         }
@@ -1066,13 +1162,11 @@ fn test_expr_tuple() {
 fn test_expr_match() {
     let expr = Expr::Match {
         expr: Box::new(spanned(Expr::Ident("x".to_string()), 0, 1)),
-        arms: vec![
-            MatchArm {
-                pattern: spanned(Pattern::Wildcard, 2, 3),
-                guard: None,
-                body: Box::new(spanned(Expr::Int(0), 4, 5)),
-            },
-        ],
+        arms: vec![MatchArm {
+            pattern: spanned(Pattern::Wildcard, 2, 3),
+            guard: None,
+            body: Box::new(spanned(Expr::Int(0), 4, 5)),
+        }],
     };
 
     match expr {

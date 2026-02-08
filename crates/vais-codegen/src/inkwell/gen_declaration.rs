@@ -3,7 +3,6 @@
 //! Handles function declarations, struct/enum/union definitions,
 //! extern blocks, and const definitions.
 
-
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
@@ -13,7 +12,10 @@ use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
-    pub(super) fn declare_function(&mut self, func: &ast::Function) -> CodegenResult<FunctionValue<'ctx>> {
+    pub(super) fn declare_function(
+        &mut self,
+        func: &ast::Function,
+    ) -> CodegenResult<FunctionValue<'ctx>> {
         let fn_name = &func.name.node;
 
         // If already declared, return existing
@@ -46,6 +48,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Store in functions map
         self.functions.insert(fn_name.clone(), fn_value);
+
+        // Track return struct type for functions (enables struct type inference for callers)
+        if let Some(ref ret_ty) = func.ret_type {
+            if let Some(sn) = self.extract_struct_type_name(&ret_ty.node) {
+                self.function_return_structs.insert(fn_name.clone(), sn);
+            }
+        }
 
         // Set parameter names
         for (i, param) in func.params.iter().enumerate() {
@@ -96,6 +105,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.struct_fields.insert(struct_name.clone(), field_names);
         self.struct_field_type_names
             .insert(struct_name.clone(), field_type_names);
+        self.type_mapper.register_struct(struct_name, struct_type);
 
         Ok(struct_type)
     }
@@ -110,10 +120,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Store variant tags
         for (i, variant) in e.variants.iter().enumerate() {
-            self.enum_variants.insert(
-                (enum_name.clone(), variant.name.node.clone()),
-                i as i32,
-            );
+            self.enum_variants
+                .insert((enum_name.clone(), variant.name.node.clone()), i as i32);
         }
 
         // Create enum as struct: { i32 tag, i64 data }
@@ -121,13 +129,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .context
             .struct_type(&[self.context.i32_type().into()], false);
 
-        self.generated_structs
-            .insert(enum_name.clone(), enum_type);
+        self.generated_structs.insert(enum_name.clone(), enum_type);
 
         Ok(enum_type)
     }
 
-    pub(super) fn declare_extern_block(&mut self, extern_block: &ast::ExternBlock) -> CodegenResult<()> {
+    pub(super) fn declare_extern_block(
+        &mut self,
+        extern_block: &ast::ExternBlock,
+    ) -> CodegenResult<()> {
         for func in &extern_block.functions {
             let fn_name = &func.name.node;
 
@@ -226,10 +236,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 };
                 Ok(result.into())
             }
-            _ => Err(CodegenError::Unsupported(format!(
-                "Const expr: {:?}",
-                expr
-            ))),
+            _ => Err(CodegenError::Unsupported(format!("Const expr: {:?}", expr))),
         }
     }
 }

@@ -9,7 +9,6 @@ use vais_ast::{FunctionBody, Item, Module, Span, Stmt, Type};
 use vais_codegen::formatter::{FormatConfig, Formatter};
 use vais_parser::parse;
 
-
 use crate::ai_completion::{generate_ai_completions, CompletionContext as AiContext};
 use crate::semantic::get_semantic_tokens;
 

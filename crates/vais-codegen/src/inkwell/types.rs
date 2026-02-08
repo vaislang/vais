@@ -223,9 +223,7 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::Array(_) => 8, // pointer
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.size_of(e)).sum(),
             ResolvedType::Optional(inner) => 1 + self.size_of(inner),
-            ResolvedType::Result(ok, err) => {
-                1 + std::cmp::max(self.size_of(ok), self.size_of(err))
-            }
+            ResolvedType::Result(ok, err) => 1 + std::cmp::max(self.size_of(ok), self.size_of(err)),
             _ => 8, // Default for structs, enums, functions
         }
     }

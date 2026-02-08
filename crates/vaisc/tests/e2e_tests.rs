@@ -7281,7 +7281,10 @@ F main() -> i64 = add(1, 2)
 fn create_multi_file_project(files: &[(&str, &str)]) -> TempDir {
     let dir = TempDir::new().expect("Failed to create temp dir");
     // Ensure the directory exists and is accessible
-    let canonical = dir.path().canonicalize().expect("Failed to canonicalize temp dir");
+    let canonical = dir
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize temp dir");
     for (name, content) in files {
         let path = canonical.join(name);
         fs::write(&path, content).expect("Failed to write file");
@@ -7324,7 +7327,10 @@ F multiply(a: i64, b: i64) -> i64 { R a * b }
     ];
 
     let project = create_multi_file_project(files);
-    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
     let main_path = canonical_path.join("main.vais");
 
     // Build the project
@@ -7375,7 +7381,10 @@ F compute(x: i64) -> i64 { R x * 2 }
     ];
 
     let project = create_multi_file_project(files);
-    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
     let main_path = canonical_path.join("main.vais");
 
     // First build
@@ -7441,7 +7450,10 @@ F double(x: i64) -> i64 { R x * 2 }
     ];
 
     let project = create_multi_file_project(files);
-    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
     let main_path = canonical_path.join("main.vais");
     let utils_path = canonical_path.join("utils.vais");
 
@@ -7513,7 +7525,10 @@ F get_value() -> i64 { R 100 }
     ];
 
     let project = create_multi_file_project(files);
-    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
     let main_path = canonical_path.join("main.vais");
 
     // Build with --emit-ir
@@ -7573,7 +7588,10 @@ F bar() -> i64 { R 10 }
     ];
 
     let project = create_multi_file_project(files);
-    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
     let a_path = canonical_path.join("a.vais");
 
     // Build should fail with circular import error
@@ -8500,7 +8518,10 @@ F main() -> i64 {
     )
     .unwrap();
     // Verify vector operations in generated IR
-    assert!(ir.contains("fmul <4 x float>") || ir.contains("fmul"), "Expected fmul for vec4f32 multiply");
+    assert!(
+        ir.contains("fmul <4 x float>") || ir.contains("fmul"),
+        "Expected fmul for vec4f32 multiply"
+    );
 }
 
 #[test]
@@ -8522,8 +8543,14 @@ F main() -> i64 {
 "#,
     )
     .unwrap();
-    assert!(ir.contains("fadd <8 x float>") || ir.contains("fadd"), "Expected fadd for vec8f32 add");
-    assert!(ir.contains("fsub <8 x float>") || ir.contains("fsub"), "Expected fsub for vec8f32 sub");
+    assert!(
+        ir.contains("fadd <8 x float>") || ir.contains("fadd"),
+        "Expected fadd for vec8f32 add"
+    );
+    assert!(
+        ir.contains("fsub <8 x float>") || ir.contains("fsub"),
+        "Expected fsub for vec8f32 sub"
+    );
 }
 
 #[test]
@@ -8543,8 +8570,14 @@ F main() -> i64 {
 "#,
     )
     .unwrap();
-    assert!(ir.contains("fsub <4 x float>") || ir.contains("fsub"), "Expected fsub for vec4f32 sub");
-    assert!(ir.contains("fmul <4 x float>") || ir.contains("fmul"), "Expected fmul for vec4f32 mul");
+    assert!(
+        ir.contains("fsub <4 x float>") || ir.contains("fsub"),
+        "Expected fsub for vec4f32 sub"
+    );
+    assert!(
+        ir.contains("fmul <4 x float>") || ir.contains("fmul"),
+        "Expected fmul for vec4f32 mul"
+    );
 }
 
 #[test]
@@ -8760,9 +8793,14 @@ F main() -> i64 {
     let ir = ir.unwrap();
     // Verify Linux constants are included (both should be 10)
     // The IR should contain constant definitions with value 10
-    assert!(ir.contains("10"), "Expected Linux constants (value 10) in IR");
-    assert!(!ir.contains("30") || ir.matches("30").count() == 0 || ir.contains("@main"),
-            "Should not contain macOS constants (value 30) when targeting Linux");
+    assert!(
+        ir.contains("10"),
+        "Expected Linux constants (value 10) in IR"
+    );
+    assert!(
+        !ir.contains("30") || ir.matches("30").count() == 0 || ir.contains("@main"),
+        "Should not contain macOS constants (value 30) when targeting Linux"
+    );
 }
 
 // ==========================================================================
@@ -8812,11 +8850,7 @@ utils = "1.0.0"
         "[package]\nname = \"my-lib\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    fs::write(
-        member_dir.join("src/lib.vais"),
-        "F greet() -> i64 { 42 }\n",
-    )
-    .unwrap();
+    fs::write(member_dir.join("src/lib.vais"), "F greet() -> i64 { 42 }\n").unwrap();
 
     let output = std::process::Command::new(vaisc_bin())
         .args(["pkg", "check", "--workspace"])
@@ -8830,11 +8864,13 @@ utils = "1.0.0"
     assert!(
         output.status.success(),
         "workspace check failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
     assert!(
         stdout.contains("Workspace") || stdout.contains("workspace"),
-        "output should mention workspace: {}", stdout
+        "output should mention workspace: {}",
+        stdout
     );
 }
 
@@ -8875,11 +8911,13 @@ fn test_workspace_build_multiple_members_e2e() {
     assert!(
         output.status.success(),
         "workspace build failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
     assert!(
         stdout.contains("2 workspace member"),
-        "should report 2 members: {}", stdout
+        "should report 2 members: {}",
+        stdout
     );
 }
 
@@ -8914,7 +8952,8 @@ fn test_workspace_shared_deps_e2e() {
     assert!(
         output.status.success(),
         "workspace check with shared deps failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -8950,11 +8989,7 @@ fn test_workspace_inter_member_path_deps_e2e() {
         "[package]\nname = \"my-app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib-core = { path = \"../lib-core\" }\n",
     )
     .unwrap();
-    fs::write(
-        app_dir.join("src/main.vais"),
-        "F main() -> i64 { 0 }\n",
-    )
-    .unwrap();
+    fs::write(app_dir.join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
     let output = std::process::Command::new(vaisc_bin())
         .args(["pkg", "build", "--workspace"])
@@ -8968,7 +9003,8 @@ fn test_workspace_inter_member_path_deps_e2e() {
     assert!(
         output.status.success(),
         "workspace build with inter-member deps failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -9008,11 +9044,13 @@ fn test_workspace_auto_detect_e2e() {
     assert!(
         output.status.success(),
         "auto-detect workspace build failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
     assert!(
         stdout.contains("Workspace") || stdout.contains("workspace"),
-        "auto-detected workspace should mention workspace: {}", stdout
+        "auto-detected workspace should mention workspace: {}",
+        stdout
     );
 }
 
@@ -9065,7 +9103,8 @@ F main() -> i64 {
     assert!(
         output.status.success(),
         "build with --features json failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -9087,11 +9126,7 @@ logging = []
     .unwrap();
 
     fs::create_dir_all(tmp.path().join("src")).unwrap();
-    fs::write(
-        tmp.path().join("src/main.vais"),
-        "F main() -> i64 { 0 }\n",
-    )
-    .unwrap();
+    fs::write(tmp.path().join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
     // Build without any flags — default features should be enabled
     let output = std::process::Command::new(vaisc_bin())
@@ -9106,7 +9141,8 @@ logging = []
     assert!(
         output.status.success(),
         "build with default features failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -9128,11 +9164,7 @@ extra = []
     .unwrap();
 
     fs::create_dir_all(tmp.path().join("src")).unwrap();
-    fs::write(
-        tmp.path().join("src/main.vais"),
-        "F main() -> i64 { 0 }\n",
-    )
-    .unwrap();
+    fs::write(tmp.path().join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
     // Build with --no-default-features
     let output = std::process::Command::new(vaisc_bin())
@@ -9147,7 +9179,8 @@ extra = []
     assert!(
         output.status.success(),
         "build with --no-default-features failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -9171,11 +9204,7 @@ logging = ["json"]
     .unwrap();
 
     fs::create_dir_all(tmp.path().join("src")).unwrap();
-    fs::write(
-        tmp.path().join("src/main.vais"),
-        "F main() -> i64 { 0 }\n",
-    )
-    .unwrap();
+    fs::write(tmp.path().join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
     // Build with --all-features
     let output = std::process::Command::new(vaisc_bin())
@@ -9190,7 +9219,8 @@ logging = ["json"]
     assert!(
         output.status.success(),
         "build with --all-features failed. stdout: {}, stderr: {}",
-        stdout, stderr
+        stdout,
+        stderr
     );
 }
 
@@ -9212,11 +9242,7 @@ json = []
     .unwrap();
 
     fs::create_dir_all(tmp.path().join("src")).unwrap();
-    fs::write(
-        tmp.path().join("src/main.vais"),
-        "F main() -> i64 { 0 }\n",
-    )
-    .unwrap();
+    fs::write(tmp.path().join("src/main.vais"), "F main() -> i64 { 0 }\n").unwrap();
 
     // Build with nonexistent feature — should fail
     let output = std::process::Command::new(vaisc_bin())
@@ -9233,7 +9259,8 @@ json = []
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("not found") || stderr.contains("nonexistent"),
-        "error should mention the invalid feature: {}", stderr
+        "error should mention the invalid feature: {}",
+        stderr
     );
 }
 
@@ -9243,7 +9270,8 @@ json = []
 
 #[test]
 fn test_path_join_basic() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Test path_join logic: manually build "/usr/bin"
     result := malloc(9)
@@ -9262,13 +9290,16 @@ F main() -> i64 {
     fifth := load_byte(result + 5)
     I first == 47 && fifth == 98 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_path_parent() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Test path_parent logic: find last '/' in "/usr/bin/ls"
     # Manual string: "/usr/bin/ls" has length 12, last '/' at position 8
@@ -9294,13 +9325,16 @@ F main() -> i64 {
     # ch8 should be 47 ('/'), ch9 should be 108 ('l')
     I ch8 == 47 && ch9 == 108 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_path_filename() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Test path_filename logic: extract filename from path
     # Build "/usr/bin/ls" manually
@@ -9324,13 +9358,16 @@ F main() -> i64 {
     second := load_byte(test_str + 10)
     I first == 108 && second == 115 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_path_extension_stem() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Test extension and stem logic with "hello.txt"
     # Build "hello.txt" manually
@@ -9355,13 +9392,16 @@ F main() -> i64 {
     # This confirms: stem is 0-4 (5 chars), extension is 6-8 (3 chars)
     I ch4 == 111 && ch5 == 46 && ch6 == 116 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_path_is_absolute() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Test absolute vs relative paths
     # Build "/usr/bin" (absolute)
@@ -9394,7 +9434,9 @@ F main() -> i64 {
     # abs_first should be 47, rel_first should be 117
     I abs_first == 47 && rel_first == 117 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
@@ -9657,7 +9699,8 @@ F main() -> i64 {
 #[test]
 fn test_datetime_leap_year() {
     // Test leap year logic: 2000 (leap), 1900 (not leap), 2024 (leap), 2023 (not leap)
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F is_leap(year: i64) -> i64 {
     I year % 400 == 0 { R 1 }
     I year % 100 == 0 { R 0 }
@@ -9672,14 +9715,17 @@ F main() -> i64 {
     d := is_leap(2023)   # 0 (not divisible by 4)
     I a == 1 && b == 0 && c == 1 && d == 0 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_datetime_days_in_month() {
     // Test days_in_month logic: Feb in leap year, Feb in non-leap year, Jan, Apr
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F is_leap(year: i64) -> i64 {
     I year % 400 == 0 { R 1 }
     I year % 100 == 0 { R 0 }
@@ -9704,14 +9750,17 @@ F main() -> i64 {
     apr := days_in_month_for(2024, 4)          # 30
     I feb_leap == 29 && feb_non == 28 && jan == 31 && apr == 30 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_datetime_to_timestamp() {
     // Test datetime_to_timestamp: 1970-01-01 00:00:00 = 0, 1970-01-02 00:00:00 = 86400
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F is_leap(year: i64) -> i64 {
     I year % 400 == 0 { R 1 }
     I year % 100 == 0 { R 0 }
@@ -9760,14 +9809,17 @@ F main() -> i64 {
     next_day := datetime_to_timestamp(1970, 1, 2, 0, 0, 0)  # 86400
     I epoch == 0 && next_day == 86400 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_datetime_from_timestamp() {
     // Test timestamp_to_datetime: timestamp 86400 -> year=1970, month=1, day=2
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F is_leap(year: i64) -> i64 {
     I year % 400 == 0 { R 1 }
     I year % 100 == 0 { R 0 }
@@ -9831,7 +9883,9 @@ F main() -> i64 {
     dt := timestamp_to_datetime(86400)  # 1970-01-02 00:00:00
     I dt.year == 1970 && dt.month == 1 && dt.day == 2 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
@@ -9897,7 +9951,8 @@ F main() -> i64 {
 
 #[test]
 fn test_args_flag_detection() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Simulate argv: ["prog", "--verbose", "file.txt"]
     argv := malloc(3 * 8)
@@ -9912,13 +9967,16 @@ F main() -> i64 {
     free(argv)
     is_flag
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_args_option_parsing() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Simulate argv: ["prog", "--output", "result.txt"]
     argv := malloc(3 * 8)
@@ -9939,13 +9997,16 @@ F main() -> i64 {
     free(argv)
     I is_option == 1 && value_ok == 1 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_args_positional() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Simulate argv: ["prog", "input.txt", "--verbose"]
     argv := malloc(3 * 8)
@@ -9964,13 +10025,16 @@ F main() -> i64 {
     free(argv)
     I is_positional == 1 && is_flag == 1 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_args_short_flag() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F main() -> i64 {
     # Simulate argv: ["prog", "-v"]
     argv := malloc(2 * 8)
@@ -9990,13 +10054,16 @@ F main() -> i64 {
     free(argv)
     I is_short == 1 && is_v == 1 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
 #[test]
 fn test_args_str_eq_helper() {
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 # String comparison helper for arg parsing
 F str_eq(a: i64, b: i64) -> i64 {
     i := mut 0
@@ -10023,7 +10090,9 @@ F main() -> i64 {
     # Should be: eq1=1, eq2=0
     I eq1 == 1 && eq2 == 0 { 1 } E { 0 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 1);
 }
 
@@ -10032,20 +10101,24 @@ F main() -> i64 {
 #[test]
 fn test_coverage_basic_program() {
     // Verify that a basic program compiles and runs correctly with coverage flags
-    let result = compile_and_run_with_coverage(r#"
+    let result = compile_and_run_with_coverage(
+        r#"
 F main() -> i64 {
     x := 42
     y := 58
     x + y
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 100);
 }
 
 #[test]
 fn test_coverage_branching() {
     // Coverage instrumentation should track branch coverage — verify branches work correctly
-    let result = compile_and_run_with_coverage(r#"
+    let result = compile_and_run_with_coverage(
+        r#"
 F classify(n: i64) -> i64 {
     I n > 100 {
         3
@@ -10070,14 +10143,17 @@ F main() -> i64 {
     # a=3, b=2, c=1, d=0 → sum=6
     a + b + c + d
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 6);
 }
 
 #[test]
 fn test_coverage_loops() {
     // Coverage should track loop iterations — verify loops work with instrumentation
-    let result = compile_and_run_with_coverage(r#"
+    let result = compile_and_run_with_coverage(
+        r#"
 F sum_to(n: i64) -> i64 {
     total := mut 0
     i := mut 1
@@ -10093,14 +10169,17 @@ F main() -> i64 {
     # 1+2+3+4+5+6+7+8+9+10 = 55
     sum_to(10)
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 55);
 }
 
 #[test]
 fn test_coverage_function_calls() {
     // Coverage should track function call counts — verify multi-function programs
-    let result = compile_and_run_with_coverage(r#"
+    let result = compile_and_run_with_coverage(
+        r#"
 F add(a: i64, b: i64) -> i64 { a + b }
 F mul(a: i64, b: i64) -> i64 { a * b }
 F square(n: i64) -> i64 { mul(n, n) }
@@ -10111,7 +10190,9 @@ F main() -> i64 {
     # a=7, b=9 → 7+9=16
     add(a, b)
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 16);
 }
 
@@ -10120,7 +10201,8 @@ F main() -> i64 {
 #[test]
 fn test_project_todo_model_struct() {
     // Test Todo struct pattern from todo-api project
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 S Todo {
     id: i64,
     title: str,
@@ -10135,14 +10217,17 @@ F main() -> i64 {
     t := todo_new(1, "Buy milk", false)
     I t.id == 1 { 10 } E { 1 }
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 10);
 }
 
 #[test]
 fn test_project_csv_row_struct() {
     // Test CsvRow struct pattern from data-pipeline project
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 S CsvRow {
     name: str,
     age: i64,
@@ -10183,14 +10268,17 @@ F main() -> i64 {
     free(buf)
     result
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 4);
 }
 
 #[test]
 fn test_project_chat_room_pattern() {
     // Test ChatRoom-like client list management pattern
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F add_client(clients: i64, count_ptr: i64, fd: i64) -> i64 {
     count := load_i64(count_ptr)
     store_i64(clients + count * 8, fd)
@@ -10216,14 +10304,17 @@ F main() -> i64 {
     free(count_ptr)
     result
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 3);
 }
 
 #[test]
 fn test_project_line_reader_pattern() {
     // Test line-by-line buffer pattern
-    let result = compile_and_run(r#"
+    let result = compile_and_run(
+        r#"
 F count_newlines(buf: i64, len: i64) -> i64 {
     count := mut 0
     i := mut 0
@@ -10262,7 +10353,9 @@ F main() -> i64 {
     free(buf)
     result
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 3);
 }
 
@@ -11493,4 +11586,3 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
-

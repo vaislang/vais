@@ -246,5 +246,4 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     // ========== Assignment ==========
-
 }

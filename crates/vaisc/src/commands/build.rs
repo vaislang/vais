@@ -1,25 +1,25 @@
 //! Build commands and GPU compilation.
 
+use crate::commands::compile::{compile_ir_to_binary, compile_per_module};
+use crate::configure_type_checker;
+use crate::error_formatter;
+use crate::imports::{load_module_with_imports_internal, load_module_with_imports_parallel};
+use crate::incremental;
+use crate::package;
+use crate::runtime::extract_used_modules;
+use crate::utils::{print_plugin_diagnostics, print_suggested_fixes};
+use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use colored::Colorize;
 use vais_ast::Item;
-use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_codegen::optimize::{optimize_ir_with_pgo, OptLevel};
+use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_macro::{collect_macros, expand_macros, process_derives, MacroRegistry};
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_query::QueryDatabase;
 use vais_types::TypeChecker;
-use crate::configure_type_checker;
-use crate::error_formatter;
-use crate::incremental;
-use crate::package;
-use crate::imports::{load_module_with_imports_internal, load_module_with_imports_parallel};
-use crate::runtime::extract_used_modules;
-use crate::commands::compile::{compile_ir_to_binary, compile_per_module};
-use crate::utils::{print_plugin_diagnostics, print_suggested_fixes};
 
 pub(crate) fn cmd_build_gpu(
     input: &PathBuf,
@@ -448,7 +448,11 @@ pub(crate) fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), S
 }
 
 /// Compile OpenCL .cl file and link with opencl_runtime
-pub(crate) fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), String> {
+pub(crate) fn compile_opencl(
+    cl_path: &PathBuf,
+    has_host: bool,
+    verbose: bool,
+) -> Result<(), String> {
     use std::process::Command;
 
     // Determine output binary name
@@ -1020,11 +1024,7 @@ pub(crate) fn cmd_build(
 
     // Per-module codegen path: split AST by source module, generate per-module .ll → .o → link
     // Auto-enable per-module for multi-file projects (opt-in flag OR auto-detect)
-    let use_per_module = per_module
-        || final_ast
-            .modules_map
-            .as_ref()
-            .is_some_and(|m| m.len() > 1);
+    let use_per_module = per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1);
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
@@ -1058,7 +1058,8 @@ pub(crate) fn cmd_build(
                             let is_main = **module_path == input_canonical;
 
                             // Create a fresh CodeGenerator for this module
-                            let mut codegen = CodeGenerator::new_with_target(&module_stem, target.clone());
+                            let mut codegen =
+                                CodeGenerator::new_with_target(&module_stem, target.clone());
                             codegen.set_resolved_functions(resolved_functions.clone());
                             codegen.set_string_prefix(&module_stem);
 
@@ -1074,10 +1075,8 @@ pub(crate) fn cmd_build(
                                     .file_name()
                                     .and_then(|s| s.to_str())
                                     .unwrap_or("unknown.vais");
-                                let source_dir = module_path
-                                    .parent()
-                                    .and_then(|p| p.to_str())
-                                    .unwrap_or(".");
+                                let source_dir =
+                                    module_path.parent().and_then(|p| p.to_str()).unwrap_or(".");
                                 codegen.enable_debug(source_file, source_dir, &main_source);
                             }
 
@@ -1470,4 +1469,3 @@ pub(crate) fn cmd_build(
 // Note: Error formatting functions have been moved to the error_formatter module
 // They are now re-exported through error_formatter::format_type_error and error_formatter::format_parse_error
 // This provides a centralized location for error handling logic
-

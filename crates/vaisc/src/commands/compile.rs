@@ -1,15 +1,18 @@
 //! Compilation functions for different targets.
 
+use crate::incremental;
+use crate::package;
+use crate::runtime::{
+    find_gc_library, find_http_runtime, find_runtime_file, find_sync_runtime, find_thread_runtime,
+    get_runtime_for_module,
+};
+use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use colored::Colorize;
 use vais_codegen::TargetTriple;
 use vais_types::TypeChecker;
-use crate::incremental;
-use crate::package;
-use crate::runtime::{find_runtime_file, find_http_runtime, find_thread_runtime, find_sync_runtime, find_gc_library, get_runtime_for_module};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compile_per_module(
@@ -717,12 +720,26 @@ pub(crate) fn compile_to_native(
             // Print coverage usage instructions
             if let Some(dir) = coverage_mode.coverage_dir() {
                 println!();
-                println!("{} Coverage instrumentation enabled.", "Coverage:".cyan().bold());
+                println!(
+                    "{} Coverage instrumentation enabled.",
+                    "Coverage:".cyan().bold()
+                );
                 println!("  Run the binary to generate profile data:");
-                println!("    LLVM_PROFILE_FILE=\"{}/default_%m.profraw\" {}", dir, bin_path.display());
+                println!(
+                    "    LLVM_PROFILE_FILE=\"{}/default_%m.profraw\" {}",
+                    dir,
+                    bin_path.display()
+                );
                 println!("  Then generate a report:");
-                println!("    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw", dir, dir);
-                println!("    llvm-cov show {} -instr-profile={}/coverage.profdata", bin_path.display(), dir);
+                println!(
+                    "    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw",
+                    dir, dir
+                );
+                println!(
+                    "    llvm-cov show {} -instr-profile={}/coverage.profdata",
+                    bin_path.display(),
+                    dir
+                );
                 println!("    llvm-cov export {} -instr-profile={}/coverage.profdata -format=lcov > {}/lcov.info", bin_path.display(), dir, dir);
             }
 
@@ -929,4 +946,3 @@ pub(crate) fn compile_to_wasi(
         }
     }
 }
-

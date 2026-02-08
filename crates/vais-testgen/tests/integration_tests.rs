@@ -2,7 +2,9 @@
 //!
 //! Tests property-based test generation, shrinking, and test suite creation.
 
-use vais_testgen::{Property, Shrinker, TestCase, TestCategory, TestGenerator, TestValue, TypeHint};
+use vais_testgen::{
+    Property, Shrinker, TestCase, TestCategory, TestGenerator, TestValue, TypeHint,
+};
 
 #[test]
 fn test_test_generator_creation() {
@@ -21,11 +23,7 @@ fn test_test_generator_default() {
 fn test_generate_integer_function_tests() {
     let generator = TestGenerator::new().with_num_cases(5).with_seed(42);
 
-    let test_suite = generator.generate(
-        "add",
-        &[TypeHint::I64, TypeHint::I64],
-        &TypeHint::I64,
-    );
+    let test_suite = generator.generate("add", &[TypeHint::I64, TypeHint::I64], &TypeHint::I64);
 
     assert_eq!(test_suite.function_name, "add");
     assert_eq!(test_suite.param_types.len(), 2);
@@ -35,23 +33,31 @@ fn test_generate_integer_function_tests() {
     assert!(!test_suite.test_cases.is_empty());
 
     // Should have boundary tests (zeros, max, min, neg_one)
-    assert!(test_suite.test_cases.iter().any(|c| c.name.contains("boundary_zeros")));
-    assert!(test_suite.test_cases.iter().any(|c| c.name.contains("boundary_max")));
-    assert!(test_suite.test_cases.iter().any(|c| c.name.contains("boundary_min")));
+    assert!(test_suite
+        .test_cases
+        .iter()
+        .any(|c| c.name.contains("boundary_zeros")));
+    assert!(test_suite
+        .test_cases
+        .iter()
+        .any(|c| c.name.contains("boundary_max")));
+    assert!(test_suite
+        .test_cases
+        .iter()
+        .any(|c| c.name.contains("boundary_min")));
 
     // "add" should have commutative property test
-    assert!(test_suite.test_cases.iter().any(|c| c.name.contains("property_commutative")));
+    assert!(test_suite
+        .test_cases
+        .iter()
+        .any(|c| c.name.contains("property_commutative")));
 }
 
 #[test]
 fn test_generate_string_function_tests() {
     let generator = TestGenerator::new().with_num_cases(3);
 
-    let test_suite = generator.generate(
-        "to_uppercase",
-        &[TypeHint::Str],
-        &TypeHint::Str,
-    );
+    let test_suite = generator.generate("to_uppercase", &[TypeHint::Str], &TypeHint::Str);
 
     assert_eq!(test_suite.function_name, "to_uppercase");
     assert_eq!(test_suite.param_types.len(), 1);
@@ -59,9 +65,10 @@ fn test_generate_string_function_tests() {
     assert_eq!(test_suite.return_type, TypeHint::Str);
 
     // Should generate tests with string inputs
-    let has_str_input = test_suite.test_cases.iter().any(|c| {
-        c.inputs.iter().any(|v| matches!(v, TestValue::Str(_)))
-    });
+    let has_str_input = test_suite
+        .test_cases
+        .iter()
+        .any(|c| c.inputs.iter().any(|v| matches!(v, TestValue::Str(_))));
     assert!(has_str_input);
 }
 
@@ -87,11 +94,7 @@ fn test_generate_multiple_param_tests() {
 fn test_test_suite_structure() {
     let generator = TestGenerator::new().with_num_cases(5);
 
-    let test_suite = generator.generate(
-        "abs",
-        &[TypeHint::I64],
-        &TypeHint::I64,
-    );
+    let test_suite = generator.generate("abs", &[TypeHint::I64], &TypeHint::I64);
 
     assert_eq!(test_suite.function_name, "abs");
     assert_eq!(test_suite.param_types, vec![TypeHint::I64]);
@@ -105,7 +108,9 @@ fn test_test_suite_structure() {
 
     // "abs" should have idempotent property test
     assert!(test_suite.test_cases.iter().any(|c| {
-        c.properties.iter().any(|p| matches!(p, Property::Idempotent))
+        c.properties
+            .iter()
+            .any(|p| matches!(p, Property::Idempotent))
     }));
 }
 
@@ -129,11 +134,8 @@ fn test_test_case_to_vais_source() {
 #[test]
 fn test_test_suite_to_vais_source() {
     let generator = TestGenerator::new().with_num_cases(2);
-    let test_suite = generator.generate(
-        "multiply",
-        &[TypeHint::I64, TypeHint::I64],
-        &TypeHint::I64,
-    );
+    let test_suite =
+        generator.generate("multiply", &[TypeHint::I64, TypeHint::I64], &TypeHint::I64);
 
     let source = test_suite.to_vais_source();
 
@@ -295,7 +297,10 @@ fn test_type_hint_from_str() {
 fn test_test_value_display() {
     assert_eq!(format!("{}", TestValue::Int(42)), "42");
     assert_eq!(format!("{}", TestValue::Bool(true)), "true");
-    assert_eq!(format!("{}", TestValue::Str("hello".to_string())), "\"hello\"");
+    assert_eq!(
+        format!("{}", TestValue::Str("hello".to_string())),
+        "\"hello\""
+    );
 
     let array = TestValue::Array(vec![TestValue::Int(1), TestValue::Int(2)]);
     assert_eq!(format!("{}", array), "[1, 2]");
@@ -308,11 +313,7 @@ fn test_test_value_display() {
 fn test_generate_with_custom_num_cases() {
     let generator = TestGenerator::new().with_num_cases(20);
 
-    let test_suite = generator.generate(
-        "foo",
-        &[TypeHint::I64],
-        &TypeHint::I64,
-    );
+    let test_suite = generator.generate("foo", &[TypeHint::I64], &TypeHint::I64);
 
     // Should have many test cases (boundary + 20 random + property)
     assert!(test_suite.test_cases.len() >= 20);
@@ -334,14 +335,12 @@ fn test_generate_with_seed() {
 fn test_boundary_value_tests_coverage() {
     let generator = TestGenerator::new().with_num_cases(0); // Only boundary tests
 
-    let test_suite = generator.generate(
-        "test",
-        &[TypeHint::I64],
-        &TypeHint::I64,
-    );
+    let test_suite = generator.generate("test", &[TypeHint::I64], &TypeHint::I64);
 
     // Should have boundary tests
-    let boundary_tests: Vec<_> = test_suite.test_cases.iter()
+    let boundary_tests: Vec<_> = test_suite
+        .test_cases
+        .iter()
         .filter(|c| c.name.contains("boundary"))
         .collect();
 
@@ -361,18 +360,24 @@ fn test_heuristic_property_detection() {
     // Test "count" function - should have non-negative property
     let count_suite = generator.generate("count", &[TypeHint::Str], &TypeHint::I64);
     assert!(count_suite.test_cases.iter().any(|c| {
-        c.properties.iter().any(|p| matches!(p, Property::ReturnsInRange(0, _)))
+        c.properties
+            .iter()
+            .any(|p| matches!(p, Property::ReturnsInRange(0, _)))
     }));
 
     // Test "max" function - should have commutative property
     let max_suite = generator.generate("max", &[TypeHint::I64, TypeHint::I64], &TypeHint::I64);
     assert!(max_suite.test_cases.iter().any(|c| {
-        c.properties.iter().any(|p| matches!(p, Property::Commutative))
+        c.properties
+            .iter()
+            .any(|p| matches!(p, Property::Commutative))
     }));
 
     // Test "normalize" function - should have idempotent property
     let norm_suite = generator.generate("normalize", &[TypeHint::F64], &TypeHint::F64);
     assert!(norm_suite.test_cases.iter().any(|c| {
-        c.properties.iter().any(|p| matches!(p, Property::Idempotent))
+        c.properties
+            .iter()
+            .any(|p| matches!(p, Property::Idempotent))
     }));
 }

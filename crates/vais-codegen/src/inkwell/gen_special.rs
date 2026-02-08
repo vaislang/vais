@@ -3,7 +3,6 @@
 //! Handles string interpolation, destructuring, method declarations,
 //! impl blocks, and builtin functions (println, store_i64, etc.).
 
-
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue};
 use inkwell::AddressSpace;
@@ -373,7 +372,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generates the body of a method declared via `declare_method`.
-    pub(super) fn generate_method(&mut self, type_name: &str, func: &ast::Function) -> CodegenResult<()> {
+    pub(super) fn generate_method(
+        &mut self,
+        type_name: &str,
+        func: &ast::Function,
+    ) -> CodegenResult<()> {
         let method_name = format!("{}_{}", type_name, func.name.node);
         let fn_value = *self
             .functions
@@ -641,7 +644,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(self.context.struct_type(&[], false).const_zero().into())
     }
 
-    pub(super) fn generate_load_i64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_load_i64(
+        &mut self,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_i64(ptr: i64) -> i64
         if args.is_empty() {
             return Err(CodegenError::Unsupported(
@@ -759,7 +765,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(self.context.struct_type(&[], false).const_zero().into())
     }
 
-    pub(super) fn generate_load_f64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_load_f64(
+        &mut self,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_f64(ptr: i64) -> f64
         if args.is_empty() {
             return Err(CodegenError::Unsupported(

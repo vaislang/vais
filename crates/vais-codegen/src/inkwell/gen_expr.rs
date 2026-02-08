@@ -324,7 +324,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     #[allow(dead_code)]
-    pub(super) fn generate_literal(&mut self, lit: &Literal) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_literal(
+        &mut self,
+        lit: &Literal,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         match lit {
             Literal::Int(n) => Ok(self.context.i64_type().const_int(*n as u64, true).into()),
             Literal::Float(f) => Ok(self.context.f64_type().const_float(*f).into()),
@@ -333,7 +336,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
-    pub(super) fn generate_string_literal(&mut self, s: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_string_literal(
+        &mut self,
+        s: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Check if we already have this string
         if let Some(global) = self.string_constants.get(s) {
             let ptr = self
@@ -927,11 +933,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .ptr_type(inkwell::AddressSpace::default());
                     let result = self
                         .builder
-                        .build_int_to_ptr(
-                            arg.into_int_value(),
-                            i8_ptr_type,
-                            "ptr_to_str_result",
-                        )
+                        .build_int_to_ptr(arg.into_int_value(), i8_ptr_type, "ptr_to_str_result")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     return Ok(result.into());
                 } else {
@@ -1116,5 +1118,4 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .left()
             .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
     }
-
 }

@@ -4,9 +4,7 @@ use vais_ast::*;
 
 use super::TypeChecker;
 use crate::lifetime;
-use crate::types::{
-    ResolvedType, TypeError, TypeResult,
-};
+use crate::types::{ResolvedType, TypeError, TypeResult};
 
 impl TypeChecker {
     /// Check a function body

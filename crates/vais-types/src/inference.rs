@@ -259,12 +259,10 @@ impl TypeChecker {
             ResolvedType::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.apply_substitutions(inner)))
             }
-            ResolvedType::Result(ok, err) => {
-                ResolvedType::Result(
-                    Box::new(self.apply_substitutions(ok)),
-                    Box::new(self.apply_substitutions(err)),
-                )
-            }
+            ResolvedType::Result(ok, err) => ResolvedType::Result(
+                Box::new(self.apply_substitutions(ok)),
+                Box::new(self.apply_substitutions(err)),
+            ),
             ResolvedType::Ref(inner) => {
                 ResolvedType::Ref(Box::new(self.apply_substitutions(inner)))
             }

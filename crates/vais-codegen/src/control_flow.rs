@@ -442,7 +442,9 @@ impl CodeGenerator {
                 .collect();
             ir.push_str(&format!(
                 "  {} = phi {} {}\n",
-                phi_result, phi_type, phi_args.join(", ")
+                phi_result,
+                phi_type,
+                phi_args.join(", ")
             ));
 
             // For Named types (enum/struct), the phi gives us a pointer.

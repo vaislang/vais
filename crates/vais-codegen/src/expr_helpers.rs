@@ -326,10 +326,7 @@ impl CodeGenerator {
                     i32_result, fmt_ptr, arg_val
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = sext i32 {} to i64\n",
-                    result, i32_result
-                ));
+                ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
                 return Ok((result, ir));
             }
 
@@ -358,10 +355,7 @@ impl CodeGenerator {
                     i32_result, fmt_ptr, arg_val
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = sext i32 {} to i64\n",
-                    result, i32_result
-                ));
+                ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
                 return Ok((result, ir));
             }
 

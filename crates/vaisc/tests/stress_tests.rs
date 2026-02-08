@@ -56,7 +56,6 @@ impl StressTestResult {
             println!("  Error:       {}", err);
         }
     }
-
 }
 
 /// Parse and type-check a stress test file

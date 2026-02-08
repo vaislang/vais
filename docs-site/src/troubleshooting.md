@@ -655,8 +655,8 @@ F abs(x: i64) -> i64 {
 ### 더 많은 도움이 필요하면?
 
 - **문서**: `docs-site/` 디렉토리의 다른 가이드 참조
-- **예제**: `examples/` 디렉토리에 105+ 예제 파일
-- **테스트**: `crates/vaisc/tests/` — 396개 E2E 테스트 참고
+- **예제**: `examples/` 디렉토리에 168+ 예제 파일
+- **테스트**: `crates/vaisc/tests/` — 415개 E2E 테스트 참고
 - **GitHub Issues**: vaislang/vais 저장소에 이슈 제출
 
 ## 추가 리소스

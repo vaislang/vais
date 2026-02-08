@@ -996,11 +996,7 @@ pub fn can_skip_type_checking(cache: &IncrementalCache, files: &[PathBuf]) -> bo
 
 /// Update the signature hash and TC result for files in the cache.
 /// Call this after successful type checking.
-pub fn update_tc_cache(
-    cache: &mut IncrementalCache,
-    module: &vais_ast::Module,
-    tc_passed: bool,
-) {
+pub fn update_tc_cache(cache: &mut IncrementalCache, module: &vais_ast::Module, tc_passed: bool) {
     // If no modules_map, compute a single hash for the whole module
     if let Some(modules_map) = &module.modules_map {
         for (file_path, indices) in modules_map {

@@ -8,14 +8,9 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, StructType};
-use inkwell::values::{
-    BasicValueEnum, FunctionValue, GlobalValue,
-    PointerValue,
-};
+use inkwell::values::{BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 
-use vais_ast::{
-    self as ast, Expr, Module as VaisModule,
-};
+use vais_ast::{self as ast, Expr, Module as VaisModule};
 use vais_types::ResolvedType;
 
 use super::builtins;
@@ -293,7 +288,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     // ========== Declaration Phase ==========
-
 }
 
 #[cfg(test)]

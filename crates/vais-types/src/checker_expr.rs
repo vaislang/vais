@@ -7,8 +7,7 @@ use vais_ast::*;
 use super::TypeChecker;
 use crate::comptime;
 use crate::types::{
-    self, GenericInstantiation, Linearity, ResolvedType, TypeError, TypeResult,
-    VariantFieldTypes,
+    self, GenericInstantiation, Linearity, ResolvedType, TypeError, TypeResult, VariantFieldTypes,
 };
 
 impl TypeChecker {
@@ -1561,5 +1560,4 @@ impl TypeChecker {
             }
         }
     }
-
 }

@@ -1,18 +1,18 @@
 //! Simple commands (run, check, fmt, new).
 
+use crate::commands::build::cmd_build;
+use crate::configure_type_checker;
+use crate::error_formatter;
+use crate::utils::{print_plugin_diagnostics, walkdir};
+use colored::Colorize;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use colored::Colorize;
 use vais_codegen::TargetTriple;
 use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_types::TypeChecker;
-use crate::configure_type_checker;
-use crate::error_formatter;
-use crate::commands::build::cmd_build;
-use crate::utils::{print_plugin_diagnostics, walkdir};
 
 pub(crate) fn cmd_run(
     input: &PathBuf,
@@ -39,9 +39,9 @@ pub(crate) fn cmd_run(
         vais_codegen::optimize::PgoMode::None,
         vais_codegen::optimize::CoverageMode::None,
         false,
-        None,  // parallel_config
-        false, // use_inkwell
-        false, // per_module
+        None,      // parallel_config
+        false,     // use_inkwell
+        false,     // per_module
         536870912, // cache_limit (512MB default)
     )?;
 
@@ -62,7 +62,11 @@ pub(crate) fn cmd_run(
     Ok(())
 }
 
-pub(crate) fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
+pub(crate) fn cmd_check(
+    input: &PathBuf,
+    verbose: bool,
+    plugins: &PluginRegistry,
+) -> Result<(), String> {
     let source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 

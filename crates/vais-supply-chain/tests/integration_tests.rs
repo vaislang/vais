@@ -2,14 +2,16 @@
 //!
 //! Tests SBOM generation, dependency auditing, and package signing.
 
-use vais_supply_chain::{
-    audit::{AuditStatus, DependencyAuditor, DependencyEntry, DependencyManifest, VulnerabilitySeverity},
-    sbom::{ComponentType, SbomComponent, SbomGenerator},
-    signing::PackageSigner,
-};
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
+use vais_supply_chain::{
+    audit::{
+        AuditStatus, DependencyAuditor, DependencyEntry, DependencyManifest, VulnerabilitySeverity,
+    },
+    sbom::{ComponentType, SbomComponent, SbomGenerator},
+    signing::PackageSigner,
+};
 
 #[test]
 fn test_sbom_generator_creation() {
@@ -70,7 +72,10 @@ fn test_sbom_document_structure() {
     assert_eq!(sbom.components[0].version, "1.0.0");
     assert_eq!(sbom.components[0].component_type, ComponentType::Library);
     assert_eq!(sbom.components[0].license, Some("MIT".to_string()));
-    assert_eq!(sbom.components[0].hashes.get("SHA-256"), Some(&"abc123".to_string()));
+    assert_eq!(
+        sbom.components[0].hashes.get("SHA-256"),
+        Some(&"abc123".to_string())
+    );
 }
 
 #[test]
@@ -155,12 +160,10 @@ fn test_dependency_audit_safe_package() {
     let auditor = DependencyAuditor::new();
 
     let manifest = DependencyManifest {
-        dependencies: vec![
-            DependencyEntry {
-                name: "safe-package".to_string(),
-                version: "1.0.0".to_string(),
-            }
-        ],
+        dependencies: vec![DependencyEntry {
+            name: "safe-package".to_string(),
+            version: "1.0.0".to_string(),
+        }],
     };
 
     let results = auditor.audit_dependencies(&manifest);
@@ -175,12 +178,10 @@ fn test_dependency_audit_vulnerable_package() {
     let auditor = DependencyAuditor::new();
 
     let manifest = DependencyManifest {
-        dependencies: vec![
-            DependencyEntry {
-                name: "old-crypto".to_string(),
-                version: "1.0.0".to_string(),
-            }
-        ],
+        dependencies: vec![DependencyEntry {
+            name: "old-crypto".to_string(),
+            version: "1.0.0".to_string(),
+        }],
     };
 
     let results = auditor.audit_dependencies(&manifest);
@@ -188,7 +189,10 @@ fn test_dependency_audit_vulnerable_package() {
     assert_eq!(results[0].dependency_name, "old-crypto");
     assert_eq!(results[0].status, AuditStatus::Vulnerable);
     assert!(results[0].has_vulnerabilities());
-    assert_eq!(results[0].max_severity(), Some(VulnerabilitySeverity::Critical));
+    assert_eq!(
+        results[0].max_severity(),
+        Some(VulnerabilitySeverity::Critical)
+    );
 }
 
 #[test]
@@ -213,12 +217,10 @@ fn test_audit_result_severity_counts() {
     let auditor = DependencyAuditor::new();
 
     let manifest = DependencyManifest {
-        dependencies: vec![
-            DependencyEntry {
-                name: "old-crypto".to_string(),
-                version: "1.0.0".to_string(),
-            }
-        ],
+        dependencies: vec![DependencyEntry {
+            name: "old-crypto".to_string(),
+            version: "1.0.0".to_string(),
+        }],
     };
 
     let results = auditor.audit_dependencies(&manifest);
@@ -237,16 +239,28 @@ fn test_package_signer_creation() {
     );
 
     assert_eq!(signer.signer_info.name, "Test Signer");
-    assert_eq!(signer.signer_info.email, Some("test@example.com".to_string()));
-    assert_eq!(signer.signer_info.organization, Some("Test Org".to_string()));
+    assert_eq!(
+        signer.signer_info.email,
+        Some("test@example.com".to_string())
+    );
+    assert_eq!(
+        signer.signer_info.organization,
+        Some("Test Org".to_string())
+    );
 }
 
 #[test]
 fn test_package_signer_default() {
     let signer = PackageSigner::default();
     assert_eq!(signer.signer_info.name, "vais-builder");
-    assert_eq!(signer.signer_info.email, Some("build@vais-lang.org".to_string()));
-    assert_eq!(signer.signer_info.organization, Some("Vais Team".to_string()));
+    assert_eq!(
+        signer.signer_info.email,
+        Some("build@vais-lang.org".to_string())
+    );
+    assert_eq!(
+        signer.signer_info.organization,
+        Some("Vais Team".to_string())
+    );
 }
 
 #[test]
@@ -256,11 +270,8 @@ fn test_package_signature_structure() {
     fs::write(&test_file, b"test content").unwrap();
 
     let signer = PackageSigner::default();
-    let signature_result = signer.sign_package(
-        &test_file,
-        "test-package".to_string(),
-        "1.0.0".to_string(),
-    );
+    let signature_result =
+        signer.sign_package(&test_file, "test-package".to_string(), "1.0.0".to_string());
 
     assert!(signature_result.is_ok());
     let signature = signature_result.unwrap();
@@ -280,11 +291,9 @@ fn test_package_signature_verification_success() {
     fs::write(&test_file, b"test content").unwrap();
 
     let signer = PackageSigner::default();
-    let signature = signer.sign_package(
-        &test_file,
-        "test-package".to_string(),
-        "1.0.0".to_string(),
-    ).unwrap();
+    let signature = signer
+        .sign_package(&test_file, "test-package".to_string(), "1.0.0".to_string())
+        .unwrap();
 
     // Verify the signature
     let verify_result = signer.verify_signature(&test_file, &signature);
@@ -303,11 +312,9 @@ fn test_package_signature_verification_failure() {
     fs::write(&test_file, b"test content").unwrap();
 
     let signer = PackageSigner::default();
-    let signature = signer.sign_package(
-        &test_file,
-        "test-package".to_string(),
-        "1.0.0".to_string(),
-    ).unwrap();
+    let signature = signer
+        .sign_package(&test_file, "test-package".to_string(), "1.0.0".to_string())
+        .unwrap();
 
     // Modify file content after signing
     fs::write(&test_file, b"modified content").unwrap();
@@ -329,11 +336,9 @@ fn test_package_signature_json_roundtrip() {
     fs::write(&test_file, b"test content").unwrap();
 
     let signer = PackageSigner::default();
-    let signature = signer.sign_package(
-        &test_file,
-        "test-package".to_string(),
-        "1.0.0".to_string(),
-    ).unwrap();
+    let signature = signer
+        .sign_package(&test_file, "test-package".to_string(), "1.0.0".to_string())
+        .unwrap();
 
     // Serialize to JSON
     let json_result = signature.to_json();
@@ -346,13 +351,17 @@ fn test_package_signature_json_roundtrip() {
     let sig_file = temp_dir.path().join("signature.json");
     signature.write_to_file(&sig_file).unwrap();
 
-    let loaded_signature_result = vais_supply_chain::signing::PackageSignature::from_file(&sig_file);
+    let loaded_signature_result =
+        vais_supply_chain::signing::PackageSignature::from_file(&sig_file);
     assert!(loaded_signature_result.is_ok());
 
     let loaded_signature = loaded_signature_result.unwrap();
     assert_eq!(loaded_signature.hash, signature.hash);
     assert_eq!(loaded_signature.algorithm, signature.algorithm);
-    assert_eq!(loaded_signature.metadata.package_name, signature.metadata.package_name);
+    assert_eq!(
+        loaded_signature.metadata.package_name,
+        signature.metadata.package_name
+    );
 }
 
 #[test]
@@ -362,11 +371,9 @@ fn test_package_signature_is_recent() {
     fs::write(&test_file, b"test content").unwrap();
 
     let signer = PackageSigner::default();
-    let signature = signer.sign_package(
-        &test_file,
-        "test-package".to_string(),
-        "1.0.0".to_string(),
-    ).unwrap();
+    let signature = signer
+        .sign_package(&test_file, "test-package".to_string(), "1.0.0".to_string())
+        .unwrap();
 
     // Signature should be recent (within 1 hour)
     let one_hour = chrono::Duration::hours(1);
@@ -421,9 +428,18 @@ depends = "my-lib"
     let sbom = sbom_result.unwrap();
 
     assert_eq!(sbom.components.len(), 2);
-    assert!(sbom.components.iter().any(|c| c.name == "my-lib" && c.version == "1.0.0"));
-    assert!(sbom.components.iter().any(|c| c.name == "my-app" && c.version == "2.0.0"));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.name == "my-lib" && c.version == "1.0.0"));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.name == "my-app" && c.version == "2.0.0"));
 
     // Check dependencies
-    assert!(sbom.dependencies.iter().any(|d| d.component == "my-app" && d.depends_on.contains(&"my-lib".to_string())));
+    assert!(sbom
+        .dependencies
+        .iter()
+        .any(|d| d.component == "my-app" && d.depends_on.contains(&"my-lib".to_string())));
 }

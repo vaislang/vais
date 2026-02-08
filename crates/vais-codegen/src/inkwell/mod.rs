@@ -20,15 +20,15 @@ mod generator;
 mod types;
 
 // Code generation modules (split from generator.rs)
-mod gen_declaration;
-mod gen_function;
-mod gen_expr;
-mod gen_stmt;
-mod gen_aggregate;
-mod gen_types;
 mod gen_advanced;
+mod gen_aggregate;
+mod gen_declaration;
+mod gen_expr;
+mod gen_function;
 mod gen_match;
 mod gen_special;
+mod gen_stmt;
+mod gen_types;
 
 pub use generator::InkwellCodeGenerator;
 pub use types::TypeMapper;

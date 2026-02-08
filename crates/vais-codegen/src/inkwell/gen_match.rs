@@ -3,7 +3,6 @@
 //! Handles match expressions, pattern checking, pattern bindings,
 //! and assertions.
 
-
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, IntValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
@@ -77,7 +76,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Gets the field index by name for a struct.
-    pub(super) fn get_field_index(&self, struct_name: &str, field_name: &str) -> CodegenResult<u32> {
+    pub(super) fn get_field_index(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> CodegenResult<u32> {
         if let Some(fields) = self.struct_fields.get(struct_name) {
             for (idx, name) in fields.iter().enumerate() {
                 if name == field_name {
@@ -786,7 +789,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ///
     /// This method provides more precise lookup when the enum name is known.
     #[allow(dead_code)]
-    pub(super) fn get_enum_variant_tag_with_enum(&self, enum_name: &str, variant_name: &str) -> i32 {
+    pub(super) fn get_enum_variant_tag_with_enum(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+    ) -> i32 {
         self.enum_variants
             .get(&(enum_name.to_string(), variant_name.to_string()))
             .copied()
@@ -847,5 +854,4 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     // ========== String Interpolation ==========
-
 }

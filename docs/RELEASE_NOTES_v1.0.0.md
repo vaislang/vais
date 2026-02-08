@@ -20,7 +20,7 @@ Vais combines the performance of compiled languages with modern type safety feat
 - **LLVM Backend** - Native code generation with performance comparable to C/C++
 - **Rust-Level Safety** - Complete ownership system with lifetimes, borrow checking, and move semantics
 - **Full Toolchain** - Batteries-included developer experience with LSP, REPL, debugger, formatter, and package manager
-- **Production Ready** - 402+ passing tests, self-hosted compiler, comprehensive documentation
+- **Production Ready** - 415+ passing tests, self-hosted compiler, comprehensive documentation
 - **Multi-Platform** - Cross-compilation support for 16 target platforms
 
 ---

@@ -686,8 +686,8 @@ impl CodeGenerator {
             ResolvedType::Str => 8, // pointer
             ResolvedType::Unit => 0,
             ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Array(_) => 8, // pointer to heap
-            ResolvedType::Optional(_) => 8, // tag + value in i64
+            ResolvedType::Array(_) => 8,     // pointer to heap
+            ResolvedType::Optional(_) => 8,  // tag + value in i64
             ResolvedType::Result(_, _) => 8, // tag + value in i64
             ResolvedType::Tuple(elems) => elems.len() as i64 * 8,
             ResolvedType::Named { name, .. } => {

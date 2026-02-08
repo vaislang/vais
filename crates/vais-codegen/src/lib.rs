@@ -327,7 +327,11 @@ impl TargetTriple {
     pub fn is_linux(&self) -> bool {
         matches!(
             self,
-            Self::X86_64Linux | Self::X86_64LinuxMusl | Self::Aarch64Linux | Self::Aarch64LinuxMusl | Self::Riscv64LinuxGnu
+            Self::X86_64Linux
+                | Self::X86_64LinuxMusl
+                | Self::Aarch64Linux
+                | Self::Aarch64LinuxMusl
+                | Self::Riscv64LinuxGnu
         )
     }
 
@@ -354,9 +358,9 @@ impl TargetTriple {
             | Self::Aarch64Linux
             | Self::Aarch64LinuxMusl
             | Self::Riscv64LinuxGnu => "linux",
-            Self::X86_64WindowsMsvc
-            | Self::X86_64WindowsGnu
-            | Self::Aarch64WindowsMsvc => "windows",
+            Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc => {
+                "windows"
+            }
             Self::Aarch64Android | Self::Armv7Android => "android",
             Self::X86_64FreeBsd | Self::Aarch64FreeBsd => "freebsd",
             Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm",
@@ -1090,7 +1094,8 @@ impl CodeGenerator {
         }
 
         // Filter to valid indices only
-        let valid_indices: Vec<usize> = item_indices.iter()
+        let valid_indices: Vec<usize> = item_indices
+            .iter()
             .copied()
             .filter(|&i| i < items_len)
             .collect();
@@ -3057,10 +3062,7 @@ impl CodeGenerator {
                             i32_result, fmt_ptr, arg_val
                         ));
                         let result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = sext i32 {} to i64\n",
-                            result, i32_result
-                        ));
+                        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
                         return Ok((result, ir));
                     }
 
@@ -3089,10 +3091,7 @@ impl CodeGenerator {
                             i32_result, fmt_ptr, arg_val
                         ));
                         let result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = sext i32 {} to i64\n",
-                            result, i32_result
-                        ));
+                        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
                         return Ok((result, ir));
                     }
                 }
@@ -3504,9 +3503,9 @@ impl CodeGenerator {
                     if arg_full.starts_with("i8*") {
                         // Already a pointer, use directly
                         // Use everything after "i8* " to preserve complex expressions like getelementptr
-                        let ptr_val = arg_full.strip_prefix("i8* ").unwrap_or(
-                            arg_full.split_whitespace().last().unwrap_or("null"),
-                        );
+                        let ptr_val = arg_full
+                            .strip_prefix("i8* ")
+                            .unwrap_or(arg_full.split_whitespace().last().unwrap_or("null"));
                         ir.push_str(&format!(
                             "  {} = call i64 @strlen(i8* {}){}\n",
                             result, ptr_val, dbg_info

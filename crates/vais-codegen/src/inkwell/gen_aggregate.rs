@@ -3,7 +3,6 @@
 //! Handles arrays, tuples, indexing, slicing, method calls,
 //! and lambda expressions.
 
-
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
@@ -96,7 +95,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(tuple_val.into())
     }
 
-    pub(super) fn generate_index(&mut self, arr: &Expr, index: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_index(
+        &mut self,
+        arr: &Expr,
+        index: &Expr,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let arr_val = self.generate_expr(arr)?;
         let idx_val = self.generate_expr(index)?;
 

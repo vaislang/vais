@@ -23,10 +23,7 @@ fn has_category(findings: &[vais_security::SecurityFinding], category: FindingCa
 }
 
 /// Helper to count findings of a specific category
-fn count_category(
-    findings: &[vais_security::SecurityFinding],
-    category: FindingCategory,
-) -> usize {
+fn count_category(findings: &[vais_security::SecurityFinding], category: FindingCategory) -> usize {
     findings.iter().filter(|f| f.category == category).count()
 }
 
@@ -217,7 +214,9 @@ fn test_command_injection_system() {
 
     // All should mention system/command execution
     assert!(
-        injection_findings.iter().all(|f| f.description.contains("system") || f.description.contains("Command")),
+        injection_findings
+            .iter()
+            .all(|f| f.description.contains("system") || f.description.contains("Command")),
         "Injection findings should mention system() calls"
     );
 }
@@ -468,9 +467,7 @@ fn test_extern_block_analysis() {
 
     // strlen should not be flagged
     assert!(
-        !findings
-            .iter()
-            .any(|f| f.description.contains("strlen")),
+        !findings.iter().any(|f| f.description.contains("strlen")),
         "strlen is a safe function and should not be flagged"
     );
 }
@@ -815,7 +812,10 @@ fn test_comprehensive_security_report() {
 
     // Verify all findings have proper structure
     for finding in &findings {
-        assert!(!finding.description.is_empty(), "Description should not be empty");
+        assert!(
+            !finding.description.is_empty(),
+            "Description should not be empty"
+        );
         assert!(
             !finding.recommendation.is_empty(),
             "Recommendation should not be empty"

@@ -1,12 +1,12 @@
 //! Advanced commands (PGO, watch).
 
+use crate::commands::build::cmd_build;
+use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use colored::Colorize;
 use vais_codegen::TargetTriple;
 use vais_plugin::PluginRegistry;
-use crate::commands::build::cmd_build;
 
 pub(crate) fn cmd_pgo(
     input: &PathBuf,
@@ -48,10 +48,10 @@ pub(crate) fn cmd_pgo(
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
             vais_codegen::optimize::CoverageMode::None,
-            false, // suggest_fixes
-            None,  // parallel_config
-            false, // use_inkwell
-            false, // per_module
+            false,     // suggest_fixes
+            None,      // parallel_config
+            false,     // use_inkwell
+            false,     // per_module
             536870912, // cache_limit (512MB default)
         )?;
 
@@ -150,10 +150,10 @@ pub(crate) fn cmd_pgo(
         vais_codegen::optimize::LtoMode::Thin,
         vais_codegen::optimize::PgoMode::Use(profdata_path),
         vais_codegen::optimize::CoverageMode::None,
-        false, // suggest_fixes
-        None,  // parallel_config
-        false, // use_inkwell
-        false, // per_module
+        false,     // suggest_fixes
+        None,      // parallel_config
+        false,     // use_inkwell
+        false,     // per_module
         536870912, // cache_limit (512MB default)
     )?;
 
@@ -243,9 +243,9 @@ pub(crate) fn cmd_watch(
         vais_codegen::optimize::PgoMode::None,
         vais_codegen::optimize::CoverageMode::None,
         false,
-        None,  // parallel_config
-        false, // use_inkwell
-        false, // per_module
+        None,      // parallel_config
+        false,     // use_inkwell
+        false,     // per_module
         536870912, // cache_limit (512MB default)
     )?;
 
@@ -335,9 +335,9 @@ pub(crate) fn cmd_watch(
                         vais_codegen::optimize::PgoMode::None,
                         vais_codegen::optimize::CoverageMode::None,
                         false,
-                        None,  // parallel_config
-                        false, // use_inkwell
-                        false, // per_module
+                        None,      // parallel_config
+                        false,     // use_inkwell
+                        false,     // per_module
                         536870912, // cache_limit (512MB default)
                     ) {
                         Ok(_) => {

@@ -1,18 +1,23 @@
 //! Test, benchmark, fix, and lint commands.
 
+use crate::commands::build::cmd_build;
+use crate::configure_type_checker;
+use crate::utils::walkdir;
+use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use colored::Colorize;
 use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_types::TypeChecker;
-use crate::configure_type_checker;
-use crate::commands::build::cmd_build;
-use crate::utils::walkdir;
 
-pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
+pub(crate) fn cmd_test(
+    path: &Path,
+    filter: Option<&str>,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<(), String> {
     let test_dir = if path.is_dir() {
         path.to_path_buf()
     } else if path.is_file() {
@@ -105,10 +110,20 @@ pub(crate) fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool, coverag
         // Print coverage instructions if enabled
         if let Some(dir) = coverage_mode.coverage_dir() {
             println!();
-            println!("{} Coverage data collected in: {}/", "Coverage:".cyan().bold(), dir);
+            println!(
+                "{} Coverage data collected in: {}/",
+                "Coverage:".cyan().bold(),
+                dir
+            );
             println!("  Generate report:");
-            println!("    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw", dir, dir);
-            println!("    llvm-cov report --instr-profile={}/coverage.profdata", dir);
+            println!(
+                "    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw",
+                dir, dir
+            );
+            println!(
+                "    llvm-cov report --instr-profile={}/coverage.profdata",
+                dir
+            );
         }
 
         Ok(())
@@ -226,7 +241,12 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
                 results.push((bench_file.clone(), elapsed, status.success()));
             }
             Err(e) => {
-                eprintln!("  {} {} - {}", "ERROR".red().bold(), bench_file.display(), e);
+                eprintln!(
+                    "  {} {} - {}",
+                    "ERROR".red().bold(),
+                    bench_file.display(),
+                    e
+                );
                 results.push((bench_file.clone(), std::time::Duration::ZERO, false));
             }
         }
@@ -238,11 +258,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
     // Display results
     println!("\n{}", "Results:".bold());
     for (path, duration, success) in &results {
-        let name = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_str()
-            .unwrap_or("?");
+        let name = path.file_stem().unwrap_or_default().to_str().unwrap_or("?");
         if *success {
             println!(
                 "  {} {} ... {:.3}ms",
@@ -296,8 +312,8 @@ pub(crate) fn cmd_fix(
             println!("{} Checking {}", "Fix".cyan(), file.display());
         }
 
-        let source =
-            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
+        let source = fs::read_to_string(file)
+            .map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
 
         // Parse to check for syntax errors
         let tokens = vais_lexer::tokenize(&source);
@@ -339,11 +355,7 @@ pub(crate) fn cmd_fix(
             // TypeErrors don't consistently have suggestions
             // This is a simplified implementation
             if verbose {
-                println!(
-                    "  {} {} — has type errors",
-                    "→".cyan(),
-                    file.display()
-                );
+                println!("  {} {} — has type errors", "→".cyan(), file.display());
             }
         }
     }
@@ -392,9 +404,9 @@ pub(crate) fn cmd_lint(
     }
 
     let level = match warning_level {
-        Some("allow") => 0,  // suppress warnings
-        Some("deny") => 2,   // treat warnings as errors
-        _ => 1,              // default: warn
+        Some("allow") => 0, // suppress warnings
+        Some("deny") => 2,  // treat warnings as errors
+        _ => 1,             // default: warn
     };
 
     let mut total_warnings = 0;
@@ -406,8 +418,8 @@ pub(crate) fn cmd_lint(
             println!("{} Linting {}", "Lint".cyan(), file.display());
         }
 
-        let source =
-            fs::read_to_string(file).map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
+        let source = fs::read_to_string(file)
+            .map_err(|e| format!("failed to read {}: {}", file.display(), e))?;
 
         let _tokens = match vais_lexer::tokenize(&source) {
             Ok(t) => t,
@@ -422,11 +434,7 @@ pub(crate) fn cmd_lint(
                     });
                     all_diagnostics.push(diag);
                 } else {
-                    eprintln!(
-                        "{}: [L001] Lexer error: {}",
-                        "error".red().bold(),
-                        e
-                    );
+                    eprintln!("{}: [L001] Lexer error: {}", "error".red().bold(), e);
                     eprintln!("  {} {}", "-->".blue().bold(), file.display());
                 }
                 continue;
@@ -613,7 +621,11 @@ pub(crate) fn discover_test_files(dir: &Path, results: &mut Vec<PathBuf>) -> Res
     Ok(())
 }
 
-pub(crate) fn run_single_test(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<(), String> {
+pub(crate) fn run_single_test(
+    path: &Path,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<(), String> {
     println!(
         "{} Running test: {}\n",
         "Testing".cyan().bold(),
@@ -635,7 +647,11 @@ pub(crate) fn run_single_test(path: &Path, verbose: bool, coverage_mode: &vais_c
     }
 }
 
-pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &vais_codegen::optimize::CoverageMode) -> Result<bool, String> {
+pub(crate) fn run_single_test_inner(
+    path: &Path,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) -> Result<bool, String> {
     use std::process::Command;
 
     // Step 1: Compile to LLVM IR
@@ -679,7 +695,10 @@ pub(crate) fn run_single_test_inner(path: &Path, verbose: bool, coverage_mode: &
         if !cov_dir.exists() {
             let _ = std::fs::create_dir_all(cov_dir);
         }
-        cmd.env("LLVM_PROFILE_FILE", format!("{}/{}_test_%m.profraw", dir, stem));
+        cmd.env(
+            "LLVM_PROFILE_FILE",
+            format!("{}/{}_test_%m.profraw", dir, stem),
+        );
     }
     let run_output = cmd
         .output()
@@ -733,4 +752,3 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
 
     Ok(ir)
 }
-

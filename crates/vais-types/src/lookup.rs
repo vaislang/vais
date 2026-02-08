@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use super::TypeChecker;
 use crate::traits::TraitMethodSig;
 use crate::types::{
-    self, Linearity, ResolvedType, TypeError, TypeResult,
-    VarInfo, VariantFieldTypes,
+    self, Linearity, ResolvedType, TypeError, TypeResult, VarInfo, VariantFieldTypes,
 };
 
 impl TypeChecker {

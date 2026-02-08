@@ -212,10 +212,7 @@ impl CoverageMode {
     pub fn clang_flags(&self) -> Vec<&'static str> {
         match self {
             CoverageMode::None => vec![],
-            CoverageMode::Enabled(_) => vec![
-                "-fprofile-instr-generate",
-                "-fcoverage-mapping",
-            ],
+            CoverageMode::Enabled(_) => vec!["-fprofile-instr-generate", "-fcoverage-mapping"],
         }
     }
 }
