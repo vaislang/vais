@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770566762425,
+  "lastUpdate": 1770578749111,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -13103,6 +13103,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1842867,
             "range": "± 20494",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "fab37f61a5fdb35bacbf3803547c36de72e26699",
+          "message": "feat: Phase 57 WASM target support & Phase 58 async runtime\n\nPhase 57 (WASM):\n- WASM codegen: wasm32-unknown-unknown target, _start wrapper, bump allocator\n- WASI SDK: WasiManifest, WasmBindgenGenerator, component linking\n- std/wasm.vais: memory management, I/O polyfill, WASI bindings\n- Playground: browser-side WASM execution via WasmRunner, 3-tier fallback\n- Server: /api/compile-wasm endpoint with base64 binary transfer\n\nPhase 58 (Async):\n- Future combinators: FlatMap, Filter, Race, Chain, Retry, Fuse\n- Async primitives: Barrier, Semaphore, WaitGroup, OnceCell, AsyncStream\n- std/async_io.vais: AsyncFile, AsyncFileReader, AsyncFileWriter\n- std/async_net.vais: AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket\n- std/async_http.vais: AsyncHttpServer, AsyncHttpClient, Router, Middleware\n- Concurrency stress tests: 6 test scenarios\n\nE2E: 435 tests (415→435), Clippy 0 warnings\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-09T04:19:02+09:00",
+          "tree_id": "0c80aaa7119124d680d310061a4b5ccd3b4cc956",
+          "url": "https://github.com/vaislang/vais/commit/fab37f61a5fdb35bacbf3803547c36de72e26699"
+        },
+        "date": 1770578748264,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2383,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5447,
+            "range": "± 45",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6065,
+            "range": "± 522",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11133,
+            "range": "± 95",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17737,
+            "range": "± 191",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34257,
+            "range": "± 214",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29958,
+            "range": "± 121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 65589,
+            "range": "± 262",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 290509,
+            "range": "± 2486",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 441089,
+            "range": "± 1568",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 108589,
+            "range": "± 642",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 755457,
+            "range": "± 8566",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 160790,
+            "range": "± 4768",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 188898,
+            "range": "± 1235",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 197870,
+            "range": "± 1128",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 239847,
+            "range": "± 886",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 517972,
+            "range": "± 1522",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 726633,
+            "range": "± 8289",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 395706,
+            "range": "± 1495",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1148256,
+            "range": "± 7126",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38767,
+            "range": "± 388",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 196364,
+            "range": "± 2309",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 378020,
+            "range": "± 3270",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1822725,
+            "range": "± 16303",
             "unit": "ns/iter"
           }
         ]
