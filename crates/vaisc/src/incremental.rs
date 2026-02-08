@@ -40,6 +40,9 @@ pub struct FileMetadata {
     /// Struct/enum definitions for type change detection
     #[serde(default)]
     pub types: HashMap<String, TypeMetadata>,
+    /// Module signature hash for incremental type checking
+    #[serde(default)]
+    pub signature_hash: Option<ModuleSignatureHash>,
 }
 
 /// Function-level metadata for incremental compilation
@@ -65,6 +68,19 @@ pub struct TypeMetadata {
     pub line_range: (u32, u32),
     /// Types this type depends on (field types, variant types)
     pub dependencies: Vec<String>,
+}
+
+/// Module signature hash for incremental type checking.
+/// Captures the "public interface" of a file — function signatures, struct fields,
+/// enum variants, trait definitions — but NOT function bodies.
+/// If this hash is unchanged, dependent modules don't need re-type-checking.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModuleSignatureHash {
+    /// Combined hash of all public signatures in this file
+    pub hash: String,
+    /// Whether type checking passed for this file (cached result)
+    #[serde(default)]
+    pub tc_passed: bool,
 }
 
 /// Dependency graph for tracking file relationships
@@ -369,6 +385,7 @@ impl IncrementalCache {
             size: metadata.len(),
             functions: HashMap::new(),
             types: HashMap::new(),
+            signature_hash: None,
         };
 
         self.state
@@ -599,6 +616,7 @@ impl IncrementalCache {
             size: metadata.len(),
             functions: extractor.functions,
             types: extractor.types,
+            signature_hash: None,
         };
 
         self.state
@@ -835,6 +853,177 @@ pub fn compute_content_hash(content: &str) -> String {
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
     format!("{:x}", result)
+}
+
+/// Compute a signature hash for a set of AST items.
+/// This captures the "public interface" — function signatures, struct fields,
+/// enum variants, trait definitions — but NOT function bodies.
+/// Used to determine if type checking results can be reused.
+pub fn compute_signature_hash(items: &[vais_ast::Spanned<vais_ast::Item>]) -> String {
+    use std::fmt::Write;
+    let mut sig = String::new();
+
+    for item in items {
+        match &item.node {
+            vais_ast::Item::Function(f) => {
+                let _ = write!(sig, "fn:{}", f.name.node);
+                for p in &f.params {
+                    let _ = write!(sig, ",p:{}:{:?}", p.name.node, p.ty.node);
+                }
+                if let Some(ret) = &f.ret_type {
+                    let _ = write!(sig, "->:{:?}", ret.node);
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::Struct(s) => {
+                let _ = write!(sig, "struct:{}", s.name.node);
+                for f in &s.fields {
+                    let _ = write!(sig, ",f:{}:{:?}", f.name.node, f.ty.node);
+                }
+                for m in &s.methods {
+                    let _ = write!(sig, ",m:{}", m.node.name.node);
+                    for p in &m.node.params {
+                        let _ = write!(sig, ",mp:{}:{:?}", p.name.node, p.ty.node);
+                    }
+                    if let Some(ret) = &m.node.ret_type {
+                        let _ = write!(sig, "->:{:?}", ret.node);
+                    }
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::Enum(e) => {
+                let _ = write!(sig, "enum:{}", e.name.node);
+                for v in &e.variants {
+                    let _ = write!(sig, ",v:{}:{:?}", v.name.node, v.fields);
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::Trait(t) => {
+                let _ = write!(sig, "trait:{}", t.name.node);
+                for m in &t.methods {
+                    let _ = write!(sig, ",tm:{}", m.name.node);
+                    for p in &m.params {
+                        let _ = write!(sig, ",tp:{}:{:?}", p.name.node, p.ty.node);
+                    }
+                    if let Some(ret) = &m.ret_type {
+                        let _ = write!(sig, "->:{:?}", ret.node);
+                    }
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::Impl(imp) => {
+                let _ = write!(sig, "impl:{:?}", imp.target_type.node);
+                if let Some(tn) = &imp.trait_name {
+                    let _ = write!(sig, ":trait:{}", tn.node);
+                }
+                for m in &imp.methods {
+                    let _ = write!(sig, ",im:{}", m.node.name.node);
+                    for p in &m.node.params {
+                        let _ = write!(sig, ",ip:{}:{:?}", p.name.node, p.ty.node);
+                    }
+                    if let Some(ret) = &m.node.ret_type {
+                        let _ = write!(sig, "->:{:?}", ret.node);
+                    }
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::TypeAlias(ta) => {
+                let _ = write!(sig, "type:{}={:?};", ta.name.node, ta.ty.node);
+            }
+            vais_ast::Item::Const(c) => {
+                let _ = write!(sig, "const:{}:{:?};", c.name.node, c.ty.node);
+            }
+            vais_ast::Item::Global(g) => {
+                let _ = write!(sig, "global:{}:{:?};", g.name.node, g.ty.node);
+            }
+            vais_ast::Item::Union(u) => {
+                let _ = write!(sig, "union:{}", u.name.node);
+                for f in &u.fields {
+                    let _ = write!(sig, ",f:{}:{:?}", f.name.node, f.ty.node);
+                }
+                sig.push(';');
+            }
+            vais_ast::Item::ExternBlock(eb) => {
+                for f in &eb.functions {
+                    let _ = write!(sig, "extern:{}:{}", eb.abi, f.name.node);
+                    for p in &f.params {
+                        let _ = write!(sig, ",ep:{}:{:?}", p.name.node, p.ty.node);
+                    }
+                    if let Some(ret) = &f.ret_type {
+                        let _ = write!(sig, "->:{:?}", ret.node);
+                    }
+                    sig.push(';');
+                }
+            }
+            _ => {} // Use, Macro, Error — don't affect signature
+        }
+    }
+
+    compute_content_hash(&sig)
+}
+
+/// Check if type checking can be skipped based on cached signatures.
+/// Returns true if ALL files have unchanged content hashes AND signature hashes,
+/// meaning type checking results are still valid.
+pub fn can_skip_type_checking(cache: &IncrementalCache, files: &[PathBuf]) -> bool {
+    for file in files {
+        let canonical = match file.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+
+        match cache.state.dep_graph.file_metadata.get(&canonical) {
+            Some(meta) => {
+                // Check file content hash
+                let current_hash = match compute_file_hash(&canonical) {
+                    Ok(h) => h,
+                    Err(_) => return false,
+                };
+                if current_hash != meta.hash {
+                    return false;
+                }
+                // Check that TC previously passed for this file
+                match &meta.signature_hash {
+                    Some(sig) if sig.tc_passed => {}
+                    _ => return false,
+                }
+            }
+            None => return false, // File not in cache
+        }
+    }
+    true
+}
+
+/// Update the signature hash and TC result for files in the cache.
+/// Call this after successful type checking.
+pub fn update_tc_cache(
+    cache: &mut IncrementalCache,
+    module: &vais_ast::Module,
+    tc_passed: bool,
+) {
+    // If no modules_map, compute a single hash for the whole module
+    if let Some(modules_map) = &module.modules_map {
+        for (file_path, indices) in modules_map {
+            let canonical = match file_path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            let file_items: Vec<vais_ast::Spanned<vais_ast::Item>> = indices
+                .iter()
+                .filter_map(|&i| module.items.get(i).cloned())
+                .collect();
+
+            let sig_hash = compute_signature_hash(&file_items);
+
+            if let Some(meta) = cache.state.dep_graph.file_metadata.get_mut(&canonical) {
+                meta.signature_hash = Some(ModuleSignatureHash {
+                    hash: sig_hash,
+                    tc_passed,
+                });
+            }
+        }
+    }
 }
 
 /// Get the path for a cached object file based on IR content hash.

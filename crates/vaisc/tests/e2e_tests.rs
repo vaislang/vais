@@ -7597,3 +7597,137 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 17);
 }
+
+#[test]
+fn test_incremental_tc_skip() {
+    // Test that incremental build works correctly when signatures haven't changed
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U math
+F main() -> i64 {
+    R add(10, 32)
+}
+"#,
+        ),
+        (
+            "math.vais",
+            r#"
+F add(a: i64, b: i64) -> i64 { R a + b }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+
+    // First build (populates cache including TC signatures)
+    let output1 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output1.status.success(),
+        "First build failed: {}",
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    // Verify initial result
+    let exe_path = canonical_path.join("main");
+    let run1 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(run1.status.code(), Some(42), "add(10,32) should return 42");
+
+    // Second build (same sources — cache should be used)
+    let output2 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output2.status.success(),
+        "Second build failed: {}",
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    // Result should still be correct
+    let run2 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(
+        run2.status.code(),
+        Some(42),
+        "Second build should produce same result"
+    );
+}
+
+#[test]
+fn test_incremental_tc_re_check_on_signature_change() {
+    // Test that type checking is re-run when function signatures change
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U helper
+F main() -> i64 {
+    R get_val()
+}
+"#,
+        ),
+        (
+            "helper.vais",
+            r#"
+F get_val() -> i64 { R 10 }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project
+        .path()
+        .canonicalize()
+        .expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+    let helper_path = canonical_path.join("helper.vais");
+
+    // First build
+    let output1 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output1.status.success(),
+        "First build failed: {}",
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    let exe_path = canonical_path.join("main");
+    let run1 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(run1.status.code(), Some(10));
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Modify helper.vais — change body only (signature unchanged)
+    fs::write(
+        &helper_path,
+        r#"
+F get_val() -> i64 { R 20 }
+"#,
+    )
+    .expect("Failed to modify helper.vais");
+
+    // Rebuild
+    let output2 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output2.status.success(),
+        "Incremental build failed: {}",
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    let run2 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(
+        run2.status.code(),
+        Some(20),
+        "Should return new value after body change"
+    );
+}

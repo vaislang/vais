@@ -1815,32 +1815,65 @@ fn cmd_build(
         }
     }
 
-    // Type check
+    // Type check (with incremental skip if signatures unchanged)
     let typecheck_start = std::time::Instant::now();
-    let mut checker = TypeChecker::new();
-    configure_type_checker(&mut checker);
+    let mut tc_skipped = false;
 
-    // Calculate imported item count so ownership checker can skip imported items
-    let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
-    if let Ok(original_ast) = query_db.parse(&input_canonical) {
-        let original_non_use_count = original_ast
-            .items
-            .iter()
-            .filter(|item| !matches!(item.node, Item::Use(_)))
-            .count();
-        let imported_count = final_ast.items.len().saturating_sub(original_non_use_count);
-        if imported_count > 0 {
-            checker.set_imported_item_count(imported_count);
+    // Check if we can skip type checking based on cached signatures
+    if !force_rebuild {
+        if let Some(ref c) = cache {
+            let tc_files: Vec<PathBuf> = final_ast
+                .modules_map
+                .as_ref()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_else(|| vec![input.to_path_buf()]);
+            if incremental::can_skip_type_checking(c, &tc_files) {
+                tc_skipped = true;
+                if verbose {
+                    println!(
+                        "  {} Type check skipped (signatures unchanged)",
+                        "⚡".cyan()
+                    );
+                }
+            }
         }
     }
 
-    if let Err(e) = checker.check_module(&final_ast) {
-        // If suggest_fixes is enabled, print suggested fixes
-        if suggest_fixes {
-            print_suggested_fixes(&e, &main_source);
+    let mut checker = TypeChecker::new();
+    configure_type_checker(&mut checker);
+
+    if !tc_skipped {
+        // Calculate imported item count so ownership checker can skip imported items
+        let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+        if let Ok(original_ast) = query_db.parse(&input_canonical) {
+            let original_non_use_count = original_ast
+                .items
+                .iter()
+                .filter(|item| !matches!(item.node, Item::Use(_)))
+                .count();
+            let imported_count = final_ast.items.len().saturating_sub(original_non_use_count);
+            if imported_count > 0 {
+                checker.set_imported_item_count(imported_count);
+            }
         }
-        // Format error with source context
-        return Err(error_formatter::format_type_error(&e, &main_source, input));
+
+        if let Err(e) = checker.check_module(&final_ast) {
+            // If suggest_fixes is enabled, print suggested fixes
+            if suggest_fixes {
+                print_suggested_fixes(&e, &main_source);
+            }
+            // Update cache: TC failed
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, &final_ast, false);
+            }
+            // Format error with source context
+            return Err(error_formatter::format_type_error(&e, &main_source, input));
+        }
+
+        // Update cache: TC passed
+        if let Some(ref mut c) = cache {
+            incremental::update_tc_cache(c, &final_ast, true);
+        }
     }
     let typecheck_time = typecheck_start.elapsed();
 
