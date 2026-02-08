@@ -83,7 +83,7 @@ jobs:
           ls -la target/package/
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: package
           path: target/package/*.tar.gz
