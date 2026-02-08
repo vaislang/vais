@@ -22,8 +22,9 @@ const navLinks = document.querySelector('.nav-links');
 
 if (toggle && navLinks) {
   toggle.addEventListener('click', () => {
-    navLinks.classList.toggle('open');
+    const isOpen = navLinks.classList.toggle('open');
     toggle.classList.toggle('active');
+    toggle.setAttribute('aria-expanded', isOpen);
   });
 
   // Close on link click
@@ -31,6 +32,7 @@ if (toggle && navLinks) {
     link.addEventListener('click', () => {
       navLinks.classList.remove('open');
       toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
     });
   });
 
@@ -39,6 +41,7 @@ if (toggle && navLinks) {
     if (!toggle.contains(e.target) && !navLinks.contains(e.target)) {
       navLinks.classList.remove('open');
       toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
     }
   });
 }

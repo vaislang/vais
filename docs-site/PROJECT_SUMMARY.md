@@ -196,7 +196,7 @@ cd docs-site
 자동 배포:
 - `main` 브랜치에 푸시
 - GitHub Actions가 자동 처리
-- 몇 분 후 https://sswoo.github.io/vais/ 에서 확인
+- 몇 분 후 https://vais.dev/docs/ 에서 확인
 
 ## 기술 스택
 

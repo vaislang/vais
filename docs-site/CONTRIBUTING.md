@@ -214,7 +214,7 @@ GitHub에서 Pull Request를 생성하고:
 `main` 브랜치에 병합되면:
 1. GitHub Actions가 자동으로 문서 빌드
 2. GitHub Pages에 배포
-3. 몇 분 내에 https://sswoo.github.io/vais/ 에서 확인 가능
+3. 몇 분 내에 https://vais.dev/docs/ 에서 확인 가능
 
 ## 로컬 테스트
 

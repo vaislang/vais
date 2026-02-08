@@ -163,7 +163,7 @@ DEPLOYMENT
 ----------
 - GitHub Actions workflow: .github/workflows/docs.yml
 - Auto-deploy on push to main branch
-- Deployment URL: https://sswoo.github.io/vais/
+- Deployment URL: https://vais.dev/docs/
 - Build time: ~5 seconds
 
 USAGE
@@ -188,7 +188,7 @@ NEXT STEPS
 2. Test locally: cd docs-site && ./serve.sh
 3. Commit and push to GitHub
 4. Enable GitHub Pages in repository settings
-5. Visit https://sswoo.github.io/vais/
+5. Visit https://vais.dev/docs/
 
 ========================================
 End of File
