@@ -8,11 +8,11 @@ description = "JIT compiler for Vais using Cranelift"
 
 [dependencies]
 # Cranelift JIT
-cranelift = "0.115"
-cranelift-jit = "0.115"
-cranelift-module = "0.115"
-cranelift-native = "0.115"
-cranelift-codegen = "0.115"
+cranelift = "0.128"
+cranelift-jit = "0.128"
+cranelift-module = "0.128"
+cranelift-native = "0.128"
+cranelift-codegen = "0.128"
 
 # Vais crates
 vais-ast = { path = "../vais-ast" }
@@ -22,7 +22,7 @@ vais-types = { path = "../vais-types" }
 thiserror.workspace = true
 
 # Platform-specific
-target-lexicon = "0.12"
+target-lexicon = "0.13"
 libc = "0.2"
 
 [dev-dependencies]

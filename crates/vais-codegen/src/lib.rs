@@ -705,8 +705,7 @@ fn format_did_you_mean(suggestions: &[String]) -> String {
 }
 
 /// Suggest type conversion hints based on common type mismatches
-#[allow(dead_code)]
-fn suggest_type_conversion(expected: &str, found: &str) -> String {
+fn _suggest_type_conversion(expected: &str, found: &str) -> String {
     // Common numeric conversions
     if expected.starts_with('i') && found.starts_with('f') {
         return format!(". Consider using `as {}` for explicit conversion", expected);
@@ -747,8 +746,7 @@ fn suggest_type_conversion(expected: &str, found: &str) -> String {
 /// Result of generating a block of statements
 /// (value, ir_code, is_terminated)
 /// is_terminated is true if the block ends with break, continue, or return
-#[allow(dead_code)]
-type BlockResult = (String, String, bool);
+type _BlockResult = (String, String, bool);
 
 /// LLVM IR Code Generator for Vais 0.0.1
 ///
@@ -1406,8 +1404,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function has the #[gc] attribute
-    #[allow(dead_code)]
-    fn has_gc_attribute(attributes: &[Attribute]) -> bool {
+    fn _has_gc_attribute(attributes: &[Attribute]) -> bool {
         attributes.iter().any(|attr| attr.name == "gc")
     }
 
@@ -1417,14 +1414,12 @@ impl CodeGenerator {
     }
 
     /// Set generic substitutions for the current context
-    #[allow(dead_code)]
-    pub(crate) fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
+    pub(crate) fn _set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
         self.generic_substitutions = subst;
     }
 
     /// Clear generic substitutions
-    #[allow(dead_code)]
-    pub(crate) fn clear_generic_substitutions(&mut self) {
+    pub(crate) fn _clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
     }
 
@@ -1446,8 +1441,7 @@ impl CodeGenerator {
     }
 
     /// Generate mangled name for a generic function
-    #[allow(dead_code)]
-    pub(crate) fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+    pub(crate) fn _mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }
 
@@ -1472,8 +1466,7 @@ impl CodeGenerator {
     }
 
     /// Get the size of a type in bytes (for generic operations)
-    #[allow(dead_code)]
-    pub(crate) fn type_size(&self, ty: &ResolvedType) -> usize {
+    pub(crate) fn _type_size(&self, ty: &ResolvedType) -> usize {
         // Track recursion depth
         if self.enter_type_recursion("type_size").is_err() {
             // On recursion limit, return default size
@@ -1493,7 +1486,7 @@ impl CodeGenerator {
             ResolvedType::Named { name, .. } => {
                 // Calculate struct size
                 if let Some(info) = self.structs.get(name) {
-                    info.fields.iter().map(|(_, t)| self.type_size(t)).sum()
+                    info.fields.iter().map(|(_, t)| self._type_size(t)).sum()
                 } else {
                     8 // Default to pointer size
                 }
@@ -1501,7 +1494,7 @@ impl CodeGenerator {
             ResolvedType::Generic(param) => {
                 // Try to get concrete type from substitutions
                 if let Some(concrete) = self.generic_substitutions.get(param) {
-                    self.type_size(concrete)
+                    self._type_size(concrete)
                 } else {
                     8 // Default to i64 size
                 }
@@ -1711,8 +1704,7 @@ impl CodeGenerator {
     /// Generate allocation call (malloc or gc_alloc depending on GC mode)
     ///
     /// Returns: (result_register, IR code)
-    #[allow(dead_code)]
-    fn generate_alloc(
+    fn _generate_alloc(
         &self,
         size_arg: &str,
         counter: &mut usize,
@@ -2204,7 +2196,7 @@ impl CodeGenerator {
                                 inferred_effects: None,
                             },
                             is_extern: false,
-                            extern_abi: None,
+                            _extern_abi: None,
                         },
                     );
                 }
@@ -5418,8 +5410,7 @@ impl CodeGenerator {
     }
 
     /// Generate code for a block expression (used in if/else branches)
-    #[allow(dead_code)]
-    fn generate_block_expr(
+    fn _generate_block_expr(
         &mut self,
         expr: &Spanned<Expr>,
         counter: &mut usize,
@@ -6991,20 +6982,20 @@ mod tests {
     }
 
     #[test]
-    fn test_suggest_type_conversion() {
+    fn test__suggest_type_conversion() {
         // Numeric conversions
-        assert!(suggest_type_conversion("i64", "f64").contains("as i64"));
-        assert!(suggest_type_conversion("f64", "i64").contains("as f64"));
-        assert!(suggest_type_conversion("i32", "i64").contains("as i32"));
+        assert!(_suggest_type_conversion("i64", "f64").contains("as i64"));
+        assert!(_suggest_type_conversion("f64", "i64").contains("as f64"));
+        assert!(_suggest_type_conversion("i32", "i64").contains("as i32"));
 
         // String conversions
-        assert!(suggest_type_conversion("String", "&str").contains(".to_string()"));
-        assert!(suggest_type_conversion("&str", "String").contains(".as_str()"));
+        assert!(_suggest_type_conversion("String", "&str").contains(".to_string()"));
+        assert!(_suggest_type_conversion("&str", "String").contains(".as_str()"));
 
         // Bool to int
-        assert!(suggest_type_conversion("i64", "bool").contains("as i64"));
+        assert!(_suggest_type_conversion("i64", "bool").contains("as i64"));
 
         // No suggestion for unrelated types
-        assert_eq!(suggest_type_conversion("Vec", "HashMap"), "");
+        assert_eq!(_suggest_type_conversion("Vec", "HashMap"), "");
     }
 }

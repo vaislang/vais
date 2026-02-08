@@ -578,4 +578,109 @@ mod tests {
         let result = expander.expand_select(&arms);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_async_macro_fresh_names() {
+        let mut expander = AsyncMacroExpander::new();
+
+        let name1 = expander.fresh_name("test");
+        let name2 = expander.fresh_name("test");
+        let name3 = expander.fresh_name("other");
+
+        // Each call should produce unique names
+        assert_ne!(name1, name2);
+        assert_ne!(name2, name3);
+        assert!(name1.starts_with("__test_tmp_"));
+        assert!(name3.starts_with("__other_tmp_"));
+    }
+
+    #[test]
+    fn test_select_with_complex_futures() {
+        let mut expander = AsyncMacroExpander::new();
+
+        let arms = vec![
+            (
+                "result1".to_string(),
+                vec![
+                    MacroToken::Ident("fetch".to_string()),
+                    MacroToken::Punct('('),
+                    MacroToken::Literal(MacroLiteral::String("url1".to_string())),
+                    MacroToken::Punct(')'),
+                ],
+                vec![MacroToken::Ident("result1".to_string())],
+            ),
+            (
+                "result2".to_string(),
+                vec![
+                    MacroToken::Ident("compute".to_string()),
+                    MacroToken::Punct('('),
+                    MacroToken::Literal(MacroLiteral::Int(100)),
+                    MacroToken::Punct(')'),
+                ],
+                vec![MacroToken::Ident("result2".to_string())],
+            ),
+        ];
+
+        let result = expander.expand_select(&arms).unwrap();
+        let s = tokens_to_string(&result);
+
+        assert!(s.contains("fetch(\"url1\")"));
+        assert!(s.contains("compute(100)"));
+        assert!(s.contains(".await"));
+    }
+
+    #[test]
+    fn test_join_four_futures() {
+        let mut expander = AsyncMacroExpander::new();
+
+        let futures = vec![
+            vec![MacroToken::Ident("a".to_string())],
+            vec![MacroToken::Ident("b".to_string())],
+            vec![MacroToken::Ident("c".to_string())],
+            vec![MacroToken::Ident("d".to_string())],
+        ];
+
+        let result = expander.expand_join(&futures).unwrap();
+        let s = tokens_to_string(&result);
+
+        // Should be nested: join(join(join(a, b), c), d).await
+        assert!(s.contains("join(join(join(a,b),c),d).await"));
+    }
+
+    #[test]
+    fn test_timeout_with_expression() {
+        let mut expander = AsyncMacroExpander::new();
+
+        let duration = vec![
+            MacroToken::Literal(MacroLiteral::Int(5)),
+            MacroToken::Punct('*'),
+            MacroToken::Literal(MacroLiteral::Int(1000)),
+        ];
+        let future = vec![
+            MacroToken::Ident("heavy_task".to_string()),
+            MacroToken::Punct('('),
+            MacroToken::Punct(')'),
+        ];
+
+        let result = expander.expand_timeout(&duration, &future).unwrap();
+        let s = tokens_to_string(&result);
+
+        assert!(s.contains("select(heavy_task(),delay(5*1000)).await"));
+    }
+
+    #[test]
+    fn test_macro_registry_contains_all_async() {
+        let mut registry = MacroRegistry::new();
+        register_async_macros(&mut registry);
+
+        // Verify all three async macros are registered
+        assert!(registry.contains(SELECT_MACRO));
+        assert!(registry.contains(JOIN_MACRO));
+        assert!(registry.contains(TIMEOUT_MACRO));
+
+        // Verify they are accessible
+        assert!(registry.get(SELECT_MACRO).is_some());
+        assert!(registry.get(JOIN_MACRO).is_some());
+        assert!(registry.get(TIMEOUT_MACRO).is_some());
+    }
 }

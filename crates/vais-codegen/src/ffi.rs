@@ -10,7 +10,7 @@ use vais_types::ResolvedType;
 
 /// Threshold for passing structs by value vs by pointer in C ABI
 /// Structs larger than 16 bytes are passed by pointer
-const FFI_STRUCT_BYVAL_THRESHOLD: usize = 16;
+const _FFI_STRUCT_BYVAL_THRESHOLD: usize = 16;
 
 impl CodeGenerator {
     /// Determine if a struct should be passed by value based on its size
@@ -18,8 +18,8 @@ impl CodeGenerator {
     /// For C ABI compatibility:
     /// - Small structs (<=16 bytes): Pass in registers (by value)
     /// - Large structs (>16 bytes): Pass by pointer with `byval` attribute
-    fn should_pass_struct_by_value(struct_size: usize) -> bool {
-        struct_size <= FFI_STRUCT_BYVAL_THRESHOLD
+    fn _should_pass_struct_by_value(struct_size: usize) -> bool {
+        struct_size <= _FFI_STRUCT_BYVAL_THRESHOLD
     }
 
     /// Parse calling convention from ABI string
@@ -29,7 +29,7 @@ impl CodeGenerator {
     /// - "stdcall" → x86 stdcall
     /// - "fastcall" → x86 fastcall
     /// - "system" → platform-dependent (stdcall on Windows x86, cdecl elsewhere)
-    fn parse_calling_convention(abi: &str) -> CallingConvention {
+    fn _parse_calling_convention(abi: &str) -> CallingConvention {
         CallingConvention::parse_abi(abi).unwrap_or(CallingConvention::C)
     }
 
@@ -39,7 +39,7 @@ impl CodeGenerator {
     /// - No generics in FFI types
     /// - No trait objects in FFI
     /// - Warns on platform-dependent types
-    fn validate_ffi_type(&self, ty: &ResolvedType, param_name: &str) -> CodegenResult<()> {
+    fn _validate_ffi_type(&self, ty: &ResolvedType, param_name: &str) -> CodegenResult<()> {
         match ty {
             // Primitive types are always FFI-safe
             ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
@@ -49,15 +49,15 @@ impl CodeGenerator {
 
             // Pointers and references are FFI-safe
             ResolvedType::Pointer(inner) | ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                self.validate_ffi_type(inner, param_name)
+                self._validate_ffi_type(inner, param_name)
             }
 
             // Function pointers are FFI-safe
             ResolvedType::FnPtr { params, ret, .. } => {
                 for (i, param) in params.iter().enumerate() {
-                    self.validate_ffi_type(param, &format!("{}[{}]", param_name, i))?;
+                    self._validate_ffi_type(param, &format!("{}[{}]", param_name, i))?;
                 }
-                self.validate_ffi_type(ret, &format!("{}:ret", param_name))
+                self._validate_ffi_type(ret, &format!("{}:ret", param_name))
             }
 
             // Named types (structs, etc.) need validation
@@ -111,7 +111,7 @@ impl CodeGenerator {
 
             // Arrays are FFI-safe but size matters
             ResolvedType::Array(elem) => {
-                self.validate_ffi_type(elem, &format!("{}[]", param_name))
+                self._validate_ffi_type(elem, &format!("{}[]", param_name))
             }
 
             // String types are not directly FFI-safe
@@ -133,7 +133,7 @@ impl CodeGenerator {
     }
 
     /// Validate all types in an extern function signature
-    pub(crate) fn validate_ffi_function(
+    pub(crate) fn _validate_ffi_function(
         &self,
         func_name: &str,
         params: &[(String, ResolvedType)],
@@ -141,34 +141,32 @@ impl CodeGenerator {
     ) -> CodegenResult<()> {
         // Validate all parameters
         for (param_name, param_type) in params {
-            self.validate_ffi_type(param_type, param_name)?;
+            self._validate_ffi_type(param_type, param_name)?;
         }
 
         // Validate return type
         if !matches!(ret_type, ResolvedType::Unit) {
-            self.validate_ffi_type(ret_type, &format!("{}:return", func_name))?;
+            self._validate_ffi_type(ret_type, &format!("{}:return", func_name))?;
         }
 
         Ok(())
     }
 
     /// Generate LLVM IR for extern block
-    #[allow(dead_code)]
-    pub(crate) fn generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
+    pub(crate) fn _generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
         let mut ir = String::new();
 
         ir.push_str(&format!("; extern \"{}\" block\n", block.abi));
 
         for func in &block.functions {
-            ir.push_str(&self.generate_extern_function(func, &block.abi)?);
+            ir.push_str(&self._generate_extern_function(func, &block.abi)?);
         }
 
         Ok(ir)
     }
 
     /// Generate extern function declaration with full C ABI support
-    #[allow(dead_code)]
-    fn generate_extern_function(
+    fn _generate_extern_function(
         &mut self,
         func: &ExternFunction,
         abi: &str,
@@ -176,18 +174,18 @@ impl CodeGenerator {
         let func_name = &func.name.node;
 
         // Parse calling convention from ABI string
-        let calling_conv = Self::parse_calling_convention(abi);
+        let calling_conv = Self::_parse_calling_convention(abi);
 
         // Convert parameter types to LLVM types
         let mut param_types = Vec::new();
         for param in &func.params {
-            let ty = self.ffi_ast_type_to_resolved(&param.ty)?;
+            let ty = self._ffi_ast_type_to_resolved(&param.ty)?;
             param_types.push(ty);
         }
 
         // Get return type
         let ret_type = if let Some(ret) = &func.ret_type {
-            self.ffi_ast_type_to_resolved(ret)?
+            self._ffi_ast_type_to_resolved(ret)?
         } else {
             ResolvedType::Unit
         };
@@ -198,7 +196,7 @@ impl CodeGenerator {
             .enumerate()
             .map(|(i, ty)| (format!("arg{}", i), ty.clone()))
             .collect();
-        self.validate_ffi_function(func_name, &params_with_names, &ret_type)?;
+        self._validate_ffi_function(func_name, &params_with_names, &ret_type)?;
 
         // Register the function signature
         let func_sig = vais_types::FunctionSig {
@@ -224,7 +222,7 @@ impl CodeGenerator {
             FunctionInfo {
                 signature: func_sig,
                 is_extern: true,
-                extern_abi: Some(abi.to_string()),
+                _extern_abi: Some(abi.to_string()),
             },
         );
 
@@ -233,8 +231,8 @@ impl CodeGenerator {
         let ret_llvm = self.type_to_llvm(&ret_type);
         let (actual_ret_type, sret_param) = if let ResolvedType::Named { name, .. } = &ret_type {
             if let Some(_struct_info) = self.structs.get(name) {
-                let struct_size = self.type_size(&ret_type);
-                if !Self::should_pass_struct_by_value(struct_size) {
+                let struct_size = self._type_size(&ret_type);
+                if !Self::_should_pass_struct_by_value(struct_size) {
                     // Large struct: use sret parameter, return void
                     (
                         "void".to_string(),
@@ -263,8 +261,8 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(ty);
             let param_str = if let ResolvedType::Named { name, .. } = ty {
                 if let Some(_struct_info) = self.structs.get(name) {
-                    let struct_size = self.type_size(ty);
-                    if !Self::should_pass_struct_by_value(struct_size) {
+                    let struct_size = self._type_size(ty);
+                    if !Self::_should_pass_struct_by_value(struct_size) {
                         // Large struct: pass by pointer with byval
                         format!("{} byval({}) %{}", llvm_ty, llvm_ty, i)
                     } else {
@@ -296,8 +294,7 @@ impl CodeGenerator {
     }
 
     /// Convert AST type to ResolvedType for FFI contexts (with error handling)
-    #[allow(dead_code)]
-    fn ffi_ast_type_to_resolved(&self, ty: &Spanned<Type>) -> CodegenResult<ResolvedType> {
+    fn _ffi_ast_type_to_resolved(&self, ty: &Spanned<Type>) -> CodegenResult<ResolvedType> {
         match &ty.node {
             Type::Named { name, generics } => match name.as_str() {
                 "i8" => Ok(ResolvedType::I8),
@@ -317,7 +314,7 @@ impl CodeGenerator {
                 _ => {
                     let generic_types: Result<Vec<_>, _> = generics
                         .iter()
-                        .map(|g| self.ffi_ast_type_to_resolved(g))
+                        .map(|g| self._ffi_ast_type_to_resolved(g))
                         .collect();
                     Ok(ResolvedType::Named {
                         name: name.clone(),
@@ -326,7 +323,7 @@ impl CodeGenerator {
                 }
             },
             Type::Pointer(inner) => {
-                let inner_ty = self.ffi_ast_type_to_resolved(inner)?;
+                let inner_ty = self._ffi_ast_type_to_resolved(inner)?;
                 Ok(ResolvedType::Pointer(Box::new(inner_ty)))
             }
             Type::FnPtr {
@@ -336,9 +333,9 @@ impl CodeGenerator {
             } => {
                 let param_types: Result<Vec<_>, _> = params
                     .iter()
-                    .map(|p| self.ffi_ast_type_to_resolved(p))
+                    .map(|p| self._ffi_ast_type_to_resolved(p))
                     .collect();
-                let ret_type = self.ffi_ast_type_to_resolved(ret)?;
+                let ret_type = self._ffi_ast_type_to_resolved(ret)?;
                 Ok(ResolvedType::FnPtr {
                     params: param_types?,
                     ret: Box::new(ret_type),
@@ -350,12 +347,12 @@ impl CodeGenerator {
             Type::Tuple(elements) => {
                 let elem_types: Result<Vec<_>, _> = elements
                     .iter()
-                    .map(|e| self.ffi_ast_type_to_resolved(e))
+                    .map(|e| self._ffi_ast_type_to_resolved(e))
                     .collect();
                 Ok(ResolvedType::Tuple(elem_types?))
             }
             Type::Array(elem) => {
-                let elem_ty = self.ffi_ast_type_to_resolved(elem)?;
+                let elem_ty = self._ffi_ast_type_to_resolved(elem)?;
                 Ok(ResolvedType::Array(Box::new(elem_ty)))
             }
             _ => Err(CodegenError::Unsupported(format!(
@@ -366,8 +363,7 @@ impl CodeGenerator {
     }
 
     /// Generate function pointer type in LLVM
-    #[allow(dead_code)]
-    pub(crate) fn generate_fn_ptr_type(
+    pub(crate) fn _generate_fn_ptr_type(
         &self,
         params: &[ResolvedType],
         ret: &ResolvedType,
@@ -388,8 +384,7 @@ impl CodeGenerator {
 
     /// Generate variadic function call
     /// For vararg calls, extra arguments are passed without type checking
-    #[allow(dead_code)]
-    pub(crate) fn generate_vararg_call(
+    pub(crate) fn _generate_vararg_call(
         &mut self,
         func_name: &str,
         args: &[String],
@@ -467,7 +462,7 @@ mod tests {
             }],
         };
 
-        let ir = gen.generate_extern_block(&block).unwrap();
+        let ir = gen._generate_extern_block(&block).unwrap();
         assert!(ir.contains("declare"));
         assert!(ir.contains("@puts"));
         assert!(ir.contains("i8*"));
@@ -509,7 +504,7 @@ mod tests {
             }],
         };
 
-        let ir = gen.generate_extern_block(&block).unwrap();
+        let ir = gen._generate_extern_block(&block).unwrap();
         assert!(ir.contains("declare"));
         assert!(ir.contains("@printf"));
         assert!(ir.contains("..."));
@@ -518,22 +513,22 @@ mod tests {
     #[test]
     fn test_calling_convention_parsing() {
         // Test C calling convention (default)
-        let cc = CodeGenerator::parse_calling_convention("C");
+        let cc = CodeGenerator::_parse_calling_convention("C");
         assert_eq!(cc, CallingConvention::C);
         assert_eq!(cc.to_llvm_str(), "ccc");
 
         // Test stdcall
-        let cc = CodeGenerator::parse_calling_convention("stdcall");
+        let cc = CodeGenerator::_parse_calling_convention("stdcall");
         assert_eq!(cc, CallingConvention::StdCall);
         assert_eq!(cc.to_llvm_str(), "x86_stdcallcc");
 
         // Test fastcall
-        let cc = CodeGenerator::parse_calling_convention("fastcall");
+        let cc = CodeGenerator::_parse_calling_convention("fastcall");
         assert_eq!(cc, CallingConvention::FastCall);
         assert_eq!(cc.to_llvm_str(), "x86_fastcallcc");
 
         // Test system (platform-dependent)
-        let cc = CodeGenerator::parse_calling_convention("system");
+        let cc = CodeGenerator::_parse_calling_convention("system");
         assert_eq!(cc, CallingConvention::System);
         #[cfg(all(target_os = "windows", target_arch = "x86"))]
         assert_eq!(cc.to_llvm_str(), "x86_stdcallcc");
@@ -541,20 +536,20 @@ mod tests {
         assert_eq!(cc.to_llvm_str(), "ccc");
 
         // Test unknown ABI defaults to C
-        let cc = CodeGenerator::parse_calling_convention("unknown");
+        let cc = CodeGenerator::_parse_calling_convention("unknown");
         assert_eq!(cc, CallingConvention::C);
     }
 
     #[test]
     fn test_struct_parameter_passing_decision() {
         // Small structs (<=16 bytes) should be passed by value
-        assert!(CodeGenerator::should_pass_struct_by_value(8));
-        assert!(CodeGenerator::should_pass_struct_by_value(16));
+        assert!(CodeGenerator::_should_pass_struct_by_value(8));
+        assert!(CodeGenerator::_should_pass_struct_by_value(16));
 
         // Large structs (>16 bytes) should be passed by pointer
-        assert!(!CodeGenerator::should_pass_struct_by_value(17));
-        assert!(!CodeGenerator::should_pass_struct_by_value(32));
-        assert!(!CodeGenerator::should_pass_struct_by_value(64));
+        assert!(!CodeGenerator::_should_pass_struct_by_value(17));
+        assert!(!CodeGenerator::_should_pass_struct_by_value(32));
+        assert!(!CodeGenerator::_should_pass_struct_by_value(64));
     }
 
     #[test]
@@ -562,9 +557,9 @@ mod tests {
         let gen = CodeGenerator::new("test");
 
         // Primitive types should be valid
-        assert!(gen.validate_ffi_type(&ResolvedType::I32, "test").is_ok());
-        assert!(gen.validate_ffi_type(&ResolvedType::F64, "test").is_ok());
-        assert!(gen.validate_ffi_type(&ResolvedType::Bool, "test").is_ok());
+        assert!(gen._validate_ffi_type(&ResolvedType::I32, "test").is_ok());
+        assert!(gen._validate_ffi_type(&ResolvedType::F64, "test").is_ok());
+        assert!(gen._validate_ffi_type(&ResolvedType::Bool, "test").is_ok());
     }
 
     #[test]
@@ -573,11 +568,11 @@ mod tests {
 
         // Pointers should be valid
         let ptr_ty = ResolvedType::Pointer(Box::new(ResolvedType::I8));
-        assert!(gen.validate_ffi_type(&ptr_ty, "test").is_ok());
+        assert!(gen._validate_ffi_type(&ptr_ty, "test").is_ok());
 
         // References should be valid
         let ref_ty = ResolvedType::Ref(Box::new(ResolvedType::I32));
-        assert!(gen.validate_ffi_type(&ref_ty, "test").is_ok());
+        assert!(gen._validate_ffi_type(&ref_ty, "test").is_ok());
     }
 
     #[test]
@@ -586,14 +581,14 @@ mod tests {
 
         // Generic types should be rejected
         let generic_ty = ResolvedType::Generic("T".to_string());
-        assert!(gen.validate_ffi_type(&generic_ty, "test").is_err());
+        assert!(gen._validate_ffi_type(&generic_ty, "test").is_err());
 
         // Named types with generics should be rejected
         let generic_named = ResolvedType::Named {
             name: "Vec".to_string(),
             generics: vec![ResolvedType::I32],
         };
-        assert!(gen.validate_ffi_type(&generic_named, "test").is_err());
+        assert!(gen._validate_ffi_type(&generic_named, "test").is_err());
     }
 
     #[test]
@@ -605,7 +600,7 @@ mod tests {
             trait_name: "Display".to_string(),
             generics: vec![],
         };
-        assert!(gen.validate_ffi_type(&trait_obj, "test").is_err());
+        assert!(gen._validate_ffi_type(&trait_obj, "test").is_err());
     }
 
     #[test]
@@ -619,7 +614,7 @@ mod tests {
             is_vararg: false,
             effects: None,
         };
-        assert!(gen.validate_ffi_type(&fn_ptr, "test").is_ok());
+        assert!(gen._validate_ffi_type(&fn_ptr, "test").is_ok());
     }
 
     #[test]
@@ -656,7 +651,7 @@ mod tests {
             }],
         };
 
-        let ir = gen.generate_extern_block(&block).unwrap();
+        let ir = gen._generate_extern_block(&block).unwrap();
         assert!(ir.contains("x86_stdcallcc"));
         assert!(ir.contains("@WindowsAPI"));
     }
@@ -668,7 +663,7 @@ mod tests {
         let params = vec![ResolvedType::I32, ResolvedType::I32];
         let ret = ResolvedType::I64;
 
-        let fn_ptr_type = gen.generate_fn_ptr_type(&params, &ret, false);
+        let fn_ptr_type = gen._generate_fn_ptr_type(&params, &ret, false);
         assert!(fn_ptr_type.contains("i64"));
         assert!(fn_ptr_type.contains("i32"));
         assert!(fn_ptr_type.contains("*"));
@@ -681,7 +676,7 @@ mod tests {
         let params = vec![ResolvedType::Pointer(Box::new(ResolvedType::I8))];
         let ret = ResolvedType::I32;
 
-        let fn_ptr_type = gen.generate_fn_ptr_type(&params, &ret, true);
+        let fn_ptr_type = gen._generate_fn_ptr_type(&params, &ret, true);
         assert!(fn_ptr_type.contains("..."));
         assert!(fn_ptr_type.contains("i32"));
         assert!(fn_ptr_type.contains("i8*"));

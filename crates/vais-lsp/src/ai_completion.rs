@@ -31,17 +31,13 @@ pub struct CompletionContext {
     /// The current line up to the cursor.
     pub current_line_prefix: String,
     /// Lines after the cursor (up to MAX_CONTEXT_LINES).
-    #[allow(dead_code)]
-    pub suffix_lines: Vec<String>,
+    pub _suffix_lines: Vec<String>,
     /// Current function name, if inside one.
-    #[allow(dead_code)]
-    pub current_function: Option<String>,
+    pub _current_function: Option<String>,
     /// Current function return type, if known.
-    #[allow(dead_code)]
-    pub current_return_type: Option<String>,
+    pub _current_return_type: Option<String>,
     /// Available local variables in scope (name, type hint).
-    #[allow(dead_code)]
-    pub locals_in_scope: Vec<(String, Option<String>)>,
+    pub _locals_in_scope: Vec<(String, Option<String>)>,
     /// Available functions in the module.
     pub available_functions: Vec<String>,
     /// Available struct names.
@@ -82,10 +78,10 @@ impl CompletionContext {
         let mut ctx = CompletionContext {
             prefix_lines,
             current_line_prefix,
-            suffix_lines,
-            current_function: None,
-            current_return_type: None,
-            locals_in_scope: vec![],
+            _suffix_lines: suffix_lines,
+            _current_function: None,
+            _current_return_type: None,
+            _locals_in_scope: vec![],
             available_functions: vec![],
             available_structs: vec![],
         };
@@ -394,10 +390,10 @@ mod tests {
         CompletionContext {
             prefix_lines: prefix.iter().map(|s| s.to_string()).collect(),
             current_line_prefix: current.to_string(),
-            suffix_lines: vec![],
-            current_function: None,
-            current_return_type: None,
-            locals_in_scope: vec![],
+            _suffix_lines: vec![],
+            _current_function: None,
+            _current_return_type: None,
+            _locals_in_scope: vec![],
             available_functions: vec![],
             available_structs: vec![],
         }

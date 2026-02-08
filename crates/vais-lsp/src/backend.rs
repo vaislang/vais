@@ -10,6 +10,7 @@ use vais_codegen::formatter::{FormatConfig, Formatter};
 use vais_parser::parse;
 
 use crate::ai_completion::{generate_ai_completions, CompletionContext as AiContext};
+use crate::diagnostics::parse_error_to_diagnostic;
 use crate::semantic::get_semantic_tokens;
 
 /// Call graph entry representing function call relationships
@@ -115,7 +116,6 @@ fn get_builtin_hover(name: &str) -> Option<Hover> {
 
 /// Symbol definition information
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct SymbolDef {
     pub(crate) name: String,
     pub(crate) kind: SymbolKind,
@@ -202,19 +202,10 @@ impl VaisBackend {
                     .await;
             }
             Err(err) => {
-                // Publish parse error as diagnostic
-                let diagnostics = vec![Diagnostic {
-                    range: Range {
-                        start: Position::new(0, 0),
-                        end: Position::new(0, 1),
-                    },
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    message: format!("{}", err),
-                    source: Some("vais".to_string()),
-                    ..Default::default()
-                }];
+                // Convert parse error to diagnostic using helper function
+                let diagnostic = parse_error_to_diagnostic(&err, content);
                 self.client
-                    .publish_diagnostics(uri.clone(), diagnostics, None)
+                    .publish_diagnostics(uri.clone(), vec![diagnostic], None)
                     .await;
             }
         }

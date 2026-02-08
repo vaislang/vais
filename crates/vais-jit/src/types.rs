@@ -201,4 +201,74 @@ mod tests {
         assert!(!mapper.is_signed(&ResolvedType::U32));
         assert!(!mapper.is_signed(&ResolvedType::F64));
     }
+
+    #[test]
+    fn test_pointer_type_mapping() {
+        let mapper = TypeMapper::new(types::I64);
+
+        let ptr_ty = ResolvedType::Pointer(Box::new(ResolvedType::I32));
+        assert_eq!(mapper.map_type(&ptr_ty), types::I64);
+
+        let ref_ty = ResolvedType::Ref(Box::new(ResolvedType::F64));
+        assert_eq!(mapper.map_type(&ref_ty), types::I64);
+
+        let refmut_ty = ResolvedType::RefMut(Box::new(ResolvedType::Bool));
+        assert_eq!(mapper.map_type(&refmut_ty), types::I64);
+    }
+
+    #[test]
+    fn test_vector_type_mapping() {
+        let mapper = TypeMapper::new(types::I64);
+
+        let vec_i32x4 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I32),
+            lanes: 4,
+        };
+        assert_eq!(mapper.map_type(&vec_i32x4), types::I32X4);
+
+        let vec_f64x2 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F64),
+            lanes: 2,
+        };
+        assert_eq!(mapper.map_type(&vec_f64x2), types::F64X2);
+    }
+
+    #[test]
+    fn test_complex_type_sizes() {
+        let mapper = TypeMapper::new(types::I64);
+
+        assert_eq!(mapper.size_of(&ResolvedType::I128), 16);
+        assert_eq!(mapper.size_of(&ResolvedType::U128), 16);
+        assert_eq!(mapper.size_of(&ResolvedType::Unit), 0);
+
+        let vec_ty = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 4,
+        };
+        assert_eq!(mapper.size_of(&vec_ty), 16); // 4 bytes * 4 lanes
+    }
+
+    #[test]
+    fn test_linear_affine_type_unwrapping() {
+        let mapper = TypeMapper::new(types::I64);
+
+        let linear_i32 = ResolvedType::Linear(Box::new(ResolvedType::I32));
+        assert_eq!(mapper.map_type(&linear_i32), types::I32);
+
+        let affine_f64 = ResolvedType::Affine(Box::new(ResolvedType::F64));
+        assert_eq!(mapper.map_type(&affine_f64), types::F64);
+    }
+
+    #[test]
+    fn test_dependent_type_base_extraction() {
+        let mapper = TypeMapper::new(types::I64);
+
+        let dependent_ty = ResolvedType::Dependent {
+            var_name: "n".to_string(),
+            base: Box::new(ResolvedType::I64),
+            predicate: "n > 0".to_string(),
+        };
+
+        assert_eq!(mapper.map_type(&dependent_ty), types::I64);
+    }
 }

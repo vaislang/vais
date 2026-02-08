@@ -81,7 +81,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -158,7 +158,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -186,13 +186,13 @@ impl CodeGenerator {
         self.structs.insert(
             s.name.node.to_string(),
             StructInfo {
-                name: s.name.node.to_string(),
+                _name: s.name.node.to_string(),
                 fields,
-                repr_c: s
+                _repr_c: s
                     .attributes
                     .iter()
                     .any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
-                invariants,
+                _invariants: invariants,
             },
         );
 
@@ -226,7 +226,7 @@ impl CodeGenerator {
 
             variants.push(EnumVariantInfo {
                 name: variant.name.node.to_string(),
-                tag: tag as u32,
+                _tag: tag as u32,
                 fields,
             });
         }
@@ -255,7 +255,7 @@ impl CodeGenerator {
         self.unions.insert(
             u.name.node.to_string(),
             UnionInfo {
-                name: u.name.node.to_string(),
+                _name: u.name.node.to_string(),
                 fields,
             },
         );
@@ -314,7 +314,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                extern_abi: Some(abi.to_string()),
+                _extern_abi: Some(abi.to_string()),
             },
         );
 
@@ -327,8 +327,8 @@ impl CodeGenerator {
         self.constants.insert(
             const_def.name.node.clone(),
             crate::types::ConstInfo {
-                name: const_def.name.node.clone(),
-                ty: self.ast_type_to_resolved(&const_def.ty.node),
+                _name: const_def.name.node.clone(),
+                _ty: self.ast_type_to_resolved(&const_def.ty.node),
                 value: const_def.value.clone(),
             },
         );
@@ -344,10 +344,10 @@ impl CodeGenerator {
         self.globals.insert(
             global_def.name.node.clone(),
             crate::types::GlobalInfo {
-                name: global_def.name.node.clone(),
-                ty: self.ast_type_to_resolved(&global_def.ty.node),
-                value: global_def.value.clone(),
-                is_mutable: global_def.is_mutable,
+                _name: global_def.name.node.clone(),
+                _ty: self.ast_type_to_resolved(&global_def.ty.node),
+                _value: global_def.value.clone(),
+                _is_mutable: global_def.is_mutable,
             },
         );
         Ok(())

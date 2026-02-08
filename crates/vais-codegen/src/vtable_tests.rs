@@ -236,7 +236,7 @@ mod tests {
             generics: vec![],
         };
 
-        assert_eq!(gen.type_size(&dyn_type), 16); // Fat pointer: 8 + 8
+        assert_eq!(gen._type_size(&dyn_type), 16); // Fat pointer: 8 + 8
     }
 
     #[test]

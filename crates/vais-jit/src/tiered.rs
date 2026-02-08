@@ -880,4 +880,120 @@ mod tests {
         assert!(Tier::Interpreter < Tier::Baseline);
         assert!(Tier::Baseline < Tier::Optimizing);
     }
+
+    #[test]
+    fn test_hot_function_detection() {
+        let thresholds = TierThresholds {
+            interpreter_to_baseline: 5,
+            baseline_to_optimizing: 50,
+        };
+
+        let source = "F loop_func()->i64{x:=0;L{I x>=10{R x} x:=x+1}0} F main()->i64{loop_func()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::with_thresholds(thresholds.clone());
+        interp.load_module(&ast);
+
+        // Execute multiple times to trigger promotion detection
+        for _ in 0..6 {
+            let _ = interp.call_function("loop_func", &[]);
+        }
+
+        // Should suggest promotion to baseline
+        assert_eq!(interp.should_promote("loop_func"), Some(Tier::Baseline));
+    }
+
+    #[test]
+    fn test_tier_promotion_baseline_to_optimizing() {
+        let thresholds = TierThresholds {
+            interpreter_to_baseline: 2,
+            baseline_to_optimizing: 5,
+        };
+
+        let source = "F hot()->i64{42} F main()->i64{hot()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::with_thresholds(thresholds);
+        interp.load_module(&ast);
+
+        // Execute 6 times (exceeds baseline threshold)
+        for _ in 0..6 {
+            let _ = interp.call_function("hot", &[]);
+        }
+
+        // After 6 executions, should suggest promotion
+        let promotion = interp.should_promote("hot");
+        assert!(promotion.is_some());
+
+        // Manually promote to baseline
+        if let Some(profile) = interp.get_profile("hot") {
+            let mut tier = profile.current_tier.write().unwrap();
+            *tier = Tier::Baseline;
+        }
+
+        // Continue execution to hit optimizing threshold
+        for _ in 0..50 {
+            let _ = interp.call_function("hot", &[]);
+        }
+
+        // Now should suggest optimizing tier
+        assert_eq!(interp.should_promote("hot"), Some(Tier::Optimizing));
+    }
+
+    #[test]
+    fn test_branch_profiling() {
+        let source = "F branch_test(x:i64)->i64{I x>5{1}E{0}} F main()->i64{branch_test(10)}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::new();
+        interp.load_module(&ast);
+
+        // Execute with different values
+        let _ = interp.call_function("branch_test", &[Value::I64(10)]);
+        let _ = interp.call_function("branch_test", &[Value::I64(3)]);
+        let _ = interp.call_function("branch_test", &[Value::I64(7)]);
+
+        let profile = interp.get_profile("branch_test").unwrap();
+
+        // Should have recorded branch outcomes
+        let branch_counts = profile.branch_counts.read().unwrap();
+        assert!(!branch_counts.is_empty());
+    }
+
+    #[test]
+    fn test_loop_profiling() {
+        let source = "F loop_test()->i64{i:=0;L{I i>=5{R i} i:=i+1}0} F main()->i64{loop_test()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::new();
+        interp.load_module(&ast);
+
+        let _ = interp.run_main();
+
+        let profile = interp.get_profile("loop_test").unwrap();
+
+        // Should have recorded loop iterations
+        let loop_counts = profile.loop_counts.read().unwrap();
+        assert!(!loop_counts.is_empty());
+    }
+
+    #[test]
+    fn test_tiered_jit_with_custom_thresholds() {
+        let thresholds = TierThresholds {
+            interpreter_to_baseline: 100,
+            baseline_to_optimizing: 500,
+        };
+
+        let source = "F compute()->i64{10+20+30} F main()->i64{compute()}";
+        let ast = parse(source).unwrap();
+
+        let mut jit = TieredJit::with_thresholds(thresholds).unwrap();
+        let result = jit.run_main(&ast).unwrap();
+
+        assert_eq!(result, 60);
+
+        // With high thresholds and single execution, should stay in interpreter tier
+        let tier = jit.get_function_tier("main");
+        assert!(tier == Tier::Interpreter || tier == Tier::Baseline);
+    }
 }

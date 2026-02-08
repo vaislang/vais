@@ -124,4 +124,82 @@ mod tests {
         assert!(registry.is_supported("Error"));
         assert!(!registry.is_supported("Custom"));
     }
+
+    #[test]
+    fn test_derive_error_display_unsupported() {
+        let err = DeriveError::UnsupportedDerive("Custom".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Unsupported derive macro"));
+        assert!(msg.contains("Custom"));
+        assert!(msg.contains("Debug"));
+    }
+
+    #[test]
+    fn test_derive_error_display_cannot_derive() {
+        let err = DeriveError::CannotDerive {
+            derive: "Clone".to_string(),
+            reason: "field is not cloneable".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Cannot derive 'Clone'"));
+        assert!(msg.contains("field is not cloneable"));
+    }
+
+    #[test]
+    fn test_derive_error_display_missing_bound() {
+        let err = DeriveError::MissingBound {
+            derive: "Debug".to_string(),
+            field: "inner".to_string(),
+            bound: "Debug".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Cannot derive 'Debug'"));
+        assert!(msg.contains("field 'inner'"));
+        assert!(msg.contains("requires 'Debug' bound"));
+    }
+
+    #[test]
+    fn test_process_derives_noop() {
+        use vais_ast::Module;
+        let mut module = Module {
+            items: vec![],
+            modules_map: Default::default(),
+        };
+        let result = process_derives(&mut module);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_derive_registry_default() {
+        // Default creates empty registry, new() populates it
+        let registry = DeriveRegistry::default();
+        assert!(registry.supported.is_empty());
+
+        // new() should populate with built-in derives
+        let registry = DeriveRegistry::new();
+        assert!(registry.is_supported("Debug"));
+        assert!(registry.is_supported("Clone"));
+    }
+
+    struct TestDeriveGenerator;
+
+    impl DeriveGenerator for TestDeriveGenerator {
+        fn trait_name(&self) -> &str {
+            "TestTrait"
+        }
+    }
+
+    #[test]
+    fn test_derive_generator_trait_name() {
+        let gen = TestDeriveGenerator;
+        assert_eq!(gen.trait_name(), "TestTrait");
+    }
+
+    #[test]
+    fn test_derive_generator_required_bounds() {
+        let gen = TestDeriveGenerator;
+        let bounds = gen.required_bounds();
+        assert_eq!(bounds.len(), 1);
+        assert_eq!(bounds[0], "TestTrait");
+    }
 }

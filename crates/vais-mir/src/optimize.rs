@@ -479,4 +479,180 @@ mod tests {
         );
         assert!(body.basic_blocks[2].statements.is_empty());
     }
+
+    #[test]
+    fn test_constant_folding_with_binop() {
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let c1 = builder.new_local(MirType::I64, None);
+        let c2 = builder.new_local(MirType::I64, None);
+        let result = builder.new_local(MirType::I64, None);
+
+        // c1 = 10, c2 = 20
+        builder.assign_const(c1, Constant::Int(10));
+        builder.assign_const(c2, Constant::Int(20));
+
+        // result = c1 + c2 (should propagate to const 10 + const 20)
+        builder.assign(
+            Place::local(result),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::Copy(Place::local(c1)),
+                Operand::Copy(Place::local(c2)),
+            ),
+        );
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        constant_propagation(&mut body);
+
+        // After propagation, the binop should use const operands
+        if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, rhs)) =
+            &body.basic_blocks[0].statements[2]
+        {
+            assert_eq!(*lhs, Operand::Constant(Constant::Int(10)));
+            assert_eq!(*rhs, Operand::Constant(Constant::Int(20)));
+        } else {
+            panic!("Expected binop with constant operands");
+        }
+    }
+
+    #[test]
+    fn test_dce_preserves_return_place() {
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let temp = builder.new_local(MirType::I64, None);
+
+        // temp = 100 (unused)
+        builder.assign_const(temp, Constant::Int(100));
+        // _0 = 42 (return place, must be kept)
+        builder.assign_const(Local(0), Constant::Int(42));
+        builder.return_();
+
+        let mut body = builder.build();
+        dead_code_elimination(&mut body);
+
+        // Return place assignment must remain
+        let has_return_assignment = body.basic_blocks[0]
+            .statements
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::Assign(place, _) if place.local.0 == 0));
+        assert!(has_return_assignment);
+    }
+
+    #[test]
+    fn test_cse_does_not_eliminate_different_ops() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64, MirType::I64], MirType::I64);
+
+        let t1 = builder.new_local(MirType::I64, None);
+        let t2 = builder.new_local(MirType::I64, None);
+
+        let param_a = Operand::Copy(Place::local(builder.param(0)));
+        let param_b = Operand::Copy(Place::local(builder.param(1)));
+
+        // t1 = a + b
+        builder.assign_binop(t1, BinOp::Add, param_a.clone(), param_b.clone());
+        // t2 = a * b (different op, should NOT be eliminated)
+        builder.assign_binop(t2, BinOp::Mul, param_a, param_b);
+
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(t2))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        common_subexpression_elimination(&mut body);
+
+        // t2 assignment should still be Mul, not replaced
+        if let Statement::Assign(_, Rvalue::BinaryOp(op, _, _)) = &body.basic_blocks[0].statements[1]
+        {
+            assert_eq!(*op, BinOp::Mul);
+        } else {
+            panic!("Expected Mul to remain");
+        }
+    }
+
+    #[test]
+    fn test_optimize_mir_body_integration() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let unused = builder.new_local(MirType::I64, None);
+        let const_val = builder.new_local(MirType::I64, None);
+        let result = builder.new_local(MirType::I64, None);
+
+        // unused = 999 (should be removed by DCE)
+        builder.assign_const(unused, Constant::Int(999));
+        // const_val = 5
+        builder.assign_const(const_val, Constant::Int(5));
+        // result = param + const_val (should propagate const 5)
+        builder.assign(
+            Place::local(result),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::Copy(Place::local(builder.param(0))),
+                Operand::Copy(Place::local(const_val)),
+            ),
+        );
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        let before_count = body.basic_blocks[0].statements.len();
+
+        optimize_mir_body(&mut body);
+
+        let after_count = body.basic_blocks[0].statements.len();
+        // Should have fewer statements after DCE removes unused
+        assert!(after_count < before_count);
+    }
+
+    #[test]
+    fn test_switch_int_with_multiple_targets() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let bb1 = builder.new_block();
+        let bb2 = builder.new_block();
+        let bb_default = builder.new_block();
+        let bb_end = builder.new_block();
+
+        let param = Operand::Copy(Place::local(builder.param(0)));
+
+        // Switch on parameter with 3 cases
+        builder.switch_int(param, vec![(1, bb1), (2, bb2)], bb_default);
+
+        // bb1: return 100
+        builder.switch_to_block(bb1);
+        builder.assign_const(builder.return_place().local, Constant::Int(100));
+        builder.goto(bb_end);
+
+        // bb2: return 200
+        builder.switch_to_block(bb2);
+        builder.assign_const(builder.return_place().local, Constant::Int(200));
+        builder.goto(bb_end);
+
+        // bb_default: return 0
+        builder.switch_to_block(bb_default);
+        builder.assign_const(builder.return_place().local, Constant::Int(0));
+        builder.goto(bb_end);
+
+        // bb_end: return
+        builder.switch_to_block(bb_end);
+        builder.return_();
+
+        let mut body = builder.build();
+        remove_unreachable_blocks(&mut body);
+
+        // All blocks should be reachable
+        for bb in &body.basic_blocks {
+            assert_ne!(bb.terminator, Some(Terminator::Unreachable));
+        }
+    }
 }

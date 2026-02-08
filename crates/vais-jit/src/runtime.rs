@@ -120,4 +120,58 @@ mod tests {
         let runtime = JitRuntime::new();
         assert!(runtime.lookup("unknown_function_xyz").is_none());
     }
+
+    #[test]
+    fn test_registered_functions_list() {
+        let runtime = JitRuntime::new();
+        let funcs = runtime.registered_functions();
+
+        // Should contain I/O functions
+        assert!(funcs.contains(&"puts"));
+        assert!(funcs.contains(&"printf"));
+
+        // Should contain memory functions
+        assert!(funcs.contains(&"malloc"));
+        assert!(funcs.contains(&"free"));
+
+        // Should contain math functions
+        assert!(funcs.contains(&"sqrt"));
+        assert!(funcs.contains(&"sin"));
+    }
+
+    #[test]
+    fn test_multiple_custom_registrations() {
+        extern "C" fn func_a() {}
+        extern "C" fn func_b() {}
+
+        let mut runtime = JitRuntime::new();
+        runtime.register("func_a", func_a as *const u8);
+        runtime.register("func_b", func_b as *const u8);
+
+        assert!(runtime.lookup("func_a").is_some());
+        assert!(runtime.lookup("func_b").is_some());
+        assert_ne!(runtime.lookup("func_a"), runtime.lookup("func_b"));
+    }
+
+    #[test]
+    fn test_overwrite_registration() {
+        extern "C" fn original() {}
+        extern "C" fn replacement() {}
+
+        let mut runtime = JitRuntime::new();
+        runtime.register("test_func", original as *const u8);
+        let first_ptr = runtime.lookup("test_func").unwrap();
+
+        runtime.register("test_func", replacement as *const u8);
+        let second_ptr = runtime.lookup("test_func").unwrap();
+
+        assert_ne!(first_ptr, second_ptr);
+    }
+
+    #[test]
+    fn test_default_runtime() {
+        let runtime = JitRuntime::default();
+        assert!(runtime.lookup("malloc").is_some());
+        assert!(runtime.lookup("sqrt").is_some());
+    }
 }

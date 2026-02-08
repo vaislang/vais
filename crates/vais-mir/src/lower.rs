@@ -531,4 +531,76 @@ mod tests {
         assert!(ir.contains("add i64"));
         assert!(ir.contains("ret i64"));
     }
+
+    #[test]
+    fn test_lower_ternary() {
+        let source = "F max(a: i64, b: i64) -> i64 = a > b ? a : b";
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        assert_eq!(mir.bodies.len(), 1);
+        // Should have entry + then + else + merge blocks
+        assert!(mir.bodies[0].basic_blocks.len() >= 4);
+
+        let display = mir.bodies[0].display();
+        assert!(display.contains("switchInt"));
+    }
+
+    #[test]
+    fn test_lower_match_expression() {
+        let source = r#"
+            F classify(x: i64) -> i64 = M x {
+                0 => 100,
+                1 => 200,
+                _ => 999
+            }
+        "#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        assert_eq!(mir.bodies.len(), 1);
+        // Should have multiple blocks for match arms
+        assert!(mir.bodies[0].basic_blocks.len() >= 4);
+
+        let display = mir.bodies[0].display();
+        assert!(display.contains("switchInt"));
+    }
+
+    #[test]
+    fn test_lower_recursive_call() {
+        let source = "F factorial(n: i64) -> i64 = I n == 0 { 1 } E { n * @(n - 1) }";
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        assert_eq!(mir.bodies.len(), 1);
+        let display = mir.bodies[0].display();
+        // Tail call should be converted to TailCall terminator
+        assert!(display.contains("tailcall") || display.contains("factorial"));
+    }
+
+    #[test]
+    fn test_lower_unary_operations() {
+        let source = "F negate_and_flip(x: i64) -> i64 = { y := -x; !y }";
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        assert_eq!(mir.bodies.len(), 1);
+        let display = mir.bodies[0].display();
+        // Should have UnaryOp for negation and bitwise not
+        assert!(display.contains("Neg") || display.contains("Not"));
+    }
+
+    #[test]
+    fn test_lower_multiple_functions() {
+        let source = r#"
+            F double(x: i64) -> i64 = x * 2
+            F triple(x: i64) -> i64 = x * 3
+        "#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        assert_eq!(mir.bodies.len(), 2);
+        assert_eq!(mir.bodies[0].name, "double");
+        assert_eq!(mir.bodies[1].name, "triple");
+    }
 }

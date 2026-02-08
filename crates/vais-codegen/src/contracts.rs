@@ -255,8 +255,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function has any contract attributes
-    #[allow(dead_code)]
-    pub(crate) fn has_contracts(f: &Function) -> bool {
+    pub(crate) fn _has_contracts(f: &Function) -> bool {
         f.attributes
             .iter()
             .any(|a| a.name == "requires" || a.name == "ensures" || a.name == "contract")
@@ -778,8 +777,7 @@ impl CodeGenerator {
     /// Generate invariant checks for a struct type
     ///
     /// Called after struct construction/modification to verify invariants.
-    #[allow(dead_code)]
-    pub(crate) fn generate_invariant_checks(
+    pub(crate) fn _generate_invariant_checks(
         &mut self,
         struct_name: &str,
         struct_ptr: &str,
@@ -794,7 +792,7 @@ impl CodeGenerator {
         let struct_info = self.structs.get(struct_name).cloned();
         let invariants = struct_info
             .as_ref()
-            .map(|s| s.invariants.clone())
+            .map(|s| s._invariants.clone())
             .unwrap_or_default();
 
         if invariants.is_empty() {
@@ -880,8 +878,7 @@ impl CodeGenerator {
     /// Generate old() snapshots for ensures clauses
     ///
     /// Called at function entry to capture pre-state values for old() references.
-    #[allow(dead_code)]
-    pub(crate) fn generate_old_snapshots(
+    pub(crate) fn _generate_old_snapshots(
         &mut self,
         f: &Function,
         counter: &mut usize,
@@ -897,7 +894,7 @@ impl CodeGenerator {
         for attr in &f.attributes {
             if attr.name == "ensures" {
                 if let Some(expr) = &attr.expr {
-                    ir.push_str(&self.capture_old_expressions(expr, counter)?);
+                    ir.push_str(&self._capture_old_expressions(expr, counter)?);
                 }
             }
         }
@@ -906,8 +903,7 @@ impl CodeGenerator {
     }
 
     /// Recursively find and capture old() expressions
-    #[allow(dead_code)]
-    fn capture_old_expressions(
+    fn _capture_old_expressions(
         &mut self,
         expr: &Spanned<Expr>,
         counter: &mut usize,
@@ -939,46 +935,46 @@ impl CodeGenerator {
 
             // Recurse into sub-expressions
             Expr::Binary { left, right, .. } => {
-                ir.push_str(&self.capture_old_expressions(left, counter)?);
-                ir.push_str(&self.capture_old_expressions(right, counter)?);
+                ir.push_str(&self._capture_old_expressions(left, counter)?);
+                ir.push_str(&self._capture_old_expressions(right, counter)?);
             }
             Expr::Unary { expr: inner, .. } => {
-                ir.push_str(&self.capture_old_expressions(inner, counter)?);
+                ir.push_str(&self._capture_old_expressions(inner, counter)?);
             }
             Expr::Call { func, args, .. } => {
-                ir.push_str(&self.capture_old_expressions(func, counter)?);
+                ir.push_str(&self._capture_old_expressions(func, counter)?);
                 for arg in args {
-                    ir.push_str(&self.capture_old_expressions(arg, counter)?);
+                    ir.push_str(&self._capture_old_expressions(arg, counter)?);
                 }
             }
             Expr::MethodCall { receiver, args, .. } => {
-                ir.push_str(&self.capture_old_expressions(receiver, counter)?);
+                ir.push_str(&self._capture_old_expressions(receiver, counter)?);
                 for arg in args {
-                    ir.push_str(&self.capture_old_expressions(arg, counter)?);
+                    ir.push_str(&self._capture_old_expressions(arg, counter)?);
                 }
             }
             Expr::Field { expr: inner, .. } => {
-                ir.push_str(&self.capture_old_expressions(inner, counter)?);
+                ir.push_str(&self._capture_old_expressions(inner, counter)?);
             }
             Expr::Index { expr: inner, index } => {
-                ir.push_str(&self.capture_old_expressions(inner, counter)?);
-                ir.push_str(&self.capture_old_expressions(index, counter)?);
+                ir.push_str(&self._capture_old_expressions(inner, counter)?);
+                ir.push_str(&self._capture_old_expressions(index, counter)?);
             }
             Expr::If { cond, then, else_ } => {
-                ir.push_str(&self.capture_old_expressions(cond, counter)?);
+                ir.push_str(&self._capture_old_expressions(cond, counter)?);
                 for stmt in then {
                     if let vais_ast::Stmt::Expr(e) = &stmt.node {
-                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                        ir.push_str(&self._capture_old_expressions(e, counter)?);
                     }
                 }
                 if let Some(else_branch) = else_ {
-                    ir.push_str(&self.capture_old_in_if_else(else_branch, counter)?);
+                    ir.push_str(&self._capture_old_in_if_else(else_branch, counter)?);
                 }
             }
             Expr::Ternary { cond, then, else_ } => {
-                ir.push_str(&self.capture_old_expressions(cond, counter)?);
-                ir.push_str(&self.capture_old_expressions(then, counter)?);
-                ir.push_str(&self.capture_old_expressions(else_, counter)?);
+                ir.push_str(&self._capture_old_expressions(cond, counter)?);
+                ir.push_str(&self._capture_old_expressions(then, counter)?);
+                ir.push_str(&self._capture_old_expressions(else_, counter)?);
             }
             _ => {}
         }
@@ -986,8 +982,7 @@ impl CodeGenerator {
         Ok(ir)
     }
 
-    #[allow(dead_code)]
-    fn capture_old_in_if_else(
+    fn _capture_old_in_if_else(
         &mut self,
         branch: &IfElse,
         counter: &mut usize,
@@ -995,20 +990,20 @@ impl CodeGenerator {
         let mut ir = String::new();
         match branch {
             IfElse::ElseIf(cond, then, else_) => {
-                ir.push_str(&self.capture_old_expressions(cond, counter)?);
+                ir.push_str(&self._capture_old_expressions(cond, counter)?);
                 for stmt in then {
                     if let vais_ast::Stmt::Expr(e) = &stmt.node {
-                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                        ir.push_str(&self._capture_old_expressions(e, counter)?);
                     }
                 }
                 if let Some(next) = else_ {
-                    ir.push_str(&self.capture_old_in_if_else(next, counter)?);
+                    ir.push_str(&self._capture_old_in_if_else(next, counter)?);
                 }
             }
             IfElse::Else(stmts) => {
                 for stmt in stmts {
                     if let vais_ast::Stmt::Expr(e) = &stmt.node {
-                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                        ir.push_str(&self._capture_old_expressions(e, counter)?);
                     }
                 }
             }
@@ -1207,14 +1202,12 @@ impl CodeGenerator {
     }
 
     /// Check if current function has a decreases clause
-    #[allow(dead_code)]
-    pub(crate) fn has_decreases_clause(&self) -> bool {
+    pub(crate) fn _has_decreases_clause(&self) -> bool {
         self.current_decreases_info.is_some()
     }
 
     /// Get the function name with decreases clause (if any)
-    #[allow(dead_code)]
-    pub(crate) fn get_decreases_function_name(&self) -> Option<String> {
+    pub(crate) fn _get_decreases_function_name(&self) -> Option<String> {
         self.current_decreases_info
             .as_ref()
             .map(|info| info.function_name.clone())

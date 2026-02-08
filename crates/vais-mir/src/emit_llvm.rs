@@ -627,4 +627,130 @@ mod tests {
         assert!(ir.contains("br i1"));
         assert!(ir.contains("sub i64 0,"));
     }
+
+    #[test]
+    fn test_emit_float_operations() {
+        let mut builder = MirBuilder::new("fmul", vec![MirType::F64, MirType::F64], MirType::F64);
+
+        let result = builder.new_local(MirType::F64, None);
+        let param_a = Operand::Copy(Place::local(builder.param(0)));
+        let param_b = Operand::Copy(Place::local(builder.param(1)));
+
+        builder.assign_binop(result, BinOp::Mul, param_a, param_b);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("define double @fmul("));
+        assert!(ir.contains("fmul double"));
+        assert!(ir.contains("ret double"));
+    }
+
+    #[test]
+    fn test_emit_struct_type() {
+        let mut module = MirModule::new("test");
+        module.structs.insert(
+            "Point".into(),
+            vec![("x".into(), MirType::I64), ("y".into(), MirType::I64)],
+        );
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("%Point = type { i64, i64 }"));
+    }
+
+    #[test]
+    fn test_emit_multi_way_switch() {
+        let mut builder = MirBuilder::new("classify", vec![MirType::I64], MirType::I64);
+
+        let bb1 = builder.new_block();
+        let bb2 = builder.new_block();
+        let bb3 = builder.new_block();
+        let bb_default = builder.new_block();
+
+        let param = Operand::Copy(Place::local(builder.param(0)));
+
+        // Switch with 3 cases
+        builder.switch_int(param, vec![(0, bb1), (1, bb2), (2, bb3)], bb_default);
+
+        builder.switch_to_block(bb1);
+        builder.assign_const(builder.return_place().local, Constant::Int(100));
+        builder.return_();
+
+        builder.switch_to_block(bb2);
+        builder.assign_const(builder.return_place().local, Constant::Int(200));
+        builder.return_();
+
+        builder.switch_to_block(bb3);
+        builder.assign_const(builder.return_place().local, Constant::Int(300));
+        builder.return_();
+
+        builder.switch_to_block(bb_default);
+        builder.assign_const(builder.return_place().local, Constant::Int(0));
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("switch i64"));
+        assert!(ir.contains("i64 0, label %bb1"));
+        assert!(ir.contains("i64 1, label %bb2"));
+        assert!(ir.contains("i64 2, label %bb3"));
+    }
+
+    #[test]
+    fn test_emit_unary_not() {
+        let mut builder = MirBuilder::new("bitflip", vec![MirType::I64], MirType::I64);
+
+        let result = builder.new_local(MirType::I64, None);
+        let param = Operand::Copy(Place::local(builder.param(0)));
+
+        builder.assign(Place::local(result), Rvalue::UnaryOp(UnOp::Not, param));
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        assert!(ir.contains("xor i64"));
+        assert!(ir.contains(", -1"));
+    }
+
+    #[test]
+    fn test_emit_comparison_ops() {
+        let mut builder = MirBuilder::new("compare", vec![MirType::I64, MirType::I64], MirType::I64);
+
+        let result = builder.new_local(MirType::I64, None);
+        let param_a = Operand::Copy(Place::local(builder.param(0)));
+        let param_b = Operand::Copy(Place::local(builder.param(1)));
+
+        // Test less-than comparison (result stored as i64, not bool)
+        builder.assign_binop(result, BinOp::Lt, param_a, param_b);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
+        // Comparison ops emit "icmp slt" instruction
+        assert!(ir.contains("icmp slt"));
+    }
 }

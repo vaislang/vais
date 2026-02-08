@@ -635,7 +635,7 @@ impl IncrementalCache {
         {
             if current != cached {
                 // Options changed - mark all files as dirty
-                let mut ds = dirty_set.lock().unwrap();
+                let mut ds = dirty_set.lock().expect("dirty_set mutex poisoned");
                 for file in self.state.dep_graph.file_metadata.keys() {
                     ds.modified_files.insert(file.clone());
                 }
@@ -665,7 +665,7 @@ impl IncrementalCache {
                 // File was deleted
                 dirty_set
                     .lock()
-                    .unwrap()
+                    .expect("dirty_set mutex poisoned")
                     .modified_files
                     .insert(file_path.clone());
                 return;
@@ -676,7 +676,7 @@ impl IncrementalCache {
                 Err(_) => {
                     dirty_set
                         .lock()
-                        .unwrap()
+                        .expect("dirty_set mutex poisoned")
                         .modified_files
                         .insert(file_path.clone());
                     return;
@@ -694,7 +694,7 @@ impl IncrementalCache {
                         if total_functions == 0 {
                             dirty_set
                                 .lock()
-                                .unwrap()
+                                .expect("dirty_set mutex poisoned")
                                 .modified_files
                                 .insert(file_path.clone());
                             return;
@@ -704,13 +704,13 @@ impl IncrementalCache {
                         // Fine-grained function detection requires sequential processing
                         dirty_set
                             .lock()
-                            .unwrap()
+                            .expect("dirty_set mutex poisoned")
                             .modified_files
                             .insert(file_path.clone());
                     } else {
                         dirty_set
                             .lock()
-                            .unwrap()
+                            .expect("dirty_set mutex poisoned")
                             .modified_files
                             .insert(file_path.clone());
                     }
@@ -719,13 +719,13 @@ impl IncrementalCache {
                 // New file not in cache
                 dirty_set
                     .lock()
-                    .unwrap()
+                    .expect("dirty_set mutex poisoned")
                     .modified_files
                     .insert(file_path.clone());
             }
         });
 
-        let mut dirty_set = dirty_set.into_inner().unwrap();
+        let mut dirty_set = dirty_set.into_inner().expect("dirty_set mutex poisoned");
 
         // Check if entry file is new
         if !self
@@ -768,7 +768,7 @@ impl IncrementalCache {
                             if func_names.contains(dep_item) {
                                 new_dirty_funcs
                                     .lock()
-                                    .unwrap()
+                                    .expect("new_dirty_funcs mutex poisoned")
                                     .push((dependent.clone(), dep_func_name.clone()));
                                 break;
                             }
@@ -778,7 +778,7 @@ impl IncrementalCache {
             }
         });
 
-        for (file, func) in new_dirty_funcs.into_inner().unwrap() {
+        for (file, func) in new_dirty_funcs.into_inner().expect("new_dirty_funcs mutex poisoned") {
             dirty_set.mark_function_dirty(file, func);
         }
 

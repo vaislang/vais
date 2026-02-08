@@ -1249,7 +1249,7 @@ pub(crate) fn cmd_pkg_doc(
             continue;
         }
 
-        let doc_file = format!("{}.{}", file.file_stem().unwrap().to_string_lossy(), ext);
+        let doc_file = format!("{}.{}", file.file_stem().unwrap_or_default().to_string_lossy(), ext);
 
         if format == "html" {
             index_content.push_str(&format!(
@@ -1876,7 +1876,7 @@ pub(crate) fn cmd_pkg_update(
             .filter_map(|(name, dep)| match dep {
                 package::Dependency::Version(v) => Some((name.clone(), v.clone())),
                 package::Dependency::Detailed(d) if d.version.is_some() => {
-                    Some((name.clone(), d.version.clone().unwrap()))
+                    d.version.as_ref().map(|v| (name.clone(), v.clone()))
                 }
                 _ => None,
             })
@@ -1889,7 +1889,7 @@ pub(crate) fn cmd_pkg_update(
                 manifest.dependencies.get(name).and_then(|dep| match dep {
                     package::Dependency::Version(v) => Some((name.clone(), v.clone())),
                     package::Dependency::Detailed(d) if d.version.is_some() => {
-                        Some((name.clone(), d.version.clone().unwrap()))
+                        d.version.as_ref().map(|v| (name.clone(), v.clone()))
                     }
                     _ => None,
                 })
@@ -2151,7 +2151,7 @@ pub(crate) fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(
             .filter_map(|(name, dep)| match dep {
                 package::Dependency::Version(v) => Some((name.clone(), v.clone())),
                 package::Dependency::Detailed(d) if d.version.is_some() => {
-                    Some((name.clone(), d.version.clone().unwrap()))
+                    d.version.as_ref().map(|v| (name.clone(), v.clone()))
                 }
                 _ => None,
             })

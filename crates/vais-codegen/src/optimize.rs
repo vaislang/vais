@@ -2563,8 +2563,7 @@ fn remove_dead_functions(ir: &str, dead: &HashSet<String>) -> String {
 ///   ...
 ///   merge:
 ///     ...
-#[allow(dead_code)]
-fn basic_block_merging(ir: &str) -> String {
+fn _basic_block_merging(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
 
     // Track empty blocks: block_label -> target_label
@@ -2611,7 +2610,7 @@ fn basic_block_merging(ir: &str) -> String {
         } else if current_block.is_some() && !trimmed.is_empty() && !trimmed.starts_with(';') {
             // Check if this is just an unconditional branch
             if trimmed.starts_with("br label %") {
-                if let Some(target) = extract_uncond_branch_target(trimmed) {
+                if let Some(target) = _extract_uncond_branch_target(trimmed) {
                     block_target = Some(target);
                 }
             } else {
@@ -2673,7 +2672,7 @@ fn basic_block_merging(ir: &str) -> String {
 
         // Rewrite branch targets
         if trimmed.starts_with("br ") {
-            if let Some(rewritten) = rewrite_branch_targets(trimmed, &empty_blocks) {
+            if let Some(rewritten) = _rewrite_branch_targets(trimmed, &empty_blocks) {
                 result.push(format!("  {}", rewritten));
                 continue;
             }
@@ -2681,7 +2680,7 @@ fn basic_block_merging(ir: &str) -> String {
 
         // Rewrite phi node labels
         if trimmed.contains(" = phi ") {
-            if let Some(rewritten) = rewrite_phi_labels(trimmed, &empty_blocks) {
+            if let Some(rewritten) = _rewrite_phi_labels(trimmed, &empty_blocks) {
                 result.push(format!("  {}", rewritten));
                 continue;
             }
@@ -2694,8 +2693,7 @@ fn basic_block_merging(ir: &str) -> String {
 }
 
 /// Rewrite branch targets, replacing references to empty blocks with their final destinations
-#[allow(dead_code)]
-fn rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
+fn _rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
     let mut modified = line.to_string();
     let mut any_change = false;
 
@@ -2716,8 +2714,7 @@ fn rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) ->
 }
 
 /// Rewrite phi node labels, replacing references to empty blocks with their final destinations
-#[allow(dead_code)]
-fn rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
+fn _rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
     let mut modified = line.to_string();
     let mut any_change = false;
 
@@ -2747,8 +2744,7 @@ fn rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Opt
 }
 
 /// Extract target from unconditional branch: br label %target
-#[allow(dead_code)]
-fn extract_uncond_branch_target(line: &str) -> Option<String> {
+fn _extract_uncond_branch_target(line: &str) -> Option<String> {
     // Pattern: br label %target
     if !line.starts_with("br label %") {
         return None;
@@ -2766,8 +2762,7 @@ fn extract_uncond_branch_target(line: &str) -> Option<String> {
 }
 
 /// Extract targets from conditional branch: br i1 %cond, label %then, label %else
-#[allow(dead_code)]
-fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
+fn _extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
     // Pattern: br i1 %cond, label %then, label %else
     let parts: Vec<&str> = line.split("label %").collect();
     if parts.len() >= 3 {
@@ -2787,8 +2782,7 @@ fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
 }
 
 /// Check if a string looks like a label name (not an SSA value)
-#[allow(dead_code)]
-fn is_likely_label(s: &str) -> bool {
+fn _is_likely_label(s: &str) -> bool {
     // Labels typically start with a letter and don't look like %1, %2, etc.
     if s.is_empty() {
         return false;

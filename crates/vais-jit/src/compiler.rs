@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use cranelift::prelude::*;
+use cranelift_codegen::ir::BlockArg;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, Linkage, Module};
 
@@ -212,15 +213,13 @@ impl JitCompiler {
         let mut var_index = 0;
 
         for (i, (param, cl_ty)) in func.params.iter().zip(param_types.iter()).enumerate() {
-            let var = Variable::new(var_index);
-            var_index += 1;
-
-            builder.declare_var(var, *cl_ty);
+            let var = builder.declare_var(*cl_ty);
 
             let val = builder.block_params(entry_block)[i];
             builder.def_var(var, val);
 
             variables.insert(param.name.node.clone(), var);
+            var_index += 1;
         }
 
         // Compile the function body
@@ -531,11 +530,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), JitError> {
         match stmt {
             Stmt::Let { name, value, .. } => {
-                let var = Variable::new(self.var_index);
-                self.var_index += 1;
-
                 // Declare variable with i64 type (default)
-                self.builder.declare_var(var, types::I64);
+                let var = self.builder.declare_var(types::I64);
+                self.var_index += 1;
 
                 let val = self.compile_expr(&value.node)?;
                 self.builder.def_var(var, val);
@@ -741,7 +738,7 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_stmts_as_expr(then_stmts)?;
-        self.builder.ins().jump(merge_block, &[then_val]);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(then_val)]);
 
         // Else block
         self.builder.switch_to_block(else_block);
@@ -751,7 +748,7 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         } else {
             self.builder.ins().iconst(types::I64, 0)
         };
-        self.builder.ins().jump(merge_block, &[else_val]);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(else_val)]);
 
         // Merge block
         self.builder.switch_to_block(merge_block);
@@ -810,12 +807,12 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         let then_val = self.compile_expr(then_expr)?;
-        self.builder.ins().jump(merge_block, &[then_val]);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(then_val)]);
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
         let else_val = self.compile_expr(else_expr)?;
-        self.builder.ins().jump(merge_block, &[else_val]);
+        self.builder.ins().jump(merge_block, &[BlockArg::Value(else_val)]);
 
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);
@@ -1024,5 +1021,55 @@ mod tests {
     fn test_bitwise_or() {
         let result = compile_and_run("F main()->i64{12|3}").unwrap();
         assert_eq!(result, 15);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let result = compile_and_run("F main()->i64{(2+3)*(4-1)}").unwrap();
+        assert_eq!(result, 15);
+    }
+
+    #[test]
+    fn test_nested_if_expressions() {
+        let source = "F main()->i64{x:=10;I x>5{I x>8{1}E{2}}E{3}}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_multiple_function_calls_same_function() {
+        let source = "F sq(x:i64)->i64{x*x} F main()->i64{sq(3)+sq(4)}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 25);
+    }
+
+    #[test]
+    fn test_ternary_expression() {
+        let source = "F main()->i64{x:=5;x>3?10:20}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 10);
+    }
+
+    #[test]
+    fn test_chained_comparisons() {
+        let source = "F main()->i64{a:=5;b:=10;I a<b&&b<20{1}E{0}}";
+        let result = compile_and_run(source).unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_compiler_clear() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        let ast1 = parse("F main()->i64{42}").unwrap();
+        let result1 = jit.compile_and_run_main(&ast1).unwrap();
+        assert_eq!(result1, 42);
+
+        // Clear and compile new code
+        jit.clear().unwrap();
+
+        let ast2 = parse("F main()->i64{99}").unwrap();
+        let result2 = jit.compile_and_run_main(&ast2).unwrap();
+        assert_eq!(result2, 99);
     }
 }

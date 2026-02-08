@@ -15,11 +15,9 @@ tokio = { workspace = true }
 vais-lexer = { path = "../vais-lexer" }
 vais-parser = { path = "../vais-parser" }
 vais-ast = { path = "../vais-ast" }
-vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 
 # Utilities
-serde = { workspace = true }
 serde_json = { workspace = true }
 dashmap = "6"
 ropey = "1"

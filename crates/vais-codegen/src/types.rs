@@ -33,46 +33,39 @@ pub(crate) struct LoopLabels {
     pub break_label: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionInfo {
     pub signature: vais_types::FunctionSig,
     pub is_extern: bool,
-    pub extern_abi: Option<String>, // ABI for extern functions (e.g., "C")
+    pub _extern_abi: Option<String>, // ABI for extern functions (e.g., "C")
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct StructInfo {
-    #[allow(dead_code)]
-    pub name: String,
+    pub _name: String,
     pub fields: Vec<(String, ResolvedType)>,
-    pub repr_c: bool, // true if #[repr(C)] attribute is present
+    pub _repr_c: bool, // true if #[repr(C)] attribute is present
     /// Invariant expressions for formal verification
     /// These are checked after struct construction/modification
-    pub invariants: Vec<vais_ast::Spanned<vais_ast::Expr>>,
+    pub _invariants: Vec<vais_ast::Spanned<vais_ast::Expr>>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct EnumInfo {
-    #[allow(dead_code)]
     pub name: String,
     pub variants: Vec<EnumVariantInfo>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct UnionInfo {
-    #[allow(dead_code)]
-    pub name: String,
+    pub _name: String,
     pub fields: Vec<(String, ResolvedType)>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct EnumVariantInfo {
-    #[allow(dead_code)]
     pub name: String,
-    #[allow(dead_code)]
-    pub tag: u32,
+    pub _tag: u32,
     pub fields: EnumVariantFields,
 }
 
@@ -84,22 +77,20 @@ pub(crate) enum EnumVariantFields {
 }
 
 /// Constant definition info
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ConstInfo {
-    pub name: String,
-    pub ty: ResolvedType,
+    pub _name: String,
+    pub _ty: ResolvedType,
     pub value: vais_ast::Spanned<vais_ast::Expr>,
 }
 
 /// Global variable definition info
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalInfo {
-    pub name: String,
-    pub ty: ResolvedType,
-    pub value: vais_ast::Spanned<vais_ast::Expr>,
-    pub is_mutable: bool,
+    pub _name: String,
+    pub _ty: ResolvedType,
+    pub _value: vais_ast::Spanned<vais_ast::Expr>,
+    pub _is_mutable: bool,
 }
 
 /// Represents the storage kind of a local variable
@@ -164,7 +155,6 @@ impl LocalVar {
 
     /// Returns true if this variable uses alloca
     #[inline]
-    #[allow(dead_code)]
     pub fn is_alloca(&self) -> bool {
         matches!(self.kind, LocalVarKind::Alloca)
     }
@@ -174,7 +164,6 @@ impl LocalVar {
 #[derive(Debug, Clone)]
 pub(crate) struct ClosureInfo {
     /// The generated LLVM function name for this lambda
-    #[allow(dead_code)]
     pub func_name: String,
     /// Captured variable names and their loaded values (var_name, llvm_value)
     pub captures: Vec<(String, String)>,
@@ -182,28 +171,26 @@ pub(crate) struct ClosureInfo {
 
 /// Information about an await point in an async function
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct AsyncAwaitPoint {
     /// State index after this await
-    pub state_index: usize,
+    pub _state_index: usize,
     /// Variable to store the awaited result
-    pub result_var: String,
+    pub _result_var: String,
     /// LLVM type of the result
-    pub result_type: String,
+    pub _result_type: String,
 }
 
 /// Information about the current async function being compiled
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct AsyncFunctionInfo {
     /// Original function name
-    pub name: String,
+    pub _name: String,
     /// State struct name for this async function
-    pub state_struct: String,
+    pub _state_struct: String,
     /// Captured variables that need to be stored in state
-    pub captured_vars: Vec<(String, ResolvedType)>,
+    pub _captured_vars: Vec<(String, ResolvedType)>,
     /// Return type of the future
-    pub ret_type: ResolvedType,
+    pub _ret_type: ResolvedType,
 }
 
 use crate::CodeGenerator;

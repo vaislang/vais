@@ -31,7 +31,7 @@ macro_rules! register_extern {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                extern_abi: Some("C".to_string()),
+                _extern_abi: Some("C".to_string()),
             },
         );
     };
@@ -53,7 +53,7 @@ macro_rules! register_extern {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                extern_abi: Some("C".to_string()),
+                _extern_abi: Some("C".to_string()),
             },
         );
     };
@@ -79,7 +79,7 @@ macro_rules! register_helper {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
     };
@@ -118,7 +118,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                extern_abi: Some("C".to_string()),
+                _extern_abi: Some("C".to_string()),
             },
         );
 
@@ -163,7 +163,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -185,7 +185,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -207,7 +207,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -325,7 +325,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
 
@@ -347,7 +347,7 @@ impl CodeGenerator {
                     inferred_effects: None,
                 },
                 is_extern: false,
-                extern_abi: None,
+                _extern_abi: None,
             },
         );
     }

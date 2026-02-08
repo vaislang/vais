@@ -666,10 +666,13 @@ pub(crate) fn run_single_test_inner(
     fs::write(&ir_path, &ir).map_err(|e| format!("failed to write IR: {}", e))?;
 
     // Step 3: Compile IR to binary with clang
+    let ir_path_str = ir_path.to_str().ok_or_else(|| "IR path contains invalid UTF-8".to_string())?;
+    let bin_path_str = bin_path.to_str().ok_or_else(|| "binary path contains invalid UTF-8".to_string())?;
+
     let mut clang_args = vec![
-        ir_path.to_str().unwrap().to_string(),
+        ir_path_str.to_string(),
         "-o".to_string(),
-        bin_path.to_str().unwrap().to_string(),
+        bin_path_str.to_string(),
         "-lm".to_string(),
     ];
 

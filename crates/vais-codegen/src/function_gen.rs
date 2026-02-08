@@ -61,10 +61,10 @@ impl CodeGenerator {
 
         // Register the specialized struct
         let struct_info = StructInfo {
-            name: inst.mangled_name.to_string(),
+            _name: inst.mangled_name.to_string(),
             fields,
-            repr_c: false,
-            invariants: Vec::new(),
+            _repr_c: false,
+            _invariants: Vec::new(),
         };
         self.structs
             .insert(inst.mangled_name.to_string(), struct_info);
@@ -863,10 +863,10 @@ impl CodeGenerator {
         self.async_state_counter = 0;
         self.async_await_points.clear();
         self.current_async_function = Some(AsyncFunctionInfo {
-            name: func_name.to_string(),
-            state_struct: state_struct_name.to_string(),
-            captured_vars: params.clone(),
-            ret_type: ret_type.clone(),
+            _name: func_name.to_string(),
+            _state_struct: state_struct_name.to_string(),
+            _captured_vars: params.clone(),
+            _ret_type: ret_type.clone(),
         });
 
         let mut ir = String::new();
