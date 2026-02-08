@@ -130,10 +130,12 @@ impl<'ctx> TypeMapper<'ctx> {
                     .struct_type(&[tag_type.into(), inner_llvm], false)
                     .into()
             }
-            ResolvedType::Result(ok) => {
-                // Result<T> is { tag: i8, value: T }
+            ResolvedType::Result(ok, err) => {
+                // Result<T, E> is { tag: i8, value: max(T, E) }
                 let ok_llvm = self.map_type(ok);
+                let _err_llvm = self.map_type(err);
                 let tag_type = self.context.i8_type();
+                // Use ok type as payload (largest variant strategy handled by enum layout)
                 self.context
                     .struct_type(&[tag_type.into(), ok_llvm], false)
                     .into()
@@ -221,7 +223,9 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::Array(_) => 8, // pointer
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.size_of(e)).sum(),
             ResolvedType::Optional(inner) => 1 + self.size_of(inner),
-            ResolvedType::Result(ok) => 1 + self.size_of(ok),
+            ResolvedType::Result(ok, err) => {
+                1 + std::cmp::max(self.size_of(ok), self.size_of(err))
+            }
             _ => 8, // Default for structs, enums, functions
         }
     }

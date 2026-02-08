@@ -2865,6 +2865,13 @@ impl CodeGenerator {
                         return Ok((result, ir));
                     }
 
+                    // sizeof(expr) — compile-time constant size query
+                    if name == "sizeof" && !args.is_empty() {
+                        let arg_type = self.infer_expr_type(&args[0]);
+                        let size = self.compute_sizeof(&arg_type);
+                        return Ok((size.to_string(), String::new()));
+                    }
+
                     if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
                         // This is a tuple enum variant constructor
                         let mut ir = String::new();

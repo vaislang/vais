@@ -880,7 +880,7 @@ F tcp_listen(port: i64) -> i64 {
 
 # Create a TCP listener (IPv4) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_listen_result(port: i64) -> Result {
+F tcp_listen_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind(port)
     I listener.fd < 0 {
         Err(ERR_IO())
@@ -898,7 +898,7 @@ F tcp_listen6(port: i64) -> i64 {
 
 # Create a TCP listener (IPv6) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_listen6_result(port: i64) -> Result {
+F tcp_listen6_result(port: i64) -> Result<i64, i64> {
     listener := TcpListener.bind6(port)
     I listener.fd < 0 {
         Err(ERR_IO())
@@ -919,7 +919,7 @@ F tcp_accept(listener_fd: i64) -> i64 {
 
 # Accept a connection using Result type
 # Returns Ok(client_fd) on success, Err(error_code) on failure
-F tcp_accept_result(listener_fd: i64) -> Result {
+F tcp_accept_result(listener_fd: i64) -> Result<i64, i64> {
     I listener_fd < 0 {
         Err(ERR_INVALID())
     } E {
@@ -951,7 +951,7 @@ F tcp_connect(host: i64, port: i64) -> i64 {
 
 # Connect to a remote TCP server (IPv4) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_connect_result(host: i64, port: i64) -> Result {
+F tcp_connect_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())
@@ -969,7 +969,7 @@ F tcp_connect6(host: i64, port: i64) -> i64 {
 
 # Connect to a remote TCP server (IPv6) using Result type
 # Returns Ok(fd) on success, Err(error_code) on failure
-F tcp_connect6_result(host: i64, port: i64) -> Result {
+F tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
     stream := TcpStream.connect6(host, port)
     I stream.fd < 0 {
         Err(ERR_IO())

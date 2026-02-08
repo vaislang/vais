@@ -645,12 +645,13 @@ pub fn vais_type_to_wit(ty: &ResolvedType) -> Option<WitType> {
             let inner_wit = vais_type_to_wit(inner)?;
             Some(WitType::Option_(Box::new(inner_wit)))
         }
-        ResolvedType::Result(inner) => {
-            // Vais Result is Result<T>, map to result<T, _>
-            let ok_wit = vais_type_to_wit(inner)?;
+        ResolvedType::Result(ok, err) => {
+            // Vais Result<T, E>, map to result<T, E>
+            let ok_wit = vais_type_to_wit(ok)?;
+            let err_wit = vais_type_to_wit(err);
             Some(WitType::Result_ {
                 ok: Some(Box::new(ok_wit)),
-                err: None,
+                err: err_wit.map(Box::new),
             })
         }
         ResolvedType::Tuple(types) => {

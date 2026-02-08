@@ -200,16 +200,16 @@ impl ExhaustivenessChecker {
                     },
                 ])
             }
-            ResolvedType::Result(inner) => {
+            ResolvedType::Result(ok, err) => {
                 // Result is Ok(T) | Err(E)
                 PatternSpace::Or(vec![
                     PatternSpace::Constructor {
                         name: "Ok".to_string(),
-                        fields: vec![self.type_to_pattern_space(inner)],
+                        fields: vec![self.type_to_pattern_space(ok)],
                     },
                     PatternSpace::Constructor {
                         name: "Err".to_string(),
-                        fields: vec![PatternSpace::Any],
+                        fields: vec![self.type_to_pattern_space(err)],
                     },
                 ])
             }

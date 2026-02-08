@@ -365,7 +365,7 @@ impl OwnershipChecker {
 
             // Optional/Result: Copy if inner is Copy
             ResolvedType::Optional(inner) => Self::is_copy_type(inner),
-            ResolvedType::Result(inner) => Self::is_copy_type(inner),
+            ResolvedType::Result(ok, err) => Self::is_copy_type(ok) && Self::is_copy_type(err),
 
             // Linear/Affine types are explicitly NOT Copy
             ResolvedType::Linear(_) | ResolvedType::Affine(_) => false,

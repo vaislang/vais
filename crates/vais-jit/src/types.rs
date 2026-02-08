@@ -35,7 +35,7 @@ impl TypeMapper {
             ResolvedType::Named { .. } => self.pointer_type,
             ResolvedType::Fn { .. } => self.pointer_type,
             ResolvedType::Optional(_) => self.pointer_type,
-            ResolvedType::Result(_) => self.pointer_type,
+            ResolvedType::Result(_, _) => self.pointer_type,
             ResolvedType::Tuple(_) => self.pointer_type,
             ResolvedType::Range(_) => self.pointer_type,
             ResolvedType::Future(_) => self.pointer_type,

@@ -134,7 +134,7 @@ X File {
 
     # Read a line into buffer using Result type
     # Returns Ok(buffer_ptr) on success, Err(ERR_IO) on failure
-    F read_line_result(&self, buffer: i64, max_len: i64) -> Result {
+    F read_line_result(&self, buffer: i64, max_len: i64) -> Result<i64, i64> {
         I self.handle == 0 {
             Err(ERR_INVALID())
         } EI buffer == 0 {
@@ -337,7 +337,7 @@ F file_read_all(path: i64, size_out: i64) -> i64 {
 # Read entire file into buffer using Result type
 # Returns Ok(buffer_ptr) on success (caller must free), Err(error_code) on failure
 # Sets size_out to number of bytes read on success
-F file_read_all_result(path: i64, size_out: i64) -> Result {
+F file_read_all_result(path: i64, size_out: i64) -> Result<i64, i64> {
     # Validate inputs
     I path == 0 {
         I size_out != 0 {

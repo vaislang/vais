@@ -7731,3 +7731,439 @@ F get_val() -> i64 { R 20 }
         "Should return new value after body change"
     );
 }
+
+// ============================================================================
+// Phase 48: Type Safety — Result<T,E> Generic + sizeof + Container Safety
+// ============================================================================
+
+#[test]
+fn test_result_generic_ok_i64() {
+    // Result<i64, i64> with Ok variant
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F main() -> i64 {
+    r := Ok(42)
+    M r {
+        Ok(v) => v,
+        Err(_) => 0
+    }
+}
+"#,
+        42,
+    );
+}
+
+#[test]
+fn test_result_generic_err_i64() {
+    // Result<i64, i64> with Err variant
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F main() -> i64 {
+    r := Err(7)
+    M r {
+        Ok(_) => 0,
+        Err(e) => e
+    }
+}
+"#,
+        7,
+    );
+}
+
+#[test]
+fn test_result_generic_try_operator() {
+    // ? operator with Result<i64, i64>
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F divide(a: i64, b: i64) -> Result {
+    I b == 0 {
+        Err(1)
+    } E {
+        Ok(a / b)
+    }
+}
+
+F compute() -> Result {
+    x := divide(10, 2)?;
+    y := divide(x, 0)?;
+    R Ok(y)
+}
+
+F main() -> i64 {
+    M compute() {
+        Ok(v) => v,
+        Err(e) => e + 100
+    }
+}
+"#,
+        101,
+    );
+}
+
+#[test]
+fn test_result_generic_unwrap_operator() {
+    // ! operator with Result
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F get_value() -> Result {
+    Ok(55)
+}
+
+F main() -> i64 {
+    get_value()!
+}
+"#,
+        55,
+    );
+}
+
+#[test]
+fn test_result_generic_chained_operations() {
+    // Chain Ok/Err operations through ? operator
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F step1(x: i64) -> Result {
+    I x > 0 { Ok(x * 2) } E { Err(1) }
+}
+
+F step2(x: i64) -> Result {
+    I x < 100 { Ok(x + 3) } E { Err(2) }
+}
+
+F pipeline() -> Result {
+    a := step1(5)?;
+    b := step2(a)?;
+    R Ok(b)
+}
+
+F main() -> i64 {
+    M pipeline() {
+        Ok(v) => v,
+        Err(_) => 0
+    }
+}
+"#,
+        13, // 5*2=10, 10+3=13
+    );
+}
+
+#[test]
+fn test_result_generic_err_propagation() {
+    // Err propagates through ? chain
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F fail_step() -> Result {
+    Err(42)
+}
+
+F pipeline() -> Result {
+    x := fail_step()?
+    R Ok(x + 1)
+}
+
+F main() -> i64 {
+    M pipeline() {
+        Ok(_) => 0,
+        Err(e) => e
+    }
+}
+"#,
+        42,
+    );
+}
+
+#[test]
+fn test_sizeof_i64() {
+    // sizeof returns 8 for i64
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+    x := 42
+    sizeof(x)
+}
+"#,
+        8,
+    );
+}
+
+#[test]
+fn test_sizeof_function_result() {
+    // sizeof on function result (promoted to i64 at runtime)
+    assert_exit_code(
+        r#"
+F get_val() -> i64 {
+    0
+}
+
+F main() -> i64 {
+    sizeof(get_val())
+}
+"#,
+        8,
+    );
+}
+
+#[test]
+fn test_sizeof_bool() {
+    // sizeof returns 1 for bool
+    assert_exit_code(
+        r#"
+F get_bool() -> bool {
+    true
+}
+
+F main() -> i64 {
+    sizeof(get_bool())
+}
+"#,
+        1,
+    );
+}
+
+#[test]
+fn test_sizeof_struct() {
+    // sizeof returns fields * 8 for struct
+    assert_exit_code(
+        r#"
+S Point {
+    x: i64,
+    y: i64
+}
+
+F main() -> i64 {
+    p := Point { x: 1, y: 2 }
+    sizeof(p)
+}
+"#,
+        16, // 2 fields * 8 bytes
+    );
+}
+
+#[test]
+fn test_sizeof_struct_3_fields() {
+    // sizeof for 3-field struct
+    assert_exit_code(
+        r#"
+S Vec3 {
+    x: i64,
+    y: i64,
+    z: i64
+}
+
+F main() -> i64 {
+    v := Vec3 { x: 1, y: 2, z: 3 }
+    sizeof(v)
+}
+"#,
+        24, // 3 fields * 8 bytes
+    );
+}
+
+#[test]
+fn test_sizeof_in_expression() {
+    // sizeof can be used in expressions
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+    x := 42
+    n := sizeof(x) / 2
+    n
+}
+"#,
+        4, // 8 / 2 = 4
+    );
+}
+
+#[test]
+fn test_result_with_match_both_arms() {
+    // Match both arms of Result
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F safe_div(a: i64, b: i64) -> Result {
+    I b == 0 { Err(0) } E { Ok(a / b) }
+}
+
+F main() -> i64 {
+    ok := safe_div(20, 4)
+    err := safe_div(10, 0)
+    a := M ok { Ok(v) => v, Err(_) => 0 }
+    b := M err { Ok(_) => 0, Err(e) => e + 50 }
+    a + b
+}
+"#,
+        55, // 5 + 50
+    );
+}
+
+#[test]
+fn test_result_function_return_type() {
+    // Function returning Result is properly typed
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F validate(x: i64) -> Result {
+    I x >= 0 { Ok(x) } E { Err(1) }
+}
+
+F check_both() -> i64 {
+    a := validate(10)
+    b := validate(0 - 5)
+    ok_val := M a { Ok(v) => v, Err(_) => 0 }
+    err_val := M b { Ok(_) => 0, Err(e) => e }
+    ok_val + err_val
+}
+
+F main() -> i64 {
+    check_both()
+}
+"#,
+        11, // 10 + 1
+    );
+}
+
+#[test]
+fn test_result_err_value() {
+    // Extract error value from Err variant
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F main() -> i64 {
+    ok := Ok(10)
+    err := Err(42)
+    a := M ok { Ok(v) => v, Err(_) => 0 }
+    b := M err { Ok(_) => 0, Err(e) => e }
+    a + b
+}
+"#,
+        52, // 10 + 42
+    );
+}
+
+#[test]
+fn test_result_nested_match() {
+    // Nested match on Result values
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F compute(x: i64) -> Result {
+    I x > 0 { Ok(x * x) } E { Err(0 - x) }
+}
+
+F main() -> i64 {
+    a := compute(3)
+    b := compute(0 - 2)
+    va := M a { Ok(v) => v, Err(_) => 0 }
+    vb := M b { Ok(_) => 0, Err(e) => e }
+    va + vb
+}
+"#,
+        11, // 9 + 2
+    );
+}
+
+#[test]
+fn test_sizeof_default() {
+    // sizeof on default i64 value
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+    a := 100
+    b := 200
+    sizeof(a) + sizeof(b)
+}
+"#,
+        16, // 8 + 8
+    );
+}
+
+#[test]
+fn test_result_in_loop() {
+    // Use Result in a loop with match
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F process(x: i64) -> Result {
+    I x == 3 { Err(x) } E { Ok(x * 10) }
+}
+
+F main() -> i64 {
+    total := mut 0
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        r := process(i)
+        M r {
+            Ok(v) => { total = total + v },
+            Err(_) => { total = total + 1 }
+        }
+        i = i + 1
+    }
+    total
+}
+"#,
+        71, // 0*10 + 1*10 + 2*10 + 1(err at 3) + 4*10 = 0+10+20+1+40
+    );
+}
+
+#[test]
+fn test_result_two_param_generic_type() {
+    // Result<T, E> in type annotations works
+    assert_exit_code(
+        r#"
+E Result { Ok(i64), Err(i64) }
+
+F make_ok(v: i64) -> Result {
+    Ok(v)
+}
+
+F make_err(e: i64) -> Result {
+    Err(e)
+}
+
+F main() -> i64 {
+    a := make_ok(10)
+    b := make_err(3)
+    va := M a { Ok(v) => v, Err(_) => 0 }
+    vb := M b { Ok(_) => 0, Err(e) => e }
+    va + vb
+}
+"#,
+        13,
+    );
+}
+
+#[test]
+fn test_sizeof_multiple_types() {
+    // sizeof works for different types in same function
+    assert_exit_code(
+        r#"
+S Pair { a: i64, b: i64 }
+
+F main() -> i64 {
+    x := 1
+    p := Pair { a: 1, b: 2 }
+    sizeof(x) + sizeof(p)
+}
+"#,
+        24, // 8 + 16
+    );
+}
+

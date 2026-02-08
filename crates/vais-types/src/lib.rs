@@ -352,6 +352,24 @@ impl TypeChecker {
             },
         );
 
+        // sizeof: (val: T) -> i64 — compile-time type size query
+        self.functions.insert(
+            "sizeof".to_string(),
+            FunctionSig {
+                name: "sizeof".to_string(),
+                generics: vec!["T".to_string()],
+                generic_bounds: HashMap::new(),
+                params: vec![("val".to_string(), ResolvedType::Generic("T".to_string()), false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // exit: (code: i32) -> void (noreturn, but typed as Unit)
         self.functions.insert(
             "exit".to_string(),
@@ -1638,6 +1656,55 @@ impl TypeChecker {
 
         // Register SIMD intrinsic functions
         self.register_simd_builtins();
+
+        // Register built-in Result<T, E> enum
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "Ok".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+            );
+            variants.insert(
+                "Err".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("E".to_string())]),
+            );
+            self.enums.insert(
+                "Result".to_string(),
+                EnumDef {
+                    name: "Result".to_string(),
+                    generics: vec!["T".to_string(), "E".to_string()],
+                    variants,
+                    methods: HashMap::new(),
+                },
+            );
+            self.exhaustiveness_checker.register_enum(
+                "Result",
+                vec!["Ok".to_string(), "Err".to_string()],
+            );
+        }
+
+        // Register built-in Option<T> enum
+        if !self.enums.contains_key("Option") {
+            let mut variants = HashMap::new();
+            variants.insert("None".to_string(), VariantFieldTypes::Unit);
+            variants.insert(
+                "Some".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+            );
+            self.enums.insert(
+                "Option".to_string(),
+                EnumDef {
+                    name: "Option".to_string(),
+                    generics: vec!["T".to_string()],
+                    variants,
+                    methods: HashMap::new(),
+                },
+            );
+            self.exhaustiveness_checker.register_enum(
+                "Option",
+                vec!["None".to_string(), "Some".to_string()],
+            );
+        }
     }
 
     /// Register SIMD vector intrinsic functions
@@ -2977,7 +3044,9 @@ impl TypeChecker {
     /// Register an enum
     fn register_enum(&mut self, e: &Enum) -> TypeResult<()> {
         let name = e.name.node.clone();
-        if self.enums.contains_key(&name) {
+        // Allow re-registration of built-in enums (Result, Option) from std lib
+        let is_builtin_override = name == "Result" || name == "Option";
+        if self.enums.contains_key(&name) && !is_builtin_override {
             return Err(TypeError::Duplicate(name, None));
         }
 
@@ -3395,10 +3464,13 @@ impl TypeChecker {
             | ResolvedType::Pointer(inner)
             | ResolvedType::Array(inner)
             | ResolvedType::Optional(inner)
-            | ResolvedType::Result(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Range(inner) => {
                 self.validate_dyn_trait_object_safety(inner);
+            }
+            ResolvedType::Result(ok, err) => {
+                self.validate_dyn_trait_object_safety(ok);
+                self.validate_dyn_trait_object_safety(err);
             }
             ResolvedType::ConstArray { element, .. } => {
                 self.validate_dyn_trait_object_safety(element);
@@ -4975,7 +5047,7 @@ impl TypeChecker {
                 // - Result<T>: returns T on Ok, propagates Err
                 // - Option<T>: returns T on Some, propagates None
                 match &inner_type {
-                    ResolvedType::Result(ok_type) => Ok(*ok_type.clone()),
+                    ResolvedType::Result(ok_type, _err_type) => Ok(*ok_type.clone()),
                     ResolvedType::Optional(some_type) => Ok(*some_type.clone()),
                     // Also support user-defined enums named "Result" with Ok variant
                     ResolvedType::Named { name, .. } if name == "Result" => {
@@ -5022,9 +5094,8 @@ impl TypeChecker {
             Expr::Unwrap(inner) => {
                 let inner_type = self.check_expr(inner)?;
                 match &inner_type {
-                    ResolvedType::Optional(inner) | ResolvedType::Result(inner) => {
-                        Ok(*inner.clone())
-                    }
+                    ResolvedType::Optional(inner) => Ok(*inner.clone()),
+                    ResolvedType::Result(ok, _err) => Ok(*ok.clone()),
                     // Support user-defined Result/Option enums
                     ResolvedType::Named { name, .. } if name == "Result" => {
                         if let Some(enum_def) = self.enums.get("Result") {
@@ -5423,7 +5494,10 @@ impl TypeChecker {
             Type::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.resolve_type(&inner.node)))
             }
-            Type::Result(inner) => ResolvedType::Result(Box::new(self.resolve_type(&inner.node))),
+            Type::Result(inner) => ResolvedType::Result(
+                Box::new(self.resolve_type(&inner.node)),
+                Box::new(ResolvedType::I64), // Default error type for backward compat
+            ),
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),

@@ -78,7 +78,10 @@ impl TypeChecker {
             (ResolvedType::Generic(_), _) | (_, ResolvedType::Generic(_)) => Ok(()),
             (ResolvedType::Array(a), ResolvedType::Array(b)) => self.unify(a, b),
             (ResolvedType::Optional(a), ResolvedType::Optional(b)) => self.unify(a, b),
-            (ResolvedType::Result(a), ResolvedType::Result(b)) => self.unify(a, b),
+            (ResolvedType::Result(a_ok, a_err), ResolvedType::Result(b_ok, b_err)) => {
+                self.unify(a_ok, b_ok)?;
+                self.unify(a_err, b_err)
+            }
             (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
             (ResolvedType::Pointer(a), ResolvedType::Pointer(b)) => self.unify(a, b),
@@ -256,8 +259,11 @@ impl TypeChecker {
             ResolvedType::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.apply_substitutions(inner)))
             }
-            ResolvedType::Result(inner) => {
-                ResolvedType::Result(Box::new(self.apply_substitutions(inner)))
+            ResolvedType::Result(ok, err) => {
+                ResolvedType::Result(
+                    Box::new(self.apply_substitutions(ok)),
+                    Box::new(self.apply_substitutions(err)),
+                )
             }
             ResolvedType::Ref(inner) => {
                 ResolvedType::Ref(Box::new(self.apply_substitutions(inner)))
@@ -346,9 +352,10 @@ impl TypeChecker {
             ResolvedType::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.substitute_generics(inner, substitutions)))
             }
-            ResolvedType::Result(inner) => {
-                ResolvedType::Result(Box::new(self.substitute_generics(inner, substitutions)))
-            }
+            ResolvedType::Result(ok, err) => ResolvedType::Result(
+                Box::new(self.substitute_generics(ok, substitutions)),
+                Box::new(self.substitute_generics(err, substitutions)),
+            ),
             ResolvedType::Ref(inner) => {
                 ResolvedType::Ref(Box::new(self.substitute_generics(inner, substitutions)))
             }
@@ -499,8 +506,9 @@ impl TypeChecker {
             (ResolvedType::Optional(inner_param), ResolvedType::Optional(inner_arg)) => {
                 self.infer_type_arg(inner_param, inner_arg, type_args)
             }
-            (ResolvedType::Result(inner_param), ResolvedType::Result(inner_arg)) => {
-                self.infer_type_arg(inner_param, inner_arg, type_args)
+            (ResolvedType::Result(ok_param, err_param), ResolvedType::Result(ok_arg, err_arg)) => {
+                self.infer_type_arg(ok_param, ok_arg, type_args)?;
+                self.infer_type_arg(err_param, err_arg, type_args)
             }
             (ResolvedType::Future(inner_param), ResolvedType::Future(inner_arg)) => {
                 self.infer_type_arg(inner_param, inner_arg, type_args)

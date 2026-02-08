@@ -103,7 +103,7 @@ X AppError {
     }
 
     # Convert to a Result Err with the error code
-    F to_result(&self) -> Result {
+    F to_result(&self) -> Result<i64, i64> {
         Err(self.code())
     }
 }

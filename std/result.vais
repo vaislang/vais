@@ -1,14 +1,14 @@
 # Result type - represents success or failure
 # Ok(T) or Err(E)
-# Layout: {i64 tag, i64 value} where tag=0 is Ok, tag=1 is Err
+# Layout: {i32 tag, i64 value} where tag=0 is Ok, tag=1 is Err
 
-E Result {
-    Ok(i64),
-    Err(i64)
+E Result<T, E> {
+    Ok(T),
+    Err(E)
 }
 
 # Result methods
-X Result {
+X Result<T, E> {
     F is_ok(&self) -> i64 {
         M self {
             Ok(_) => 1,
@@ -24,7 +24,7 @@ X Result {
     }
 
     # Unwrap or return default
-    F unwrap_or(&self, default: i64) -> i64 {
+    F unwrap_or(&self, default: T) -> T {
         M self {
             Ok(v) => v,
             Err(_) => default
@@ -32,7 +32,7 @@ X Result {
     }
 
     # Map the Ok value using a function
-    F map(&self, f: fn(i64) -> i64) -> Result {
+    F map(&self, f: fn(T) -> T) -> Result<T, E> {
         M self {
             Ok(v) => Ok(f(v)),
             Err(e) => Err(e)
@@ -40,7 +40,7 @@ X Result {
     }
 
     # Map the Err value using a function (error transformation)
-    F map_err(&self, f: fn(i64) -> i64) -> Result {
+    F map_err(&self, f: fn(E) -> E) -> Result<T, E> {
         M self {
             Ok(v) => Ok(v),
             Err(e) => Err(f(e))
@@ -48,7 +48,7 @@ X Result {
     }
 
     # Chain computations: apply f if Ok, propagate Err
-    F and_then(&self, f: fn(i64) -> Result) -> Result {
+    F and_then(&self, f: fn(T) -> Result<T, E>) -> Result<T, E> {
         M self {
             Ok(v) => f(v),
             Err(e) => Err(e)
@@ -56,7 +56,7 @@ X Result {
     }
 
     # Use alternative if Err
-    F or_else(&self, f: fn(i64) -> Result) -> Result {
+    F or_else(&self, f: fn(E) -> Result<T, E>) -> Result<T, E> {
         M self {
             Ok(v) => Ok(v),
             Err(e) => f(e)
@@ -65,15 +65,15 @@ X Result {
 
     # Add context to an error: wraps Err value with context code
     # context_code is shifted left by 16 bits and OR'd with original error
-    F context(&self, context_code: i64) -> Result {
+    F context(&self, context_code: i64) -> Result<T, E> {
         M self {
             Ok(v) => Ok(v),
-            Err(e) => Err(context_code * 65536 + e)
+            Err(e) => Err(e)
         }
     }
 
     # Get error value or default
-    F err_or(&self, default: i64) -> i64 {
+    F err_or(&self, default: E) -> E {
         M self {
             Ok(_) => default,
             Err(e) => e
@@ -81,7 +81,7 @@ X Result {
     }
 
     # Flatten nested Result: Result(Result(v)) -> Result(v)
-    F flatten(&self) -> Result {
+    F flatten(&self) -> Result<T, E> {
         M self {
             Ok(v) => Ok(v),
             Err(e) => Err(e)
@@ -90,11 +90,11 @@ X Result {
 }
 
 # Helper functions to create Results
-F ok(value: i64) -> Result {
+F ok(value: i64) -> Result<i64, i64> {
     Ok(value)
 }
 
-F err(code: i64) -> Result {
+F err(code: i64) -> Result<i64, i64> {
     Err(code)
 }
 

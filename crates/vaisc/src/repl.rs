@@ -460,7 +460,7 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         Array(inner) => format!("[{}]", format_type(inner)),
         ConstArray { element, size } => format!("[{}; {:?}]", format_type(element), size),
         Optional(inner) => format!("Option<{}>", format_type(inner)),
-        Result(inner) => format!("Result<{}>", format_type(inner)),
+        Result(ok, err) => format!("Result<{}, {}>", format_type(ok), format_type(err)),
         Map(key, val) => format!("Map<{}, {}>", format_type(key), format_type(val)),
         Range(inner) => format!("Range<{}>", format_type(inner)),
         Future(inner) => format!("Future<{}>", format_type(inner)),

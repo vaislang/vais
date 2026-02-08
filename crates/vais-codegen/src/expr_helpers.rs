@@ -283,6 +283,17 @@ impl CodeGenerator {
                 return self.generate_simd_intrinsic(name, args, counter);
             }
 
+            // sizeof(expr) — compile-time constant
+            if name == "sizeof" {
+                let size = if !args.is_empty() {
+                    let arg_type = self.infer_expr_type(&args[0]);
+                    self.compute_sizeof(&arg_type)
+                } else {
+                    8
+                };
+                return Ok((size.to_string(), String::new()));
+            }
+
             // Handle print/println builtins with format string support
             if name == "print" || name == "println" {
                 return self.generate_print_call(name, args, counter, span);

@@ -3380,9 +3380,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Type::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.ast_type_to_resolved(&inner.node)))
             }
-            Type::Result(inner) => {
-                ResolvedType::Result(Box::new(self.ast_type_to_resolved(&inner.node)))
-            }
+            Type::Result(inner) => ResolvedType::Result(
+                Box::new(self.ast_type_to_resolved(&inner.node)),
+                Box::new(ResolvedType::I64),
+            ),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
             Type::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))

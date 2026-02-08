@@ -314,7 +314,10 @@ impl JitCompiler {
             Type::Optional(inner) => {
                 ResolvedType::Optional(Box::new(self.resolve_type(&inner.node)))
             }
-            Type::Result(inner) => ResolvedType::Result(Box::new(self.resolve_type(&inner.node))),
+            Type::Result(inner) => ResolvedType::Result(
+                Box::new(self.resolve_type(&inner.node)),
+                Box::new(ResolvedType::I64),
+            ),
             Type::Fn { params, ret } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.resolve_type(&p.node)).collect(),
                 ret: Box::new(self.resolve_type(&ret.node)),

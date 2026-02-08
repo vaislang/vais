@@ -759,7 +759,7 @@ pub enum ResolvedType {
     Map(Box<ResolvedType>, Box<ResolvedType>),
     Tuple(Vec<ResolvedType>),
     Optional(Box<ResolvedType>),
-    Result(Box<ResolvedType>),
+    Result(Box<ResolvedType>, Box<ResolvedType>),
     Pointer(Box<ResolvedType>),
     Ref(Box<ResolvedType>),
     RefMut(Box<ResolvedType>),
@@ -966,7 +966,7 @@ impl std::fmt::Display for ResolvedType {
                 write!(f, ")")
             }
             ResolvedType::Optional(t) => write!(f, "{}?", t),
-            ResolvedType::Result(t) => write!(f, "{}!", t),
+            ResolvedType::Result(t, e) => write!(f, "Result<{}, {}>", t, e),
             ResolvedType::Pointer(t) => write!(f, "*{}", t),
             ResolvedType::Ref(t) => write!(f, "&{}", t),
             ResolvedType::RefMut(t) => write!(f, "&mut {}", t),
@@ -1664,7 +1664,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         ResolvedType::Ref(inner) => format!("ref_{}", mangle_type(inner)),
         ResolvedType::RefMut(inner) => format!("refmut_{}", mangle_type(inner)),
         ResolvedType::Optional(inner) => format!("opt_{}", mangle_type(inner)),
-        ResolvedType::Result(inner) => format!("res_{}", mangle_type(inner)),
+        ResolvedType::Result(ok, err) => format!("res_{}_{}", mangle_type(ok), mangle_type(err)),
         ResolvedType::Future(inner) => format!("fut_{}", mangle_type(inner)),
         ResolvedType::Tuple(types) => {
             let args = types.iter().map(mangle_type).collect::<Vec<_>>().join("_");
@@ -1763,12 +1763,13 @@ pub fn substitute_type(
             }
             ResolvedType::Optional(Box::new(new_inner))
         }
-        ResolvedType::Result(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
-            if inner.as_ref() == &new_inner {
+        ResolvedType::Result(ok, err) => {
+            let new_ok = substitute_type(ok, substitutions);
+            let new_err = substitute_type(err, substitutions);
+            if ok.as_ref() == &new_ok && err.as_ref() == &new_err {
                 return ty.clone();
             }
-            ResolvedType::Result(Box::new(new_inner))
+            ResolvedType::Result(Box::new(new_ok), Box::new(new_err))
         }
         ResolvedType::Future(inner) => {
             let new_inner = substitute_type(inner, substitutions);

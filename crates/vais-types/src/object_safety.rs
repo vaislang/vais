@@ -186,9 +186,9 @@ fn contains_self_type(ty: &ResolvedType) -> bool {
         | ResolvedType::Pointer(inner)
         | ResolvedType::Array(inner)
         | ResolvedType::Optional(inner)
-        | ResolvedType::Result(inner)
         | ResolvedType::Future(inner)
         | ResolvedType::Range(inner) => contains_self_type(inner),
+        ResolvedType::Result(ok, err) => contains_self_type(ok) || contains_self_type(err),
 
         ResolvedType::ConstArray { element, .. } => contains_self_type(element),
 

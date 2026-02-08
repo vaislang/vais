@@ -336,8 +336,9 @@ impl LifetimeInferencer {
             | ResolvedType::RefLifetime { .. }
             | ResolvedType::RefMutLifetime { .. } => true,
             ResolvedType::Tuple(types) => types.iter().any(|t| self.has_reference_in_return(t)),
-            ResolvedType::Optional(inner) | ResolvedType::Result(inner) => {
-                self.has_reference_in_return(inner)
+            ResolvedType::Optional(inner) => self.has_reference_in_return(inner),
+            ResolvedType::Result(ok, err) => {
+                self.has_reference_in_return(ok) || self.has_reference_in_return(err)
             }
             _ => false,
         }
@@ -445,10 +446,13 @@ impl LifetimeInferencer {
             }
             ResolvedType::Array(inner)
             | ResolvedType::Optional(inner)
-            | ResolvedType::Result(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Pointer(inner) => {
                 self.generate_type_constraints(inner, reason);
+            }
+            ResolvedType::Result(ok, err) => {
+                self.generate_type_constraints(ok, reason);
+                self.generate_type_constraints(err, reason);
             }
             ResolvedType::Tuple(types) => {
                 for t in types {

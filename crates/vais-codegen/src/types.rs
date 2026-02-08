@@ -673,4 +673,31 @@ impl CodeGenerator {
             _ => 8,                       // Default fallback
         }
     }
+
+    /// Compute sizeof for a ResolvedType (in bytes)
+    /// Returns the size in Vais's runtime representation
+    pub(crate) fn compute_sizeof(&self, ty: &ResolvedType) -> i64 {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
+            ResolvedType::I128 | ResolvedType::U128 => 16,
+            ResolvedType::Str => 8, // pointer
+            ResolvedType::Unit => 0,
+            ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Array(_) => 8, // pointer to heap
+            ResolvedType::Optional(_) => 8, // tag + value in i64
+            ResolvedType::Result(_, _) => 8, // tag + value in i64
+            ResolvedType::Tuple(elems) => elems.len() as i64 * 8,
+            ResolvedType::Named { name, .. } => {
+                if let Some(struct_info) = self.structs.get(name) {
+                    struct_info.fields.len() as i64 * 8
+                } else {
+                    8 // enum (tag + payload) or unknown named type
+                }
+            }
+            _ => 8, // default for complex types
+        }
+    }
 }
