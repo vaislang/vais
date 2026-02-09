@@ -122,6 +122,13 @@ test_*
 # Backup files
 *.bak
 *.bak2
+*.bak3
+*.bak4
+*.backup
+
+# Benchmark generated fixtures
+benches/fixtures/generated_*.vais
+benches/fixtures/multi_module_*.vais
 
 # Temporary reports
 COMPILATION_STATUS_REPORT.md
