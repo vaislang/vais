@@ -114,6 +114,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **66** | **코드 품질 & 리팩토링** | ✅ 완료 | builtins.rs 분할, codegen 모듈화, unwrap/clone 안전화, LSP 핸들러 분리 |
 | **67** | **테스트 커버리지 확충** | ✅ 완료 | 4개 crate 142개 통합 테스트 (mir 36, macro 39, codegen-js 33, jit 34) |
 | **68** | **타입 안전 메모리 모델 & Borrow Checker** | ✅ 완료 | load_typed/store_typed, MIR Borrow Checker (E100~E105), --strict-borrow, 475 E2E |
+| **69** | **Lifetime & Ownership 실전 강화** | 📋 예정 | CFG 기반 정밀 borrow checking, NLL, lifetime annotation 활용 |
+| **70** | **컴파일러 성능 최적화** | 📋 예정 | clone() 감소, 병렬 모듈 컴파일 확장, 대규모 벤치마크 |
+| **71** | **Selfhost 기능 확장** | 📋 예정 | advanced_opt 4개 모듈 포팅, query 아키텍처 |
+| **72** | **에코시스템 패키지** | 📋 예정 | vais-crc32, vais-lz4, vais-aes 범용 라이브러리 패키지화 |
 
 ---
 
@@ -1644,3 +1648,168 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 - [x] 10. 통합 검증 & --strict-borrow 플래그 (Opus 직접) ✅
   변경: vaisc/Cargo.toml (+vais-mir), main.rs (STRICT_BORROW, --strict-borrow), build.rs (MIR borrow check pass)
 진행률: 10/10 (100%)
+
+---
+
+## Phase 69: Lifetime & Ownership 실전 강화
+
+> **상태**: 📋 예정
+> **목표**: 현재 forward-pass 전용 borrow checker를 CFG 기반 정밀 분석으로 업그레이드하고, 이미 파싱되는 lifetime annotation을 실제 분석에 활용
+> **배경**: Phase 68에서 MIR borrow checker 기본 구현 완료 (E100~E105). 하지만 forward-pass만 지원하여 분기/루프 정밀도 부족. Lexer/Parser/AST에 lifetime 문법이 이미 존재하나 미활용
+
+### Stage 1: CFG 기반 Dataflow Analysis
+
+**목표**: forward-pass를 worklist 기반 반복 dataflow 분석으로 교체
+
+- [ ] 1. Block-level 상태 관리 — BlockState (entry/exit LocalState 맵) 도입 (Sonnet)
+- [ ] 2. Worklist 알고리즘 — cfg_predecessors/successors 활용, 고정점 도달까지 반복 (Sonnet)
+- [ ] 3. 상태 병합 (join) — 분기 합류점에서 LocalState 보수적 병합 (Moved ∪ Owned → Moved) (Sonnet)
+- [ ] 4. 루프 고정점 — 루프 백엣지에서 상태 수렴까지 반복, 무한 루프 방지 (Sonnet)
+- [ ] 5. 테스트 — 분기/루프 시나리오 10개 (if-else use-after-move, loop borrow 등) (Sonnet)
+
+### Stage 2: Non-Lexical Lifetimes (NLL)
+
+**목표**: 변수의 수명을 어휘적(lexical) 스코프가 아닌 실제 사용 범위로 축소
+
+- [ ] 1. Liveness 분석 — 각 Local의 마지막 사용 지점 계산 (Sonnet)
+- [ ] 2. Borrow 범위 축소 — borrow 활성 구간을 마지막 사용까지로 제한 (Sonnet)
+- [ ] 3. Two-phase borrows — &mut 생성과 첫 사용 사이 기간에 &를 허용 (Sonnet)
+- [ ] 4. 테스트 — NLL 허용 패턴 8개 (재할당 후 borrow, 조건부 borrow 등) (Sonnet)
+
+### Stage 3: Lifetime Annotation 활용
+
+**목표**: 이미 파싱되는 `'a` 문법을 타입 검사와 borrow checker에서 실제 검증
+
+- [ ] 1. Lifetime 해결 — 함수 시그니처의 lifetime param을 MIR에 전달 (Sonnet)
+- [ ] 2. Lifetime 관계 검증 — `'a: 'b` (outlives) 관계를 borrow checker에서 확인 (Sonnet)
+- [ ] 3. Lifetime elision 규칙 — 단일 입력 참조 → 출력 lifetime 자동 추론 (Sonnet)
+- [ ] 4. 에러 메시지 — lifetime 관련 에러에 `'a`/`'b` 이름 표시 (Sonnet)
+- [ ] 5. E2E 테스트 — lifetime 양성/음성 각 5개 (Sonnet)
+
+### Stage 4: 통합 검증
+
+- [ ] 1. 기존 E2E 475개 회귀 테스트 통과 (Opus)
+- [ ] 2. --strict-borrow 모드에서 CFG+NLL+Lifetime 통합 동작 확인 (Opus)
+- [ ] 3. Clippy 0건 유지 (Opus)
+
+---
+
+## Phase 70: 컴파일러 성능 최적화
+
+> **상태**: 📋 예정
+> **목표**: 대규모 프로젝트 컴파일 성능 개선 — clone 감소, 병렬 처리 확대, 메모리 사용량 절감
+> **배경**: vais-codegen에 clone() 560건, 병렬 처리는 import 로딩만 적용. 대규모 프로젝트 벤치마크 미비
+
+### Stage 1: Clone 감소 & 메모리 최적화
+
+**목표**: codegen 핫 경로의 불필요한 clone 제거
+
+- [ ] 1. Clone 핫스팟 분석 — vais-codegen clone() 560건 프로파일링, 상위 20건 분류 (Sonnet)
+- [ ] 2. 참조 전환 — String→&str, Vec→&[T], HashMap 엔트리 API 활용 (Sonnet)
+- [ ] 3. Cow/Rc 도입 — AST 노드 공유가 빈번한 경로에 Cow<str>/Rc<str> 적용 (Sonnet)
+- [ ] 4. 타입 체커 clone 감소 — vais-types clone() 핫스팟 분석 및 감소 (Sonnet)
+- [ ] 5. 벤치마크 비교 — 최적화 전후 criterion 벤치마크 수치 비교 (Sonnet)
+
+### Stage 2: 병렬 컴파일 확대
+
+**목표**: 모듈 단위 병렬 type-check/codegen
+
+- [ ] 1. 모듈 의존성 그래프 — import 관계에서 DAG 구축 (Sonnet)
+- [ ] 2. 병렬 Type Check — 독립 모듈을 rayon par_iter로 동시 검사 (Sonnet)
+- [ ] 3. 병렬 Codegen — 독립 모듈을 rayon par_iter로 동시 IR 생성 (Sonnet)
+- [ ] 4. 파이프라인 병렬화 — lex→parse 완료된 모듈부터 즉시 typecheck 시작 (Sonnet)
+- [ ] 5. 벤치마크 — 10/50/100 모듈 프로젝트에서 병렬 speedup 측정 (Sonnet)
+
+### Stage 3: 대규모 벤치마크 & 프로파일링
+
+**목표**: 실전 규모 프로젝트에서 컴파일 성능 검증
+
+- [ ] 1. 대규모 fixture 생성 — 10K/50K/100K lines 합성 프로젝트 생성기 (Sonnet)
+- [ ] 2. 메모리 프로파일링 — peak RSS 측정, 대규모 입력 시 메모리 사용량 추적 (Sonnet)
+- [ ] 3. CI 성능 회귀 감지 — criterion 벤치마크 CI 통합, 10% 이상 회귀 시 경고 (Sonnet)
+- [ ] 4. 통합 검증 — 475 E2E 통과, Clippy 0건 (Opus)
+
+---
+
+## Phase 71: Selfhost 기능 확장
+
+> **상태**: 📋 예정
+> **목표**: 셀프호스트 컴파일러에 Rust 컴파일러의 advanced_opt 모듈 4개를 포팅하여 기능 대등성 확보
+> **배경**: Rust 컴파일러에 alias_analysis, auto_vectorize, bounds_check_elim, data_layout 최적화가 있으나 셀프호스트(46K LOC)에는 미구현
+
+### Stage 1: Alias Analysis 포팅
+
+**목표**: 포인터 별칭 분석을 셀프호스트 MIR에 추가
+
+- [ ] 1. selfhost/mir_alias.vais — PointerInfo/FunctionSummary 구조체 정의 (Sonnet)
+- [ ] 2. analyze_aliases() 핵심 로직 포팅 — Vais 문법으로 변환 (Sonnet)
+- [ ] 3. MIR 최적화 파이프라인에 alias analysis pass 통합 (Sonnet)
+- [ ] 4. 테스트 — alias 시나리오 5개 (Sonnet)
+
+### Stage 2: Bounds Check Elimination 포팅
+
+**목표**: 배열 경계 검사 불필요한 경우 제거
+
+- [ ] 1. selfhost/mir_bounds.vais — ValueRange/RangeAnalysis 구조체 정의 (Sonnet)
+- [ ] 2. analyze_bounds_checks() / eliminate_bounds_checks() 포팅 (Sonnet)
+- [ ] 3. 테스트 — bounds check 제거 시나리오 5개 (Sonnet)
+
+### Stage 3: Auto-Vectorize & Data Layout 포팅
+
+**목표**: 자동 벡터화 힌트 및 구조체 레이아웃 최적화
+
+- [ ] 1. selfhost/mir_vectorize.vais — VectorizationCandidate, reduction 감지 (Sonnet)
+- [ ] 2. selfhost/mir_layout.vais — StructLayout, AoS→SoA 제안 (Sonnet)
+- [ ] 3. 테스트 — 벡터화/레이아웃 시나리오 각 3개 (Sonnet)
+
+### Stage 4: 통합 검증
+
+- [ ] 1. 셀프호스트 빌드 성공 — 기존 bootstrap 검증 (Opus)
+- [ ] 2. 최적화 pass on/off 비교 — IR 출력 차이 확인 (Opus)
+- [ ] 3. Clippy 0건, 475 E2E 통과 (Opus)
+
+---
+
+## Phase 72: 에코시스템 패키지
+
+> **상태**: 📋 예정
+> **목표**: 표준 라이브러리의 범용 유틸리티를 독립 패키지로 분리하여 레지스트리에 배포, 에코시스템 씨앗 확보
+> **배경**: 패키지 레지스트리에 서드파티 라이브러리 없음. std/crc32.vais(46줄, 순수 Vais), std/crypto.vais(교육용), std/compress.vais(zlib FFI)
+
+### Stage 1: vais-crc32 패키지
+
+**목표**: std/crc32.vais를 독립 패키지로 분리, 룩업 테이블 최적화
+
+- [ ] 1. 패키지 초기화 — `vais init vais-crc32`, vais.toml 설정 (Sonnet)
+- [ ] 2. CRC32 룩업 테이블 — 256-entry 테이블 기반 고속 구현 (현재 비트 단위) (Sonnet)
+- [ ] 3. CRC32C (Castagnoli) — iSCSI/Btrfs에서 사용하는 CRC32C 변형 추가 (Sonnet)
+- [ ] 4. 테스트 & 벤치마크 — 정확성 검증 (RFC 3720 벡터), 처리량 측정 (Sonnet)
+- [ ] 5. 레지스트리 배포 — `vais publish` (Sonnet)
+
+### Stage 2: vais-lz4 패키지
+
+**목표**: 순수 Vais로 LZ4 압축/해제 구현 (현재 zlib FFI만 존재)
+
+- [ ] 1. 패키지 초기화 — `vais init vais-lz4` (Sonnet)
+- [ ] 2. LZ4 Block Format 압축 — 해시 테이블 기반 매칭, 리터럴/매치 시퀀스 (Sonnet)
+- [ ] 3. LZ4 Block Format 해제 — 스트리밍 디코더 (Sonnet)
+- [ ] 4. LZ4 Frame Format — 프레임 헤더/체크섬 (xxHash32) 지원 (Sonnet)
+- [ ] 5. 테스트 & 벤치마크 — 라운드트립 검증, 압축률/속도 측정 (Sonnet)
+- [ ] 6. 레지스트리 배포 (Sonnet)
+
+### Stage 3: vais-aes 패키지
+
+**목표**: 교육용 XOR 구현을 실제 AES-256으로 교체
+
+- [ ] 1. 패키지 초기화 — `vais init vais-aes` (Sonnet)
+- [ ] 2. AES-256 핵심 — SubBytes/ShiftRows/MixColumns/AddRoundKey, 14라운드 (Sonnet)
+- [ ] 3. 블록 모드 — ECB, CBC, CTR 모드 구현 (Sonnet)
+- [ ] 4. 키 스케줄 — AES-256 키 확장 (Sonnet)
+- [ ] 5. 테스트 — NIST FIPS 197 테스트 벡터 검증 (Sonnet)
+- [ ] 6. 레지스트리 배포 (Sonnet)
+
+### Stage 4: 통합 검증
+
+- [ ] 1. 3개 패키지 독립 빌드 & 테스트 통과 (Opus)
+- [ ] 2. examples/에서 3개 패키지 활용 예제 추가 (Opus)
+- [ ] 3. 475 E2E 회귀 없음, Clippy 0건 (Opus)
