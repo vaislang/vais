@@ -34,6 +34,20 @@ impl TypeChecker {
 
         // Set current function context
         let ret_type_inferred = f.ret_type.is_none();
+
+        // Detect recursive functions (using @) with inferred return type — this is undecidable
+        if ret_type_inferred && Self::body_contains_self_call(&f.body) {
+            return Err(TypeError::InferFailed {
+                kind: "return type".to_string(),
+                name: f.name.node.clone(),
+                context: f.name.node.clone(),
+                span: Some(f.name.span),
+                suggestion: Some(
+                    "Recursive functions require explicit return type annotation".to_string(),
+                ),
+            });
+        }
+
         let ret_type = f
             .ret_type
             .as_ref()
@@ -86,8 +100,14 @@ impl TypeChecker {
         if ret_type_inferred {
             let resolved_ret = self.apply_substitutions(&ret_type);
             let final_ret = if matches!(resolved_ret, ResolvedType::Var(_)) {
-                // Unresolved: default to i64 for numeric expressions
-                ResolvedType::I64
+                // Unresolved type variable: compile error instead of silent i64 default
+                return Err(TypeError::InferFailed {
+                    kind: "return type".to_string(),
+                    name: f.name.node.clone(),
+                    context: f.name.node.clone(),
+                    span: Some(f.name.span),
+                    suggestion: Some("Add explicit return type annotation".to_string()),
+                });
             } else {
                 resolved_ret
             };
@@ -99,8 +119,28 @@ impl TypeChecker {
         // Resolve inferred parameter types after body type checking.
         // Parameters declared without type annotations (Type::Infer) get Var(id) types
         // which may have been resolved through unification during body checking.
-        // Update the FunctionSig with the resolved types, defaulting unresolved vars to i64.
+        // Update the FunctionSig with resolved types; error on unresolved vars.
         if f.params.iter().any(|p| matches!(p.ty.node, Type::Infer)) {
+            // First check for unresolved type variables (before mutably borrowing)
+            if let Some(sig) = self.functions.get(&f.name.node) {
+                for (name, ty, _) in &sig.params {
+                    let resolved = self.apply_substitutions(ty);
+                    if matches!(resolved, ResolvedType::Var(_)) {
+                        let param_span = f
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: name.clone(),
+                            context: f.name.node.clone(),
+                            span: param_span,
+                            suggestion: Some(format!("Add explicit type: `{}: <type>`", name)),
+                        });
+                    }
+                }
+            }
             let resolved_params: Vec<_> = {
                 let sig = self.functions.get(&f.name.node);
                 if let Some(sig) = sig {
@@ -108,13 +148,7 @@ impl TypeChecker {
                         .iter()
                         .map(|(name, ty, is_mut)| {
                             let resolved = self.apply_substitutions(ty);
-                            let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
-                                // Unresolved type variable: default to i64
-                                ResolvedType::I64
-                            } else {
-                                resolved
-                            };
-                            (name.clone(), final_ty, *is_mut)
+                            (name.clone(), resolved, *is_mut)
                         })
                         .collect()
                 } else {
@@ -318,6 +352,30 @@ impl TypeChecker {
             .iter()
             .any(|p| matches!(p.ty.node, Type::Infer))
         {
+            // First check for unresolved type variables
+            if let Some(sig) = self
+                .structs
+                .get(&self_type_name)
+                .and_then(|s| s.methods.get(&method.name.node))
+            {
+                for (name, ty, _) in &sig.params {
+                    let resolved = self.apply_substitutions(ty);
+                    if matches!(resolved, ResolvedType::Var(_)) {
+                        let param_span = method
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: name.clone(),
+                            context: format!("{}::{}", self_type_name, method.name.node),
+                            span: param_span,
+                            suggestion: Some(format!("Add explicit type: `{}: <type>`", name)),
+                        });
+                    }
+                }
+            }
             let resolved_params: Vec<_> = {
                 let sig = self
                     .structs
@@ -328,12 +386,7 @@ impl TypeChecker {
                         .iter()
                         .map(|(name, ty, is_mut)| {
                             let resolved = self.apply_substitutions(ty);
-                            let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
-                                ResolvedType::I64
-                            } else {
-                                resolved
-                            };
-                            (name.clone(), final_ty, *is_mut)
+                            (name.clone(), resolved, *is_mut)
                         })
                         .collect()
                 } else {
@@ -355,5 +408,72 @@ impl TypeChecker {
         self.pop_scope();
 
         Ok(())
+    }
+
+    /// Check if a function body contains any `@` (self-call/recursion)
+    fn body_contains_self_call(body: &FunctionBody) -> bool {
+        match body {
+            FunctionBody::Expr(expr) => Self::expr_contains_self_call(&expr.node),
+            FunctionBody::Block(stmts) => stmts
+                .iter()
+                .any(|s| Self::stmt_contains_self_call(&s.node)),
+        }
+    }
+
+    fn expr_contains_self_call(expr: &Expr) -> bool {
+        match expr {
+            Expr::SelfCall => true,
+            Expr::Call { func, args } => {
+                Self::expr_contains_self_call(&func.node)
+                    || args.iter().any(|a| Self::expr_contains_self_call(&a.node))
+            }
+            Expr::Binary { left, right, .. } => {
+                Self::expr_contains_self_call(&left.node)
+                    || Self::expr_contains_self_call(&right.node)
+            }
+            Expr::Unary { expr, .. } => Self::expr_contains_self_call(&expr.node),
+            Expr::If {
+                cond, then, else_, ..
+            } => {
+                Self::expr_contains_self_call(&cond.node)
+                    || then
+                        .iter()
+                        .any(|s| Self::stmt_contains_self_call(&s.node))
+                    || else_.as_ref().map_or(false, |eb| {
+                        Self::if_else_contains_self_call(eb)
+                    })
+            }
+            Expr::Block(stmts) => stmts
+                .iter()
+                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            Expr::Assign { value, .. } => Self::expr_contains_self_call(&value.node),
+            _ => false,
+        }
+    }
+
+    fn if_else_contains_self_call(else_branch: &IfElse) -> bool {
+        match else_branch {
+            IfElse::Else(stmts) => stmts
+                .iter()
+                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            IfElse::ElseIf(cond, stmts, next) => {
+                Self::expr_contains_self_call(&cond.node)
+                    || stmts
+                        .iter()
+                        .any(|s| Self::stmt_contains_self_call(&s.node))
+                    || next
+                        .as_ref()
+                        .map_or(false, |n| Self::if_else_contains_self_call(n))
+            }
+        }
+    }
+
+    fn stmt_contains_self_call(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr) => Self::expr_contains_self_call(&expr.node),
+            Stmt::Let { value, .. } => Self::expr_contains_self_call(&value.node),
+            Stmt::Return(Some(e)) => Self::expr_contains_self_call(&e.node),
+            _ => false,
+        }
     }
 }

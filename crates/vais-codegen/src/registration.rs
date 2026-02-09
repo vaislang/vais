@@ -26,13 +26,8 @@ impl CodeGenerator {
                     .iter()
                     .map(|p| {
                         let ty = self.ast_type_to_resolved(&p.ty.node);
-                        let ty = if matches!(ty, ResolvedType::Unknown)
-                            && matches!(p.ty.node, vais_ast::Type::Infer)
-                        {
-                            ResolvedType::I64 // default to i64 for unresolved inferred types
-                        } else {
-                            ty
-                        };
+                        // Type checker should have resolved all Infer types;
+                        // if we still see Unknown here, keep it (will error at codegen)
                         (p.name.node.to_string(), ty, p.is_mut)
                     })
                     .collect()

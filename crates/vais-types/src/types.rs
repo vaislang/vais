@@ -282,6 +282,15 @@ pub enum TypeError {
         found: String,
         span: Option<Span>,
     },
+
+    #[error("Cannot infer type of {kind} '{name}' in function '{context}'")]
+    InferFailed {
+        kind: String,
+        name: String,
+        context: String,
+        span: Option<Span>,
+        suggestion: Option<String>,
+    },
 }
 
 impl TypeError {
@@ -319,6 +328,7 @@ impl TypeError {
             TypeError::ReturnLocalRef { return_at, .. } => *return_at,
             TypeError::NoSuchField { span, .. } => *span,
             TypeError::ExternSignatureMismatch { span, .. } => *span,
+            TypeError::InferFailed { span, .. } => *span,
         }
     }
 
@@ -356,6 +366,7 @@ impl TypeError {
             TypeError::ReturnLocalRef { .. } => "E029",
             TypeError::NoSuchField { .. } => "E030",
             TypeError::ExternSignatureMismatch { .. } => "E031",
+            TypeError::InferFailed { .. } => "E032",
         }
     }
 
@@ -496,6 +507,9 @@ impl TypeError {
                     name, expected, found
                 ))
             }
+            TypeError::InferFailed { suggestion, .. } => {
+                suggestion.as_ref().map(|s| s.clone())
+            }
             _ => None,
         }
     }
@@ -634,6 +648,12 @@ impl TypeError {
             } => vais_i18n::get(
                 &key,
                 &[("name", name), ("expected", expected), ("found", found)],
+            ),
+            TypeError::InferFailed {
+                kind, name, context, ..
+            } => vais_i18n::get(
+                &key,
+                &[("kind", kind), ("name", name), ("context", context)],
             ),
         }
     }

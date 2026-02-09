@@ -3541,8 +3541,10 @@ F main() -> i64 {
 
 #[test]
 fn test_ret_type_infer_both_param_and_ret() {
+    // When all params and return type are inferred, explicit return type is needed
+    // since params are unconstrained within the function body alone
     let source = r#"
-F add(a, b) { a + b }
+F add(a, b) -> i64 { a + b }
 F main() -> i64 {
     R add(17, 25)
 }
@@ -3552,8 +3554,22 @@ F main() -> i64 {
 
 #[test]
 fn test_ret_type_infer_recursive() {
+    // Recursive functions (using @) require explicit return type annotation
     let source = r#"
 F fib(n: i64) {
+    I n <= 1 { R n }
+    R @(n - 1) + @(n - 2)
+}
+F main() -> i64 { R 0 }
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn test_ret_type_infer_recursive_with_annotation() {
+    // Recursive function with explicit return type works fine
+    let source = r#"
+F fib(n: i64) -> i64 {
     I n <= 1 { R n }
     R @(n - 1) + @(n - 2)
 }
@@ -3575,6 +3591,157 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 42);
+}
+
+// ===== Type Inference Safety Tests =====
+
+// --- Positive tests: inference succeeds ---
+
+#[test]
+fn test_infer_from_binary_ops() {
+    let source = r#"
+F compute(a, b, c) -> i64 { a + b * c }
+F main() -> i64 {
+    R compute(1, 2, 3)
+}
+"#;
+    assert_exit_code(source, 7);
+}
+
+#[test]
+fn test_infer_from_comparison() {
+    // Param 'x' inferred as i64 from comparison with literal 0
+    let source = r#"
+F check(x) -> i64 {
+    I x > 0 { R 1 }
+    R 0
+}
+F main() -> i64 {
+    R check(5)
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn test_infer_mixed_explicit_inferred() {
+    let source = r#"
+F clamp_max(x: i64, limit) -> i64 {
+    I x > limit { R limit }
+    R x
+}
+F main() -> i64 {
+    R clamp_max(50, 42)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_infer_with_if_else() {
+    let source = r#"
+F safe_div(a, b) -> i64 {
+    I b == 0 { R 0 }
+    R a / b
+}
+F main() -> i64 {
+    R safe_div(84, 2)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_infer_param_from_call_chain() {
+    // Parameter type inferred from being passed to a typed function
+    let source = r#"
+F double(x: i64) -> i64 { x * 2 }
+F apply(n) -> i64 { double(n) }
+F main() -> i64 {
+    R apply(21)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_infer_ret_from_body() {
+    let source = r#"
+F square(x: i64) { x * x }
+F main() -> i64 {
+    R square(6)
+}
+"#;
+    assert_exit_code(source, 36);
+}
+
+#[test]
+fn test_infer_param_from_string_concat() {
+    let source = r#"
+F greet(name) -> str { "hello " + name }
+F main() -> i64 {
+    s := greet("world")
+    R 0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_infer_f64_param() {
+    // Param inferred as f64 from float operation
+    let source = r#"
+F half(x) -> f64 { x / 2.0 }
+F main() -> i64 {
+    R 0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+// --- Negative tests: inference correctly fails ---
+
+#[test]
+fn test_infer_fail_unconstrained_param() {
+    // Parameter 'x' is never used, so its type cannot be inferred
+    let source = r#"
+F unused(x) -> i64 { 42 }
+F main() -> i64 { R unused(1) }
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn test_infer_fail_recursive_no_ret() {
+    // Recursive function with @ but no return type annotation
+    let source = r#"
+F count(n: i64) {
+    I n <= 0 { R 0 }
+    R 1 + @(n - 1)
+}
+F main() -> i64 { R 0 }
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn test_infer_fail_unconstrained_return() {
+    // Both params and return unconstrained — can't determine types
+    let source = r#"
+F identity(x) { x }
+F main() -> i64 { R 0 }
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn test_infer_fail_all_unconstrained() {
+    // All unconstrained: a, b, and return type
+    let source = r#"
+F swap_first(a, b) { a }
+F main() -> i64 { R 0 }
+"#;
+    assert_compile_error(source);
 }
 
 // ===== Tilde Mut Abbreviation Tests =====
