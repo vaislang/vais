@@ -306,6 +306,7 @@ fn has_array_access_in_true_branch(lines: &[&str], br_line: usize, idx_var: &str
     if true_label.is_none() {
         return false;
     }
+    // safe: checked above that true_label is Some
     let true_label = true_label.unwrap();
 
     // Find the true label block and check for GEP using idx_var

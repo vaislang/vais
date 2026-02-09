@@ -232,6 +232,7 @@ impl AliasAnalysis {
                     }
                 }
 
+                // safe: checked above that current_func.is_some()
                 self.functions.insert(
                     current_func.take().unwrap(),
                     std::mem::take(&mut current_summary),

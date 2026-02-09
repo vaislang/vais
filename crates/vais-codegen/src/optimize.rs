@@ -619,6 +619,7 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
 
                         // Mark as tail call
                         let prefix = if is_self_call { "musttail" } else { "tail" };
+                        // safe: checked at line 603 that trimmed contains " = call "
                         let call_pos = trimmed.find(" = call ").unwrap();
                         let dest_part = &trimmed[..call_pos];
                         let call_part = &trimmed[call_pos + 3..]; // " = call ..."
@@ -958,6 +959,7 @@ pub(crate) fn conditional_branch_simplification(ir: &str) -> String {
                     *var_uses.entry(word.to_string()).or_insert(0) += 1;
                 } else if trimmed.starts_with(word) && trimmed.contains(" = ") {
                     // This is a definition, but also check for uses in the RHS
+                    // safe: checked above that trimmed contains " = "
                     let def_end = trimmed.find(" = ").unwrap() + 3;
                     let rhs = &trimmed[def_end..];
                     if rhs.contains(word) {
@@ -2787,6 +2789,7 @@ fn _is_likely_label(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
+    // safe: checked above that s is not empty
     let first = s.chars().next().unwrap();
     first.is_alphabetic() || first == '_'
 }
