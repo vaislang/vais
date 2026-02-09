@@ -1,0 +1,1 @@
+Type error: NoSuchField { field: "invalid_field", type_name: "User", suggestion: None, span: None }
