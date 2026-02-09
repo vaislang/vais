@@ -1,0 +1,25 @@
+# HTTP types with routing
+S Response {
+    status: i64,
+    body: i64,
+}
+
+F route(path: i64) -> Response {
+    I path == 1 {
+        Response { status: 200, body: 1 }
+    } E I path == 2 {
+        Response { status: 200, body: 2 }
+    } E {
+        Response { status: 404, body: 0 }
+    }
+}
+
+F main() -> i64 {
+    res := route(1)
+    printf("status=%lld body=%lld\n", res.status, res.body)
+    res2 := route(2)
+    printf("status=%lld body=%lld\n", res2.status, res2.body)
+    res3 := route(99)
+    printf("status=%lld body=%lld\n", res3.status, res3.body)
+    0
+}

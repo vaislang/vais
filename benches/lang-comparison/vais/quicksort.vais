@@ -1,0 +1,58 @@
+# Quicksort using malloc-based array
+F arr_new(size: i64) -> i64 {
+    malloc(size * 8)
+}
+
+F arr_get(arr: i64, i: i64) -> i64 {
+    load_i64(arr + i * 8)
+}
+
+F arr_set(arr: i64, i: i64, val: i64) {
+    store_i64(arr + i * 8, val)
+}
+
+F arr_swap(arr: i64, i: i64, j: i64) {
+    t := arr_get(arr, i)
+    arr_set(arr, i, arr_get(arr, j))
+    arr_set(arr, j, t)
+}
+
+F partition(arr: i64, lo: i64, hi: i64) -> i64 {
+    pivot := arr_get(arr, hi)
+    i := mut lo
+    j := mut lo
+    L j < hi {
+        I arr_get(arr, j) <= pivot {
+            arr_swap(arr, i, j)
+            i = i + 1
+        }
+        j = j + 1
+    }
+    arr_swap(arr, i, hi)
+    i
+}
+
+F quicksort(arr: i64, lo: i64, hi: i64) {
+    I lo < hi {
+        p := partition(arr, lo, hi)
+        quicksort(arr, lo, p - 1)
+        quicksort(arr, p + 1, hi)
+    }
+}
+
+F main() -> i64 {
+    data := [38, 27, 43, 3, 9, 82, 10, 55, 1, 77]
+    arr := arr_new(10)
+    k := mut 0
+    L k < 10 {
+        arr_set(arr, k, data[k])
+        k = k + 1
+    }
+    quicksort(arr, 0, 9)
+    i := mut 0
+    L i < 10 {
+        printf("%lld\n", arr_get(arr, i))
+        i = i + 1
+    }
+    0
+}

@@ -307,13 +307,13 @@ F main() -> i64 {
     version := 1
 
     # Variable interpolation
-    println("Hello, {name}!")
+    puts("Hello, {name}!")
 
     # Expression interpolation
-    println("1 + 2 = {1 + 2}")
+    puts("1 + 2 = {1 + 2}")
 
     # Escaped braces
-    println("Use {{braces}} for literal braces")
+    puts("Use {{braces}} for literal braces")
 
     0
 }`

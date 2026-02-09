@@ -5,8 +5,8 @@ Web-based interactive playground for the Vais programming language.
 ## Features
 
 - **Monaco Editor** with Vais syntax highlighting
-- **Real-time compilation** and execution (mock mode for now)
-- **13 example programs** demonstrating language features
+- **Real-time compilation** and execution (Server, WASM, or Preview mode)
+- **18 example programs** demonstrating language features
 - **Auto-completion** for Vais keywords and functions
 - **Keyboard shortcuts** for quick actions
 - **Responsive design** for desktop and mobile
@@ -65,7 +65,12 @@ playground/
 10. **Type Inference** - Automatic type inference
 11. **Operators** - Arithmetic and logical operators
 12. **Functions** - Function definitions
-13. **Minimal** - Simplest valid program
+13. **String Interpolation** - String formatting with variables
+14. **Pipe Operator** - Function chaining with |>
+15. **Tilde Mut** - Mutable references with ~mut
+16. **Destructuring** - Pattern destructuring
+17. **Type Infer Params** - Parameter type inference
+18. **Minimal** - Simplest valid program
 
 ## Keyboard Shortcuts
 
@@ -90,25 +95,13 @@ Press `Ctrl+Space` to see suggestions for:
 - Built-in functions
 - Code snippets
 
-### Mock Compiler
+### 3-Tier Compilation
 
-Currently, the playground uses a mock compiler for demonstration purposes. The mock compiler:
-- Validates basic syntax
-- Checks for common errors
-- Generates mock LLVM IR
-- Provides sample output
+The playground uses a 3-tier execution model with automatic fallback:
 
-### WASM Integration (TODO)
-
-Future versions will integrate the actual Vais compiler compiled to WebAssembly:
-
-```bash
-# Build vaisc for WASM target
-npm run wasm:build
-
-# Copy the WASM binary to playground
-cp ../target/wasm32-unknown-unknown/release/vaisc.wasm public/
-```
+1. **Server mode** — Sends code to the playground server for real compilation via `vaisc`
+2. **WASM mode** — Compiles and runs code in-browser using WebAssembly
+3. **Preview mode** — Client-side mock compiler for basic syntax validation and demonstration
 
 ## Development
 
@@ -159,7 +152,7 @@ Edit `src/styles.css` to customize the appearance.
 
 ## Future Enhancements
 
-- [ ] Real WASM-based compilation
+- [x] Real WASM-based compilation
 - [ ] Code sharing via URL
 - [ ] Multi-file projects
 - [ ] Standard library documentation integration

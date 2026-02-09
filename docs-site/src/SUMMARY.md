@@ -26,6 +26,7 @@
 
 - [언어 사양](./language/language-spec.md)
 - [제네릭](./language/generics.md)
+- [타입 추론](./language/type-inference.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
 - [컴파일 타임 기능](./language/comptime-feature.md)
 - [타입 추론 개선](./language/iterator-type-inference.md)
@@ -42,6 +43,7 @@
 - [기술 사양](./compiler/tech-spec.md)
 - [JIT 컴파일](./compiler/jit-compilation.md)
 - [GPU 코드 생성](./compiler/gpu-codegen.md)
+- [JavaScript 코드 생성](./compiler/js-codegen.md)
 
 # 개발자 도구
 
@@ -69,6 +71,8 @@
   - [C++ 빠른 시작](./advanced/bindgen/cpp-quickstart.md)
 - [WASM 컴포넌트](./advanced/wasm/README.md)
   - [컴포넌트 모델](./advanced/wasm/component-model.md)
+  - [JS 인터롭](./advanced/wasm/js-interop.md)
+- [Async 런타임](./advanced/async-runtime.md)
 
 # 보안
 
@@ -101,6 +105,13 @@
 - [Deque](./api/deque.md)
 - [PriorityQueue](./api/priority_queue.md)
 - [Collections](./api/collections.md)
+
+## Utility
+
+- [Path](./api/path.md)
+- [DateTime](./api/datetime.md)
+- [Channel](./api/channel.md)
+- [Args](./api/args.md)
 
 ## I/O and Filesystem
 

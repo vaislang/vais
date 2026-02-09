@@ -1,0 +1,46 @@
+# Singly linked list using i64 pointer arithmetic
+F node_new(val: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, val)
+    store_i64(ptr + 8, 0)
+    ptr
+}
+
+F list_push(head: i64, val: i64) {
+    new_node := node_new(val)
+    old_next := load_i64(head + 8)
+    store_i64(new_node + 8, old_next)
+    store_i64(head + 8, new_node)
+}
+
+F list_len(head: i64) -> i64 {
+    count := mut 0
+    cur := mut load_i64(head + 8)
+    L cur != 0 {
+        count = count + 1
+        cur = load_i64(cur + 8)
+    }
+    count
+}
+
+F list_sum(head: i64) -> i64 {
+    total := mut 0
+    cur := mut load_i64(head + 8)
+    L cur != 0 {
+        total = total + load_i64(cur)
+        cur = load_i64(cur + 8)
+    }
+    total
+}
+
+F main() -> i64 {
+    head := node_new(0)
+    i := mut 1
+    L i <= 10 {
+        list_push(head, i)
+        i = i + 1
+    }
+    printf("%lld\n", list_len(head))
+    printf("%lld\n", list_sum(head))
+    0
+}

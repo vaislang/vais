@@ -34,6 +34,7 @@
       <div class="nav-links" id="nav-links">
         <a href="#features">Features</a>
         <a href="#compare">Compare</a>
+        <a href="#performance">Performance</a>
         <a href="#playground">Playground</a>
         <a href="/docs/" class="nav-link-docs">Docs</a>
         <a href="/blog/" class="nav-link-blog">Blog</a>
@@ -87,7 +88,7 @@
 
 <span class="kw">F</span> <span class="fn">main</span>() {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
-  <span class="fn">println</span>(<span class="str">"fib(10) = {}"</span>, result)
+  <span class="fn">puts</span>(<span class="str">"fib(10) = {}"</span>, result)
 }</code><code class="code-panel" data-panel="1"><span class="kw">S</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
 
 <span class="kw">F</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
@@ -96,7 +97,7 @@
 
 <span class="kw">F</span> <span class="fn">main</span>() {
   p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
-  <span class="fn">println</span>(<span class="str">"len = {}"</span>, <span class="fn">len</span>(p))
+  <span class="fn">puts</span>(<span class="str">"len = {}"</span>, <span class="fn">len</span>(p))
 }</code><code class="code-panel" data-panel="2"><span class="kw">E</span> <span class="type">Shape</span> {
   Circle(<span class="type">f64</span>),
   Rect(<span class="type">f64</span>, <span class="type">f64</span>),
@@ -118,56 +119,53 @@
     <div class="container">
       <h2 class="section-title">Token Efficiency Matters</h2>
       <p class="section-subtitle">
-        AI models pay per token. Vais uses up to <strong>40% fewer tokens</strong> than Rust
-        for equivalent programs — saving cost and context window.
+        AI models pay per token. Vais uses <strong>~10% fewer tokens</strong> than Rust
+        for equivalent programs — single-char keywords and implicit returns add up across large codebases.
       </p>
       <div class="compare-grid">
         <!-- Vais -->
         <div class="compare-card compare-card-vais">
           <div class="compare-header">
             <span class="compare-lang">Vais</span>
-            <span class="compare-tokens">~32 tokens</span>
+            <span class="compare-tokens">88 tokens</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">S</span> <span class="type">Point</span> {
-  x: <span class="type">f64</span>,
-  y: <span class="type">f64</span>,
+          <pre class="compare-code"><code><span class="kw">E</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+
+<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">M</span> s {
+    Circle(r) => <span class="num">3.14</span> * r * r,
+    Rect(w, h) => w * h,
+  }
 }
 
-<span class="kw">F</span> <span class="fn">dist</span>(p: <span class="type">Point</span>) -> <span class="type">f64</span> {
-  <span class="fn">sqrt</span>(p.x * p.x + p.y * p.y)
+<span class="kw">F</span> <span class="fn">classify</span>(s: <span class="type">Shape</span>) -> <span class="type">str</span> {
+  a <span class="op">:=</span> <span class="fn">area</span>(s)
+  <span class="kw">I</span> a > <span class="num">100.0</span> { <span class="str">"large"</span> }
+  <span class="kw">E</span> <span class="kw">I</span> a > <span class="num">10.0</span> { <span class="str">"medium"</span> }
+  <span class="kw">E</span> { <span class="str">"small"</span> }
 }</code></pre>
         </div>
         <!-- Rust -->
         <div class="compare-card">
           <div class="compare-header">
             <span class="compare-lang">Rust</span>
-            <span class="compare-tokens">~52 tokens</span>
+            <span class="compare-tokens">97 tokens</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">struct</span> <span class="type">Point</span> {
-    x: <span class="type">f64</span>,
-    y: <span class="type">f64</span>,
+          <pre class="compare-code"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+
+<span class="kw">fn</span> <span class="fn">area</span>(s: &amp;<span class="type">Shape</span>) -&gt; <span class="type">f64</span> {
+    <span class="kw">match</span> s {
+        Shape::Circle(r) =&gt; <span class="num">3.14</span> * r * r,
+        Shape::Rect(w, h) =&gt; w * h,
+    }
 }
 
-<span class="kw">fn</span> <span class="fn">dist</span>(p: &amp;<span class="type">Point</span>) -&gt; <span class="type">f64</span> {
-    (p.x * p.x + p.y * p.y).<span class="fn">sqrt</span>()
+<span class="kw">fn</span> <span class="fn">classify</span>(s: &amp;<span class="type">Shape</span>) -&gt; &amp;<span class="type">str</span> {
+    <span class="kw">let</span> a = <span class="fn">area</span>(s);
+    <span class="kw">if</span> a &gt; <span class="num">100.0</span> { <span class="str">"large"</span> }
+    <span class="kw">else</span> <span class="kw">if</span> a &gt; <span class="num">10.0</span> { <span class="str">"medium"</span> }
+    <span class="kw">else</span> { <span class="str">"small"</span> }
 }</code></pre>
-        </div>
-        <!-- Python -->
-        <div class="compare-card">
-          <div class="compare-header">
-            <span class="compare-lang">Python</span>
-            <span class="compare-tokens">~48 tokens</span>
-          </div>
-          <pre class="compare-code"><code><span class="kw">from</span> math <span class="kw">import</span> sqrt
-<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
-
-<span class="decorator">@dataclass</span>
-<span class="kw">class</span> <span class="type">Point</span>:
-    x: <span class="type">float</span>
-    y: <span class="type">float</span>
-
-<span class="kw">def</span> <span class="fn">dist</span>(p: <span class="type">Point</span>) -> <span class="type">float</span>:
-    <span class="kw">return</span> <span class="fn">sqrt</span>(p.x * p.x + p.y * p.y)</code></pre>
         </div>
       </div>
       <div class="compare-bar-section">
@@ -176,23 +174,74 @@
           <div class="bar-item">
             <span class="bar-label">Vais</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 62%"></div>
+              <div class="bar-fill bar-vais" style="width: 91%"></div>
             </div>
-            <span class="bar-value">32</span>
-          </div>
-          <div class="bar-item">
-            <span class="bar-label">Python</span>
-            <div class="bar-track">
-              <div class="bar-fill bar-python" style="width: 92%"></div>
-            </div>
-            <span class="bar-value">48</span>
+            <span class="bar-value">88</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
             <div class="bar-track">
               <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
-            <span class="bar-value">52</span>
+            <span class="bar-value">97</span>
+          </div>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">
+          Savings grow with codebase size — <code>E</code> vs <code>enum</code>, <code>M</code> vs <code>match</code>, <code>I</code>/<code>E</code> vs <code>if</code>/<code>else</code>, no <code>let</code>/<code>;</code>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Performance Section -->
+  <section class="compare" id="performance">
+    <div class="container">
+      <h2 class="section-title">Native Performance</h2>
+      <p class="section-subtitle">
+        Vais compiles to optimized LLVM IR — on par with C and Rust at runtime, with fast compilation.
+      </p>
+      <div class="compare-bar-section">
+        <h3 class="compare-bar-title">Runtime — Fibonacci(35)</h3>
+        <div class="compare-bars">
+          <div class="bar-item">
+            <span class="bar-label">C</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 92%"></div>
+            </div>
+            <span class="bar-value">44ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Rust</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 94%"></div>
+            </div>
+            <span class="bar-value">45ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Vais</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-vais" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">48ms</span>
+          </div>
+        </div>
+      </div>
+      <div class="compare-bar-section" style="margin-top: 2rem;">
+        <h3 class="compare-bar-title">Compilation Speed</h3>
+        <div class="compare-bars">
+          <div class="bar-item">
+            <span class="bar-label">Throughput</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-vais" style="width: 80%"></div>
+            </div>
+            <span class="bar-value">800K lines/sec</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Incremental</span>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: 60%; background: var(--accent-green);"></div>
+            </div>
+            <span class="bar-value">96ms / 30K LOC</span>
           </div>
         </div>
       </div>
@@ -236,6 +285,21 @@
           <div class="feature-icon">🔧</div>
           <h3>Full Toolchain</h3>
           <p>LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌐</div>
+          <h3>Multi-Target Output</h3>
+          <p>Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Incremental Compilation</h3>
+          <p>Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏗️</div>
+          <h3>Self-Hosting Compiler</h3>
+          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap (Stage1→Stage2→Stage3 fixed point) with 17,800+ lines of Vais.</p>
         </div>
       </div>
     </div>
