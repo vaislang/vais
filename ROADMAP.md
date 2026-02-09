@@ -125,6 +125,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **62~64** | 문서 · 실행 검증 · 패키지 생태계 | LLM 토큰 효율성 벤치마크, execution_tests 95개, error_snapshot 10개, init/install/publish E2E, SemVer/workspace/lockfile — 37 신규 패키지 테스트 |
 | **65~66** | CI 릴리스 · 코드 품질 | Windows CI, release/homebrew/crates.io/docker 워크플로우, RELEASING.md, builtins.rs 분할, codegen 모듈화, LSP 핸들러 분리 |
 | **67~68** | 테스트 커버리지 · 메모리 모델 | 4 crate 142개 통합 테스트, load_typed/store_typed, MIR Borrow Checker E100~E105, --strict-borrow — **475 E2E** |
+| **Phase 1** | Lifetime & Ownership 실전 강화 | CFG worklist dataflow, NLL (liveness/expire/two-phase), MIR lifetime tracking (RefLifetime/RefMutLifetime), outlives 검증 E106, elision 규칙 — MIR 테스트 144개 |
 
 ---
 
@@ -142,7 +143,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 1: Lifetime & Ownership 실전 강화
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: 현재 forward-pass 전용 borrow checker를 CFG 기반 정밀 분석으로 업그레이드하고, 이미 파싱되는 lifetime annotation을 실제 분석에 활용
 > **배경**: Phase 68에서 MIR borrow checker 기본 구현 완료 (E100~E105). 하지만 forward-pass만 지원하여 분기/루프 정밀도 부족. Lexer/Parser/AST에 lifetime 문법이 이미 존재하나 미활용
 
@@ -150,36 +151,50 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 **목표**: forward-pass를 worklist 기반 반복 dataflow 분석으로 교체
 
-- [ ] 1. Block-level 상태 관리 — BlockState (entry/exit LocalState 맵) 도입 (Sonnet)
-- [ ] 2. Worklist 알고리즘 — cfg_predecessors/successors 활용, 고정점 도달까지 반복 (Sonnet)
-- [ ] 3. 상태 병합 (join) — 분기 합류점에서 LocalState 보수적 병합 (Moved ∪ Owned → Moved) (Sonnet)
-- [ ] 4. 루프 고정점 — 루프 백엣지에서 상태 수렴까지 반복, 무한 루프 방지 (Sonnet)
-- [ ] 5. 테스트 — 분기/루프 시나리오 10개 (if-else use-after-move, loop borrow 등) (Sonnet)
+- [x] 1. Block-level 상태 관리 — BlockState (entry/exit LocalState 맵) 도입 (Sonnet) ✅
+  변경: borrow_check.rs (BlockState 구조체, BorrowChecker에 block_states 필드 추가)
+- [x] 2. Worklist 알고리즘 — cfg_predecessors/successors 활용, 고정점 도달까지 반복 (Sonnet) ✅
+  변경: borrow_check.rs (check() 메서드를 worklist 기반으로 교체, analyze_block() 추가)
+- [x] 3. 상태 병합 (join) — 분기 합류점에서 LocalState 보수적 병합 (Moved ∪ Owned → Moved) (Sonnet) ✅
+  변경: borrow_check.rs (join_local_state(), join_states() 구현)
+- [x] 4. 루프 고정점 — 루프 백엣지에서 상태 수렴까지 반복, 무한 루프 방지 (Sonnet) ✅
+  변경: borrow_check.rs (max_iterations = blocks * 4, worklist 수렴)
+- [x] 5. 테스트 — 분기/루프 시나리오 12개 (if-else use-after-move, loop borrow 등) (Sonnet) ✅
+  변경: borrow_check.rs (2 CFG 기본 + 10 고급 CFG 테스트)
 
 ### Stage 2: Non-Lexical Lifetimes (NLL)
 
 **목표**: 변수의 수명을 어휘적(lexical) 스코프가 아닌 실제 사용 범위로 축소
 
-- [ ] 1. Liveness 분석 — 각 Local의 마지막 사용 지점 계산 (Sonnet)
-- [ ] 2. Borrow 범위 축소 — borrow 활성 구간을 마지막 사용까지로 제한 (Sonnet)
-- [ ] 3. Two-phase borrows — &mut 생성과 첫 사용 사이 기간에 &를 허용 (Sonnet)
-- [ ] 4. 테스트 — NLL 허용 패턴 8개 (재할당 후 borrow, 조건부 borrow 등) (Sonnet)
+- [x] 1. Liveness 분석 — 각 Local의 마지막 사용 지점 계산 (Sonnet) ✅
+  변경: borrow_check.rs (LivenessInfo, compute_liveness() 구현)
+- [x] 2. Borrow 범위 축소 — borrow 활성 구간을 마지막 사용까지로 제한 (Sonnet) ✅
+  변경: borrow_check.rs (expire_borrows(), BorrowInfo에 borrowed_local/borrow_target 추가)
+- [x] 3. Two-phase borrows — &mut 생성과 첫 사용 사이 기간에 &를 허용 (Sonnet) ✅
+  변경: borrow_check.rs (BorrowKind::ReservedMutable, activate_reserved_borrows())
+- [x] 4. 테스트 — NLL 허용 패턴 8개 (재할당 후 borrow, 조건부 borrow 등) (Sonnet) ✅
+  변경: borrow_check.rs (8개 NLL 시나리오 테스트)
 
 ### Stage 3: Lifetime Annotation 활용
 
 **목표**: 이미 파싱되는 `'a` 문법을 타입 검사와 borrow checker에서 실제 검증
 
-- [ ] 1. Lifetime 해결 — 함수 시그니처의 lifetime param을 MIR에 전달 (Sonnet)
-- [ ] 2. Lifetime 관계 검증 — `'a: 'b` (outlives) 관계를 borrow checker에서 확인 (Sonnet)
-- [ ] 3. Lifetime elision 규칙 — 단일 입력 참조 → 출력 lifetime 자동 추론 (Sonnet)
-- [ ] 4. 에러 메시지 — lifetime 관련 에러에 `'a`/`'b` 이름 표시 (Sonnet)
-- [ ] 5. E2E 테스트 — lifetime 양성/음성 각 5개 (Sonnet)
+- [x] 1. Lifetime 해결 — 함수 시그니처의 lifetime param을 MIR에 전달 (Sonnet) ✅
+  변경: types.rs (MirType::RefLifetime/RefMutLifetime, Body lifetime_params/bounds), lower.rs, builder.rs, emit_llvm.rs
+- [x] 2. Lifetime 관계 검증 — `'a: 'b` (outlives) 관계를 borrow checker에서 확인 (Sonnet) ✅
+  변경: borrow_check.rs (check_lifetime_constraints(), build_outlives_map(), BorrowError::LifetimeViolation E106)
+- [x] 3. Lifetime elision 규칙 — 단일 입력 참조 → 출력 lifetime 자동 추론 (Sonnet) ✅
+  변경: borrow_check.rs (apply_lifetime_elision(), extract_lifetime())
+- [x] 4. 에러 메시지 — lifetime 관련 에러에 `'a`/`'b` 이름 표시 (Sonnet) ✅
+  변경: borrow_check.rs (BorrowError::LifetimeViolation Display 구현)
+- [x] 5. E2E 테스트 — lifetime 양성/음성 각 5개 (Sonnet) ✅
+  변경: borrow_check.rs (10개 lifetime 테스트)
 
 ### Stage 4: 통합 검증
 
-- [ ] 1. 기존 E2E 475개 회귀 테스트 통과 (Opus)
-- [ ] 2. --strict-borrow 모드에서 CFG+NLL+Lifetime 통합 동작 확인 (Opus)
-- [ ] 3. Clippy 0건 유지 (Opus)
+- [x] 1. 기존 E2E 475개 회귀 테스트 통과 (Opus) ✅
+- [x] 2. --strict-borrow 모드에서 CFG+NLL+Lifetime 통합 동작 확인 (Opus) ✅
+- [x] 3. Clippy 0건 유지 (Opus) ✅
 
 ---
 

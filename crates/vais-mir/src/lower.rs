@@ -109,6 +109,14 @@ fn ast_type_to_mir(ty: &AstType) -> MirType {
         AstType::Ref(inner) | AstType::RefMut(inner) => {
             MirType::Ref(Box::new(ast_type_to_mir(&inner.node)))
         }
+        AstType::RefLifetime { lifetime, inner } => MirType::RefLifetime {
+            lifetime: lifetime.clone(),
+            inner: Box::new(ast_type_to_mir(&inner.node)),
+        },
+        AstType::RefMutLifetime { lifetime, inner } => MirType::RefMutLifetime {
+            lifetime: lifetime.clone(),
+            inner: Box::new(ast_type_to_mir(&inner.node)),
+        },
         AstType::Pointer(inner) => MirType::Pointer(Box::new(ast_type_to_mir(&inner.node))),
         AstType::Unit => MirType::Unit,
         _ => MirType::I64, // Default fallback

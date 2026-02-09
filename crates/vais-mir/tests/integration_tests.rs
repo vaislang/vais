@@ -793,17 +793,17 @@ fn test_borrow_check_double_move() {
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::Str,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
                 ty: MirType::Str,
-                is_mutable: false,
+                is_mutable: false, lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
                 ty: MirType::Str,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -822,6 +822,8 @@ fn test_borrow_check_double_move() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -846,12 +848,12 @@ fn test_borrow_check_double_drop() {
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::Unit,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
                 ty: MirType::Str,
-                is_mutable: false,
+                is_mutable: false, lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -862,6 +864,8 @@ fn test_borrow_check_double_drop() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -885,12 +889,12 @@ fn test_borrow_check_use_after_drop() {
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::Str,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
                 ty: MirType::Str,
-                is_mutable: false,
+                is_mutable: false, lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -905,6 +909,8 @@ fn test_borrow_check_use_after_drop() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     let errors = check_body(&body);
@@ -932,12 +938,12 @@ fn test_borrow_check_mixed_valid_invalid() {
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::I64,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
             LocalDecl {
                 name: Some("x".to_string()),
                 ty: MirType::I64,
-                is_mutable: false,
+                is_mutable: false, lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -948,6 +954,8 @@ fn test_borrow_check_mixed_valid_invalid() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     // Body 2: Invalid - str double-move
@@ -959,17 +967,17 @@ fn test_borrow_check_mixed_valid_invalid() {
             LocalDecl {
                 name: Some("_ret".to_string()),
                 ty: MirType::Str,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
                 ty: MirType::Str,
-                is_mutable: false,
+                is_mutable: false, lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
                 ty: MirType::Str,
-                is_mutable: true,
+                is_mutable: true, lifetime: None,
             },
         ],
         basic_blocks: vec![BasicBlock {
@@ -986,6 +994,8 @@ fn test_borrow_check_mixed_valid_invalid() {
             terminator: Some(Terminator::Return),
         }],
         block_names: std::collections::HashMap::new(),
+        lifetime_params: vec![],
+        lifetime_bounds: vec![],
     };
 
     module.bodies.push(valid_body);

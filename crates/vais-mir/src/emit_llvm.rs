@@ -454,6 +454,9 @@ impl LlvmEmitter {
             MirType::Unit => "void".to_string(),
             MirType::Pointer(inner) => format!("{}*", self.mir_type_to_llvm(inner)),
             MirType::Ref(inner) => format!("{}*", self.mir_type_to_llvm(inner)),
+            MirType::RefLifetime { inner, .. } | MirType::RefMutLifetime { inner, .. } => {
+                format!("{}*", self.mir_type_to_llvm(inner))
+            }
             MirType::Array(elem) => format!("[0 x {}]", self.mir_type_to_llvm(elem)),
             MirType::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|t| self.mir_type_to_llvm(t)).collect();
