@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust. Self-hosting compiler (bootstrap) achieved with 17,807 lines.
+Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust. Self-hosting compiler (bootstrap) achieved with 46,000+ lines.
 
 ## GitHub & Links
 
@@ -60,8 +60,8 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (78 .vais files)
-examples/          # Example programs (135+ files)
+std/               # Standard library (73 .vais files)
+examples/          # Example programs (138+ files)
 selfhost/          # Self-hosting compiler (30,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
@@ -133,7 +133,7 @@ intellij-vais/     # IntelliJ plugin
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (467+)
+- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (475+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests

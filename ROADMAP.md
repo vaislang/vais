@@ -113,7 +113,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **65** | **크로스 플랫폼 CI & 릴리스** | ✅ 완료 | Windows CI, 릴리스 자동화 (release/homebrew/crates.io/docker), RELEASING.md |
 | **66** | **코드 품질 & 리팩토링** | ✅ 완료 | builtins.rs 분할, codegen 모듈화, unwrap/clone 안전화, LSP 핸들러 분리 |
 | **67** | **테스트 커버리지 확충** | ✅ 완료 | 4개 crate 142개 통합 테스트 (mir 36, macro 39, codegen-js 33, jit 34) |
-| **68** | **타입 안전 메모리 모델 & Borrow Checker** | 📋 예정 | i64 의존도 감소 + MIR Borrow Checker 구현 |
+| **68** | **타입 안전 메모리 모델 & Borrow Checker** | ✅ 완료 | load_typed/store_typed, MIR Borrow Checker (E100~E105), --strict-borrow, 475 E2E |
 
 ---
 
@@ -222,9 +222,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 467+, 통합 256+) |
-| 표준 라이브러리 | 76개 .vais + 19개 C 런타임 |
-| 셀프호스트 코드 | 30,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
+| 전체 테스트 | 2,500+ (E2E 475+, 통합 354+) |
+| 표준 라이브러리 | 73개 .vais + 19개 C 런타임 |
+| 셀프호스트 코드 | 46,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
 | 토큰 절감 | 시스템 코드(구조체+라우팅)에서 Rust 대비 57%, C 대비 60% 절감 |
 | 컴파일 속도 비교 | C 대비 8.5x, Go 대비 8x, Rust 대비 19x faster (단일 파일 IR 생성) |
