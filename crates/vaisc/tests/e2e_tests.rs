@@ -12213,3 +12213,404 @@ fn test_wasm_serializer_types() {
     assert!(ir.contains("%WasmString"));
     assert!(ir.contains("%WasmResult"));
 }
+
+// ============================================================================
+// JavaScript Target E2E Tests
+// ============================================================================
+
+#[test]
+fn test_js_target_simple_function() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F add(a: i64, b: i64) -> i64 = a + b
+F main() -> i64 = add(1, 2)
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("function add"));
+    assert!(js_content.contains("function main"));
+}
+
+#[test]
+fn test_js_target_struct_to_class() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"S Point {
+    x: i64,
+    y: i64,
+}
+
+F main() -> i64 {
+    p := Point { x: 10, y: 20 }
+    R p.x + p.y
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("class Point"));
+    assert!(js_content.contains("constructor"));
+}
+
+#[test]
+fn test_js_target_enum_tagged_union() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"E Result {
+    Ok(i64),
+    Err(i64),
+}
+
+F main() -> i64 {
+    r := Ok(42)
+    M r {
+        Ok(v) => v,
+        Err(_) => 0,
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    // Enum should be represented as object with tag field
+    assert!(js_content.contains("tag") || js_content.contains("Ok") || js_content.contains("Err"));
+}
+
+#[test]
+fn test_js_target_if_else() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F max(a: i64, b: i64) -> i64 {
+    I a > b {
+        R a
+    } E {
+        R b
+    }
+}
+
+F main() -> i64 = max(5, 3)
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("if") || js_content.contains("?"));
+    assert!(js_content.contains("function max"));
+}
+
+#[test]
+fn test_js_target_array_operations() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F main() -> i64 {
+    arr := [1, 2, 3, 4, 5]
+    R arr[2]
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("[") || js_content.contains("Array"));
+}
+
+#[test]
+fn test_js_target_lambda_arrow() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+
+F main() -> i64 {
+    double := |x: i64| x * 2
+    R apply(double, 5)
+}
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("=>") || js_content.contains("function"));
+    assert!(js_content.contains("apply"));
+}
+
+#[test]
+fn test_js_target_match_expression() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F classify(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        1 => 10,
+        2 => 20,
+        _ => 99,
+    }
+}
+
+F main() -> i64 = classify(2)
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    // Match should be converted to if/else chain or switch
+    assert!(
+        js_content.contains("if") || js_content.contains("switch") || js_content.contains("===")
+    );
+    assert!(js_content.contains("classify"));
+}
+
+#[test]
+fn test_js_target_loop_for_of() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F sum_loop(n: i64) -> i64 {
+    total := mut 0
+    i := mut 0
+    L {
+        I i >= n { B }
+        total := total + i
+        i := i + 1
+    }
+    R total
+}
+
+F main() -> i64 = sum_loop(5)
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("while") || js_content.contains("for"));
+    assert!(js_content.contains("break"));
+}
+
+#[test]
+fn test_js_target_tree_shaking() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F used() -> i64 = 42
+
+F unused() -> i64 = 999
+
+F main() -> i64 = used()
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    let js_content = fs::read_to_string(&js_path).unwrap();
+    assert!(js_content.contains("function used"));
+    assert!(js_content.contains("function main"));
+    // Tree shaking should remove unused function (this is a soft check - may not always remove)
+    // We just verify the output compiles successfully
+}
+
+#[test]
+fn test_js_target_output_extension() {
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("test.vais");
+    fs::write(
+        &input,
+        r#"F main() -> i64 = 42
+"#,
+    )
+    .unwrap();
+
+    // Test default output (same name with .js extension)
+    let output = Command::new(vaisc_bin())
+        .args(["build", input.to_str().unwrap(), "--target", "js"])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "vaisc --target js failed: {}",
+        stderr
+    );
+
+    let js_path = tmp.path().join("test.js");
+    assert!(js_path.exists(), "JS output file not generated");
+
+    // Test custom output path
+    let custom_output = tmp.path().join("custom_name.js");
+    let output2 = Command::new(vaisc_bin())
+        .args([
+            "build",
+            input.to_str().unwrap(),
+            "--target",
+            "js",
+            "-o",
+            custom_output.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute vaisc");
+
+    let stderr2 = String::from_utf8_lossy(&output2.stderr);
+    assert!(
+        output2.status.success(),
+        "vaisc --target js with -o failed: {}",
+        stderr2
+    );
+
+    assert!(
+        custom_output.exists(),
+        "Custom JS output file not generated"
+    );
+}

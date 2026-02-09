@@ -612,6 +612,18 @@ fn main() {
                 std::env::set_var("VAIS_DEP_PATHS", combined);
             }
 
+            // Check if JS target is specified
+            if target.as_deref().is_some_and(commands::build_js::is_js_target) {
+                let js_config = commands::build_js::JsBuildConfig::default();
+                commands::build_js::cmd_build_js(
+                    &resolved_input,
+                    output,
+                    cli.verbose,
+                    &plugins,
+                    &js_config,
+                )
+            } else
+
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 commands::build::cmd_build_gpu(

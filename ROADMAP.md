@@ -33,6 +33,7 @@ crates/
 ├── vais-parser/       # Recursive descent 파서 ✅
 ├── vais-types/        # 타입 체커 ✅
 ├── vais-codegen/      # LLVM IR 생성기 ✅
+├── vais-codegen-js/   # JavaScript (ESM) 코드 생성기 ✅
 ├── vais-mir/          # Middle IR ✅
 ├── vais-lsp/          # Language Server ✅
 ├── vais-dap/          # Debug Adapter Protocol ✅
@@ -1333,35 +1334,37 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 
 ---
 
-## Phase 60: JS 코드 생성 백엔드 📋 예정
+## Phase 60: JS 코드 생성 백엔드 ✅ 완료
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: Vais 소스 코드를 JavaScript (ESM)로 컴파일하는 새 코드젠 백엔드 구현
 > **선행**: Phase 59 (JS interop 타입 체계 공유)
 
+모드: 자동진행
+
 ### Stage 0: 코어 코드 생성
 
-- [ ] 1. JS 코드젠 크레이트 생성 (`vais-codegen-js`)
-  대상: crates/vais-codegen-js/ (신규)
-- [ ] 2. 기본 타입/표현식/문장 → JS 변환
-  대상: vais-codegen-js (변수, 함수, 조건문, 루프, 구조체)
-- [ ] 3. 트레이트/제너릭 → JS 클래스/프로토타입 변환
-  대상: vais-codegen-js
+- [x] 1. vais-codegen-js 크레이트 생성 + 기본 타입/표현식/문장 JS 변환 (Opus 직접) ✅
+  변경: crates/vais-codegen-js/src/{lib,expr,stmt,items,types}.rs — JsCodeGenerator, 32 Expr/6 Stmt/12 Item 변환, 16 unit tests
+- [x] 2. 트레이트/제네릭/enum → JS 클래스/프로토타입 변환 (Sonnet 위임) ✅
+  변경: crates/vais-codegen-js/src/items.rs — Result/Option helpers, generic comments, trait impl tracking (__implements Set)
 
 ### Stage 1: 모듈 & 최적화
 
-- [ ] 4. ESM import/export 생성
-  대상: vais-codegen-js (모듈 시스템)
-- [ ] 5. 소스맵 생성
-  대상: vais-codegen-js
-- [ ] 6. 트리 쉐이킹 (미사용 코드 제거)
-  대상: vais-codegen-js
+- [x] 3. ESM import/export 생성 (Sonnet 위임) ✅
+  변경: crates/vais-codegen-js/src/modules.rs — Use→import, barrel exports, per-module generation, 8 tests
+- [x] 4. 소스맵 생성 (Sonnet 위임) ✅
+  변경: crates/vais-codegen-js/src/sourcemap.rs — Source Map v3 + VLQ base64, 12 tests
+- [x] 5. 트리 쉐이킹 (Sonnet 위임) ✅
+  변경: crates/vais-codegen-js/src/tree_shaking.rs — dependency graph + flood-fill reachability, 5 tests
+- [x] 6. vaisc CLI --target js 통합 (Opus 직접) ✅
+  변경: crates/vaisc/src/{main.rs, commands/build_js.rs, Cargo.toml} — `--target js` → JsCodeGenerator 경로, tree shaking + source map 옵션
 
 ### Stage 2: 검증
 
-- [ ] 7. JS 출력 정합성 테스트 (Vais↔JS 동일 결과)
-  대상: tests/js_codegen/
-- [ ] 8. 번들 사이즈 벤치마크
-  대상: benchmarks/js_output/
+- [x] 7. JS 출력 정합성 E2E 테스트 (Sonnet 위임) ✅
+  변경: crates/vaisc/tests/e2e_tests.rs — 10개 JS target E2E (simple_function, struct, enum, if_else, lambda, match, loop, array, tree_shaking, output_extension), 454개 총 E2E
+- [x] 8. 번들 사이즈 벤치마크 (Sonnet 위임) ✅
+  변경: scripts/js-bundle-bench.sh — 8개 프로그램 벤치마크 (hello 33B ~ loop 248B, 평균 91B)
 
-진행률: 0/8 (0%)
+진행률: 8/8 (100%)

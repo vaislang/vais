@@ -25,6 +25,7 @@ vais-parser = { path = "../vais-parser" }
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
+vais-codegen-js = { path = "../vais-codegen-js" }
 vais-i18n = { path = "../vais-i18n" }
 vais-plugin = { path = "../vais-plugin" }
 vais-jit = { path = "../vais-jit", optional = true }
