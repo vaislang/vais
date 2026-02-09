@@ -17,6 +17,7 @@
 //! - Drop elaboration
 
 mod builder;
+pub mod borrow_check;
 pub mod emit_llvm;
 pub mod lower;
 pub mod optimize;

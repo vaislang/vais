@@ -593,10 +593,162 @@ impl CodeGenerator {
                     }
 
                     // sizeof(expr) — compile-time constant size query
+                    // Also supports sizeof(T) where T is a generic type parameter
                     if name == "sizeof" && !args.is_empty() {
-                        let arg_type = self.infer_expr_type(&args[0]);
+                        let arg_type = if let Expr::Ident(ident) = &args[0].node {
+                            if let Some(concrete) = self.get_generic_substitution(ident) {
+                                concrete
+                            } else {
+                                self.infer_expr_type(&args[0])
+                            }
+                        } else {
+                            self.infer_expr_type(&args[0])
+                        };
                         let size = self.compute_sizeof(&arg_type);
                         return Ok((size.to_string(), String::new()));
+                    }
+
+                    // alignof(expr) — compile-time constant alignment query
+                    // Also supports alignof(T) where T is a generic type parameter
+                    if name == "alignof" && !args.is_empty() {
+                        let arg_type = if let Expr::Ident(ident) = &args[0].node {
+                            if let Some(concrete) = self.get_generic_substitution(ident) {
+                                concrete
+                            } else {
+                                self.infer_expr_type(&args[0])
+                            }
+                        } else {
+                            self.infer_expr_type(&args[0])
+                        };
+                        let align = self.compute_alignof(&arg_type);
+                        return Ok((align.to_string(), String::new()));
+                    }
+
+                    // type_size() — compile-time size of current generic type T
+                    // Returns sizeof(T) where T is resolved from generic_substitutions
+                    // Used in generic containers like Vec<T> to get element size
+                    if name == "type_size" && args.is_empty() {
+                        let resolved_t = self
+                            .get_generic_substitution("T")
+                            .unwrap_or(ResolvedType::I64);
+                        let size = self.compute_sizeof(&resolved_t);
+                        return Ok((size.to_string(), String::new()));
+                    }
+
+                    // load_typed(ptr) -> T — type-aware memory load
+                    // Dispatches to correct LLVM load based on generic type T
+                    if name == "load_typed" && !args.is_empty() {
+                        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+                        let mut ir = ptr_ir;
+                        // Resolve T from generic substitutions
+                        let resolved_t = self
+                            .get_generic_substitution("T")
+                            .unwrap_or(ResolvedType::I64);
+                        let size = self.compute_sizeof(&resolved_t);
+                        let result = self.next_temp(counter);
+                        match size {
+                            1 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load i8, i8* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!("  {} = zext i8 {} to i64\n", result, tmp2));
+                            }
+                            2 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i16*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load i16, i16* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!("  {} = zext i16 {} to i64\n", result, tmp2));
+                            }
+                            4 if matches!(resolved_t, ResolvedType::F32) => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                let tmp3 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to float*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load float, float* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!("  {} = fpext float {} to double\n", tmp3, tmp2));
+                                ir.push_str(&format!("  {} = bitcast double {} to i64\n", result, tmp3));
+                            }
+                            4 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i32*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load i32, i32* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!("  {} = zext i32 {} to i64\n", result, tmp2));
+                            }
+                            _ if matches!(resolved_t, ResolvedType::F64) => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to double*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load double, double* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!("  {} = bitcast double {} to i64\n", result, tmp2));
+                            }
+                            _ => {
+                                let tmp1 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = load i64, i64* {}\n", result, tmp1));
+                            }
+                        }
+                        return Ok((result, ir));
+                    }
+
+                    // store_typed(ptr, val) — type-aware memory store
+                    // Dispatches to correct LLVM store based on generic type T
+                    if name == "store_typed" && args.len() >= 2 {
+                        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+                        let (val_val, val_ir) = self.generate_expr(&args[1], counter)?;
+                        let mut ir = ptr_ir;
+                        ir.push_str(&val_ir);
+                        let resolved_t = self
+                            .get_generic_substitution("T")
+                            .unwrap_or(ResolvedType::I64);
+                        let size = self.compute_sizeof(&resolved_t);
+                        match size {
+                            1 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = trunc i64 {} to i8\n", tmp2, val_val));
+                                ir.push_str(&format!("  store i8 {}, i8* {}\n", tmp2, tmp1));
+                            }
+                            2 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i16*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = trunc i64 {} to i16\n", tmp2, val_val));
+                                ir.push_str(&format!("  store i16 {}, i16* {}\n", tmp2, tmp1));
+                            }
+                            4 if matches!(resolved_t, ResolvedType::F32) => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                let tmp3 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to float*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = bitcast i64 {} to double\n", tmp2, val_val));
+                                ir.push_str(&format!("  {} = fptrunc double {} to float\n", tmp3, tmp2));
+                                ir.push_str(&format!("  store float {}, float* {}\n", tmp3, tmp1));
+                            }
+                            4 => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i32*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = trunc i64 {} to i32\n", tmp2, val_val));
+                                ir.push_str(&format!("  store i32 {}, i32* {}\n", tmp2, tmp1));
+                            }
+                            _ if matches!(resolved_t, ResolvedType::F64) => {
+                                let tmp1 = self.next_temp(counter);
+                                let tmp2 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to double*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  {} = bitcast i64 {} to double\n", tmp2, val_val));
+                                ir.push_str(&format!("  store double {}, double* {}\n", tmp2, tmp1));
+                            }
+                            _ => {
+                                let tmp1 = self.next_temp(counter);
+                                ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", tmp1, ptr_val));
+                                ir.push_str(&format!("  store i64 {}, i64* {}\n", val_val, tmp1));
+                            }
+                        }
+                        return Ok(("0".to_string(), ir));
                     }
 
                     if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {

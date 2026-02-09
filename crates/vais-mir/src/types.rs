@@ -54,6 +54,33 @@ pub enum MirType {
     Never,
 }
 
+impl MirType {
+    /// Returns true if this type implements Copy semantics.
+    pub fn is_copy(&self) -> bool {
+        match self {
+            MirType::I8
+            | MirType::I16
+            | MirType::I32
+            | MirType::I64
+            | MirType::I128
+            | MirType::U8
+            | MirType::U16
+            | MirType::U32
+            | MirType::U64
+            | MirType::U128
+            | MirType::F32
+            | MirType::F64
+            | MirType::Bool
+            | MirType::Unit
+            | MirType::Pointer(_)
+            | MirType::Ref(_)
+            | MirType::Never => true,
+            MirType::Tuple(elems) => elems.iter().all(|e| e.is_copy()),
+            _ => false, // Str, Array, Struct, Enum, Function
+        }
+    }
+}
+
 /// A constant value in MIR.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {

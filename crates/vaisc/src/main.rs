@@ -32,8 +32,15 @@ use vais_types::TypeChecker;
 /// None = disabled, Some(true) = strict errors (default), Some(false) = warn-only
 static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
 
+/// Global MIR borrow checking flag
+static STRICT_BORROW: OnceLock<bool> = OnceLock::new();
+
 pub(crate) fn get_ownership_mode() -> Option<bool> {
     OWNERSHIP_MODE.get().copied().unwrap_or(Some(true))
+}
+
+pub(crate) fn get_strict_borrow() -> bool {
+    STRICT_BORROW.get().copied().unwrap_or(false)
 }
 
 /// Generate a crash report with system info, backtrace, and panic details
@@ -166,6 +173,10 @@ struct Cli {
     /// Use warn-only borrow checking (legacy default, not recommended for new projects)
     #[arg(long, global = true)]
     warn_only_ownership: bool,
+
+    /// Enable MIR-based borrow checking (use-after-move, double-free, use-after-free detection)
+    #[arg(long, global = true)]
+    strict_borrow: bool,
 
     /// Use inkwell (LLVM API) backend instead of text-based IR generation
     /// Requires compilation with --features inkwell
@@ -480,6 +491,9 @@ fn main() {
         Some(true) // strict (default since Phase 34)
     };
     let _ = OWNERSHIP_MODE.set(ownership_mode);
+
+    // Configure MIR borrow checking
+    let _ = STRICT_BORROW.set(cli.strict_borrow);
 
     // Initialize i18n system
     let locale = cli.locale.as_ref().and_then(|s| Locale::parse(s));

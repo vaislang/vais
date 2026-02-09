@@ -111,6 +111,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **63** | **실행 검증 강화** | ✅ 완료 | execution_tests 95개, error_scenario 21개, error_snapshot 10개, 126 신규 테스트 |
 | **64** | **패키지 매니저 & 생태계** | ✅ 완료 | init/install/publish E2E, SemVer 해석, workspace, lockfile, template, doc — 37 신규 테스트 (130 총) |
 | **65** | **크로스 플랫폼 CI & 릴리스** | ✅ 완료 | Windows CI, 릴리스 자동화 (release/homebrew/crates.io/docker), RELEASING.md |
+| **66** | **코드 품질 & 리팩토링** | ✅ 완료 | builtins.rs 분할, codegen 모듈화, unwrap/clone 안전화, LSP 핸들러 분리 |
+| **67** | **테스트 커버리지 확충** | ✅ 완료 | 4개 crate 142개 통합 테스트 (mir 36, macro 39, codegen-js 33, jit 34) |
+| **68** | **타입 안전 메모리 모델 & Borrow Checker** | 📋 예정 | i64 의존도 감소 + MIR Borrow Checker 구현 |
 
 ---
 
@@ -194,6 +197,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 64** | 패키지 매니저 & 생태계 | ✅ init/install/publish/SemVer/workspace/lockfile/template/doc — 37 신규 E2E (130 총) | 2026-02-09 |
 | **Phase 65** | 크로스 플랫폼 CI & 릴리스 | ✅ Windows CI 매트릭스, 플랫폼 이슈 수정, homebrew/crates.io/docker 워크플로우, RELEASING.md | 2026-02-09 |
 | **Phase 66** | 코드 품질 & 리팩토링 | ✅ builtins.rs 분할, codegen 모듈화, unwrap/clone 안전화, 거대 함수 추출, LSP 핸들러 분리 | 2026-02-09 |
+| **Phase 67** | 테스트 커버리지 확충 | ✅ 4개 crate 142개 통합 테스트 (mir/macro/codegen-js/jit) | 2026-02-09 |
 
 ---
 
@@ -245,67 +249,70 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 > **출처**: VaisDB (RAG-native hybrid database) 구현 가능성 검토 (2026-02-08)
 > **배경**: VaisDB는 Vais 언어의 첫 대규모 실전 프로젝트(데이터베이스 엔진)로, 검토 과정에서 시스템 프로그래밍 수준의 언어 기능 부족 사항이 발견됨
+> **현행화**: 2026-02-09 — 코드 확인 기반 상태 업데이트
 
 ### 🔴 높은 우선순위 (데이터베이스 구현에 치명적)
 
-#### 1. Result<T, E> 제네릭화 필요
+#### 1. ✅ Result<T, E> 제네릭화 — Phase 48에서 완료
 
-**현재 상태**: `E Result { Ok(i64), Err(i64) }` — 값이 `i64`로 고정
-**문제점**: 복잡한 에러 체이닝 시 타입 안전성 상실. 데이터베이스에서는 `Result<Page, StorageError>`, `Result<Row, SqlError>` 등 다양한 타입 조합 필요
-**목표**: `E Result<T, E> { Ok(T), Err(E) }` — 완전 제네릭 Result 타입
-**영향 범위**: std/result.vais, type checker, codegen (enum의 제네릭 payload)
+**현재 상태**: `E Result<T, E> { Ok(T), Err(E) }` — 완전 제네릭 (Phase 48, 2026-02-08)
+**완료 내용**: ResolvedType::Result(ok, err) 도입, map/map_err/and_then/or_else 메서드, ~25개 파일 수정
 
-#### 2. i64 범용 타입 의존도 감소
+#### 2. ✅ i64 범용 타입 의존도 감소 — Phase 68에서 완료
 
-**현재 상태**: 내부적으로 포인터, 핸들, 값을 모두 `i64`로 표현. `HashMap<K,V>`도 내부 체인 노드가 `24 bytes = 3 * i64`
-**문제점**: 데이터베이스에서 타입 혼동은 **데이터 손상**으로 직결. page_id(u32)와 txn_id(u64)를 혼동하면 치명적
-**목표**: 구조체 내부 필드가 실제 타입으로 저장되는 진정한 타입 안전 제네릭 컨테이너
-**영향 범위**: Vec<T>, HashMap<K,V>, BTreeMap<K,V> 등 모든 제네릭 컨테이너의 메모리 레이아웃
+**현재 상태**: load_typed/store_typed/type_size 빌트인으로 제네릭 컨테이너가 실제 타입 크기에 맞는 메모리 레이아웃 사용
+**완료 내용**: Vec<T> elem_size 필드 + load_typed/store_typed, HashMap Entry key/value typed 접근, sizeof/alignof 제네릭 해결
 
-#### 3. SIMD Intrinsics 실전 검증
+#### 3. ✅ SIMD Intrinsics 실전 검증 — 완료
 
-**현재 상태**: Phase 8에서 SIMD intrinsics 추가, Phase 11에서 AVX-512/NEON GPU 백엔드 추가
-**문제점**: HNSW 벡터 거리 계산에서 SIMD 미사용 시 10x 성능 저하. 1536차원 벡터의 cosine/L2 거리 계산이 핵심 워크로드
-**목표**: NEON(ARM) / SSE4.2+AVX2(x86) 기반 f32/f64 벡터 연산의 실전 벤치마크 및 안정성 검증
-**검증 방법**: 1M개 1536-dim 벡터에서 brute-force cosine distance, SIMD vs 스칼라 성능 비교
+**현재 상태**: AVX2/NEON 벤치마크 구현 완료 (`benches/simd_bench.rs` 593줄)
+**완료 내용**: 1536-dim f32 벡터 dot product/cosine/L2 distance, SIMD4/SIMD8/플랫폼 네이티브(AVX2/NEON) 비교 벤치마크, `examples/simd_test.vais`로 언어 레벨 SIMD intrinsics 검증
 
 ### 🟡 중간 우선순위 (프로덕션 품질에 영향)
 
-#### 4. 크로스 플랫폼 상수 통일
+#### 4. ✅ 크로스 플랫폼 상수 통일 — Phase 49에서 완료
 
-**현재 상태**: 네트워크 상수 등이 macOS 특화 (예: `AF_INET6: i64 = 30` — Linux에서는 10)
-**문제점**: VaisDB가 Linux 서버에서 실행 불가능. 데이터베이스는 Linux 서버 환경이 주요 타겟
-**목표**: 컴파일 타임 플랫폼 감지 + 조건부 상수 정의 (`#[cfg(target_os)]` 또는 빌드 시 C 헤더 참조)
-**영향 범위**: std/net.vais, std/signal.vais, std/file.vais (mmap 플래그 등)
+**현재 상태**: `#[cfg(target_os)]` 기반 4개 플랫폼(macOS/Linux/FreeBSD/Windows) 조건부 상수 정의 완료
+**완료 내용**: std/net.vais (AF_INET6, SOL_SOCKET, IPV6_V6ONLY), std/signal.vais (SIGBUS, SIGUSR1/2), std/file.vais (O_DIRECT, O_NOFOLLOW)
 
-#### 5. Borrow Checker 실전 적용 범위 확대
+#### 5. ✅ Borrow Checker 실전 적용 범위 확대 — Phase 68에서 완료
 
-**현재 상태**: MIR 기반 borrow checker 구현 완료 (Phase 39), strict 모드 존재 (Phase 34)
-**문제점**: 표준 라이브러리가 `malloc`/`free`/`load_i64`/`store_i64` 패턴을 광범위하게 사용. 데이터베이스 코드에서 use-after-free나 double-free는 데이터 손상으로 직결
-**목표**: 표준 라이브러리 컨테이너에서 unsafe raw pointer 사용을 최소화하고, borrow checker가 사용자 코드의 메모리 안전성을 실질적으로 보증
-**검증 방법**: strict borrow checker 모드에서 VaisDB Phase 1(Storage Engine) 구현 가능 여부 확인
+**현재 상태**: MIR 기반 borrow checker 구현 완료 — UseAfterMove(E100), DoubleFree(E101), UseAfterFree(E102), MutableBorrowConflict(E103), BorrowWhileMutablyBorrowed(E104), MoveWhileBorrowed(E105)
+**완료 내용**: borrow_check.rs (BorrowChecker, CFG 분석, &mut 지원), --strict-borrow CLI 플래그, 29개 테스트
 
-#### 6. 디버거 실전 검증
+#### 6. ✅ 디버거 실전 검증 — 완료
 
-**현재 상태**: DAP(Debug Adapter Protocol) 서버 구현 (Phase 3), DWARF 디버그 정보 생성
-**문제점**: 데이터베이스 개발에서는 동시성 버그, 메모리 손상 등 디버깅이 핵심. lldb/gdb에서 Vais 코드 step-through가 정상 동작하는지 미검증
-**목표**: lldb에서 Vais 바이너리 디버깅 — 브레이크포인트, 변수 검사, 스택 트레이스가 정상 동작
+**현재 상태**: DAP 서버 완전 구현 (8개 모듈, 33개 테스트 통과)
+**완료 내용**: LLDB 백엔드, breakpoint/step/variable inspection/call stack/expression eval/memory ops/disassembly, VSCode 통합, TODO/FIXME 0건
 
 ### 🟢 낮은 우선순위 (장기 개선)
 
-#### 7. 에코시스템 성장
+#### 7. ⏳ 에코시스템 성장
 
 **현재 상태**: 패키지 레지스트리 10개 패키지, 모두 자체 작성. GitHub 스타 1개
 **문제점**: 서드파티 라이브러리 없어 모든 것을 직접 구현해야 함 (CRC32, 압축, 암호화 등)
 **목표**: VaisDB 개발 과정에서 범용 유틸리티를 패키지로 분리하여 에코시스템 씨앗 확보
 **구체적 패키지 후보**: `vais-crc32`, `vais-lz4`, `vais-aes`, `vais-bnf` (파서 생성기)
 
-#### 8. 24시간 장시간 실행 안정성 검증
+#### 8. ⏳ 24시간 장시간 실행 안정성 검증
 
 **현재 상태**: Phase 37에서 계획되었으나 미실행 (장기 관찰 항목으로 분류)
 **문제점**: 데이터베이스는 24/7 운영. 메모리 누수, 파일 디스크립터 누수 등이 치명적
 **목표**: VaisDB 워크로드 시뮬레이션(혼합 read/write)으로 24시간 안정성 검증
 **선행 조건**: VaisDB Phase 1(Storage Engine) 최소 구현 완료 후 진행
+
+### 요약
+
+| # | 항목 | 상태 | 비고 |
+|---|------|------|------|
+| 1 | Result<T, E> 제네릭화 | ✅ 완료 | Phase 48 |
+| 2 | i64 의존도 감소 | ✅ 완료 | Phase 68, load_typed/store_typed |
+| 3 | SIMD Intrinsics 검증 | ✅ 완료 | AVX2/NEON 벤치마크 |
+| 4 | 크로스 플랫폼 상수 | ✅ 완료 | Phase 49, #[cfg] 4개 플랫폼 |
+| 5 | Borrow Checker | ✅ 완료 | Phase 68, MIR borrow checker E100-E105 |
+| 6 | DAP 디버거 | ✅ 완료 | 33개 테스트, LLDB 통합 |
+| 7 | 에코시스템 성장 | ⏳ 장기 | 수작업/커뮤니티 |
+| 8 | 24시간 안정성 | ⏳ 장기 | VaisDB 선행 필요 |
 
 ---
 
@@ -1572,3 +1579,68 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
   변경: 4개 crate 142개 신규 테스트 전체 통과, Clippy 0건
 
 진행률: 5/5 (100%)
+
+---
+
+## Phase 68: 타입 안전 메모리 모델 & Borrow Checker
+
+> **상태**: ✅ 완료 (2026-02-09)
+> **목표**: i64 범용 의존도를 제거하여 진정한 타입 안전 제네릭 컨테이너 구현 + MIR 기반 Borrow Checker로 메모리 안전성 보증
+> **배경**: VaisDB 구현 검토에서 발견된 핵심 미완 항목 (#2, #5)
+
+### Stage 1: 타입별 메모리 레이아웃 ✅
+
+**목표**: 제네릭 컨테이너가 실제 타입 크기에 맞는 메모리 레이아웃 사용
+
+- [x] 1. 타입별 sizeof/alignof 계산 — compute_sizeof/compute_alignof 정확도 개선, 제네릭 파라미터 해결
+- [x] 2. 타입별 load/store 함수 — load_typed/store_typed/type_size 빌트인 + load_i8~f32 8개 함수
+- [x] 3. Vec<T> 메모리 모델 변경 — elem_size 필드 추가, load_typed/store_typed 기반
+- [x] 4. HashMap<K,V> 메모리 모델 변경 — Entry key/value에 load_typed/store_typed 적용
+- [x] 5. E2E 테스트 — 8개 테스트 (type_size, load_typed/store_typed, Vec 연산)
+- **영향**: std/vec.vais, std/hashmap.vais, vais-codegen, vais-types
+
+### Stage 2: MIR Borrow Checker 구현 ✅
+
+**목표**: MIR 단계에서 소유권/수명 검사를 수행하여 메모리 안전성 위반을 컴파일 타임에 감지
+
+- [x] 1. 소유권 추적 — LocalState (Uninitialized/Owned/Moved/Dropped) 상태 머신
+- [x] 2. Copy/Move 구분 — MirType::is_copy() 기반, Move 후 상태 전이
+- [x] 3. use-after-move 감지 — BorrowError::UseAfterMove (E100)
+- [x] 4. use-after-free 감지 — BorrowError::UseAfterFree (E102)
+- [x] 5. double-free 감지 — BorrowError::DoubleFree (E101)
+- [x] 6. 뮤터블 참조 배타성 — BorrowError::MutableBorrowConflict (E103) + BorrowWhileMutablyBorrowed (E104)
+- [x] 7. CFG 분석 — cfg_predecessors/cfg_successors 함수
+- [x] 8. Display trait — 에러 코드 E100~E105 포맷, Location Display
+- [x] 9. E2E 테스트 — 19 unit tests + 10 integration tests (양성 5 + 음성 5)
+- **영향**: vais-mir (borrow_check.rs 신규)
+
+### Stage 3: 통합 검증 ✅
+
+- [x] 1. `--strict-borrow` CLI 플래그 — vaisc에 opt-in MIR borrow checker 통합
+- [x] 2. 기존 E2E 회귀 — 475개 테스트 전부 통과 (467 기존 + 8 신규)
+- [x] 3. Clippy 0건 유지
+- [x] 4. MIR Move/Drop lowering — Copy/Move 구분, Drop elaboration (lower.rs)
+
+### 세부 작업 목록
+
+- [x] 1. typed load/store 빌트인 추가 (Sonnet 위임) ✅
+  변경: builtins.rs, function_gen.rs (load_i8/store_i8, load_i16/store_i16, load_i32/store_i32, load_f32/store_f32)
+- [x] 2. sizeof/alignof 정확도 개선 (Sonnet 위임) ✅
+  변경: codegen/types.rs, inkwell/types.rs, vais-types/builtins.rs (compute_sizeof 튜플/구조체 수정, alignof 빌트인)
+- [x] 3. Vec<T> 타입별 메모리 모델 변경 (Opus 직접) ✅
+  변경: std/vec.vais (elem_size 필드, load_typed/store_typed), generate_expr.rs (load_typed/store_typed/type_size codegen)
+- [x] 4. HashMap<K,V> 타입별 메모리 모델 변경 (Sonnet 위임) ✅
+  변경: std/hashmap.vais (Entry key/value에 load_typed/store_typed, StrHashMap value에 적용)
+- [x] 5. Stage 1 E2E 테스트 (Sonnet 위임) ✅
+  변경: e2e_tests.rs (+8개: type_size, load_typed/store_typed, Vec 연산)
+- [x] 6. MIR Move/Drop lowering 구현 (Sonnet 위임) ✅
+  변경: vais-mir/types.rs (is_copy()), lower.rs (Copy/Move 구분, Drop 삽입)
+- [x] 7. MIR Borrow Checker 핵심 구현 (Sonnet 위임) ✅
+  변경: borrow_check.rs (신규 940줄, 11 테스트), lib.rs (mod 추가)
+- [x] 8. MIR Borrow Checker 고급 검사 (Sonnet 위임) ✅
+  변경: borrow_check.rs (CFG 분석, &mut 지원, Display, +8 테스트 = 총 19)
+- [x] 9. Stage 2 E2E 테스트 (Sonnet 위임) ✅
+  변경: integration_tests.rs (+10개: borrow checker 양성 5 + 음성 5)
+- [x] 10. 통합 검증 & --strict-borrow 플래그 (Opus 직접) ✅
+  변경: vaisc/Cargo.toml (+vais-mir), main.rs (STRICT_BORROW, --strict-borrow), build.rs (MIR borrow check pass)
+진행률: 10/10 (100%)

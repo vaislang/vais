@@ -309,6 +309,86 @@ impl CodeGenerator {
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
 
+        // __load_i8: load an 8-bit integer from memory address
+        ir.push_str("\n; Helper function: load i8 from memory\n");
+        ir.push_str("define i64 @__load_i8(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  %1 = load i8, i8* %0\n");
+        ir.push_str("  %2 = zext i8 %1 to i64\n");
+        ir.push_str("  ret i64 %2\n");
+        ir.push_str("}\n");
+
+        // __store_i8: store an 8-bit integer to memory address
+        ir.push_str("\n; Helper function: store i8 to memory\n");
+        ir.push_str("define void @__store_i8(i64 %ptr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  %1 = trunc i64 %val to i8\n");
+        ir.push_str("  store i8 %1, i8* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __load_i16: load a 16-bit integer from memory address
+        ir.push_str("\n; Helper function: load i16 from memory\n");
+        ir.push_str("define i64 @__load_i16(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i16*\n");
+        ir.push_str("  %1 = load i16, i16* %0\n");
+        ir.push_str("  %2 = zext i16 %1 to i64\n");
+        ir.push_str("  ret i64 %2\n");
+        ir.push_str("}\n");
+
+        // __store_i16: store a 16-bit integer to memory address
+        ir.push_str("\n; Helper function: store i16 to memory\n");
+        ir.push_str("define void @__store_i16(i64 %ptr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i16*\n");
+        ir.push_str("  %1 = trunc i64 %val to i16\n");
+        ir.push_str("  store i16 %1, i16* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __load_i32: load a 32-bit integer from memory address
+        ir.push_str("\n; Helper function: load i32 from memory\n");
+        ir.push_str("define i64 @__load_i32(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i32*\n");
+        ir.push_str("  %1 = load i32, i32* %0\n");
+        ir.push_str("  %2 = zext i32 %1 to i64\n");
+        ir.push_str("  ret i64 %2\n");
+        ir.push_str("}\n");
+
+        // __store_i32: store a 32-bit integer to memory address
+        ir.push_str("\n; Helper function: store i32 to memory\n");
+        ir.push_str("define void @__store_i32(i64 %ptr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i32*\n");
+        ir.push_str("  %1 = trunc i64 %val to i32\n");
+        ir.push_str("  store i32 %1, i32* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __load_f32: load a 32-bit float from memory address
+        ir.push_str("\n; Helper function: load f32 from memory\n");
+        ir.push_str("define double @__load_f32(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to float*\n");
+        ir.push_str("  %1 = load float, float* %0\n");
+        ir.push_str("  %2 = fpext float %1 to double\n");
+        ir.push_str("  ret double %2\n");
+        ir.push_str("}\n");
+
+        // __store_f32: store a 32-bit float to memory address
+        ir.push_str("\n; Helper function: store f32 to memory\n");
+        ir.push_str("define void @__store_f32(i64 %ptr, double %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to float*\n");
+        ir.push_str("  %1 = fptrunc double %val to float\n");
+        ir.push_str("  store float %1, float* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
         // === Async runtime helper functions ===
 
         // __call_poll: call an indirect function pointer (poll_fn) with future_ptr

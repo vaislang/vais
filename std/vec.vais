@@ -1,20 +1,24 @@
 # Vec - dynamic array (growable)
-# Stores elements of type T
-# Updated to use Option<T> for error handling
+# Stores elements of type T with type-safe memory layout
+# Uses sizeof(T) for element stride and load_typed/store_typed for memory access
 
 U std/option
 
 S Vec<T> {
-    data: i64,      # Pointer to element array (all pointers are i64)
+    data: i64,      # Pointer to element array
     len: i64,       # Current number of elements
-    cap: i64        # Allocated capacity
+    cap: i64,       # Allocated capacity
+    elem_size: i64  # Size of each element in bytes (sizeof(T))
 }
 
 X Vec<T> {
     # Create a new empty Vec with given capacity
     F with_capacity(capacity: i64) -> Vec<T> {
-        data := malloc(capacity * 8)  # 8 bytes per element
-        Vec { data: data, len: 0, cap: capacity }
+        es := type_size()  # Returns sizeof(T) — resolved at monomorphization
+        # For backward compatibility: if sizeof returns 0 (e.g., Unit), default to 8
+        elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+        data := malloc(capacity * elem_sz)
+        Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
     }
 
     # Get the number of elements
@@ -39,8 +43,8 @@ X Vec<T> {
         } E I index >= self.len {
             0
         } E {
-            ptr := self.data + index * 8
-            load_i64(ptr)
+            ptr := self.data + index * self.elem_size
+            load_typed(ptr)
         }
     }
 
@@ -52,16 +56,16 @@ X Vec<T> {
         } E I index >= self.len {
             None
         } E {
-            ptr := self.data + index * 8
-            Some(load_i64(ptr))
+            ptr := self.data + index * self.elem_size
+            Some(load_typed(ptr))
         }
     }
 
     # Set element at index
     F set(&self, index: i64, value: T) -> i64 {
         I index >= 0 && index < self.len {
-            ptr := self.data + index * 8
-            store_i64(ptr, value)
+            ptr := self.data + index * self.elem_size
+            store_typed(ptr, value)
             1
         } E {
             0
@@ -73,8 +77,8 @@ X Vec<T> {
         I self.len >= self.cap {
             @.grow()
         }
-        ptr := self.data + self.len * 8
-        store_i64(ptr, value)
+        ptr := self.data + self.len * self.elem_size
+        store_typed(ptr, value)
         self.len = self.len + 1
         self.len
     }
@@ -83,8 +87,8 @@ X Vec<T> {
     F pop(&self) -> T {
         I self.len > 0 {
             self.len = self.len - 1
-            ptr := self.data + self.len * 8
-            load_i64(ptr)
+            ptr := self.data + self.len * self.elem_size
+            load_typed(ptr)
         } E {
             0
         }
@@ -95,8 +99,8 @@ X Vec<T> {
     F pop_opt(&self) -> Option<T> {
         I self.len > 0 {
             self.len = self.len - 1
-            ptr := self.data + self.len * 8
-            Some(load_i64(ptr))
+            ptr := self.data + self.len * self.elem_size
+            Some(load_typed(ptr))
         } E {
             None
         }
@@ -106,8 +110,8 @@ X Vec<T> {
     F grow(&self) -> i64 {
         doubled := self.cap * 2
         new_cap := I doubled < 8 { 8 } E { doubled }
-        new_data := malloc(new_cap * 8)
-        memcpy(new_data, self.data, self.len * 8)
+        new_data := malloc(new_cap * self.elem_size)
+        memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
         self.data = new_data
         self.cap = new_cap
@@ -137,7 +141,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             result.push(f(elem))
             i = i + 1
         }
@@ -150,7 +154,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             I pred(elem) != 0 {
                 result.push(elem)
             }
@@ -165,7 +169,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             acc = f(acc, elem)
             i = i + 1
         }
@@ -177,7 +181,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             f(elem)
             i = i + 1
         }
@@ -189,7 +193,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             I pred(elem) != 0 { R 1 }
             i = i + 1
         }
@@ -201,7 +205,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             I pred(elem) == 0 { R 0 }
             i = i + 1
         }
@@ -213,7 +217,7 @@ X Vec<T> {
         i := mut 0
         L {
             I i >= self.len { B }
-            elem := load_i64(self.data + i * 8)
+            elem := load_typed(self.data + i * self.elem_size)
             I pred(elem) != 0 { R elem }
             i = i + 1
         }

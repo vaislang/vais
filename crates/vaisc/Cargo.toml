@@ -31,6 +31,7 @@ vais-plugin = { path = "../vais-plugin" }
 vais-jit = { path = "../vais-jit", optional = true }
 vais-gpu = { path = "../vais-gpu" }
 vais-macro = { path = "../vais-macro" }
+vais-mir = { path = "../vais-mir" }
 vais-query = { path = "../vais-query" }
 
 inkwell = { workspace = true, optional = true }

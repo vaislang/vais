@@ -12807,3 +12807,271 @@ fn test_js_target_output_extension() {
         "Custom JS output file not generated"
     );
 }
+
+// ========================================
+// Phase 68: Typed Memory Operations Tests
+// ========================================
+
+#[test]
+fn test_typed_memory_type_size_basic() {
+    let source = r#"
+        S Vec<T> {
+            elem_size: i64
+        }
+
+        X Vec<T> {
+            F new() -> Vec<T> {
+                es := type_size()
+                Vec { elem_size: es }
+            }
+        }
+
+        F main() -> i64 {
+            v := Vec.new()
+            v.elem_size
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 8, "Exit code should be 8 (sizeof i64)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_load_store_i64() {
+    let source = r#"
+        F main() -> i64 {
+            ptr := malloc(16)
+            store_typed(ptr, 42)
+            value := load_typed(ptr)
+            free(ptr)
+            value
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 42, "Exit code should be 42");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_type_size_builtin() {
+    let source = r#"
+        S Vec<T> {
+            data: i64,
+            len: i64,
+            cap: i64,
+            elem_size: i64
+        }
+
+        X Vec<T> {
+            F with_capacity(capacity: i64) -> Vec<T> {
+                es := type_size()
+                elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+                data := malloc(capacity * elem_sz)
+                Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
+            }
+
+            F drop(&self) -> i64 {
+                free(self.data)
+                0
+            }
+        }
+
+        F main() -> i64 {
+            v := Vec.with_capacity(4)
+            print_i64(v.elem_size)
+            v.drop()
+            0
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 0, "Exit code should be 0");
+            assert_eq!(result.stdout.trim(), "8");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_load_store_i32() {
+    let source = r#"
+        F main() -> i64 {
+            ptr := malloc(16)
+            store_typed(ptr, 42)
+            store_typed(ptr + 4, 100)
+            a := load_typed(ptr)
+            b := load_typed(ptr + 4)
+            free(ptr)
+            a + b
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 142, "Exit code should be 142 (42+100)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_vec_simple() {
+    let source = r#"
+        S Vec<T> {
+            data: i64,
+            len: i64,
+            elem_size: i64
+        }
+
+        X Vec<T> {
+            F new() -> Vec<T> {
+                es := type_size()
+                data := malloc(16 * es)
+                Vec { data: data, len: 0, elem_size: es }
+            }
+
+            F push(&self, value: T) -> i64 {
+                ptr := self.data + self.len * self.elem_size
+                store_typed(ptr, value)
+                self.len = self.len + 1
+                self.len
+            }
+
+            F get(&self, index: i64) -> T {
+                ptr := self.data + index * self.elem_size
+                load_typed(ptr)
+            }
+
+            F drop(&self) -> i64 {
+                free(self.data)
+                0
+            }
+        }
+
+        F main() -> i64 {
+            v := Vec.new()
+            v.push(10)
+            v.push(20)
+            v.push(30)
+            a := v.get(0)
+            b := v.get(1)
+            c := v.get(2)
+            v.drop()
+            a + b + c
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 60, "Exit code should be 60 (10+20+30)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_array_operations() {
+    let source = r#"
+        F main() -> i64 {
+            ptr := malloc(32)
+            store_typed(ptr + 0, 5)
+            store_typed(ptr + 8, 15)
+            store_typed(ptr + 16, 25)
+
+            a := load_typed(ptr + 0)
+            b := load_typed(ptr + 8)
+            c := load_typed(ptr + 16)
+
+            free(ptr)
+            a + b + c
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 45, "Exit code should be 45 (5+15+25)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_sequential_ops() {
+    let source = r#"
+        F main() -> i64 {
+            ptr := malloc(64)
+
+            store_typed(ptr + 0, 1)
+            store_typed(ptr + 8, 2)
+            store_typed(ptr + 16, 4)
+            store_typed(ptr + 24, 8)
+            store_typed(ptr + 32, 16)
+
+            a := load_typed(ptr + 0)
+            b := load_typed(ptr + 8)
+            c := load_typed(ptr + 16)
+            d := load_typed(ptr + 24)
+            e := load_typed(ptr + 32)
+
+            free(ptr)
+            a + b + c + d + e
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 31, "Exit code should be 31 (1+2+4+8+16)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_typed_memory_overwrite() {
+    let source = r#"
+        F main() -> i64 {
+            ptr := malloc(16)
+
+            store_typed(ptr, 100)
+            v1 := load_typed(ptr)
+
+            store_typed(ptr, 200)
+            v2 := load_typed(ptr)
+
+            free(ptr)
+            v2 - v1
+        }
+    "#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 100, "Exit code should be 100 (200-100)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}

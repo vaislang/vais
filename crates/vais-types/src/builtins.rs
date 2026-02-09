@@ -134,6 +134,92 @@ impl TypeChecker {
             },
         );
 
+        // alignof: (val: T) -> i64 — compile-time type alignment query
+        self.functions.insert(
+            "alignof".to_string(),
+            FunctionSig {
+                name: "alignof".to_string(),
+                generics: vec!["T".to_string()],
+                generic_bounds: HashMap::new(),
+                params: vec![(
+                    "val".to_string(),
+                    ResolvedType::Generic("T".to_string()),
+                    false,
+                )],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // type_size: () -> i64 — compile-time size of generic type T
+        // Used in generic containers to get element size at monomorphization time
+        self.functions.insert(
+            "type_size".to_string(),
+            FunctionSig {
+                name: "type_size".to_string(),
+                generics: vec!["T".to_string()],
+                generic_bounds: HashMap::new(),
+                params: vec![],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // load_typed: (ptr: i64) -> T — type-aware memory load
+        // Dispatches to correct load instruction based on resolved type T
+        self.functions.insert(
+            "load_typed".to_string(),
+            FunctionSig {
+                name: "load_typed".to_string(),
+                generics: vec!["T".to_string()],
+                generic_bounds: HashMap::new(),
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::Generic("T".to_string()),
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // store_typed: (ptr: i64, val: T) -> () — type-aware memory store
+        // Dispatches to correct store instruction based on resolved type T
+        self.functions.insert(
+            "store_typed".to_string(),
+            FunctionSig {
+                name: "store_typed".to_string(),
+                generics: vec!["T".to_string()],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    (
+                        "val".to_string(),
+                        ResolvedType::Generic("T".to_string()),
+                        false,
+                    ),
+                ],
+                ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // exit: (code: i32) -> void (noreturn, but typed as Unit)
         self.functions.insert(
             "exit".to_string(),

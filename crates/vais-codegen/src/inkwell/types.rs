@@ -227,4 +227,26 @@ impl<'ctx> TypeMapper<'ctx> {
             _ => 8, // Default for structs, enums, functions
         }
     }
+
+    /// Gets the alignment of a type in bytes.
+    pub fn align_of(&self, ty: &ResolvedType) -> u64 {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
+            ResolvedType::I128 | ResolvedType::U128 => 16,
+            ResolvedType::Str
+            | ResolvedType::Pointer(_)
+            | ResolvedType::Ref(_)
+            | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Unit => 1,
+            ResolvedType::Tuple(elems) => {
+                elems.iter().map(|e| self.align_of(e)).max().unwrap_or(8)
+            }
+            ResolvedType::Optional(inner) => self.align_of(inner),
+            ResolvedType::Result(ok, err) => std::cmp::max(self.align_of(ok), self.align_of(err)),
+            _ => 8, // Default for structs, enums, functions
+        }
+    }
 }

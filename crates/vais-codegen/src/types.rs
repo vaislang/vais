@@ -676,15 +676,126 @@ impl CodeGenerator {
             ResolvedType::Array(_) => 8,     // pointer to heap
             ResolvedType::Optional(_) => 8,  // tag + value in i64
             ResolvedType::Result(_, _) => 8, // tag + value in i64
-            ResolvedType::Tuple(elems) => elems.len() as i64 * 8,
+            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
             ResolvedType::Named { name, .. } => {
                 if let Some(struct_info) = self.structs.get(name) {
-                    struct_info.fields.len() as i64 * 8
+                    struct_info.fields.iter().map(|(_name, ty)| self.compute_sizeof(ty)).sum()
                 } else {
                     8 // enum (tag + payload) or unknown named type
                 }
             }
             _ => 8, // default for complex types
         }
+    }
+
+    /// Compute alignof for a ResolvedType (in bytes)
+    /// Returns the alignment requirement of the type
+    pub(crate) fn compute_alignof(&self, ty: &ResolvedType) -> i64 {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
+            ResolvedType::I128 | ResolvedType::U128 => 16,
+            ResolvedType::Str | ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Unit => 1,
+            ResolvedType::Tuple(elems) => {
+                elems.iter().map(|e| self.compute_alignof(e)).max().unwrap_or(8)
+            }
+            ResolvedType::Named { name, .. } => {
+                if let Some(struct_info) = self.structs.get(name) {
+                    struct_info.fields.iter().map(|(_name, ty)| self.compute_alignof(ty)).max().unwrap_or(8)
+                } else {
+                    8 // enum or unknown named type
+                }
+            }
+            _ => 8, // default for complex types
+        }
+    }
+}
+
+#[cfg(test)]
+mod sizeof_alignof_tests {
+    use super::*;
+    use vais_types::ResolvedType;
+    use crate::CodeGenerator;
+
+    #[test]
+    fn test_tuple_sizeof_sums_elements() {
+        let gen = CodeGenerator::new("test");
+        // (i8, i8) should be 2 bytes, not 16
+        let tuple_type = ResolvedType::Tuple(vec![ResolvedType::I8, ResolvedType::I8]);
+        assert_eq!(gen.compute_sizeof(&tuple_type), 2);
+    }
+
+    #[test]
+    fn test_tuple_alignof_takes_max() {
+        let gen = CodeGenerator::new("test");
+        // (i8, i32) should have alignment of 4 (from i32)
+        let tuple_type = ResolvedType::Tuple(vec![ResolvedType::I8, ResolvedType::I32]);
+        assert_eq!(gen.compute_alignof(&tuple_type), 4);
+    }
+
+    #[test]
+    fn test_struct_sizeof_sums_fields() {
+        let mut gen = CodeGenerator::new("test");
+        // Struct with two i8 fields
+        gen.structs.insert(
+            "Point2D".to_string(),
+            StructInfo {
+                _name: "Point2D".to_string(),
+                fields: vec![
+                    ("x".to_string(), ResolvedType::I8),
+                    ("y".to_string(), ResolvedType::I8),
+                ],
+                _repr_c: false,
+                _invariants: vec![],
+            },
+        );
+        let struct_type = ResolvedType::Named {
+            name: "Point2D".to_string(),
+            generics: vec![],
+        };
+        assert_eq!(gen.compute_sizeof(&struct_type), 2);
+    }
+
+    #[test]
+    fn test_struct_alignof_takes_max_field() {
+        let mut gen = CodeGenerator::new("test");
+        // Struct with i8 and i32 fields
+        gen.structs.insert(
+            "MixedStruct".to_string(),
+            StructInfo {
+                _name: "MixedStruct".to_string(),
+                fields: vec![
+                    ("a".to_string(), ResolvedType::I8),
+                    ("b".to_string(), ResolvedType::I32),
+                    ("c".to_string(), ResolvedType::I16),
+                ],
+                _repr_c: false,
+                _invariants: vec![],
+            },
+        );
+        let struct_type = ResolvedType::Named {
+            name: "MixedStruct".to_string(),
+            generics: vec![],
+        };
+        // Size: 1 + 4 + 2 = 7
+        assert_eq!(gen.compute_sizeof(&struct_type), 7);
+        // Alignment: max(1, 4, 2) = 4
+        assert_eq!(gen.compute_alignof(&struct_type), 4);
+    }
+
+    #[test]
+    fn test_primitive_types() {
+        let gen = CodeGenerator::new("test");
+        assert_eq!(gen.compute_sizeof(&ResolvedType::I8), 1);
+        assert_eq!(gen.compute_alignof(&ResolvedType::I8), 1);
+        assert_eq!(gen.compute_sizeof(&ResolvedType::I32), 4);
+        assert_eq!(gen.compute_alignof(&ResolvedType::I32), 4);
+        assert_eq!(gen.compute_sizeof(&ResolvedType::I64), 8);
+        assert_eq!(gen.compute_alignof(&ResolvedType::I64), 8);
+        assert_eq!(gen.compute_sizeof(&ResolvedType::I128), 16);
+        assert_eq!(gen.compute_alignof(&ResolvedType::I128), 16);
     }
 }

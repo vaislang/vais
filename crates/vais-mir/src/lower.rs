@@ -9,6 +9,7 @@
 
 use crate::builder::MirBuilder;
 use crate::types::*;
+use std::collections::{HashMap, HashSet};
 use vais_ast::{
     BinOp as AstBinOp, Expr, FunctionBody, IfElse, Item, Literal, Module, Pattern, Spanned, Stmt,
     Type as AstType, UnaryOp as AstUnOp,
@@ -47,6 +48,7 @@ pub fn lower_module(module: &Module) -> MirModule {
                         lowerer
                             .builder
                             .assign(lowerer.builder.return_place(), Rvalue::Use(result));
+                        lowerer.emit_drops();
                         lowerer.builder.return_();
                     }
                     FunctionBody::Block(stmts) => {
@@ -57,6 +59,7 @@ pub fn lower_module(module: &Module) -> MirModule {
                         lowerer
                             .builder
                             .assign(lowerer.builder.return_place(), Rvalue::Use(last_operand));
+                        lowerer.emit_drops();
                         lowerer.builder.return_();
                     }
                 }
@@ -114,16 +117,28 @@ fn ast_type_to_mir(ty: &AstType) -> MirType {
 
 struct FunctionLowerer {
     builder: MirBuilder,
-    vars: std::collections::HashMap<String, Local>,
+    vars: HashMap<String, Local>,
     func_name: String,
+    local_types: HashMap<Local, MirType>,
+    moved_locals: HashSet<Local>,
 }
 
 impl FunctionLowerer {
     fn new(name: &str, params: Vec<MirType>, ret_type: MirType) -> Self {
+        let builder = MirBuilder::new(name, params.clone(), ret_type);
+        let mut local_types = HashMap::new();
+
+        // Register parameter types (_1, _2, ...)
+        for (i, ty) in params.iter().enumerate() {
+            local_types.insert(Local((i + 1) as u32), ty.clone());
+        }
+
         Self {
-            builder: MirBuilder::new(name, params, ret_type),
-            vars: std::collections::HashMap::new(),
+            builder,
+            vars: HashMap::new(),
             func_name: name.to_string(),
+            local_types,
+            moved_locals: HashSet::new(),
         }
     }
 
@@ -132,15 +147,31 @@ impl FunctionLowerer {
     }
 
     fn new_temp(&mut self, ty: MirType) -> Local {
-        self.builder.new_local(ty, None)
+        let local = self.builder.new_local(ty.clone(), None);
+        self.local_types.insert(local, ty);
+        local
+    }
+
+    /// Emit Drop statements for non-Copy locals that haven't been moved yet.
+    /// Call this before function return to clean up remaining values.
+    fn emit_drops(&mut self) {
+        for (&local, ty) in &self.local_types {
+            if !ty.is_copy() && !self.moved_locals.contains(&local) {
+                self.builder.drop(Place::local(local));
+            }
+        }
     }
 
     /// Lower a statement.
     fn lower_stmt(&mut self, stmt: &Spanned<Stmt>) -> Operand {
         match &stmt.node {
-            Stmt::Let { name, value, .. } => {
+            Stmt::Let { name, value, ty, .. } => {
                 let val = self.lower_expr(value);
-                let local = self.new_temp(MirType::I64);
+                let mir_type = ty
+                    .as_ref()
+                    .map(|t| ast_type_to_mir(&t.node))
+                    .unwrap_or(MirType::I64);
+                let local = self.new_temp(mir_type);
                 self.builder.assign(Place::local(local), Rvalue::Use(val));
                 self.bind_var(&name.node, local);
                 Operand::Constant(Constant::Unit)
@@ -150,12 +181,14 @@ impl FunctionLowerer {
                 let val = self.lower_expr(expr);
                 self.builder
                     .assign(self.builder.return_place(), Rvalue::Use(val));
+                self.emit_drops();
                 self.builder.return_();
                 let dead_bb = self.builder.new_block();
                 self.builder.switch_to_block(dead_bb);
                 Operand::Constant(Constant::Int(0))
             }
             Stmt::Return(None) => {
+                self.emit_drops();
                 self.builder.return_();
                 let dead_bb = self.builder.new_block();
                 self.builder.switch_to_block(dead_bb);
@@ -185,7 +218,17 @@ impl FunctionLowerer {
 
             Expr::Ident(name) => {
                 if let Some(&local) = self.vars.get(name) {
-                    Operand::Copy(Place::local(local))
+                    let ty = self
+                        .local_types
+                        .get(&local)
+                        .cloned()
+                        .unwrap_or(MirType::I64);
+                    if ty.is_copy() {
+                        Operand::Copy(Place::local(local))
+                    } else {
+                        self.moved_locals.insert(local);
+                        Operand::Move(Place::local(local))
+                    }
                 } else {
                     Operand::Constant(Constant::Int(0))
                 }
@@ -602,5 +645,81 @@ mod tests {
         assert_eq!(mir.bodies.len(), 2);
         assert_eq!(mir.bodies[0].name, "double");
         assert_eq!(mir.bodies[1].name, "triple");
+    }
+
+    #[test]
+    fn test_copy_type_operand() {
+        // All i64 types should use Operand::Copy (not Move)
+        let source = "F add(x: i64, y: i64) -> i64 = x + y";
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        let display = mir.bodies[0].display();
+        // Should use "Copy(" for i64 parameters (debug format)
+        assert!(display.contains("Copy("));
+        assert!(!display.contains("Move("));
+    }
+
+    #[test]
+    fn test_move_type_operand() {
+        // String type should use Operand::Move (not Copy)
+        let source = r#"F take_string(s: str) -> str = s"#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        let display = mir.bodies[0].display();
+        // Should use "Move(" for str parameter (debug format)
+        assert!(display.contains("Move("));
+    }
+
+    #[test]
+    fn test_drop_insertion() {
+        // Non-Copy locals should have Drop statements inserted before return
+        // Note: Using str type which is non-Copy
+        let source = r#"
+            F use_string() -> i64 {
+                s: str = "hello"
+                42
+            }
+        "#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        let display = mir.bodies[0].display();
+        // The string local should be dropped before return
+        assert!(display.contains("drop("));
+    }
+
+    #[test]
+    fn test_no_drop_for_copy_types() {
+        // Copy types should NOT have Drop statements
+        let source = r#"
+            F use_int() -> i64 = {
+                x := 42
+                y := 100
+                x + y
+            }
+        "#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        let display = mir.bodies[0].display();
+        // No drops for i64 locals
+        assert!(!display.contains("drop("));
+    }
+
+    #[test]
+    fn test_move_prevents_drop() {
+        // If a non-Copy value is moved, it should NOT be dropped
+        let source = r#"F return_string(s: str) -> str = s"#;
+        let module = vais_parser::parse(source).expect("Parse failed");
+        let mir = lower_module(&module);
+
+        let display = mir.bodies[0].display();
+        // The parameter is moved to return place, so no drop should occur
+        // (The string "s" is moved, not dropped)
+        assert!(display.contains("Move("));
+        // The moved value should NOT be dropped
+        assert!(!display.contains("drop("));
     }
 }

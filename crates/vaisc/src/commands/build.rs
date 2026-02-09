@@ -1022,6 +1022,37 @@ pub(crate) fn cmd_build(
         );
     }
 
+    // MIR borrow checking (when --strict-borrow is enabled)
+    if crate::get_strict_borrow() {
+        let borrow_start = std::time::Instant::now();
+        if verbose {
+            println!("  {} Running MIR borrow checker...", "🔍".cyan());
+        }
+
+        let mir_module = vais_mir::lower::lower_module(&final_ast);
+        let borrow_errors = vais_mir::borrow_check::check_module(&mir_module);
+
+        if !borrow_errors.is_empty() {
+            for error in &borrow_errors {
+                eprintln!("{}: {}", "error".red().bold(), error);
+            }
+            return Err(format!(
+                "Borrow checking failed: {} error(s) detected",
+                borrow_errors.len()
+            ));
+        }
+
+        if verbose {
+            let borrow_time = borrow_start.elapsed();
+            println!("  {}", "Borrow check passed".green());
+            println!(
+                "  {} Borrow check time: {:.3}s",
+                "⏱".cyan(),
+                borrow_time.as_secs_f64()
+            );
+        }
+    }
+
     // Per-module codegen path: split AST by source module, generate per-module .ll → .o → link
     // Auto-enable per-module for multi-file projects (opt-in flag OR auto-detect)
     let use_per_module = per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1);

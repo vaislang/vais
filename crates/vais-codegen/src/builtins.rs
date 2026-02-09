@@ -306,6 +306,66 @@ impl CodeGenerator {
             ResolvedType::Unit
         );
 
+        // load_i8: load 8-bit integer from memory (internal helper)
+        register_helper!(self, "load_i8" => "__load_i8",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // store_i8: store 8-bit integer to memory (internal helper)
+        register_helper!(self, "store_i8" => "__store_i8",
+            vec![
+                ("ptr".to_string(), ResolvedType::I64),
+                ("val".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::Unit
+        );
+
+        // load_i16: load 16-bit integer from memory (internal helper)
+        register_helper!(self, "load_i16" => "__load_i16",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // store_i16: store 16-bit integer to memory (internal helper)
+        register_helper!(self, "store_i16" => "__store_i16",
+            vec![
+                ("ptr".to_string(), ResolvedType::I64),
+                ("val".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::Unit
+        );
+
+        // load_i32: load 32-bit integer from memory (internal helper)
+        register_helper!(self, "load_i32" => "__load_i32",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // store_i32: store 32-bit integer to memory (internal helper)
+        register_helper!(self, "store_i32" => "__store_i32",
+            vec![
+                ("ptr".to_string(), ResolvedType::I64),
+                ("val".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::Unit
+        );
+
+        // load_f32: load 32-bit float from memory (internal helper)
+        register_helper!(self, "load_f32" => "__load_f32",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::F64
+        );
+
+        // store_f32: store 32-bit float to memory (internal helper)
+        register_helper!(self, "store_f32" => "__store_f32",
+            vec![
+                ("ptr".to_string(), ResolvedType::I64),
+                ("val".to_string(), ResolvedType::F64),
+            ],
+            ResolvedType::Unit
+        );
+
         // str_to_ptr: convert str (i8*) to i64 — IR is special-cased in generate_expr
         // Register so infer_expr_type returns the correct type
         self.functions.insert(
