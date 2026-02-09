@@ -437,4 +437,25 @@ impl CodeGenerator {
             _ => ResolvedType::I64, // Default fallback
         }
     }
+
+    /// Generate a condition conversion to i1 for branch instructions.
+    /// If the expression is already i1 (bool), use it directly.
+    /// Otherwise, convert via `icmp ne <type> %val, 0`.
+    pub(crate) fn generate_cond_to_i1(
+        &mut self,
+        cond_expr: &Spanned<Expr>,
+        cond_val: &str,
+        counter: &mut usize,
+    ) -> (String, String) {
+        let cond_ty = self.infer_expr_type(cond_expr);
+        if cond_ty == ResolvedType::Bool {
+            // Already i1, use directly
+            (cond_val.to_string(), String::new())
+        } else {
+            let cond_bool = self.next_temp(counter);
+            let llvm_ty = self.type_to_llvm(&cond_ty);
+            let ir = format!("  {} = icmp ne {} {}, 0\n", cond_bool, llvm_ty, cond_val);
+            (cond_bool, ir)
+        }
+    }
 }

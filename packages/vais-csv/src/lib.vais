@@ -1,0 +1,411 @@
+# CSV Library - Parser and Generator
+# Provides utilities for reading and writing CSV (Comma-Separated Values) files
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+C MAX_FIELDS: i64 = 128
+C MAX_FIELD_LEN: i64 = 2048
+C CSV_BUFFER_SIZE: i64 = 8192
+
+# ============================================================================
+# CSV Row Structure
+# ============================================================================
+
+# CsvRow - represents a parsed CSV row
+S CsvRow {
+    fields: i64,      # Array of field string pointers (i64*)
+    count: i64,       # Number of fields in this row
+    capacity: i64     # Allocated capacity
+}
+
+# ============================================================================
+# CSV Row Operations
+# ============================================================================
+
+# Create a new empty CsvRow
+F csv_row_new() -> i64 {
+    row := malloc(24)  # sizeof(CsvRow) = 3 * 8
+    capacity := MAX_FIELDS
+    fields := malloc(capacity * 8)
+
+    store_i64(row, fields)
+    store_i64(row + 8, 0)
+    store_i64(row + 16, capacity)
+    row
+}
+
+# Get field at index from row
+F csv_row_get(row: i64, idx: i64) -> i64 {
+    I idx < 0 { R 0 }
+
+    count := load_i64(row + 8)
+    I idx >= count { R 0 }
+
+    fields := load_i64(row)
+    load_i64(fields + (idx * 8))
+}
+
+# Get number of fields in row
+F csv_row_count(row: i64) -> i64 {
+    load_i64(row + 8)
+}
+
+# Add a field to the row
+F csv_row_add(row: i64, field: i64) -> i64 {
+    count := load_i64(row + 8)
+    capacity := load_i64(row + 16)
+
+    I count >= capacity { R 0 }  # Row full
+
+    fields := load_i64(row)
+    store_i64(fields + (count * 8), field)
+    store_i64(row + 8, count + 1)
+    1
+}
+
+# Free all memory allocated for row
+F csv_row_free(row: i64) -> i64 {
+    count := load_i64(row + 8)
+    fields := load_i64(row)
+
+    # Free each field string
+    i := mut 0
+    L i < count {
+        field := load_i64(fields + (i * 8))
+        I field != 0 {
+            free(field)
+        }
+        i = i + 1
+    }
+
+    # Free fields array
+    I fields != 0 {
+        free(fields)
+    }
+
+    # Free row structure
+    free(row)
+    0
+}
+
+# ============================================================================
+# CSV Parser
+# ============================================================================
+
+# Parse a CSV line into a CsvRow
+# Handles quoted fields with embedded commas and quotes
+F csv_parse_line(line: i64) -> i64 {
+    row := csv_row_new()
+    I line == 0 { R row }
+
+    len := strlen(line)
+    I len == 0 { R row }
+
+    field_buf := malloc(MAX_FIELD_LEN)
+    field_pos := mut 0
+    in_quotes := mut 0
+    i := mut 0
+
+    L i <= len {
+        c := load_byte(line + i)
+
+        # End of line - save current field
+        I c == 0 {
+            I field_pos > 0 {
+                field_str := malloc(field_pos + 1)
+                memcpy(field_str, field_buf, field_pos)
+                store_byte(field_str + field_pos, 0)
+                csv_row_add(row, field_str)
+            } E {
+                # Empty field at end
+                I i > 0 {
+                    prev := load_byte(line + (i - 1))
+                    I prev == 44 {  # Previous was comma - add empty field
+                        field_str := malloc(1)
+                        store_byte(field_str, 0)
+                        csv_row_add(row, field_str)
+                    }
+                }
+            }
+            B
+        }
+
+        # Quote character
+        I c == 34 {  # ASCII '"'
+            I in_quotes {
+                # Check for doubled quote (escaped quote)
+                next := load_byte(line + (i + 1))
+                I next == 34 {
+                    # Doubled quote - add single quote to field
+                    I field_pos < (MAX_FIELD_LEN - 1) {
+                        store_byte(field_buf + field_pos, 34)
+                        field_pos = field_pos + 1
+                    }
+                    i = i + 2  # Skip both quotes
+                    C
+                } E {
+                    # End of quoted field
+                    in_quotes = 0
+                    i = i + 1
+                    C
+                }
+            } E {
+                # Start of quoted field
+                in_quotes = 1
+                i = i + 1
+                C
+            }
+        }
+
+        # Comma separator (if not in quotes)
+        I c == 44 {  # ASCII ','
+            I in_quotes == 0 {
+                # End of field - save it
+                field_str := malloc(field_pos + 1)
+                memcpy(field_str, field_buf, field_pos)
+                store_byte(field_str + field_pos, 0)
+                csv_row_add(row, field_str)
+
+                field_pos = 0
+                i = i + 1
+                C
+            }
+        }
+
+        # Regular character - add to field buffer
+        I field_pos < (MAX_FIELD_LEN - 1) {
+            store_byte(field_buf + field_pos, c)
+            field_pos = field_pos + 1
+        }
+
+        i = i + 1
+    }
+
+    free(field_buf)
+    row
+}
+
+# ============================================================================
+# CSV Generator
+# ============================================================================
+
+# Check if a field needs quoting
+# Returns 1 if field contains comma, quote, newline, or carriage return
+F csv_needs_quoting(field: i64) -> i64 {
+    I field == 0 { R 0 }
+
+    i := mut 0
+    L 1 {
+        c := load_byte(field + i)
+        I c == 0 { B }
+
+        I c == 44 { R 1 }  # Comma ','
+        I c == 34 { R 1 }  # Quote '"'
+        I c == 10 { R 1 }  # Newline '\n'
+        I c == 13 { R 1 }  # Carriage return '\r'
+
+        i = i + 1
+    }
+
+    0
+}
+
+# Write field to buffer with proper escaping
+# Returns new buffer position
+F csv_write_field(buf: i64, pos: i64, field: i64) -> i64 {
+    p := mut pos
+
+    needs_quote := csv_needs_quoting(field)
+
+    I needs_quote {
+        store_byte(buf + p, 34)  # Opening quote '"'
+        p = p + 1
+    }
+
+    # Copy field, escaping quotes
+    I field != 0 {
+        i := mut 0
+        L 1 {
+            c := load_byte(field + i)
+            I c == 0 { B }
+
+            # Escape quotes by doubling them
+            I c == 34 {
+                store_byte(buf + p, 34)
+                p = p + 1
+                store_byte(buf + p, 34)
+                p = p + 1
+            } E {
+                store_byte(buf + p, c)
+                p = p + 1
+            }
+
+            i = i + 1
+        }
+    }
+
+    I needs_quote {
+        store_byte(buf + p, 34)  # Closing quote '"'
+        p = p + 1
+    }
+
+    p
+}
+
+# Generate a CSV line from a CsvRow
+# Returns allocated string (caller must free)
+F csv_row_to_string(row: i64) -> i64 {
+    count := csv_row_count(row)
+    I count == 0 {
+        buf := malloc(1)
+        store_byte(buf, 0)
+        R buf
+    }
+
+    buf := malloc(CSV_BUFFER_SIZE)
+    pos := mut 0
+
+    i := mut 0
+    L i < count {
+        # Add comma separator (except for first field)
+        I i > 0 {
+            store_byte(buf + pos, 44)  # Comma ','
+            pos = pos + 1
+        }
+
+        field := csv_row_get(row, i)
+        pos = csv_write_field(buf, pos, field)
+
+        i = i + 1
+    }
+
+    store_byte(buf + pos, 0)
+    buf
+}
+
+# Generate a CSV line from array of field strings
+# fields: array of string pointers (i64*)
+# count: number of fields
+# Returns allocated CSV line string (caller must free)
+F csv_write_row(fields: i64, count: i64) -> i64 {
+    I count == 0 {
+        buf := malloc(1)
+        store_byte(buf, 0)
+        R buf
+    }
+
+    buf := malloc(CSV_BUFFER_SIZE)
+    pos := mut 0
+
+    i := mut 0
+    L i < count {
+        # Add comma separator (except for first field)
+        I i > 0 {
+            store_byte(buf + pos, 44)  # Comma ','
+            pos = pos + 1
+        }
+
+        field := load_i64(fields + (i * 8))
+        pos = csv_write_field(buf, pos, field)
+
+        i = i + 1
+    }
+
+    store_byte(buf + pos, 0)
+    buf
+}
+
+# ============================================================================
+# CSV Header Operations
+# ============================================================================
+
+# Parse CSV header (first line) and return field names as CsvRow
+F csv_parse_header(line: i64) -> i64 {
+    csv_parse_line(line)
+}
+
+# Find index of field by name in header row
+# Returns -1 if not found
+F csv_header_find(header: i64, name: i64) -> i64 {
+    count := csv_row_count(header)
+
+    i := mut 0
+    L i < count {
+        field := csv_row_get(header, i)
+        I str_equal(field, name) {
+            R i
+        }
+        i = i + 1
+    }
+
+    0 - 1  # Not found
+}
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Compare two strings for equality
+F str_equal(a: i64, b: i64) -> i64 {
+    I a == 0 { I b == 0 { R 1 } E { R 0 } }
+    I b == 0 { R 0 }
+
+    i := mut 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+
+        i = i + 1
+    }
+
+    0
+}
+
+# Copy field value into new string
+F csv_field_copy(field: i64) -> i64 {
+    I field == 0 {
+        buf := malloc(1)
+        store_byte(buf, 0)
+        R buf
+    }
+
+    len := strlen(field)
+    buf := malloc(len + 1)
+    memcpy(buf, field, len)
+    store_byte(buf + len, 0)
+    buf
+}
+
+# Create a new row from array of strings
+# Makes copies of all strings
+F csv_row_from_strings(strings: i64, count: i64) -> i64 {
+    row := csv_row_new()
+
+    i := mut 0
+    L i < count {
+        str := load_i64(strings + (i * 8))
+        copy := csv_field_copy(str)
+        csv_row_add(row, copy)
+        i = i + 1
+    }
+
+    row
+}
+
+# ============================================================================
+# Extern Declarations
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

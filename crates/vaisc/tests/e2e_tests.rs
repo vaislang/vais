@@ -13075,3 +13075,471 @@ fn test_typed_memory_overwrite() {
         Err(e) => panic!("Test failed: {}", e),
     }
 }
+
+// ============================================================================
+// Trait Dispatch Tests
+// ============================================================================
+
+#[test]
+fn test_trait_dispatch_basic() {
+    let source = r#"
+W Printable {
+    F display(&self) -> i64
+}
+
+S Point { x: i64, y: i64 }
+
+X Point: Printable {
+    F display(&self) -> i64 {
+        self.x + self.y
+    }
+}
+
+F main() -> i64 {
+    p := Point { x: 3, y: 4 }
+    p.display()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 7, "Exit code should be 7 (3+4)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_multiple_structs() {
+    let source = r#"
+W Calculable {
+    F compute(&self) -> i64
+}
+
+S Circle { radius: i64 }
+S Square { side: i64 }
+
+X Circle: Calculable {
+    F compute(&self) -> i64 {
+        self.radius * self.radius * 3
+    }
+}
+
+X Square: Calculable {
+    F compute(&self) -> i64 {
+        self.side * self.side
+    }
+}
+
+F main() -> i64 {
+    c := Circle { radius: 5 }
+    s := Square { side: 4 }
+    c.compute() + s.compute()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 91, "Exit code should be 91 (75+16)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_polymorphism() {
+    let source = r#"
+W Summable {
+    F sum(&self) -> i64
+}
+
+S Pair { a: i64, b: i64 }
+S Triple { a: i64, b: i64, c: i64 }
+
+X Pair: Summable {
+    F sum(&self) -> i64 {
+        self.a + self.b
+    }
+}
+
+X Triple: Summable {
+    F sum(&self) -> i64 {
+        self.a + self.b + self.c
+    }
+}
+
+F main() -> i64 {
+    p := Pair { a: 10, b: 20 }
+    t := Triple { a: 1, b: 2, c: 3 }
+    p.sum() + t.sum()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 36, "Exit code should be 36 (30+6)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_self_field_access() {
+    let source = r#"
+W Incrementable {
+    F increment(&self) -> i64
+}
+
+S Counter { value: i64, step: i64 }
+
+X Counter: Incrementable {
+    F increment(&self) -> i64 {
+        self.value + self.step
+    }
+}
+
+F main() -> i64 {
+    c := Counter { value: 100, step: 7 }
+    c.increment()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 107, "Exit code should be 107 (100+7)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_multiple_traits_one_struct() {
+    let source = r#"
+W Addable {
+    F add(&self) -> i64
+}
+
+W Multipliable {
+    F multiply(&self) -> i64
+}
+
+S Numbers { a: i64, b: i64 }
+
+X Numbers: Addable {
+    F add(&self) -> i64 {
+        self.a + self.b
+    }
+}
+
+X Numbers: Multipliable {
+    F multiply(&self) -> i64 {
+        self.a * self.b
+    }
+}
+
+F main() -> i64 {
+    n := Numbers { a: 5, b: 3 }
+    n.add() + n.multiply()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 23, "Exit code should be 23 (8+15)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_return_value_usage() {
+    let source = r#"
+W Evaluable {
+    F evaluate(&self) -> i64
+}
+
+S Expression { left: i64, right: i64 }
+
+X Expression: Evaluable {
+    F evaluate(&self) -> i64 {
+        self.left * 10 + self.right
+    }
+}
+
+F main() -> i64 {
+    e := Expression { left: 4, right: 2 }
+    result := e.evaluate()
+    result * 2
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 84, "Exit code should be 84 (42*2)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_chain_calls() {
+    let source = r#"
+W Doubler {
+    F double(&self) -> i64
+}
+
+W Tripler {
+    F triple(&self) -> i64
+}
+
+S Value { n: i64 }
+
+X Value: Doubler {
+    F double(&self) -> i64 {
+        self.n * 2
+    }
+}
+
+X Value: Tripler {
+    F triple(&self) -> i64 {
+        self.n * 3
+    }
+}
+
+F main() -> i64 {
+    v := Value { n: 5 }
+    d := v.double()
+    t := v.triple()
+    d + t
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 25, "Exit code should be 25 (10+15)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_conditional() {
+    let source = r#"
+W Checker {
+    F check(&self) -> i64
+}
+
+S Data { flag: i64, value: i64 }
+
+X Data: Checker {
+    F check(&self) -> i64 {
+        I self.flag > 0 {
+            R self.value
+        } E {
+            R 0
+        }
+    }
+}
+
+F main() -> i64 {
+    d1 := Data { flag: 1, value: 42 }
+    d2 := Data { flag: 0, value: 99 }
+    d1.check() + d2.check()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 42, "Exit code should be 42 (42+0)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_nested_operations() {
+    let source = r#"
+W Calculator {
+    F calculate(&self) -> i64
+}
+
+S Operation { x: i64, y: i64, z: i64 }
+
+X Operation: Calculator {
+    F calculate(&self) -> i64 {
+        result := self.x + self.y
+        result := result * self.z
+        result
+    }
+}
+
+F main() -> i64 {
+    op := Operation { x: 2, y: 3, z: 4 }
+    op.calculate()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 20, "Exit code should be 20 ((2+3)*4)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_zero_fields() {
+    let source = r#"
+W Provider {
+    F provide(&self) -> i64
+}
+
+S Unit {}
+
+X Unit: Provider {
+    F provide(&self) -> i64 {
+        42
+    }
+}
+
+F main() -> i64 {
+    u := Unit {}
+    u.provide()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 42, "Exit code should be 42");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_complex_calculation() {
+    let source = r#"
+W AreaCalculator {
+    F area(&self) -> i64
+}
+
+W PerimeterCalculator {
+    F perimeter(&self) -> i64
+}
+
+S Rectangle { width: i64, height: i64 }
+
+X Rectangle: AreaCalculator {
+    F area(&self) -> i64 {
+        self.width * self.height
+    }
+}
+
+X Rectangle: PerimeterCalculator {
+    F perimeter(&self) -> i64 {
+        (self.width + self.height) * 2
+    }
+}
+
+F main() -> i64 {
+    r := Rectangle { width: 5, height: 3 }
+    a := r.area()
+    p := r.perimeter()
+    a + p
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 31, "Exit code should be 31 (15+16)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_negative_values() {
+    let source = r#"
+W Negator {
+    F negate(&self) -> i64
+}
+
+S SignedValue { value: i64 }
+
+X SignedValue: Negator {
+    F negate(&self) -> i64 {
+        0 - self.value
+    }
+}
+
+F main() -> i64 {
+    v := SignedValue { value: 50 }
+    n := v.negate()
+    n + 100
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 50, "Exit code should be 50 (-50+100)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}
+
+#[test]
+fn test_trait_dispatch_multiple_instances() {
+    let source = r#"
+W Scorer {
+    F score(&self) -> i64
+}
+
+S Player { points: i64, bonus: i64 }
+
+X Player: Scorer {
+    F score(&self) -> i64 {
+        self.points + self.bonus
+    }
+}
+
+F main() -> i64 {
+    p1 := Player { points: 10, bonus: 5 }
+    p2 := Player { points: 20, bonus: 3 }
+    p3 := Player { points: 15, bonus: 7 }
+    p1.score() + p2.score() + p3.score()
+}
+"#;
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(result.exit_code, 60, "Exit code should be 60 (15+23+22)");
+        }
+        Err(e) if e.contains("Failed to run clang") => {
+            eprintln!("Skipping test: clang not available");
+        }
+        Err(e) => panic!("Test failed: {}", e),
+    }
+}

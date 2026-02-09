@@ -1,0 +1,449 @@
+# CSV Test Suite
+# Tests CSV parser and generator functionality
+
+# ============================================================================
+# Include CSV Library (inlined for testing)
+# ============================================================================
+
+C MAX_FIELDS: i64 = 128
+C MAX_FIELD_LEN: i64 = 2048
+C CSV_BUFFER_SIZE: i64 = 8192
+
+# CsvRow operations
+F csv_row_new() -> i64 {
+    row := malloc(24)
+    capacity := MAX_FIELDS
+    fields := malloc(capacity * 8)
+    store_i64(row, fields)
+    store_i64(row + 8, 0)
+    store_i64(row + 16, capacity)
+    row
+}
+
+F csv_row_get(row: i64, idx: i64) -> i64 {
+    I idx < 0 { R 0 }
+    count := load_i64(row + 8)
+    I idx >= count { R 0 }
+    fields := load_i64(row)
+    load_i64(fields + (idx * 8))
+}
+
+F csv_row_count(row: i64) -> i64 {
+    load_i64(row + 8)
+}
+
+F csv_row_add(row: i64, field: i64) -> i64 {
+    count := load_i64(row + 8)
+    capacity := load_i64(row + 16)
+    I count >= capacity { R 0 }
+    fields := load_i64(row)
+    store_i64(fields + (count * 8), field)
+    store_i64(row + 8, count + 1)
+    1
+}
+
+F csv_row_free(row: i64) -> i64 {
+    count := load_i64(row + 8)
+    fields := load_i64(row)
+    i := mut 0
+    L i < count {
+        field := load_i64(fields + (i * 8))
+        I field != 0 { free(field) }
+        i = i + 1
+    }
+    I fields != 0 { free(fields) }
+    free(row)
+    0
+}
+
+# Parse CSV line
+F csv_parse_line(line: i64) -> i64 {
+    row := csv_row_new()
+    I line == 0 { R row }
+
+    len := strlen(line)
+    I len == 0 { R row }
+
+    field_buf := malloc(MAX_FIELD_LEN)
+    field_pos := mut 0
+    in_quotes := mut 0
+    i := mut 0
+
+    L i <= len {
+        c := load_byte(line + i)
+
+        I c == 0 {
+            I field_pos > 0 {
+                field_str := malloc(field_pos + 1)
+                memcpy(field_str, field_buf, field_pos)
+                store_byte(field_str + field_pos, 0)
+                csv_row_add(row, field_str)
+            } E {
+                I i > 0 {
+                    prev := load_byte(line + (i - 1))
+                    I prev == 44 {
+                        field_str := malloc(1)
+                        store_byte(field_str, 0)
+                        csv_row_add(row, field_str)
+                    }
+                }
+            }
+            B
+        }
+
+        I c == 34 {
+            I in_quotes {
+                next := load_byte(line + (i + 1))
+                I next == 34 {
+                    I field_pos < (MAX_FIELD_LEN - 1) {
+                        store_byte(field_buf + field_pos, 34)
+                        field_pos = field_pos + 1
+                    }
+                    i = i + 2
+                    C
+                } E {
+                    in_quotes = 0
+                    i = i + 1
+                    C
+                }
+            } E {
+                in_quotes = 1
+                i = i + 1
+                C
+            }
+        }
+
+        I c == 44 {
+            I in_quotes == 0 {
+                field_str := malloc(field_pos + 1)
+                memcpy(field_str, field_buf, field_pos)
+                store_byte(field_str + field_pos, 0)
+                csv_row_add(row, field_str)
+                field_pos = 0
+                i = i + 1
+                C
+            }
+        }
+
+        I field_pos < (MAX_FIELD_LEN - 1) {
+            store_byte(field_buf + field_pos, c)
+            field_pos = field_pos + 1
+        }
+
+        i = i + 1
+    }
+
+    free(field_buf)
+    row
+}
+
+# Compare strings
+F str_equal(a: i64, b: i64) -> i64 {
+    I a == 0 { I b == 0 { R 1 } E { R 0 } }
+    I b == 0 { R 0 }
+    i := mut 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# Test Helpers
+# ============================================================================
+
+F my_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        R 0
+    }
+
+    I val < 0 {
+        putchar(45)
+        my_print_i64(0 - val)
+        R 0
+    }
+
+    I val >= 10 {
+        my_print_i64(val / 10)
+    }
+    putchar(48 + (val % 10))
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, name: i64) -> i64 {
+    I actual == expected {
+        puts("  PASS: ")
+        puts(name)
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL: ")
+        puts(name)
+        puts(" - expected ")
+        my_print_i64(expected)
+        puts(", got ")
+        my_print_i64(actual)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Test Cases
+# ============================================================================
+
+# Test 1: Parse simple CSV line with three fields
+F test_simple_parse() -> i64 {
+    puts("\n[test_simple_parse]")
+
+    row := csv_parse_line("a,b,c")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        f1 := csv_row_get(row, 1)
+        f2 := csv_row_get(row, 2)
+
+        I str_equal(f0, "a") == 0 { result = 0 }
+        I str_equal(f1, "b") == 0 { result = 0 }
+        I str_equal(f2, "c") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "simple parse")
+}
+
+# Test 2: Parse CSV with quoted field
+F test_quoted_field() -> i64 {
+    puts("\n[test_quoted_field]")
+
+    row := csv_parse_line("a,\"b,c\",d")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        f1 := csv_row_get(row, 1)
+        f2 := csv_row_get(row, 2)
+
+        I str_equal(f0, "a") == 0 { result = 0 }
+        I str_equal(f1, "b,c") == 0 { result = 0 }
+        I str_equal(f2, "d") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "quoted field")
+}
+
+# Test 3: Parse empty fields
+F test_empty_fields() -> i64 {
+    puts("\n[test_empty_fields]")
+
+    row := csv_parse_line("a,,c")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        f1 := csv_row_get(row, 1)
+        f2 := csv_row_get(row, 2)
+
+        I str_equal(f0, "a") == 0 { result = 0 }
+        I str_equal(f1, "") == 0 { result = 0 }
+        I str_equal(f2, "c") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "empty fields")
+}
+
+# Test 4: Parse single field
+F test_single_field() -> i64 {
+    puts("\n[test_single_field]")
+
+    row := csv_parse_line("hello")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 1 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        I str_equal(f0, "hello") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "single field")
+}
+
+# Test 5: Parse two fields
+F test_two_fields() -> i64 {
+    puts("\n[test_two_fields]")
+
+    row := csv_parse_line("first,second")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 2 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        f1 := csv_row_get(row, 1)
+
+        I str_equal(f0, "first") == 0 { result = 0 }
+        I str_equal(f1, "second") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "two fields")
+}
+
+# Test 6: Parse numbers as fields
+F test_number_fields() -> i64 {
+    puts("\n[test_number_fields]")
+
+    row := csv_parse_line("1,2,3")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        f1 := csv_row_get(row, 1)
+        f2 := csv_row_get(row, 2)
+
+        I str_equal(f0, "1") == 0 { result = 0 }
+        I str_equal(f1, "2") == 0 { result = 0 }
+        I str_equal(f2, "3") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "number fields")
+}
+
+# Test 7: Parse empty line
+F test_empty_line() -> i64 {
+    puts("\n[test_empty_line]")
+
+    row := csv_parse_line("")
+    count := csv_row_count(row)
+
+    csv_row_free(row)
+    assert_eq(count, 0, "empty line")
+}
+
+# Test 8: Parse quoted empty field
+F test_quoted_empty() -> i64 {
+    puts("\n[test_quoted_empty]")
+
+    row := csv_parse_line("\"\",b,c")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        I str_equal(f0, "") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "quoted empty field")
+}
+
+# Test 9: Parse trailing comma
+F test_trailing_comma() -> i64 {
+    puts("\n[test_trailing_comma]")
+
+    row := csv_parse_line("a,b,")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 3 { result = 0 }
+
+    I result == 1 {
+        f2 := csv_row_get(row, 2)
+        I str_equal(f2, "") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "trailing comma")
+}
+
+# Test 10: Parse field with spaces
+F test_spaces() -> i64 {
+    puts("\n[test_spaces]")
+
+    row := csv_parse_line("hello world,test")
+    count := csv_row_count(row)
+
+    result := mut 1
+    I count != 2 { result = 0 }
+
+    I result == 1 {
+        f0 := csv_row_get(row, 0)
+        I str_equal(f0, "hello world") == 0 { result = 0 }
+    }
+
+    csv_row_free(row)
+    assert_eq(result, 1, "field with spaces")
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("\n  CSV Test Suite")
+    puts("\n===========================================")
+
+    total := mut 0
+    total = total + test_simple_parse()
+    total = total + test_quoted_field()
+    total = total + test_empty_fields()
+    total = total + test_single_field()
+    total = total + test_two_fields()
+    total = total + test_number_fields()
+    total = total + test_empty_line()
+    total = total + test_quoted_empty()
+    total = total + test_trailing_comma()
+    total = total + test_spaces()
+
+    puts("\n===========================================")
+    puts("\n  Total passed: ")
+    my_print_i64(total)
+    puts(" / 10")
+    puts("\n===========================================")
+    putchar(10)
+
+    0
+}
+
+# ============================================================================
+# Extern Declarations
+# ============================================================================
+
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+X F strlen(s: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

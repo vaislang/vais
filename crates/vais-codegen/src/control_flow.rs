@@ -54,9 +54,9 @@ impl CodeGenerator {
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
 
-                // Convert i64 to i1 for branch
-                let cond_bool = self.next_temp(counter);
-                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+                // Convert to i1 for branch (type-aware: skips for bool/i1)
+                let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
+                ir.push_str(&conv_ir);
 
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
@@ -135,6 +135,15 @@ impl CodeGenerator {
                 // Both branches terminated = this whole if-else is terminated
                 let all_terminated = then_terminated && else_terminated;
 
+                // If both branches are terminated (e.g., both return/break),
+                // skip the merge block entirely — it's unreachable
+                if all_terminated {
+                    // No merge block needed. Return a dummy value.
+                    // The caller will see all_terminated=true and skip using this value.
+                    let result = self.next_temp(counter);
+                    return Ok((result, ir, true, String::new()));
+                }
+
                 // Merge
                 ir.push_str(&format!("{}:\n", local_merge));
                 self.current_block = local_merge.clone();
@@ -169,8 +178,9 @@ impl CodeGenerator {
                         result, llvm_type, else_val_for_phi, else_from_label
                     ));
                 } else {
-                    // Unreachable merge block
-                    ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+                    // Unreachable merge block — add terminator
+                    ir.push_str("  unreachable\n");
+                    return Ok((result, ir, true, local_merge));
                 }
 
                 // Return local_merge as the last block for this nested if-else

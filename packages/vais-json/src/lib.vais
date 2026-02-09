@@ -1,0 +1,752 @@
+# JSON Library - Parser and Generator
+# Supports parsing JSON strings into structured data and generating JSON output
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+C JSON_TYPE_NULL: i64 = 0
+C JSON_TYPE_BOOL: i64 = 1
+C JSON_TYPE_NUMBER: i64 = 2
+C JSON_TYPE_STRING: i64 = 3
+C JSON_TYPE_ARRAY: i64 = 4
+C JSON_TYPE_OBJECT: i64 = 5
+
+C MAX_JSON_DEPTH: i64 = 32
+C MAX_STRING_LEN: i64 = 4096
+C MAX_ARRAY_SIZE: i64 = 256
+C MAX_OBJECT_PAIRS: i64 = 256
+
+# ============================================================================
+# JSON Value Structure
+# ============================================================================
+
+# JsonValue - represents any JSON value
+S JsonValue {
+    type: i64,      # JSON_TYPE_*
+    data: i64,      # Pointer to type-specific data
+    num_value: i64  # For numbers and booleans (0/1)
+}
+
+# JsonArray - dynamic array of JsonValue pointers
+S JsonArray {
+    values: i64,    # Array of JsonValue* (i64*)
+    count: i64,
+    capacity: i64
+}
+
+# JsonPair - key-value pair for objects
+S JsonPair {
+    key: i64,       # String pointer
+    value: i64      # JsonValue pointer
+}
+
+# JsonObject - collection of key-value pairs
+S JsonObject {
+    pairs: i64,     # Array of JsonPair (JsonPair*)
+    count: i64,
+    capacity: i64
+}
+
+# ============================================================================
+# JSON Value Constructors
+# ============================================================================
+
+# Create a null value
+F json_null() -> i64 {
+    val := malloc(24)  # sizeof(JsonValue) = 3 * 8
+    store_i64(val, JSON_TYPE_NULL)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, 0)
+    val
+}
+
+# Create a boolean value
+F json_bool(b: i64) -> i64 {
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_BOOL)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, I b { 1 } E { 0 })
+    val
+}
+
+# Create a number value
+F json_number(n: i64) -> i64 {
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_NUMBER)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, n)
+    val
+}
+
+# Create a string value
+F json_string(s: i64) -> i64 {
+    val := malloc(24)
+    len := strlen(s)
+    str_copy := malloc(len + 1)
+    memcpy(str_copy, s, len)
+    store_byte(str_copy + len, 0)
+
+    store_i64(val, JSON_TYPE_STRING)
+    store_i64(val + 8, str_copy)
+    store_i64(val + 16, 0)
+    val
+}
+
+# Create an empty array
+F json_array() -> i64 {
+    arr := malloc(24)  # sizeof(JsonArray)
+    capacity := MAX_ARRAY_SIZE
+    values := malloc(capacity * 8)
+
+    store_i64(arr, values)
+    store_i64(arr + 8, 0)
+    store_i64(arr + 16, capacity)
+
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_ARRAY)
+    store_i64(val + 8, arr)
+    store_i64(val + 16, 0)
+    val
+}
+
+# Create an empty object
+F json_object() -> i64 {
+    obj := malloc(24)  # sizeof(JsonObject)
+    capacity := MAX_OBJECT_PAIRS
+    pairs := malloc(capacity * 16)  # sizeof(JsonPair) = 2 * 8
+
+    store_i64(obj, pairs)
+    store_i64(obj + 8, 0)
+    store_i64(obj + 16, capacity)
+
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_OBJECT)
+    store_i64(val + 8, obj)
+    store_i64(val + 16, 0)
+    val
+}
+
+# ============================================================================
+# Array Operations
+# ============================================================================
+
+# Add value to array
+F json_array_push(arr_val: i64, item: i64) -> i64 {
+    arr := load_i64(arr_val + 8)
+    count := load_i64(arr + 8)
+    capacity := load_i64(arr + 16)
+
+    I count >= capacity { R 0 }  # Array full
+
+    values := load_i64(arr)
+    store_i64(values + (count * 8), item)
+    store_i64(arr + 8, count + 1)
+    1
+}
+
+# Get value from array at index
+F json_array_get(arr_val: i64, idx: i64) -> i64 {
+    arr := load_i64(arr_val + 8)
+    count := load_i64(arr + 8)
+
+    I idx < 0 { R 0 }
+    I idx >= count { R 0 }
+
+    values := load_i64(arr)
+    load_i64(values + (idx * 8))
+}
+
+# Get array length
+F json_array_len(arr_val: i64) -> i64 {
+    arr := load_i64(arr_val + 8)
+    load_i64(arr + 8)
+}
+
+# ============================================================================
+# Object Operations
+# ============================================================================
+
+# Add key-value pair to object
+F json_object_set(obj_val: i64, key: i64, value: i64) -> i64 {
+    obj := load_i64(obj_val + 8)
+    count := load_i64(obj + 8)
+    capacity := load_i64(obj + 16)
+
+    I count >= capacity { R 0 }  # Object full
+
+    # Copy key string
+    key_len := strlen(key)
+    key_copy := malloc(key_len + 1)
+    memcpy(key_copy, key, key_len)
+    store_byte(key_copy + key_len, 0)
+
+    # Store pair
+    pairs := load_i64(obj)
+    pair_offset := pairs + (count * 16)
+    store_i64(pair_offset, key_copy)
+    store_i64(pair_offset + 8, value)
+
+    store_i64(obj + 8, count + 1)
+    1
+}
+
+# Get value from object by key
+F json_object_get(obj_val: i64, key: i64) -> i64 {
+    obj := load_i64(obj_val + 8)
+    count := load_i64(obj + 8)
+    pairs := load_i64(obj)
+
+    i := mut 0
+    L i < count {
+        pair_offset := pairs + (i * 16)
+        pair_key := load_i64(pair_offset)
+
+        I str_equal(pair_key, key) {
+            R load_i64(pair_offset + 8)
+        }
+
+        i = i + 1
+    }
+
+    0  # Not found
+}
+
+# Get object size
+F json_object_len(obj_val: i64) -> i64 {
+    obj := load_i64(obj_val + 8)
+    load_i64(obj + 8)
+}
+
+# ============================================================================
+# Value Accessors
+# ============================================================================
+
+# Get type of JSON value
+F json_type(val: i64) -> i64 {
+    load_i64(val)
+}
+
+# Get boolean value (0 or 1)
+F json_get_bool(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_BOOL {
+        load_i64(val + 16)
+    } E {
+        0
+    }
+}
+
+# Get number value
+F json_get_number(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_NUMBER {
+        load_i64(val + 16)
+    } E {
+        0
+    }
+}
+
+# Get string value (pointer)
+F json_get_string(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_STRING {
+        load_i64(val + 8)
+    } E {
+        0
+    }
+}
+
+# ============================================================================
+# JSON Parser
+# ============================================================================
+
+# Skip whitespace
+F skip_whitespace(input: i64, pos: i64) -> i64 {
+    p := mut pos
+    L 1 {
+        c := load_byte(input + p)
+        I c == 32 { p = p + 1; C }  # space
+        I c == 9 { p = p + 1; C }   # tab
+        I c == 10 { p = p + 1; C }  # newline
+        I c == 13 { p = p + 1; C }  # carriage return
+        B
+    }
+    p
+}
+
+# Parse JSON number
+F parse_number(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+    p := mut pos
+    is_negative := mut 0
+
+    # Check for negative sign
+    c := load_byte(input + p)
+    I c == 45 {  # '-'
+        is_negative = 1
+        p = p + 1
+    }
+
+    # Parse digits
+    num := mut 0
+    has_digits := mut 0
+
+    L 1 {
+        c := load_byte(input + p)
+        I c >= 48 {  # '0'
+            I c <= 57 {  # '9'
+                num = (num * 10) + (c - 48)
+                p = p + 1
+                has_digits = 1
+                C
+            }
+        }
+        B
+    }
+
+    I has_digits == 0 { R 0 }  # No digits found
+
+    I is_negative {
+        num = 0 - num
+    }
+
+    store_i64(out_val, json_number(num))
+    store_i64(out_pos, p)
+    1
+}
+
+# Parse JSON string
+F parse_string(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+    p := mut pos
+
+    # Expect opening quote
+    I load_byte(input + p) != 34 { R 0 }  # '"'
+    p = p + 1
+
+    buf := malloc(MAX_STRING_LEN)
+    buf_pos := mut 0
+
+    L 1 {
+        c := load_byte(input + p)
+
+        # End of string or input
+        I c == 0 { free(buf); R 0 }
+
+        # Closing quote
+        I c == 34 {  # '"'
+            store_byte(buf + buf_pos, 0)
+            str_val := json_string(buf)
+            free(buf)
+            store_i64(out_val, str_val)
+            store_i64(out_pos, p + 1)
+            R 1
+        }
+
+        # Escape sequence
+        I c == 92 {  # '\\'
+            p = p + 1
+            next := load_byte(input + p)
+            I next == 110 { store_byte(buf + buf_pos, 10); buf_pos = buf_pos + 1 }  # \n
+            E I next == 116 { store_byte(buf + buf_pos, 9); buf_pos = buf_pos + 1 }  # \t
+            E I next == 114 { store_byte(buf + buf_pos, 13); buf_pos = buf_pos + 1 }  # \r
+            E I next == 34 { store_byte(buf + buf_pos, 34); buf_pos = buf_pos + 1 }  # \"
+            E I next == 92 { store_byte(buf + buf_pos, 92); buf_pos = buf_pos + 1 }  # \\
+            E { store_byte(buf + buf_pos, next); buf_pos = buf_pos + 1 }
+            p = p + 1
+            C
+        }
+
+        # Regular character
+        I buf_pos < (MAX_STRING_LEN - 1) {
+            store_byte(buf + buf_pos, c)
+            buf_pos = buf_pos + 1
+        }
+
+        p = p + 1
+    }
+
+    free(buf)
+    0
+}
+
+# Forward declaration for recursive parsing
+F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64
+
+# Parse JSON array
+F parse_array(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+    p := mut pos
+
+    # Expect opening bracket
+    I load_byte(input + p) != 91 { R 0 }  # '['
+    p = p + 1
+    p = skip_whitespace(input, p)
+
+    arr := json_array()
+
+    # Empty array
+    I load_byte(input + p) == 93 {  # ']'
+        store_i64(out_val, arr)
+        store_i64(out_pos, p + 1)
+        R 1
+    }
+
+    # Parse elements
+    L 1 {
+        elem_val := mut 0
+        elem_pos := mut 0
+
+        success := parse_value(input, p, &elem_val, &elem_pos)
+        I success == 0 { R 0 }
+
+        json_array_push(arr, elem_val)
+        p = elem_pos
+        p = skip_whitespace(input, p)
+
+        c := load_byte(input + p)
+        I c == 44 {  # ','
+            p = p + 1
+            p = skip_whitespace(input, p)
+            C
+        }
+        I c == 93 {  # ']'
+            store_i64(out_val, arr)
+            store_i64(out_pos, p + 1)
+            R 1
+        }
+        R 0  # Invalid array syntax
+    }
+
+    0
+}
+
+# Parse JSON object
+F parse_object(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+    p := mut pos
+
+    # Expect opening brace
+    I load_byte(input + p) != 123 { R 0 }  # '{'
+    p = p + 1
+    p = skip_whitespace(input, p)
+
+    obj := json_object()
+
+    # Empty object
+    I load_byte(input + p) == 125 {  # '}'
+        store_i64(out_val, obj)
+        store_i64(out_pos, p + 1)
+        R 1
+    }
+
+    # Parse pairs
+    L 1 {
+        # Parse key (must be string)
+        key_val := mut 0
+        key_pos := mut 0
+
+        success := parse_string(input, p, &key_val, &key_pos)
+        I success == 0 { R 0 }
+
+        key_str := json_get_string(key_val)
+        p = key_pos
+        p = skip_whitespace(input, p)
+
+        # Expect colon
+        I load_byte(input + p) != 58 { R 0 }  # ':'
+        p = p + 1
+        p = skip_whitespace(input, p)
+
+        # Parse value
+        val_val := mut 0
+        val_pos := mut 0
+
+        success := parse_value(input, p, &val_val, &val_pos)
+        I success == 0 { R 0 }
+
+        json_object_set(obj, key_str, val_val)
+        p = val_pos
+        p = skip_whitespace(input, p)
+
+        c := load_byte(input + p)
+        I c == 44 {  # ','
+            p = p + 1
+            p = skip_whitespace(input, p)
+            C
+        }
+        I c == 125 {  # '}'
+            store_i64(out_val, obj)
+            store_i64(out_pos, p + 1)
+            R 1
+        }
+        R 0  # Invalid object syntax
+    }
+
+    0
+}
+
+# Parse JSON value (entry point for recursion)
+F parse_value(input: i64, pos: i64, out_val: i64, out_pos: i64) -> i64 {
+    p := skip_whitespace(input, pos)
+    c := load_byte(input + p)
+
+    # null
+    I c == 110 {  # 'n'
+        I load_byte(input + p + 1) == 117 {  # 'u'
+            I load_byte(input + p + 2) == 108 {  # 'l'
+                I load_byte(input + p + 3) == 108 {  # 'l'
+                    store_i64(out_val, json_null())
+                    store_i64(out_pos, p + 4)
+                    R 1
+                }
+            }
+        }
+    }
+
+    # true
+    I c == 116 {  # 't'
+        I load_byte(input + p + 1) == 114 {  # 'r'
+            I load_byte(input + p + 2) == 117 {  # 'u'
+                I load_byte(input + p + 3) == 101 {  # 'e'
+                    store_i64(out_val, json_bool(1))
+                    store_i64(out_pos, p + 4)
+                    R 1
+                }
+            }
+        }
+    }
+
+    # false
+    I c == 102 {  # 'f'
+        I load_byte(input + p + 1) == 97 {  # 'a'
+            I load_byte(input + p + 2) == 108 {  # 'l'
+                I load_byte(input + p + 3) == 115 {  # 's'
+                    I load_byte(input + p + 4) == 101 {  # 'e'
+                        store_i64(out_val, json_bool(0))
+                        store_i64(out_pos, p + 5)
+                        R 1
+                    }
+                }
+            }
+        }
+    }
+
+    # string
+    I c == 34 { R parse_string(input, p, out_val, out_pos) }  # '"'
+
+    # array
+    I c == 91 { R parse_array(input, p, out_val, out_pos) }  # '['
+
+    # object
+    I c == 123 { R parse_object(input, p, out_val, out_pos) }  # '{'
+
+    # number (including negative)
+    I c >= 48 { I c <= 57 { R parse_number(input, p, out_val, out_pos) } }  # '0'-'9'
+    I c == 45 { R parse_number(input, p, out_val, out_pos) }  # '-'
+
+    0  # Parse failed
+}
+
+# Main JSON parse function
+F json_parse(input: i64) -> i64 {
+    val := mut 0
+    pos := mut 0
+    success := parse_value(input, 0, &val, &pos)
+    I success { val } E { 0 }
+}
+
+# ============================================================================
+# JSON Generator
+# ============================================================================
+
+# Stringify a JSON value to buffer
+F stringify_value(val: i64, buf: i64, pos: i64) -> i64 {
+    p := mut pos
+    type := json_type(val)
+
+    I type == JSON_TYPE_NULL {
+        store_byte(buf + p, 110); p = p + 1  # 'n'
+        store_byte(buf + p, 117); p = p + 1  # 'u'
+        store_byte(buf + p, 108); p = p + 1  # 'l'
+        store_byte(buf + p, 108); p = p + 1  # 'l'
+        R p
+    }
+
+    I type == JSON_TYPE_BOOL {
+        b := json_get_bool(val)
+        I b {
+            store_byte(buf + p, 116); p = p + 1  # 't'
+            store_byte(buf + p, 114); p = p + 1  # 'r'
+            store_byte(buf + p, 117); p = p + 1  # 'u'
+            store_byte(buf + p, 101); p = p + 1  # 'e'
+        } E {
+            store_byte(buf + p, 102); p = p + 1  # 'f'
+            store_byte(buf + p, 97); p = p + 1   # 'a'
+            store_byte(buf + p, 108); p = p + 1  # 'l'
+            store_byte(buf + p, 115); p = p + 1  # 's'
+            store_byte(buf + p, 101); p = p + 1  # 'e'
+        }
+        R p
+    }
+
+    I type == JSON_TYPE_NUMBER {
+        num := json_get_number(val)
+        p = write_i64(buf, p, num)
+        R p
+    }
+
+    I type == JSON_TYPE_STRING {
+        str := json_get_string(val)
+        store_byte(buf + p, 34); p = p + 1  # '"'
+
+        i := mut 0
+        L 1 {
+            c := load_byte(str + i)
+            I c == 0 { B }
+
+            I c == 34 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 34); p = p + 1 }  # \"
+            E I c == 92 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 92); p = p + 1 }  # \\
+            E I c == 10 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 110); p = p + 1 }  # \n
+            E I c == 9 { store_byte(buf + p, 92); p = p + 1; store_byte(buf + p, 116); p = p + 1 }  # \t
+            E { store_byte(buf + p, c); p = p + 1 }
+
+            i = i + 1
+        }
+
+        store_byte(buf + p, 34); p = p + 1  # '"'
+        R p
+    }
+
+    I type == JSON_TYPE_ARRAY {
+        store_byte(buf + p, 91); p = p + 1  # '['
+
+        len := json_array_len(val)
+        i := mut 0
+        L i < len {
+            I i > 0 {
+                store_byte(buf + p, 44); p = p + 1  # ','
+            }
+
+            elem := json_array_get(val, i)
+            p = stringify_value(elem, buf, p)
+            i = i + 1
+        }
+
+        store_byte(buf + p, 93); p = p + 1  # ']'
+        R p
+    }
+
+    I type == JSON_TYPE_OBJECT {
+        store_byte(buf + p, 123); p = p + 1  # '{'
+
+        obj := load_i64(val + 8)
+        count := load_i64(obj + 8)
+        pairs := load_i64(obj)
+
+        i := mut 0
+        L i < count {
+            I i > 0 {
+                store_byte(buf + p, 44); p = p + 1  # ','
+            }
+
+            pair_offset := pairs + (i * 16)
+            key := load_i64(pair_offset)
+            pair_val := load_i64(pair_offset + 8)
+
+            # Write key
+            store_byte(buf + p, 34); p = p + 1  # '"'
+            j := mut 0
+            L 1 {
+                c := load_byte(key + j)
+                I c == 0 { B }
+                store_byte(buf + p, c); p = p + 1
+                j = j + 1
+            }
+            store_byte(buf + p, 34); p = p + 1  # '"'
+
+            store_byte(buf + p, 58); p = p + 1  # ':'
+
+            p = stringify_value(pair_val, buf, p)
+            i = i + 1
+        }
+
+        store_byte(buf + p, 125); p = p + 1  # '}'
+        R p
+    }
+
+    p
+}
+
+# Convert JSON value to string
+F json_stringify(val: i64) -> i64 {
+    buf := malloc(16384)
+    pos := stringify_value(val, buf, 0)
+    store_byte(buf + pos, 0)
+    buf
+}
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+# Compare two strings for equality
+F str_equal(a: i64, b: i64) -> i64 {
+    I a == 0 { I b == 0 { R 1 } E { R 0 } }
+    I b == 0 { R 0 }
+
+    i := mut 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+
+        i = i + 1
+    }
+
+    0
+}
+
+# Write i64 to buffer as decimal string
+F write_i64(buf: i64, pos: i64, val: i64) -> i64 {
+    p := mut pos
+
+    I val == 0 {
+        store_byte(buf + p, 48)  # '0'
+        R p + 1
+    }
+
+    I val < 0 {
+        store_byte(buf + p, 45)  # '-'
+        p = p + 1
+        val = 0 - val
+    }
+
+    # Count digits
+    temp := mut val
+    digits := mut 0
+    L temp > 0 {
+        digits = digits + 1
+        temp = temp / 10
+    }
+
+    # Write digits in reverse
+    i := mut digits
+    L i > 0 {
+        i = i - 1
+        digit := val % 10
+        store_byte(buf + p + i, 48 + digit)
+        val = val / 10
+    }
+
+    p + digits
+}
+
+# ============================================================================
+# Extern Declarations
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

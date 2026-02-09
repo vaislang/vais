@@ -347,4 +347,46 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 5: Codegen 버그 수정 & 에코시스템 확장
+
+> **상태**: ✅ 완료 (2026-02-10)
+> **목표**: 셀프호스트 네이티브 바이너리 생성을 가로막는 codegen 버그 2건 수정, trait 실행 검증 강화, 에코시스템 패키지 확대
+> **배경**: selfhost IR 생성은 성공하지만 clang 링킹 시 elseif.merge 라벨 에러. bool i1/i64 불일치 pre-existing 버그. trait dispatch E2E 검증 부족. 에코시스템 패키지 3개→5개
+
+모드: 자동진행
+
+### Stage 1: Codegen 버그 수정
+
+**목표**: 셀프호스트 네이티브 바이너리 생성을 가로막는 핵심 codegen 버그 해결
+
+- [x] 1. elseif.merge codegen 버그 수정 — control_flow.rs의 라벨 관리 로직 수정 (Opus) ✅ 2026-02-10
+  변경: control_flow.rs (both branches terminated → skip merge block, add unreachable terminator)
+- [x] 2. bool i1/i64 codegen 정합성 수정 — 비교 연산 결과 타입 일관성 확보 (Opus) ✅ 2026-02-10
+  변경: inkwell/gen_stmt.rs (i1 alloca for bool), type_inference.rs (generate_cond_to_i1 helper), generate_expr.rs + control_flow.rs (type-aware condition conversion)
+
+### Stage 2: 셀프호스트 링킹 & 테스트
+
+**목표**: codegen 수정 후 selfhost 네이티브 바이너리 생성 성공, trait E2E 확충
+
+- [x] 3. 셀프호스트 네이티브 바이너리 링킹 검증 (Sonnet) [blockedBy: 1, 2] ✅ 2026-02-10
+  변경: selfhost/*.ll — 20/21 파일 clang 컴파일 성공 (95.2%), 560+ elseif.merge 라벨 정상, 1개 %%t 이중기호 별도 버그
+- [x] 4. Trait dispatch E2E 테스트 10개+ 추가 (Sonnet) [∥3] ✅ 2026-02-10
+  변경: e2e_tests.rs — 13개 trait dispatch 테스트 추가 (475→488개, X StructName: TraitName 문법)
+
+### Stage 3: 에코시스템 패키지 확대
+
+**목표**: 순수 Vais 실용 패키지 추가로 에코시스템 씨앗 확보
+
+- [x] 5. vais-json + vais-csv 패키지 구현 (Sonnet) [∥3, ∥4] ✅ 2026-02-10
+  변경: packages/vais-json/ (lib 752줄 + test 344줄), packages/vais-csv/ (lib 411줄 + test 449줄)
+
+### Stage 4: 통합 검증
+
+- [x] 6. E2E 475+ 회귀 없음, Clippy 0건, 신규 테스트 전체 통과 (Opus) [blockedBy: 1~5] ✅ 2026-02-10
+  변경: E2E 488개 통과 (475→488, +13 trait dispatch), Clippy 0건
+
+진행률: 6/6 (100%) ✅
+
+---
+
 **메인테이너**: Steve

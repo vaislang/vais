@@ -1,0 +1,344 @@
+# JSON Test Suite
+# Tests JSON parser and generator functionality
+
+# ============================================================================
+# Include JSON Library (inlined for testing)
+# ============================================================================
+
+# Constants
+C JSON_TYPE_NULL: i64 = 0
+C JSON_TYPE_BOOL: i64 = 1
+C JSON_TYPE_NUMBER: i64 = 2
+C JSON_TYPE_STRING: i64 = 3
+C JSON_TYPE_ARRAY: i64 = 4
+C JSON_TYPE_OBJECT: i64 = 5
+
+C MAX_JSON_DEPTH: i64 = 32
+C MAX_STRING_LEN: i64 = 4096
+C MAX_ARRAY_SIZE: i64 = 256
+C MAX_OBJECT_PAIRS: i64 = 256
+
+# JSON Value constructors (minimal inline version for tests)
+F json_null() -> i64 {
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_NULL)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, 0)
+    val
+}
+
+F json_bool(b: i64) -> i64 {
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_BOOL)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, I b { 1 } E { 0 })
+    val
+}
+
+F json_number(n: i64) -> i64 {
+    val := malloc(24)
+    store_i64(val, JSON_TYPE_NUMBER)
+    store_i64(val + 8, 0)
+    store_i64(val + 16, n)
+    val
+}
+
+F json_string(s: i64) -> i64 {
+    val := malloc(24)
+    len := strlen(s)
+    str_copy := malloc(len + 1)
+    memcpy(str_copy, s, len)
+    store_byte(str_copy + len, 0)
+    store_i64(val, JSON_TYPE_STRING)
+    store_i64(val + 8, str_copy)
+    store_i64(val + 16, 0)
+    val
+}
+
+F json_type(val: i64) -> i64 {
+    load_i64(val)
+}
+
+F json_get_bool(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_BOOL {
+        load_i64(val + 16)
+    } E {
+        0
+    }
+}
+
+F json_get_number(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_NUMBER {
+        load_i64(val + 16)
+    } E {
+        0
+    }
+}
+
+F json_get_string(val: i64) -> i64 {
+    I load_i64(val) == JSON_TYPE_STRING {
+        load_i64(val + 8)
+    } E {
+        0
+    }
+}
+
+# ============================================================================
+# Test Helpers
+# ============================================================================
+
+F my_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        R 0
+    }
+
+    I val < 0 {
+        putchar(45)
+        my_print_i64(0 - val)
+        R 0
+    }
+
+    I val >= 10 {
+        my_print_i64(val / 10)
+    }
+    putchar(48 + (val % 10))
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, name: i64) -> i64 {
+    I actual == expected {
+        puts("  PASS: ")
+        puts(name)
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL: ")
+        puts(name)
+        puts(" - expected ")
+        my_print_i64(expected)
+        puts(", got ")
+        my_print_i64(actual)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Test Cases
+# ============================================================================
+
+# Test 1: Create and check null value
+F test_null_value() -> i64 {
+    puts("\n[test_null_value]")
+
+    val := json_null()
+    type := json_type(val)
+
+    free(val)
+    assert_eq(type, JSON_TYPE_NULL, "null type")
+}
+
+# Test 2: Create and check boolean values
+F test_bool_values() -> i64 {
+    puts("\n[test_bool_values]")
+
+    val_true := json_bool(1)
+    val_false := json_bool(0)
+
+    type_true := json_type(val_true)
+    type_false := json_type(val_false)
+
+    b_true := json_get_bool(val_true)
+    b_false := json_get_bool(val_false)
+
+    free(val_true)
+    free(val_false)
+
+    result := mut 1
+    I type_true != JSON_TYPE_BOOL { result = 0 }
+    I type_false != JSON_TYPE_BOOL { result = 0 }
+    I b_true != 1 { result = 0 }
+    I b_false != 0 { result = 0 }
+
+    assert_eq(result, 1, "bool values")
+}
+
+# Test 3: Create and check number value
+F test_number_value() -> i64 {
+    puts("\n[test_number_value]")
+
+    val := json_number(42)
+    type := json_type(val)
+    num := json_get_number(val)
+
+    free(val)
+
+    result := mut 1
+    I type != JSON_TYPE_NUMBER { result = 0 }
+    I num != 42 { result = 0 }
+
+    assert_eq(result, 1, "number value 42")
+}
+
+# Test 4: Create and check string value
+F test_string_value() -> i64 {
+    puts("\n[test_string_value]")
+
+    val := json_string("hello")
+    type := json_type(val)
+    str := json_get_string(val)
+
+    result := mut 1
+    I type != JSON_TYPE_STRING { result = 0 }
+    I str == 0 { result = 0 }
+
+    # Check first few characters
+    I result == 1 {
+        I load_byte(str) != 104 { result = 0 }  # 'h'
+        I load_byte(str + 1) != 101 { result = 0 }  # 'e'
+        I load_byte(str + 2) != 108 { result = 0 }  # 'l'
+    }
+
+    free(val)
+    assert_eq(result, 1, "string value")
+}
+
+# Test 5: Test negative number
+F test_negative_number() -> i64 {
+    puts("\n[test_negative_number]")
+
+    val := json_number(0 - 100)
+    num := json_get_number(val)
+
+    free(val)
+    assert_eq(num, 0 - 100, "negative number")
+}
+
+# Test 6: Test zero
+F test_zero() -> i64 {
+    puts("\n[test_zero]")
+
+    val := json_number(0)
+    num := json_get_number(val)
+
+    free(val)
+    assert_eq(num, 0, "zero value")
+}
+
+# Test 7: Test large number
+F test_large_number() -> i64 {
+    puts("\n[test_large_number]")
+
+    val := json_number(999999)
+    num := json_get_number(val)
+
+    free(val)
+    assert_eq(num, 999999, "large number")
+}
+
+# Test 8: Test empty string
+F test_empty_string() -> i64 {
+    puts("\n[test_empty_string]")
+
+    val := json_string("")
+    str := json_get_string(val)
+
+    result := I str != 0 { I load_byte(str) == 0 { 1 } E { 0 } } E { 0 }
+
+    free(val)
+    assert_eq(result, 1, "empty string")
+}
+
+# Test 9: Test string with special characters
+F test_string_special() -> i64 {
+    puts("\n[test_string_special]")
+
+    val := json_string("a b c")
+    str := json_get_string(val)
+
+    result := mut 1
+    I str == 0 { result = 0 }
+    I result == 1 {
+        I load_byte(str) != 97 { result = 0 }  # 'a'
+        I load_byte(str + 1) != 32 { result = 0 }  # ' '
+        I load_byte(str + 2) != 98 { result = 0 }  # 'b'
+    }
+
+    free(val)
+    assert_eq(result, 1, "string with spaces")
+}
+
+# Test 10: Test multiple value types
+F test_mixed_types() -> i64 {
+    puts("\n[test_mixed_types]")
+
+    val1 := json_null()
+    val2 := json_bool(1)
+    val3 := json_number(123)
+    val4 := json_string("test")
+
+    t1 := json_type(val1)
+    t2 := json_type(val2)
+    t3 := json_type(val3)
+    t4 := json_type(val4)
+
+    result := mut 1
+    I t1 != JSON_TYPE_NULL { result = 0 }
+    I t2 != JSON_TYPE_BOOL { result = 0 }
+    I t3 != JSON_TYPE_NUMBER { result = 0 }
+    I t4 != JSON_TYPE_STRING { result = 0 }
+
+    free(val1)
+    free(val2)
+    free(val3)
+    free(val4)
+
+    assert_eq(result, 1, "mixed types")
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("\n  JSON Test Suite")
+    puts("\n===========================================")
+
+    total := mut 0
+    total = total + test_null_value()
+    total = total + test_bool_values()
+    total = total + test_number_value()
+    total = total + test_string_value()
+    total = total + test_negative_number()
+    total = total + test_zero()
+    total = total + test_large_number()
+    total = total + test_empty_string()
+    total = total + test_string_special()
+    total = total + test_mixed_types()
+
+    puts("\n===========================================")
+    puts("\n  Total passed: ")
+    my_print_i64(total)
+    puts(" / 10")
+    puts("\n===========================================")
+    putchar(10)
+
+    0
+}
+
+# ============================================================================
+# Extern Declarations
+# ============================================================================
+
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+X F strlen(s: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

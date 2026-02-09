@@ -73,6 +73,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 {
                     // Keep pointer type for array allocations, slice results, and strings
                     val.get_type()
+                } else if val.is_int_value()
+                    && val.into_int_value().get_type().get_bit_width() == 1
+                {
+                    // Keep i1 type for boolean values (from comparisons, bool literals)
+                    val.get_type()
                 } else {
                     // Default to i64 for non-struct values (backward compatible)
                     self.type_mapper.map_type(&ResolvedType::I64)
