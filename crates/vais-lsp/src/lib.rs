@@ -14,5 +14,8 @@ mod folding;
 mod hints;
 mod symbol_analysis;
 
+// LSP request handlers
+pub(crate) mod handlers;
+
 // Re-export the backend for use in tests and as a library
 pub use backend::VaisBackend;

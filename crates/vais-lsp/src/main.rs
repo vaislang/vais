@@ -12,6 +12,7 @@ mod semantic;
 // Backend module extensions
 mod analysis;
 mod folding;
+mod handlers;
 mod hints;
 mod symbol_analysis;
 

@@ -1540,11 +1540,13 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 ### Stage 1: 안전성 강화
 
 - [ ] 3. 프로덕션 unwrap() 안전화 — 798→400 목표 (Sonnet 위임) [blockedBy: 1, 2]
-- [ ] 4. 460줄+ 거대 함수 추출 — generate_call, compile_to_native 등 (Sonnet 위임) [blockedBy: 2]
+- [x] 4. 460줄+ 거대 함수 추출 — generate_call, compile_to_native 등 (Sonnet 위임) ✅ 2026-02-09
+  변경: compile.rs — compile_to_native 457→285줄(-37%), expr_helpers.rs — generate_call_expr 252→190줄(-25%)
 
 ### Stage 2: 성능 & 구조
 
 - [ ] 5. clone() 최적화 — 1,667→1,100 목표 (Sonnet 위임) [blockedBy: 1, 2]
-- [ ] 6. LSP backend.rs 핸들러 분리 — 2,920줄 (Sonnet 위임)
+- [x] 6. LSP backend.rs 핸들러 분리 — 2,920줄 (Sonnet 위임) ✅ 2026-02-09
+  변경: backend.rs 2,920→1,250줄(-57%), handlers/ 디렉토리에 hover/completion/code_action/navigation 모듈 추출
 
-진행률: 2/6 (33%)
+진행률: 4/6 (67%)

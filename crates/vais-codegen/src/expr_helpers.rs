@@ -299,103 +299,41 @@ impl CodeGenerator {
                 return self.generate_print_call(name, args, counter, span);
             }
 
-            // Handle print_i64/print_f64 builtins: emit printf call
-            // Skip if user defined their own function with the same name
-            let has_user_print_i64 = self
-                .functions
-                .get("print_i64")
-                .map(|f| !f.is_extern)
-                .unwrap_or(false);
-            if name == "print_i64" && args.len() == 1 && !has_user_print_i64 {
-                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = arg_ir;
-                let fmt_str = "%ld";
-                let fmt_name = format!(".str.{}", self.string_counter);
-                self.string_counter += 1;
-                self.string_constants
-                    .push((fmt_name.clone(), fmt_str.to_string()));
-                let fmt_len = fmt_str.len() + 1; // +1 for null terminator
-                let fmt_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
-                    fmt_ptr, fmt_len, fmt_len, fmt_name
-                ));
-                let i32_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
-                    i32_result, fmt_ptr, arg_val
-                ));
-                let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
-                return Ok((result, ir));
+            // Handle print_i64/print_f64 builtins
+            if name == "print_i64" && args.len() == 1 {
+                let has_user_fn = self
+                    .functions
+                    .get("print_i64")
+                    .map(|f| !f.is_extern)
+                    .unwrap_or(false);
+                if !has_user_fn {
+                    return self.generate_print_i64_builtin(args, counter);
+                }
+            }
+            if name == "print_f64" && args.len() == 1 {
+                let has_user_fn = self
+                    .functions
+                    .get("print_f64")
+                    .map(|f| !f.is_extern)
+                    .unwrap_or(false);
+                if !has_user_fn {
+                    return self.generate_print_f64_builtin(args, counter);
+                }
             }
 
-            let has_user_print_f64 = self
-                .functions
-                .get("print_f64")
-                .map(|f| !f.is_extern)
-                .unwrap_or(false);
-            if name == "print_f64" && args.len() == 1 && !has_user_print_f64 {
-                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = arg_ir;
-                let fmt_str = "%f";
-                let fmt_name = format!(".str.{}", self.string_counter);
-                self.string_counter += 1;
-                self.string_constants
-                    .push((fmt_name.clone(), fmt_str.to_string()));
-                let fmt_len = fmt_str.len() + 1; // +1 for null terminator
-                let fmt_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
-                    fmt_ptr, fmt_len, fmt_len, fmt_name
-                ));
-                let i32_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
-                    i32_result, fmt_ptr, arg_val
-                ));
-                let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
-                return Ok((result, ir));
-            }
-
-            // Handle format builtin: returns formatted string
+            // Handle format builtin
             if name == "format" {
                 return self.generate_format_call(args, counter, span);
             }
 
-            // Handle str_to_ptr builtin: convert string pointer to i64
+            // Handle str_to_ptr builtin
             if name == "str_to_ptr" {
-                if args.len() != 1 {
-                    return Err(CodegenError::TypeError(
-                        "str_to_ptr expects 1 argument".to_string(),
-                    ));
-                }
-                let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = str_ir;
-                let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, str_val));
-                return Ok((result, ir));
+                return self.generate_str_to_ptr_builtin(args, counter);
             }
 
-            // Handle ptr_to_str builtin: convert i64 to string pointer
-            // Only do inttoptr if arg is i64; if already a pointer, pass through
+            // Handle ptr_to_str builtin
             if name == "ptr_to_str" {
-                if args.len() != 1 {
-                    return Err(CodegenError::TypeError(
-                        "ptr_to_str expects 1 argument".to_string(),
-                    ));
-                }
-                let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = ptr_ir;
-                let arg_type = self.infer_expr_type(&args[0]);
-                if matches!(arg_type, vais_types::ResolvedType::I64) {
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", result, ptr_val));
-                    return Ok((result, ir));
-                }
-                // Already a pointer type, no conversion needed
-                return Ok((ptr_val, ir));
+                return self.generate_ptr_to_str_builtin(args, counter);
             }
         }
 
@@ -2608,5 +2546,104 @@ impl CodeGenerator {
         };
 
         Ok((lanes, elem))
+    }
+
+    /// Generate print_i64 builtin call
+    fn generate_print_i64_builtin(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+        let mut ir = arg_ir;
+        let fmt_str = "%ld";
+        let fmt_name = format!(".str.{}", self.string_counter);
+        self.string_counter += 1;
+        self.string_constants
+            .push((fmt_name.clone(), fmt_str.to_string()));
+        let fmt_len = fmt_str.len() + 1;
+        let fmt_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+            fmt_ptr, fmt_len, fmt_len, fmt_name
+        ));
+        let i32_result = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
+            i32_result, fmt_ptr, arg_val
+        ));
+        let result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
+        Ok((result, ir))
+    }
+
+    /// Generate print_f64 builtin call
+    fn generate_print_f64_builtin(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+        let mut ir = arg_ir;
+        let fmt_str = "%f";
+        let fmt_name = format!(".str.{}", self.string_counter);
+        self.string_counter += 1;
+        self.string_constants
+            .push((fmt_name.clone(), fmt_str.to_string()));
+        let fmt_len = fmt_str.len() + 1;
+        let fmt_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+            fmt_ptr, fmt_len, fmt_len, fmt_name
+        ));
+        let i32_result = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
+            i32_result, fmt_ptr, arg_val
+        ));
+        let result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
+        Ok((result, ir))
+    }
+
+    /// Generate str_to_ptr builtin call
+    fn generate_str_to_ptr_builtin(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        if args.len() != 1 {
+            return Err(CodegenError::TypeError(
+                "str_to_ptr expects 1 argument".to_string(),
+            ));
+        }
+        let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
+        let mut ir = str_ir;
+        let result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, str_val));
+        Ok((result, ir))
+    }
+
+    /// Generate ptr_to_str builtin call
+    fn generate_ptr_to_str_builtin(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        if args.len() != 1 {
+            return Err(CodegenError::TypeError(
+                "ptr_to_str expects 1 argument".to_string(),
+            ));
+        }
+        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+        let mut ir = ptr_ir;
+        let arg_type = self.infer_expr_type(&args[0]);
+        if matches!(arg_type, vais_types::ResolvedType::I64) {
+            let result = self.next_temp(counter);
+            ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", result, ptr_val));
+            return Ok((result, ir));
+        }
+        // Already a pointer type, no conversion needed
+        Ok((ptr_val, ir))
     }
 }

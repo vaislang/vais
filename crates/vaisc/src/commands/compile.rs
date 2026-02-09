@@ -458,6 +458,126 @@ pub(crate) fn compile_to_native(
         args.push(flag.to_string());
     }
 
+    // Setup directories and validate PGO/Coverage
+    setup_profiling_dirs(pgo_mode, coverage_mode, verbose)?;
+
+    args.push("-o".to_string());
+    args.push(
+        bin_path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
+            .to_string(),
+    );
+    args.push(
+        ir_path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
+            .to_string(),
+    );
+
+    // Add runtime libraries and native dependencies
+    add_runtime_and_native_libs(
+        &mut args,
+        verbose,
+        used_modules,
+        native_deps,
+        ir_path,
+    )?;
+
+    if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled() || coverage_mode.is_enabled()) {
+        let mut features = vec![];
+        if lto_mode.is_enabled() {
+            features.push(format!("LTO={:?}", lto_mode));
+        }
+        if pgo_mode.is_generate() {
+            features.push("PGO=generate".to_string());
+        } else if pgo_mode.is_use() {
+            features.push("PGO=use".to_string());
+        }
+        if coverage_mode.is_enabled() {
+            features.push("Coverage=enabled".to_string());
+        }
+        println!(
+            "{} Compiling with: {}",
+            "info:".blue().bold(),
+            features.join(", ")
+        );
+    }
+
+    let status = Command::new("clang").args(&args).status();
+
+    match status {
+        Ok(s) if s.success() => {
+            print_compilation_success(bin_path, debug, verbose, coverage_mode);
+            Ok(())
+        }
+        Ok(s) => Err(format!("clang exited with code {}", s.code().unwrap_or(-1))),
+        Err(_) => Err(
+            "clang not found. Install LLVM/clang or use --emit-ir to output LLVM IR only."
+                .to_string(),
+        ),
+    }
+}
+
+/// Print compilation success message and coverage instructions if applicable.
+fn print_compilation_success(
+    bin_path: &Path,
+    debug: bool,
+    verbose: bool,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+) {
+    if verbose {
+        if debug {
+            println!(
+                "{} {} (with debug symbols)",
+                "Compiled".green().bold(),
+                bin_path.display()
+            );
+        } else {
+            println!("{} {}", "Compiled".green().bold(), bin_path.display());
+        }
+    } else {
+        println!("{}", bin_path.display());
+    }
+
+    // Print coverage usage instructions
+    if let Some(dir) = coverage_mode.coverage_dir() {
+        println!();
+        println!(
+            "{} Coverage instrumentation enabled.",
+            "Coverage:".cyan().bold()
+        );
+        println!("  Run the binary to generate profile data:");
+        println!(
+            "    LLVM_PROFILE_FILE=\"{}/default_%m.profraw\" {}",
+            dir,
+            bin_path.display()
+        );
+        println!("  Then generate a report:");
+        println!(
+            "    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw",
+            dir, dir
+        );
+        println!(
+            "    llvm-cov show {} -instr-profile={}/coverage.profdata",
+            bin_path.display(),
+            dir
+        );
+        println!(
+            "    llvm-cov export {} -instr-profile={}/coverage.profdata -format=lcov > {}/lcov.info",
+            bin_path.display(),
+            dir,
+            dir
+        );
+    }
+}
+
+/// Setup profiling directories and validate PGO profile files.
+fn setup_profiling_dirs(
+    pgo_mode: &vais_codegen::optimize::PgoMode,
+    coverage_mode: &vais_codegen::optimize::CoverageMode,
+    verbose: bool,
+) -> Result<(), String> {
     // Create coverage directory if coverage is enabled
     if let Some(dir) = coverage_mode.coverage_dir() {
         let coverage_path = Path::new(dir);
@@ -490,7 +610,7 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    // Show PGO info
+    // Show PGO info and validate profile file exists
     if let Some(path) = pgo_mode.profile_file() {
         if !Path::new(path).exists() {
             return Err(format!(
@@ -507,26 +627,23 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    args.push("-o".to_string());
-    args.push(
-        bin_path
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
-            .to_string(),
-    );
-    args.push(
-        ir_path
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
-            .to_string(),
-    );
+    Ok(())
+}
 
+/// Helper to add runtime libraries and native dependencies to clang link arguments (non-cached path).
+/// This is the full version used by the direct compilation path.
+fn add_runtime_and_native_libs(
+    args: &mut Vec<String>,
+    verbose: bool,
+    used_modules: &HashSet<String>,
+    native_deps: &HashMap<String, package::NativeDependency>,
+    ir_path: &Path,
+) -> Result<(), String> {
     // Link math library (required on Linux for sqrt, sin, cos, etc.)
     #[cfg(target_os = "linux")]
     args.push("-lm".to_string());
 
-    // Link against libvais_gc if available (for GC runtime support)
-    // Use the static library directly to avoid dylib path dependencies
+    // Link against libvais_gc if available
     if let Some(gc_lib_path) = find_gc_library() {
         let static_lib = gc_lib_path.join("libvais_gc.a");
         args.push(static_lib.to_str().unwrap_or("libvais_gc.a").to_string());
@@ -539,14 +656,13 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    // Link C runtimes based on used modules (smart linking)
+    // Link C runtimes based on used modules
     let mut needs_pthread = false;
     let mut linked_libs: HashSet<&str> = HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
 
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
-            // Find and link the runtime C file
             if let Some(rt_path) = find_runtime_file(runtime_info.file) {
                 let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
                 if !linked_runtimes.contains(&rt_str) {
@@ -562,13 +678,9 @@ pub(crate) fn compile_to_native(
                     }
                 }
             }
-
-            // Track pthread requirement
             if runtime_info.needs_pthread {
                 needs_pthread = true;
             }
-
-            // Add required system libraries
             for lib in runtime_info.libs {
                 if !linked_libs.contains(lib) {
                     linked_libs.insert(lib);
@@ -578,10 +690,8 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    // Fallback: Also check for legacy find_*_runtime functions for backwards compatibility
-    // This ensures existing projects still work even if they don't use the new module detection
+    // Legacy fallbacks
     if linked_runtimes.is_empty() {
-        // Link HTTP runtime if available (legacy fallback)
         if let Some(http_rt_path) = find_http_runtime() {
             args.push(
                 http_rt_path
@@ -597,8 +707,6 @@ pub(crate) fn compile_to_native(
                 );
             }
         }
-
-        // Link thread runtime if available (legacy fallback)
         if let Some(thread_rt_path) = find_thread_runtime() {
             args.push(
                 thread_rt_path
@@ -615,8 +723,6 @@ pub(crate) fn compile_to_native(
                 );
             }
         }
-
-        // Link sync runtime if available (legacy fallback)
         if let Some(sync_rt_path) = find_sync_runtime() {
             args.push(
                 sync_rt_path
@@ -635,25 +741,20 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    // Add -lpthread once if needed by any runtime
     if needs_pthread {
         args.push("-lpthread".to_string());
     }
 
-    // Link native dependencies from vais.toml [native-dependencies]
+    // Native dependencies from vais.toml
     if !native_deps.is_empty() {
         for (name, dep) in native_deps {
-            // Add -L library search path
             if let Some(lib_path_flag) = dep.lib_path_flag() {
                 args.push(lib_path_flag);
             }
-            // Add -I include path (for C source compilation)
             if let Some(include_flag) = dep.include_flag() {
                 args.push(include_flag);
             }
-            // Add C source files to compile
             for src in dep.source_files() {
-                // Resolve relative to ir_path's parent directory
                 let src_path = if Path::new(src).is_absolute() {
                     PathBuf::from(src)
                 } else if let Some(parent) = ir_path.parent() {
@@ -663,7 +764,6 @@ pub(crate) fn compile_to_native(
                 };
                 args.push(src_path.to_string_lossy().to_string());
             }
-            // Add -l library flags
             for flag in dep.lib_flags() {
                 if !args.contains(&flag) {
                     args.push(flag);
@@ -679,78 +779,7 @@ pub(crate) fn compile_to_native(
         }
     }
 
-    if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled() || coverage_mode.is_enabled()) {
-        let mut features = vec![];
-        if lto_mode.is_enabled() {
-            features.push(format!("LTO={:?}", lto_mode));
-        }
-        if pgo_mode.is_generate() {
-            features.push("PGO=generate".to_string());
-        } else if pgo_mode.is_use() {
-            features.push("PGO=use".to_string());
-        }
-        if coverage_mode.is_enabled() {
-            features.push("Coverage=enabled".to_string());
-        }
-        println!(
-            "{} Compiling with: {}",
-            "info:".blue().bold(),
-            features.join(", ")
-        );
-    }
-
-    let status = Command::new("clang").args(&args).status();
-
-    match status {
-        Ok(s) if s.success() => {
-            if verbose {
-                if debug {
-                    println!(
-                        "{} {} (with debug symbols)",
-                        "Compiled".green().bold(),
-                        bin_path.display()
-                    );
-                } else {
-                    println!("{} {}", "Compiled".green().bold(), bin_path.display());
-                }
-            } else {
-                println!("{}", bin_path.display());
-            }
-
-            // Print coverage usage instructions
-            if let Some(dir) = coverage_mode.coverage_dir() {
-                println!();
-                println!(
-                    "{} Coverage instrumentation enabled.",
-                    "Coverage:".cyan().bold()
-                );
-                println!("  Run the binary to generate profile data:");
-                println!(
-                    "    LLVM_PROFILE_FILE=\"{}/default_%m.profraw\" {}",
-                    dir,
-                    bin_path.display()
-                );
-                println!("  Then generate a report:");
-                println!(
-                    "    llvm-profdata merge -output={}/coverage.profdata {}/*.profraw",
-                    dir, dir
-                );
-                println!(
-                    "    llvm-cov show {} -instr-profile={}/coverage.profdata",
-                    bin_path.display(),
-                    dir
-                );
-                println!("    llvm-cov export {} -instr-profile={}/coverage.profdata -format=lcov > {}/lcov.info", bin_path.display(), dir, dir);
-            }
-
-            Ok(())
-        }
-        Ok(s) => Err(format!("clang exited with code {}", s.code().unwrap_or(-1))),
-        Err(_) => Err(
-            "clang not found. Install LLVM/clang or use --emit-ir to output LLVM IR only."
-                .to_string(),
-        ),
-    }
+    Ok(())
 }
 
 /// Helper to add runtime libraries to clang link arguments.
