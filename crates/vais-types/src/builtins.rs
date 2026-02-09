@@ -7,6 +7,21 @@ use crate::types::{EffectAnnotation, EnumDef, FunctionSig, ResolvedType, Variant
 
 impl TypeChecker {
     pub(crate) fn register_builtins(&mut self) {
+        self.register_core_builtins();
+        self.register_print_builtins();
+        self.register_memory_builtins();
+        self.register_stdlib_builtins();
+        self.register_file_io_builtins();
+        self.register_simd_builtins();
+        self.register_helper_print_builtins();
+        self.register_gc_builtins();
+        self.register_system_builtins();
+        self.register_io_builtins();
+        self.register_math_builtins();
+        self.register_enum_builtins();
+    }
+
+    fn register_core_builtins(&mut self) {
         // printf: (str, ...) -> i32
         self.functions.insert(
             "printf".to_string(),
@@ -137,6 +152,9 @@ impl TypeChecker {
             },
         );
 
+    }
+
+    fn register_print_builtins(&mut self) {
         // print: (format, ...) -> void - format string output (no newline)
         self.functions.insert(
             "print".to_string(),
@@ -191,6 +209,9 @@ impl TypeChecker {
             },
         );
 
+    }
+
+    fn register_memory_builtins(&mut self) {
         // memcpy: (dest, src, n) -> i64
         self.functions.insert(
             "memcpy".to_string(),
@@ -407,6 +428,9 @@ impl TypeChecker {
             },
         );
 
+    }
+
+    fn register_stdlib_builtins(&mut self) {
         // ===== Standard library utility functions =====
 
         // atoi: (s: str) -> i32 - string to integer
@@ -725,6 +749,9 @@ impl TypeChecker {
             },
         );
 
+    }
+
+    fn register_file_io_builtins(&mut self) {
         // ===== File I/O functions =====
 
         // fopen: (path, mode) -> FILE* (as i64)
@@ -1441,54 +1468,6 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
-
-        // Register SIMD intrinsic functions
-        self.register_simd_builtins();
-
-        // Register built-in Result<T, E> enum
-        {
-            let mut variants = HashMap::new();
-            variants.insert(
-                "Ok".to_string(),
-                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
-            );
-            variants.insert(
-                "Err".to_string(),
-                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("E".to_string())]),
-            );
-            self.enums.insert(
-                "Result".to_string(),
-                EnumDef {
-                    name: "Result".to_string(),
-                    generics: vec!["T".to_string(), "E".to_string()],
-                    variants,
-                    methods: HashMap::new(),
-                },
-            );
-            self.exhaustiveness_checker
-                .register_enum("Result", vec!["Ok".to_string(), "Err".to_string()]);
-        }
-
-        // Register built-in Option<T> enum
-        if !self.enums.contains_key("Option") {
-            let mut variants = HashMap::new();
-            variants.insert("None".to_string(), VariantFieldTypes::Unit);
-            variants.insert(
-                "Some".to_string(),
-                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
-            );
-            self.enums.insert(
-                "Option".to_string(),
-                EnumDef {
-                    name: "Option".to_string(),
-                    generics: vec!["T".to_string()],
-                    variants,
-                    methods: HashMap::new(),
-                },
-            );
-            self.exhaustiveness_checker
-                .register_enum("Option", vec!["None".to_string(), "Some".to_string()]);
-        }
     }
 
     pub(crate) fn register_simd_builtins(&mut self) {
@@ -1954,7 +1933,9 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
+    }
 
+    fn register_helper_print_builtins(&mut self) {
         // ===== Helper print functions used by examples =====
 
         // print_i64: (n: i64) -> i64
@@ -2028,7 +2009,9 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
+    }
 
+    fn register_gc_builtins(&mut self) {
         // ===== GC functions used by gc examples =====
         let gc_fns = vec![
             ("gc_init", vec![], ResolvedType::I64),
@@ -2079,7 +2062,9 @@ impl TypeChecker {
                 },
             );
         }
+    }
 
+    fn register_system_builtins(&mut self) {
         // ===== System functions (env/process/signal) =====
         #[allow(clippy::type_complexity)]
         let sys_fns: Vec<(&str, Vec<(String, ResolvedType, bool)>, ResolvedType)> = vec![
@@ -2157,7 +2142,9 @@ impl TypeChecker {
                 },
             );
         }
+    }
 
+    fn register_io_builtins(&mut self) {
         // ===== IO functions =====
         let io_fns = vec![
             ("read_i64", vec![], ResolvedType::I64),
@@ -2203,7 +2190,9 @@ impl TypeChecker {
                 },
             );
         }
+    }
 
+    fn register_math_builtins(&mut self) {
         // ===== Math functions =====
         let math_f64_fns = vec![
             "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log2", "log10", "floor",
@@ -2321,48 +2310,52 @@ impl TypeChecker {
                 },
             );
         }
+    }
 
-        // Math helper functions
-        let math_convert_fns = vec!["deg_to_rad", "rad_to_deg"];
-        for name in math_convert_fns {
-            self.functions.insert(
-                name.to_string(),
-                FunctionSig {
-                    name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
-                    params: vec![("x".to_string(), ResolvedType::F64, false)],
-                    ret: ResolvedType::F64,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
+    fn register_enum_builtins(&mut self) {
+        // Register built-in Result<T, E> enum
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "Ok".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+            );
+            variants.insert(
+                "Err".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("E".to_string())]),
+            );
+            self.enums.insert(
+                "Result".to_string(),
+                EnumDef {
+                    name: "Result".to_string(),
+                    generics: vec!["T".to_string(), "E".to_string()],
+                    variants,
+                    methods: HashMap::new(),
                 },
             );
+            self.exhaustiveness_checker
+                .register_enum("Result", vec!["Ok".to_string(), "Err".to_string()]);
         }
 
-        // approx_eq: (a: f64, b: f64, epsilon: f64) -> i64
-        self.functions.insert(
-            "approx_eq".to_string(),
-            FunctionSig {
-                name: "approx_eq".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
-                params: vec![
-                    ("a".to_string(), ResolvedType::F64, false),
-                    ("b".to_string(), ResolvedType::F64, false),
-                    ("epsilon".to_string(), ResolvedType::F64, false),
-                ],
-                ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
-            },
-        );
+        // Register built-in Option<T> enum
+        if !self.enums.contains_key("Option") {
+            let mut variants = HashMap::new();
+            variants.insert("None".to_string(), VariantFieldTypes::Unit);
+            variants.insert(
+                "Some".to_string(),
+                VariantFieldTypes::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+            );
+            self.enums.insert(
+                "Option".to_string(),
+                EnumDef {
+                    name: "Option".to_string(),
+                    generics: vec!["T".to_string()],
+                    variants,
+                    methods: HashMap::new(),
+                },
+            );
+            self.exhaustiveness_checker
+                .register_enum("Option", vec!["None".to_string(), "Some".to_string()]);
+        }
     }
 }
