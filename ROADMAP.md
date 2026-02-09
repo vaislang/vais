@@ -1552,3 +1552,23 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
   변경: backend.rs 2,920→1,250줄(-57%), handlers/ 디렉토리에 hover/completion/code_action/navigation 모듈 추출
 
 진행률: 6/6 (100%)
+
+## Phase 67: 테스트 커버리지 확충
+
+> **상태**: ✅ 완료
+> **목표**: 미테스트 crate 4개(codegen-js, jit, macro, mir)에 통합 테스트 추가
+
+모드: 자동진행
+
+- [x] 1. vais-mir 통합 테스트 (Sonnet 위임) ✅ 2026-02-09
+  변경: tests/integration_tests.rs — 36개 통합 테스트 (함수 호출 lowering, 타입 변환, emit_llvm Cast/Ref/TailCall/Assert/Aggregate)
+- [x] 2. vais-macro 통합 테스트 (Sonnet 위임) ✅ 2026-02-09
+  변경: tests/integration_tests.rs — 39개 통합 테스트 (MacroRegistry, ProcMacro, Async/Derive/Property 매크로, HygienicContext, AST 확장)
+- [x] 3. vais-codegen-js 통합 테스트 (Sonnet 위임) ✅ 2026-02-09
+  변경: tests/integration_tests.rs — 33개 통합 테스트 (함수/표현식/제어흐름/struct/enum/에러처리/모듈/TreeShaking/SourceMap)
+- [x] 4. vais-jit 통합 테스트 (Sonnet 위임) ✅ 2026-02-09
+  변경: tests/integration_tests.rs — 34개 통합 테스트 (JitCompiler/Interpreter/TieredJit/TypeMapper/Runtime/에러 경로)
+- [x] 5. 전체 검증 & ROADMAP 업데이트 (Opus 직접) ✅ 2026-02-09
+  변경: 4개 crate 142개 신규 테스트 전체 통과, Clippy 0건
+
+진행률: 5/5 (100%)
