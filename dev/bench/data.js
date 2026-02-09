@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770606767204,
+  "lastUpdate": 1770610413113,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -14279,6 +14279,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1838090,
             "range": "± 16056",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "2c043ae745689bb5c9a661412f7630b00ae793c8",
+          "message": "test: Phase 64 package manager & ecosystem — 37 new E2E tests\n\nComprehensive E2E verification of the package management workflow:\n- vais init: manifest creation, default naming, duplicate detection, roundtrip, build\n- vais install: path dependency resolution, transitive deps, binary install, lib-only rejection\n- vais publish: request structure, archive creation, no-server error handling\n- SemVer resolver: caret/tilde ranges, version conflicts, diamond deps (compatible/incompatible)\n- Workspace: member resolution, inter-member deps, manifest parsing, check\n- Lock file: format versioning, deterministic serialization, reproducible resolution\n- Templates: bin/lib scaffolding, gitignore, new→build workflow\n- Documentation: markdown/HTML generation, no-manifest error\n- Cross-cutting: pkg add + build, feature resolution, cyclic dependency detection\n\nTotal registry E2E tests: 93 → 130 (+37)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-09T13:06:29+09:00",
+          "tree_id": "a3d7f4610634a8a2a58834ee883af0dac896cd10",
+          "url": "https://github.com/vaislang/vais/commit/2c043ae745689bb5c9a661412f7630b00ae793c8"
+        },
+        "date": 1770610412242,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2438,
+            "range": "± 35",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5331,
+            "range": "± 63",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6139,
+            "range": "± 228",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11626,
+            "range": "± 92",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17718,
+            "range": "± 524",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34050,
+            "range": "± 272",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30260,
+            "range": "± 122",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66357,
+            "range": "± 521",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 289868,
+            "range": "± 1387",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 441139,
+            "range": "± 2671",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 107027,
+            "range": "± 2828",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 754106,
+            "range": "± 2745",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 162844,
+            "range": "± 1180",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 190579,
+            "range": "± 12068",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 198287,
+            "range": "± 776",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 241884,
+            "range": "± 2256",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 515936,
+            "range": "± 1228",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 725687,
+            "range": "± 18240",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 398582,
+            "range": "± 3685",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1147248,
+            "range": "± 5657",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39482,
+            "range": "± 322",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 196080,
+            "range": "± 1448",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 379526,
+            "range": "± 3666",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1852158,
+            "range": "± 17073",
             "unit": "ns/iter"
           }
         ]
