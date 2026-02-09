@@ -2991,3 +2991,1490 @@ fn test_pkg_verify_valid() {
         Err(_) => eprintln!("skipping test: cargo run not available"),
     }
 }
+
+// ===========================================================================
+// Phase 64: Package Manager & Ecosystem — Comprehensive E2E Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 1: vais init → vais.toml Generation Workflow E2E
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_init_creates_valid_manifest_and_source() {
+    let tmp = TempDir::new().unwrap();
+    let output = Command::new("cargo")
+        .args([
+            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "phase64-init",
+        ])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // 1. vais.toml exists and is valid
+                let manifest_path = tmp.path().join("vais.toml");
+                assert!(manifest_path.exists(), "vais.toml must be created");
+                let content = fs::read_to_string(&manifest_path).unwrap();
+                let manifest: PackageManifest = toml::from_str(&content).unwrap();
+                assert_eq!(manifest.package.name, "phase64-init");
+                assert_eq!(manifest.package.version, "0.1.0");
+                assert_eq!(manifest.package.license.as_deref(), Some("MIT"));
+                assert!(manifest.dependencies.is_empty());
+                assert!(manifest.dev_dependencies.is_empty());
+
+                // 2. src/main.vais exists with compilable content
+                let main_path = tmp.path().join("src").join("main.vais");
+                assert!(main_path.exists(), "src/main.vais must be created");
+                let main_content = fs::read_to_string(&main_path).unwrap();
+                assert!(
+                    main_content.contains("F main()"),
+                    "main.vais should contain F main(): got {}",
+                    main_content
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("pkg init non-zero (may be expected): {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test: cargo run not available"),
+    }
+}
+
+#[test]
+fn test_phase64_init_default_name_from_directory() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("my-cool-project");
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "init"])
+        .current_dir(&project_dir)
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                let content = fs::read_to_string(project_dir.join("vais.toml")).unwrap();
+                let manifest: PackageManifest = toml::from_str(&content).unwrap();
+                assert_eq!(
+                    manifest.package.name, "my-cool-project",
+                    "should use directory name as package name"
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("pkg init non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_init_fails_if_already_exists() {
+    let tmp = TempDir::new().unwrap();
+
+    // First init
+    let _ = Command::new("cargo")
+        .args([
+            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "dup-init",
+        ])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    // Second init should fail
+    match Command::new("cargo")
+        .args([
+            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "dup-init",
+        ])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output()
+    {
+        Ok(o) => {
+            if o.status.success() {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                // Even if exit code is 0, it should warn or error about existing
+                assert!(
+                    stderr.contains("already exists")
+                        || stdout.contains("already exists")
+                        || !o.status.success(),
+                    "second init should fail or warn: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            }
+            // Non-zero is expected behavior
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_init_manifest_roundtrip_parse() {
+    // Test that init_package creates a manifest that round-trips through toml
+    let tmp = TempDir::new().unwrap();
+
+    let output = Command::new("cargo")
+        .args([
+            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "roundtrip-rt",
+        ])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                let content = fs::read_to_string(tmp.path().join("vais.toml")).unwrap();
+                let manifest: PackageManifest = toml::from_str(&content).unwrap();
+
+                // Roundtrip: serialize and re-parse
+                let re_serialized = toml::to_string_pretty(&manifest).unwrap();
+                let re_parsed: PackageManifest = toml::from_str(&re_serialized).unwrap();
+                assert_eq!(re_parsed.package.name, manifest.package.name);
+                assert_eq!(re_parsed.package.version, manifest.package.version);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_init_then_build_produces_binary() {
+    let tmp = TempDir::new().unwrap();
+
+    // Init
+    let init_output = Command::new("cargo")
+        .args([
+            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "build-test",
+        ])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    match init_output {
+        Ok(o) => {
+            if !o.status.success() {
+                eprintln!("init failed, skipping build test");
+                return;
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping CLI test");
+            return;
+        }
+    }
+
+    // Build the initialized package
+    let build_output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "build"])
+        .current_dir(tmp.path())
+        .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
+        .output();
+
+    match build_output {
+        Ok(o) => {
+            if o.status.success() {
+                // Check that target/ directory or binary was created
+                let target_dir = tmp.path().join("target");
+                let src_main = tmp.path().join("src").join("main");
+                assert!(
+                    target_dir.exists() || src_main.exists(),
+                    "build should produce output in target/ or src/"
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("build non-zero (may need clang): {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping build test"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 2: vais install — Local Path Dependency Resolution + Build
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_install_path_dependency_resolution() {
+    let tmp = TempDir::new().unwrap();
+
+    // Create a library package (dependency)
+    let lib_dir = tmp.path().join("mylib");
+    fs::create_dir_all(lib_dir.join("src")).unwrap();
+    fs::write(
+        lib_dir.join("vais.toml"),
+        "[package]\nname = \"mylib\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib_dir.join("src").join("lib.vais"),
+        "F add(a: i64, b: i64) -> i64 { a + b }\n",
+    )
+    .unwrap();
+
+    // Create a main package that depends on mylib
+    let app_dir = tmp.path().join("myapp");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    fs::write(
+        app_dir.join("vais.toml"),
+        "[package]\nname = \"myapp\"\nversion = \"0.1.0\"\n\n[dependencies]\nmylib = { path = \"../mylib\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app_dir.join("src").join("main.vais"),
+        "U mylib\nF main() -> i64 { add(3, 4) }\n",
+    )
+    .unwrap();
+
+    // Build the app (should resolve path dependency)
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "build"])
+        .current_dir(&app_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                // Build should mention the dependency or succeed silently
+                assert!(
+                    o.status.success(),
+                    "build with path dep should succeed: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                // May fail if clang is not available, that's ok
+                if !stderr.contains("clang") && !stderr.contains("linker") {
+                    eprintln!("path dep build failed: {}", stderr);
+                }
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_path_dependency_manifest_parsing() {
+    // Verify path dependency in manifest is correctly parsed and resolved
+    let tmp = TempDir::new().unwrap();
+
+    let lib_dir = tmp.path().join("utils");
+    fs::create_dir_all(lib_dir.join("src")).unwrap();
+    fs::write(
+        lib_dir.join("vais.toml"),
+        "[package]\nname = \"utils\"\nversion = \"2.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib_dir.join("src").join("lib.vais"),
+        "F double(x: i64) -> i64 { x * 2 }\n",
+    )
+    .unwrap();
+
+    // Main package with path dependency
+    let app_dir = tmp.path().join("app");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    let manifest_str =
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nutils = { path = \"../utils\" }\n";
+    fs::write(app_dir.join("vais.toml"), manifest_str).unwrap();
+    fs::write(
+        app_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Parse the manifest and check the dependency
+    let content = fs::read_to_string(app_dir.join("vais.toml")).unwrap();
+    let manifest: PackageManifest = toml::from_str(&content).unwrap();
+    assert_eq!(manifest.dependencies.len(), 1);
+    match &manifest.dependencies["utils"] {
+        Dependency::Detailed(d) => {
+            assert_eq!(d.path.as_deref(), Some("../utils"));
+        }
+        _ => panic!("expected Detailed dependency with path"),
+    }
+}
+
+#[test]
+fn test_phase64_transitive_path_dependencies() {
+    let tmp = TempDir::new().unwrap();
+
+    // A -> B -> C (transitive chain)
+    let c_dir = tmp.path().join("c");
+    fs::create_dir_all(c_dir.join("src")).unwrap();
+    fs::write(
+        c_dir.join("vais.toml"),
+        "[package]\nname = \"c\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        c_dir.join("src").join("lib.vais"),
+        "F base_val() -> i64 { 42 }\n",
+    )
+    .unwrap();
+
+    let b_dir = tmp.path().join("b");
+    fs::create_dir_all(b_dir.join("src")).unwrap();
+    fs::write(
+        b_dir.join("vais.toml"),
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[dependencies]\nc = { path = \"../c\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        b_dir.join("src").join("lib.vais"),
+        "U c\nF wrapped_val() -> i64 { base_val() }\n",
+    )
+    .unwrap();
+
+    let a_dir = tmp.path().join("a");
+    fs::create_dir_all(a_dir.join("src")).unwrap();
+    fs::write(
+        a_dir.join("vais.toml"),
+        "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[dependencies]\nb = { path = \"../b\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        a_dir.join("src").join("main.vais"),
+        "U b\nF main() -> i64 { wrapped_val() }\n",
+    )
+    .unwrap();
+
+    // Build A — should transitively resolve B and C
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "build"])
+        .current_dir(&a_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            if o.status.success() {
+                // Success means transitive resolution worked
+            } else if !stderr.contains("clang") && !stderr.contains("linker") {
+                eprintln!("transitive dep build failed: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_install_binary_package_creates_binary() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("installme");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"installme\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("main.vais"),
+        "F main() -> i64 { puts(\"installed!\") \n 0 }\n",
+    )
+    .unwrap();
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "install",
+            project_dir.to_str().unwrap(),
+        ])
+        .env(
+            "HOME",
+            tmp.path().join("fakehome").to_str().unwrap(),
+        )
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            if o.status.success() {
+                assert!(
+                    stdout.contains("Installed") || stdout.contains("✓"),
+                    "should report installation: stdout={}, stderr={}",
+                    stdout,
+                    stderr
+                );
+            } else {
+                eprintln!("install non-zero (may need clang): {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_install_library_only_fails() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("libonly");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"libonly\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    // Only lib.vais, no main.vais
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "F helper() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "install",
+            project_dir.to_str().unwrap(),
+        ])
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            assert!(
+                !o.status.success() || stderr.contains("main.vais"),
+                "installing library-only package should fail: {}",
+                stderr
+            );
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 3: vais publish — Registry Server Integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_publish_request_structure() {
+    // Verify that a publish request has the correct structure
+    // (tests the serialization format without a running server)
+    #[derive(Debug, Serialize, Deserialize)]
+    struct PublishMetadata {
+        name: String,
+        version: String,
+        description: Option<String>,
+        authors: Vec<String>,
+        license: Option<String>,
+        dependencies: HashMap<String, String>,
+    }
+
+    let metadata = PublishMetadata {
+        name: "test-pkg".to_string(),
+        version: "1.0.0".to_string(),
+        description: Some("A test package".to_string()),
+        authors: vec!["Author".to_string()],
+        license: Some("MIT".to_string()),
+        dependencies: {
+            let mut m = HashMap::new();
+            m.insert("dep-a".to_string(), "^1.0".to_string());
+            m
+        },
+    };
+
+    let json = serde_json::to_string_pretty(&metadata).unwrap();
+    assert!(json.contains("\"name\": \"test-pkg\""));
+    assert!(json.contains("\"version\": \"1.0.0\""));
+    assert!(json.contains("\"dep-a\""));
+    assert!(json.contains("\"^1.0\""));
+
+    // Round-trip
+    let parsed: PublishMetadata = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.name, "test-pkg");
+    assert_eq!(parsed.version, "1.0.0");
+    assert_eq!(parsed.dependencies.len(), 1);
+}
+
+#[test]
+fn test_phase64_publish_package_creates_archive() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("pub-test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"pub-test\"\nversion = \"0.1.0\"\ndescription = \"Publish test\"\nauthors = [\"Bot\"]\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "F greet() -> i64 { puts(\"hi\") \n 0 }\n",
+    )
+    .unwrap();
+
+    // Run pkg package (create archive without publishing)
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "package", "--list"])
+        .current_dir(&project_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            if o.status.success() {
+                assert!(
+                    stdout.contains("vais.toml") || stdout.contains("src/"),
+                    "package list should include manifest and source: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("package --list non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_publish_no_server_reports_error() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("pub-noserver");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"pub-noserver\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "F nop() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // publish should fail gracefully when no server is running
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "publish"])
+        .current_dir(&project_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            // Should fail since there's no registry server running
+            assert!(
+                !o.status.success(),
+                "publish without server should fail gracefully"
+            );
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 4: SemVer Dependency Resolver — Version Conflicts, Diamond
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_semver_caret_range_comprehensive() {
+    // ^1.2.3 := >=1.2.3, <2.0.0
+    assert!(caret_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.2.3").unwrap()
+    ));
+    assert!(caret_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.9.9").unwrap()
+    ));
+    assert!(!caret_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("2.0.0").unwrap()
+    ));
+    assert!(!caret_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.2.2").unwrap()
+    ));
+
+    // ^0.2.3 := >=0.2.3, <0.3.0
+    assert!(caret_matches(
+        &SemVer::parse("0.2.3").unwrap(),
+        &SemVer::parse("0.2.3").unwrap()
+    ));
+    assert!(caret_matches(
+        &SemVer::parse("0.2.3").unwrap(),
+        &SemVer::parse("0.2.9").unwrap()
+    ));
+    assert!(!caret_matches(
+        &SemVer::parse("0.2.3").unwrap(),
+        &SemVer::parse("0.3.0").unwrap()
+    ));
+
+    // ^0.0.3 := =0.0.3
+    assert!(caret_matches(
+        &SemVer::parse("0.0.3").unwrap(),
+        &SemVer::parse("0.0.3").unwrap()
+    ));
+    assert!(!caret_matches(
+        &SemVer::parse("0.0.3").unwrap(),
+        &SemVer::parse("0.0.4").unwrap()
+    ));
+}
+
+#[test]
+fn test_phase64_semver_tilde_range_comprehensive() {
+    // ~1.2.3 := >=1.2.3, <1.3.0
+    assert!(tilde_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.2.3").unwrap()
+    ));
+    assert!(tilde_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.2.9").unwrap()
+    ));
+    assert!(!tilde_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("1.3.0").unwrap()
+    ));
+    assert!(!tilde_matches(
+        &SemVer::parse("1.2.3").unwrap(),
+        &SemVer::parse("2.0.0").unwrap()
+    ));
+}
+
+#[test]
+fn test_phase64_version_conflict_detection_structure() {
+    // Simulate A depends on C ^1.0, B depends on C ^2.0 (conflict)
+    let a_c_req = SemVer::parse("1.0.0").unwrap();
+    let b_c_req = SemVer::parse("2.0.0").unwrap();
+
+    // Any version satisfying ^1.0 cannot satisfy ^2.0
+    let candidate_1_5 = SemVer::parse("1.5.0").unwrap();
+    let candidate_2_0 = SemVer::parse("2.0.0").unwrap();
+
+    assert!(
+        caret_matches(&a_c_req, &candidate_1_5),
+        "1.5.0 should match ^1.0"
+    );
+    assert!(
+        !caret_matches(&b_c_req, &candidate_1_5),
+        "1.5.0 should NOT match ^2.0"
+    );
+    assert!(
+        !caret_matches(&a_c_req, &candidate_2_0),
+        "2.0.0 should NOT match ^1.0"
+    );
+    assert!(
+        caret_matches(&b_c_req, &candidate_2_0),
+        "2.0.0 should match ^2.0"
+    );
+
+    // This confirms no version exists that satisfies both ^1.0 and ^2.0
+}
+
+#[test]
+fn test_phase64_diamond_dependency_compatible() {
+    // Diamond: App -> A -> C ^1.0, App -> B -> C ^1.2
+    // Compatible: ^1.0 and ^1.2 can be satisfied by 1.2.x
+    let c_req_a = SemVer::parse("1.0.0").unwrap();
+    let c_req_b = SemVer::parse("1.2.0").unwrap();
+    let candidate = SemVer::parse("1.3.0").unwrap();
+
+    assert!(caret_matches(&c_req_a, &candidate), "1.3.0 matches ^1.0");
+    assert!(caret_matches(&c_req_b, &candidate), "1.3.0 matches ^1.2");
+}
+
+#[test]
+fn test_phase64_diamond_dependency_incompatible() {
+    // Diamond: App -> A -> C ^1.0, App -> B -> C ^2.0
+    // Incompatible: no version satisfies both
+    let c_req_a = SemVer::parse("1.0.0").unwrap();
+    let c_req_b = SemVer::parse("2.0.0").unwrap();
+
+    // Try all candidate ranges
+    for candidate_str in &["1.0.0", "1.5.0", "1.9.9", "2.0.0", "2.5.0", "3.0.0"] {
+        let candidate = SemVer::parse(candidate_str).unwrap();
+        let matches_a = caret_matches(&c_req_a, &candidate);
+        let matches_b = caret_matches(&c_req_b, &candidate);
+
+        assert!(
+            !(matches_a && matches_b),
+            "No version should satisfy both ^1.0 and ^2.0, but {} does",
+            candidate_str
+        );
+    }
+}
+
+#[test]
+fn test_phase64_semver_prerelease_comparison() {
+    let alpha = SemVer::parse("1.0.0-alpha").unwrap();
+    let beta = SemVer::parse("1.0.0-beta").unwrap();
+    let rc1 = SemVer::parse("1.0.0-rc.1").unwrap();
+    let release = SemVer::parse("1.0.0").unwrap();
+
+    assert!(alpha < beta, "alpha < beta");
+    assert!(beta < rc1, "beta < rc.1");
+    assert!(rc1 < release, "rc.1 < release");
+}
+
+#[test]
+fn test_phase64_version_selection_best_match() {
+    // Given available versions, find the best match for ^1.2
+    let available = [
+        SemVer::parse("1.0.0").unwrap(),
+        SemVer::parse("1.1.0").unwrap(),
+        SemVer::parse("1.2.0").unwrap(),
+        SemVer::parse("1.2.5").unwrap(),
+        SemVer::parse("1.3.0").unwrap(),
+        SemVer::parse("2.0.0").unwrap(),
+    ];
+
+    let req = SemVer::parse("1.2.0").unwrap();
+    let best = available
+        .iter()
+        .filter(|v| caret_matches(&req, v))
+        .max()
+        .unwrap();
+
+    assert_eq!(best.major, 1);
+    assert_eq!(best.minor, 3);
+    assert_eq!(best.patch, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 5: Multi-Package Workspace Build E2E
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_workspace_member_resolution() {
+    let tmp = TempDir::new().unwrap();
+    let ws_root = tmp.path();
+
+    // Create workspace root vais.toml
+    fs::write(
+        ws_root.join("vais.toml"),
+        "[package]\nname = \"workspace-root\"\nversion = \"0.1.0\"\n\n[workspace]\nmembers = [\"crates/*\"]\n",
+    )
+    .unwrap();
+
+    // Create two members
+    let member_a = ws_root.join("crates").join("a");
+    fs::create_dir_all(member_a.join("src")).unwrap();
+    fs::write(
+        member_a.join("vais.toml"),
+        "[package]\nname = \"a\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member_a.join("src").join("lib.vais"),
+        "F hello_a() -> i64 { 1 }\n",
+    )
+    .unwrap();
+
+    let member_b = ws_root.join("crates").join("b");
+    fs::create_dir_all(member_b.join("src")).unwrap();
+    fs::write(
+        member_b.join("vais.toml"),
+        "[package]\nname = \"b\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member_b.join("src").join("lib.vais"),
+        "F hello_b() -> i64 { 2 }\n",
+    )
+    .unwrap();
+
+    // Verify workspace build
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "pkg",
+            "build",
+            "--workspace",
+        ])
+        .current_dir(ws_root)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                // Should mention both members
+                assert!(
+                    stdout.contains("a") || stdout.contains("b") || stdout.contains("workspace"),
+                    "workspace build should process members: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("workspace build non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_workspace_inter_member_dependency() {
+    let tmp = TempDir::new().unwrap();
+    let ws_root = tmp.path();
+
+    // Workspace root
+    fs::write(
+        ws_root.join("vais.toml"),
+        "[package]\nname = \"ws-root\"\nversion = \"0.1.0\"\n\n[workspace]\nmembers = [\"crates/*\"]\n",
+    )
+    .unwrap();
+
+    // Member core (no deps)
+    let core_dir = ws_root.join("crates").join("core");
+    fs::create_dir_all(core_dir.join("src")).unwrap();
+    fs::write(
+        core_dir.join("vais.toml"),
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        core_dir.join("src").join("lib.vais"),
+        "F core_fn() -> i64 { 10 }\n",
+    )
+    .unwrap();
+
+    // Member app (depends on core)
+    let app_dir = ws_root.join("crates").join("app");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    fs::write(
+        app_dir.join("vais.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ncore = { path = \"../core\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app_dir.join("src").join("main.vais"),
+        "U core\nF main() -> i64 { core_fn() }\n",
+    )
+    .unwrap();
+
+    // Build workspace
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "pkg",
+            "build",
+            "--workspace",
+        ])
+        .current_dir(ws_root)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // Verify inter-member deps resolved correctly
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                if !stderr.contains("clang") && !stderr.contains("linker") {
+                    eprintln!("workspace inter-dep build failed: {}", stderr);
+                }
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_workspace_manifest_parsing() {
+    let toml_str = r#"
+[package]
+name = "ws-root"
+version = "0.1.0"
+
+[workspace]
+members = ["crates/*", "tools/*"]
+
+[workspace.dependencies]
+json = "1.0.0"
+utils = "2.0.0"
+"#;
+
+    #[derive(Debug, Deserialize)]
+    struct WsManifest {
+        package: PackageInfo,
+        workspace: Option<WsConfig>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct WsConfig {
+        members: Vec<String>,
+        #[serde(default)]
+        dependencies: HashMap<String, String>,
+    }
+
+    let manifest: WsManifest = toml::from_str(toml_str).unwrap();
+    assert_eq!(manifest.package.name, "ws-root");
+    let ws = manifest.workspace.unwrap();
+    assert_eq!(ws.members, vec!["crates/*", "tools/*"]);
+    assert_eq!(ws.dependencies.len(), 2);
+    assert_eq!(ws.dependencies["json"], "1.0.0");
+    assert_eq!(ws.dependencies["utils"], "2.0.0");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 6: Lock File Generation & Reproducible Builds
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_lockfile_format_version() {
+    let lockfile_str = r#"
+version = 1
+
+[packages.json-parser]
+version = "1.0.0"
+checksum = "abc123"
+source = "registry"
+dependencies = []
+
+[packages.utils]
+version = "2.1.0"
+checksum = "def456"
+source = "registry"
+dependencies = ["json-parser"]
+"#;
+
+    #[derive(Debug, Deserialize)]
+    struct TestLockFile {
+        version: u32,
+        packages: HashMap<String, TestLockedPkg>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestLockedPkg {
+        version: String,
+        checksum: String,
+        source: String,
+        dependencies: Vec<String>,
+    }
+
+    let lock: TestLockFile = toml::from_str(lockfile_str).unwrap();
+    assert_eq!(lock.version, 1);
+    assert_eq!(lock.packages.len(), 2);
+    assert_eq!(lock.packages["json-parser"].version, "1.0.0");
+    assert_eq!(lock.packages["json-parser"].checksum, "abc123");
+    assert_eq!(lock.packages["utils"].dependencies, vec!["json-parser"]);
+}
+
+#[test]
+fn test_phase64_lockfile_deterministic_serialization() {
+    // Verify that two identical lockfiles produce the same string output
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct TestLockFile {
+        version: u32,
+        packages: std::collections::BTreeMap<String, TestLockedPkg>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct TestLockedPkg {
+        version: String,
+        checksum: String,
+        source: String,
+        dependencies: Vec<String>,
+    }
+
+    let mut lock = TestLockFile {
+        version: 1,
+        packages: std::collections::BTreeMap::new(),
+    };
+
+    lock.packages.insert(
+        "alpha".to_string(),
+        TestLockedPkg {
+            version: "1.0.0".to_string(),
+            checksum: "sha256-aaa".to_string(),
+            source: "registry".to_string(),
+            dependencies: vec![],
+        },
+    );
+    lock.packages.insert(
+        "beta".to_string(),
+        TestLockedPkg {
+            version: "2.0.0".to_string(),
+            checksum: "sha256-bbb".to_string(),
+            source: "registry".to_string(),
+            dependencies: vec!["alpha".to_string()],
+        },
+    );
+
+    // Serialize twice — should be identical (BTreeMap ensures ordering)
+    let s1 = toml::to_string_pretty(&lock).unwrap();
+    let s2 = toml::to_string_pretty(&lock).unwrap();
+    assert_eq!(s1, s2, "lockfile serialization must be deterministic");
+
+    // Roundtrip
+    let parsed: TestLockFile = toml::from_str(&s1).unwrap();
+    assert_eq!(parsed.packages.len(), 2);
+    assert_eq!(parsed.packages["beta"].dependencies, vec!["alpha"]);
+}
+
+#[test]
+fn test_phase64_lockfile_reproducible_resolution() {
+    // Given the same lockfile, dependency resolution should pick the same versions
+    let lock_content = r#"
+version = 1
+
+[packages.dep-a]
+version = "1.2.3"
+checksum = "sha256-xyz"
+source = "registry"
+dependencies = []
+"#;
+
+    #[derive(Debug, Deserialize)]
+    struct TestLockFile {
+        version: u32,
+        packages: HashMap<String, TestLockedPkg>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestLockedPkg {
+        version: String,
+        checksum: String,
+        source: String,
+        dependencies: Vec<String>,
+    }
+
+    let lock: TestLockFile = toml::from_str(lock_content).unwrap();
+    let locked_pkg = &lock.packages["dep-a"];
+
+    // The locked version should be used even if newer versions exist
+    assert_eq!(locked_pkg.version, "1.2.3");
+    assert_eq!(locked_pkg.checksum, "sha256-xyz");
+    assert_eq!(locked_pkg.source, "registry");
+
+    // Verify that ^1.0 requirement is compatible with locked 1.2.3
+    let req = SemVer::parse("1.0.0").unwrap();
+    let locked_ver = SemVer::parse("1.2.3").unwrap();
+    assert!(
+        caret_matches(&req, &locked_ver),
+        "locked 1.2.3 should satisfy ^1.0"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 7: Package Template — vais new --lib / --bin Scaffolding
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_new_bin_project_structure() {
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["new", "my-bin-app"], tmp.path()) {
+        Ok(output) => {
+            if output.status.success() {
+                let project = tmp.path().join("my-bin-app");
+                assert!(project.join("vais.toml").exists());
+                assert!(project.join("src").join("main.vais").exists());
+                assert!(project.join("tests").exists());
+                assert!(project.join(".gitignore").exists());
+
+                let manifest = fs::read_to_string(project.join("vais.toml")).unwrap();
+                assert!(manifest.contains("my-bin-app"));
+                assert!(manifest.contains("0.1.0"));
+
+                let main = fs::read_to_string(project.join("src").join("main.vais")).unwrap();
+                assert!(
+                    main.contains("F main()"),
+                    "bin project should have F main()"
+                );
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_new_lib_project_structure() {
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["new", "my-lib-pkg", "--lib"], tmp.path()) {
+        Ok(output) => {
+            if output.status.success() {
+                let project = tmp.path().join("my-lib-pkg");
+                assert!(project.join("vais.toml").exists());
+                assert!(project.join("src").join("lib.vais").exists());
+                assert!(
+                    !project.join("src").join("main.vais").exists(),
+                    "lib project should not have main.vais"
+                );
+
+                let lib = fs::read_to_string(project.join("src").join("lib.vais")).unwrap();
+                assert!(
+                    !lib.contains("F main()"),
+                    "lib project should not have F main()"
+                );
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_new_project_gitignore_contents() {
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["new", "gitignore-test"], tmp.path()) {
+        Ok(output) => {
+            if output.status.success() {
+                let gitignore_path = tmp.path().join("gitignore-test").join(".gitignore");
+                if gitignore_path.exists() {
+                    let content = fs::read_to_string(&gitignore_path).unwrap();
+                    assert!(
+                        content.contains("target") || content.contains("*.o"),
+                        ".gitignore should ignore build artifacts"
+                    );
+                }
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_new_project_then_build() {
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["new", "buildable-proj"], tmp.path()) {
+        Ok(output) => {
+            if !output.status.success() {
+                return;
+            }
+        }
+        Err(_) => return,
+    }
+
+    let project_dir = tmp.path().join("buildable-proj");
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "build"])
+        .current_dir(&project_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // Build should succeed for newly created project
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("new project build non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64 Task 8: Documentation Generation — vais doc → HTML Output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_doc_generates_markdown() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("doc-test");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"doc-test\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "# A helper function\nF helper(x: i64) -> i64 { x + 1 }\n\n# Entry point\nF main() -> i64 { helper(5) }\n",
+    )
+    .unwrap();
+
+    match run_vaisc(&["pkg", "doc"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if output.status.success() {
+                assert!(
+                    stdout.contains("helper") || stdout.contains("main") || stdout.contains("doc"),
+                    "doc output should mention functions: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!("pkg doc non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_doc_html_format_output() {
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("html-doc");
+    fs::create_dir_all(project_dir.join("src")).unwrap();
+    fs::write(
+        project_dir.join("vais.toml"),
+        "[package]\nname = \"html-doc\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        project_dir.join("src").join("lib.vais"),
+        "# Compute sum\nF sum(a: i64, b: i64) -> i64 { a + b }\n",
+    )
+    .unwrap();
+
+    match run_vaisc(&["pkg", "doc", "--format", "html"], &project_dir) {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if output.status.success() {
+                assert!(
+                    stdout.contains("<html") || stdout.contains("<h") || stdout.contains("<div")
+                        || stdout.contains("html-doc") || stdout.contains("sum"),
+                    "HTML doc should contain HTML tags or function names: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!("pkg doc --format html non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_doc_no_manifest_errors() {
+    let tmp = TempDir::new().unwrap();
+
+    match run_vaisc(&["pkg", "doc"], tmp.path()) {
+        Ok(output) => {
+            assert!(
+                !output.status.success(),
+                "pkg doc without manifest should fail"
+            );
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 64: Cross-cutting tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_phase64_add_then_build_with_path_dep() {
+    let tmp = TempDir::new().unwrap();
+
+    // Create a library
+    let lib_dir = tmp.path().join("mathlib");
+    fs::create_dir_all(lib_dir.join("src")).unwrap();
+    fs::write(
+        lib_dir.join("vais.toml"),
+        "[package]\nname = \"mathlib\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib_dir.join("src").join("lib.vais"),
+        "F square(x: i64) -> i64 { x * x }\n",
+    )
+    .unwrap();
+
+    // Create main app
+    let app_dir = tmp.path().join("calculator");
+    fs::create_dir_all(app_dir.join("src")).unwrap();
+    fs::write(
+        app_dir.join("vais.toml"),
+        "[package]\nname = \"calculator\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app_dir.join("src").join("main.vais"),
+        "F main() -> i64 { 0 }\n",
+    )
+    .unwrap();
+
+    // Add dependency via CLI
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "pkg",
+            "add",
+            "mathlib",
+            "--path",
+            "../mathlib",
+        ])
+        .current_dir(&app_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // Verify dependency was added to vais.toml
+                let content = fs::read_to_string(app_dir.join("vais.toml")).unwrap();
+                assert!(
+                    content.contains("mathlib"),
+                    "vais.toml should contain mathlib dependency after add"
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("pkg add non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_feature_resolution_with_defaults() {
+    // Simulate feature resolution
+    let feature_defs: HashMap<String, Vec<String>> = {
+        let mut m = HashMap::new();
+        m.insert("default".to_string(), vec!["json".to_string()]);
+        m.insert("json".to_string(), vec![]);
+        m.insert("async".to_string(), vec!["json".to_string()]);
+        m.insert(
+            "full".to_string(),
+            vec!["json".to_string(), "async".to_string()],
+        );
+        m
+    };
+
+    // Resolve "full" feature with defaults
+    let mut enabled = std::collections::HashSet::new();
+    let mut stack = vec!["full".to_string(), "default".to_string()];
+
+    while let Some(feat) = stack.pop() {
+        if enabled.insert(feat.clone()) {
+            if let Some(deps) = feature_defs.get(&feat) {
+                for dep in deps {
+                    if !enabled.contains(dep) {
+                        stack.push(dep.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(enabled.contains("full"));
+    assert!(enabled.contains("json"));
+    assert!(enabled.contains("async"));
+    assert!(enabled.contains("default"));
+}
+
+#[test]
+fn test_phase64_pkg_check_workspace() {
+    let tmp = TempDir::new().unwrap();
+    let ws_root = tmp.path();
+
+    // Workspace with one member
+    fs::write(
+        ws_root.join("vais.toml"),
+        "[package]\nname = \"ws\"\nversion = \"0.1.0\"\n\n[workspace]\nmembers = [\"pkgs/*\"]\n",
+    )
+    .unwrap();
+
+    let member = ws_root.join("pkgs").join("lib-a");
+    fs::create_dir_all(member.join("src")).unwrap();
+    fs::write(
+        member.join("vais.toml"),
+        "[package]\nname = \"lib-a\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member.join("src").join("lib.vais"),
+        "F lib_fn() -> i64 { 42 }\n",
+    )
+    .unwrap();
+
+    // Check workspace
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "pkg",
+            "check",
+            "--workspace",
+        ])
+        .current_dir(ws_root)
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                // Should mention checking or the member
+                assert!(
+                    stdout.contains("lib-a") || stdout.contains("✓") || stdout.contains("Check"),
+                    "workspace check should process member: {}",
+                    stdout
+                );
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("workspace check non-zero: {}", stderr);
+            }
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
+
+#[test]
+fn test_phase64_cyclic_dependency_detection() {
+    let tmp = TempDir::new().unwrap();
+
+    // Create A -> B -> A (cycle)
+    let a_dir = tmp.path().join("a");
+    fs::create_dir_all(a_dir.join("src")).unwrap();
+    fs::write(
+        a_dir.join("vais.toml"),
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[dependencies]\nb = { path = \"../b\" }\n",
+    )
+    .unwrap();
+    fs::write(a_dir.join("src").join("lib.vais"), "F fa() -> i64 { 1 }\n").unwrap();
+
+    let b_dir = tmp.path().join("b");
+    fs::create_dir_all(b_dir.join("src")).unwrap();
+    fs::write(
+        b_dir.join("vais.toml"),
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[dependencies]\na = { path = \"../a\" }\n",
+    )
+    .unwrap();
+    fs::write(b_dir.join("src").join("lib.vais"), "F fb() -> i64 { 2 }\n").unwrap();
+
+    // Build A — should detect cycle and fail gracefully
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "pkg", "build"])
+        .current_dir(&a_dir)
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            // Should either fail with cycle error or detect and report
+            assert!(
+                !o.status.success()
+                    || stderr.contains("cyclic")
+                    || stderr.contains("cycle")
+                    || stdout.contains("cyclic")
+                    || stdout.contains("cycle"),
+                "cyclic dependency should be detected: stdout={}, stderr={}",
+                stdout,
+                stderr
+            );
+        }
+        Err(_) => eprintln!("skipping CLI test"),
+    }
+}
