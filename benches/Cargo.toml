@@ -58,6 +58,15 @@ name = "simd_bench"
 path = "simd_bench.rs"
 harness = false
 
+[[bench]]
+name = "parallel_bench"
+path = "parallel_bench.rs"
+harness = false
+
+[[example]]
+name = "gen_large_example"
+path = "fixtures/gen_large_example.rs"
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }
@@ -66,6 +75,7 @@ vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
 vais-gc = { path = "../crates/vais-gc" }
 criterion = { version = "0.8", features = ["html_reports"] }
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"

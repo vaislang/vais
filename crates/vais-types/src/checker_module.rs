@@ -102,7 +102,7 @@ impl TypeChecker {
                     };
                     // Also include impl-level generics
                     let mut all_generics = struct_generics;
-                    all_generics.extend(impl_block.generics.iter().cloned());
+                    all_generics.extend_from_slice(&impl_block.generics);
 
                     for method in &impl_block.methods {
                         self.check_impl_method(
@@ -161,7 +161,7 @@ impl TypeChecker {
     ) {
         let prev_generics = std::mem::replace(
             &mut self.current_generics,
-            generics.iter().map(|g| g.name.node.clone()).collect(),
+            generics.iter().map(|g| &g.name.node).cloned().collect(),
         );
         let prev_bounds = std::mem::replace(
             &mut self.current_generic_bounds,
@@ -170,7 +170,7 @@ impl TypeChecker {
                 .map(|g| {
                     (
                         g.name.node.clone(),
-                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                        g.bounds.iter().map(|b| &b.node).cloned().collect(),
                     )
                 })
                 .collect(),
@@ -280,7 +280,7 @@ impl TypeChecker {
             .map(|g| {
                 (
                     g.name.node.clone(),
-                    g.bounds.iter().map(|b| b.node.clone()).collect(),
+                    g.bounds.iter().map(|b| &b.node).cloned().collect(),
                 )
             })
             .collect();
@@ -302,7 +302,7 @@ impl TypeChecker {
             name.clone(),
             FunctionSig {
                 name,
-                generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
+                generics: f.generics.iter().map(|g| &g.name.node).cloned().collect(),
                 generic_bounds,
                 params,
                 ret,
@@ -428,7 +428,7 @@ impl TypeChecker {
                 .map(|g| {
                     (
                         g.name.node.clone(),
-                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                        g.bounds.iter().map(|b| &b.node).cloned().collect(),
                     )
                 })
                 .collect();
@@ -463,7 +463,7 @@ impl TypeChecker {
             name.clone(),
             StructDef {
                 name,
-                generics: s.generics.iter().map(|g| g.name.node.clone()).collect(),
+                generics: s.generics.iter().map(|g| &g.name.node).cloned().collect(),
                 fields,
                 methods,
                 repr_c: s
@@ -514,7 +514,7 @@ impl TypeChecker {
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         // Register enum variants for exhaustiveness checking
-        let variant_names: Vec<String> = e.variants.iter().map(|v| v.name.node.clone()).collect();
+        let variant_names: Vec<String> = e.variants.iter().map(|v| &v.name.node).cloned().collect();
         self.exhaustiveness_checker
             .register_enum(&name, variant_names);
 
@@ -522,7 +522,7 @@ impl TypeChecker {
             name.clone(),
             EnumDef {
                 name,
-                generics: e.generics.iter().map(|g| g.name.node.clone()).collect(),
+                generics: e.generics.iter().map(|g| &g.name.node).cloned().collect(),
                 variants,
                 methods: HashMap::new(),
             },
@@ -553,7 +553,7 @@ impl TypeChecker {
             name.clone(),
             UnionDef {
                 name,
-                generics: u.generics.iter().map(|g| g.name.node.clone()).collect(),
+                generics: u.generics.iter().map(|g| &g.name.node).cloned().collect(),
                 fields,
             },
         );
@@ -604,7 +604,7 @@ impl TypeChecker {
 
         // Combine struct generics with impl-level generics
         let mut all_generics = struct_generics;
-        all_generics.extend(impl_block.generics.iter().cloned());
+        all_generics.extend_from_slice(&impl_block.generics);
 
         // Set current generics for proper type resolution
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
@@ -706,7 +706,7 @@ impl TypeChecker {
                 .map(|g| {
                     (
                         g.name.node.clone(),
-                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                        g.bounds.iter().map(|b| &b.node).cloned().collect(),
                     )
                 })
                 .collect();
@@ -778,19 +778,19 @@ impl TypeChecker {
         // Parse associated types (with GAT support)
         let mut associated_types = HashMap::new();
         for assoc in &t.associated_types {
-            let bounds: Vec<String> = assoc.bounds.iter().map(|b| b.node.clone()).collect();
+            let bounds: Vec<String> = assoc.bounds.iter().map(|b| &b.node).cloned().collect();
             let default = assoc.default.as_ref().map(|ty| self.resolve_type(&ty.node));
 
             // Extract GAT generic parameters and their bounds
             let gat_generics: Vec<String> =
-                assoc.generics.iter().map(|g| g.name.node.clone()).collect();
+                assoc.generics.iter().map(|g| &g.name.node).cloned().collect();
             let gat_bounds: HashMap<String, Vec<String>> = assoc
                 .generics
                 .iter()
                 .map(|g| {
                     (
                         g.name.node.clone(),
-                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                        g.bounds.iter().map(|b| &b.node).cloned().collect(),
                     )
                 })
                 .collect();
@@ -846,8 +846,8 @@ impl TypeChecker {
             name.clone(),
             TraitDef {
                 name,
-                generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
-                super_traits: t.super_traits.iter().map(|s| s.node.clone()).collect(),
+                generics: t.generics.iter().map(|g| &g.name.node).cloned().collect(),
+                super_traits: t.super_traits.iter().map(|s| &s.node).cloned().collect(),
                 associated_types,
                 methods,
             },

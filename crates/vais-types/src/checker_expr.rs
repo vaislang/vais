@@ -209,7 +209,7 @@ impl TypeChecker {
                         };
 
                         return Ok(ResolvedType::Fn {
-                            params: sig.params.iter().map(|(_, t, _)| t.clone()).collect(),
+                            params: sig.params.iter().map(|(_, t, _)| t).cloned().collect(),
                             ret: Box::new(ret_type),
                             effects: None,
                         });

@@ -267,6 +267,37 @@ impl TypeChecker {
     pub fn get_lifetime_inferencer(&self) -> &lifetime::LifetimeInferencer {
         &self.lifetime_inferencer
     }
+
+    /// Clone type definitions from another checker (for parallel type-checking).
+    /// Copies all type information but not runtime state like scopes or current function context.
+    pub fn clone_type_defs_from(&mut self, other: &TypeChecker) {
+        self.structs = other.structs.clone();
+        self.enums = other.enums.clone();
+        self.unions = other.unions.clone();
+        self.functions = other.functions.clone();
+        self.type_aliases = other.type_aliases.clone();
+        self.traits = other.traits.clone();
+        self.trait_impls = other.trait_impls.clone();
+        self.constants = other.constants.clone();
+    }
+
+    /// Merge type definitions from another checker (for parallel type-checking).
+    /// Extends this checker with types from another, allowing duplicates to be overwritten.
+    pub fn merge_type_defs_from(&mut self, other: TypeChecker) {
+        self.structs.extend(other.structs);
+        self.enums.extend(other.enums);
+        self.unions.extend(other.unions);
+        self.functions.extend(other.functions);
+        self.type_aliases.extend(other.type_aliases);
+        self.traits.extend(other.traits);
+        self.trait_impls.extend(other.trait_impls);
+        self.constants.extend(other.constants);
+        self.warnings.extend(other.warnings);
+
+        for inst in other.generic_instantiations {
+            self.add_instantiation(inst);
+        }
+    }
 }
 
 impl Default for TypeChecker {

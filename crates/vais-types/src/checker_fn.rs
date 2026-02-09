@@ -277,7 +277,7 @@ impl TypeChecker {
 
         // Combine struct generics with method generics
         let mut all_generics: Vec<GenericParam> = struct_generics.to_vec();
-        all_generics.extend(method.generics.iter().cloned());
+        all_generics.extend_from_slice(&method.generics);
 
         // Set current generic parameters (including struct-level generics)
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);

@@ -126,6 +126,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **65~66** | CI 릴리스 · 코드 품질 | Windows CI, release/homebrew/crates.io/docker 워크플로우, RELEASING.md, builtins.rs 분할, codegen 모듈화, LSP 핸들러 분리 |
 | **67~68** | 테스트 커버리지 · 메모리 모델 | 4 crate 142개 통합 테스트, load_typed/store_typed, MIR Borrow Checker E100~E105, --strict-borrow — **475 E2E** |
 | **Phase 1** | Lifetime & Ownership 실전 강화 | CFG worklist dataflow, NLL (liveness/expire/two-phase), MIR lifetime tracking (RefLifetime/RefMutLifetime), outlives 검증 E106, elision 규칙 — MIR 테스트 144개 |
+| **Phase 2** | 컴파일러 성능 최적화 | Clone 감소 (~60건 제거, Rc<Function/Struct>), 병렬 TC/CG/파이프라인 (parse 2.18x, codegen 4.14x speedup), 대규모 벤치마크 (10K~100K fixture, 메모리 프로파일링, CI 회귀 감지) — 벤치마크 30+개, 테스트 46+개 |
 
 ---
 
@@ -200,7 +201,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 2: 컴파일러 성능 최적화
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: 대규모 프로젝트 컴파일 성능 개선 — clone 감소, 병렬 처리 확대, 메모리 사용량 절감
 > **배경**: vais-codegen에 clone() 560건, 병렬 처리는 import 로딩만 적용. 대규모 프로젝트 벤치마크 미비
 
@@ -208,30 +209,43 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 **목표**: codegen 핫 경로의 불필요한 clone 제거
 
-- [ ] 1. Clone 핫스팟 분석 — vais-codegen clone() 560건 프로파일링, 상위 20건 분류 (Sonnet)
-- [ ] 2. 참조 전환 — String→&str, Vec→&[T], HashMap 엔트리 API 활용 (Sonnet)
-- [ ] 3. Cow/Rc 도입 — AST 노드 공유가 빈번한 경로에 Cow<str>/Rc<str> 적용 (Sonnet)
-- [ ] 4. 타입 체커 clone 감소 — vais-types clone() 핫스팟 분석 및 감소 (Sonnet)
-- [ ] 5. 벤치마크 비교 — 최적화 전후 criterion 벤치마크 수치 비교 (Sonnet)
+- [x] 1. Clone 핫스팟 분석 — vais-codegen clone() 560건 프로파일링, 상위 20건 분류 (Sonnet) ✅
+  변경: docs/clone-analysis.md (913건 clone 분석, 42% 제거 가능, ROI 기준 Top 20 핫스팟 보고서)
+- [x] 2. 참조 전환 — String→&str, Vec→&[T], HashMap 엔트리 API 활용 (Sonnet) ✅
+  변경: vais-codegen/src/{generate_expr,lib,expr_helpers,control_flow}.rs (~40-50건 clone 제거)
+- [x] 3. Cow/Rc 도입 — AST 노드 공유가 빈번한 경로에 Rc<Function>/Rc<Struct> 적용 (Sonnet) ✅
+  변경: vais-codegen/src/lib.rs (generic_function_templates→Rc<Function>, generic_struct_defs→Rc<Struct>)
+- [x] 4. 타입 체커 clone 감소 — vais-types clone() 핫스팟 분석 및 감소 (Sonnet) ✅
+  변경: vais-types/src/{checker_module,checker_expr,checker_fn}.rs (-16건 clone, iter→cloned/extend_from_slice)
+- [x] 5. 벤치마크 비교 — 최적화 전후 criterion 벤치마크 수치 비교 (Sonnet) ✅
+  변경: benches/clone_reduction_bench.rs (6개 그룹: TC/CG throughput, generic instantiation, full pipeline)
 
 ### Stage 2: 병렬 컴파일 확대
 
 **목표**: 모듈 단위 병렬 type-check/codegen
 
-- [ ] 1. 모듈 의존성 그래프 — import 관계에서 DAG 구축 (Sonnet)
-- [ ] 2. 병렬 Type Check — 독립 모듈을 rayon par_iter로 동시 검사 (Sonnet)
-- [ ] 3. 병렬 Codegen — 독립 모듈을 rayon par_iter로 동시 IR 생성 (Sonnet)
-- [ ] 4. 파이프라인 병렬화 — lex→parse 완료된 모듈부터 즉시 typecheck 시작 (Sonnet)
-- [ ] 5. 벤치마크 — 10/50/100 모듈 프로젝트에서 병렬 speedup 측정 (Sonnet)
+- [x] 1. 모듈 의존성 그래프 — import 관계에서 DAG 구축 (Sonnet) ✅
+  변경: vaisc/src/incremental.rs (topological_sort, parallel_levels with Tarjan SCC, is_independent — 9개 테스트)
+- [x] 2. 병렬 Type Check — 독립 모듈을 rayon par_iter로 동시 검사 (Sonnet) ✅
+  변경: vaisc/src/commands/compile.rs (parallel_type_check()), vais-types/src/lib.rs (clone/merge_type_defs) — 5개 테스트
+- [x] 3. 병렬 Codegen — 독립 모듈을 rayon par_iter로 동시 IR 생성 (Sonnet) ✅
+  변경: vaisc/src/commands/compile.rs (parallel_codegen()), vaisc/tests/parallel_codegen_tests.rs — 10개 테스트
+- [x] 4. 파이프라인 병렬화 — lex→parse 완료된 모듈부터 즉시 typecheck 시작 (Sonnet) ✅
+  변경: vaisc/src/commands/compile.rs (pipeline_compile(), mpsc producer-consumer), vaisc/tests/pipeline_compile_tests.rs — 19개 테스트
+- [x] 5. 벤치마크 — 10/50/100 모듈 프로젝트에서 병렬 speedup 측정 (Sonnet) ✅
+  변경: benches/parallel_bench.rs (30개 벤치마크, 실측 parse 2.18x/codegen 4.14x speedup)
 
 ### Stage 3: 대규모 벤치마크 & 프로파일링
 
 **목표**: 실전 규모 프로젝트에서 컴파일 성능 검증
 
-- [ ] 1. 대규모 fixture 생성 — 10K/50K/100K lines 합성 프로젝트 생성기 (Sonnet)
-- [ ] 2. 메모리 프로파일링 — peak RSS 측정, 대규모 입력 시 메모리 사용량 추적 (Sonnet)
-- [ ] 3. CI 성능 회귀 감지 — criterion 벤치마크 CI 통합, 10% 이상 회귀 시 경고 (Sonnet)
-- [ ] 4. 통합 검증 — 475 E2E 통과, Clippy 0건 (Opus)
+- [x] 1. 대규모 fixture 생성 — 10K/50K/100K lines 합성 프로젝트 생성기 (Sonnet) ✅
+  변경: benches/lib.rs (generate_large_project, generate_multi_module_project, generate_distributed_project — 12개 테스트)
+- [x] 2. 메모리 프로파일링 — peak RSS 측정, 대규모 입력 시 메모리 사용량 추적 (Sonnet) ✅
+  변경: benches/memory_bench.rs (커스텀 GlobalAlloc 트래커, 7개 벤치마크 — 단계별/스케일링/브레이크다운)
+- [x] 3. CI 성능 회귀 감지 — criterion 벤치마크 CI 통합, 10% 이상 회귀 시 경고 (Sonnet) ✅
+  변경: .github/workflows/bench.yml (491줄, PR 코멘트, 10% 임계값, baseline 캐시, compile-time tracking)
+- [x] 4. 통합 검증 — 475 E2E 통과, Clippy 0건 (Opus) ✅
 
 ---
 

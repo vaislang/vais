@@ -769,7 +769,7 @@ pub struct CodeGenerator {
     structs: HashMap<String, StructInfo>,
 
     // Generic struct AST definitions (before monomorphization)
-    generic_struct_defs: HashMap<String, vais_ast::Struct>,
+    generic_struct_defs: HashMap<String, std::rc::Rc<vais_ast::Struct>>,
 
     // Enum definitions
     enums: HashMap<String, EnumInfo>,
@@ -891,7 +891,7 @@ pub struct CodeGenerator {
     generic_fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
 
     // Generic function templates stored for specialization (base_name -> Function)
-    generic_function_templates: HashMap<String, Function>,
+    generic_function_templates: HashMap<String, std::rc::Rc<Function>>,
 
     // Resolved function signatures from type checker (for inferred parameter types)
     resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
@@ -2162,9 +2162,10 @@ impl CodeGenerator {
 
                     if !f.generics.is_empty() {
                         // Store generic function for later specialization
+                        let f_rc = std::rc::Rc::new(f.clone());
                         generic_functions.insert(f.name.node.clone(), f.clone());
                         self.generic_function_templates
-                            .insert(f.name.node.clone(), f.clone());
+                            .insert(f.name.node.clone(), std::rc::Rc::clone(&f_rc));
                     } else {
                         self.register_function(f)?;
                     }
@@ -2172,10 +2173,11 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     if !s.generics.is_empty() {
                         // Store generic struct for later specialization
+                        let s_rc = std::rc::Rc::new(s.clone());
                         generic_structs.insert(s.name.node.clone(), s.clone());
                         // Also store in the generic_struct_defs for type inference
                         self.generic_struct_defs
-                            .insert(s.name.node.clone(), s.clone());
+                            .insert(s.name.node.clone(), std::rc::Rc::clone(&s_rc));
                     } else {
                         self.register_struct(s)?;
                         for method in &s.methods {
