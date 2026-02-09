@@ -53,7 +53,12 @@ struct CompileRunResult {
 /// Compile a .vais file with the Rust compiler, then link and run
 fn compile_run_rust(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult, String> {
     let ir_path = tmp.join("rust_output.ll");
-    let exe_path = tmp.join("rust_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "rust_exe.exe"
+    } else {
+        "rust_exe"
+    };
+    let exe_path = tmp.join(exe_name);
 
     // Compile with Rust vaisc
     let output = Command::new(vaisc_bin())
@@ -70,12 +75,14 @@ fn compile_run_rust(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult, St
     }
 
     // Link with clang
-    let output = Command::new("clang")
-        .arg(&ir_path)
+    let mut cmd = Command::new("clang");
+    cmd.arg(&ir_path)
         .arg("-o")
         .arg(&exe_path)
-        .arg("-Wno-override-module")
-        .arg("-lm")
+        .arg("-Wno-override-module");
+    #[cfg(not(target_os = "windows"))]
+    cmd.arg("-lm");
+    let output = cmd
         .output()
         .map_err(|e| format!("clang failed: {}", e))?;
 
@@ -100,7 +107,12 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
     // Selfhost always writes to selfhost/main_output.ll regardless of -o flag
     let fixed_ir_path = selfhost_dir().join("main_output.ll");
     let ir_path = tmp.join("selfhost_output.ll");
-    let exe_path = tmp.join("selfhost_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "selfhost_exe.exe"
+    } else {
+        "selfhost_exe"
+    };
+    let exe_path = tmp.join(exe_name);
 
     // Compile with selfhost (run from project root so paths resolve)
     let output = Command::new(stage1_bin())
@@ -121,13 +133,15 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
         .map_err(|e| format!("Failed to copy IR from {}: {}", fixed_ir_path.display(), e))?;
 
     // Link with clang + runtime.o
-    let output = Command::new("clang")
-        .arg(&ir_path)
+    let mut cmd = Command::new("clang");
+    cmd.arg(&ir_path)
         .arg(&runtime_o())
         .arg("-o")
         .arg(&exe_path)
-        .arg("-Wno-override-module")
-        .arg("-lm")
+        .arg("-Wno-override-module");
+    #[cfg(not(target_os = "windows"))]
+    cmd.arg("-lm");
+    let output = cmd
         .output()
         .map_err(|e| format!("clang failed: {}", e))?;
 

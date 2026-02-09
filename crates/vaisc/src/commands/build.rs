@@ -486,11 +486,11 @@ pub(crate) fn compile_opencl(
         );
     }
 
-    // Build with cc (clang/gcc)
-    let compiler = if cfg!(target_os = "macos") {
-        "clang"
-    } else {
+    // Build with cc (clang/gcc); on macOS and Windows, use clang directly
+    let compiler = if cfg!(target_os = "linux") {
         "cc"
+    } else {
+        "clang"
     };
 
     // Check compiler availability

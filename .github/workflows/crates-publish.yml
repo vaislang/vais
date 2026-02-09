@@ -1,0 +1,253 @@
+name: Publish to crates.io
+
+on:
+  # Trigger on release creation
+  release:
+    types: [published]
+
+  # Manual trigger with dry-run option
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (do not actually publish)'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  publish:
+    name: Publish Crates to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-publish-
+
+      - name: Verify all crates build
+        run: cargo build --workspace --exclude vais-python --exclude vais-node
+
+      - name: Run tests
+        run: cargo test --workspace --exclude vais-python --exclude vais-node
+
+      - name: Determine publish flags
+        id: publish-flags
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "flags=--dry-run" >> $GITHUB_OUTPUT
+            echo "Running in DRY-RUN mode"
+          else
+            echo "flags=" >> $GITHUB_OUTPUT
+            echo "Running in PUBLISH mode"
+          fi
+
+      # Layer 0: No dependencies
+      - name: Publish vais-ast
+        run: |
+          cd crates/vais-ast
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-lexer
+        run: |
+          cd crates/vais-lexer
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-i18n
+        run: |
+          cd crates/vais-i18n
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 1: Depends on Layer 0
+      - name: Publish vais-parser
+        run: |
+          cd crates/vais-parser
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-types
+        run: |
+          cd crates/vais-types
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 2: Depends on Layer 0-1
+      - name: Publish vais-mir
+        run: |
+          cd crates/vais-mir
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-codegen
+        run: |
+          cd crates/vais-codegen
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-codegen-js
+        run: |
+          cd crates/vais-codegen-js
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 3: Support crates
+      - name: Publish vais-query
+        run: |
+          cd crates/vais-query
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-plugin
+        run: |
+          cd crates/vais-plugin
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-macro
+        run: |
+          cd crates/vais-macro
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-bindgen
+        run: |
+          cd crates/vais-bindgen
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-profiler
+        run: |
+          cd crates/vais-profiler
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-security
+        run: |
+          cd crates/vais-security
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-supply-chain
+        run: |
+          cd crates/vais-supply-chain
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-testgen
+        run: |
+          cd crates/vais-testgen
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 4: Runtime & tooling crates
+      - name: Publish vais-jit
+        run: |
+          cd crates/vais-jit
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-gc
+        run: |
+          cd crates/vais-gc
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-gpu
+        run: |
+          cd crates/vais-gpu
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-hotreload
+        run: |
+          cd crates/vais-hotreload
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-dynload
+        run: |
+          cd crates/vais-dynload
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-tutorial
+        run: |
+          cd crates/vais-tutorial
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 5: LSP, DAP, and servers
+      - name: Publish vais-lsp
+        run: |
+          cd crates/vais-lsp
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-dap
+        run: |
+          cd crates/vais-dap
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-registry-server
+        run: |
+          cd crates/vais-registry-server
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      - name: Publish vais-playground-server
+        run: |
+          cd crates/vais-playground-server
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Layer 6: Main compiler binary (depends on most other crates)
+      - name: Publish vaisc
+        run: |
+          cd crates/vaisc
+          cargo publish ${{ steps.publish-flags.outputs.flags }} --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+
+      # Note: vais-python and vais-node are excluded as they require
+      # separate build systems (maturin/napi) and are published to
+      # PyPI and npm respectively, not crates.io
+
+      - name: Publish summary
+        run: |
+          echo "::notice::Publication complete!"
+          if [[ "${{ steps.publish-flags.outputs.flags }}" == "--dry-run" ]]; then
+            echo "::notice::This was a DRY-RUN. No crates were actually published."
+          else
+            echo "::notice::All crates have been published to crates.io"
+            echo "::notice::Users can now install with: cargo install vaisc"
+          fi

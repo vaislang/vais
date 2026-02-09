@@ -110,7 +110,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **62** | **문서 현행화 & 언어 비교 벤치마크** | ✅ 완료 | LLM 토큰 효율성 + 컴파일 속도 벤치마크, CLAUDE.md/MEMORY.md/docs-site 현행화 |
 | **63** | **실행 검증 강화** | ✅ 완료 | execution_tests 95개, error_scenario 21개, error_snapshot 10개, 126 신규 테스트 |
 | **64** | **패키지 매니저 & 생태계** | ✅ 완료 | init/install/publish E2E, SemVer 해석, workspace, lockfile, template, doc — 37 신규 테스트 (130 총) |
-| **65** | **크로스 플랫폼 CI & 릴리스** | 📋 예정 | Linux/Windows CI, GitHub Release 자동화, brew/cargo install, Docker 이미지 |
+| **65** | **크로스 플랫폼 CI & 릴리스** | ✅ 완료 | Windows CI, 릴리스 자동화 (release/homebrew/crates.io/docker), RELEASING.md |
 
 ---
 
@@ -192,6 +192,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 62** | 문서 현행화 & 언어 비교 벤치마크 | ✅ LLM 토큰 효율성 + 컴파일 속도 벤치마크, CLAUDE.md/docs-site 현행화 | 2026-02-09 |
 | **Phase 63** | 실행 검증 강화 | ✅ execution_tests 95개, error_scenario 21개, error_snapshot 10개 (126 신규) | 2026-02-09 |
 | **Phase 64** | 패키지 매니저 & 생태계 | ✅ init/install/publish/SemVer/workspace/lockfile/template/doc — 37 신규 E2E (130 총) | 2026-02-09 |
+| **Phase 65** | 크로스 플랫폼 CI & 릴리스 | ✅ Windows CI 매트릭스, 플랫폼 이슈 수정, homebrew/crates.io/docker 워크플로우, RELEASING.md | 2026-02-09 |
 
 ---
 
@@ -1488,25 +1489,33 @@ Stage 0 (1,2,3 병렬 → 4) → Stage 1 (5,6,7,8 병렬) → Stage 2 (9,10,11 �
 
 ## Phase 65: 크로스 플랫폼 CI & 릴리스
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료
 > **목표**: Linux/Windows CI 추가, GitHub Release 자동화, brew tap/cargo install/Docker 배포 파이프라인. 실제 배포 가능 상태.
 > **배경**: 현재 macOS 중심 개발. 크로스 플랫폼 검증과 릴리스 자동화 필요.
 
 ### Stage 0: 크로스 플랫폼 CI
 
-- [ ] 1. GitHub Actions — Linux (ubuntu-latest) CI 매트릭스 추가 (Opus 직접)
-- [ ] 2. GitHub Actions — Windows (windows-latest) CI 매트릭스 추가 (Opus 직접)
-- [ ] 3. 플랫폼별 조건부 컴파일 이슈 수정 (Opus 직접)
+- [x] 1. GitHub Actions — Linux (ubuntu-latest) CI 매트릭스 추가 (Opus 직접) ✅ 2026-02-09
+  변경: 이미 ci.yml에 ubuntu-latest 구현 완료 상태
+- [x] 2. GitHub Actions — Windows (windows-latest) CI 매트릭스 추가 (Opus 직접) ✅ 2026-02-09
+  변경: ci.yml — clippy/check/test 3개 job에 windows-latest 매트릭스 + LLVM 17 choco 설치 추가
+- [x] 3. 플랫폼별 조건부 컴파일 이슈 수정 (Opus 직접) ✅ 2026-02-09
+  변경: compile.rs (-lm → linux only), build.rs (Windows clang), e2e_tests.rs (POSIX 테스트 #[cfg(unix)]), 테스트 exe 경로 Windows .exe 대응, clippy 3건 수정
 
 ### Stage 1: 릴리스 자동화
 
-- [ ] 4. GitHub Release workflow — 태그 푸시 시 바이너리 빌드+첨부 (Sonnet 위임)
-- [ ] 5. brew tap vaislang/tap 포뮬라 자동 업데이트 (Sonnet 위임)
-- [ ] 6. cargo install vaisc — crates.io 퍼블리시 워크플로우 (Sonnet 위임)
+- [x] 4. GitHub Release workflow — 태그 푸시 시 바이너리 빌드+첨부 (Sonnet 위임) ✅ 2026-02-09
+  변경: 이미 release.yml에 4 플랫폼 빌드 + GitHub Release 구현 완료 상태
+- [x] 5. brew tap vaislang/tap 포뮬라 자동 업데이트 (Sonnet 위임) ✅ 2026-02-09
+  변경: .github/workflows/homebrew.yml 신규 — release 트리거, SHA256 계산, Formula/vais.rb 자동 업데이트
+- [x] 6. cargo install vaisc — crates.io 퍼블리시 워크플로우 (Sonnet 위임) ✅ 2026-02-09
+  변경: .github/workflows/crates-publish.yml 신규 — 6-layer 의존성순 publish, dry-run 지원
 
 ### Stage 2: 컨테이너 & 배포
 
-- [ ] 7. Docker 이미지 — vaislang/vais:latest 자동 빌드+푸시 (Sonnet 위임)
-- [ ] 8. 릴리스 체크리스트 문서 — RELEASING.md (Sonnet 위임)
+- [x] 7. Docker 이미지 — vaislang/vais:latest 자동 빌드+푸시 (Sonnet 위임) ✅ 2026-02-09
+  변경: Dockerfile (multi-stage: builder+runtime), .github/workflows/docker.yml 신규 — buildx, Docker Hub push
+- [x] 8. 릴리스 체크리스트 문서 — RELEASING.md (Sonnet 위임) ✅ 2026-02-09
+  변경: RELEASING.md 신규 — 사전준비/실행/검증/롤백/트러블슈팅 전체 문서화 (735줄)
 
-진행률: 0/8 (0%)
+진행률: 8/8 (100%)

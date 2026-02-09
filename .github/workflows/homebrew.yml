@@ -1,0 +1,106 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+
+env:
+  HOMEBREW_TAP_REPO: vaislang/homebrew-tap
+
+jobs:
+  update-formula:
+    name: Update Homebrew Formula
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout homebrew-tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION_NO_V="${VERSION#v}"
+          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+
+      - name: Download and compute SHA256 for x86_64 Darwin
+        id: x86_64
+        run: |
+          ARCHIVE_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/vais-${{ steps.version.outputs.tag }}-x86_64-apple-darwin.tar.gz"
+          echo "Downloading: $ARCHIVE_URL"
+          curl -L -o x86_64.tar.gz "$ARCHIVE_URL"
+          SHA256=$(shasum -a 256 x86_64.tar.gz | awk '{print $1}')
+          echo "url=${ARCHIVE_URL}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "x86_64 SHA256: $SHA256"
+
+      - name: Download and compute SHA256 for aarch64 Darwin
+        id: aarch64
+        run: |
+          ARCHIVE_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/vais-${{ steps.version.outputs.tag }}-aarch64-apple-darwin.tar.gz"
+          echo "Downloading: $ARCHIVE_URL"
+          curl -L -o aarch64.tar.gz "$ARCHIVE_URL"
+          SHA256=$(shasum -a 256 aarch64.tar.gz | awk '{print $1}')
+          echo "url=${ARCHIVE_URL}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "aarch64 SHA256: $SHA256"
+
+      - name: Update Formula/vais.rb
+        run: |
+          cd homebrew-tap
+          cat > Formula/vais.rb << 'FORMULA'
+          class Vais < Formula
+            desc "AI-optimized systems programming language with single-character keywords"
+            homepage "https://github.com/vaislang/vais"
+            version "${{ steps.version.outputs.version }}"
+            license "MIT"
+
+            if Hardware::CPU.intel?
+              url "${{ steps.x86_64.outputs.url }}"
+              sha256 "${{ steps.x86_64.outputs.sha256 }}"
+            elsif Hardware::CPU.arm?
+              url "${{ steps.aarch64.outputs.url }}"
+              sha256 "${{ steps.aarch64.outputs.sha256 }}"
+            end
+
+            def install
+              bin.install "vaisc"
+              prefix.install "std"
+              doc.install "README.md" if File.exist?("README.md")
+            end
+
+            test do
+              assert_match "vais", shell_output("#{bin}/vaisc --version")
+            end
+          end
+          FORMULA
+
+      - name: Verify formula syntax
+        run: |
+          cd homebrew-tap
+          brew install --formula --dry-run Formula/vais.rb 2>&1 || true
+
+      - name: Commit and push changes
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/vais.rb
+          git commit -m "Update vais to version ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Verify update
+        run: |
+          echo "✅ Successfully updated Formula/vais.rb"
+          echo "Version: ${{ steps.version.outputs.version }}"
+          echo "x86_64 URL: ${{ steps.x86_64.outputs.url }}"
+          echo "x86_64 SHA256: ${{ steps.x86_64.outputs.sha256 }}"
+          echo "aarch64 URL: ${{ steps.aarch64.outputs.url }}"
+          echo "aarch64 SHA256: ${{ steps.aarch64.outputs.sha256 }}"

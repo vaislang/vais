@@ -439,9 +439,9 @@ impl TypeChecker {
                     || then
                         .iter()
                         .any(|s| Self::stmt_contains_self_call(&s.node))
-                    || else_.as_ref().map_or(false, |eb| {
-                        Self::if_else_contains_self_call(eb)
-                    })
+                    || else_
+                        .as_ref()
+                        .is_some_and(Self::if_else_contains_self_call)
             }
             Expr::Block(stmts) => stmts
                 .iter()
@@ -463,7 +463,7 @@ impl TypeChecker {
                         .any(|s| Self::stmt_contains_self_call(&s.node))
                     || next
                         .as_ref()
-                        .map_or(false, |n| Self::if_else_contains_self_call(n))
+                        .is_some_and(|n| Self::if_else_contains_self_call(n))
             }
         }
     }

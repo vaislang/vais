@@ -508,7 +508,7 @@ impl TypeError {
                 ))
             }
             TypeError::InferFailed { suggestion, .. } => {
-                suggestion.as_ref().map(|s| s.clone())
+                suggestion.clone()
             }
             _ => None,
         }

@@ -20,7 +20,12 @@ fn compile_and_run_selfhost(test_file: &str) -> (i32, String, String) {
     let source_path = format!("{}/selfhost/{}", workspace_root, test_file);
 
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
 
     // Build vaisc first (ensure it's up to date)
     let build = Command::new("cargo")

@@ -50,7 +50,12 @@ fn compile_and_run_with_extra_sources(
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let ll_path = tmp_dir.path().join("test.ll");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
 
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 

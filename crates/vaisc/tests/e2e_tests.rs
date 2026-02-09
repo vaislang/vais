@@ -52,7 +52,12 @@ fn compile_and_run_with_extra_sources(
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let ll_path = tmp_dir.path().join("test.ll");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
 
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
@@ -98,7 +103,12 @@ fn compile_and_run_with_coverage(source: &str) -> Result<RunResult, String> {
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let ll_path = tmp_dir.path().join("test.ll");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
     let profraw_path = tmp_dir.path().join("default_%m.profraw");
 
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
@@ -3959,6 +3969,7 @@ F main() -> i64 {
 // ==================== Phase 31: File System Durability ====================
 
 #[test]
+#[cfg(unix)]
 fn e2e_fsync_write_and_sync() {
     // Test: write file, fsync via fileno, read back and verify
     let source = r#"
@@ -3995,6 +4006,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_fileno_valid_stream() {
     // Test: fileno returns valid fd for an open file
     let source = r#"
@@ -4011,6 +4023,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_file_sync_method() {
     // Test File.sync() method via the std/file.vais pattern
     // (simplified: directly test fsync + fflush combo)
@@ -4032,6 +4045,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_dir_sync_tmp() {
     // Test: open directory fd, fsync it, close it
     let source = r#"
@@ -4048,6 +4062,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_mmap_read_file() {
     // Test: write a file, mmap it for reading, verify content via load_byte
     let source = r#"
@@ -4078,6 +4093,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 #[cfg_attr(
     not(target_os = "macos"),
     ignore = "msync flags differ on Linux (MS_SYNC=16 on macOS, 4 on Linux)"
@@ -4128,6 +4144,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_mmap_invalid_fd() {
     // Test: mmap with invalid fd returns MAP_FAILED (-1)
     let source = r#"
@@ -4142,6 +4159,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_mmap_madvise() {
     // Test: mmap a file and call madvise with MADV_SEQUENTIAL
     let source = r#"
@@ -4170,6 +4188,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_flock_exclusive_lock() {
     // Test: open a file, acquire exclusive lock, unlock, close
     let source = r#"
@@ -4199,6 +4218,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_flock_shared_lock() {
     // Test: acquire shared lock on a file
     let source = r#"
@@ -4226,6 +4246,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg(unix)]
 fn e2e_flock_try_nonblocking() {
     // Test: try non-blocking exclusive lock (LOCK_EX | LOCK_NB)
     let source = r#"
@@ -8426,7 +8447,12 @@ fn compile_and_run_with_cfg(
     let ir = compile_to_ir_with_cfg(source, cfg_values)?;
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let ll_path = tmp_dir.path().join("test.ll");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
     let clang_output = Command::new("clang")
         .arg(&ll_path)

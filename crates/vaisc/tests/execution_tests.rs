@@ -49,7 +49,12 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let ll_path = tmp_dir.path().join("test.ll");
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
 
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
@@ -1173,7 +1178,12 @@ F main() -> i64 {
 /// Helper: compile a .vais file using vaisc CLI, then run the binary
 fn compile_and_run_via_cli(vais_file: &Path) -> Result<RunResult, String> {
     let tmp_dir = TempDir::new().map_err(|e| format!("TempDir: {}", e))?;
-    let exe_path = tmp_dir.path().join("test_exe");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
 
     // Find vaisc binary
     let mut vaisc = std::env::current_exe()

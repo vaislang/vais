@@ -522,7 +522,7 @@ pub(crate) fn compile_to_native(
     );
 
     // Link math library (required on Linux for sqrt, sin, cos, etc.)
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     args.push("-lm".to_string());
 
     // Link against libvais_gc if available (for GC runtime support)
@@ -764,7 +764,7 @@ pub(crate) fn add_runtime_libs(
     _hot: bool,
 ) -> Result<(), String> {
     // Link math library (required on Linux for sqrt, sin, cos, etc.)
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     args.push("-lm".to_string());
 
     // Link against libvais_gc if available
