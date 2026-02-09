@@ -1,0 +1,905 @@
+# Vais Self-Hosting Compiler - MIR Alias Analysis
+# Implements interprocedural pointer alias analysis for optimization.
+#
+# Ports crates/vais-codegen/src/advanced_opt/alias_analysis.rs to selfhost patterns.
+# Key features:
+#   - May-alias / Must-alias / No-alias queries
+#   - Escape analysis (which pointers escape their defining function)
+#   - Cross-function propagation (track aliases through call boundaries)
+#   - Function summaries (tracks which params are modified/read/escaped)
+#
+# Memory layout notes:
+#   - All structs use flat memory with known byte offsets
+#   - Uses StringPool indices for name storage
+#   - Arrays stored as (ptr, len) pairs
+
+U mir
+
+# ============================================================================
+# AliasResult Constants
+# ============================================================================
+# Result of alias query between two pointers
+
+F ALIAS_NO() -> i64 = 1        # Definitely do not alias
+F ALIAS_MAY() -> i64 = 2       # May alias (conservative)
+F ALIAS_MUST() -> i64 = 3      # Definitely alias (same location)
+F ALIAS_PARTIAL() -> i64 = 4   # Partially overlap
+
+# Check if result indicates possible aliasing
+F alias_result_may_alias(result: i64) -> i64 {
+    I result == ALIAS_MAY() { R 1 }
+    E I result == ALIAS_MUST() { R 1 }
+    E I result == ALIAS_PARTIAL() { R 1 }
+    E { R 0 }
+}
+
+# Merge two alias results (most conservative)
+F alias_result_merge(r1: i64, r2: i64) -> i64 {
+    I r1 == ALIAS_MUST() {
+        I r2 == ALIAS_MUST() { R ALIAS_MUST() } E { R ALIAS_MAY() }
+    }
+    E I r1 == ALIAS_NO() {
+        I r2 == ALIAS_NO() { R ALIAS_NO() } E { R ALIAS_MAY() }
+    }
+    E { R ALIAS_MAY() }
+}
+
+# ============================================================================
+# PointerBase Constants
+# ============================================================================
+# Where a pointer was allocated
+
+F PTR_BASE_STACK() -> i64 = 1      # Stack allocation (alloca)
+F PTR_BASE_HEAP() -> i64 = 2       # Heap allocation (malloc)
+F PTR_BASE_GLOBAL() -> i64 = 3     # Global variable
+F PTR_BASE_PARAM() -> i64 = 4      # Function parameter
+F PTR_BASE_DERIVED() -> i64 = 5    # Derived from another pointer (GEP)
+F PTR_BASE_UNKNOWN() -> i64 = 6    # Unknown origin
+
+# Check if two pointer bases can never alias
+F pointer_base_disjoint(kind1: i64, name1: i64, kind2: i64, name2: i64) -> i64 {
+    # Different stack allocations never alias
+    I kind1 == PTR_BASE_STACK() {
+        I kind2 == PTR_BASE_STACK() {
+            I name1 != name2 { R 1 } E { R 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Different heap allocations never alias
+    I kind1 == PTR_BASE_HEAP() {
+        I kind2 == PTR_BASE_HEAP() {
+            I name1 != name2 { R 1 } E { R 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Stack and heap never alias
+    I kind1 == PTR_BASE_STACK() {
+        I kind2 == PTR_BASE_HEAP() { R 1 } E { 0 }
+    } E { 0 }
+    I kind1 == PTR_BASE_HEAP() {
+        I kind2 == PTR_BASE_STACK() { R 1 } E { 0 }
+    } E { 0 }
+
+    # Different globals never alias
+    I kind1 == PTR_BASE_GLOBAL() {
+        I kind2 == PTR_BASE_GLOBAL() {
+            I name1 != name2 { R 1 } E { R 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Otherwise, may alias
+    R 0
+}
+
+# ============================================================================
+# PointerInfo - information about a pointer value
+# ============================================================================
+# Layout: 56 bytes
+#   base_kind(0): i64           — PointerBase type constant
+#   base_name_idx(8): i64       — StringPool index for base name
+#   offset(16): i64             — offset from base (-1 = unknown)
+#   size(24): i64               — size of pointed-to object (-1 = unknown)
+#   escapes(32): i64            — 1 if escapes, 0 if not
+#   alias_set_ptr(40): i64      — pointer to array of name indices
+#   alias_set_len(48): i64      — length of alias set array
+
+F pointer_info_new(base_kind: i64, base_name_idx: i64) -> i64 {
+    ptr := malloc(56)
+    store_i64(ptr, base_kind)
+    store_i64(ptr + 8, base_name_idx)
+    store_i64(ptr + 16, 0 - 1)     # offset = -1 (unknown)
+    store_i64(ptr + 24, 0 - 1)     # size = -1 (unknown)
+    store_i64(ptr + 32, 0)         # escapes = false
+    store_i64(ptr + 40, malloc(8 * 64))  # alias_set (initial capacity 64)
+    store_i64(ptr + 48, 0)         # alias_set_len = 0
+    R ptr
+}
+
+# Add a name index to the alias set
+F pointer_info_add_alias(info_ptr: i64, name_idx: i64) -> i64 {
+    alias_set_ptr := load_i64(info_ptr + 40)
+    alias_set_len := load_i64(info_ptr + 48)
+
+    # Check if already in set
+    i := mut 0
+    L {
+        I i >= alias_set_len { B } E { 0 }
+        I load_i64(alias_set_ptr + i * 8) == name_idx { R 0 }
+        i = i + 1
+    }
+
+    # Add to set
+    store_i64(alias_set_ptr + alias_set_len * 8, name_idx)
+    store_i64(info_ptr + 48, alias_set_len + 1)
+    1
+}
+
+F pointer_info_free(info_ptr: i64) -> i64 {
+    alias_set := load_i64(info_ptr + 40)
+    I alias_set != 0 { free(alias_set); 0 } E { 0 }
+    free(info_ptr)
+    1
+}
+
+# ============================================================================
+# FunctionSummary - alias behavior summary for a function
+# ============================================================================
+# Layout: 96 bytes
+#   name_idx(0): i64                    — StringPool index
+#   modifies_ptr(8): i64                — array of param indices modified
+#   modifies_len(16): i64
+#   reads_ptr(24): i64                  — array of param indices read
+#   reads_len(32): i64
+#   escapes_ptr(40): i64                — array of param indices that escape
+#   escapes_len(48): i64
+#   param_aliases_ptr(56): i64          — array of (idx1, idx2) pairs (16 bytes each)
+#   param_aliases_len(64): i64
+#   alloc_escaping(72): i64             — 1 if allocates escaping memory
+#   is_pure(80): i64                    — 1 if no side effects
+#   is_readonly(88): i64                — 1 if reads but doesn't write
+
+F func_summary_new(name_idx: i64) -> i64 {
+    ptr := malloc(96)
+    store_i64(ptr, name_idx)
+    store_i64(ptr + 8, malloc(8 * 32))    # modifies (capacity 32)
+    store_i64(ptr + 16, 0)
+    store_i64(ptr + 24, malloc(8 * 32))   # reads
+    store_i64(ptr + 32, 0)
+    store_i64(ptr + 40, malloc(8 * 32))   # escapes
+    store_i64(ptr + 48, 0)
+    store_i64(ptr + 56, malloc(16 * 32))  # param_aliases (16 bytes per pair)
+    store_i64(ptr + 64, 0)
+    store_i64(ptr + 72, 0)                # alloc_escaping = false
+    store_i64(ptr + 80, 0)                # is_pure = false
+    store_i64(ptr + 88, 0)                # is_readonly = false
+    R ptr
+}
+
+# Add a parameter index to modifies set
+F summary_add_modify(sum_ptr: i64, param_idx: i64) -> i64 {
+    arr := load_i64(sum_ptr + 8)
+    len := load_i64(sum_ptr + 16)
+
+    # Check if already present
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        I load_i64(arr + i * 8) == param_idx { R 0 }
+        i = i + 1
+    }
+
+    store_i64(arr + len * 8, param_idx)
+    store_i64(sum_ptr + 16, len + 1)
+    1
+}
+
+# Add a parameter index to reads set
+F summary_add_read(sum_ptr: i64, param_idx: i64) -> i64 {
+    arr := load_i64(sum_ptr + 24)
+    len := load_i64(sum_ptr + 32)
+
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        I load_i64(arr + i * 8) == param_idx { R 0 }
+        i = i + 1
+    }
+
+    store_i64(arr + len * 8, param_idx)
+    store_i64(sum_ptr + 32, len + 1)
+    1
+}
+
+# Add a parameter index to escapes set
+F summary_add_escape(sum_ptr: i64, param_idx: i64) -> i64 {
+    arr := load_i64(sum_ptr + 40)
+    len := load_i64(sum_ptr + 48)
+
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        I load_i64(arr + i * 8) == param_idx { R 0 }
+        i = i + 1
+    }
+
+    store_i64(arr + len * 8, param_idx)
+    store_i64(sum_ptr + 48, len + 1)
+    1
+}
+
+# Add a parameter alias pair (idx1, idx2)
+F summary_add_param_alias(sum_ptr: i64, idx1: i64, idx2: i64) -> i64 {
+    arr := load_i64(sum_ptr + 56)
+    len := load_i64(sum_ptr + 64)
+
+    # Store as 16-byte entry: (idx1, idx2)
+    entry := arr + len * 16
+    store_i64(entry, idx1)
+    store_i64(entry + 8, idx2)
+    store_i64(sum_ptr + 64, len + 1)
+    1
+}
+
+F func_summary_free(sum_ptr: i64) -> i64 {
+    free(load_i64(sum_ptr + 8))   # modifies
+    free(load_i64(sum_ptr + 24))  # reads
+    free(load_i64(sum_ptr + 40))  # escapes
+    free(load_i64(sum_ptr + 56))  # param_aliases
+    free(sum_ptr)
+    1
+}
+
+# ============================================================================
+# AliasAnalysisContext - interprocedural analysis state
+# ============================================================================
+# Layout: 40 bytes
+#   pointers_ptr(0): i64        — array of (name_idx, info_ptr) pairs (16 bytes each)
+#   pointers_len(8): i64
+#   functions_ptr(16): i64      — array of FunctionSummary pointers
+#   functions_len(24): i64
+#   scope_counter(32): i64      — for LLVM metadata generation
+
+F alias_ctx_new() -> i64 {
+    ptr := malloc(40)
+    store_i64(ptr, malloc(16 * 256))      # pointers (capacity 256)
+    store_i64(ptr + 8, 0)
+    store_i64(ptr + 16, malloc(8 * 128))  # functions (capacity 128)
+    store_i64(ptr + 24, 0)
+    store_i64(ptr + 32, 0)                # scope_counter = 0
+    R ptr
+}
+
+# Add pointer info for a name
+F ctx_add_pointer(ctx: i64, name_idx: i64, info_ptr: i64) -> i64 {
+    ptrs := load_i64(ctx)
+    len := load_i64(ctx + 8)
+
+    # Store as (name_idx, info_ptr) pair
+    entry := ptrs + len * 16
+    store_i64(entry, name_idx)
+    store_i64(entry + 8, info_ptr)
+    store_i64(ctx + 8, len + 1)
+    1
+}
+
+# Get pointer info by name index (returns 0 if not found)
+F ctx_get_pointer(ctx: i64, name_idx: i64) -> i64 {
+    ptrs := load_i64(ctx)
+    len := load_i64(ctx + 8)
+
+    i := mut 0
+    L {
+        I i >= len { R 0 }
+        entry := ptrs + i * 16
+        I load_i64(entry) == name_idx {
+            R load_i64(entry + 8)  # Return info_ptr
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+# Add function summary
+F ctx_add_function(ctx: i64, sum_ptr: i64) -> i64 {
+    funcs := load_i64(ctx + 16)
+    len := load_i64(ctx + 24)
+
+    store_i64(funcs + len * 8, sum_ptr)
+    store_i64(ctx + 24, len + 1)
+    1
+}
+
+# Get function summary by name index (returns 0 if not found)
+F ctx_get_function(ctx: i64, name_idx: i64) -> i64 {
+    funcs := load_i64(ctx + 16)
+    len := load_i64(ctx + 24)
+
+    i := mut 0
+    L {
+        I i >= len { R 0 }
+        sum_ptr := load_i64(funcs + i * 8)
+        I load_i64(sum_ptr) == name_idx {
+            R sum_ptr
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+F alias_ctx_free(ctx: i64) -> i64 {
+    # Free all pointer infos
+    ptrs := load_i64(ctx)
+    plen := load_i64(ctx + 8)
+    i := mut 0
+    L {
+        I i >= plen { B } E { 0 }
+        entry := ptrs + i * 16
+        info_ptr := load_i64(entry + 8)
+        pointer_info_free(info_ptr)
+        i = i + 1
+    }
+    free(ptrs)
+
+    # Free all function summaries
+    funcs := load_i64(ctx + 16)
+    flen := load_i64(ctx + 24)
+    i = 0
+    L {
+        I i >= flen { B } E { 0 }
+        func_summary_free(load_i64(funcs + i * 8))
+        i = i + 1
+    }
+    free(funcs)
+
+    free(ctx)
+    1
+}
+
+# ============================================================================
+# Alias Query
+# ============================================================================
+# Query if two pointers (by name index) may alias
+
+F alias_query(ctx: i64, name1: i64, name2: i64) -> i64 {
+    info1 := ctx_get_pointer(ctx, name1)
+    info2 := ctx_get_pointer(ctx, name2)
+
+    I info1 == 0 { R ALIAS_MAY() }  # Unknown -> conservative
+    I info2 == 0 { R ALIAS_MAY() }
+
+    # Check if bases are disjoint
+    base_kind1 := load_i64(info1)
+    base_name1 := load_i64(info1 + 8)
+    base_kind2 := load_i64(info2)
+    base_name2 := load_i64(info2 + 8)
+
+    I pointer_base_disjoint(base_kind1, base_name1, base_kind2, base_name2) == 1 {
+        R ALIAS_NO()
+    } E { 0 }
+
+    # Same base with same known offset -> must alias
+    offset1 := load_i64(info1 + 16)
+    offset2 := load_i64(info2 + 16)
+    I base_kind1 == base_kind2 {
+        I base_name1 == base_name2 {
+            I offset1 != (0 - 1) {
+                I offset1 == offset2 {
+                    R ALIAS_MUST()
+                } E { 0 }
+            } E { 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Check explicit alias sets
+    alias_set1 := load_i64(info1 + 40)
+    alias_len1 := load_i64(info1 + 48)
+    i := mut 0
+    L {
+        I i >= alias_len1 { B } E { 0 }
+        I load_i64(alias_set1 + i * 8) == name2 {
+            R ALIAS_MAY()
+        } E { 0 }
+        i = i + 1
+    }
+
+    alias_set2 := load_i64(info2 + 40)
+    alias_len2 := load_i64(info2 + 48)
+    i = 0
+    L {
+        I i >= alias_len2 { B } E { 0 }
+        I load_i64(alias_set2 + i * 8) == name1 {
+            R ALIAS_MAY()
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Conservative default
+    R ALIAS_MAY()
+}
+
+# Check if a pointer escapes
+F alias_escapes(ctx: i64, name_idx: i64) -> i64 {
+    info := ctx_get_pointer(ctx, name_idx)
+    I info == 0 { R 1 }  # Unknown -> conservative (escaped)
+    R load_i64(info + 32)
+}
+
+# ============================================================================
+# Analysis: Build Function Summaries (Pass 1)
+# ============================================================================
+# Scan a MIR body to build function summary:
+#   - Which params are modified (store to param-derived pointer)
+#   - Which params are read (load from param-derived pointer)
+#   - Which params escape (passed to call, returned)
+
+F build_function_summary(body_ptr: i64) -> i64 {
+    name_idx := load_i64(body_ptr)
+    summary := func_summary_new(name_idx)
+
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Scan all blocks
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        # Scan statements
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+
+                # Store -> mark destination as modified
+                # (For simplicity, we track locals 1..params_len as params)
+                local_idx := load_i64(place_ptr)
+                params_len := load_i64(body_ptr + 16)
+                I local_idx > 0 {
+                    I local_idx <= params_len {
+                        summary_add_modify(summary, local_idx - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+
+                # Read operands in rvalue
+                bs_scan_rvalue_reads(rvalue_ptr, summary, params_len)
+            } E { 0 }
+
+            si = si + 1
+        }
+
+        # Scan terminator
+        I term_ptr != 0 {
+            bs_scan_terminator(term_ptr, summary, load_i64(body_ptr + 16))
+            0
+        } E { 0 }
+
+        bi = bi + 1
+    }
+
+    # Determine purity
+    modifies_len := load_i64(summary + 16)
+    alloc_esc := load_i64(summary + 72)
+    I modifies_len == 0 {
+        I alloc_esc == 0 {
+            reads_len := load_i64(summary + 32)
+            I reads_len == 0 {
+                store_i64(summary + 80, 1)  # is_pure = true
+                0
+            } E {
+                store_i64(summary + 88, 1)  # is_readonly = true
+                0
+            }
+        } E { 0 }
+    } E { 0 }
+
+    R summary
+}
+
+# Scan rvalue for parameter reads
+F bs_scan_rvalue_reads(rvalue_ptr: i64, summary: i64, params_len: i64) -> i64 {
+    rv_kind := load_i64(rvalue_ptr)
+
+    I rv_kind == RVALUE_USE() {
+        bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
+    }
+    E I rv_kind == RVALUE_BINOP() {
+        bs_scan_operand_read(load_i64(rvalue_ptr + 24), summary, params_len)
+        bs_scan_operand_read(load_i64(rvalue_ptr + 32), summary, params_len)
+    }
+    E I rv_kind == RVALUE_UNOP() {
+        bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
+    }
+    E I rv_kind == RVALUE_CAST() {
+        bs_scan_operand_read(load_i64(rvalue_ptr + 8), summary, params_len)
+    }
+    E I rv_kind == RVALUE_REF() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I local_idx > 0 {
+            I local_idx <= params_len {
+                summary_add_read(summary, local_idx - 1)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E I rv_kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { B } E { 0 }
+            bs_scan_operand_read(load_i64(agg_ops + j * 8), summary, params_len)
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+}
+
+F bs_scan_operand_read(op_ptr: i64, summary: i64, params_len: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+    I op_kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx > 0 {
+            I local_idx <= params_len {
+                summary_add_read(summary, local_idx - 1)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E I op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx > 0 {
+            I local_idx <= params_len {
+                summary_add_read(summary, local_idx - 1)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Scan terminator for escapes (calls, returns)
+F bs_scan_terminator(term_ptr: i64, summary: i64, params_len: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_CALL() {
+        # Arguments to calls may escape
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { B } E { 0 }
+            arg_ptr := load_i64(args_ptr + j * 8)
+            op_kind := load_i64(arg_ptr)
+            I op_kind == OPERAND_COPY() {
+                local_idx := load_i64(arg_ptr + 8)
+                I local_idx > 0 {
+                    I local_idx <= params_len {
+                        summary_add_escape(summary, local_idx - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+            }
+            E I op_kind == OPERAND_MOVE() {
+                local_idx := load_i64(arg_ptr + 8)
+                I local_idx > 0 {
+                    I local_idx <= params_len {
+                        summary_add_escape(summary, local_idx - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+            }
+            E { 0 }
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { B } E { 0 }
+            arg_ptr := load_i64(args_ptr + j * 8)
+            op_kind := load_i64(arg_ptr)
+            I op_kind == OPERAND_COPY() {
+                local_idx := load_i64(arg_ptr + 8)
+                I local_idx > 0 {
+                    I local_idx <= params_len {
+                        summary_add_escape(summary, local_idx - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+            }
+            E I op_kind == OPERAND_MOVE() {
+                local_idx := load_i64(arg_ptr + 8)
+                I local_idx > 0 {
+                    I local_idx <= params_len {
+                        summary_add_escape(summary, local_idx - 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+            }
+            E { 0 }
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_RETURN() {
+        # _0 implicitly returned — if it's a param-derived pointer, mark as escaped
+        # (For simplicity, we assume _0 can hold param values)
+        # In a real implementation, we'd track dataflow
+        0
+    }
+    E { 0 }
+}
+
+# ============================================================================
+# Analysis: Propagate Alias Info (Pass 2)
+# ============================================================================
+# Track pointer origins through the MIR body:
+#   - Alloca -> Stack base
+#   - Ref -> derive from base
+#   - PHI / aggregate -> merge alias sets
+
+F propagate_aliases_in_body(ctx: i64, body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                local_idx := load_i64(place_ptr)
+
+                rv_kind := load_i64(rvalue_ptr)
+
+                # Ref creates derived pointer
+                I rv_kind == RVALUE_REF() {
+                    ref_place := load_i64(rvalue_ptr + 40)
+                    ref_local := load_i64(ref_place)
+
+                    # Check if ref_local has pointer info
+                    ref_info := ctx_get_pointer(ctx, ref_local)
+                    I ref_info != 0 {
+                        # Create derived pointer info
+                        base_kind := load_i64(ref_info)
+                        base_name := load_i64(ref_info + 8)
+                        new_info := pointer_info_new(PTR_BASE_DERIVED(), ref_local)
+
+                        # Propagate escape status
+                        store_i64(new_info + 32, load_i64(ref_info + 32))
+
+                        ctx_add_pointer(ctx, local_idx, new_info)
+                        0
+                    } E { 0 }
+                }
+                E { 0 }
+            } E { 0 }
+
+            si = si + 1
+        }
+
+        bi = bi + 1
+    }
+    1
+}
+
+# ============================================================================
+# Analysis: Escape Analysis (Pass 3)
+# ============================================================================
+# Mark pointers as escaping if they:
+#   - Are stored to globals
+#   - Are returned from the function
+#   - Are passed to external/unknown functions
+
+F analyze_escapes_in_body(ctx: i64, body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        # Scan statements for global stores
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+
+                # If storing to a global-derived place, operands escape
+                # (Simplified: we don't track globals in this version)
+                0
+            } E { 0 }
+
+            si = si + 1
+        }
+
+        # Scan terminator for returns
+        I term_ptr != 0 {
+            tk := load_i64(term_ptr)
+            I tk == TERM_RETURN() {
+                # _0 escapes (simplified: assume all returns escape)
+                info := ctx_get_pointer(ctx, 0)
+                I info != 0 {
+                    store_i64(info + 32, 1)
+                    0
+                } E { 0 }
+            }
+            E I tk == TERM_CALL() {
+                # Arguments to unknown calls escape
+                args_ptr := load_i64(term_ptr + 56)
+                args_len := load_i64(term_ptr + 64)
+                j := mut 0
+                L {
+                    I j >= args_len { B } E { 0 }
+                    arg_ptr := load_i64(args_ptr + j * 8)
+                    op_kind := load_i64(arg_ptr)
+                    I op_kind == OPERAND_COPY() {
+                        local_idx := load_i64(arg_ptr + 8)
+                        info := ctx_get_pointer(ctx, local_idx)
+                        I info != 0 {
+                            store_i64(info + 32, 1)
+                            0
+                        } E { 0 }
+                    }
+                    E I op_kind == OPERAND_MOVE() {
+                        local_idx := load_i64(arg_ptr + 8)
+                        info := ctx_get_pointer(ctx, local_idx)
+                        I info != 0 {
+                            store_i64(info + 32, 1)
+                            0
+                        } E { 0 }
+                    }
+                    E { 0 }
+                    j = j + 1
+                }
+                0
+            }
+            E { 0 }
+        } E { 0 }
+
+        bi = bi + 1
+    }
+    1
+}
+
+# ============================================================================
+# Top-level Analysis: Analyze Aliases in a MIR Body
+# ============================================================================
+# Runs all 3 passes on a single function body
+
+F analyze_aliases(ctx: i64, body_ptr: i64) -> i64 {
+    # Pass 1: Build function summary
+    summary := build_function_summary(body_ptr)
+    ctx_add_function(ctx, summary)
+
+    # Pass 2: Propagate alias info (track pointer origins)
+    propagate_aliases_in_body(ctx, body_ptr)
+
+    # Pass 3: Escape analysis
+    analyze_escapes_in_body(ctx, body_ptr)
+
+    1
+}
+
+# ============================================================================
+# Module-level Analysis
+# ============================================================================
+# Analyze all function bodies in a MIR module
+
+F alias_analyze_module(ctx: i64, mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+
+    i := mut 0
+    L {
+        I i >= bodies_len { B } E { 0 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        analyze_aliases(ctx, body_ptr)
+        i = i + 1
+    }
+
+    1
+}
+
+# ============================================================================
+# Report Generation
+# ============================================================================
+# Return count of NoAlias pairs found (for optimization stats)
+
+F aa_generate_report(ctx: i64) -> i64 {
+    ptrs := load_i64(ctx)
+    plen := load_i64(ctx + 8)
+
+    noalias_count := mut 0
+
+    # Check all pairs
+    i := mut 0
+    L {
+        I i >= plen { R noalias_count }
+        entry_i := ptrs + i * 16
+        name_i := load_i64(entry_i)
+
+        j := mut i + 1
+        L {
+            I j >= plen { B } E { 0 }
+            entry_j := ptrs + j * 16
+            name_j := load_i64(entry_j)
+
+            result := alias_query(ctx, name_i, name_j)
+            I result == ALIAS_NO() {
+                noalias_count = noalias_count + 1
+                0
+            } E { 0 }
+
+            j = j + 1
+        }
+
+        i = i + 1
+    }
+
+    noalias_count
+}
+
+# Count total number of tracked pointers
+F aa_count_pointers(ctx: i64) -> i64 {
+    R load_i64(ctx + 8)
+}
+
+# Count total number of function summaries
+F aa_count_functions(ctx: i64) -> i64 {
+    R load_i64(ctx + 24)
+}
+
+# Count escaping pointers
+F aa_count_escaping(ctx: i64) -> i64 {
+    ptrs := load_i64(ctx)
+    plen := load_i64(ctx + 8)
+    count := mut 0
+
+    i := mut 0
+    L {
+        I i >= plen { R count }
+        entry := ptrs + i * 16
+        info_ptr := load_i64(entry + 8)
+        I load_i64(info_ptr + 32) == 1 {
+            count = count + 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    count
+}

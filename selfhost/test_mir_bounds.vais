@@ -1,0 +1,347 @@
+# Vais Self-Hosting Compiler - MIR Bounds Check Elimination Tests
+# Tests the mir_bounds.vais module for range analysis and bounds check optimization.
+
+U mir
+U mir_bounds
+U mir_analysis
+
+# ============================================================================
+# Test 1: Value Range - Constant
+# ============================================================================
+F test_value_range_const() -> i64 {
+    print_str("Test 1: value_range_const [5, 6) safe for length 10...")
+
+    # Create constant range [5, 6)
+    range := value_range_const(5)
+
+    # Check layout
+    lo := load_i64(range)
+    hi := load_i64(range + 8)
+    hi_sym := load_i64(range + 16)
+    has_lo := load_i64(range + 24)
+
+    # Verify lo = 5, hi = 6, no symbolic bound, has_lo = 1
+    I lo != 5 {
+        print_str(" FAIL: lo should be 5, got ")
+        print_i64(lo)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    I hi != 6 {
+        print_str(" FAIL: hi should be 6, got ")
+        print_i64(hi)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    I hi_sym != (0 - 1) {
+        print_str(" FAIL: hi_sym should be -1, got ")
+        print_i64(hi_sym)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    I has_lo != 1 {
+        print_str(" FAIL: has_lo should be 1, got ")
+        print_i64(has_lo)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    # Check is_safe_for_const_length(10) returns 1 (5 < 10 and 6 <= 10)
+    safe := value_range_is_safe_for_const_length(range, 10)
+    I safe != 1 {
+        print_str(" FAIL: should be safe for length 10, got ")
+        print_i64(safe)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    # Check is_safe_for_const_length(5) returns 0 (6 > 5)
+    unsafe := value_range_is_safe_for_const_length(range, 5)
+    I unsafe != 0 {
+        print_str(" FAIL: should be unsafe for length 5, got ")
+        print_i64(unsafe)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    value_range_free(range)
+    print_str(" PASS\n")
+    R 1
+}
+
+# ============================================================================
+# Test 2: Value Range - Bounded
+# ============================================================================
+F test_value_range_bounded() -> i64 {
+    print_str("Test 2: value_range_bounded [0, 10) safety checks...")
+
+    # Create bounded range [0, 10)
+    range := value_range_bounded(0, 10)
+
+    # Check is_safe_for_const_length(10) returns 1
+    safe := value_range_is_safe_for_const_length(range, 10)
+    I safe != 1 {
+        print_str(" FAIL: [0,10) should be safe for length 10, got ")
+        print_i64(safe)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    # Check is_safe_for_const_length(5) returns 0 (10 > 5)
+    unsafe := value_range_is_safe_for_const_length(range, 5)
+    I unsafe != 0 {
+        print_str(" FAIL: [0,10) should be unsafe for length 5, got ")
+        print_i64(unsafe)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    # Check is_safe_for_const_length(15) returns 1 (0 >= 0 and 10 <= 15)
+    safe15 := value_range_is_safe_for_const_length(range, 15)
+    I safe15 != 1 {
+        print_str(" FAIL: [0,10) should be safe for length 15, got ")
+        print_i64(safe15)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    value_range_free(range)
+    print_str(" PASS\n")
+    R 1
+}
+
+# ============================================================================
+# Test 3: Value Range - Unbounded
+# ============================================================================
+F test_value_range_unbounded() -> i64 {
+    print_str("Test 3: value_range_new() unbounded range...")
+
+    # Create unbounded range
+    range := value_range_new()
+
+    # Check layout
+    lo := load_i64(range)
+    hi := load_i64(range + 8)
+    has_lo := load_i64(range + 24)
+
+    # Verify lo = -1, hi = -1, has_lo = 0
+    I lo != (0 - 1) {
+        print_str(" FAIL: lo should be -1, got ")
+        print_i64(lo)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    I hi != (0 - 1) {
+        print_str(" FAIL: hi should be -1, got ")
+        print_i64(hi)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    I has_lo != 0 {
+        print_str(" FAIL: has_lo should be 0, got ")
+        print_i64(has_lo)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    # Unbounded range should never be safe
+    safe := value_range_is_safe_for_const_length(range, 100)
+    I safe != 0 {
+        print_str(" FAIL: unbounded should be unsafe for any length, got ")
+        print_i64(safe)
+        print_str("\n")
+        value_range_free(range)
+        R 0
+    } E { 0 }
+
+    value_range_free(range)
+    print_str(" PASS\n")
+    R 1
+}
+
+# ============================================================================
+# Test 4: Range Analysis Creation
+# ============================================================================
+F test_range_analysis_creation() -> i64 {
+    print_str("Test 4: range_analysis_new(5) initialization...")
+
+    # Create range analysis for 5 locals
+    analysis := range_analysis_new(5)
+
+    # Check layout
+    ranges_ptr := load_i64(analysis)
+    ranges_len := load_i64(analysis + 8)
+    eliminable_ptr := load_i64(analysis + 16)
+    eliminable_len := load_i64(analysis + 24)
+    eliminated_count := load_i64(analysis + 32)
+
+    # Verify ranges_len = 5
+    I ranges_len != 5 {
+        print_str(" FAIL: ranges_len should be 5, got ")
+        print_i64(ranges_len)
+        print_str("\n")
+        range_analysis_free(analysis)
+        R 0
+    } E { 0 }
+
+    # Verify all ranges are initialized (not null)
+    i := mut 0
+    L {
+        I i >= ranges_len { B } E { 0 }
+        range_ptr := load_i64(ranges_ptr + i * 8)
+        I range_ptr == 0 {
+            print_str(" FAIL: range[")
+            print_i64(i)
+            print_str("] should be initialized\n")
+            range_analysis_free(analysis)
+            R 0
+        } E { 0 }
+        # Verify each range is unbounded by default
+        has_lo := load_i64(range_ptr + 24)
+        I has_lo != 0 {
+            print_str(" FAIL: range[")
+            print_i64(i)
+            print_str("] should be unbounded (has_lo=0), got ")
+            print_i64(has_lo)
+            print_str("\n")
+            range_analysis_free(analysis)
+            R 0
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Verify eliminable_len = 0, eliminated_count = 0
+    I eliminable_len != 0 {
+        print_str(" FAIL: eliminable_len should be 0, got ")
+        print_i64(eliminable_len)
+        print_str("\n")
+        range_analysis_free(analysis)
+        R 0
+    } E { 0 }
+
+    I eliminated_count != 0 {
+        print_str(" FAIL: eliminated_count should be 0, got ")
+        print_i64(eliminated_count)
+        print_str("\n")
+        range_analysis_free(analysis)
+        R 0
+    } E { 0 }
+
+    range_analysis_free(analysis)
+    print_str(" PASS\n")
+    R 1
+}
+
+# ============================================================================
+# Test 5: Bounds Check Module Analysis
+# ============================================================================
+F test_bounds_check_module() -> i64 {
+    print_str("Test 5: bounds_check_analyze_module() on simple module...")
+
+    # Create a minimal MIR module with one function body
+    # Function: F test() -> i64 { R 42 }
+    mod_ptr := mir_module_new(0)
+
+    # Create function body
+    body_ptr := malloc(64)
+    store_i64(body_ptr, 0)           # name_idx = 0
+    store_i64(body_ptr + 8, 0)       # params_ptr = null
+    store_i64(body_ptr + 16, 0)      # params_len = 0
+    store_i64(body_ptr + 24, mir_type_prim(MIR_TY_I64()))  # return_type = i64
+
+    # Create 1 local (_0 = return place)
+    locals := malloc(8)
+    local0 := mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0)
+    store_i64(locals, local0)
+    store_i64(body_ptr + 32, locals)  # locals_ptr
+    store_i64(body_ptr + 40, 1)       # locals_len = 1
+
+    # Create 1 basic block with Return terminator
+    blocks := malloc(8)
+    bb0 := mir_bb_new()
+    term := term_return()
+    mir_bb_set_term(bb0, term)
+    store_i64(blocks, bb0)
+    store_i64(body_ptr + 48, blocks)  # blocks_ptr
+    store_i64(body_ptr + 56, 1)       # blocks_len = 1
+
+    # Add body to module
+    mir_module_add_body(mod_ptr, body_ptr)
+
+    # Run bounds check analysis
+    # This should not crash and should return 0 (no checks eliminated)
+    eliminated := bounds_check_analyze_module(mod_ptr)
+
+    I eliminated != 0 {
+        print_str(" FAIL: expected 0 eliminated checks, got ")
+        print_i64(eliminated)
+        print_str("\n")
+        # Note: proper cleanup would free all allocated memory
+        R 0
+    } E { 0 }
+
+    print_str(" PASS\n")
+    R 1
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+F main() -> i64 {
+    print_str("\n=== MIR Bounds Check Elimination Tests ===\n\n")
+
+    passed := mut 0
+    total := 5
+
+    I test_value_range_const() == 1 {
+        passed = passed + 1
+    } E { 0 }
+
+    I test_value_range_bounded() == 1 {
+        passed = passed + 1
+    } E { 0 }
+
+    I test_value_range_unbounded() == 1 {
+        passed = passed + 1
+    } E { 0 }
+
+    I test_range_analysis_creation() == 1 {
+        passed = passed + 1
+    } E { 0 }
+
+    I test_bounds_check_module() == 1 {
+        passed = passed + 1
+    } E { 0 }
+
+    print_str("\n=== Summary ===\n")
+    print_str("Passed: ")
+    print_i64(passed)
+    print_str("/")
+    print_i64(total)
+    print_str("\n")
+
+    I passed == total {
+        print_str("All tests passed!\n")
+        R 0
+    } E {
+        print_str("Some tests failed.\n")
+        R 1
+    }
+}

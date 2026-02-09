@@ -1,0 +1,689 @@
+# Vais Self-Hosting Compiler - MIR Data Layout Optimization
+# Analyzes struct layouts for cache-friendly optimizations: field reordering,
+# padding reduction, AoS to SoA transformation, hot/cold splitting.
+#
+# Mirrors crates/vais-codegen/src/advanced_opt/data_layout.rs patterns.
+# Operates on MIR body structures to discover aggregate constructions and
+# field access patterns.
+
+U mir
+U mir_analysis
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+F CACHE_LINE_SIZE() -> i64 = 64
+
+# Layout suggestion kinds
+F LAYOUT_REORDER() -> i64 = 1
+F LAYOUT_CACHE_ALIGN() -> i64 = 2
+F LAYOUT_SPLIT_HOT_COLD() -> i64 = 3
+F LAYOUT_AOS_TO_SOA() -> i64 = 4
+F LAYOUT_ADD_PADDING() -> i64 = 5
+
+# ============================================================================
+# FieldInfo — metadata for a single struct field (56 bytes)
+# ============================================================================
+# name_idx(0): i64 — string pool index
+# type_idx(8): i64 — type name/kind index
+# size(16): i64 — size in bytes
+# alignment(24): i64 — required alignment
+# offset(32): i64 — offset within struct
+# access_freq(40): i64 — scaled 0-100 (from f64 * 100)
+# is_hot(48): i64 — 1 if freq > 70
+
+F field_info_new(name_idx: i64, type_idx: i64, size: i64, alignment: i64) -> i64 {
+    ptr := malloc(56)
+    store_i64(ptr, name_idx)
+    store_i64(ptr + 8, type_idx)
+    store_i64(ptr + 16, size)
+    store_i64(ptr + 24, alignment)
+    store_i64(ptr + 32, 0)  # offset (calculated later)
+    store_i64(ptr + 40, 50)  # default access_freq = 50%
+    store_i64(ptr + 48, 0)  # is_hot = 0
+    R ptr
+}
+
+F field_info_free(fi_ptr: i64) -> i64 {
+    free(fi_ptr)
+    1
+}
+
+# ============================================================================
+# StructLayout — layout info for a struct (56 bytes)
+# ============================================================================
+# name_idx(0): i64 — struct name string pool index
+# fields_ptr(8): i64 — array of FieldInfo pointers
+# fields_len(16): i64 — number of fields
+# total_size(24): i64 — total size in bytes
+# alignment(32): i64 — struct alignment
+# padding(40): i64 — total padding bytes
+# cache_aligned(48): i64 — 1 if total_size >= CACHE_LINE_SIZE
+
+F struct_layout_new(name_idx: i64) -> i64 {
+    ptr := malloc(56)
+    store_i64(ptr, name_idx)
+    store_i64(ptr + 8, 0)  # fields_ptr
+    store_i64(ptr + 16, 0)  # fields_len
+    store_i64(ptr + 24, 0)  # total_size
+    store_i64(ptr + 32, 1)  # alignment (min 1)
+    store_i64(ptr + 40, 0)  # padding
+    store_i64(ptr + 48, 0)  # cache_aligned
+    R ptr
+}
+
+F struct_layout_add_field(layout_ptr: i64, field_ptr: i64) -> i64 {
+    fields_ptr := load_i64(layout_ptr + 8)
+    fields_len := load_i64(layout_ptr + 16)
+
+    # Allocate or grow fields array
+    I fields_ptr == 0 {
+        fields_ptr = malloc(8 * 16)  # initial capacity: 16 fields
+        store_i64(layout_ptr + 8, fields_ptr)
+        0
+    } E { 0 }
+
+    store_i64(fields_ptr + fields_len * 8, field_ptr)
+    store_i64(layout_ptr + 16, fields_len + 1)
+    1
+}
+
+F struct_layout_free(layout_ptr: i64) -> i64 {
+    fields_ptr := load_i64(layout_ptr + 8)
+    fields_len := load_i64(layout_ptr + 16)
+    I fields_ptr != 0 {
+        i := mut 0
+        L {
+            I i >= fields_len { B } E { 0 }
+            fi_ptr := load_i64(fields_ptr + i * 8)
+            I fi_ptr != 0 { field_info_free(fi_ptr) } E { 0 }
+            i = i + 1
+        }
+        free(fields_ptr)
+        0
+    } E { 0 }
+    free(layout_ptr)
+    1
+}
+
+# ============================================================================
+# LayoutSuggestion — optimization suggestion (72 bytes, union-like)
+# ============================================================================
+# kind(0): i64 — LAYOUT_* constant
+# struct_name_idx(8): i64 — struct name string pool index
+# For REORDER:
+#   new_order_ptr(16): i64 — array of field indices
+#   new_order_len(24): i64
+#   size_before(32): i64
+#   size_after(40): i64
+#   padding_saved(48): i64
+# For CACHE_ALIGN:
+#   current_align(16): i64
+#   suggested_align(24): i64
+# For SPLIT_HOT_COLD:
+#   hot_fields_ptr(16): i64 — array of field indices
+#   hot_fields_len(24): i64
+#   cold_fields_ptr(32): i64
+#   cold_fields_len(40): i64
+# For AOS_TO_SOA:
+#   array_name_idx(16): i64
+#   soa_name_idx(24): i64
+#   soa_fields_ptr(32): i64 — array of (name_idx, type_idx) pairs
+#   soa_fields_len(40): i64
+# For ADD_PADDING:
+#   field_after_idx(16): i64
+#   padding_bytes(24): i64
+
+F layout_suggestion_new(kind: i64, struct_name_idx: i64) -> i64 {
+    ptr := malloc(72)
+    store_i64(ptr, kind)
+    store_i64(ptr + 8, struct_name_idx)
+    i := mut 16
+    L {
+        I i >= 72 { B } E { 0 }
+        store_i64(ptr + i, 0)
+        i = i + 8
+    }
+    R ptr
+}
+
+F layout_suggestion_free(sugg_ptr: i64) -> i64 {
+    I sugg_ptr == 0 { R 0 } E { 0 }
+    kind := load_i64(sugg_ptr)
+
+    # Free internal arrays
+    I kind == LAYOUT_REORDER() {
+        new_order_ptr := load_i64(sugg_ptr + 16)
+        I new_order_ptr != 0 { free(new_order_ptr) } E { 0 }
+        0
+    } E I kind == LAYOUT_SPLIT_HOT_COLD() {
+        hot_ptr := load_i64(sugg_ptr + 16)
+        cold_ptr := load_i64(sugg_ptr + 32)
+        I hot_ptr != 0 { free(hot_ptr) } E { 0 }
+        I cold_ptr != 0 { free(cold_ptr) } E { 0 }
+        0
+    } E I kind == LAYOUT_AOS_TO_SOA() {
+        soa_ptr := load_i64(sugg_ptr + 32)
+        I soa_ptr != 0 { free(soa_ptr) } E { 0 }
+        0
+    } E { 0 }
+
+    free(sugg_ptr)
+    1
+}
+
+# ============================================================================
+# LayoutOptContext — main optimizer context (24 bytes)
+# ============================================================================
+# suggestions_ptr(0): i64 — array of LayoutSuggestion pointers
+# suggestions_len(8): i64
+# suggestions_cap(16): i64
+
+F layout_ctx_new() -> i64 {
+    ptr := malloc(24)
+    store_i64(ptr, malloc(8 * 64))  # initial capacity: 64 suggestions
+    store_i64(ptr + 8, 0)
+    store_i64(ptr + 16, 64)
+    R ptr
+}
+
+F layout_ctx_add_suggestion(ctx_ptr: i64, sugg_ptr: i64) -> i64 {
+    suggs_ptr := load_i64(ctx_ptr)
+    suggs_len := load_i64(ctx_ptr + 8)
+    suggs_cap := load_i64(ctx_ptr + 16)
+
+    I suggs_len >= suggs_cap {
+        # Grow array (double capacity)
+        new_cap := suggs_cap * 2
+        new_ptr := malloc(8 * new_cap)
+        i := mut 0
+        L {
+            I i >= suggs_len { B } E { 0 }
+            store_i64(new_ptr + i * 8, load_i64(suggs_ptr + i * 8))
+            i = i + 1
+        }
+        free(suggs_ptr)
+        store_i64(ctx_ptr, new_ptr)
+        store_i64(ctx_ptr + 16, new_cap)
+        suggs_ptr = new_ptr
+        0
+    } E { 0 }
+
+    store_i64(suggs_ptr + suggs_len * 8, sugg_ptr)
+    store_i64(ctx_ptr + 8, suggs_len + 1)
+    1
+}
+
+F layout_ctx_free(ctx_ptr: i64) -> i64 {
+    suggs_ptr := load_i64(ctx_ptr)
+    suggs_len := load_i64(ctx_ptr + 8)
+
+    i := mut 0
+    L {
+        I i >= suggs_len { B } E { 0 }
+        sugg_ptr := load_i64(suggs_ptr + i * 8)
+        I sugg_ptr != 0 { layout_suggestion_free(sugg_ptr) } E { 0 }
+        i = i + 1
+    }
+
+    I suggs_ptr != 0 { free(suggs_ptr) } E { 0 }
+    free(ctx_ptr)
+    1
+}
+
+F layout_count_suggestions(ctx_ptr: i64) -> i64 {
+    R load_i64(ctx_ptr + 8)
+}
+
+# ============================================================================
+# Layout Calculation — compute offsets, total size, padding
+# ============================================================================
+
+F align_to(offset: i64, alignment: i64) -> i64 {
+    R offset + alignment - 1 & (0 - alignment)
+}
+
+F struct_layout_calculate(layout_ptr: i64) -> i64 {
+    fields_ptr := load_i64(layout_ptr + 8)
+    fields_len := load_i64(layout_ptr + 16)
+
+    offset := mut 0
+    max_align := mut 1
+    total_padding := mut 0
+
+    i := mut 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        fi_ptr := load_i64(fields_ptr + i * 8)
+
+        size := load_i64(fi_ptr + 16)
+        alignment := load_i64(fi_ptr + 24)
+
+        # Align offset to field alignment
+        aligned_offset := align_to(offset, alignment)
+        total_padding = total_padding + aligned_offset - offset
+
+        # Store offset in field
+        store_i64(fi_ptr + 32, aligned_offset)
+
+        offset = aligned_offset + size
+        I alignment > max_align { max_align = alignment } E { 0 }
+
+        i = i + 1
+    }
+
+    # Final struct padding for alignment
+    final_size := align_to(offset, max_align)
+    total_padding = total_padding + final_size - offset
+
+    store_i64(layout_ptr + 24, final_size)
+    store_i64(layout_ptr + 32, max_align)
+    store_i64(layout_ptr + 40, total_padding)
+
+    # Check cache alignment
+    I final_size >= CACHE_LINE_SIZE() {
+        store_i64(layout_ptr + 48, 1)
+        0
+    } E {
+        store_i64(layout_ptr + 48, 0)
+        0
+    }
+
+    1
+}
+
+F layout_padding_savings(layout_ptr: i64) -> i64 {
+    R load_i64(layout_ptr + 40)
+}
+
+# ============================================================================
+# Type size/alignment inference (simplified for MIR)
+# ============================================================================
+
+F type_size_and_align(type_idx: i64) -> i64 {
+    # Returns (size << 32) | alignment in single i64
+    # For simplicity, map MIR types to sizes:
+    # i8/u8/bool: (1,1), i16/u16: (2,2), i32/u32/f32: (4,4),
+    # i64/u64/f64/ptr: (8,8), i128/u128: (16,16)
+
+    # Default: assume i64 (8 bytes, 8 align)
+    # In real impl, would inspect MirType struct
+    # Here we'll just hardcode common cases based on type_idx as a proxy
+
+    # For struct types, would need to recursively calculate
+    # For now: return default 8-byte pointer-sized value
+    R 8 * 4294967296 + 8  # (size=8) << 32 | (align=8)
+}
+
+F extract_size(size_align: i64) -> i64 {
+    R size_align / 4294967296  # >> 32
+}
+
+F extract_align(size_align: i64) -> i64 {
+    R size_align & 4294967295  # lower 32 bits
+}
+
+# ============================================================================
+# Field Reordering Suggestion
+# ============================================================================
+
+F suggest_field_reorder(layout_ptr: i64) -> i64 {
+    fields_ptr := load_i64(layout_ptr + 8)
+    fields_len := load_i64(layout_ptr + 16)
+
+    I fields_len < 2 { R 0 } E { 0 }
+
+    # Create optimized order: sort by alignment descending
+    # Copy fields to temp array with (field_idx, alignment) pairs
+    temp := malloc(16 * fields_len)
+    i := mut 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        fi_ptr := load_i64(fields_ptr + i * 8)
+        alignment := load_i64(fi_ptr + 24)
+        store_i64(temp + i * 16, i)  # field index
+        store_i64(temp + i * 16 + 8, alignment)  # alignment
+        i = i + 1
+    }
+
+    # Bubble sort by alignment descending (simple, good enough for small N)
+    i = 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        j := mut i + 1
+        L {
+            I j >= fields_len { B } E { 0 }
+            align_i := load_i64(temp + i * 16 + 8)
+            align_j := load_i64(temp + j * 16 + 8)
+            I align_j > align_i {
+                # Swap
+                idx_i := load_i64(temp + i * 16)
+                idx_j := load_i64(temp + j * 16)
+                store_i64(temp + i * 16, idx_j)
+                store_i64(temp + i * 16 + 8, align_j)
+                store_i64(temp + j * 16, idx_i)
+                store_i64(temp + j * 16 + 8, align_i)
+                0
+            } E { 0 }
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    # Build new_order array
+    new_order := malloc(8 * fields_len)
+    i = 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        idx := load_i64(temp + i * 16)
+        store_i64(new_order + i * 8, idx)
+        i = i + 1
+    }
+    free(temp)
+
+    # Calculate optimized layout
+    # Clone fields in new order and recalculate
+    opt_layout := struct_layout_new(load_i64(layout_ptr))
+    opt_fields_ptr := malloc(8 * fields_len)
+    store_i64(opt_layout + 8, opt_fields_ptr)
+    store_i64(opt_layout + 16, fields_len)
+
+    i = 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        orig_idx := load_i64(new_order + i * 8)
+        orig_fi := load_i64(fields_ptr + orig_idx * 8)
+
+        # Clone field (simplified: just copy pointer, don't deep copy)
+        store_i64(opt_fields_ptr + i * 8, orig_fi)
+        i = i + 1
+    }
+
+    struct_layout_calculate(opt_layout)
+
+    # Compare padding
+    orig_padding := load_i64(layout_ptr + 40)
+    opt_padding := load_i64(opt_layout + 40)
+
+    I opt_padding < orig_padding {
+        # Create suggestion
+        sugg := layout_suggestion_new(LAYOUT_REORDER(), load_i64(layout_ptr))
+        store_i64(sugg + 16, new_order)
+        store_i64(sugg + 24, fields_len)
+        store_i64(sugg + 32, load_i64(layout_ptr + 24))  # size_before
+        store_i64(sugg + 40, load_i64(opt_layout + 24))  # size_after
+        store_i64(sugg + 48, orig_padding - opt_padding)  # padding_saved
+
+        # Clean up opt_layout (don't free field pointers, they're shared)
+        free(opt_fields_ptr)
+        free(opt_layout)
+
+        R sugg
+    } E {
+        # No improvement
+        free(new_order)
+        free(opt_fields_ptr)
+        free(opt_layout)
+        R 0
+    }
+}
+
+# ============================================================================
+# Hot/Cold Field Split Suggestion
+# ============================================================================
+
+F suggest_split_hot_cold(layout_ptr: i64) -> i64 {
+    fields_ptr := load_i64(layout_ptr + 8)
+    fields_len := load_i64(layout_ptr + 16)
+
+    I fields_len < 4 { R 0 } E { 0 }  # Need meaningful separation
+
+    # Count hot and cold fields
+    hot_count := mut 0
+    cold_count := mut 0
+    i := mut 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        fi_ptr := load_i64(fields_ptr + i * 8)
+        is_hot := load_i64(fi_ptr + 48)
+        I is_hot != 0 {
+            hot_count = hot_count + 1
+            0
+        } E {
+            cold_count = cold_count + 1
+            0
+        }
+        i = i + 1
+    }
+
+    # Only suggest if both hot and cold exist
+    I hot_count == 0 { R 0 } E { 0 }
+    I cold_count == 0 { R 0 } E { 0 }
+
+    # Build hot and cold field index arrays
+    hot_indices := malloc(8 * hot_count)
+    cold_indices := malloc(8 * cold_count)
+    hot_idx := mut 0
+    cold_idx := mut 0
+
+    i = 0
+    L {
+        I i >= fields_len { B } E { 0 }
+        fi_ptr := load_i64(fields_ptr + i * 8)
+        is_hot := load_i64(fi_ptr + 48)
+        I is_hot != 0 {
+            store_i64(hot_indices + hot_idx * 8, i)
+            hot_idx = hot_idx + 1
+            0
+        } E {
+            store_i64(cold_indices + cold_idx * 8, i)
+            cold_idx = cold_idx + 1
+            0
+        }
+        i = i + 1
+    }
+
+    # Create suggestion
+    sugg := layout_suggestion_new(LAYOUT_SPLIT_HOT_COLD(), load_i64(layout_ptr))
+    store_i64(sugg + 16, hot_indices)
+    store_i64(sugg + 24, hot_count)
+    store_i64(sugg + 32, cold_indices)
+    store_i64(sugg + 40, cold_count)
+
+    R sugg
+}
+
+# ============================================================================
+# AoS to SoA Transformation Suggestion
+# ============================================================================
+
+F suggest_aos_to_soa(ctx_ptr: i64, body_ptr: i64, layout_ptr: i64) -> i64 {
+    # Detect array-of-struct patterns in MIR:
+    # Look for array allocations followed by repeated field accesses
+
+    # Simplified: if struct has 3+ fields, suggest SoA
+    fields_len := load_i64(layout_ptr + 16)
+    I fields_len < 3 { R 0 } E { 0 }
+
+    # Create suggestion (simplified, no deep analysis)
+    sugg := layout_suggestion_new(LAYOUT_AOS_TO_SOA(), load_i64(layout_ptr))
+    store_i64(sugg + 16, 0)  # array_name_idx (would need to discover)
+    store_i64(sugg + 24, 0)  # soa_name_idx (would generate)
+    store_i64(sugg + 32, 0)  # soa_fields_ptr
+    store_i64(sugg + 40, fields_len)
+
+    # In real impl: only suggest if array pattern detected
+    # For now, return 0 (not implemented fully)
+    layout_suggestion_free(sugg)
+    R 0
+}
+
+# ============================================================================
+# Core Analysis — discover struct layouts from MIR body
+# ============================================================================
+
+F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
+    # Scan body for Aggregate rvalue constructions to discover structs
+    # For each struct, collect field sizes and access frequencies
+
+    # Track discovered layouts: struct_name_idx -> StructLayout mapping
+    # Simplified: use fixed-size array (max 64 structs)
+    layouts := malloc(8 * 64)
+    layouts_count := mut 0
+
+    # Track field accesses: count projections by struct and field index
+    # Simplified: use flat array for demo purposes
+
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Phase 1: Discover aggregates
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+
+                # Check for RVALUE_AGGREGATE
+                I rv_kind == RVALUE_AGGREGATE() {
+                    agg_kind := load_i64(rvalue_ptr + 48)
+                    I agg_kind == AGG_STRUCT() {
+                        # Found struct construction
+                        # Extract field count and sizes
+                        operands_ptr := load_i64(rvalue_ptr + 56)
+                        operands_len := load_i64(rvalue_ptr + 64)
+
+                        # For now, just count as discovered struct
+                        # In full impl: build StructLayout, infer field sizes
+                        0
+                    } E { 0 }
+                    0
+                } E { 0 }
+                0
+            } E { 0 }
+
+            si = si + 1
+        }
+
+        bi = bi + 1
+    }
+
+    # Phase 2: Count field access frequencies
+    # Scan for Place projections (PROJ_FIELD)
+    bi = 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+
+                # Check for Ref(place) with field projection
+                I rv_kind == RVALUE_REF() {
+                    place_ptr := load_i64(rvalue_ptr + 40)
+                    I place_ptr != 0 {
+                        proj_ptr := load_i64(place_ptr + 8)
+                        proj_len := load_i64(place_ptr + 16)
+
+                        # Scan projections for PROJ_FIELD
+                        pi := mut 0
+                        L {
+                            I pi >= proj_len { B } E { 0 }
+                            p_ptr := load_i64(proj_ptr + pi * 8)
+                            p_kind := load_i64(p_ptr)
+                            I p_kind == PROJ_FIELD() {
+                                # Found field access
+                                field_idx := load_i64(p_ptr + 8)
+                                # Increment access count (simplified)
+                                0
+                            } E { 0 }
+                            pi = pi + 1
+                        }
+                        0
+                    } E { 0 }
+                    0
+                } E { 0 }
+                0
+            } E { 0 }
+
+            si = si + 1
+        }
+
+        bi = bi + 1
+    }
+
+    # Phase 3: Generate suggestions for discovered layouts
+    # For demo: create a dummy layout and suggest reordering
+    I layouts_count > 0 {
+        i := mut 0
+        L {
+            I i >= layouts_count { B } E { 0 }
+            layout_ptr := load_i64(layouts + i * 8)
+
+            # Try field reorder
+            sugg := suggest_field_reorder(layout_ptr)
+            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } E { 0 }
+
+            # Try hot/cold split
+            sugg = suggest_split_hot_cold(layout_ptr)
+            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } E { 0 }
+
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Cleanup
+    I layouts != 0 { free(layouts) } E { 0 }
+
+    1
+}
+
+# ============================================================================
+# Module-Level Analysis
+# ============================================================================
+
+F layout_analyze_module(ctx_ptr: i64, mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+
+    i := mut 0
+    L {
+        I i >= bodies_len { B } E { 0 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        layout_analyze_body(ctx_ptr, body_ptr)
+        i = i + 1
+    }
+
+    1
+}
+
+# ============================================================================
+# Report Generation
+# ============================================================================
+
+F layout_report_summary(ctx_ptr: i64) -> i64 {
+    # Returns count of suggestions
+    R layout_count_suggestions(ctx_ptr)
+}

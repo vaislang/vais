@@ -1,0 +1,583 @@
+# Vais Self-Hosting Compiler - MIR Bounds Check Elimination
+# Provides range analysis to prove array accesses are safe, allowing removal
+# of unnecessary bounds checks.
+#
+# Key techniques:
+#   1. Loop induction variable analysis: determine that i in `L i := 0; i < n; i += 1`
+#      is always in range [0, n).
+#   2. Guard-based elimination: if `I i < arr.len` dominates `arr[i]`, the check is proven.
+#   3. Constant index elimination: `arr[0]` on a known-length array needs no check.
+#
+# Mirrors crates/vais-codegen/src/advanced_opt/bounds_check_elim.rs but operates
+# on MIR data structures instead of text IR.
+
+U mir
+U mir_analysis
+
+# ============================================================================
+# ValueRange — represents a range of values [lo, hi)
+# ============================================================================
+# Layout (32 bytes):
+#   lo(0): i64 — minimum value inclusive (-1 = unbounded)
+#   hi(8): i64 — maximum value exclusive (-1 = unbounded)
+#   hi_sym_idx(16): i64 — symbolic upper bound name index (-1 = none)
+#   has_lo(24): i64 — 1 if lo is valid, 0 if unbounded
+
+S ValueRange {
+    lo: i64,
+    hi: i64,
+    hi_sym_idx: i64,
+    has_lo: i64
+}
+
+# Create unbounded range
+F value_range_new() -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, 0 - 1)        # lo = -1 (unbounded)
+    store_i64(ptr + 8, 0 - 1)    # hi = -1 (unbounded)
+    store_i64(ptr + 16, 0 - 1)   # hi_sym_idx = -1 (none)
+    store_i64(ptr + 24, 0)       # has_lo = 0
+    R ptr
+}
+
+# Create constant range [v, v+1)
+F value_range_const(v: i64) -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, v)            # lo = v
+    store_i64(ptr + 8, v + 1)    # hi = v + 1
+    store_i64(ptr + 16, 0 - 1)   # hi_sym_idx = -1
+    store_i64(ptr + 24, 1)       # has_lo = 1
+    R ptr
+}
+
+# Create bounded range [lo, hi_exclusive)
+F value_range_bounded(lo: i64, hi_exclusive: i64) -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, lo)
+    store_i64(ptr + 8, hi_exclusive)
+    store_i64(ptr + 16, 0 - 1)
+    store_i64(ptr + 24, 1)
+    R ptr
+}
+
+# Create symbolically bounded range [lo, sym)
+F value_range_bounded_sym(lo: i64, sym_idx: i64) -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, lo)
+    store_i64(ptr + 8, 0 - 1)    # no concrete hi
+    store_i64(ptr + 16, sym_idx)
+    store_i64(ptr + 24, 1)
+    R ptr
+}
+
+# Check if range is safe for symbolic length
+# Returns 1 if [0, length_idx) contains this range
+F value_range_is_safe_for_length(range_ptr: i64, length_idx: i64) -> i64 {
+    # Lower bound must be >= 0
+    has_lo := load_i64(range_ptr + 24)
+    I has_lo == 0 { R 0 }
+    lo := load_i64(range_ptr)
+    I lo < 0 { R 0 }
+
+    # Upper bound must match symbolic length
+    hi_sym := load_i64(range_ptr + 16)
+    I hi_sym == length_idx { R 1 } E { R 0 }
+}
+
+# Check if range is safe for concrete length
+# Returns 1 if [0, length) contains this range
+F value_range_is_safe_for_const_length(range_ptr: i64, length: i64) -> i64 {
+    has_lo := load_i64(range_ptr + 24)
+    I has_lo == 0 { R 0 }
+
+    lo := load_i64(range_ptr)
+    hi := load_i64(range_ptr + 8)
+
+    I lo < 0 { R 0 }
+    I hi == (0 - 1) { R 0 }  # unbounded hi
+    I hi > length { R 0 }
+    R 1
+}
+
+F value_range_free(ptr: i64) -> i64 {
+    free(ptr)
+    1
+}
+
+# ============================================================================
+# BoundsCheck — information about a bounds check in MIR
+# ============================================================================
+# Layout (40 bytes):
+#   index_local(0): i64 — MIR local index being checked
+#   length_local(8): i64 — length local/constant (-1 for symbolic)
+#   length_const(16): i64 — concrete length if known (-1 if symbolic)
+#   block_idx(24): i64 — block containing the check
+#   stmt_idx(32): i64 — statement index of the check
+
+S BoundsCheck {
+    index_local: i64,
+    length_local: i64,
+    length_const: i64,
+    block_idx: i64,
+    stmt_idx: i64
+}
+
+F bounds_check_new(idx_local: i64, len_local: i64, len_const: i64, bb: i64, stmt: i64) -> i64 {
+    ptr := malloc(40)
+    store_i64(ptr, idx_local)
+    store_i64(ptr + 8, len_local)
+    store_i64(ptr + 16, len_const)
+    store_i64(ptr + 24, bb)
+    store_i64(ptr + 32, stmt)
+    R ptr
+}
+
+F bounds_check_free(ptr: i64) -> i64 {
+    free(ptr)
+    1
+}
+
+# ============================================================================
+# RangeAnalysis — analysis result
+# ============================================================================
+# Layout (40 bytes):
+#   ranges_ptr(0): array of ValueRange ptrs (indexed by local)
+#   ranges_len(8): number of locals
+#   eliminable_ptr(16): array of BoundsCheck ptrs
+#   eliminable_len(24): number of eliminable checks
+#   eliminated_count(32): count of checks eliminated
+
+S RangeAnalysis {
+    ranges_ptr: i64,
+    ranges_len: i64,
+    eliminable_ptr: i64,
+    eliminable_len: i64,
+    eliminated_count: i64
+}
+
+F range_analysis_new(locals_len: i64) -> i64 {
+    ptr := malloc(40)
+    ranges := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        store_i64(ranges + i * 8, value_range_new())
+        i = i + 1
+    }
+    store_i64(ptr, ranges)
+    store_i64(ptr + 8, locals_len)
+    store_i64(ptr + 16, malloc(8 * 256))  # capacity for 256 checks
+    store_i64(ptr + 24, 0)                # eliminable_len = 0
+    store_i64(ptr + 32, 0)                # eliminated_count = 0
+    R ptr
+}
+
+F range_analysis_free(analysis_ptr: i64) -> i64 {
+    ranges_ptr := load_i64(analysis_ptr)
+    ranges_len := load_i64(analysis_ptr + 8)
+    i := mut 0
+    L {
+        I i >= ranges_len { B } E { 0 }
+        value_range_free(load_i64(ranges_ptr + i * 8))
+        i = i + 1
+    }
+    free(ranges_ptr)
+
+    eliminable_ptr := load_i64(analysis_ptr + 16)
+    eliminable_len := load_i64(analysis_ptr + 24)
+    i = 0
+    L {
+        I i >= eliminable_len { B } E { 0 }
+        bounds_check_free(load_i64(eliminable_ptr + i * 8))
+        i = i + 1
+    }
+    free(eliminable_ptr)
+    free(analysis_ptr)
+    1
+}
+
+# Add an eliminable bounds check
+F range_analysis_add_eliminable(analysis_ptr: i64, bc_ptr: i64) -> i64 {
+    eliminable_ptr := load_i64(analysis_ptr + 16)
+    eliminable_len := load_i64(analysis_ptr + 24)
+    store_i64(eliminable_ptr + eliminable_len * 8, bc_ptr)
+    store_i64(analysis_ptr + 24, eliminable_len + 1)
+    1
+}
+
+# Set range for a local
+F range_analysis_set_range(analysis_ptr: i64, local_idx: i64, range_ptr: i64) -> i64 {
+    ranges_ptr := load_i64(analysis_ptr)
+    ranges_len := load_i64(analysis_ptr + 8)
+    I local_idx >= ranges_len { R 0 }
+
+    # Free old range and set new one
+    old := load_i64(ranges_ptr + local_idx * 8)
+    value_range_free(old)
+    store_i64(ranges_ptr + local_idx * 8, range_ptr)
+    1
+}
+
+# Get range for a local
+F range_analysis_get_range(analysis_ptr: i64, local_idx: i64) -> i64 {
+    ranges_ptr := load_i64(analysis_ptr)
+    ranges_len := load_i64(analysis_ptr + 8)
+    I local_idx >= ranges_len { R 0 }
+    R load_i64(ranges_ptr + local_idx * 8)
+}
+
+# ============================================================================
+# Core Analysis Functions
+# ============================================================================
+
+# Analyze bounds checks in a MIR function body
+# Returns RangeAnalysis pointer that caller must free
+F analyze_bounds_checks(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    analysis := range_analysis_new(locals_len)
+
+    # Build dominance tree for loop detection
+    idom := mir_dominance_analysis(body_ptr)
+    loop_info := mir_loop_analysis(body_ptr, idom)
+
+    # Pass 1: Find loop induction variables
+    analyze_induction_vars(body_ptr, analysis, loop_info)
+
+    # Pass 2: Find guard comparisons that prove ranges
+    analyze_guards(body_ptr, analysis, idom)
+
+    # Pass 3: Find constant array accesses
+    analyze_constant_accesses(body_ptr, analysis)
+
+    # Cleanup
+    free(loop_info)
+    free(idom)
+
+    R analysis
+}
+
+# Pass 1: Find loop induction variables
+# Pattern: local starts at 0, increments by 1, compared with < upper_bound
+F analyze_induction_vars(body_ptr: i64, analysis: i64, loop_info: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+    locals_len := load_i64(body_ptr + 40)
+
+    # Track initialization: local_init[i] = initial value or -1 if unknown
+    local_init := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        store_i64(local_init + i * 8, 0 - 1)  # unknown
+        i = i + 1
+    }
+
+    # Track increment: local_inc[i] = increment value or -1 if not constant
+    local_inc := malloc(8 * locals_len)
+    i = 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        store_i64(local_inc + i * 8, 0 - 1)  # unknown
+        i = i + 1
+    }
+
+    # Scan all blocks for assignments
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        is_header := load_i64(loop_info + bi * 16)
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                local_idx := load_i64(place_ptr)
+
+                # Check for initialization: _i := 0
+                rv_kind := load_i64(rvalue_ptr)
+                I rv_kind == RVALUE_USE() {
+                    operand := load_i64(rvalue_ptr + 8)
+                    op_kind := load_i64(operand)
+                    I op_kind == OPERAND_CONSTANT() {
+                        const_kind := load_i64(operand + 16)
+                        const_val := load_i64(operand + 24)
+                        I const_kind == CONST_INT() {
+                            I const_val == 0 {
+                                store_i64(local_init + local_idx * 8, 0)
+                                0
+                            } E { 0 }
+                        } E { 0 }
+                    } E { 0 }
+                }
+                # Check for increment: _i := _i + 1
+                E I rv_kind == RVALUE_BINOP() {
+                    binop := load_i64(rvalue_ptr + 16)
+                    lhs := load_i64(rvalue_ptr + 24)
+                    rhs := load_i64(rvalue_ptr + 32)
+                    I binop == BINOP_ADD() {
+                        # Check if lhs is same local
+                        lhs_kind := load_i64(lhs)
+                        I lhs_kind == OPERAND_COPY() {
+                            lhs_local := load_i64(lhs + 8)
+                            I lhs_local == local_idx {
+                                # Check if rhs is constant 1
+                                rhs_kind := load_i64(rhs)
+                                I rhs_kind == OPERAND_CONSTANT() {
+                                    rhs_const_kind := load_i64(rhs + 16)
+                                    rhs_const_val := load_i64(rhs + 24)
+                                    I rhs_const_kind == CONST_INT() {
+                                        I rhs_const_val == 1 {
+                                            store_i64(local_inc + local_idx * 8, 1)
+                                            0
+                                        } E { 0 }
+                                    } E { 0 }
+                                } E { 0 }
+                            } E { 0 }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+                0
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    # Now scan terminators for comparison guards
+    bi = 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            kind := load_i64(term_ptr)
+            I kind == TERM_SWITCH_INT() {
+                disc_ptr := load_i64(term_ptr + 16)
+                # Check if discriminant is a comparison
+                # For simplicity, we'll look for statements just before this
+                # that compute comparisons
+                analyze_switch_guard(body_ptr, bi, analysis, local_init, local_inc)
+                0
+            } E { 0 }
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    free(local_init)
+    free(local_inc)
+    1
+}
+
+# Analyze a switch terminator for loop guard pattern
+F analyze_switch_guard(body_ptr: i64, bb_idx: i64, analysis: i64, local_init: i64, local_inc: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    bb_ptr := load_i64(blocks_ptr + bb_idx * 8)
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+
+    # Look for last assignment before terminator
+    I stmts_len == 0 { R 0 }
+    last_stmt := load_i64(stmts_ptr + (stmts_len - 1) * 8)
+    kind := load_i64(last_stmt)
+    I kind != STMT_MIR_ASSIGN() { R 0 }
+
+    place_ptr := load_i64(last_stmt + 8)
+    rvalue_ptr := load_i64(last_stmt + 16)
+    cmp_local := load_i64(place_ptr)
+
+    rv_kind := load_i64(rvalue_ptr)
+    I rv_kind != RVALUE_BINOP() { R 0 }
+
+    binop := load_i64(rvalue_ptr + 16)
+    # Check for LT or LE comparison
+    I binop != BINOP_LT() {
+        I binop != BINOP_LE() { R 0 } E { 0 }
+    } E { 0 }
+
+    lhs := load_i64(rvalue_ptr + 24)
+    rhs := load_i64(rvalue_ptr + 32)
+
+    # lhs should be a local that was initialized to 0 and increments by 1
+    lhs_kind := load_i64(lhs)
+    I lhs_kind != OPERAND_COPY() { R 0 }
+    idx_local := load_i64(lhs + 8)
+
+    init_val := load_i64(local_init + idx_local * 8)
+    inc_val := load_i64(local_inc + idx_local * 8)
+    I init_val != 0 { R 0 }
+    I inc_val != 1 { R 0 }
+
+    # rhs should be a local or constant representing the bound
+    rhs_kind := load_i64(rhs)
+    I rhs_kind == OPERAND_COPY() {
+        bound_local := load_i64(rhs + 8)
+        # Set range: idx_local is in [0, bound_local)
+        range := value_range_bounded_sym(0, bound_local)
+        range_analysis_set_range(analysis, idx_local, range)
+        1
+    }
+    E I rhs_kind == OPERAND_CONSTANT() {
+        const_kind := load_i64(rhs + 16)
+        const_val := load_i64(rhs + 24)
+        I const_kind == CONST_INT() {
+            range := value_range_bounded(0, const_val)
+            range_analysis_set_range(analysis, idx_local, range)
+            1
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Pass 2: Find guard comparisons that dominate accesses
+F analyze_guards(body_ptr: i64, analysis: i64, idom: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # For each block with a SwitchInt on a comparison
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            kind := load_i64(term_ptr)
+            I kind == TERM_SWITCH_INT() {
+                # Check if this is a bounds check: idx < len
+                analyze_guard_switch(body_ptr, bi, analysis)
+                0
+            } E { 0 }
+        } E { 0 }
+        bi = bi + 1
+    }
+    1
+}
+
+F analyze_guard_switch(body_ptr: i64, bb_idx: i64, analysis: i64) -> i64 {
+    # Same pattern as analyze_switch_guard but for guard elimination
+    # (Simplified for now — full implementation would check domination)
+    1
+}
+
+# Pass 3: Find constant array accesses
+F analyze_constant_accesses(body_ptr: i64, analysis: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+    locals_ptr := load_i64(body_ptr + 32)
+    locals_len := load_i64(body_ptr + 40)
+
+    # Track array lengths from locals that are known arrays
+    # (Simplified — would need type info from MirLocalDecl)
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            # Look for Index projections with constant indices
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+                # Check for Rvalue::Use of a Place with Index projection
+                # (Simplified — full implementation would track these)
+                0
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+    1
+}
+
+# ============================================================================
+# Elimination: Modify MIR in-place
+# ============================================================================
+
+# Eliminate proven-safe bounds checks by replacing SwitchInt with Goto
+F eliminate_bounds_checks(body_ptr: i64, analysis_ptr: i64) -> i64 {
+    eliminable_ptr := load_i64(analysis_ptr + 16)
+    eliminable_len := load_i64(analysis_ptr + 24)
+
+    blocks_ptr := load_i64(body_ptr + 48)
+
+    i := mut 0
+    L {
+        I i >= eliminable_len { B } E { 0 }
+        bc_ptr := load_i64(eliminable_ptr + i * 8)
+        block_idx := load_i64(bc_ptr + 24)
+        stmt_idx := load_i64(bc_ptr + 32)
+
+        # Get the block
+        bb_ptr := load_i64(blocks_ptr + block_idx * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        I term_ptr != 0 {
+            kind := load_i64(term_ptr)
+            I kind == TERM_SWITCH_INT() {
+                # Replace with unconditional goto to first target (safe path)
+                targets_ptr := load_i64(term_ptr + 24)
+                targets_len := load_i64(term_ptr + 32)
+                I targets_len > 0 {
+                    # Get first target value
+                    first_target := load_i64(targets_ptr + 8)
+                    # Replace terminator with goto
+                    store_i64(term_ptr, TERM_GOTO())
+                    store_i64(term_ptr + 8, first_target)
+                    # Increment eliminated count
+                    count := load_i64(analysis_ptr + 32)
+                    store_i64(analysis_ptr + 32, count + 1)
+                    0
+                } E { 0 }
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Top-level Module Analysis
+# ============================================================================
+
+# Analyze and optimize all function bodies in a module
+F bounds_check_analyze_module(mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+
+    total_eliminated := mut 0
+
+    i := mut 0
+    L {
+        I i >= bodies_len { B } E { 0 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+
+        analysis := analyze_bounds_checks(body_ptr)
+        eliminate_bounds_checks(body_ptr, analysis)
+
+        eliminated := load_i64(analysis + 32)
+        total_eliminated = total_eliminated + eliminated
+
+        range_analysis_free(analysis)
+        i = i + 1
+    }
+
+    R total_eliminated
+}

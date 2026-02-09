@@ -1,0 +1,650 @@
+# Vais Self-Hosting Compiler - MIR Auto-Vectorization Analysis
+# Provides vectorization candidate detection, dependence analysis, and legality checking.
+#
+# Mirrors crates/vais-codegen/src/advanced_opt/auto_vectorize.rs
+# Key features:
+#   - Loop candidate detection (back-edge analysis via dominance)
+#   - Memory access pattern analysis (stride, base pointer tracking)
+#   - Dependence analysis (flow/anti/output dependencies)
+#   - Vectorizability determination (unit stride, no conflicting deps)
+#   - Reduction detection (sum/product/min/max patterns in PHI nodes)
+
+U mir
+U mir_analysis
+
+# ============================================================================
+# Vector Width Constants
+# ============================================================================
+
+F VEC_WIDTH_SSE() -> i64 = 128
+F VEC_WIDTH_AVX2() -> i64 = 256
+F VEC_WIDTH_AVX512() -> i64 = 512
+F VEC_WIDTH_NEON() -> i64 = 128
+
+# ============================================================================
+# Loop Dependence Constants
+# ============================================================================
+
+F DEP_NONE() -> i64 = 0
+F DEP_FLOW() -> i64 = 1       # Read-after-write: a[i] = ...; ... = a[i]
+F DEP_ANTI() -> i64 = 2       # Write-after-read: ... = a[i]; a[i] = ...
+F DEP_OUTPUT() -> i64 = 3     # Write-after-write: a[i] = ...; a[i] = ...
+F DEP_UNKNOWN() -> i64 = 4
+
+# ============================================================================
+# Reduction Kind Constants
+# ============================================================================
+
+F RED_NONE() -> i64 = 0
+F RED_ADD() -> i64 = 1        # Sum reduction: acc += val
+F RED_MUL() -> i64 = 2        # Product reduction: acc *= val
+F RED_MIN() -> i64 = 3        # Min reduction: acc = min(acc, val)
+F RED_MAX() -> i64 = 4        # Max reduction: acc = max(acc, val)
+F RED_OR() -> i64 = 5         # Bitwise OR reduction
+F RED_AND() -> i64 = 6        # Bitwise AND reduction
+F RED_XOR() -> i64 = 7        # Bitwise XOR reduction
+
+# ============================================================================
+# MemoryAccess — memory access in a loop
+# ============================================================================
+
+# MemoryAccess: 48 bytes
+#   base_local(0): i64      — MIR local index of base pointer
+#   index_local(8): i64     — MIR local index of index (-1 if none)
+#   stride(16): i64         — stride between iterations (-1 if unknown)
+#   is_write(24): i64       — 1 for write, 0 for read
+#   element_size(32): i64   — element type size in bytes
+#   block_idx(40): i64      — block index containing this access
+
+F mem_access_new(base_local: i64, index_local: i64, stride: i64, is_write: i64, element_size: i64, block_idx: i64) -> i64 {
+    ptr := malloc(48)
+    store_i64(ptr, base_local)
+    store_i64(ptr + 8, index_local)
+    store_i64(ptr + 16, stride)
+    store_i64(ptr + 24, is_write)
+    store_i64(ptr + 32, element_size)
+    store_i64(ptr + 40, block_idx)
+    R ptr
+}
+
+F mem_access_free(access_ptr: i64) -> i64 {
+    free(access_ptr)
+    1
+}
+
+# ============================================================================
+# VectorizationCandidate — loop vectorization candidate
+# ============================================================================
+
+# VectorizationCandidate: 96 bytes
+#   header_bb(0): i64              — loop header block index
+#   latch_bb(8): i64               — loop latch block index
+#   induction_local(16): i64       — induction variable local index (-1 if none)
+#   trip_count(24): i64            — trip count (-1 if unknown)
+#   accesses_ptr(32), accesses_len(40): array of MemoryAccess
+#   deps_ptr(48), deps_len(56): array of dependence kinds (i64 each)
+#   is_vectorizable(64): i64       — 1 if vectorizable
+#   reason_idx(72): i64            — StringPool index for non-vectorizable reason (-1 if OK)
+#   recommended_width(80): i64     — recommended vector width in bits
+#   reduction_kind(88): i64        — detected reduction pattern (RED_* constant)
+
+F vec_candidate_new(header_bb: i64, latch_bb: i64) -> i64 {
+    ptr := malloc(96)
+    store_i64(ptr, header_bb)
+    store_i64(ptr + 8, latch_bb)
+    store_i64(ptr + 16, 0 - 1)       # induction_local = -1
+    store_i64(ptr + 24, 0 - 1)       # trip_count = -1
+    store_i64(ptr + 32, malloc(8 * 64))  # accesses_ptr
+    store_i64(ptr + 40, 0)           # accesses_len = 0
+    store_i64(ptr + 48, malloc(8 * 32))  # deps_ptr
+    store_i64(ptr + 56, 0)           # deps_len = 0
+    store_i64(ptr + 64, 0)           # is_vectorizable = 0
+    store_i64(ptr + 72, 0 - 1)       # reason_idx = -1
+    store_i64(ptr + 80, 0)           # recommended_width = 0
+    store_i64(ptr + 88, RED_NONE())  # reduction_kind
+    R ptr
+}
+
+F vec_candidate_free(candidate_ptr: i64) -> i64 {
+    # Free memory accesses
+    accesses_ptr := load_i64(candidate_ptr + 32)
+    accesses_len := load_i64(candidate_ptr + 40)
+    i := mut 0
+    L {
+        I i >= accesses_len { B } E { 0 }
+        access := load_i64(accesses_ptr + i * 8)
+        I access != 0 { mem_access_free(access); 0 } E { 0 }
+        i = i + 1
+    }
+    free(accesses_ptr)
+
+    # Free deps array
+    free(load_i64(candidate_ptr + 48))
+
+    free(candidate_ptr)
+    1
+}
+
+F vec_candidate_add_access(candidate_ptr: i64, access_ptr: i64) -> i64 {
+    accesses_ptr := load_i64(candidate_ptr + 32)
+    accesses_len := load_i64(candidate_ptr + 40)
+    store_i64(accesses_ptr + accesses_len * 8, access_ptr)
+    store_i64(candidate_ptr + 40, accesses_len + 1)
+    1
+}
+
+F vec_candidate_add_dep(candidate_ptr: i64, dep_kind: i64) -> i64 {
+    deps_ptr := load_i64(candidate_ptr + 48)
+    deps_len := load_i64(candidate_ptr + 56)
+    store_i64(deps_ptr + deps_len * 8, dep_kind)
+    store_i64(candidate_ptr + 56, deps_len + 1)
+    1
+}
+
+# ============================================================================
+# VectorizeContext — auto-vectorization analyzer
+# ============================================================================
+
+# VectorizeContext: 32 bytes
+#   candidates_ptr(0), candidates_len(8): array of VectorizationCandidate
+#   target_width(16): i64          — target vector width in bits
+#   loop_id_counter(24): i64
+
+F vectorize_ctx_new(target_width: i64) -> i64 {
+    ptr := malloc(32)
+    store_i64(ptr, malloc(8 * 64))   # candidates_ptr
+    store_i64(ptr + 8, 0)            # candidates_len
+    store_i64(ptr + 16, target_width)
+    store_i64(ptr + 24, 0)           # loop_id_counter
+    R ptr
+}
+
+F vectorize_ctx_free(ctx_ptr: i64) -> i64 {
+    candidates_ptr := load_i64(ctx_ptr)
+    candidates_len := load_i64(ctx_ptr + 8)
+    i := mut 0
+    L {
+        I i >= candidates_len { B } E { 0 }
+        candidate := load_i64(candidates_ptr + i * 8)
+        I candidate != 0 { vec_candidate_free(candidate); 0 } E { 0 }
+        i = i + 1
+    }
+    free(candidates_ptr)
+    free(ctx_ptr)
+    1
+}
+
+F vectorize_ctx_add_candidate(ctx_ptr: i64, candidate_ptr: i64) -> i64 {
+    candidates_ptr := load_i64(ctx_ptr)
+    candidates_len := load_i64(ctx_ptr + 8)
+    store_i64(candidates_ptr + candidates_len * 8, candidate_ptr)
+    store_i64(ctx_ptr + 8, candidates_len + 1)
+    1
+}
+
+# ============================================================================
+# Loop Detection — find back-edges via dominance analysis
+# ============================================================================
+
+# Analyze a MIR body and detect loop candidates
+# Returns context with candidates populated
+F vectorize_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    I blocks_len == 0 { R 1 }
+
+    # Step 1: Compute dominance tree
+    idom := mir_dominance_analysis(body_ptr)
+
+    # Step 2: Detect loop headers via back-edges
+    # A back-edge is an edge src→dst where dst dominates src
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        I term_ptr != 0 {
+            sc := cfg_successor_count(term_ptr)
+            si := mut 0
+            L {
+                I si >= sc { B } E { 0 }
+                succ := cfg_successor_at(term_ptr, si)
+                I succ >= 0 {
+                    I succ < blocks_len {
+                        # Check if succ dominates bi → back-edge → succ is loop header
+                        I dominates(idom, succ, bi) == 1 {
+                            # Found a loop: header=succ, latch=bi
+                            vec_detect_and_add_loop(ctx_ptr, body_ptr, succ, bi, idom)
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    free(idom)
+    1
+}
+
+# Detect loop properties and add candidate to context
+F vec_detect_and_add_loop(ctx_ptr: i64, body_ptr: i64, header_bb: i64, latch_bb: i64, idom: i64) -> i64 {
+    candidate := vec_candidate_new(header_bb, latch_bb)
+
+    # Step 3: Analyze memory accesses in loop body
+    vec_analyze_memory_accesses(candidate, body_ptr, header_bb, idom)
+
+    # Step 4: Analyze dependencies
+    vec_analyze_dependencies(candidate)
+
+    # Step 5: Determine vectorizability
+    target_width := load_i64(ctx_ptr + 16)
+    vec_determine_vectorizability(candidate, target_width)
+
+    # Step 6: Detect reduction patterns
+    reduction := vec_detect_reduction(body_ptr, header_bb, load_i64(candidate + 16))
+    store_i64(candidate + 88, reduction)
+
+    vectorize_ctx_add_candidate(ctx_ptr, candidate)
+}
+
+# ============================================================================
+# Memory Access Analysis — scan statements for loads/stores
+# ============================================================================
+
+F vec_analyze_memory_accesses(candidate: i64, body_ptr: i64, header_bb: i64, idom: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Scan all blocks dominated by the loop header
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+
+        # Check if bi is dominated by header (i.e., in loop body)
+        I dominates(idom, header_bb, bi) == 1 {
+            bb_ptr := load_i64(blocks_ptr + bi * 8)
+            stmts_ptr := load_i64(bb_ptr)
+            stmts_len := load_i64(bb_ptr + 8)
+
+            si := mut 0
+            L {
+                I si >= stmts_len { B } E { 0 }
+                stmt_ptr := load_i64(stmts_ptr + si * 8)
+                kind := load_i64(stmt_ptr)
+
+                I kind == STMT_MIR_ASSIGN() {
+                    place_ptr := load_i64(stmt_ptr + 8)
+                    rvalue_ptr := load_i64(stmt_ptr + 16)
+                    rv_kind := load_i64(rvalue_ptr)
+
+                    # Detect load pattern: place = Use(Copy(local)) where local is dereferenced
+                    # Or place = Ref/Deref operations
+                    # Simplified: check if rvalue involves memory access
+                    I rv_kind == RVALUE_REF() {
+                        ref_place := load_i64(rvalue_ptr + 40)
+                        base_local := load_i64(ref_place)
+                        proj_len := load_i64(ref_place + 16)
+
+                        # If there's a projection (field/index/deref), this is a memory access
+                        I proj_len > 0 {
+                            # Extract index local and stride
+                            proj_ptr := load_i64(ref_place + 8)
+                            proj_kind := load_i64(proj_ptr)
+                            index_local := mut 0 - 1
+                            stride := mut 0 - 1
+
+                            I proj_kind == PROJ_INDEX() {
+                                index_local = load_i64(proj_ptr + 8)
+                                stride = 1  # Assume unit stride for array index
+                            }
+                            E I proj_kind == PROJ_FIELD() {
+                                stride = 0  # Struct field access (loop-invariant)
+                            }
+                            E I proj_kind == PROJ_DEREF() {
+                                stride = 1  # Pointer deref (assume unit stride)
+                            }
+                            E { 0 }
+
+                            # Determine element size (simplified: assume i64 = 8 bytes)
+                            element_size := 8
+
+                            access := mem_access_new(base_local, index_local, stride, 0, element_size, bi)
+                            vec_candidate_add_access(candidate, access)
+                            0
+                        } E { 0 }
+                    }
+                    E { 0 }
+
+                    # Detect store pattern: assign to projected place
+                    proj_len := load_i64(place_ptr + 16)
+                    I proj_len > 0 {
+                        base_local := load_i64(place_ptr)
+                        proj_ptr := load_i64(place_ptr + 8)
+                        proj_kind := load_i64(proj_ptr)
+                        index_local := mut 0 - 1
+                        stride := mut 0 - 1
+
+                        I proj_kind == PROJ_INDEX() {
+                            index_local = load_i64(proj_ptr + 8)
+                            stride = 1
+                        }
+                        E I proj_kind == PROJ_FIELD() {
+                            stride = 0
+                        }
+                        E I proj_kind == PROJ_DEREF() {
+                            stride = 1
+                        }
+                        E { 0 }
+
+                        element_size := 8
+                        access := mem_access_new(base_local, index_local, stride, 1, element_size, bi)
+                        vec_candidate_add_access(candidate, access)
+                        0
+                    } E { 0 }
+                } E { 0 }
+
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+    1
+}
+
+# ============================================================================
+# Dependence Analysis — check for conflicts between memory accesses
+# ============================================================================
+
+F vec_analyze_dependencies(candidate: i64) -> i64 {
+    accesses_ptr := load_i64(candidate + 32)
+    accesses_len := load_i64(candidate + 40)
+
+    i := mut 0
+    L {
+        I i >= accesses_len { B } E { 0 }
+        a1 := load_i64(accesses_ptr + i * 8)
+
+        j := mut i + 1
+        L {
+            I j >= accesses_len { B } E { 0 }
+            a2 := load_i64(accesses_ptr + j * 8)
+
+            # Check if same base pointer → potential dependence
+            base1 := load_i64(a1)
+            base2 := load_i64(a2)
+            I base1 == base2 {
+                dep := vec_analyze_access_pair(a1, a2)
+                I dep != DEP_NONE() {
+                    vec_candidate_add_dep(candidate, dep)
+                    0
+                } E { 0 }
+            } E { 0 }
+
+            j = j + 1
+        }
+        i = i + 1
+    }
+    1
+}
+
+# Analyze a pair of memory accesses for dependencies
+F vec_analyze_access_pair(a1: i64, a2: i64) -> i64 {
+    is_write1 := load_i64(a1 + 24)
+    is_write2 := load_i64(a2 + 24)
+
+    # Read-read is never a dependence
+    I is_write1 == 0 {
+        I is_write2 == 0 { R DEP_NONE() } E { 0 }
+    } E { 0 }
+
+    # Check if indices are the same (same iteration access)
+    index1 := load_i64(a1 + 8)
+    index2 := load_i64(a2 + 8)
+    I index1 == index2 {
+        # Same index → iteration-local dependence (safe for vectorization if distance >= width)
+        # For now, assume distance is 0 (same iteration) → conservative: report dependence
+        I is_write1 == 1 {
+            I is_write2 == 0 { R DEP_FLOW() } E { R DEP_OUTPUT() }
+        }
+        E { R DEP_ANTI() }
+    } E { 0 }
+
+    # Different indices → check if stride analysis suggests independence
+    stride1 := load_i64(a1 + 16)
+    stride2 := load_i64(a2 + 16)
+
+    # If both have unit stride and different indices, likely loop-carried
+    I stride1 == 1 {
+        I stride2 == 1 {
+            I index1 != index2 {
+                # Conservative: flag as unknown dependence
+                R DEP_UNKNOWN()
+            } E { 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # If one is stride 0 (loop-invariant) and the other varies, potential aliasing
+    I stride1 == 0 { R DEP_UNKNOWN() } E { 0 }
+    I stride2 == 0 { R DEP_UNKNOWN() } E { 0 }
+
+    R DEP_NONE()
+}
+
+# ============================================================================
+# Vectorizability Determination
+# ============================================================================
+
+F vec_determine_vectorizability(candidate: i64, target_width: i64) -> i64 {
+    accesses_ptr := load_i64(candidate + 32)
+    accesses_len := load_i64(candidate + 40)
+    deps_ptr := load_i64(candidate + 48)
+    deps_len := load_i64(candidate + 56)
+
+    # Determine vector lanes from target width and element size
+    # Assume 64-bit elements (i64) for simplicity
+    element_bits := 64
+    vector_lanes := target_width / element_bits
+
+    # Check for blocking dependencies
+    has_blocking_dep := mut 0
+    di := mut 0
+    L {
+        I di >= deps_len { B } E { 0 }
+        dep := load_i64(deps_ptr + di * 8)
+        I vec_dep_prevents_vectorization(dep, vector_lanes) == 1 {
+            has_blocking_dep = 1
+            B
+        } E { 0 }
+        di = di + 1
+    }
+
+    I has_blocking_dep == 1 {
+        store_i64(candidate + 64, 0)  # is_vectorizable = 0
+        store_i64(candidate + 72, 0)  # reason_idx placeholder (should be StringPool index)
+        R 0
+    } E { 0 }
+
+    # Check if all memory accesses have unit stride
+    all_unit_stride := mut 1
+    ai := mut 0
+    L {
+        I ai >= accesses_len { B } E { 0 }
+        access := load_i64(accesses_ptr + ai * 8)
+        stride := load_i64(access + 16)
+        I stride != 1 {
+            I stride != 0 {  # Allow stride 0 (loop-invariant)
+                all_unit_stride = 0
+                B
+            } E { 0 }
+        } E { 0 }
+        ai = ai + 1
+    }
+
+    I all_unit_stride == 0 {
+        # Non-unit stride requires gather/scatter → reduced speedup
+        store_i64(candidate + 64, 1)  # is_vectorizable = 1
+        store_i64(candidate + 72, 0 - 1)  # reason_idx = -1 (OK)
+        store_i64(candidate + 80, vector_lanes / 2)  # recommended_width (reduced)
+        R 1
+    } E { 0 }
+
+    # Looks good for vectorization
+    store_i64(candidate + 64, 1)  # is_vectorizable = 1
+    store_i64(candidate + 72, 0 - 1)  # reason_idx = -1 (OK)
+    store_i64(candidate + 80, vector_lanes)  # recommended_width
+    1
+}
+
+# Check if a dependence prevents vectorization
+F vec_dep_prevents_vectorization(dep_kind: i64, width: i64) -> i64 {
+    I dep_kind == DEP_NONE() { R 0 }
+    I dep_kind == DEP_UNKNOWN() { R 1 }
+
+    # For flow/anti/output deps, assume distance is unknown → conservative
+    # In a full implementation, we'd track distance and compare with width
+    # For now, any non-NONE dependence blocks vectorization
+    I dep_kind == DEP_FLOW() { R 1 } E { 0 }
+    I dep_kind == DEP_ANTI() { R 1 } E { 0 }
+    I dep_kind == DEP_OUTPUT() { R 1 } E { 0 }
+
+    R 0
+}
+
+# ============================================================================
+# Reduction Detection — find PHI-based accumulators
+# ============================================================================
+
+F vec_detect_reduction(body_ptr: i64, header_bb: i64, induction_local: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    I header_bb >= blocks_len { R RED_NONE() }
+
+    # Look at the loop header block for PHI nodes
+    bb_ptr := load_i64(blocks_ptr + header_bb * 8)
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+
+    # Scan statements for assignment patterns that suggest reduction
+    # Pattern: _acc = BinOp(_acc, _val) where _acc is a PHI node
+    # Simplified: look for BinOp with Add/Mul/Min/Max
+    si := mut 0
+    L {
+        I si >= stmts_len { B } E { 0 }
+        stmt_ptr := load_i64(stmts_ptr + si * 8)
+        kind := load_i64(stmt_ptr)
+
+        I kind == STMT_MIR_ASSIGN() {
+            rvalue_ptr := load_i64(stmt_ptr + 16)
+            rv_kind := load_i64(rvalue_ptr)
+
+            I rv_kind == RVALUE_BINOP() {
+                op := load_i64(rvalue_ptr + 16)
+                lhs_ptr := load_i64(rvalue_ptr + 24)
+                rhs_ptr := load_i64(rvalue_ptr + 32)
+
+                # Check if lhs or rhs involves a local that might be an accumulator
+                # For simplicity, detect the operation kind
+                I op == BINOP_ADD() { R RED_ADD() } E { 0 }
+                I op == BINOP_MUL() { R RED_MUL() } E { 0 }
+                # Min/Max would require checking for intrinsic calls
+                0
+            } E { 0 }
+        } E { 0 }
+
+        si = si + 1
+    }
+
+    R RED_NONE()
+}
+
+# ============================================================================
+# Top-Level Analysis API
+# ============================================================================
+
+# Analyze all function bodies in a module
+F vectorize_analyze_module(ctx_ptr: i64, mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+
+    i := mut 0
+    L {
+        I i >= bodies_len { R 1 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        vectorize_analyze_body(ctx_ptr, body_ptr)
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Report Functions
+# ============================================================================
+
+# Count number of vectorizable loops
+F vec_count_vectorizable(ctx_ptr: i64) -> i64 {
+    candidates_ptr := load_i64(ctx_ptr)
+    candidates_len := load_i64(ctx_ptr + 8)
+    count := mut 0
+
+    i := mut 0
+    L {
+        I i >= candidates_len { R count }
+        candidate := load_i64(candidates_ptr + i * 8)
+        is_vectorizable := load_i64(candidate + 64)
+        I is_vectorizable == 1 {
+            count = count + 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    count
+}
+
+# Count total loop candidates
+F vec_count_candidates(ctx_ptr: i64) -> i64 {
+    R load_i64(ctx_ptr + 8)
+}
+
+# Get vectorizable status of a candidate
+F vec_is_vectorizable(candidate_ptr: i64) -> i64 {
+    R load_i64(candidate_ptr + 64)
+}
+
+# Get recommended width of a candidate
+F vec_get_recommended_width(candidate_ptr: i64) -> i64 {
+    R load_i64(candidate_ptr + 80)
+}
+
+# Get reduction kind of a candidate
+F vec_get_reduction_kind(candidate_ptr: i64) -> i64 {
+    R load_i64(candidate_ptr + 88)
+}
+
+# Get candidate by index
+F vec_get_candidate(ctx_ptr: i64, idx: i64) -> i64 {
+    candidates_ptr := load_i64(ctx_ptr)
+    candidates_len := load_i64(ctx_ptr + 8)
+    I idx >= candidates_len { R 0 }
+    R load_i64(candidates_ptr + idx * 8)
+}
+
+# ============================================================================
+# Utility: Vector Lane Computation
+# ============================================================================
+
+# Compute number of vector lanes for a given element size
+F vec_lanes_for_element(target_width: i64, element_bits: i64) -> i64 {
+    I element_bits == 0 { R 0 }
+    R target_width / element_bits
+}
+
+# Get default element size for MIR type (simplified: assume i64)
+F vec_default_element_bits() -> i64 = 64

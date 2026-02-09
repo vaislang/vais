@@ -6,6 +6,10 @@
 # Operates in-place on MirBody/MirModule data structures.
 
 U mir
+U mir_alias
+U mir_bounds
+U mir_vectorize
+U mir_layout
 
 # ============================================================================
 # Top-level API
@@ -752,4 +756,67 @@ F mir_count_reachable_blocks(body_ptr: i64) -> i64 {
         bi = bi + 1
     }
     count
+}
+
+# ============================================================================
+# Advanced Optimization Passes (Phase 3)
+# ============================================================================
+# These passes provide deeper analysis and optimization:
+#   - Alias analysis: track pointer origins and escape behavior
+#   - Bounds check elimination: prove array accesses are safe
+#   - Auto-vectorization: detect loop vectorization opportunities
+#   - Data layout: suggest struct field reordering and cache optimizations
+
+# Advanced optimization passes (Phase 3 additions)
+F mir_advanced_optimize_body(body_ptr: i64) -> i64 {
+    # Phase 1: Alias analysis (informational, feeds into other passes)
+    alias_ctx := alias_ctx_new()
+    analyze_aliases(alias_ctx, body_ptr)
+
+    # Phase 2: Bounds check elimination
+    bc_analysis := analyze_bounds_checks(body_ptr)
+    eliminate_bounds_checks(body_ptr, bc_analysis)
+    range_analysis_free(bc_analysis)
+
+    # Phase 3: Auto-vectorization analysis (informational hints)
+    vec_ctx := vectorize_ctx_new(VEC_WIDTH_AVX2())
+    vectorize_analyze_body(vec_ctx, body_ptr)
+    vectorize_ctx_free(vec_ctx)
+
+    # Phase 4: Data layout analysis (informational hints)
+    layout_ctx := layout_ctx_new()
+    layout_analyze_body(layout_ctx, body_ptr)
+    layout_ctx_free(layout_ctx)
+
+    alias_ctx_free(alias_ctx)
+    1
+}
+
+# Advanced optimization for all bodies in a module
+F mir_advanced_optimize_module(mod_ptr: i64) -> i64 {
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+
+    i := mut 0
+    L {
+        I i >= bodies_len { R 1 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        mir_advanced_optimize_body(body_ptr)
+        i = i + 1
+    }
+    1
+}
+
+# Run all optimization passes (basic + advanced)
+F mir_optimize_all(body_ptr: i64) -> i64 {
+    mir_optimize_body(body_ptr)
+    mir_advanced_optimize_body(body_ptr)
+    1
+}
+
+# Run all optimization passes on a module (basic + advanced)
+F mir_optimize_all_module(mod_ptr: i64) -> i64 {
+    mir_optimize_module(mod_ptr)
+    mir_advanced_optimize_module(mod_ptr)
+    1
 }
