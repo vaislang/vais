@@ -82,13 +82,13 @@ export class VaisCompiler {
     }
   }
 
-  async compile(sourceCode) {
+  async compile(sourceCode, target = 'native') {
     if (!this.isReady) {
       await this.initialize();
     }
 
     if (this.serverAvailable) {
-      return this.serverCompile(sourceCode, { execute: false, emit_ir: true });
+      return this.serverCompile(sourceCode, { execute: false, emit_ir: true, target });
     }
     return this.mockCompile(sourceCode);
   }
@@ -98,13 +98,30 @@ export class VaisCompiler {
     return this.mockExecute(ir);
   }
 
-  async compileAndRun(sourceCode) {
+  async compileAndRun(sourceCode, target = 'native') {
     if (!this.isReady) {
       await this.initialize();
     }
 
+    // Handle JS target - compile only, no execution
+    if (target === 'js') {
+      return this.compileToJs(sourceCode);
+    }
+
+    // Handle WASM target
+    if (target === 'wasm') {
+      if (this.wasmAvailable) {
+        return this.wasmCompileAndRun(sourceCode);
+      }
+      if (this.serverAvailable) {
+        return this.serverCompile(sourceCode, { execute: false, emit_ir: false, target: 'wasm32' });
+      }
+      return this.mockCompileAndRun(sourceCode);
+    }
+
+    // Handle native target (default)
     if (this.serverAvailable) {
-      return this.serverCompile(sourceCode, { execute: true, emit_ir: false });
+      return this.serverCompile(sourceCode, { execute: true, emit_ir: false, target: 'native' });
     }
     if (this.wasmAvailable) {
       return this.wasmCompileAndRun(sourceCode);
@@ -191,15 +208,22 @@ export class VaisCompiler {
 
   async serverCompile(sourceCode, options = {}) {
     try {
+      const requestBody = {
+        source: sourceCode,
+        optimize: options.optimize || false,
+        emit_ir: options.emit_ir || false,
+        execute: options.execute !== false,
+      };
+
+      // Add target if specified
+      if (options.target && options.target !== 'native') {
+        requestBody.target = options.target;
+      }
+
       const response = await fetch(`${this.apiUrl}/api/compile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: sourceCode,
-          optimize: options.optimize || false,
-          emit_ir: options.emit_ir || false,
-          execute: options.execute !== false,
-        }),
+        body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(30000),
       });
 
@@ -211,6 +235,7 @@ export class VaisCompiler {
         warnings: data.warnings || [],
         ir: data.ir || null,
         output: data.output || null,
+        jsCode: data.js_code || null,
         exitCode: data.exit_code,
         compileTimeMs: data.compile_time_ms,
       };
@@ -377,6 +402,67 @@ export class VaisCompiler {
 
   formatWarning(warning) {
     return `Warning at line ${warning.line}, column ${warning.column}: ${warning.message}`;
+  }
+
+  // --- JavaScript target compilation ---
+  async compileToJs(sourceCode) {
+    if (!this.serverAvailable) {
+      return {
+        success: false,
+        errors: [{ line: 0, column: 0, message: 'JavaScript compilation requires server (not available in preview mode)' }],
+        warnings: [],
+        output: null,
+      };
+    }
+
+    try {
+      const response = await fetch(`${this.apiUrl}/api/compile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: sourceCode,
+          target: 'js',
+          optimize: false,
+          emit_ir: false,
+          execute: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        return {
+          success: false,
+          errors: data.errors || [],
+          warnings: data.warnings || [],
+          output: null,
+        };
+      }
+
+      // Format the JS code output
+      const jsCode = data.js_code || data.output || '// No code generated';
+      let output = '=== Generated JavaScript (ESM) ===\n\n';
+      output += jsCode;
+      output += '\n\n';
+      output += `[JavaScript target — compiled in ${data.compile_time_ms || 0}ms]`;
+
+      return {
+        success: true,
+        errors: [],
+        warnings: data.warnings || [],
+        output: output,
+        jsCode: jsCode,
+        compileTimeMs: data.compile_time_ms,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        errors: [{ line: 0, column: 0, message: `JS compilation error: ${error.message}` }],
+        warnings: [],
+        output: null,
+      };
+    }
   }
 }
 

@@ -1,0 +1,30 @@
+# JavaScript Target Advanced — Lambdas, pipes, string interpolation
+#
+# Compile: vaisc --target js js_target_advanced.vais
+
+# Lambda / closure
+F apply(x: i64, f: |i64| -> i64) -> i64 = f(x)
+
+# Pipe operator
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+F square(x: i64) -> i64 = x * x
+
+F main() -> i64 {
+    # Lambda usage
+    result := apply(5, |x| x * 3)
+
+    # Pipe chain: 3 |> square |> double |> add_one = 19
+    piped := 3 |> square |> double |> add_one
+
+    # Array operations
+    arr := [1, 2, 3, 4, 5]
+
+    # Loop
+    sum := mut 0
+    L i: 0..5 {
+        sum = sum + i
+    }
+
+    0
+}

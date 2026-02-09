@@ -227,23 +227,40 @@
         </div>
       </div>
       <div class="compare-bar-section" style="margin-top: 2rem;">
-        <h3 class="compare-bar-title">Compilation Speed</h3>
+        <h3 class="compare-bar-title">Compile Speed — Single File</h3>
         <div class="compare-bars">
           <div class="bar-item">
-            <span class="bar-label">Throughput</span>
+            <span class="bar-label">Vais</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 80%"></div>
+              <div class="bar-fill bar-vais" style="width: 5%"></div>
             </div>
-            <span class="bar-value">800K lines/sec</span>
+            <span class="bar-value">6.5ms</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">Incremental</span>
+            <span class="bar-label">C (clang)</span>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 60%; background: var(--accent-green);"></div>
+              <div class="bar-fill bar-rust" style="width: 45%"></div>
             </div>
-            <span class="bar-value">96ms / 30K LOC</span>
+            <span class="bar-value">55ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Go</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 43%"></div>
+            </div>
+            <span class="bar-value">52ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Rust</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">122ms</span>
           </div>
         </div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">
+          Vais <code>--emit-ir</code> vs full compilation. 8.5x faster than C, 19x faster than Rust.
+        </p>
       </div>
     </div>
   </section>

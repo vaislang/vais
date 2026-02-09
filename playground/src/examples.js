@@ -402,6 +402,28 @@ F main() -> i64 {
     description: 'Simplest valid program',
     code: `# Minimal Vais program
 F main() -> i64 = 0`
+  },
+
+  'wasm-interop': {
+    name: 'WASM Interop',
+    description: 'Import JS functions and export Vais functions',
+    code: `# WASM Import/Export example
+#[wasm_import("env", "console_log")]
+N F console_log(ptr: i64, len: i64) -> i64
+
+#[wasm_export("add")]
+F add(a: i64, b: i64) -> i64 = a + b
+
+#[wasm_export("fibonacci")]
+F fib(n: i64) -> i64 {
+    I n <= 1 { n }
+    E { @(n - 1) + @(n - 2) }
+}
+
+F main() -> i64 {
+    result := add(10, 20)
+    0
+}`
   }
 };
 

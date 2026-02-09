@@ -1,0 +1,45 @@
+# JavaScript Target Example — Compiles to ESM JavaScript
+#
+# Compile: vaisc --target js js_target.vais -o output.mjs
+
+# Struct → JS class
+S Point {
+    x: f64,
+    y: f64
+}
+
+# Enum → tagged union
+E Shape {
+    Circle(f64),
+    Rect(f64, f64)
+}
+
+# Functions → exported JS functions
+F distance(p: Point) -> f64 {
+    sqrt(p.x * p.x + p.y * p.y)
+}
+
+F area(s: Shape) -> f64 {
+    M s {
+        Circle(r) => 3.14159 * r * r,
+        Rect(w, h) => w * h,
+        _ => 0.0
+    }
+}
+
+F classify(s: Shape) -> i64 {
+    a := area(s)
+    I a > 100.0 { 2 }
+    E I a > 10.0 { 1 }
+    E { 0 }
+}
+
+F main() -> i64 {
+    p := Point { x: 3.0, y: 4.0 }
+    d := distance(p)
+
+    c := Circle(5.0)
+    a := area(c)
+
+    0
+}
