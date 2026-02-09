@@ -1,0 +1,1368 @@
+# vais-aes: Real AES-256 encryption library
+# Implements FIPS 197 specification with SubBytes, ShiftRows, MixColumns, AddRoundKey
+# Supports ECB, CBC, and CTR block cipher modes
+
+# ========================================
+# Constants
+# ========================================
+
+C AES_BLOCK_SIZE: i64 = 16     # 128 bits
+C AES_KEY_SIZE: i64 = 32       # 256 bits (32 bytes)
+C AES_ROUNDS: i64 = 14         # AES-256 uses 14 rounds
+C AES_NK: i64 = 8              # Key length in 32-bit words (256/32)
+C AES_NB: i64 = 4              # Block size in 32-bit words (128/32)
+
+# ========================================
+# Extern Declarations
+# ========================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F str_to_ptr(s: str) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+
+# ========================================
+# Result Struct
+# ========================================
+
+S AesResult {
+    data: i64,
+    len: i64,
+    status: i64    # 0 = OK, -1 = error
+}
+
+# ========================================
+# S-Box (SubBytes) - FIPS 197 Standard Values
+# ========================================
+
+F aes_make_sbox() -> i64 {
+    sbox := malloc(256)
+    I sbox == 0 {
+        R 0
+    }
+
+    # AES S-Box values (all 256 entries in decimal)
+    # Row 0
+    store_byte(sbox + 0, 99)
+    store_byte(sbox + 1, 124)
+    store_byte(sbox + 2, 119)
+    store_byte(sbox + 3, 123)
+    store_byte(sbox + 4, 242)
+    store_byte(sbox + 5, 107)
+    store_byte(sbox + 6, 111)
+    store_byte(sbox + 7, 197)
+    store_byte(sbox + 8, 48)
+    store_byte(sbox + 9, 1)
+    store_byte(sbox + 10, 103)
+    store_byte(sbox + 11, 43)
+    store_byte(sbox + 12, 254)
+    store_byte(sbox + 13, 215)
+    store_byte(sbox + 14, 171)
+    store_byte(sbox + 15, 118)
+
+    # Row 1
+    store_byte(sbox + 16, 202)
+    store_byte(sbox + 17, 130)
+    store_byte(sbox + 18, 201)
+    store_byte(sbox + 19, 125)
+    store_byte(sbox + 20, 250)
+    store_byte(sbox + 21, 89)
+    store_byte(sbox + 22, 71)
+    store_byte(sbox + 23, 240)
+    store_byte(sbox + 24, 173)
+    store_byte(sbox + 25, 212)
+    store_byte(sbox + 26, 162)
+    store_byte(sbox + 27, 175)
+    store_byte(sbox + 28, 156)
+    store_byte(sbox + 29, 164)
+    store_byte(sbox + 30, 114)
+    store_byte(sbox + 31, 192)
+
+    # Row 2
+    store_byte(sbox + 32, 183)
+    store_byte(sbox + 33, 253)
+    store_byte(sbox + 34, 147)
+    store_byte(sbox + 35, 38)
+    store_byte(sbox + 36, 54)
+    store_byte(sbox + 37, 63)
+    store_byte(sbox + 38, 247)
+    store_byte(sbox + 39, 204)
+    store_byte(sbox + 40, 52)
+    store_byte(sbox + 41, 165)
+    store_byte(sbox + 42, 229)
+    store_byte(sbox + 43, 241)
+    store_byte(sbox + 44, 113)
+    store_byte(sbox + 45, 216)
+    store_byte(sbox + 46, 49)
+    store_byte(sbox + 47, 21)
+
+    # Row 3
+    store_byte(sbox + 48, 4)
+    store_byte(sbox + 49, 199)
+    store_byte(sbox + 50, 35)
+    store_byte(sbox + 51, 195)
+    store_byte(sbox + 52, 24)
+    store_byte(sbox + 53, 150)
+    store_byte(sbox + 54, 5)
+    store_byte(sbox + 55, 154)
+    store_byte(sbox + 56, 7)
+    store_byte(sbox + 57, 18)
+    store_byte(sbox + 58, 128)
+    store_byte(sbox + 59, 226)
+    store_byte(sbox + 60, 235)
+    store_byte(sbox + 61, 39)
+    store_byte(sbox + 62, 178)
+    store_byte(sbox + 63, 117)
+
+    # Row 4
+    store_byte(sbox + 64, 9)
+    store_byte(sbox + 65, 131)
+    store_byte(sbox + 66, 44)
+    store_byte(sbox + 67, 26)
+    store_byte(sbox + 68, 27)
+    store_byte(sbox + 69, 110)
+    store_byte(sbox + 70, 90)
+    store_byte(sbox + 71, 160)
+    store_byte(sbox + 72, 82)
+    store_byte(sbox + 73, 59)
+    store_byte(sbox + 74, 214)
+    store_byte(sbox + 75, 179)
+    store_byte(sbox + 76, 41)
+    store_byte(sbox + 77, 227)
+    store_byte(sbox + 78, 47)
+    store_byte(sbox + 79, 132)
+
+    # Row 5
+    store_byte(sbox + 80, 83)
+    store_byte(sbox + 81, 209)
+    store_byte(sbox + 82, 0)
+    store_byte(sbox + 83, 237)
+    store_byte(sbox + 84, 32)
+    store_byte(sbox + 85, 252)
+    store_byte(sbox + 86, 177)
+    store_byte(sbox + 87, 91)
+    store_byte(sbox + 88, 106)
+    store_byte(sbox + 89, 203)
+    store_byte(sbox + 90, 190)
+    store_byte(sbox + 91, 57)
+    store_byte(sbox + 92, 74)
+    store_byte(sbox + 93, 76)
+    store_byte(sbox + 94, 88)
+    store_byte(sbox + 95, 207)
+
+    # Row 6
+    store_byte(sbox + 96, 208)
+    store_byte(sbox + 97, 239)
+    store_byte(sbox + 98, 170)
+    store_byte(sbox + 99, 251)
+    store_byte(sbox + 100, 67)
+    store_byte(sbox + 101, 77)
+    store_byte(sbox + 102, 51)
+    store_byte(sbox + 103, 133)
+    store_byte(sbox + 104, 69)
+    store_byte(sbox + 105, 249)
+    store_byte(sbox + 106, 2)
+    store_byte(sbox + 107, 127)
+    store_byte(sbox + 108, 80)
+    store_byte(sbox + 109, 60)
+    store_byte(sbox + 110, 159)
+    store_byte(sbox + 111, 168)
+
+    # Row 7
+    store_byte(sbox + 112, 81)
+    store_byte(sbox + 113, 163)
+    store_byte(sbox + 114, 64)
+    store_byte(sbox + 115, 143)
+    store_byte(sbox + 116, 146)
+    store_byte(sbox + 117, 157)
+    store_byte(sbox + 118, 56)
+    store_byte(sbox + 119, 245)
+    store_byte(sbox + 120, 188)
+    store_byte(sbox + 121, 182)
+    store_byte(sbox + 122, 218)
+    store_byte(sbox + 123, 33)
+    store_byte(sbox + 124, 16)
+    store_byte(sbox + 125, 255)
+    store_byte(sbox + 126, 243)
+    store_byte(sbox + 127, 210)
+
+    # Row 8
+    store_byte(sbox + 128, 205)
+    store_byte(sbox + 129, 12)
+    store_byte(sbox + 130, 19)
+    store_byte(sbox + 131, 236)
+    store_byte(sbox + 132, 95)
+    store_byte(sbox + 133, 151)
+    store_byte(sbox + 134, 68)
+    store_byte(sbox + 135, 23)
+    store_byte(sbox + 136, 196)
+    store_byte(sbox + 137, 167)
+    store_byte(sbox + 138, 126)
+    store_byte(sbox + 139, 61)
+    store_byte(sbox + 140, 100)
+    store_byte(sbox + 141, 93)
+    store_byte(sbox + 142, 25)
+    store_byte(sbox + 143, 115)
+
+    # Row 9
+    store_byte(sbox + 144, 96)
+    store_byte(sbox + 145, 129)
+    store_byte(sbox + 146, 79)
+    store_byte(sbox + 147, 220)
+    store_byte(sbox + 148, 34)
+    store_byte(sbox + 149, 42)
+    store_byte(sbox + 150, 144)
+    store_byte(sbox + 151, 136)
+    store_byte(sbox + 152, 70)
+    store_byte(sbox + 153, 238)
+    store_byte(sbox + 154, 184)
+    store_byte(sbox + 155, 20)
+    store_byte(sbox + 156, 222)
+    store_byte(sbox + 157, 94)
+    store_byte(sbox + 158, 11)
+    store_byte(sbox + 159, 219)
+
+    # Row 10
+    store_byte(sbox + 160, 224)
+    store_byte(sbox + 161, 50)
+    store_byte(sbox + 162, 58)
+    store_byte(sbox + 163, 10)
+    store_byte(sbox + 164, 73)
+    store_byte(sbox + 165, 6)
+    store_byte(sbox + 166, 36)
+    store_byte(sbox + 167, 92)
+    store_byte(sbox + 168, 194)
+    store_byte(sbox + 169, 211)
+    store_byte(sbox + 170, 172)
+    store_byte(sbox + 171, 98)
+    store_byte(sbox + 172, 145)
+    store_byte(sbox + 173, 149)
+    store_byte(sbox + 174, 228)
+    store_byte(sbox + 175, 121)
+
+    # Row 11
+    store_byte(sbox + 176, 231)
+    store_byte(sbox + 177, 200)
+    store_byte(sbox + 178, 55)
+    store_byte(sbox + 179, 109)
+    store_byte(sbox + 180, 141)
+    store_byte(sbox + 181, 213)
+    store_byte(sbox + 182, 78)
+    store_byte(sbox + 183, 169)
+    store_byte(sbox + 184, 108)
+    store_byte(sbox + 185, 86)
+    store_byte(sbox + 186, 244)
+    store_byte(sbox + 187, 234)
+    store_byte(sbox + 188, 101)
+    store_byte(sbox + 189, 122)
+    store_byte(sbox + 190, 174)
+    store_byte(sbox + 191, 8)
+
+    # Row 12
+    store_byte(sbox + 192, 186)
+    store_byte(sbox + 193, 120)
+    store_byte(sbox + 194, 37)
+    store_byte(sbox + 195, 46)
+    store_byte(sbox + 196, 28)
+    store_byte(sbox + 197, 166)
+    store_byte(sbox + 198, 180)
+    store_byte(sbox + 199, 198)
+    store_byte(sbox + 200, 232)
+    store_byte(sbox + 201, 221)
+    store_byte(sbox + 202, 116)
+    store_byte(sbox + 203, 31)
+    store_byte(sbox + 204, 75)
+    store_byte(sbox + 205, 189)
+    store_byte(sbox + 206, 139)
+    store_byte(sbox + 207, 138)
+
+    # Row 13
+    store_byte(sbox + 208, 112)
+    store_byte(sbox + 209, 62)
+    store_byte(sbox + 210, 181)
+    store_byte(sbox + 211, 102)
+    store_byte(sbox + 212, 72)
+    store_byte(sbox + 213, 3)
+    store_byte(sbox + 214, 246)
+    store_byte(sbox + 215, 14)
+    store_byte(sbox + 216, 97)
+    store_byte(sbox + 217, 53)
+    store_byte(sbox + 218, 87)
+    store_byte(sbox + 219, 185)
+    store_byte(sbox + 220, 134)
+    store_byte(sbox + 221, 193)
+    store_byte(sbox + 222, 29)
+    store_byte(sbox + 223, 158)
+
+    # Row 14
+    store_byte(sbox + 224, 225)
+    store_byte(sbox + 225, 248)
+    store_byte(sbox + 226, 152)
+    store_byte(sbox + 227, 17)
+    store_byte(sbox + 228, 105)
+    store_byte(sbox + 229, 217)
+    store_byte(sbox + 230, 142)
+    store_byte(sbox + 231, 148)
+    store_byte(sbox + 232, 155)
+    store_byte(sbox + 233, 30)
+    store_byte(sbox + 234, 135)
+    store_byte(sbox + 235, 233)
+    store_byte(sbox + 236, 206)
+    store_byte(sbox + 237, 85)
+    store_byte(sbox + 238, 40)
+    store_byte(sbox + 239, 223)
+
+    # Row 15
+    store_byte(sbox + 240, 140)
+    store_byte(sbox + 241, 161)
+    store_byte(sbox + 242, 137)
+    store_byte(sbox + 243, 13)
+    store_byte(sbox + 244, 191)
+    store_byte(sbox + 245, 230)
+    store_byte(sbox + 246, 66)
+    store_byte(sbox + 247, 104)
+    store_byte(sbox + 248, 65)
+    store_byte(sbox + 249, 153)
+    store_byte(sbox + 250, 45)
+    store_byte(sbox + 251, 15)
+    store_byte(sbox + 252, 176)
+    store_byte(sbox + 253, 84)
+    store_byte(sbox + 254, 187)
+    store_byte(sbox + 255, 22)
+
+    R sbox
+}
+
+# Inverse S-Box for decryption
+F aes_make_inv_sbox() -> i64 {
+    inv_sbox := malloc(256)
+    I inv_sbox == 0 {
+        R 0
+    }
+
+    # AES Inverse S-Box values (all 256 entries in decimal)
+    # Row 0
+    store_byte(inv_sbox + 0, 82)
+    store_byte(inv_sbox + 1, 9)
+    store_byte(inv_sbox + 2, 106)
+    store_byte(inv_sbox + 3, 213)
+    store_byte(inv_sbox + 4, 48)
+    store_byte(inv_sbox + 5, 54)
+    store_byte(inv_sbox + 6, 165)
+    store_byte(inv_sbox + 7, 56)
+    store_byte(inv_sbox + 8, 191)
+    store_byte(inv_sbox + 9, 64)
+    store_byte(inv_sbox + 10, 163)
+    store_byte(inv_sbox + 11, 158)
+    store_byte(inv_sbox + 12, 129)
+    store_byte(inv_sbox + 13, 243)
+    store_byte(inv_sbox + 14, 215)
+    store_byte(inv_sbox + 15, 251)
+
+    # Row 1
+    store_byte(inv_sbox + 16, 124)
+    store_byte(inv_sbox + 17, 227)
+    store_byte(inv_sbox + 18, 57)
+    store_byte(inv_sbox + 19, 130)
+    store_byte(inv_sbox + 20, 155)
+    store_byte(inv_sbox + 21, 47)
+    store_byte(inv_sbox + 22, 255)
+    store_byte(inv_sbox + 23, 135)
+    store_byte(inv_sbox + 24, 52)
+    store_byte(inv_sbox + 25, 142)
+    store_byte(inv_sbox + 26, 67)
+    store_byte(inv_sbox + 27, 68)
+    store_byte(inv_sbox + 28, 196)
+    store_byte(inv_sbox + 29, 222)
+    store_byte(inv_sbox + 30, 233)
+    store_byte(inv_sbox + 31, 203)
+
+    # Row 2
+    store_byte(inv_sbox + 32, 84)
+    store_byte(inv_sbox + 33, 123)
+    store_byte(inv_sbox + 34, 148)
+    store_byte(inv_sbox + 35, 50)
+    store_byte(inv_sbox + 36, 166)
+    store_byte(inv_sbox + 37, 194)
+    store_byte(inv_sbox + 38, 35)
+    store_byte(inv_sbox + 39, 61)
+    store_byte(inv_sbox + 40, 238)
+    store_byte(inv_sbox + 41, 76)
+    store_byte(inv_sbox + 42, 149)
+    store_byte(inv_sbox + 43, 11)
+    store_byte(inv_sbox + 44, 66)
+    store_byte(inv_sbox + 45, 250)
+    store_byte(inv_sbox + 46, 195)
+    store_byte(inv_sbox + 47, 78)
+
+    # Row 3
+    store_byte(inv_sbox + 48, 8)
+    store_byte(inv_sbox + 49, 46)
+    store_byte(inv_sbox + 50, 161)
+    store_byte(inv_sbox + 51, 102)
+    store_byte(inv_sbox + 52, 40)
+    store_byte(inv_sbox + 53, 217)
+    store_byte(inv_sbox + 54, 36)
+    store_byte(inv_sbox + 55, 178)
+    store_byte(inv_sbox + 56, 118)
+    store_byte(inv_sbox + 57, 91)
+    store_byte(inv_sbox + 58, 162)
+    store_byte(inv_sbox + 59, 73)
+    store_byte(inv_sbox + 60, 109)
+    store_byte(inv_sbox + 61, 139)
+    store_byte(inv_sbox + 62, 209)
+    store_byte(inv_sbox + 63, 37)
+
+    # Row 4
+    store_byte(inv_sbox + 64, 114)
+    store_byte(inv_sbox + 65, 248)
+    store_byte(inv_sbox + 66, 246)
+    store_byte(inv_sbox + 67, 100)
+    store_byte(inv_sbox + 68, 134)
+    store_byte(inv_sbox + 69, 104)
+    store_byte(inv_sbox + 70, 152)
+    store_byte(inv_sbox + 71, 22)
+    store_byte(inv_sbox + 72, 212)
+    store_byte(inv_sbox + 73, 164)
+    store_byte(inv_sbox + 74, 92)
+    store_byte(inv_sbox + 75, 204)
+    store_byte(inv_sbox + 76, 93)
+    store_byte(inv_sbox + 77, 101)
+    store_byte(inv_sbox + 78, 182)
+    store_byte(inv_sbox + 79, 146)
+
+    # Row 5
+    store_byte(inv_sbox + 80, 108)
+    store_byte(inv_sbox + 81, 112)
+    store_byte(inv_sbox + 82, 72)
+    store_byte(inv_sbox + 83, 80)
+    store_byte(inv_sbox + 84, 253)
+    store_byte(inv_sbox + 85, 237)
+    store_byte(inv_sbox + 86, 185)
+    store_byte(inv_sbox + 87, 218)
+    store_byte(inv_sbox + 88, 94)
+    store_byte(inv_sbox + 89, 21)
+    store_byte(inv_sbox + 90, 70)
+    store_byte(inv_sbox + 91, 87)
+    store_byte(inv_sbox + 92, 167)
+    store_byte(inv_sbox + 93, 141)
+    store_byte(inv_sbox + 94, 157)
+    store_byte(inv_sbox + 95, 132)
+
+    # Row 6
+    store_byte(inv_sbox + 96, 144)
+    store_byte(inv_sbox + 97, 216)
+    store_byte(inv_sbox + 98, 171)
+    store_byte(inv_sbox + 99, 0)
+    store_byte(inv_sbox + 100, 140)
+    store_byte(inv_sbox + 101, 188)
+    store_byte(inv_sbox + 102, 211)
+    store_byte(inv_sbox + 103, 10)
+    store_byte(inv_sbox + 104, 247)
+    store_byte(inv_sbox + 105, 228)
+    store_byte(inv_sbox + 106, 88)
+    store_byte(inv_sbox + 107, 5)
+    store_byte(inv_sbox + 108, 184)
+    store_byte(inv_sbox + 109, 179)
+    store_byte(inv_sbox + 110, 69)
+    store_byte(inv_sbox + 111, 6)
+
+    # Row 7
+    store_byte(inv_sbox + 112, 208)
+    store_byte(inv_sbox + 113, 44)
+    store_byte(inv_sbox + 114, 30)
+    store_byte(inv_sbox + 115, 143)
+    store_byte(inv_sbox + 116, 202)
+    store_byte(inv_sbox + 117, 63)
+    store_byte(inv_sbox + 118, 15)
+    store_byte(inv_sbox + 119, 2)
+    store_byte(inv_sbox + 120, 193)
+    store_byte(inv_sbox + 121, 175)
+    store_byte(inv_sbox + 122, 189)
+    store_byte(inv_sbox + 123, 3)
+    store_byte(inv_sbox + 124, 1)
+    store_byte(inv_sbox + 125, 19)
+    store_byte(inv_sbox + 126, 138)
+    store_byte(inv_sbox + 127, 107)
+
+    # Row 8
+    store_byte(inv_sbox + 128, 58)
+    store_byte(inv_sbox + 129, 145)
+    store_byte(inv_sbox + 130, 17)
+    store_byte(inv_sbox + 131, 65)
+    store_byte(inv_sbox + 132, 79)
+    store_byte(inv_sbox + 133, 103)
+    store_byte(inv_sbox + 134, 220)
+    store_byte(inv_sbox + 135, 234)
+    store_byte(inv_sbox + 136, 151)
+    store_byte(inv_sbox + 137, 242)
+    store_byte(inv_sbox + 138, 207)
+    store_byte(inv_sbox + 139, 206)
+    store_byte(inv_sbox + 140, 240)
+    store_byte(inv_sbox + 141, 180)
+    store_byte(inv_sbox + 142, 230)
+    store_byte(inv_sbox + 143, 115)
+
+    # Row 9
+    store_byte(inv_sbox + 144, 150)
+    store_byte(inv_sbox + 145, 172)
+    store_byte(inv_sbox + 146, 116)
+    store_byte(inv_sbox + 147, 34)
+    store_byte(inv_sbox + 148, 231)
+    store_byte(inv_sbox + 149, 173)
+    store_byte(inv_sbox + 150, 53)
+    store_byte(inv_sbox + 151, 133)
+    store_byte(inv_sbox + 152, 226)
+    store_byte(inv_sbox + 153, 249)
+    store_byte(inv_sbox + 154, 55)
+    store_byte(inv_sbox + 155, 232)
+    store_byte(inv_sbox + 156, 28)
+    store_byte(inv_sbox + 157, 117)
+    store_byte(inv_sbox + 158, 223)
+    store_byte(inv_sbox + 159, 110)
+
+    # Row 10
+    store_byte(inv_sbox + 160, 71)
+    store_byte(inv_sbox + 161, 241)
+    store_byte(inv_sbox + 162, 26)
+    store_byte(inv_sbox + 163, 113)
+    store_byte(inv_sbox + 164, 29)
+    store_byte(inv_sbox + 165, 41)
+    store_byte(inv_sbox + 166, 197)
+    store_byte(inv_sbox + 167, 137)
+    store_byte(inv_sbox + 168, 111)
+    store_byte(inv_sbox + 169, 183)
+    store_byte(inv_sbox + 170, 98)
+    store_byte(inv_sbox + 171, 14)
+    store_byte(inv_sbox + 172, 170)
+    store_byte(inv_sbox + 173, 24)
+    store_byte(inv_sbox + 174, 190)
+    store_byte(inv_sbox + 175, 27)
+
+    # Row 11
+    store_byte(inv_sbox + 176, 252)
+    store_byte(inv_sbox + 177, 86)
+    store_byte(inv_sbox + 178, 62)
+    store_byte(inv_sbox + 179, 75)
+    store_byte(inv_sbox + 180, 198)
+    store_byte(inv_sbox + 181, 210)
+    store_byte(inv_sbox + 182, 121)
+    store_byte(inv_sbox + 183, 32)
+    store_byte(inv_sbox + 184, 154)
+    store_byte(inv_sbox + 185, 219)
+    store_byte(inv_sbox + 186, 192)
+    store_byte(inv_sbox + 187, 254)
+    store_byte(inv_sbox + 188, 120)
+    store_byte(inv_sbox + 189, 205)
+    store_byte(inv_sbox + 190, 90)
+    store_byte(inv_sbox + 191, 244)
+
+    # Row 12
+    store_byte(inv_sbox + 192, 31)
+    store_byte(inv_sbox + 193, 221)
+    store_byte(inv_sbox + 194, 168)
+    store_byte(inv_sbox + 195, 51)
+    store_byte(inv_sbox + 196, 136)
+    store_byte(inv_sbox + 197, 7)
+    store_byte(inv_sbox + 198, 199)
+    store_byte(inv_sbox + 199, 49)
+    store_byte(inv_sbox + 200, 177)
+    store_byte(inv_sbox + 201, 18)
+    store_byte(inv_sbox + 202, 16)
+    store_byte(inv_sbox + 203, 89)
+    store_byte(inv_sbox + 204, 39)
+    store_byte(inv_sbox + 205, 128)
+    store_byte(inv_sbox + 206, 236)
+    store_byte(inv_sbox + 207, 95)
+
+    # Row 13
+    store_byte(inv_sbox + 208, 96)
+    store_byte(inv_sbox + 209, 81)
+    store_byte(inv_sbox + 210, 127)
+    store_byte(inv_sbox + 211, 169)
+    store_byte(inv_sbox + 212, 25)
+    store_byte(inv_sbox + 213, 181)
+    store_byte(inv_sbox + 214, 74)
+    store_byte(inv_sbox + 215, 13)
+    store_byte(inv_sbox + 216, 45)
+    store_byte(inv_sbox + 217, 229)
+    store_byte(inv_sbox + 218, 122)
+    store_byte(inv_sbox + 219, 159)
+    store_byte(inv_sbox + 220, 147)
+    store_byte(inv_sbox + 221, 201)
+    store_byte(inv_sbox + 222, 156)
+    store_byte(inv_sbox + 223, 239)
+
+    # Row 14
+    store_byte(inv_sbox + 224, 160)
+    store_byte(inv_sbox + 225, 224)
+    store_byte(inv_sbox + 226, 59)
+    store_byte(inv_sbox + 227, 77)
+    store_byte(inv_sbox + 228, 174)
+    store_byte(inv_sbox + 229, 42)
+    store_byte(inv_sbox + 230, 245)
+    store_byte(inv_sbox + 231, 176)
+    store_byte(inv_sbox + 232, 200)
+    store_byte(inv_sbox + 233, 235)
+    store_byte(inv_sbox + 234, 187)
+    store_byte(inv_sbox + 235, 60)
+    store_byte(inv_sbox + 236, 131)
+    store_byte(inv_sbox + 237, 83)
+    store_byte(inv_sbox + 238, 153)
+    store_byte(inv_sbox + 239, 97)
+
+    # Row 15
+    store_byte(inv_sbox + 240, 23)
+    store_byte(inv_sbox + 241, 43)
+    store_byte(inv_sbox + 242, 4)
+    store_byte(inv_sbox + 243, 126)
+    store_byte(inv_sbox + 244, 186)
+    store_byte(inv_sbox + 245, 119)
+    store_byte(inv_sbox + 246, 214)
+    store_byte(inv_sbox + 247, 38)
+    store_byte(inv_sbox + 248, 225)
+    store_byte(inv_sbox + 249, 105)
+    store_byte(inv_sbox + 250, 20)
+    store_byte(inv_sbox + 251, 99)
+    store_byte(inv_sbox + 252, 85)
+    store_byte(inv_sbox + 253, 33)
+    store_byte(inv_sbox + 254, 12)
+    store_byte(inv_sbox + 255, 125)
+
+    R inv_sbox
+}
+
+# ========================================
+# RCON (Round Constants)
+# ========================================
+
+F aes_rcon(round: i64) -> i64 {
+    I round == 0 { R 1 }
+    I round == 1 { R 2 }
+    I round == 2 { R 4 }
+    I round == 3 { R 8 }
+    I round == 4 { R 16 }
+    I round == 5 { R 32 }
+    I round == 6 { R 64 }
+    I round == 7 { R 128 }
+    I round == 8 { R 27 }
+    I round == 9 { R 54 }
+    R 0
+}
+
+# ========================================
+# Galois Field (GF(2^8)) Multiplication
+# ========================================
+
+# xtime doubling in GF(2^8) with irreducible polynomial 0x1b (27)
+F gf_xtime(a: i64) -> i64 {
+    high_bit := (a >> 7) & 1
+    result := (a << 1) & 255
+    I high_bit == 1 {
+        result = (result ^ 27) & 255
+    }
+    R result
+}
+
+# Multiply two values in GF(2^8)
+F gf_mul(a: i64, b: i64) -> i64 {
+    a = a & 255
+    b = b & 255
+    result := 0
+
+    i := mut 0
+    L i < 8 {
+        I (b & 1) == 1 {
+            result = (result ^ a) & 255
+        }
+        high_bit := (a >> 7) & 1
+        a = (a << 1) & 255
+        I high_bit == 1 {
+            a = (a ^ 27) & 255
+        }
+        b = (b >> 1) & 255
+        i = i + 1
+    }
+
+    R result
+}
+
+# ========================================
+# Key Expansion (AES-256)
+# ========================================
+
+F aes_key_expand(key: i64, sbox: i64) -> i64 {
+    # Allocate memory for 15 round keys (15 * 16 = 240 bytes)
+    expanded := malloc(240)
+    I expanded == 0 {
+        R 0
+    }
+
+    # Copy first 32 bytes (8 words) from key
+    memcpy(expanded, key, 32)
+
+    # Generate remaining words (32 to 239)
+    i := mut 32
+    L i < 240 {
+        word_idx := (i / 4) & 4294967295
+
+        # Get previous 4 bytes (word)
+        b0 := load_byte(expanded + i - 4)
+        b1 := load_byte(expanded + i - 3)
+        b2 := load_byte(expanded + i - 2)
+        b3 := load_byte(expanded + i - 1)
+
+        I (word_idx & 7) == 0 {
+            # Every 8th word: RotWord + SubWord + Rcon
+            # RotWord: [b0, b1, b2, b3] -> [b1, b2, b3, b0]
+            tmp := b0
+            b0 = b1
+            b1 = b2
+            b2 = b3
+            b3 = tmp
+
+            # SubWord: apply S-Box
+            b0 = load_byte(sbox + b0)
+            b1 = load_byte(sbox + b1)
+            b2 = load_byte(sbox + b2)
+            b3 = load_byte(sbox + b3)
+
+            # Rcon: XOR first byte with round constant
+            rcon_idx := ((word_idx / 8) - 1) & 4294967295
+            b0 = (b0 ^ aes_rcon(rcon_idx)) & 255
+        } E I (word_idx & 7) == 4 {
+            # Every 4th word after 8th: SubWord only
+            b0 = load_byte(sbox + b0)
+            b1 = load_byte(sbox + b1)
+            b2 = load_byte(sbox + b2)
+            b3 = load_byte(sbox + b3)
+        }
+
+        # XOR with word[i-32]
+        b0 = (b0 ^ load_byte(expanded + i - 32)) & 255
+        b1 = (b1 ^ load_byte(expanded + i - 31)) & 255
+        b2 = (b2 ^ load_byte(expanded + i - 30)) & 255
+        b3 = (b3 ^ load_byte(expanded + i - 29)) & 255
+
+        # Store the new word
+        store_byte(expanded + i, b0)
+        store_byte(expanded + i + 1, b1)
+        store_byte(expanded + i + 2, b2)
+        store_byte(expanded + i + 3, b3)
+
+        i = i + 4
+    }
+
+    R expanded
+}
+
+# ========================================
+# SubBytes Transformations
+# ========================================
+
+F aes_sub_bytes(state: i64, sbox: i64) -> i64 {
+    i := mut 0
+    L i < 16 {
+        byte_val := load_byte(state + i)
+        sub_val := load_byte(sbox + byte_val)
+        store_byte(state + i, sub_val)
+        i = i + 1
+    }
+    R state
+}
+
+F aes_inv_sub_bytes(state: i64, inv_sbox: i64) -> i64 {
+    i := mut 0
+    L i < 16 {
+        byte_val := load_byte(state + i)
+        sub_val := load_byte(inv_sbox + byte_val)
+        store_byte(state + i, sub_val)
+        i = i + 1
+    }
+    R state
+}
+
+# ========================================
+# ShiftRows Transformations
+# ========================================
+
+F aes_shift_rows(state: i64) -> i64 {
+    # State is column-major: byte[row + 4*col]
+    # Row 0: no shift
+    # Row 1: left shift 1
+    # Row 2: left shift 2
+    # Row 3: left shift 3
+
+    # Row 1: [s1, s5, s9, s13] -> [s5, s9, s13, s1]
+    tmp := load_byte(state + 1)
+    store_byte(state + 1, load_byte(state + 5))
+    store_byte(state + 5, load_byte(state + 9))
+    store_byte(state + 9, load_byte(state + 13))
+    store_byte(state + 13, tmp)
+
+    # Row 2: [s2, s6, s10, s14] -> [s10, s14, s2, s6]
+    tmp = load_byte(state + 2)
+    tmp2 := load_byte(state + 6)
+    store_byte(state + 2, load_byte(state + 10))
+    store_byte(state + 6, load_byte(state + 14))
+    store_byte(state + 10, tmp)
+    store_byte(state + 14, tmp2)
+
+    # Row 3: [s3, s7, s11, s15] -> [s15, s3, s7, s11]
+    tmp = load_byte(state + 15)
+    store_byte(state + 15, load_byte(state + 11))
+    store_byte(state + 11, load_byte(state + 7))
+    store_byte(state + 7, load_byte(state + 3))
+    store_byte(state + 3, tmp)
+
+    R state
+}
+
+F aes_inv_shift_rows(state: i64) -> i64 {
+    # Row 1: right shift 1
+    tmp := load_byte(state + 13)
+    store_byte(state + 13, load_byte(state + 9))
+    store_byte(state + 9, load_byte(state + 5))
+    store_byte(state + 5, load_byte(state + 1))
+    store_byte(state + 1, tmp)
+
+    # Row 2: right shift 2
+    tmp = load_byte(state + 2)
+    tmp2 := load_byte(state + 6)
+    store_byte(state + 2, load_byte(state + 10))
+    store_byte(state + 6, load_byte(state + 14))
+    store_byte(state + 10, tmp)
+    store_byte(state + 14, tmp2)
+
+    # Row 3: right shift 3
+    tmp = load_byte(state + 3)
+    store_byte(state + 3, load_byte(state + 7))
+    store_byte(state + 7, load_byte(state + 11))
+    store_byte(state + 11, load_byte(state + 15))
+    store_byte(state + 15, tmp)
+
+    R state
+}
+
+# ========================================
+# MixColumns Transformations
+# ========================================
+
+F aes_mix_columns(state: i64) -> i64 {
+    # Mix each column using GF(2^8) matrix multiplication
+    # Matrix: [2,3,1,1; 1,2,3,1; 1,1,2,3; 3,1,1,2]
+
+    col := mut 0
+    L col < 4 {
+        offset := col * 4
+        s0 := load_byte(state + offset)
+        s1 := load_byte(state + offset + 1)
+        s2 := load_byte(state + offset + 2)
+        s3 := load_byte(state + offset + 3)
+
+        # Compute new column values
+        t0 := (gf_mul(2, s0) ^ gf_mul(3, s1) ^ s2 ^ s3) & 255
+        t1 := (s0 ^ gf_mul(2, s1) ^ gf_mul(3, s2) ^ s3) & 255
+        t2 := (s0 ^ s1 ^ gf_mul(2, s2) ^ gf_mul(3, s3)) & 255
+        t3 := (gf_mul(3, s0) ^ s1 ^ s2 ^ gf_mul(2, s3)) & 255
+
+        store_byte(state + offset, t0)
+        store_byte(state + offset + 1, t1)
+        store_byte(state + offset + 2, t2)
+        store_byte(state + offset + 3, t3)
+
+        col = col + 1
+    }
+
+    R state
+}
+
+F aes_inv_mix_columns(state: i64) -> i64 {
+    # Inverse matrix: [14,11,13,9; 9,14,11,13; 13,9,14,11; 11,13,9,14]
+
+    col := mut 0
+    L col < 4 {
+        offset := col * 4
+        s0 := load_byte(state + offset)
+        s1 := load_byte(state + offset + 1)
+        s2 := load_byte(state + offset + 2)
+        s3 := load_byte(state + offset + 3)
+
+        # Compute new column values
+        t0 := (gf_mul(14, s0) ^ gf_mul(11, s1) ^ gf_mul(13, s2) ^ gf_mul(9, s3)) & 255
+        t1 := (gf_mul(9, s0) ^ gf_mul(14, s1) ^ gf_mul(11, s2) ^ gf_mul(13, s3)) & 255
+        t2 := (gf_mul(13, s0) ^ gf_mul(9, s1) ^ gf_mul(14, s2) ^ gf_mul(11, s3)) & 255
+        t3 := (gf_mul(11, s0) ^ gf_mul(13, s1) ^ gf_mul(9, s2) ^ gf_mul(14, s3)) & 255
+
+        store_byte(state + offset, t0)
+        store_byte(state + offset + 1, t1)
+        store_byte(state + offset + 2, t2)
+        store_byte(state + offset + 3, t3)
+
+        col = col + 1
+    }
+
+    R state
+}
+
+# ========================================
+# AddRoundKey
+# ========================================
+
+F aes_add_round_key(state: i64, round_keys: i64, round: i64) -> i64 {
+    round_key_offset := round * 16
+
+    i := mut 0
+    L i < 16 {
+        state_byte := load_byte(state + i)
+        key_byte := load_byte(round_keys + round_key_offset + i)
+        store_byte(state + i, (state_byte ^ key_byte) & 255)
+        i = i + 1
+    }
+
+    R state
+}
+
+# ========================================
+# AES-256 Core Structure
+# ========================================
+
+S Aes256 {
+    round_keys: i64,
+    sbox: i64,
+    inv_sbox: i64
+}
+
+X Aes256 {
+    F new(key: i64) -> Aes256 {
+        sbox := aes_make_sbox()
+        inv_sbox := aes_make_inv_sbox()
+        round_keys := aes_key_expand(key, sbox)
+
+        R Aes256 {
+            round_keys: round_keys,
+            sbox: sbox,
+            inv_sbox: inv_sbox
+        }
+    }
+
+    F encrypt_block(&self, block: i64) -> i64 {
+        # Initial round
+        aes_add_round_key(block, self.round_keys, 0)
+
+        # Rounds 1-13
+        round := mut 1
+        L round < 14 {
+            aes_sub_bytes(block, self.sbox)
+            aes_shift_rows(block)
+            aes_mix_columns(block)
+            aes_add_round_key(block, self.round_keys, round)
+            round = round + 1
+        }
+
+        # Final round (no MixColumns)
+        aes_sub_bytes(block, self.sbox)
+        aes_shift_rows(block)
+        aes_add_round_key(block, self.round_keys, 14)
+
+        R block
+    }
+
+    F decrypt_block(&self, block: i64) -> i64 {
+        # Initial round
+        aes_add_round_key(block, self.round_keys, 14)
+
+        # Rounds 13-1
+        round := mut 13
+        L round > 0 {
+            aes_inv_shift_rows(block)
+            aes_inv_sub_bytes(block, self.inv_sbox)
+            aes_add_round_key(block, self.round_keys, round)
+            aes_inv_mix_columns(block)
+            round = round - 1
+        }
+
+        # Final round (no InvMixColumns)
+        aes_inv_shift_rows(block)
+        aes_inv_sub_bytes(block, self.inv_sbox)
+        aes_add_round_key(block, self.round_keys, 0)
+
+        R block
+    }
+
+    F cleanup(&self) -> i64 {
+        I self.round_keys != 0 {
+            free(self.round_keys)
+        }
+        I self.sbox != 0 {
+            free(self.sbox)
+        }
+        I self.inv_sbox != 0 {
+            free(self.inv_sbox)
+        }
+        R 0
+    }
+}
+
+# ========================================
+# PKCS7 Padding
+# ========================================
+
+F pkcs7_pad(data: i64, data_len: i64) -> AesResult {
+    # PKCS7: pad_len is always 1..16 (never 0)
+    # When data_len is multiple of 16: 16 - 0 = 16 (full block of padding)
+    pad_len := 16 - (data_len & 15)
+
+    new_len := data_len + pad_len
+    padded := malloc(new_len)
+    I padded == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Copy original data
+    memcpy(padded, data, data_len)
+
+    # Add padding bytes (value = pad_len)
+    i := mut 0
+    L i < pad_len {
+        store_byte(padded + data_len + i, pad_len & 255)
+        i = i + 1
+    }
+
+    R AesResult { data: padded, len: new_len, status: 0 }
+}
+
+F pkcs7_unpad(data: i64, data_len: i64) -> AesResult {
+    I data_len == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    pad_len := load_byte(data + data_len - 1)
+
+    # Validate padding
+    I pad_len == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+    I pad_len > 16 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+    I pad_len > data_len {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Verify all padding bytes
+    i := mut 0
+    L i < pad_len {
+        I load_byte(data + data_len - 1 - i) != pad_len {
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        i = i + 1
+    }
+
+    new_len := data_len - pad_len
+    unpadded := malloc(new_len)
+    I unpadded == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    memcpy(unpadded, data, new_len)
+
+    R AesResult { data: unpadded, len: new_len, status: 0 }
+}
+
+# ========================================
+# ECB Mode (Electronic Codebook)
+# ========================================
+
+F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
+    # Apply PKCS7 padding
+    pad_result := pkcs7_pad(data, data_len)
+    I pad_result.status != 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    padded_data := pad_result.data
+    padded_len := pad_result.len
+
+    # Allocate output buffer
+    output := malloc(padded_len)
+    I output == 0 {
+        free(padded_data)
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Encrypt each block
+    block_idx := mut 0
+    L block_idx < padded_len {
+        # Copy block
+        block := malloc(16)
+        I block == 0 {
+            free(padded_data)
+            free(output)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(block, padded_data + block_idx, 16)
+
+        # Encrypt
+        aes.encrypt_block(block)
+
+        # Copy to output
+        memcpy(output + block_idx, block, 16)
+        free(block)
+
+        block_idx = block_idx + 16
+    }
+
+    free(padded_data)
+    R AesResult { data: output, len: padded_len, status: 0 }
+}
+
+F aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
+    # Allocate output buffer
+    output := malloc(data_len)
+    I output == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Decrypt each block
+    block_idx := mut 0
+    L block_idx < data_len {
+        # Copy block
+        block := malloc(16)
+        I block == 0 {
+            free(output)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(block, data + block_idx, 16)
+
+        # Decrypt
+        aes.decrypt_block(block)
+
+        # Copy to output
+        memcpy(output + block_idx, block, 16)
+        free(block)
+
+        block_idx = block_idx + 16
+    }
+
+    # Remove PKCS7 padding
+    unpad_result := pkcs7_unpad(output, data_len)
+    free(output)
+
+    R unpad_result
+}
+
+# ========================================
+# CBC Mode (Cipher Block Chaining)
+# ========================================
+
+F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
+    # Apply PKCS7 padding
+    pad_result := pkcs7_pad(data, data_len)
+    I pad_result.status != 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    padded_data := pad_result.data
+    padded_len := pad_result.len
+
+    # Allocate output buffer
+    output := malloc(padded_len)
+    I output == 0 {
+        free(padded_data)
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Allocate previous ciphertext block (initialized with IV)
+    prev_block := malloc(16)
+    I prev_block == 0 {
+        free(padded_data)
+        free(output)
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+    memcpy(prev_block, iv, 16)
+
+    # Encrypt each block
+    block_idx := mut 0
+    L block_idx < padded_len {
+        # Copy plaintext block
+        block := malloc(16)
+        I block == 0 {
+            free(padded_data)
+            free(output)
+            free(prev_block)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(block, padded_data + block_idx, 16)
+
+        # XOR with previous ciphertext (or IV)
+        i := mut 0
+        L i < 16 {
+            b := load_byte(block + i)
+            p := load_byte(prev_block + i)
+            store_byte(block + i, (b ^ p) & 255)
+            i = i + 1
+        }
+
+        # Encrypt
+        aes.encrypt_block(block)
+
+        # Copy to output
+        memcpy(output + block_idx, block, 16)
+
+        # Update previous block
+        memcpy(prev_block, block, 16)
+        free(block)
+
+        block_idx = block_idx + 16
+    }
+
+    free(padded_data)
+    free(prev_block)
+    R AesResult { data: output, len: padded_len, status: 0 }
+}
+
+F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
+    # Allocate output buffer
+    output := malloc(data_len)
+    I output == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Allocate previous ciphertext block (initialized with IV)
+    prev_block := malloc(16)
+    I prev_block == 0 {
+        free(output)
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+    memcpy(prev_block, iv, 16)
+
+    # Decrypt each block
+    block_idx := mut 0
+    L block_idx < data_len {
+        # Save current ciphertext block
+        cipher_block := malloc(16)
+        I cipher_block == 0 {
+            free(output)
+            free(prev_block)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(cipher_block, data + block_idx, 16)
+
+        # Copy and decrypt
+        block := malloc(16)
+        I block == 0 {
+            free(output)
+            free(prev_block)
+            free(cipher_block)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(block, cipher_block, 16)
+        aes.decrypt_block(block)
+
+        # XOR with previous ciphertext (or IV)
+        i := mut 0
+        L i < 16 {
+            b := load_byte(block + i)
+            p := load_byte(prev_block + i)
+            store_byte(block + i, (b ^ p) & 255)
+            i = i + 1
+        }
+
+        # Copy to output
+        memcpy(output + block_idx, block, 16)
+
+        # Update previous block
+        memcpy(prev_block, cipher_block, 16)
+        free(block)
+        free(cipher_block)
+
+        block_idx = block_idx + 16
+    }
+
+    free(prev_block)
+
+    # Remove PKCS7 padding
+    unpad_result := pkcs7_unpad(output, data_len)
+    free(output)
+
+    R unpad_result
+}
+
+# ========================================
+# CTR Mode (Counter)
+# ========================================
+
+F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
+    # Allocate output buffer
+    output := malloc(data_len)
+    I output == 0 {
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Counter block (8-byte nonce + 8-byte counter)
+    counter_block := malloc(16)
+    I counter_block == 0 {
+        free(output)
+        R AesResult { data: 0, len: 0, status: -1 }
+    }
+
+    # Initialize counter with nonce
+    memcpy(counter_block, nonce, 8)
+    memset(counter_block + 8, 0, 8)
+
+    # Process each block
+    block_idx := mut 0
+    block_num := mut 0
+    L block_idx < data_len {
+        # Update counter (8-byte little-endian)
+        counter_val := block_num
+        i := mut 0
+        L i < 8 {
+            store_byte(counter_block + 8 + i, (counter_val >> (i * 8)) & 255)
+            i = i + 1
+        }
+
+        # Encrypt counter
+        keystream := malloc(16)
+        I keystream == 0 {
+            free(output)
+            free(counter_block)
+            R AesResult { data: 0, len: 0, status: -1 }
+        }
+        memcpy(keystream, counter_block, 16)
+        aes.encrypt_block(keystream)
+
+        # XOR data with keystream
+        bytes_in_block := 16
+        I block_idx + 16 > data_len {
+            bytes_in_block = data_len - block_idx
+        }
+
+        i = 0
+        L i < bytes_in_block {
+            d := load_byte(data + block_idx + i)
+            k := load_byte(keystream + i)
+            store_byte(output + block_idx + i, (d ^ k) & 255)
+            i = i + 1
+        }
+
+        free(keystream)
+        block_num = block_num + 1
+        block_idx = block_idx + 16
+    }
+
+    free(counter_block)
+    R AesResult { data: output, len: data_len, status: 0 }
+}
+
+F aes_ctr_decrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
+    # CTR mode encryption and decryption are identical
+    R aes_ctr_encrypt(aes, data, data_len, nonce)
+}

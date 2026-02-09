@@ -1,0 +1,359 @@
+# Example usage of vais-aes library
+
+# Extern declarations
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+
+# Example 1: Basic block encryption/decryption
+F example_basic_block() -> i64 {
+    puts("Example 1: Basic AES-256 Block Encryption")
+    putchar(10)
+
+    # Create a 32-byte key
+    key := malloc(32)
+    I key == 0 {
+        puts("Error: Failed to allocate key")
+        putchar(10)
+        R -1
+    }
+
+    # Initialize key with pattern
+    i := mut 0
+    L i < 32 {
+        store_byte(key + i, i & 255)
+        i = i + 1
+    }
+
+    # Create a 16-byte plaintext block
+    plaintext := malloc(16)
+    I plaintext == 0 {
+        puts("Error: Failed to allocate plaintext")
+        putchar(10)
+        free(key)
+        R -1
+    }
+
+    # Initialize plaintext with "Hello World!!!!!" (16 chars)
+    store_byte(plaintext + 0, 72)   # H
+    store_byte(plaintext + 1, 101)  # e
+    store_byte(plaintext + 2, 108)  # l
+    store_byte(plaintext + 3, 108)  # l
+    store_byte(plaintext + 4, 111)  # o
+    store_byte(plaintext + 5, 32)   # space
+    store_byte(plaintext + 6, 87)   # W
+    store_byte(plaintext + 7, 111)  # o
+    store_byte(plaintext + 8, 114)  # r
+    store_byte(plaintext + 9, 108)  # l
+    store_byte(plaintext + 10, 100) # d
+    store_byte(plaintext + 11, 33)  # !
+    store_byte(plaintext + 12, 33)  # !
+    store_byte(plaintext + 13, 33)  # !
+    store_byte(plaintext + 14, 33)  # !
+    store_byte(plaintext + 15, 33)  # !
+
+    # Create AES cipher
+    aes := Aes256.new(key)
+
+    # Make a copy for decryption test
+    ciphertext := malloc(16)
+    memcpy(ciphertext, plaintext, 16)
+
+    # Encrypt
+    puts("Encrypting...")
+    putchar(10)
+    aes.encrypt_block(ciphertext)
+
+    # Decrypt back
+    puts("Decrypting...")
+    putchar(10)
+    aes.decrypt_block(ciphertext)
+
+    # Verify roundtrip
+    match := mut 1
+    i = 0
+    L i < 16 {
+        I load_byte(plaintext + i) != load_byte(ciphertext + i) {
+            match = 0
+        }
+        i = i + 1
+    }
+
+    I match == 1 {
+        puts("Success: Encryption/Decryption roundtrip OK")
+        putchar(10)
+    } E {
+        puts("Error: Roundtrip failed")
+        putchar(10)
+    }
+
+    # Cleanup
+    aes.cleanup()
+    free(key)
+    free(plaintext)
+    free(ciphertext)
+
+    putchar(10)
+    R 0
+}
+
+# Example 2: CBC mode with IV
+F example_cbc_mode() -> i64 {
+    puts("Example 2: CBC Mode Encryption")
+    putchar(10)
+
+    # Create key
+    key := malloc(32)
+    I key == 0 {
+        puts("Error: Failed to allocate key")
+        putchar(10)
+        R -1
+    }
+    i := mut 0
+    L i < 32 {
+        store_byte(key + i, (i * 7) & 255)
+        i = i + 1
+    }
+
+    # Create IV
+    iv := malloc(16)
+    I iv == 0 {
+        puts("Error: Failed to allocate IV")
+        putchar(10)
+        free(key)
+        R -1
+    }
+    i = 0
+    L i < 16 {
+        store_byte(iv + i, (i * 11) & 255)
+        i = i + 1
+    }
+
+    # Create plaintext (30 bytes - will be padded to 32)
+    plaintext := malloc(30)
+    I plaintext == 0 {
+        puts("Error: Failed to allocate plaintext")
+        putchar(10)
+        free(key)
+        free(iv)
+        R -1
+    }
+    i = 0
+    L i < 30 {
+        store_byte(plaintext + i, (65 + i) & 255)  # A, B, C, ...
+        i = i + 1
+    }
+
+    # Create AES cipher
+    aes := Aes256.new(key)
+
+    # Encrypt with CBC
+    puts("Encrypting with CBC mode...")
+    putchar(10)
+    enc_result := aes_cbc_encrypt(&aes, plaintext, 30, iv)
+
+    I enc_result.status != 0 {
+        puts("Error: CBC encryption failed")
+        putchar(10)
+        aes.cleanup()
+        free(key)
+        free(iv)
+        free(plaintext)
+        R -1
+    }
+
+    # Decrypt with CBC
+    puts("Decrypting with CBC mode...")
+    putchar(10)
+    dec_result := aes_cbc_decrypt(&aes, enc_result.data, enc_result.len, iv)
+
+    I dec_result.status != 0 {
+        puts("Error: CBC decryption failed")
+        putchar(10)
+        free(enc_result.data)
+        aes.cleanup()
+        free(key)
+        free(iv)
+        free(plaintext)
+        R -1
+    }
+
+    # Verify roundtrip
+    I dec_result.len == 30 {
+        match := mut 1
+        i = 0
+        L i < 30 {
+            I load_byte(plaintext + i) != load_byte(dec_result.data + i) {
+                match = 0
+            }
+            i = i + 1
+        }
+
+        I match == 1 {
+            puts("Success: CBC roundtrip OK")
+            putchar(10)
+        } E {
+            puts("Error: CBC roundtrip failed")
+            putchar(10)
+        }
+    } E {
+        puts("Error: Decrypted length mismatch")
+        putchar(10)
+    }
+
+    # Cleanup
+    free(enc_result.data)
+    free(dec_result.data)
+    aes.cleanup()
+    free(key)
+    free(iv)
+    free(plaintext)
+
+    putchar(10)
+    R 0
+}
+
+# Example 3: CTR mode (stream cipher)
+F example_ctr_mode() -> i64 {
+    puts("Example 3: CTR Mode Encryption (Stream Cipher)")
+    putchar(10)
+
+    # Create key
+    key := malloc(32)
+    I key == 0 {
+        puts("Error: Failed to allocate key")
+        putchar(10)
+        R -1
+    }
+    i := mut 0
+    L i < 32 {
+        store_byte(key + i, (i * 13) & 255)
+        i = i + 1
+    }
+
+    # Create nonce (8 bytes)
+    nonce := malloc(8)
+    I nonce == 0 {
+        puts("Error: Failed to allocate nonce")
+        putchar(10)
+        free(key)
+        R -1
+    }
+    i = 0
+    L i < 8 {
+        store_byte(nonce + i, (i * 17) & 255)
+        i = i + 1
+    }
+
+    # Create plaintext (25 bytes - no padding needed in CTR)
+    plaintext := malloc(25)
+    I plaintext == 0 {
+        puts("Error: Failed to allocate plaintext")
+        putchar(10)
+        free(key)
+        free(nonce)
+        R -1
+    }
+    i = 0
+    L i < 25 {
+        store_byte(plaintext + i, (97 + i) & 255)  # a, b, c, ...
+        i = i + 1
+    }
+
+    # Create AES cipher
+    aes := Aes256.new(key)
+
+    # Encrypt with CTR
+    puts("Encrypting with CTR mode...")
+    putchar(10)
+    enc_result := aes_ctr_encrypt(&aes, plaintext, 25, nonce)
+
+    I enc_result.status != 0 {
+        puts("Error: CTR encryption failed")
+        putchar(10)
+        aes.cleanup()
+        free(key)
+        free(nonce)
+        free(plaintext)
+        R -1
+    }
+
+    # Decrypt with CTR (same operation as encrypt)
+    puts("Decrypting with CTR mode...")
+    putchar(10)
+    dec_result := aes_ctr_decrypt(&aes, enc_result.data, enc_result.len, nonce)
+
+    I dec_result.status != 0 {
+        puts("Error: CTR decryption failed")
+        putchar(10)
+        free(enc_result.data)
+        aes.cleanup()
+        free(key)
+        free(nonce)
+        free(plaintext)
+        R -1
+    }
+
+    # Verify roundtrip
+    I dec_result.len == 25 {
+        match := mut 1
+        i = 0
+        L i < 25 {
+            I load_byte(plaintext + i) != load_byte(dec_result.data + i) {
+                match = 0
+            }
+            i = i + 1
+        }
+
+        I match == 1 {
+            puts("Success: CTR roundtrip OK")
+            putchar(10)
+        } E {
+            puts("Error: CTR roundtrip failed")
+            putchar(10)
+        }
+    } E {
+        puts("Error: Decrypted length mismatch")
+        putchar(10)
+    }
+
+    # Cleanup
+    free(enc_result.data)
+    free(dec_result.data)
+    aes.cleanup()
+    free(key)
+    free(nonce)
+    free(plaintext)
+
+    putchar(10)
+    R 0
+}
+
+# Main function
+F main() -> i64 {
+    puts("========================================")
+    putchar(10)
+    puts("vais-aes Usage Examples")
+    putchar(10)
+    puts("========================================")
+    putchar(10)
+    putchar(10)
+
+    example_basic_block()
+    example_cbc_mode()
+    example_ctr_mode()
+
+    puts("========================================")
+    putchar(10)
+    puts("Examples completed")
+    putchar(10)
+    puts("========================================")
+    putchar(10)
+
+    R 0
+}

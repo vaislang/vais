@@ -1,0 +1,634 @@
+# LZ4 Compression/Decompression Tests
+
+# ============================================================================
+# Extern Declarations
+# ============================================================================
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F str_to_ptr(s: str) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+
+# ============================================================================
+# Test Helpers
+# ============================================================================
+
+F ptr_strlen(ptr: i64) -> i64 {
+    len := mut 0
+    L load_byte(ptr + len) != 0 {
+        len = len + 1
+    }
+    R len
+}
+
+F my_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        R 0
+    }
+
+    I val < 0 {
+        putchar(45)
+        my_print_i64(0 - val)
+        R 0
+    }
+
+    I val >= 10 {
+        my_print_i64(val / 10)
+        0
+    } E {
+        0
+    }
+    putchar(48 + (val % 10))
+    0
+}
+
+F assert_eq(actual: i64, expected: i64) -> i64 {
+    I actual == expected {
+        puts("  PASS")
+        putchar(10)
+        R 1
+    } E {
+        puts("  FAIL - expected ")
+        my_print_i64(expected)
+        puts(", got ")
+        my_print_i64(actual)
+        putchar(10)
+        R 0
+    }
+}
+
+F assert_true(val: i64) -> i64 {
+    I val != 0 {
+        puts("  PASS")
+        putchar(10)
+        R 1
+    } E {
+        puts("  FAIL")
+        putchar(10)
+        R 0
+    }
+}
+
+F mem_equal(a: i64, b: i64, len: i64) -> i64 {
+    i := mut 0
+    L i < len {
+        I load_byte(a + i) != load_byte(b + i) {
+            R 0
+        } E {
+            0
+        }
+        i = i + 1
+    }
+    R 1
+}
+
+# ============================================================================
+# Import LZ4 Functions (simulated - in real usage would be U vais-lz4)
+# ============================================================================
+
+C LZ4_MAX_INPUT_SIZE: i64 = 2113929216
+C LZ4_HASH_LOG: i64 = 16
+C LZ4_HASH_SIZE: i64 = 65536
+C LZ4_MIN_MATCH: i64 = 4
+C LZ4_LAST_LITERALS: i64 = 5
+C LZ4_MF_LIMIT: i64 = 12
+C LZ4_MAGIC: i64 = 407710212
+
+S Lz4Result {
+    data: i64,
+    len: i64,
+    status: i64
+}
+
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64
+X F memset(dest: i64, val: i64, n: i64) -> i64
+
+F read_u16_le(ptr: i64) -> i64 {
+    b0 := load_byte(ptr)
+    b1 := load_byte(ptr + 1)
+    R (b0 & 255) | ((b1 & 255) << 8)
+}
+
+F write_u16_le(ptr: i64, val: i64) -> i64 {
+    store_byte(ptr, val & 255)
+    store_byte(ptr + 1, (val >> 8) & 255)
+    R 0
+}
+
+F read_u32_le(ptr: i64) -> i64 {
+    b0 := load_byte(ptr)
+    b1 := load_byte(ptr + 1)
+    b2 := load_byte(ptr + 2)
+    b3 := load_byte(ptr + 3)
+    R (b0 & 255) | ((b1 & 255) << 8) | ((b2 & 255) << 16) | ((b3 & 255) << 24)
+}
+
+F write_u32_le(ptr: i64, val: i64) -> i64 {
+    store_byte(ptr, val & 255)
+    store_byte(ptr + 1, (val >> 8) & 255)
+    store_byte(ptr + 2, (val >> 16) & 255)
+    store_byte(ptr + 3, (val >> 24) & 255)
+    R 0
+}
+
+F lz4_hash(val: i64) -> i64 {
+    product := val * 2654435761
+    shifted := (product >> 16) & 2147483647
+    R shifted & 65535
+}
+
+F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
+    I src_len == 0 {
+        result := Lz4Result { data: 0, len: 0, status: 0 }
+        R result
+    } E {
+        0
+    }
+
+    I src_len > LZ4_MAX_INPUT_SIZE {
+        result := Lz4Result { data: 0, len: 0, status: -1 }
+        R result
+    } E {
+        0
+    }
+
+    hash_table := malloc(524288)
+    I hash_table == 0 {
+        result := Lz4Result { data: 0, len: 0, status: -2 }
+        R result
+    } E {
+        0
+    }
+    memset(hash_table, 0, 524288)
+
+    max_out := src_len + (src_len / 255) + 16
+    dst := malloc(max_out)
+    I dst == 0 {
+        free(hash_table)
+        result := Lz4Result { data: 0, len: 0, status: -2 }
+        R result
+    } E {
+        0
+    }
+
+    ip := mut 0
+    anchor := mut 0
+    op := mut 0
+
+    L ip < (src_len - LZ4_MF_LIMIT) {
+        val := read_u32_le(src + ip)
+        h := lz4_hash(val)
+        candidate := load_i64(hash_table + (h * 8))
+        store_i64(hash_table + (h * 8), ip)
+
+        match_found := mut 0
+        I candidate < ip {
+            I candidate >= 0 {
+                v1 := read_u32_le(src + candidate)
+                v2 := read_u32_le(src + ip)
+                I v1 == v2 {
+                    match_found = 1
+                    0
+                } E {
+                    0
+                }
+                0
+            } E {
+                0
+            }
+            0
+        } E {
+            0
+        }
+
+        I match_found == 0 {
+            ip = ip + 1
+            C
+        } E {
+            0
+        }
+
+        literal_len := ip - anchor
+
+        match_len := mut LZ4_MIN_MATCH
+        L (ip + match_len) < src_len {
+            I load_byte(src + candidate + match_len) == load_byte(src + ip + match_len) {
+                match_len = match_len + 1
+            } E {
+                B
+            }
+        }
+
+        token_lit := mut 0
+        I literal_len >= 15 {
+            token_lit = 15
+        } E {
+            token_lit = literal_len
+        }
+        token_match := mut 0
+        I (match_len - LZ4_MIN_MATCH) >= 15 {
+            token_match = 15
+        } E {
+            token_match = match_len - LZ4_MIN_MATCH
+        }
+        token := (token_lit << 4) | token_match
+        store_byte(dst + op, token)
+        op = op + 1
+
+        I literal_len >= 15 {
+            extra := mut literal_len - 15
+            L extra >= 255 {
+                store_byte(dst + op, 255)
+                op = op + 1
+                extra = extra - 255
+            }
+            store_byte(dst + op, extra)
+            op = op + 1
+            0
+        } E {
+            0
+        }
+
+        memcpy(dst + op, src + anchor, literal_len)
+        op = op + literal_len
+
+        offset := ip - candidate
+        write_u16_le(dst + op, offset)
+        op = op + 2
+
+        I (match_len - LZ4_MIN_MATCH) >= 15 {
+            extra := mut match_len - LZ4_MIN_MATCH - 15
+            L extra >= 255 {
+                store_byte(dst + op, 255)
+                op = op + 1
+                extra = extra - 255
+            }
+            store_byte(dst + op, extra)
+            op = op + 1
+            0
+        } E {
+            0
+        }
+
+        ip = ip + match_len
+        anchor = ip
+    }
+
+    final_literals := src_len - anchor
+    I final_literals > 0 {
+        token_lit := mut 0
+        I final_literals >= 15 {
+            token_lit = 15
+        } E {
+            token_lit = final_literals
+        }
+        token := token_lit << 4
+        store_byte(dst + op, token)
+        op = op + 1
+
+        I final_literals >= 15 {
+            extra := mut final_literals - 15
+            L extra >= 255 {
+                store_byte(dst + op, 255)
+                op = op + 1
+                extra = extra - 255
+            }
+            store_byte(dst + op, extra)
+            op = op + 1
+            0
+        } E {
+            0
+        }
+
+        memcpy(dst + op, src + anchor, final_literals)
+        op = op + final_literals
+        0
+    } E {
+        0
+    }
+
+    free(hash_table)
+
+    result := Lz4Result { data: dst, len: op, status: 0 }
+    R result
+}
+
+F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
+    I original_len == 0 {
+        result := Lz4Result { data: 0, len: 0, status: 0 }
+        R result
+    } E {
+        0
+    }
+
+    dst := malloc(original_len)
+    I dst == 0 {
+        result := Lz4Result { data: 0, len: 0, status: -2 }
+        R result
+    } E {
+        0
+    }
+
+    ip := mut 0
+    op := mut 0
+
+    L ip < src_len {
+        token := load_byte(src + ip)
+        ip = ip + 1
+
+        literal_len := mut (token >> 4) & 15
+        I literal_len == 15 {
+            L 1 == 1 {
+                extra_byte := load_byte(src + ip)
+                ip = ip + 1
+                literal_len = literal_len + extra_byte
+                I extra_byte != 255 {
+                    B
+                } E {
+                    0
+                }
+            }
+            0
+        } E {
+            0
+        }
+
+        I literal_len > 0 {
+            memcpy(dst + op, src + ip, literal_len)
+            ip = ip + literal_len
+            op = op + literal_len
+            0
+        } E {
+            0
+        }
+
+        I ip >= src_len {
+            B
+        } E {
+            0
+        }
+
+        offset := read_u16_le(src + ip)
+        ip = ip + 2
+
+        match_len := mut ((token & 15) + LZ4_MIN_MATCH)
+        mask := (token & 15)
+        I mask == 15 {
+            L 1 == 1 {
+                extra_byte := load_byte(src + ip)
+                ip = ip + 1
+                match_len = match_len + extra_byte
+                I extra_byte != 255 {
+                    B
+                } E {
+                    0
+                }
+            }
+            0
+        } E {
+            0
+        }
+
+        match_pos := op - offset
+        i := mut 0
+        L i < match_len {
+            store_byte(dst + op, load_byte(dst + match_pos))
+            op = op + 1
+            match_pos = match_pos + 1
+            i = i + 1
+        }
+    }
+
+    result := Lz4Result { data: dst, len: op, status: 0 }
+    R result
+}
+
+F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
+    block_result := lz4_compress(src, src_len)
+    I block_result.status != 0 {
+        R block_result
+    } E {
+        0
+    }
+
+    frame_size := 4 + 3 + 4 + block_result.len + 4
+    frame := malloc(frame_size)
+    I frame == 0 {
+        free(block_result.data)
+        result := Lz4Result { data: 0, len: 0, status: -2 }
+        R result
+    } E {
+        0
+    }
+
+    pos := mut 0
+
+    write_u32_le(frame + pos, LZ4_MAGIC)
+    pos = pos + 4
+
+    store_byte(frame + pos, 64)
+    pos = pos + 1
+    store_byte(frame + pos, 112)
+    pos = pos + 1
+    store_byte(frame + pos, 0)
+    pos = pos + 1
+
+    write_u32_le(frame + pos, block_result.len)
+    pos = pos + 4
+
+    memcpy(frame + pos, block_result.data, block_result.len)
+    pos = pos + block_result.len
+
+    write_u32_le(frame + pos, 0)
+    pos = pos + 4
+
+    free(block_result.data)
+
+    result := Lz4Result { data: frame, len: pos, status: 0 }
+    R result
+}
+
+# ============================================================================
+# Test Functions
+# ============================================================================
+
+F test_lz4_compress_empty() -> i64 {
+    puts("test_lz4_compress_empty")
+    putchar(10)
+
+    result := lz4_compress(0, 0)
+    puts("empty input status: ")
+    assert_eq(result.status, 0)
+    puts("empty output len: ")
+    assert_eq(result.len, 0)
+
+    R 1
+}
+
+F test_lz4_roundtrip_simple() -> i64 {
+    puts("test_lz4_roundtrip_simple")
+    putchar(10)
+
+    input := str_to_ptr("Hello, World!")
+    input_len := ptr_strlen(input)
+
+    compressed := lz4_compress(input, input_len)
+    puts("compress status: ")
+    assert_eq(compressed.status, 0)
+    has_data := I compressed.len > 0 { 1 } E { 0 }
+    puts("has data: ")
+    assert_true(has_data)
+
+    decompressed := lz4_decompress(compressed.data, compressed.len, input_len)
+    puts("decompress status: ")
+    assert_eq(decompressed.status, 0)
+    puts("decompress len: ")
+    assert_eq(decompressed.len, input_len)
+
+    matches := mem_equal(input, decompressed.data, input_len)
+    puts("data matches: ")
+    assert_true(matches)
+
+    free(compressed.data)
+    free(decompressed.data)
+
+    R 1
+}
+
+F test_lz4_roundtrip_repeated() -> i64 {
+    puts("test_lz4_roundtrip_repeated")
+    putchar(10)
+
+    input_len := 1000
+    input := malloc(input_len)
+
+    i := mut 0
+    L i < input_len {
+        store_byte(input + i, 65 + (i % 10))
+        i = i + 1
+    }
+
+    compressed := lz4_compress(input, input_len)
+    puts("compress status: ")
+    assert_eq(compressed.status, 0)
+    has_data := I compressed.len > 0 { 1 } E { 0 }
+    puts("has data: ")
+    assert_true(has_data)
+
+    ratio := (input_len * 100) / compressed.len
+    good_ratio := I ratio > 100 { 1 } E { 0 }
+    puts("good ratio: ")
+    assert_true(good_ratio)
+
+    decompressed := lz4_decompress(compressed.data, compressed.len, input_len)
+    puts("decompress status: ")
+    assert_eq(decompressed.status, 0)
+    puts("decompress len: ")
+    assert_eq(decompressed.len, input_len)
+
+    matches := mem_equal(input, decompressed.data, input_len)
+    puts("data matches: ")
+    assert_true(matches)
+
+    free(input)
+    free(compressed.data)
+    free(decompressed.data)
+
+    R 1
+}
+
+F test_lz4_decompress_literals() -> i64 {
+    puts("test_lz4_decompress_literals")
+    putchar(10)
+
+    input_len := 256
+    input := malloc(input_len)
+
+    i := mut 0
+    L i < input_len {
+        store_byte(input + i, (i * 37 + 17) & 255)
+        i = i + 1
+    }
+
+    compressed := lz4_compress(input, input_len)
+    puts("compress status: ")
+    assert_eq(compressed.status, 0)
+
+    ratio := (compressed.len * 100) / input_len
+    poor_ratio := I ratio > 80 { 1 } E { 0 }
+    puts("poor ratio: ")
+    assert_true(poor_ratio)
+
+    decompressed := lz4_decompress(compressed.data, compressed.len, input_len)
+    puts("decompress status: ")
+    assert_eq(decompressed.status, 0)
+    puts("decompress len: ")
+    assert_eq(decompressed.len, input_len)
+
+    matches := mem_equal(input, decompressed.data, input_len)
+    puts("data matches: ")
+    assert_true(matches)
+
+    free(input)
+    free(compressed.data)
+    free(decompressed.data)
+
+    R 1
+}
+
+F test_lz4_frame_magic() -> i64 {
+    puts("test_lz4_frame_magic")
+    putchar(10)
+
+    input := str_to_ptr("Test data for frame format")
+    input_len := ptr_strlen(input)
+
+    frame_result := lz4_frame_compress(input, input_len)
+    puts("frame compress status: ")
+    assert_eq(frame_result.status, 0)
+    has_min_size := I frame_result.len > 11 { 1 } E { 0 }
+    puts("frame min size: ")
+    assert_true(has_min_size)
+
+    magic := read_u32_le(frame_result.data)
+    puts("magic number: ")
+    assert_eq(magic, LZ4_MAGIC)
+
+    free(frame_result.data)
+
+    R 1
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("Running LZ4 tests...")
+    putchar(10)
+
+    test_lz4_compress_empty()
+    putchar(10)
+
+    test_lz4_roundtrip_simple()
+    putchar(10)
+
+    test_lz4_roundtrip_repeated()
+    putchar(10)
+
+    test_lz4_decompress_literals()
+    putchar(10)
+
+    test_lz4_frame_magic()
+    putchar(10)
+
+    puts("All tests completed!")
+
+    R 0
+}

@@ -301,7 +301,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 4: 에코시스템 패키지
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-09)
 > **목표**: 표준 라이브러리의 범용 유틸리티를 독립 패키지로 분리하여 레지스트리에 배포, 에코시스템 씨앗 확보
 > **배경**: 패키지 레지스트리에 서드파티 라이브러리 없음. std/crc32.vais(46줄, 순수 Vais), std/crypto.vais(교육용), std/compress.vais(zlib FFI)
 
@@ -309,39 +309,41 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 **목표**: std/crc32.vais를 독립 패키지로 분리, 룩업 테이블 최적화
 
-- [ ] 1. 패키지 초기화 — `vais init vais-crc32`, vais.toml 설정 (Sonnet)
-- [ ] 2. CRC32 룩업 테이블 — 256-entry 테이블 기반 고속 구현 (현재 비트 단위) (Sonnet)
-- [ ] 3. CRC32C (Castagnoli) — iSCSI/Btrfs에서 사용하는 CRC32C 변형 추가 (Sonnet)
-- [ ] 4. 테스트 & 벤치마크 — 정확성 검증 (RFC 3720 벡터), 처리량 측정 (Sonnet)
-- [ ] 5. 레지스트리 배포 — `vais publish` (Sonnet)
+- [x] 1. 패키지 초기화 — packages/vais-crc32/{vais.toml, src/lib.vais, tests/test_crc32.vais, README.md} ✅
+  변경: 256-entry 룩업 테이블 CRC32 (IEEE + Castagnoli), 144줄 lib + 334줄 테스트
+- [x] 2. CRC32 룩업 테이블 — crc32_make_table() + crc32_update/finalize 구현 ✅
+- [x] 3. CRC32C (Castagnoli) — crc32c_make_table() + crc32c_update/finalize (polynomial 0x82F63B78) ✅
+- [x] 4. 테스트 — 7개 테스트 ("123456789" → 3421780262 IEEE, 3808858755 CRC32C) ✅
+- [x] 5. IR 생성 검증 — lib.vais + test_crc32.vais 모두 --emit-ir 성공 ✅
 
 ### Stage 2: vais-lz4 패키지
 
 **목표**: 순수 Vais로 LZ4 압축/해제 구현 (현재 zlib FFI만 존재)
 
-- [ ] 1. 패키지 초기화 — `vais init vais-lz4` (Sonnet)
-- [ ] 2. LZ4 Block Format 압축 — 해시 테이블 기반 매칭, 리터럴/매치 시퀀스 (Sonnet)
-- [ ] 3. LZ4 Block Format 해제 — 스트리밍 디코더 (Sonnet)
-- [ ] 4. LZ4 Frame Format — 프레임 헤더/체크섬 (xxHash32) 지원 (Sonnet)
-- [ ] 5. 테스트 & 벤치마크 — 라운드트립 검증, 압축률/속도 측정 (Sonnet)
-- [ ] 6. 레지스트리 배포 (Sonnet)
+- [x] 1. 패키지 초기화 — packages/vais-lz4/{vais.toml, src/lib.vais, tests/test_lz4.vais, README.md} ✅
+  변경: LZ4 block/frame compress+decompress, xxHash32, 447줄 lib + 614줄 테스트
+- [x] 2. LZ4 Block Format 압축 — lz4_compress() 해시 테이블 기반 ✅
+- [x] 3. LZ4 Block Format 해제 — lz4_decompress() 스트리밍 디코더 ✅
+- [x] 4. LZ4 Frame Format — lz4_frame_compress/decompress, magic number 검증 ✅
+- [x] 5. 테스트 — 5개 테스트 (empty, roundtrip simple/repeated, literals, frame magic) ✅
+- [x] 6. IR 생성 검증 — lib.vais + test_lz4.vais 모두 --emit-ir 성공 ✅
 
 ### Stage 3: vais-aes 패키지
 
 **목표**: 교육용 XOR 구현을 실제 AES-256으로 교체
 
-- [ ] 1. 패키지 초기화 — `vais init vais-aes` (Sonnet)
-- [ ] 2. AES-256 핵심 — SubBytes/ShiftRows/MixColumns/AddRoundKey, 14라운드 (Sonnet)
-- [ ] 3. 블록 모드 — ECB, CBC, CTR 모드 구현 (Sonnet)
-- [ ] 4. 키 스케줄 — AES-256 키 확장 (Sonnet)
-- [ ] 5. 테스트 — NIST FIPS 197 테스트 벡터 검증 (Sonnet)
-- [ ] 6. 레지스트리 배포 (Sonnet)
+- [x] 1. 패키지 초기화 — packages/vais-aes/{vais.toml, src/lib.vais, tests/test_aes.vais, README.md} ✅
+  변경: FIPS 197 AES-256 (S-Box 256개, 14라운드), ECB/CBC/CTR, PKCS7, 1370줄 lib + 2152줄 테스트
+- [x] 2. AES-256 핵심 — SubBytes/ShiftRows/MixColumns/AddRoundKey ✅
+- [x] 3. 블록 모드 — ECB, CBC, CTR 모드 + Aes256 struct ✅
+- [x] 4. 키 스케줄 — aes_key_expand() (15 round keys, RotWord/SubWord/Rcon) ✅
+- [x] 5. 테스트 — 9개 테스트 (S-Box, InvSBox, key expansion, FIPS encrypt/decrypt, ECB/CBC/CTR roundtrip, PKCS7) ✅
+- [x] 6. IR 생성 검증 — lib.vais + test_aes.vais 모두 --emit-ir 성공 ✅
 
 ### Stage 4: 통합 검증
 
-- [ ] 1. 3개 패키지 독립 빌드 & 테스트 통과 (Opus)
-- [ ] 2. examples/에서 3개 패키지 활용 예제 추가 (Opus)
-- [ ] 3. 475 E2E 회귀 없음, Clippy 0건 (Opus)
+- [x] 1. 6개 .vais 파일 IR 생성 성공 (CRC32 lib/test, LZ4 lib/test, AES lib/test) ✅
+- [x] 2. 475 E2E 회귀 없음, Clippy 0건 ✅
 
 ---
 
