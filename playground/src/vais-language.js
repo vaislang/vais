@@ -10,6 +10,7 @@ export function registerVaisLanguage(monaco) {
 
     keywords: [
       'F', 'S', 'E', 'I', 'L', 'M', 'T', 'U', 'R', 'C', 'O', 'A', 'Y',
+      'B', 'W', 'X', 'P', 'D', 'N', 'G',
       'break', 'continue', 'return', 'true', 'false',
       'async', 'await', 'pub', 'mut', 'const', 'static',
       'impl', 'trait', 'where', 'self', 'Self', 'super',
@@ -29,7 +30,7 @@ export function registerVaisLanguage(monaco) {
       '+', '-', '*', '/', '&', '|', '^', '%',
       '<<', '>>', '>>>', '+=', '-=', '*=', '/=', '&=',
       '|=', '^=', '%=', '<<=', '>>=', '>>>=', '=>',
-      '@', ':=', '|>'
+      '@', ':=', '|>', '..'
     ],
 
     symbols: /[=><!~?:&|+\-*\/\^%@]+/,
@@ -175,6 +176,10 @@ export function registerVaisLanguage(monaco) {
         { label: 'I', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'I ${1:condition} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'L', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'L ${1:i}:${2:0..10} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'M', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'M ${1:expr} {\n    ${2:pattern} => ${3:result}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'B', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'B', documentation: 'break' },
+        { label: 'W', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'W ${1:TraitName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'trait definition' },
+        { label: 'X', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'X ${1:StructName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
+        { label: 'D', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'D ${1:expression}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'defer statement' },
         { label: 'break', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'break' },
         { label: 'continue', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'continue' },
         { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return ${1:value}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },

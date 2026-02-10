@@ -300,17 +300,17 @@ F main() -> i64 {
 
   'string-interpolation': {
     name: 'String Interpolation',
-    description: 'Embed expressions in strings with {expr}',
+    description: 'Embed expressions in strings with ~{expr}',
     code: `# String interpolation example
 F main() -> i64 {
     name := "Vais"
     version := 1
 
     # Variable interpolation
-    puts("Hello, {name}!")
+    puts("Hello, ~{name}!")
 
     # Expression interpolation
-    puts("1 + 2 = {1 + 2}")
+    puts("1 + 2 = ~{1 + 2}")
 
     # Escaped braces
     puts("Use {{braces}} for literal braces")
@@ -339,15 +339,13 @@ F main() -> i64 {
   },
 
   'tilde-mut': {
-    name: 'Tilde Mut (~)',
-    description: 'Shorthand ~ for mut keyword',
-    code: `# ~ is shorthand for mut
+    name: 'Mutable Variables',
+    description: 'Declare mutable variables with mut',
+    code: `# Mutable variable example
 F main() -> i64 {
-    # Traditional mutable
+    # Mutable variable declaration
     counter := mut 0
-
-    # ~ shorthand (equivalent)
-    ~ total := 0
+    total := mut 0
 
     L i: 0..10 {
         counter = counter + 1
@@ -402,6 +400,120 @@ F main() -> i64 {
     description: 'Simplest valid program',
     code: `# Minimal Vais program
 F main() -> i64 = 0`
+  },
+
+  'slice-types': {
+    name: 'Slice Types',
+    description: 'Array slices with fat pointers',
+    code: `# Slice types: &[T] and &mut [T]
+F sum(data: &[i64]) -> i64 {
+    total := mut 0
+    i := mut 0
+    L i < data.len() {
+        total = total + data[i]
+        i = i + 1
+    }
+    R total
+}
+
+F main() -> i64 {
+    arr := [10, 20, 30, 40, 50]
+    slice := arr[1..4]     # &[i64] — [20, 30, 40]
+
+    result := sum(slice)   # 90
+    len := slice.len()     # 3
+
+    result
+}`
+  },
+
+  'traits': {
+    name: 'Traits',
+    description: 'Define and implement traits',
+    code: `# Trait definition with W keyword
+W Shape {
+    F area(&self) -> f64
+    F name(&self) -> str
+}
+
+S Circle {
+    radius: f64,
+}
+
+S Rectangle {
+    width: f64,
+    height: f64,
+}
+
+# Trait implementation with X keyword
+X Circle: Shape {
+    F area(&self) -> f64 {
+        3.14159 * self.radius * self.radius
+    }
+    F name(&self) -> str { "Circle" }
+}
+
+X Rectangle: Shape {
+    F area(&self) -> f64 {
+        self.width * self.height
+    }
+    F name(&self) -> str { "Rectangle" }
+}
+
+F main() -> i64 {
+    c := Circle { radius: 5.0 }
+    r := Rectangle { width: 4.0, height: 6.0 }
+    0
+}`
+  },
+
+  'async-await': {
+    name: 'Async/Await',
+    description: 'Asynchronous programming',
+    code: `# Async functions with A keyword
+A F fetch_data(id: i64) -> i64 {
+    # Simulate async work
+    id * 10
+}
+
+A F process() -> i64 {
+    # Y keyword for await
+    a := Y fetch_data(1)    # 10
+    b := Y fetch_data(2)    # 20
+    a + b                   # 30
+}
+
+F main() -> i64 {
+    result := Y process()
+    result
+}`
+  },
+
+  'ownership': {
+    name: 'Ownership',
+    description: 'Move semantics and borrowing',
+    code: `# Ownership and borrowing (--strict-borrow)
+F read_only(data: &Vec<i64>) -> i64 {
+    data[0]
+}
+
+F modify(data: &mut Vec<i64>) {
+    data.push(42)
+}
+
+F main() -> i64 {
+    items := mut Vec::new()
+    items.push(1)
+    items.push(2)
+
+    # Immutable borrow
+    first := read_only(&items)
+
+    # Mutable borrow
+    modify(&mut items)
+
+    items.len()
+}`
   },
 
   'wasm-interop': {
