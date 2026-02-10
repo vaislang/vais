@@ -278,6 +278,11 @@ impl LanguageServer for VaisBackend {
                     trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
                     ..Default::default()
                 }),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
+                    retrigger_characters: Some(vec![",".to_string()]),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -305,6 +310,7 @@ impl LanguageServer for VaisBackend {
                         },
                     ),
                 ),
+                document_highlight_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Right(RenameOptions {
                     prepare_provider: Some(true),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
@@ -320,6 +326,7 @@ impl LanguageServer for VaisBackend {
                 }),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                document_range_formatting_provider: Some(OneOf::Left(true)),
                 code_lens_provider: Some(CodeLensOptions {
                     resolve_provider: Some(false),
                 }),
@@ -385,6 +392,10 @@ impl LanguageServer for VaisBackend {
         crate::handlers::completion::handle_completion(self, params).await
     }
 
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        crate::handlers::signature::handle_signature_help(self, params).await
+    }
+
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
@@ -419,6 +430,13 @@ impl LanguageServer for VaisBackend {
         }
 
         Ok(None)
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        crate::handlers::highlight::handle_document_highlight(self, params).await
     }
 
     async fn prepare_rename(
@@ -887,6 +905,13 @@ impl LanguageServer for VaisBackend {
             }
         }
         Ok(None)
+    }
+
+    async fn range_formatting(
+        &self,
+        params: DocumentRangeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        crate::handlers::formatting::handle_range_formatting(self, params).await
     }
 
     async fn prepare_type_hierarchy(

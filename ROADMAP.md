@@ -133,6 +133,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 6** | %%t Codegen 수정 & Slice 타입 | SSA→Alloca 업그레이드 (21/21 selfhost clang 100%), Slice/SliceMut fat pointer ({i8*,i64}) 타입 전체 파이프라인 (AST/Parser/TC/Codegen Text+Inkwell), E2E 10개 (488→498) — **498 E2E** |
 | **Phase 7** | 홈페이지/Playground/docs-site 동기화 | VaisDB I→X 전환 (92파일 209건), use→U (109파일 707건), Playground 문법+예제 수정, docs-site 3개 문서 신규 |
 | **Phase 8** | 장기 관찰 항목 처리 | vais-base64/sha256/uuid/regex 4개 패키지 (1,942줄 lib), TCP 10K 벤치마크 (307줄), Endurance Test 프레임워크 (502줄+329줄), 장기 관찰 3건 해결 (⏳→✅) |
+| **Phase 9** | 개발자 경험 강화 | LSP Signature Help/Document Highlight/Range Formatting, DAP Variables/Breakpoint 조건/Step 정밀 제어, VSCode Code Lens 5개 + Snippet 60→90개 — DAP 23 테스트, **498 E2E** |
 
 ---
 
@@ -512,6 +513,191 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: cargo check OK, clippy 0건, E2E 498 통과, 4개 패키지 IR 생성 확인, endurance 5/7 통과
 
 진행률: 7/7 (100%) ✅
+
+---
+
+## Phase 9: 개발자 경험 강화
+
+> **상태**: ✅ 완료 (2026-02-10)
+> **목표**: LSP Signature Help/Document Highlight 구현, DAP 핵심 TODO 해결, VSCode Extension 기능 확충
+> **배경**: LSP에 Signature Help/Document Highlight/Range Formatting 미구현. DAP에 265건 TODO. VSCode Extension에 Code Lens/Refactoring 부족
+
+모드: 자동진행
+
+### Stage 1: LSP Signature Help & Document Highlight
+
+**목표**: 함수 호출 시 파라미터 힌트, 심볼 하이라이트 구현
+
+- [x] 1. LSP Signature Help 구현 — 함수 시그니처/파라미터 정보 제공 (Sonnet) ✅ 2026-02-10
+  변경: handlers/signature.rs (332줄, 23+ 빌트인 함수 + 사용자 정의 함수 시그니처, 활성 파라미터 추적)
+- [x] 2. LSP Document Highlight 구현 — 커서 위치 심볼 하이라이트 (Sonnet) [∥1] ✅ 2026-02-10
+  변경: handlers/highlight.rs (62줄, Definition→WRITE/Reference→READ 하이라이트)
+- [x] 3. LSP Range Formatting 구현 — 선택 영역 포맷팅 (Sonnet) [∥1] ✅ 2026-02-10
+  변경: handlers/formatting.rs (82줄, 전체 포맷→범위 추출 전략), handlers/mod.rs (3개 모듈 등록)
+
+### Stage 2: DAP 핵심 기능 완성
+
+**목표**: 디버거 프로토콜 핵심 TODO 해결 (265건 중 고영향 항목)
+
+- [x] 4. DAP 변수 검사 강화 — Variables/Evaluate 응답 완성 (Sonnet) [blockedBy: 1~3] ✅ 2026-02-10
+  변경: variables.rs (EvaluateContext enum, evaluate_expression/find_variable_by_name/resolve_path/format_for_context, create_scopes_with_globals)
+- [x] 5. DAP Breakpoint 조건/히트카운트 구현 (Sonnet) [∥4] ✅ 2026-02-10
+  변경: breakpoint.rs (HitCounter/HitConditionOp/HitResult, parse_hit_condition/evaluate_hit_condition/record_hit, 10개 테스트)
+- [x] 6. DAP Step In/Out/Over 정밀 제어 (Sonnet) [∥4] ✅ 2026-02-10
+  변경: stack.rs (StepGranularity/StepMode/StepController/ActiveStep, should_stop 로직, 10개 테스트)
+
+### Stage 3: VSCode Extension 확충
+
+**목표**: Code Lens, Snippet 확장, 디버그 설정 개선
+
+- [x] 7. VSCode Code Lens 활성화 — 테스트 실행/참조 카운트 (Sonnet) [blockedBy: 4~6] ✅ 2026-02-10
+  변경: extension.ts (5개 Code Lens 커맨드: runTest/debugTest/showReferences/showImplementations/runBenchmark)
+- [x] 8. VSCode Snippet 확충 — Vais 관용 패턴 20개+ (Sonnet) [∥7] ✅ 2026-02-10
+  변경: vais.json (60→90개 스니펫, 디자인 패턴 8개 + 고급 패턴 4개 추가, Vais 문법 수정)
+
+### Stage 4: 통합 검증
+
+- [x] 9. 통합 검증 — E2E 498+ 회귀 없음, Clippy 0건, LSP/DAP 테스트 통과 (Opus) [blockedBy: 1~8] ✅ 2026-02-10
+  변경: E2E 498 통과, Clippy 0건 (vais-dap+vais-lsp), 전체 workspace 테스트 0 실패, DAP 23개 테스트 통과
+
+진행률: 9/9 (100%) ✅
+
+---
+
+## Phase 10: 테스트 & 안정성 강화
+
+> **상태**: 📋 예정
+> **목표**: Parser 통합 테스트 확충, vais-query 테스트 추가, playground-server E2E 테스트, ignored 테스트 정리
+> **배경**: vais-parser 테스트 3개뿐, vais-query 테스트 0개, playground-server 테스트 0개. ignored 테스트 39건 중 실행 가능한 항목 정리
+
+### Stage 1: Parser 테스트 확충
+
+**목표**: 파서 견고성 검증 — 에러 복구, 엣지 케이스, 대형 파일 파싱
+
+- [ ] 1. Parser 양성 통합 테스트 20개+ — 모든 문법 구성요소 커버 (Sonnet)
+  대상: crates/vais-parser/tests/
+- [ ] 2. Parser 음성 테스트 10개+ — 잘못된 문법 에러 복구 검증 (Sonnet) [∥1]
+  대상: crates/vais-parser/tests/
+
+### Stage 2: 미테스트 Crate 보강
+
+**목표**: vais-query, playground-server 테스트 추가
+
+- [ ] 3. vais-query 통합 테스트 15개+ — 쿼리 무효화/메모이제이션/의존성 추적 (Sonnet) [∥1]
+  대상: crates/vais-query/tests/
+- [ ] 4. playground-server E2E 테스트 10개+ — API 엔드포인트/WASM 실행/보안 (Sonnet) [∥3]
+  대상: crates/vais-playground-server/tests/
+
+### Stage 3: Ignored 테스트 정리 & 안정화
+
+**목표**: 39건 ignored 테스트 중 실행 가능 항목 활성화
+
+- [ ] 5. ignored 테스트 분류 — 실행 가능/환경 의존/장시간 분류 (Sonnet) [blockedBy: 1~4]
+  대상: 전체 tests/
+- [ ] 6. 실행 가능 ignored 테스트 활성화 — 환경 독립적 테스트 ignore 해제 (Sonnet) [blockedBy: 5]
+  대상: 전체 tests/
+
+### Stage 4: 통합 검증
+
+- [ ] 7. 통합 검증 — E2E 498+ 회귀 없음, Clippy 0건, 신규 테스트 전체 통과 (Opus) [blockedBy: 1~6]
+
+진행률: 0/7 (0%)
+
+---
+
+## Phase 11: 에코시스템 확장
+
+> **상태**: 📋 예정
+> **목표**: 패키지 레지스트리 웹 UI, Std Library 문서화, WASM 컴포넌트 모델 완성, 실전 WASM 앱 예제
+> **배경**: 레지스트리 REST API만 존재 (웹 UI 없음), std 73개 모듈 중 3개만 문서화, WASM 컴포넌트 모델 26건 TODO
+
+### Stage 1: 패키지 레지스트리 웹 UI
+
+**목표**: 패키지 검색/상세/버전 목록을 웹에서 확인
+
+- [ ] 1. 레지스트리 웹 UI — 패키지 목록/검색/상세 페이지 (Sonnet)
+  대상: crates/vais-registry-server/src/handlers/
+- [ ] 2. 레지스트리 검색 API 개선 — 전문 검색, 카테고리 필터 (Sonnet) [∥1]
+  대상: crates/vais-registry-server/src/
+
+### Stage 2: Standard Library 문서화
+
+**목표**: 주요 std 모듈 문서화 (docs-site에 추가)
+
+- [ ] 3. Std 핵심 모듈 문서 10개 작성 — vec/hashmap/file_io/net/thread/channel/sync/json/regex/crypto (Sonnet) [∥1]
+  대상: docs-site/src/stdlib/
+- [ ] 4. Std API Reference 자동 생성 개선 — doc_gen과 docs-site 연동 (Sonnet) [blockedBy: 3]
+  대상: docs-site/src/stdlib/
+
+### Stage 3: WASM 컴포넌트 모델 & 예제
+
+**목표**: WASM 컴포넌트 모델 TODO 해결, 실전 WASM 앱 예제
+
+- [ ] 5. WASM 컴포넌트 모델 핵심 TODO 해결 — 26건 중 고영향 항목 (Sonnet) [∥1]
+  대상: crates/vais-codegen/src/, crates/vais-bindgen/src/
+- [ ] 6. WASM 실전 앱 예제 3개 — Todo App/Calculator/API Client (Sonnet) [blockedBy: 5]
+  대상: examples/wasm/
+
+### Stage 4: 통합 검증
+
+- [ ] 7. 통합 검증 — E2E 498+ 회귀 없음, Clippy 0건, 문서 빌드 확인 (Opus) [blockedBy: 1~6]
+
+진행률: 0/7 (0%)
+
+---
+
+## Phase 12: 컴파일러 고도화
+
+> **상태**: 📋 예정
+> **목표**: JIT 프로덕션화, GPU 커널 실행 테스트, LLVM 최적화 pass 추가, Incremental 컴파일 강화
+> **배경**: JIT 티어 전략 단순 (OSR 없음), GPU 타입 변환만 테스트 (실행 없음), LLVM pass 추가 여지, Incremental per-module 개선 가능
+
+### Stage 1: JIT 프로덕션화
+
+**목표**: Cranelift JIT를 REPL/핫패스에서 실전 사용 가능 수준으로 향상
+
+- [ ] 1. JIT 티어 전환 전략 개선 — 프로파일링 기반 동적 티어 업/다운 (Sonnet)
+  대상: crates/vais-jit/src/
+- [ ] 2. JIT REPL 통합 — vaisc REPL에서 Cranelift JIT 사용 옵션 (Sonnet) [blockedBy: 1]
+  대상: crates/vaisc/src/commands/repl.rs, crates/vais-jit/src/
+
+### Stage 2: GPU 실행 검증
+
+**목표**: GPU 커널 코드 생성 → 실제 실행 검증
+
+- [ ] 3. GPU 커널 생성 테스트 — OpenCL/Metal 커널 코드 생성 검증 (Sonnet) [∥1]
+  대상: crates/vais-gpu/tests/
+- [ ] 4. GPU 벤치마크 — 행렬 곱셈/벡터 연산 CPU vs GPU 비교 (Sonnet) [blockedBy: 3]
+  대상: benches/gpu_bench.rs
+
+### Stage 3: Std Library 기능 확장
+
+**목표**: VaisDB 등 시스템 프로젝트에서 필요한 POSIX I/O 및 SIMD 지원 추가
+
+- [ ] 5. pread/pwrite POSIX 함수 추가 — seek 없이 오프셋 지정 atomic read/write (Sonnet) [∥1]
+  대상: std/file.vais (extern "C" pread/pwrite 선언 + File 메서드 래퍼)
+  배경: VaisDB 페이지 매니저에서 concurrent positioned I/O 필수. 현재 seek+read/write는 race condition 위험
+- [ ] 6. SIMD Intrinsics 모듈 — x86_64 SSE/AVX2, ARM NEON 래퍼 (Sonnet) [∥5]
+  대상: std/simd.vais (신규), std/simd_runtime.c (신규)
+  배경: VaisDB 벡터 엔진 distance 계산에서 10x 성능 차이. 현재 C FFI 직접 사용 중, std 모듈로 표준화 필요
+- [ ] 7. std/crypto.vais 프로덕션 교체 — 교육용 XOR AES → vais-aes 패키지 연동 또는 libcrypto FFI (Sonnet) [∥5]
+  대상: std/crypto.vais
+  배경: VaisDB Phase 10 encryption at rest에 프로덕션 AES-256-CTR 필요. 현재 std/crypto.vais는 교육용 XOR 구현
+
+### Stage 4: LLVM 최적화 & Incremental 강화
+
+**목표**: 컴파일러 출력 품질 및 빌드 속도 향상
+
+- [ ] 8. LLVM 최적화 pass 추가 — Loop Unrolling/Vectorization 세부 튜닝 (Sonnet) [∥1]
+  대상: crates/vais-codegen/src/inkwell/, crates/vais-codegen/src/advanced_opt/
+- [ ] 9. Incremental 컴파일 강화 — 변경 감지 정밀도 향상, 캐시 히트율 개선 (Sonnet) [∥8]
+  대상: crates/vaisc/src/incremental.rs
+
+### Stage 5: 통합 검증
+
+- [ ] 10. 통합 검증 — E2E 498+ 회귀 없음, Clippy 0건, 성능 회귀 없음 (Opus) [blockedBy: 1~9]
+
+진행률: 0/10 (0%)
 
 ---
 

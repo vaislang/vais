@@ -7,6 +7,86 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use crate::protocol::types::{Breakpoint, FunctionBreakpoint, Source, SourceBreakpoint};
 
+/// Hit counter for tracking breakpoint hits
+#[derive(Debug, Default)]
+pub struct HitCounter {
+    counts: HashMap<i64, u64>,  // breakpoint_id -> hit_count
+}
+
+impl HitCounter {
+    pub fn new() -> Self {
+        Self {
+            counts: HashMap::new(),
+        }
+    }
+
+    /// Increment hit count for a breakpoint and return the new count
+    pub fn increment(&mut self, bp_id: i64) -> u64 {
+        let count = self.counts.entry(bp_id).or_insert(0);
+        *count += 1;
+        *count
+    }
+
+    /// Get current hit count for a breakpoint
+    pub fn get(&self, bp_id: i64) -> u64 {
+        self.counts.get(&bp_id).copied().unwrap_or(0)
+    }
+
+    /// Reset hit count for a specific breakpoint
+    pub fn reset(&mut self, bp_id: i64) {
+        self.counts.remove(&bp_id);
+    }
+
+    /// Reset all hit counts
+    pub fn reset_all(&mut self) {
+        self.counts.clear();
+    }
+}
+
+/// Hit condition operators
+#[derive(Debug, Clone, PartialEq)]
+pub enum HitConditionOp {
+    Equal(u64),        // "= N" or just "N"
+    GreaterEqual(u64), // ">= N"
+    Greater(u64),      // "> N"
+    Multiple(u64),     // "% N" (every Nth hit)
+}
+
+/// Parse hit condition string into an operator
+pub fn parse_hit_condition(cond: &str) -> Option<HitConditionOp> {
+    let cond = cond.trim();
+
+    if let Some(rest) = cond.strip_prefix(">=") {
+        rest.trim().parse::<u64>().ok().map(HitConditionOp::GreaterEqual)
+    } else if let Some(rest) = cond.strip_prefix('>') {
+        rest.trim().parse::<u64>().ok().map(HitConditionOp::Greater)
+    } else if let Some(rest) = cond.strip_prefix('%') {
+        rest.trim().parse::<u64>().ok().map(HitConditionOp::Multiple)
+    } else if let Some(rest) = cond.strip_prefix('=') {
+        rest.trim().parse::<u64>().ok().map(HitConditionOp::Equal)
+    } else {
+        cond.parse::<u64>().ok().map(HitConditionOp::Equal)
+    }
+}
+
+/// Evaluate hit condition
+pub fn evaluate_hit_condition(op: &HitConditionOp, hit_count: u64) -> bool {
+    match op {
+        HitConditionOp::Equal(n) => hit_count == *n,
+        HitConditionOp::GreaterEqual(n) => hit_count >= *n,
+        HitConditionOp::Greater(n) => hit_count > *n,
+        HitConditionOp::Multiple(n) => *n > 0 && hit_count.is_multiple_of(*n),
+    }
+}
+
+/// Result of recording a breakpoint hit
+#[derive(Debug, PartialEq)]
+pub enum HitResult {
+    Break,          // Break execution
+    Skip,           // Condition not met, continue
+    Log(String),    // Logpoint, log message and continue
+}
+
 /// Manages breakpoints for a debug session
 #[derive(Debug, Default)]
 pub struct BreakpointManager {
@@ -18,6 +98,8 @@ pub struct BreakpointManager {
     function_breakpoints: HashMap<String, ManagedBreakpoint>,
     /// Exception breakpoints
     exception_filters: Vec<String>,
+    /// Hit counter for tracking breakpoint hits
+    hit_counter: HitCounter,
 }
 
 /// Internal breakpoint representation
@@ -41,6 +123,7 @@ impl BreakpointManager {
             source_breakpoints: HashMap::new(),
             function_breakpoints: HashMap::new(),
             exception_filters: Vec::new(),
+            hit_counter: HitCounter::new(),
         }
     }
 
@@ -210,6 +293,38 @@ impl BreakpointManager {
         self.source_breakpoints.clear();
         self.function_breakpoints.clear();
         self.exception_filters.clear();
+        self.hit_counter.reset_all();
+    }
+
+    /// Record a breakpoint hit and evaluate conditions
+    pub fn record_hit(&mut self, bp: &ManagedBreakpoint) -> HitResult {
+        let count = self.hit_counter.increment(bp.id);
+
+        // Check hit condition
+        if let Some(ref hit_cond) = bp.hit_condition {
+            if let Some(op) = parse_hit_condition(hit_cond) {
+                if !evaluate_hit_condition(&op, count) {
+                    return HitResult::Skip;
+                }
+            }
+        }
+
+        // Check log message (logpoint)
+        if let Some(ref msg) = bp.log_message {
+            return HitResult::Log(msg.clone());
+        }
+
+        HitResult::Break
+    }
+
+    /// Get current hit count for a breakpoint
+    pub fn get_hit_count(&self, bp_id: i64) -> u64 {
+        self.hit_counter.get(bp_id)
+    }
+
+    /// Reset hit count for a specific breakpoint
+    pub fn reset_hit_count(&mut self, bp_id: i64) {
+        self.hit_counter.reset(bp_id);
     }
 }
 
@@ -280,5 +395,220 @@ mod tests {
         assert!(bps[0].verified);
         assert_eq!(bps[0].address, Some(0x1234));
         assert_eq!(bps[0].line, 11);
+    }
+
+    #[test]
+    fn test_hit_counter_increment() {
+        let mut counter = HitCounter::new();
+
+        assert_eq!(counter.get(1), 0);
+        assert_eq!(counter.increment(1), 1);
+        assert_eq!(counter.increment(1), 2);
+        assert_eq!(counter.increment(1), 3);
+        assert_eq!(counter.get(1), 3);
+
+        assert_eq!(counter.increment(2), 1);
+        assert_eq!(counter.get(2), 1);
+
+        counter.reset(1);
+        assert_eq!(counter.get(1), 0);
+
+        counter.increment(2);
+        counter.reset_all();
+        assert_eq!(counter.get(2), 0);
+    }
+
+    #[test]
+    fn test_parse_hit_condition_equal() {
+        assert_eq!(parse_hit_condition("5"), Some(HitConditionOp::Equal(5)));
+        assert_eq!(parse_hit_condition("= 5"), Some(HitConditionOp::Equal(5)));
+        assert_eq!(parse_hit_condition("  =  10  "), Some(HitConditionOp::Equal(10)));
+        assert_eq!(parse_hit_condition("invalid"), None);
+    }
+
+    #[test]
+    fn test_parse_hit_condition_greater() {
+        assert_eq!(parse_hit_condition("> 3"), Some(HitConditionOp::Greater(3)));
+        assert_eq!(parse_hit_condition(">5"), Some(HitConditionOp::Greater(5)));
+        assert_eq!(parse_hit_condition(">= 3"), Some(HitConditionOp::GreaterEqual(3)));
+        assert_eq!(parse_hit_condition(">=10"), Some(HitConditionOp::GreaterEqual(10)));
+        assert_eq!(parse_hit_condition("  >=  7  "), Some(HitConditionOp::GreaterEqual(7)));
+    }
+
+    #[test]
+    fn test_parse_hit_condition_multiple() {
+        assert_eq!(parse_hit_condition("% 10"), Some(HitConditionOp::Multiple(10)));
+        assert_eq!(parse_hit_condition("%5"), Some(HitConditionOp::Multiple(5)));
+        assert_eq!(parse_hit_condition("  %  3  "), Some(HitConditionOp::Multiple(3)));
+    }
+
+    #[test]
+    fn test_evaluate_hit_condition() {
+        // Equal
+        assert!(evaluate_hit_condition(&HitConditionOp::Equal(5), 5));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Equal(5), 4));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Equal(5), 6));
+
+        // Greater
+        assert!(evaluate_hit_condition(&HitConditionOp::Greater(3), 4));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Greater(3), 3));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Greater(3), 2));
+
+        // GreaterEqual
+        assert!(evaluate_hit_condition(&HitConditionOp::GreaterEqual(3), 4));
+        assert!(evaluate_hit_condition(&HitConditionOp::GreaterEqual(3), 3));
+        assert!(!evaluate_hit_condition(&HitConditionOp::GreaterEqual(3), 2));
+
+        // Multiple
+        assert!(evaluate_hit_condition(&HitConditionOp::Multiple(10), 10));
+        assert!(evaluate_hit_condition(&HitConditionOp::Multiple(10), 20));
+        assert!(evaluate_hit_condition(&HitConditionOp::Multiple(10), 100));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Multiple(10), 5));
+        assert!(!evaluate_hit_condition(&HitConditionOp::Multiple(10), 15));
+
+        // Multiple with 0 should always return false
+        assert!(!evaluate_hit_condition(&HitConditionOp::Multiple(0), 10));
+    }
+
+    #[test]
+    fn test_record_hit_break() {
+        let mut manager = BreakpointManager::new();
+
+        let bp = ManagedBreakpoint {
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: Some(0x1000),
+            function_name: None,
+        };
+
+        // First hit should break
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+        assert_eq!(manager.get_hit_count(1), 1);
+
+        // Second hit should also break
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+        assert_eq!(manager.get_hit_count(1), 2);
+    }
+
+    #[test]
+    fn test_record_hit_skip() {
+        let mut manager = BreakpointManager::new();
+
+        let bp = ManagedBreakpoint {
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: Some(">= 3".to_string()),
+            log_message: None,
+            address: Some(0x1000),
+            function_name: None,
+        };
+
+        // First two hits should skip
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+        assert_eq!(manager.get_hit_count(1), 1);
+
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+        assert_eq!(manager.get_hit_count(1), 2);
+
+        // Third hit should break
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+        assert_eq!(manager.get_hit_count(1), 3);
+
+        // Fourth hit should also break
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+        assert_eq!(manager.get_hit_count(1), 4);
+    }
+
+    #[test]
+    fn test_record_hit_logpoint() {
+        let mut manager = BreakpointManager::new();
+
+        let bp = ManagedBreakpoint {
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: Some("Value: {x}".to_string()),
+            address: Some(0x1000),
+            function_name: None,
+        };
+
+        // Should return log message
+        assert_eq!(manager.record_hit(&bp), HitResult::Log("Value: {x}".to_string()));
+        assert_eq!(manager.get_hit_count(1), 1);
+
+        // Second hit should also log
+        assert_eq!(manager.record_hit(&bp), HitResult::Log("Value: {x}".to_string()));
+        assert_eq!(manager.get_hit_count(1), 2);
+    }
+
+    #[test]
+    fn test_record_hit_multiple_condition() {
+        let mut manager = BreakpointManager::new();
+
+        let bp = ManagedBreakpoint {
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: Some("% 3".to_string()),
+            log_message: None,
+            address: Some(0x1000),
+            function_name: None,
+        };
+
+        // First two hits should skip
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+
+        // Third hit should break (multiple of 3)
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+
+        // Fourth and fifth should skip
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+        assert_eq!(manager.record_hit(&bp), HitResult::Skip);
+
+        // Sixth hit should break (multiple of 3)
+        assert_eq!(manager.record_hit(&bp), HitResult::Break);
+
+        assert_eq!(manager.get_hit_count(1), 6);
+    }
+
+    #[test]
+    fn test_reset_hit_count() {
+        let mut manager = BreakpointManager::new();
+
+        let bp = ManagedBreakpoint {
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: Some(0x1000),
+            function_name: None,
+        };
+
+        manager.record_hit(&bp);
+        manager.record_hit(&bp);
+        assert_eq!(manager.get_hit_count(1), 2);
+
+        manager.reset_hit_count(1);
+        assert_eq!(manager.get_hit_count(1), 0);
+
+        manager.record_hit(&bp);
+        assert_eq!(manager.get_hit_count(1), 1);
     }
 }

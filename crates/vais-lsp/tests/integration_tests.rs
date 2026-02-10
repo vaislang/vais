@@ -454,6 +454,10 @@ async fn test_server_capabilities_comprehensive() {
         "Missing semantic_tokens_provider"
     );
     assert!(caps.rename_provider.is_some(), "Missing rename_provider");
+    assert!(
+        caps.document_highlight_provider.is_some(),
+        "Missing document_highlight_provider"
+    );
 
     // Verify newly implemented capabilities
     assert!(

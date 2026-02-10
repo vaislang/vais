@@ -140,6 +140,142 @@ pub struct RawFrame {
     pub module_name: Option<String>,
 }
 
+/// Granularity of stepping operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StepGranularity {
+    #[default]
+    Statement,   // Statement-level (default)
+    Line,        // Line-level
+    Instruction, // Instruction-level
+}
+
+/// Stepping mode
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepMode {
+    /// Step over: next statement at same depth
+    Over,
+    /// Step in: enter function calls
+    In { target_function: Option<String> },
+    /// Step out: return from current function
+    Out,
+}
+
+/// Controls precise stepping behavior
+pub struct StepController {
+    /// Current step mode (None = running freely)
+    active_step: Option<ActiveStep>,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveStep {
+    mode: StepMode,
+    granularity: StepGranularity,
+    /// Stack depth when step was initiated
+    origin_depth: usize,
+    /// Line number when step was initiated
+    origin_line: i64,
+    /// Thread ID that initiated the step
+    thread_id: i64,
+}
+
+impl StepController {
+    pub fn new() -> Self {
+        Self { active_step: None }
+    }
+
+    /// Start a new step operation
+    pub fn start_step(
+        &mut self,
+        mode: StepMode,
+        granularity: StepGranularity,
+        current_depth: usize,
+        current_line: i64,
+        thread_id: i64,
+    ) {
+        self.active_step = Some(ActiveStep {
+            mode,
+            granularity,
+            origin_depth: current_depth,
+            origin_line: current_line,
+            thread_id,
+        });
+    }
+
+    /// Check if execution should stop at the current location
+    /// Returns true if a step is complete and we should break
+    pub fn should_stop(
+        &self,
+        current_depth: usize,
+        current_line: i64,
+        current_function: Option<&str>,
+        thread_id: i64,
+    ) -> bool {
+        let Some(step) = &self.active_step else {
+            return false;
+        };
+
+        // Only check for the thread that initiated the step
+        if step.thread_id != thread_id {
+            return false;
+        }
+
+        match &step.mode {
+            StepMode::Over => {
+                // Stop if: same or lower depth AND different line (for Statement/Line)
+                // OR same or lower depth (for Instruction)
+                match step.granularity {
+                    StepGranularity::Instruction => current_depth <= step.origin_depth,
+                    _ => current_depth <= step.origin_depth && current_line != step.origin_line,
+                }
+            }
+            StepMode::In { target_function } => {
+                // If target specified, only stop when entering that function
+                if let Some(target) = target_function {
+                    if let Some(func) = current_function {
+                        return func == target;
+                    }
+                    return false;
+                }
+                // Otherwise stop at next statement (deeper or same level)
+                match step.granularity {
+                    StepGranularity::Instruction => true,
+                    _ => current_line != step.origin_line || current_depth > step.origin_depth,
+                }
+            }
+            StepMode::Out => {
+                // Stop when depth is less than origin (returned from function)
+                current_depth < step.origin_depth
+            }
+        }
+    }
+
+    /// Complete the current step (called when execution stops)
+    pub fn complete_step(&mut self) {
+        self.active_step = None;
+    }
+
+    /// Cancel any active step
+    pub fn cancel(&mut self) {
+        self.active_step = None;
+    }
+
+    /// Check if a step operation is active
+    pub fn is_stepping(&self) -> bool {
+        self.active_step.is_some()
+    }
+
+    /// Get the current step mode
+    pub fn current_mode(&self) -> Option<&StepMode> {
+        self.active_step.as_ref().map(|s| &s.mode)
+    }
+}
+
+impl Default for StepController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,5 +341,198 @@ mod tests {
         manager.invalidate();
 
         assert!(manager.get_frame_info(id).is_none());
+    }
+
+    // StepController tests
+
+    #[test]
+    fn test_step_over() {
+        let mut controller = StepController::new();
+
+        // Start step over at depth 1, line 10, thread 1
+        controller.start_step(StepMode::Over, StepGranularity::Statement, 1, 10, 1);
+
+        assert!(controller.is_stepping());
+
+        // Same line, same depth - should not stop
+        assert!(!controller.should_stop(1, 10, Some("main"), 1));
+
+        // Different line, same depth - should stop
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+
+        // Same line, deeper (function call) - should not stop
+        assert!(!controller.should_stop(2, 10, Some("foo"), 1));
+
+        // Different line, deeper - should not stop
+        assert!(!controller.should_stop(2, 20, Some("foo"), 1));
+
+        // Back to same depth, different line - should stop
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+    }
+
+    #[test]
+    fn test_step_over_skip_deeper() {
+        let mut controller = StepController::new();
+
+        controller.start_step(StepMode::Over, StepGranularity::Statement, 1, 10, 1);
+
+        // Go deeper (into function call)
+        assert!(!controller.should_stop(2, 20, Some("foo"), 1));
+        assert!(!controller.should_stop(3, 30, Some("bar"), 1));
+
+        // Return to original depth at different line - should stop
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+    }
+
+    #[test]
+    fn test_step_in() {
+        let mut controller = StepController::new();
+
+        // Step in without target function
+        controller.start_step(
+            StepMode::In { target_function: None },
+            StepGranularity::Statement,
+            1,
+            10,
+            1,
+        );
+
+        // Same line - should not stop
+        assert!(!controller.should_stop(1, 10, Some("main"), 1));
+
+        // Different line at same depth - should stop
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+
+        // Deeper level (entered function) - should stop
+        assert!(controller.should_stop(2, 20, Some("foo"), 1));
+    }
+
+    #[test]
+    fn test_step_in_target() {
+        let mut controller = StepController::new();
+
+        // Step in with target function
+        controller.start_step(
+            StepMode::In {
+                target_function: Some("target_func".to_string()),
+            },
+            StepGranularity::Statement,
+            1,
+            10,
+            1,
+        );
+
+        // Enter different function - should not stop
+        assert!(!controller.should_stop(2, 20, Some("other_func"), 1));
+
+        // Enter target function - should stop
+        assert!(controller.should_stop(2, 30, Some("target_func"), 1));
+
+        // Without function name - should not stop
+        assert!(!controller.should_stop(2, 40, None, 1));
+    }
+
+    #[test]
+    fn test_step_out() {
+        let mut controller = StepController::new();
+
+        // Start at depth 2 (inside a function)
+        controller.start_step(StepMode::Out, StepGranularity::Statement, 2, 20, 1);
+
+        // Same depth - should not stop
+        assert!(!controller.should_stop(2, 21, Some("foo"), 1));
+
+        // Deeper - should not stop
+        assert!(!controller.should_stop(3, 30, Some("bar"), 1));
+
+        // Shallower (returned from function) - should stop
+        assert!(controller.should_stop(1, 10, Some("main"), 1));
+    }
+
+    #[test]
+    fn test_step_granularity_instruction() {
+        let mut controller = StepController::new();
+
+        // Step over with instruction granularity
+        controller.start_step(StepMode::Over, StepGranularity::Instruction, 1, 10, 1);
+
+        // Instruction granularity stops at same depth regardless of line
+        assert!(controller.should_stop(1, 10, Some("main"), 1));
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+
+        // Deeper should not stop
+        assert!(!controller.should_stop(2, 20, Some("foo"), 1));
+
+        // Reset and test step in with instruction granularity
+        controller.start_step(
+            StepMode::In { target_function: None },
+            StepGranularity::Instruction,
+            1,
+            10,
+            1,
+        );
+
+        // Instruction granularity always stops on step in
+        assert!(controller.should_stop(1, 10, Some("main"), 1));
+        assert!(controller.should_stop(2, 20, Some("foo"), 1));
+    }
+
+    #[test]
+    fn test_step_thread_isolation() {
+        let mut controller = StepController::new();
+
+        // Start step on thread 1
+        controller.start_step(StepMode::Over, StepGranularity::Statement, 1, 10, 1);
+
+        // Thread 1 should stop at different line
+        assert!(controller.should_stop(1, 11, Some("main"), 1));
+
+        // Thread 2 should not be affected
+        assert!(!controller.should_stop(1, 11, Some("main"), 2));
+        assert!(!controller.should_stop(2, 20, Some("foo"), 2));
+    }
+
+    #[test]
+    fn test_step_complete_cancel() {
+        let mut controller = StepController::new();
+
+        controller.start_step(StepMode::Over, StepGranularity::Statement, 1, 10, 1);
+
+        assert!(controller.is_stepping());
+        assert!(controller.current_mode().is_some());
+
+        // Complete step
+        controller.complete_step();
+
+        assert!(!controller.is_stepping());
+        assert!(controller.current_mode().is_none());
+
+        // Start new step
+        controller.start_step(StepMode::Out, StepGranularity::Line, 2, 20, 1);
+
+        assert!(controller.is_stepping());
+        assert_eq!(
+            controller.current_mode(),
+            Some(&StepMode::Out)
+        );
+
+        // Cancel step
+        controller.cancel();
+
+        assert!(!controller.is_stepping());
+        assert!(controller.current_mode().is_none());
+    }
+
+    #[test]
+    fn test_step_granularity_default() {
+        let default = StepGranularity::default();
+        assert_eq!(default, StepGranularity::Statement);
+    }
+
+    #[test]
+    fn test_step_controller_default() {
+        let controller = StepController::default();
+        assert!(!controller.is_stepping());
+        assert!(controller.current_mode().is_none());
     }
 }

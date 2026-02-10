@@ -51,9 +51,9 @@
     "description": "Define an enum with data variants"
   },
   "Trait Definition": {
-    "prefix": ["T", "trait"],
+    "prefix": ["W", "trait"],
     "body": [
-      "T ${1:TraitName} {",
+      "W ${1:TraitName} {",
       "\tF ${2:method}(${3:&self}) -> ${4:ReturnType};$0",
       "}"
     ],
@@ -73,7 +73,7 @@
   "Trait Impl": {
     "prefix": ["Xt", "implt"],
     "body": [
-      "X ${1:Trait} for ${2:Type} {",
+      "X ${1:Type}: ${2:Trait} {",
       "\tF ${3:method}(&self) -> ${4:ReturnType} {",
       "\t\t$0",
       "\t}",
@@ -105,7 +105,7 @@
     "body": [
       "I ${1:condition} {",
       "\t$2",
-      "} else {",
+      "} E {",
       "\t$0",
       "}"
     ],
@@ -121,13 +121,13 @@
     "description": "Infinite loop"
   },
   "While Loop": {
-    "prefix": ["W", "while"],
+    "prefix": ["Lw", "while"],
     "body": [
-      "W ${1:condition} {",
+      "L ${1:condition} {",
       "\t$0",
       "}"
     ],
-    "description": "While loop"
+    "description": "While-style loop with condition"
   },
   "For Loop": {
     "prefix": ["for"],
@@ -155,18 +155,18 @@
   },
   "Let Binding": {
     "prefix": ["let"],
-    "body": "let ${1:name}: ${2:Type} = ${0:value}",
-    "description": "Let binding with type annotation"
+    "body": "${1:name} := ${0:value}",
+    "description": "Variable binding"
   },
   "Mutable Binding": {
     "prefix": ["letm", "mut"],
-    "body": "let mut ${1:name}: ${2:Type} = ${0:value}",
-    "description": "Mutable let binding"
+    "body": "${1:name} := mut ${0:value}",
+    "description": "Mutable variable binding"
   },
   "Import": {
-    "prefix": ["I", "import"],
-    "body": "I \"${1:path}\"",
-    "description": "Import a module"
+    "prefix": ["U", "import", "use"],
+    "body": "U \"${1:path}\"",
+    "description": "Import/use a module"
   },
   "Return": {
     "prefix": ["R", "return"],
@@ -184,23 +184,23 @@
     "description": "Continue to next iteration"
   },
   "Assert": {
-    "prefix": ["A", "assert"],
-    "body": "A ${1:condition}, \"${2:message}\"",
+    "prefix": ["assert"],
+    "body": "assert(${1:condition}, \"${2:message}\")",
     "description": "Assert condition"
   },
   "Async Function": {
-    "prefix": ["async", "Fasync"],
+    "prefix": ["A", "async", "Fasync"],
     "body": [
-      "async F ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "A F ${1:name}(${2:params}) -> ${3:ReturnType} {",
       "\t$0",
       "}"
     ],
     "description": "Async function definition"
   },
   "Await": {
-    "prefix": ["await"],
-    "body": "await ${0:future}",
-    "description": "Await a future"
+    "prefix": ["Y", "await"],
+    "body": "${0:future}.Y",
+    "description": "Await a future (postfix .Y)"
   },
   "Spawn": {
     "prefix": ["spawn"],
@@ -208,9 +208,13 @@
     "description": "Spawn an async task"
   },
   "Defer": {
-    "prefix": ["defer"],
-    "body": "defer ${0:cleanup_expr}",
-    "description": "Defer expression until scope exit"
+    "prefix": ["D", "defer"],
+    "body": [
+      "D {",
+      "\t${0:cleanup_code}",
+      "}"
+    ],
+    "description": "Defer block until scope exit"
   },
   "Test Function": {
     "prefix": ["test", "Ftest"],
@@ -250,7 +254,7 @@
   "Impl for Trait": {
     "prefix": ["implfor", "Xfor"],
     "body": [
-      "X ${1:TraitName} for ${2:TypeName} {",
+      "X ${1:TypeName}: ${2:TraitName} {",
       "\tF ${3:method}(&self) -> ${4:ReturnType} {",
       "\t\t$0",
       "\t}",
@@ -308,7 +312,7 @@
   "Async Main": {
     "prefix": ["asyncmain", "amain"],
     "body": [
-      "async F main() -> i64 {",
+      "A F main() -> i64 {",
       "\t$0",
       "\t0",
       "}"
@@ -327,7 +331,7 @@
   "Async Handler": {
     "prefix": ["asynchandler", "ahandler"],
     "body": [
-      "async F ${1:handler}(${2:request}: ${3:Request}) -> ${4:Response} {",
+      "A F ${1:handler}(${2:request}: ${3:Request}) -> ${4:Response} {",
       "\t$0",
       "}"
     ],
@@ -362,11 +366,11 @@
   "For Range": {
     "prefix": ["forrange", "fori"],
     "body": [
-      "for ${1:i} in 0..${2:n} {",
+      "L ${1:i} := 0..${2:n} {",
       "\t$0",
       "}"
     ],
-    "description": "For loop over range 0..n"
+    "description": "Loop over range 0..n"
   },
   "Iter Chain": {
     "prefix": ["iterchain", "ichain"],
@@ -398,8 +402,8 @@
     "description": "Constant definition"
   },
   "Extern Function": {
-    "prefix": ["extern", "XF"],
-    "body": "extern F ${1:name}(${2:params}) -> ${0:ReturnType}",
+    "prefix": ["N", "extern", "NF"],
+    "body": "N F ${1:name}(${2:params}) -> ${0:ReturnType}",
     "description": "External function declaration"
   },
   "Closure": {
@@ -451,7 +455,7 @@
     "description": "Postfix await operator"
   },
   "Use Import": {
-    "prefix": ["U", "use"],
+    "prefix": ["use"],
     "body": "U \"${0:module_path}\"",
     "description": "Use/import statement"
   },
@@ -461,8 +465,321 @@
     "description": "Ternary conditional operator"
   },
   "Type Alias": {
-    "prefix": ["type", "talias"],
-    "body": "type ${1:Alias} = ${0:Type}",
+    "prefix": ["T", "type", "talias"],
+    "body": "T ${1:Alias} = ${0:Type}",
     "description": "Type alias definition"
+  },
+  "Global Variable": {
+    "prefix": ["G", "global"],
+    "body": "G ${1:name}: ${2:Type} = ${0:value}",
+    "description": "Global variable definition"
+  },
+  "Public Function": {
+    "prefix": ["P", "pub", "pfn"],
+    "body": [
+      "P F ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Public function definition"
+  },
+  "Public Struct": {
+    "prefix": ["PS", "pubstruct"],
+    "body": [
+      "P S ${1:Name} {",
+      "\t${2:field}: ${3:Type},$0",
+      "}"
+    ],
+    "description": "Public struct definition"
+  },
+  "Pipe Operator": {
+    "prefix": ["pipe", "|>"],
+    "body": "${1:value} |> ${0:function}",
+    "description": "Pipe operator for function composition"
+  },
+  "String Interpolation": {
+    "prefix": ["interp", "~"],
+    "body": "~\"${1:text} ~{${2:expr}}${0}\"",
+    "description": "String interpolation with ~{expr}"
+  },
+  "For Each": {
+    "prefix": ["foreach", "forin"],
+    "body": [
+      "L ${1:item} := ${2:collection} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Loop over each item in collection"
+  },
+  "Result Try": {
+    "prefix": ["try", "?"],
+    "body": "${0:result_expr}?",
+    "description": "Try operator for Result/Option"
+  },
+  "Unwrap": {
+    "prefix": ["unwrap", "!"],
+    "body": "${0:option_expr}!",
+    "description": "Unwrap operator for Result/Option"
+  },
+  "Generic Function": {
+    "prefix": ["Fg", "gfn"],
+    "body": [
+      "F ${1:name}<${2:T}>(${3:param}: ${4:T}) -> ${5:T} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Generic function definition"
+  },
+  "Generic Trait": {
+    "prefix": ["Wg", "gtrait"],
+    "body": [
+      "W ${1:TraitName}<${2:T}> {",
+      "\tF ${3:method}(&self, ${4:param}: ${5:T}) -> ${6:T};$0",
+      "}"
+    ],
+    "description": "Generic trait definition"
+  },
+  "Match Guard": {
+    "prefix": ["mguard", "matchguard"],
+    "body": [
+      "M ${1:expr} {",
+      "\t${2:pattern} I ${3:guard_condition} => ${4:result},",
+      "\t${5:pattern} => ${6:default},",
+      "\t_ => ${0:fallback},",
+      "}"
+    ],
+    "description": "Match with guard condition"
+  },
+  "Error Propagation": {
+    "prefix": ["eprop", "errprop"],
+    "body": [
+      "M ${1:result} {",
+      "\tOk(${2:v}) => ${3:v},",
+      "\tErr(${4:e}) => R Err(${5:e}),",
+      "}"
+    ],
+    "description": "Error propagation pattern"
+  },
+  "Builder Pattern": {
+    "prefix": ["builder", "build"],
+    "body": [
+      "X ${1:Builder} {",
+      "\tF new() -> Self {",
+      "\t\tSelf { ${2:field}: ${3:default} }",
+      "\t}",
+      "\t",
+      "\tF ${4:with_field}(&mut self, ${5:value}: ${6:Type}) -> &mut Self {",
+      "\t\tself.${7:field} = ${8:value}",
+      "\t\tself",
+      "\t}",
+      "\t",
+      "\tF build(&self) -> ${9:Target} {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Builder pattern implementation"
+  },
+  "Visitor Pattern": {
+    "prefix": ["visitor", "visit"],
+    "body": [
+      "W ${1:Visitor} {",
+      "\tF visit_${2:variant}(&mut self, ${3:param}: &${4:Type});$0",
+      "}",
+      "",
+      "X ${5:Type}: ${1:Visitor} {",
+      "\tF visit_${2:variant}(&mut self, ${3:param}: &${4:Type}) {",
+      "\t\t${6}",
+      "\t}",
+      "}"
+    ],
+    "description": "Visitor pattern trait and impl"
+  },
+  "State Pattern": {
+    "prefix": ["state", "statemachine"],
+    "body": [
+      "E ${1:State} {",
+      "\t${2:StateA},",
+      "\t${3:StateB},$0",
+      "}",
+      "",
+      "S ${4:StateMachine} {",
+      "\tstate: ${1:State},",
+      "}",
+      "",
+      "X ${4:StateMachine} {",
+      "\tF transition(&mut self, event: ${5:Event}) {",
+      "\t\tself.state = M self.state {",
+      "\t\t\t${2:StateA} => ${3:StateB},",
+      "\t\t\t${3:StateB} => ${2:StateA},",
+      "\t\t\t_ => self.state,",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "State machine pattern"
+  },
+  "Iterator Trait": {
+    "prefix": ["iterator", "iter"],
+    "body": [
+      "W Iterator {",
+      "\ttype Item;",
+      "\tF next(&mut self) -> Option<Self::Item>;",
+      "}",
+      "",
+      "X ${1:Type}: Iterator {",
+      "\ttype Item = ${2:ItemType};",
+      "\t",
+      "\tF next(&mut self) -> Option<Self::Item> {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Iterator trait implementation"
+  },
+  "Drop Trait": {
+    "prefix": ["drop", "cleanup"],
+    "body": [
+      "W Drop {",
+      "\tF drop(&mut self);",
+      "}",
+      "",
+      "X ${1:Type}: Drop {",
+      "\tF drop(&mut self) {",
+      "\t\t${0:# cleanup code}",
+      "\t}",
+      "}"
+    ],
+    "description": "Drop trait for cleanup"
+  },
+  "Range Loop": {
+    "prefix": ["range", ".."],
+    "body": [
+      "L ${1:i} := ${2:start}..${3:end} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Loop over custom range"
+  },
+  "Inclusive Range": {
+    "prefix": ["rangeinc", "..="],
+    "body": [
+      "L ${1:i} := ${2:start}..=${3:end} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Loop over inclusive range"
+  },
+  "Macro Rules": {
+    "prefix": ["macro", "macrorules"],
+    "body": [
+      "macro_rules! ${1:name} {",
+      "\t(${2:pattern}) => {",
+      "\t\t${0:expansion}",
+      "\t};",
+      "}"
+    ],
+    "description": "Declarative macro definition"
+  },
+  "WASM Import": {
+    "prefix": ["wasmimport", "wasm"],
+    "body": [
+      "#[wasm_import(\"${1:module}\", \"${2:name}\")]",
+      "N F ${3:name}(${4:params}) -> ${0:ReturnType}"
+    ],
+    "description": "WASM import declaration"
+  },
+  "WASM Export": {
+    "prefix": ["wasmexport", "wasmexp"],
+    "body": [
+      "#[wasm_export(\"${1:name}\")]",
+      "P F ${2:name}(${3:params}) -> ${4:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "WASM export function"
+  },
+  "Cfg Attribute": {
+    "prefix": ["cfg", "conditional"],
+    "body": "#[cfg(${1|target_os,feature,test|}=\"${2:value}\")]",
+    "description": "Conditional compilation attribute"
+  },
+  "Inline Attribute": {
+    "prefix": ["inline"],
+    "body": "#[inline${1|(always),|}]",
+    "description": "Inline function hint"
+  },
+  "Test Suite": {
+    "prefix": ["testsuite", "tests"],
+    "body": [
+      "#[cfg(test)]",
+      "mod tests {",
+      "\tU \"super::*\"",
+      "\t",
+      "\t#[test]",
+      "\tF test_${1:name}() {",
+      "\t\t${0:# test code}",
+      "\t}",
+      "}"
+    ],
+    "description": "Test module structure"
+  },
+  "Error Enum": {
+    "prefix": ["error", "errorenum"],
+    "body": [
+      "E ${1:Error} {",
+      "\t${2:NotFound}(String),",
+      "\t${3:Invalid}(String),",
+      "\t${4:Io}(IoError),$0",
+      "}",
+      "",
+      "X ${1:Error} {",
+      "\tF message(&self) -> String {",
+      "\t\tM self {",
+      "\t\t\t${2:NotFound}(msg) => ~\"Not found: ~{msg}\",",
+      "\t\t\t${3:Invalid}(msg) => ~\"Invalid: ~{msg}\",",
+      "\t\t\t${4:Io}(err) => ~\"IO error: ~{err}\",",
+      "\t\t}",
+      "\t}",
+      "}"
+    ],
+    "description": "Error enum with message method"
+  },
+  "Newtype Pattern": {
+    "prefix": ["newtype"],
+    "body": [
+      "S ${1:TypeName}(${2:InnerType});",
+      "",
+      "X ${1:TypeName} {",
+      "\tF new(${3:value}: ${2:InnerType}) -> Self {",
+      "\t\tSelf(${3:value})",
+      "\t}",
+      "\t",
+      "\tF inner(&self) -> &${2:InnerType} {",
+      "\t\t&self.0",
+      "\t}",
+      "}"
+    ],
+    "description": "Newtype wrapper pattern"
+  },
+  "Singleton Pattern": {
+    "prefix": ["singleton"],
+    "body": [
+      "S ${1:Singleton} {",
+      "\t${2:data}: ${3:Type},",
+      "}",
+      "",
+      "G ${1:Singleton}_INSTANCE: Option<${1:Singleton}> = None",
+      "",
+      "X ${1:Singleton} {",
+      "\tF instance() -> &'static ${1:Singleton} {",
+      "\t\tI ${1:Singleton}_INSTANCE.is_none() {",
+      "\t\t\t${1:Singleton}_INSTANCE = Some(${1:Singleton} { ${2:data}: ${4:default} })",
+      "\t\t}",
+      "\t\t${1:Singleton}_INSTANCE!",
+      "\t}",
+      "}"
+    ],
+    "description": "Singleton pattern with global instance"
   }
 }
