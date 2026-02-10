@@ -63,6 +63,16 @@ name = "parallel_bench"
 path = "parallel_bench.rs"
 harness = false
 
+[[bench]]
+name = "tcp_bench"
+path = "tcp_bench.rs"
+harness = false
+
+[[bench]]
+name = "endurance_bench"
+path = "endurance_bench.rs"
+harness = false
+
 [[example]]
 name = "gen_large_example"
 path = "fixtures/gen_large_example.rs"

@@ -1,0 +1,12 @@
+[package]
+name = "vais-regex"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "NFA-based regular expression engine for pattern matching"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

@@ -2,7 +2,9 @@
 
 Quick reference guide for all available Vais packages.
 
-## Available Packages (10)
+## Available Packages (19)
+
+### Utility Packages (10)
 
 | Package | Version | Description | Key Features |
 |---------|---------|-------------|--------------|
@@ -16,6 +18,20 @@ Quick reference guide for all available Vais packages.
 | [validate](#validate) | 1.0.0 | Input validation utilities | Email, URL, numeric, range, length checks |
 | [cache](#cache) | 1.0.0 | In-memory LRU cache | LRU eviction, key-value storage, fixed capacity |
 | [math-ext](#math-ext) | 1.0.0 | Extended math functions | GCD, LCM, primes, fibonacci, combinatorics |
+
+### Ecosystem Packages (9)
+
+| Package | Version | Description | Key Features |
+|---------|---------|-------------|--------------|
+| [vais-aes](#vais-aes) | 1.0.0 | AES-128/192/256 encryption | ECB/CBC/CTR modes, PKCS7 padding |
+| [vais-base64](#vais-base64) | 1.0.0 | Base64 encoding/decoding | RFC 4648 compliant |
+| [vais-crc32](#vais-crc32) | 1.0.0 | CRC32 checksums | IEEE 802.3, Castagnoli polynomials |
+| [vais-csv](#vais-csv) | 1.0.0 | Advanced CSV processing | RFC 4180, streaming, custom delimiters |
+| [vais-json](#vais-json) | 1.0.0 | JSON parser/serializer | RFC 8259 compliant |
+| [vais-lz4](#vais-lz4) | 1.0.0 | LZ4 compression | Fast compression/decompression |
+| [vais-regex](#vais-regex) | 1.0.0 | Regular expressions | Pattern matching, groups |
+| [vais-sha256](#vais-sha256) | 1.0.0 | SHA-256 cryptographic hash | FIPS 180-4, streaming API |
+| [vais-uuid](#vais-uuid) | 1.0.0 | UUID generation | v4 (random), v5 (SHA-1) |
 
 ## Quick Start
 
@@ -308,6 +324,42 @@ fact := factorial(5)    # 120
 
 ---
 
+### vais-sha256
+**SHA-256 cryptographic hash (FIPS 180-4)**
+
+```vais
+U vais-sha256
+
+# Simple hashing
+data := str_to_ptr("hello world")
+hash := sha256_hash(data, 11)
+hex := sha256_hex(hash)
+puts_ptr(hex)
+free(hash)
+free(hex)
+
+# Incremental hashing
+state := sha256_init()
+sha256_update(state, str_to_ptr("hello"), 5)
+sha256_update(state, str_to_ptr(" world"), 6)
+hash := sha256_finalize(state)
+```
+
+**Main API:**
+- `sha256_init() -> i64` - Initialize state
+- `sha256_update(state, data, len) -> i64` - Process data incrementally
+- `sha256_finalize(state) -> i64` - Finalize and return 32-byte hash
+- `sha256_hash(data, len) -> i64` - One-shot hashing
+- `sha256_hex(hash) -> i64` - Convert to 64-char hex string
+
+**Features:**
+- FIPS 180-4 compliant
+- Streaming API for large data
+- Pure Vais implementation
+- 10+ test vectors
+
+---
+
 ## Common Patterns
 
 ### CLI Application
@@ -512,6 +564,6 @@ vaisc pkg publish packages/my-package
 
 ---
 
-**Last Updated**: 2026-02-04
-**Total Packages**: 10
+**Last Updated**: 2026-02-10
+**Total Packages**: 19 (10 utility + 9 ecosystem)
 **Vais Version**: 0.1.0

@@ -1,0 +1,198 @@
+# stress_memory.vais — Memory Allocation Stress Test
+#
+# This program performs repeated malloc/free cycles to stress test
+# memory allocation patterns and detect potential leaks.
+#
+# Usage: vaisc stress_memory.vais && ./stress_memory
+
+# External C functions for memory management
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F print_i64(val: i64) -> i64
+X F print_str(s: str) -> i64
+
+# Perform a single allocation and free cycle
+F alloc_and_free_cycle(size: i64) -> i64 {
+    # Allocate memory
+    ptr := malloc(size)
+
+    # Check if allocation succeeded
+    I ptr == 0 {
+        print_str("ERROR: malloc failed\n")
+        R 0
+    }
+
+    # Immediately free it
+    result := free(ptr)
+
+    # Return success
+    R 1
+}
+
+# Test pattern 1: Small allocations (8-64 bytes)
+F test_small_allocations(iterations: i64) -> i64 {
+    print_str("\n--- Test 1: Small Allocations ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Allocate sizes from 8 to 64 bytes
+        size := 8 + (i % 8) * 8
+        result := alloc_and_free_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test pattern 2: Medium allocations (1KB-16KB)
+F test_medium_allocations(iterations: i64) -> i64 {
+    print_str("\n--- Test 2: Medium Allocations ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Allocate sizes from 1KB to 16KB
+        size := 1024 + (i % 16) * 1024
+        result := alloc_and_free_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test pattern 3: Large allocations (64KB-1MB)
+F test_large_allocations(iterations: i64) -> i64 {
+    print_str("\n--- Test 3: Large Allocations ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Allocate sizes from 64KB to 1MB
+        size := 65536 + (i % 16) * 65536
+        result := alloc_and_free_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test pattern 4: Mixed allocation sizes
+F test_mixed_allocations(iterations: i64) -> i64 {
+    print_str("\n--- Test 4: Mixed Allocations ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Mix of small, medium, and large
+        pattern := i % 3
+        size := I pattern == 0 {
+            R 64
+        } E I pattern == 1 {
+            R 4096
+        } E {
+            R 131072
+        }
+
+        result := alloc_and_free_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Main function
+F main() -> i64 {
+    print_str("=========================\n")
+    print_str("Memory Stress Test\n")
+    print_str("=========================\n")
+
+    # Run all test patterns
+    count1 := test_small_allocations(1000)
+    count2 := test_medium_allocations(500)
+    count3 := test_large_allocations(100)
+    count4 := test_mixed_allocations(500)
+
+    # Calculate total
+    total := count1 + count2 + count3 + count4
+    expected := 1000 + 500 + 100 + 500
+
+    print_str("\n=== Overall Summary ===\n")
+    print_str("Total successful cycles: ")
+    print_i64(total)
+    print_str(" / ")
+    print_i64(expected)
+    print_str("\n")
+
+    I total == expected {
+        print_str("SUCCESS: All allocations successful\n")
+        R 0
+    } E {
+        print_str("FAILURE: Some allocations failed\n")
+        R 1
+    }
+}

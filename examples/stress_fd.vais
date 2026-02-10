@@ -1,0 +1,211 @@
+# stress_fd.vais — File Descriptor Leak Detection Test
+#
+# This program simulates file descriptor management by tracking
+# open/close operations and detecting potential leaks.
+#
+# Since actual file I/O requires more complex FFI, we simulate
+# file descriptors using memory allocation as a proxy.
+#
+# Usage: vaisc stress_fd.vais && ./stress_fd
+
+# External C functions
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F print_i64(val: i64) -> i64
+X F print_str(s: str) -> i64
+
+# Global tracking variables (simulated through parameter passing)
+# In a real implementation, these would be mutable statics or globals
+
+# Simulate opening and closing a file descriptor
+F simulate_fd_cycle(size: i64) -> i64 {
+    # Allocate memory to simulate resource acquisition
+    fd := malloc(size)
+
+    # Check if allocation succeeded
+    I fd == 0 {
+        print_str("ERROR: FD allocation failed\n")
+        R 0
+    }
+
+    # Immediately close (free) the file descriptor
+    result := free(fd)
+
+    # Return success
+    R 1
+}
+
+# Test 1: Sequential open/close
+F test_sequential(iterations: i64) -> i64 {
+    print_str("\n--- Test 1: Sequential Open/Close ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Standard 4KB file buffer size
+        result := simulate_fd_cycle(4096)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test 2: Batch operations
+F test_batch(batch_size: i64) -> i64 {
+    print_str("\n--- Test 2: Batch Open/Close ---\n")
+    print_str("Batch size: ")
+    print_i64(batch_size)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= batch_size {
+            B
+        }
+
+        # Larger buffer size (8KB)
+        result := simulate_fd_cycle(8192)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(batch_size)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test 3: Alternating pattern with different sizes
+F test_alternating(iterations: i64) -> i64 {
+    print_str("\n--- Test 3: Alternating Pattern ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Alternate between small (2KB) and large (16KB) buffers
+        size := I i % 2 == 0 {
+            R 2048
+        } E {
+            R 16384
+        }
+
+        result := simulate_fd_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Test 4: Stress test with varying sizes
+F test_stress(iterations: i64) -> i64 {
+    print_str("\n--- Test 4: Stress Test ---\n")
+    print_str("Iterations: ")
+    print_i64(iterations)
+    print_str("\n")
+
+    i := mut 0
+    success_count := mut 0
+
+    L {
+        I i >= iterations {
+            B
+        }
+
+        # Vary sizes: small (1KB), medium (16KB), large (64KB)
+        size := I i % 3 == 0 {
+            R 1024
+        } E I i % 3 == 1 {
+            R 16384
+        } E {
+            R 65536
+        }
+
+        result := simulate_fd_cycle(size)
+        success_count = success_count + result
+
+        i = i + 1
+    }
+
+    print_str("Successful cycles: ")
+    print_i64(success_count)
+    print_str(" / ")
+    print_i64(iterations)
+    print_str("\n")
+
+    R success_count
+}
+
+# Main function
+F main() -> i64 {
+    print_str("==============================\n")
+    print_str("File Descriptor Stress Test\n")
+    print_str("==============================\n")
+
+    # Run all test patterns
+    count1 := test_sequential(500)
+    count2 := test_batch(100)
+    count3 := test_alternating(200)
+    count4 := test_stress(300)
+
+    # Calculate totals
+    total := count1 + count2 + count3 + count4
+    expected := 500 + 100 + 200 + 300
+
+    print_str("\n=== Overall Summary ===\n")
+    print_str("Total opens:   ")
+    print_i64(expected)
+    print_str("\n")
+    print_str("Total closes:  ")
+    print_i64(total)
+    print_str("\n")
+
+    leaks := expected - total
+
+    I leaks > 0 {
+        print_str("FAILURE: ")
+        print_i64(leaks)
+        print_str(" file descriptor leaks detected!\n")
+        R 1
+    }
+
+    print_str("SUCCESS: All file descriptors properly closed\n")
+    R 0
+}

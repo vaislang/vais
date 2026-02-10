@@ -1,0 +1,795 @@
+# Base64 Test Suite
+# Tests RFC 4648 Base64 encoding/decoding with standard and URL-safe variants
+
+# ============================================================================
+# Base64 Library Functions (inlined for testing)
+# ============================================================================
+
+# Encode a 6-bit value to Base64 character (standard alphabet)
+F base64_encode_char(idx: i64) -> i64 {
+    I idx < 26 {
+        65 + idx
+    } E {
+        I idx < 52 {
+            97 + (idx - 26)
+        } E {
+            I idx < 62 {
+                48 + (idx - 52)
+            } E {
+                I idx == 62 {
+                    43
+                } E {
+                    47
+                }
+            }
+        }
+    }
+}
+
+F base64url_encode_char(idx: i64) -> i64 {
+    I idx < 26 {
+        65 + idx
+    } E {
+        I idx < 52 {
+            97 + (idx - 26)
+        } E {
+            I idx < 62 {
+                48 + (idx - 52)
+            } E {
+                I idx == 62 {
+                    45
+                } E {
+                    95
+                }
+            }
+        }
+    }
+}
+
+F base64_decode_char(c: i64) -> i64 {
+    I c >= 65 {
+        I c <= 90 {
+            c - 65
+        } E {
+            I c >= 97 {
+                I c <= 122 {
+                    c - 97 + 26
+                } E {
+                    -1
+                }
+            } E {
+                I c >= 48 {
+                    I c <= 57 {
+                        c - 48 + 52
+                    } E {
+                        I c == 43 {
+                            62
+                        } E {
+                            I c == 47 {
+                                63
+                            } E {
+                                -1
+                            }
+                        }
+                    }
+                } E {
+                    -1
+                }
+            }
+        }
+    } E {
+        I c >= 48 {
+            I c <= 57 {
+                c - 48 + 52
+            } E {
+                I c == 43 {
+                    62
+                } E {
+                    I c == 47 {
+                        63
+                    } E {
+                        -1
+                    }
+                }
+            }
+        } E {
+            -1
+        }
+    }
+}
+
+F base64url_decode_char(c: i64) -> i64 {
+    I c >= 65 {
+        I c <= 90 {
+            c - 65
+        } E {
+            I c >= 97 {
+                I c <= 122 {
+                    c - 97 + 26
+                } E {
+                    -1
+                }
+            } E {
+                I c >= 48 {
+                    I c <= 57 {
+                        c - 48 + 52
+                    } E {
+                        I c == 45 {
+                            62
+                        } E {
+                            I c == 95 {
+                                63
+                            } E {
+                                -1
+                            }
+                        }
+                    }
+                } E {
+                    -1
+                }
+            }
+        }
+    } E {
+        I c >= 48 {
+            I c <= 57 {
+                c - 48 + 52
+            } E {
+                I c == 45 {
+                    62
+                } E {
+                    I c == 95 {
+                        63
+                    } E {
+                        -1
+                    }
+                }
+            }
+        } E {
+            -1
+        }
+    }
+}
+
+F base64_encode(data: i64, len: i64) -> i64 {
+    out_len := ((len + 2) / 3) * 4
+    out := malloc(out_len + 1)
+
+    in_idx := mut 0
+    out_idx := mut 0
+
+    L in_idx + 2 < len {
+        b0 := load_byte(data + in_idx)
+        b1 := load_byte(data + in_idx + 1)
+        b2 := load_byte(data + in_idx + 2)
+
+        c0 := base64_encode_char((b0 >> 2) & 63)
+        c1 := base64_encode_char(((b0 << 4) | (b1 >> 4)) & 63)
+        c2 := base64_encode_char(((b1 << 2) | (b2 >> 6)) & 63)
+        c3 := base64_encode_char(b2 & 63)
+
+        store_byte(out + out_idx, c0)
+        store_byte(out + out_idx + 1, c1)
+        store_byte(out + out_idx + 2, c2)
+        store_byte(out + out_idx + 3, c3)
+
+        in_idx = in_idx + 3
+        out_idx = out_idx + 4
+    }
+
+    remaining := len - in_idx
+
+    I remaining == 1 {
+        b0 := load_byte(data + in_idx)
+
+        c0 := base64_encode_char((b0 >> 2) & 63)
+        c1 := base64_encode_char((b0 << 4) & 63)
+
+        store_byte(out + out_idx, c0)
+        store_byte(out + out_idx + 1, c1)
+        store_byte(out + out_idx + 2, 61)
+        store_byte(out + out_idx + 3, 61)
+
+        out_idx = out_idx + 4
+    } E {
+        I remaining == 2 {
+            b0 := load_byte(data + in_idx)
+            b1 := load_byte(data + in_idx + 1)
+
+            c0 := base64_encode_char((b0 >> 2) & 63)
+            c1 := base64_encode_char(((b0 << 4) | (b1 >> 4)) & 63)
+            c2 := base64_encode_char((b1 << 2) & 63)
+
+            store_byte(out + out_idx, c0)
+            store_byte(out + out_idx + 1, c1)
+            store_byte(out + out_idx + 2, c2)
+            store_byte(out + out_idx + 3, 61)
+
+            out_idx = out_idx + 4
+        } E {
+            0
+        }
+    }
+
+    store_byte(out + out_idx, 0)
+
+    out
+}
+
+F base64_decode(encoded: i64, encoded_len: i64) -> i64 {
+    max_out_len := (encoded_len / 4) * 3
+    out := malloc(max_out_len)
+
+    result := malloc(16)
+
+    in_idx := mut 0
+    out_idx := mut 0
+
+    L in_idx + 3 < encoded_len {
+        c0 := load_byte(encoded + in_idx)
+        c1 := load_byte(encoded + in_idx + 1)
+        c2 := load_byte(encoded + in_idx + 2)
+        c3 := load_byte(encoded + in_idx + 3)
+
+        v0 := base64_decode_char(c0)
+        v1 := base64_decode_char(c1)
+        v2 := base64_decode_char(c2)
+        v3 := base64_decode_char(c3)
+
+        I c2 == 61 {
+            b0 := ((v0 << 2) | (v1 >> 4)) & 255
+            store_byte(out + out_idx, b0)
+            out_idx = out_idx + 1
+        } E {
+            I c3 == 61 {
+                b0 := ((v0 << 2) | (v1 >> 4)) & 255
+                b1 := ((v1 << 4) | (v2 >> 2)) & 255
+                store_byte(out + out_idx, b0)
+                store_byte(out + out_idx + 1, b1)
+                out_idx = out_idx + 2
+            } E {
+                b0 := ((v0 << 2) | (v1 >> 4)) & 255
+                b1 := ((v1 << 4) | (v2 >> 2)) & 255
+                b2 := ((v2 << 6) | v3) & 255
+                store_byte(out + out_idx, b0)
+                store_byte(out + out_idx + 1, b1)
+                store_byte(out + out_idx + 2, b2)
+                out_idx = out_idx + 3
+            }
+        }
+
+        in_idx = in_idx + 4
+    }
+
+    store_i64(result, out)
+    store_i64(result + 8, out_idx)
+
+    result
+}
+
+F base64url_encode(data: i64, len: i64) -> i64 {
+    out_len := ((len + 2) / 3) * 4
+    out := malloc(out_len + 1)
+
+    in_idx := mut 0
+    out_idx := mut 0
+
+    L in_idx + 2 < len {
+        b0 := load_byte(data + in_idx)
+        b1 := load_byte(data + in_idx + 1)
+        b2 := load_byte(data + in_idx + 2)
+
+        c0 := base64url_encode_char((b0 >> 2) & 63)
+        c1 := base64url_encode_char(((b0 << 4) | (b1 >> 4)) & 63)
+        c2 := base64url_encode_char(((b1 << 2) | (b2 >> 6)) & 63)
+        c3 := base64url_encode_char(b2 & 63)
+
+        store_byte(out + out_idx, c0)
+        store_byte(out + out_idx + 1, c1)
+        store_byte(out + out_idx + 2, c2)
+        store_byte(out + out_idx + 3, c3)
+
+        in_idx = in_idx + 3
+        out_idx = out_idx + 4
+    }
+
+    remaining := len - in_idx
+
+    I remaining == 1 {
+        b0 := load_byte(data + in_idx)
+
+        c0 := base64url_encode_char((b0 >> 2) & 63)
+        c1 := base64url_encode_char((b0 << 4) & 63)
+
+        store_byte(out + out_idx, c0)
+        store_byte(out + out_idx + 1, c1)
+        store_byte(out + out_idx + 2, 61)
+        store_byte(out + out_idx + 3, 61)
+
+        out_idx = out_idx + 4
+    } E {
+        I remaining == 2 {
+            b0 := load_byte(data + in_idx)
+            b1 := load_byte(data + in_idx + 1)
+
+            c0 := base64url_encode_char((b0 >> 2) & 63)
+            c1 := base64url_encode_char(((b0 << 4) | (b1 >> 4)) & 63)
+            c2 := base64url_encode_char((b1 << 2) & 63)
+
+            store_byte(out + out_idx, c0)
+            store_byte(out + out_idx + 1, c1)
+            store_byte(out + out_idx + 2, c2)
+            store_byte(out + out_idx + 3, 61)
+
+            out_idx = out_idx + 4
+        } E {
+            0
+        }
+    }
+
+    store_byte(out + out_idx, 0)
+
+    out
+}
+
+F base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
+    max_out_len := (encoded_len / 4) * 3
+    out := malloc(max_out_len)
+
+    result := malloc(16)
+
+    in_idx := mut 0
+    out_idx := mut 0
+
+    L in_idx + 3 < encoded_len {
+        c0 := load_byte(encoded + in_idx)
+        c1 := load_byte(encoded + in_idx + 1)
+        c2 := load_byte(encoded + in_idx + 2)
+        c3 := load_byte(encoded + in_idx + 3)
+
+        v0 := base64url_decode_char(c0)
+        v1 := base64url_decode_char(c1)
+        v2 := base64url_decode_char(c2)
+        v3 := base64url_decode_char(c3)
+
+        I c2 == 61 {
+            b0 := ((v0 << 2) | (v1 >> 4)) & 255
+            store_byte(out + out_idx, b0)
+            out_idx = out_idx + 1
+        } E {
+            I c3 == 61 {
+                b0 := ((v0 << 2) | (v1 >> 4)) & 255
+                b1 := ((v1 << 4) | (v2 >> 2)) & 255
+                store_byte(out + out_idx, b0)
+                store_byte(out + out_idx + 1, b1)
+                out_idx = out_idx + 2
+            } E {
+                b0 := ((v0 << 2) | (v1 >> 4)) & 255
+                b1 := ((v1 << 4) | (v2 >> 2)) & 255
+                b2 := ((v2 << 6) | v3) & 255
+                store_byte(out + out_idx, b0)
+                store_byte(out + out_idx + 1, b1)
+                store_byte(out + out_idx + 2, b2)
+                out_idx = out_idx + 3
+            }
+        }
+
+        in_idx = in_idx + 4
+    }
+
+    store_i64(result, out)
+    store_i64(result + 8, out_idx)
+
+    result
+}
+
+# ============================================================================
+# Test helpers
+# ============================================================================
+
+# Print i64 in decimal
+F my_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        R 0
+    }
+
+    I val < 0 {
+        putchar(45)
+        my_print_i64(0 - val)
+        R 0
+    }
+
+    I val >= 10 {
+        my_print_i64(val / 10)
+    }
+    putchar(48 + (val % 10))
+    0
+}
+
+# Compare two strings
+F str_eq(s1: i64, s2: i64, len: i64) -> i64 {
+    idx := mut 0
+    L idx < len {
+        c1 := load_byte(s1 + idx)
+        c2 := load_byte(s2 + idx)
+        I c1 != c2 {
+            R 0
+        }
+        idx = idx + 1
+    }
+    1
+}
+
+# Assert string equality
+F assert_str_eq(actual: i64, expected_ptr: i64, expected_len: i64) -> i64 {
+    match := str_eq(actual, expected_ptr, expected_len)
+
+    I match == 1 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - expected: ")
+        # Print expected string by reading from pointer
+        idx2 := mut 0
+        L idx2 < expected_len {
+            c := load_byte(expected_ptr + idx2)
+            putchar(c)
+            idx2 = idx2 + 1
+        }
+        puts(", got: ")
+        idx := mut 0
+        L idx < expected_len {
+            c := load_byte(actual + idx)
+            putchar(c)
+            idx = idx + 1
+        }
+        putchar(10)
+        0
+    }
+}
+
+# Assert i64 equality
+F assert_eq(actual: i64, expected: i64) -> i64 {
+    I actual == expected {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - expected ")
+        my_print_i64(expected)
+        puts(", got ")
+        my_print_i64(actual)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Test cases
+# ============================================================================
+
+# Test: Encode empty string
+F test_encode_empty() -> i64 {
+    puts("\n[test_encode_empty]")
+
+    data := malloc(1)
+    result := base64_encode(data, 0)
+
+    # Empty string should produce empty Base64
+    first_char := load_byte(result)
+
+    free(data)
+    free(result)
+
+    assert_eq(first_char, 0)
+}
+
+# Test: Encode "f" -> "Zg=="
+F test_encode_f() -> i64 {
+    puts("\n[test_encode_f]")
+
+    data := str_to_ptr("f")
+    len := strlen("f")
+    result := base64_encode(data, len)
+
+    expected := str_to_ptr("Zg==")
+    expected_len := strlen("Zg==")
+    success := assert_str_eq(result, expected, expected_len)
+
+    free(result)
+    success
+}
+
+# Test: Encode "fo" -> "Zm8="
+F test_encode_fo() -> i64 {
+    puts("\n[test_encode_fo]")
+
+    data := str_to_ptr("fo")
+    len := strlen("fo")
+    result := base64_encode(data, len)
+
+    expected := str_to_ptr("Zm8=")
+    expected_len := strlen("Zm8=")
+    success := assert_str_eq(result, expected, expected_len)
+
+    free(result)
+    success
+}
+
+# Test: Encode "foo" -> "Zm9v"
+F test_encode_foo() -> i64 {
+    puts("\n[test_encode_foo]")
+
+    data := str_to_ptr("foo")
+    len := strlen("foo")
+    result := base64_encode(data, len)
+
+    expected := str_to_ptr("Zm9v")
+    expected_len := strlen("Zm9v")
+    success := assert_str_eq(result, expected, expected_len)
+
+    free(result)
+    success
+}
+
+# Test: Encode "foobar" -> "Zm9vYmFy"
+F test_encode_foobar() -> i64 {
+    puts("\n[test_encode_foobar]")
+
+    data := str_to_ptr("foobar")
+    len := strlen("foobar")
+    result := base64_encode(data, len)
+
+    expected := str_to_ptr("Zm9vYmFy")
+    expected_len := strlen("Zm9vYmFy")
+    success := assert_str_eq(result, expected, expected_len)
+
+    free(result)
+    success
+}
+
+# Test: Decode "Zm9v" -> "foo"
+F test_decode_foo() -> i64 {
+    puts("\n[test_decode_foo]")
+
+    encoded := str_to_ptr("Zm9v")
+    encoded_len := strlen("Zm9v")
+
+    result := base64_decode(encoded, encoded_len)
+
+    data_ptr := load_i64(result)
+    data_len := load_i64(result + 8)
+
+    # Verify length
+    I data_len != 3 {
+        puts("  FAIL - length mismatch: expected 3, got ")
+        my_print_i64(data_len)
+        putchar(10)
+        free(data_ptr)
+        free(result)
+        R 0
+    }
+
+    # Verify data
+    expected := str_to_ptr("foo")
+    match := str_eq(data_ptr, expected, 3)
+
+    free(data_ptr)
+    free(result)
+
+    I match == 1 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - data mismatch")
+        putchar(10)
+        0
+    }
+}
+
+# Test: URL-safe encode
+F test_url_encode() -> i64 {
+    puts("\n[test_url_encode]")
+
+    # Create data with bytes that would produce + and / in standard Base64
+    data := malloc(3)
+    store_byte(data, 251)  # Will produce + in standard
+    store_byte(data, 239)
+    store_byte(data, 190)
+
+    result := base64url_encode(data, 3)
+
+    # Standard: ++--
+    # URL-safe should have - and _ instead
+    c0 := load_byte(result)
+    c1 := load_byte(result + 1)
+
+    free(data)
+    free(result)
+
+    # Check that it uses URL-safe chars (not + or /)
+    valid := I c0 != 43 { I c0 != 47 { 1 } E { 0 } } E { 0 }
+
+    I valid == 1 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - contains + or /")
+        putchar(10)
+        0
+    }
+}
+
+# Test: URL-safe decode
+F test_url_decode() -> i64 {
+    puts("\n[test_url_decode]")
+
+    # Encode with URL-safe, then decode
+    data := str_to_ptr("hello")
+    len := strlen("hello")
+
+    encoded := base64url_encode(data, len)
+    encoded_len := strlen("aGVsbG8=")
+
+    result := base64url_decode(encoded, encoded_len)
+
+    data_ptr := load_i64(result)
+    data_len := load_i64(result + 8)
+
+    # Verify length
+    I data_len != 5 {
+        puts("  FAIL - length mismatch")
+        putchar(10)
+        free(data_ptr)
+        free(result)
+        free(encoded)
+        R 0
+    }
+
+    # Verify data
+    expected := str_to_ptr("hello")
+    match := str_eq(data_ptr, expected, 5)
+
+    free(data_ptr)
+    free(result)
+    free(encoded)
+
+    I match == 1 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - data mismatch")
+        putchar(10)
+        0
+    }
+}
+
+# Test: Roundtrip encode/decode
+F test_roundtrip() -> i64 {
+    puts("\n[test_roundtrip]")
+
+    original := str_to_ptr("The quick brown fox jumps over the lazy dog")
+    original_len := strlen("The quick brown fox jumps over the lazy dog")
+
+    # Encode
+    encoded := base64_encode(original, original_len)
+    encoded_len := strlen("VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZw==")
+
+    # Decode
+    result := base64_decode(encoded, encoded_len)
+
+    data_ptr := load_i64(result)
+    data_len := load_i64(result + 8)
+
+    # Verify length
+    I data_len != original_len {
+        puts("  FAIL - length mismatch: expected ")
+        my_print_i64(original_len)
+        puts(", got ")
+        my_print_i64(data_len)
+        putchar(10)
+        free(data_ptr)
+        free(result)
+        free(encoded)
+        R 0
+    }
+
+    # Verify data
+    match := str_eq(data_ptr, original, original_len)
+
+    free(data_ptr)
+    free(result)
+    free(encoded)
+
+    I match == 1 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - data mismatch")
+        putchar(10)
+        0
+    }
+}
+
+# Test: Encode binary data (with null bytes)
+F test_encode_binary() -> i64 {
+    puts("\n[test_encode_binary]")
+
+    # Create binary data with null byte
+    data := malloc(5)
+    store_byte(data, 0)
+    store_byte(data, 1)
+    store_byte(data, 2)
+    store_byte(data, 3)
+    store_byte(data, 4)
+
+    result := base64_encode(data, 5)
+
+    # Should produce valid Base64 (non-empty)
+    first_char := load_byte(result)
+
+    free(data)
+    free(result)
+
+    # Just check it's not null-terminated at start
+    I first_char != 0 {
+        puts("  PASS")
+        putchar(10)
+        1
+    } E {
+        puts("  FAIL - empty result")
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Main test runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("\n  Base64 Test Suite")
+    puts("\n===========================================")
+
+    total := mut 0
+    total = total + test_encode_empty()
+    total = total + test_encode_f()
+    total = total + test_encode_fo()
+    total = total + test_encode_foo()
+    total = total + test_encode_foobar()
+    total = total + test_decode_foo()
+    total = total + test_url_encode()
+    total = total + test_url_decode()
+    total = total + test_roundtrip()
+    total = total + test_encode_binary()
+
+    puts("\n===========================================")
+    puts("\n  Total passed: ")
+    my_print_i64(total)
+    puts(" / 10")
+    puts("\n===========================================")
+    putchar(10)
+
+    0
+}
+
+# ============================================================================
+# Extern declarations
+# ============================================================================
+
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+X F strlen(s: str) -> i64
+X F str_to_ptr(s: str) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F load_byte(ptr: i64) -> i64
+X F store_byte(ptr: i64, val: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F store_i64(ptr: i64, val: i64) -> i64

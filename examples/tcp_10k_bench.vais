@@ -1,0 +1,370 @@
+# TCP 10K Concurrent Connection Benchmark (Conceptual Example)
+# Demonstrates TCP server design patterns for high-concurrency scenarios
+# This is a simplified example showing the architecture — production would use AsyncTcpListener
+
+# Socket constants
+C AF_INET: i64 = 2
+C SOCK_STREAM: i64 = 1
+C SOL_SOCKET: i64 = 1
+C SO_REUSEADDR: i64 = 2
+C SOCKADDR_IN_SIZE: i64 = 16
+
+# Error codes
+C EAGAIN: i64 = 11
+C EWOULDBLOCK: i64 = 11
+
+# External C functions
+X F socket(domain: i64, type: i64, protocol: i64) -> i64
+X F bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F listen(sockfd: i64, backlog: i64) -> i64
+X F accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F close(fd: i64) -> i64
+X F setsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
+X F inet_pton(af: i64, src: i64, dst: i64) -> i64
+X F htons(hostshort: i64) -> i64
+X F fcntl(fd: i64, cmd: i64, arg: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> ()
+X F memset(ptr: i64, value: i64, size: i64) -> i64
+X F strlen(s: str) -> i64
+X F print_i64(val: i64) -> i64
+X F print_str(s: str) -> i64
+
+# Helper: Create sockaddr_in structure
+F make_sockaddr_in(host: str, port: i64) -> i64 {
+    addr := malloc(16)
+    memset(addr, 0, 16)
+
+    # sin_family (AF_INET) at offset 1
+    store_i8(addr + 1, 2)
+
+    # sin_port at offset 2 (network byte order)
+    port_net := htons(port)
+    store_i16(addr + 2, port_net)
+
+    # sin_addr at offset 4
+    ip_buf := malloc(4)
+    inet_result := inet_pton(AF_INET, host, ip_buf)
+    I inet_result <= 0 {
+        free(ip_buf)
+        free(addr)
+        R 0
+    }
+
+    ip_val := load_i32(ip_buf)
+    store_i32(addr + 4, ip_val)
+    free(ip_buf)
+
+    R addr
+}
+
+# Helper: Set socket to non-blocking mode
+F set_nonblocking(fd: i64) -> i64 {
+    # F_GETFL = 3, F_SETFL = 4, O_NONBLOCK = 2048 (Linux)
+    flags := fcntl(fd, 3, 0)
+    I flags < 0 {
+        R -1
+    }
+
+    new_flags := flags | 2048
+    R fcntl(fd, 4, new_flags)
+}
+
+# ============================================================================
+# Simple Echo Server
+# ============================================================================
+
+S EchoServer {
+    fd: i64,
+    port: i64,
+    is_running: i64,
+    connections_handled: i64
+}
+
+X EchoServer {
+    # Create and start echo server
+    F new(port: i64) -> EchoServer {
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            print_str("[ERROR] Failed to create socket\n")
+            R EchoServer { fd: -1, port: 0, is_running: 0, connections_handled: 0 }
+        }
+
+        # Set SO_REUSEADDR
+        optval := malloc(8)
+        store_i32(optval, 1)
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+        free(optval)
+
+        # Bind to 127.0.0.1:port
+        addr := make_sockaddr_in("127.0.0.1", port)
+        I addr == 0 {
+            close(fd)
+            print_str("[ERROR] Failed to create sockaddr\n")
+            R EchoServer { fd: -1, port: 0, is_running: 0, connections_handled: 0 }
+        }
+
+        bind_result := bind(fd, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        I bind_result < 0 {
+            close(fd)
+            print_str("[ERROR] Failed to bind socket\n")
+            R EchoServer { fd: -1, port: 0, is_running: 0, connections_handled: 0 }
+        }
+
+        # Listen with large backlog for 10K connections
+        backlog := 1024
+        listen_result := listen(fd, backlog)
+        I listen_result < 0 {
+            close(fd)
+            print_str("[ERROR] Failed to listen\n")
+            R EchoServer { fd: -1, port: 0, is_running: 0, connections_handled: 0 }
+        }
+
+        # Set non-blocking for high concurrency
+        set_nonblocking(fd)
+
+        print_str("[INFO] Echo server started on port ")
+        print_i64(port)
+        print_str("\n")
+
+        R EchoServer { fd: fd, port: port, is_running: 1, connections_handled: 0 }
+    }
+
+    # Handle single connection (echo pattern)
+    F handle_connection(client_fd: i64) -> i64 {
+        buf := malloc(1024)
+        total_bytes := 0
+
+        L {
+            n := recv(client_fd, buf, 1024, 0)
+
+            I n > 0 {
+                # Echo back the data
+                send(client_fd, buf, n, 0)
+                total_bytes := total_bytes + n
+            } E I n == 0 {
+                # Connection closed
+                B
+            } E {
+                # Error or would block
+                B
+            }
+        }
+
+        free(buf)
+        close(client_fd)
+        R total_bytes
+    }
+
+    # Accept and handle connections (simplified single-threaded version)
+    F run(max_connections: i64) -> i64 {
+        I is_running == 0 {
+            R 0
+        }
+
+        print_str("[INFO] Accepting up to ")
+        print_i64(max_connections)
+        print_str(" connections\n")
+
+        handled := 0
+        L {
+            I handled >= max_connections {
+                B
+            }
+
+            client_fd := accept(fd, 0, 0)
+
+            I client_fd >= 0 {
+                # Handle connection
+                bytes := handle_connection(client_fd)
+                handled := handled + 1
+                connections_handled := connections_handled + 1
+
+                I handled % 100 == 0 {
+                    print_str("[INFO] Handled ")
+                    print_i64(handled)
+                    print_str(" connections\n")
+                }
+            } E {
+                # No pending connection, continue
+                C
+            }
+        }
+
+        print_str("[INFO] Finished handling ")
+        print_i64(handled)
+        print_str(" connections\n")
+
+        R handled
+    }
+
+    # Shutdown server
+    F shutdown() -> i64 {
+        I is_running == 0 {
+            R 0
+        }
+
+        result := close(fd)
+        is_running := 0
+
+        print_str("[INFO] Server shutdown. Total connections: ")
+        print_i64(connections_handled)
+        print_str("\n")
+
+        R result
+    }
+}
+
+# ============================================================================
+# TCP Client for Benchmarking
+# ============================================================================
+
+S TcpClient {
+    connections_created: i64,
+    bytes_sent: i64,
+    bytes_received: i64
+}
+
+X TcpClient {
+    # Create new benchmark client
+    F new() -> TcpClient {
+        R TcpClient { connections_created: 0, bytes_sent: 0, bytes_received: 0 }
+    }
+
+    # Create single connection and send/receive data
+    F connect_and_exchange(host: str, port: i64, msg: str) -> i64 {
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            R -1
+        }
+
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            close(fd)
+            R -1
+        }
+
+        connect_result := connect(fd, addr, SOCKADDR_IN_SIZE)
+        free(addr)
+
+        I connect_result < 0 {
+            close(fd)
+            R -1
+        }
+
+        # Send message
+        msg_len := strlen(msg)
+        sent := send(fd, msg, msg_len, 0)
+        bytes_sent := bytes_sent + sent
+
+        # Receive echo
+        buf := malloc(1024)
+        received := recv(fd, buf, 1024, 0)
+        bytes_received := bytes_received + received
+
+        free(buf)
+        close(fd)
+        connections_created := connections_created + 1
+
+        R I received > 0 { 1 } E { 0 }
+    }
+
+    # Benchmark: Create multiple connections rapidly
+    F bench_connection_rate(host: str, port: i64, count: i64) -> i64 {
+        print_str("[BENCH] Creating ")
+        print_i64(count)
+        print_str(" connections...\n")
+
+        successful := 0
+        i := 0
+
+        L {
+            I i >= count {
+                B
+            }
+
+            result := connect_and_exchange(host, port, "PING")
+            I result > 0 {
+                successful := successful + 1
+            }
+
+            i := i + 1
+        }
+
+        print_str("[BENCH] Successfully created ")
+        print_i64(successful)
+        print_str(" / ")
+        print_i64(count)
+        print_str(" connections\n")
+
+        R successful
+    }
+
+    # Print statistics
+    F print_stats() -> i64 {
+        print_str("[STATS] Connections: ")
+        print_i64(connections_created)
+        print_str(", Bytes Sent: ")
+        print_i64(bytes_sent)
+        print_str(", Bytes Received: ")
+        print_i64(bytes_received)
+        print_str("\n")
+        R 0
+    }
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+F main() -> i64 {
+    print_str("=== TCP 10K Benchmark (Conceptual Example) ===\n")
+    print_str("This example demonstrates TCP server patterns for high concurrency.\n")
+    print_str("In production, use AsyncTcpListener from std/async_net.vais\n\n")
+
+    # Start echo server on port 9090
+    server := EchoServer::new(9090)
+    I server.is_running == 0 {
+        print_str("[ERROR] Failed to start server\n")
+        R 1
+    }
+
+    # Note: In real scenario, server would run in separate thread/process
+    # This is a conceptual demonstration
+
+    # For actual benchmark, you would:
+    # 1. Start server in background (thread/process)
+    # 2. Create multiple client threads
+    # 3. Each client creates many connections
+    # 4. Measure connection rate, latency, throughput
+
+    print_str("[INFO] In production:\n")
+    print_str("  - Use AsyncTcpListener with event loop (kqueue/epoll)\n")
+    print_str("  - Spawn worker threads to handle connections\n")
+    print_str("  - Use connection pooling for clients\n")
+    print_str("  - Monitor with metrics (connections/sec, latency)\n\n")
+
+    # Simulate accepting a small number of connections
+    server.run(10)
+
+    # Create benchmark client
+    client := TcpClient::new()
+
+    # Note: This won't actually connect since server is stopped
+    # In real scenario, server runs continuously
+    print_str("\n[INFO] Client benchmark simulation:\n")
+    print_str("  Target: 10,000 concurrent connections\n")
+    print_str("  Pattern: Connect -> Send -> Receive -> Close\n")
+    print_str("  Metric: Connections per second\n\n")
+
+    # Shutdown
+    server.shutdown()
+    client.print_stats()
+
+    print_str("\n=== Benchmark Complete ===\n")
+    R 0
+}
