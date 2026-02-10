@@ -783,6 +783,10 @@ pub enum ResolvedType {
     Pointer(Box<ResolvedType>),
     Ref(Box<ResolvedType>),
     RefMut(Box<ResolvedType>),
+    /// Immutable slice: `&[T]` — fat pointer (ptr, len)
+    Slice(Box<ResolvedType>),
+    /// Mutable slice: `&mut [T]` — fat pointer (ptr, len)
+    SliceMut(Box<ResolvedType>),
     Range(Box<ResolvedType>),
     Future(Box<ResolvedType>),
 
@@ -990,6 +994,8 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Pointer(t) => write!(f, "*{}", t),
             ResolvedType::Ref(t) => write!(f, "&{}", t),
             ResolvedType::RefMut(t) => write!(f, "&mut {}", t),
+            ResolvedType::Slice(t) => write!(f, "&[{}]", t),
+            ResolvedType::SliceMut(t) => write!(f, "&mut [{}]", t),
             ResolvedType::Range(t) => write!(f, "Range<{}>", t),
             ResolvedType::Future(t) => write!(f, "Future<{}>", t),
             ResolvedType::Fn {
@@ -1683,6 +1689,8 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         ResolvedType::Pointer(inner) => format!("ptr_{}", mangle_type(inner)),
         ResolvedType::Ref(inner) => format!("ref_{}", mangle_type(inner)),
         ResolvedType::RefMut(inner) => format!("refmut_{}", mangle_type(inner)),
+        ResolvedType::Slice(inner) => format!("slice_{}", mangle_type(inner)),
+        ResolvedType::SliceMut(inner) => format!("slicemut_{}", mangle_type(inner)),
         ResolvedType::Optional(inner) => format!("opt_{}", mangle_type(inner)),
         ResolvedType::Result(ok, err) => format!("res_{}_{}", mangle_type(ok), mangle_type(err)),
         ResolvedType::Future(inner) => format!("fut_{}", mangle_type(inner)),
@@ -1775,6 +1783,20 @@ pub fn substitute_type(
                 return ty.clone();
             }
             ResolvedType::RefMut(Box::new(new_inner))
+        }
+        ResolvedType::Slice(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Slice(Box::new(new_inner))
+        }
+        ResolvedType::SliceMut(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::SliceMut(Box::new(new_inner))
         }
         ResolvedType::Optional(inner) => {
             let new_inner = substitute_type(inner, substitutions);

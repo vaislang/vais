@@ -407,6 +407,10 @@ impl CodeGenerator {
                     .collect::<Result<_, _>>()?;
                 format!("{{ {} }}", elem_types.join(", "))
             }
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
+                // Slice is a fat pointer: { i8* data, i64 length }
+                "{ i8*, i64 }".to_string()
+            }
             _ => "i64".to_string(), // Default fallback
         })
     }

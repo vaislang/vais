@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 475+, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 498+, 통합 354+) |
 | 표준 라이브러리 | 73개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 46,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -128,6 +128,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 1** | Lifetime & Ownership 실전 강화 | CFG worklist dataflow, NLL (liveness/expire/two-phase), MIR lifetime tracking (RefLifetime/RefMutLifetime), outlives 검증 E106, elision 규칙 — MIR 테스트 144개 |
 | **Phase 2** | 컴파일러 성능 최적화 | Clone 감소 (~60건 제거, Rc<Function/Struct>), 병렬 TC/CG/파이프라인 (parse 2.18x, codegen 4.14x speedup), 대규모 벤치마크 (10K~100K fixture, 메모리 프로파일링, CI 회귀 감지) — 벤치마크 30+개, 테스트 46+개 |
 | **Phase 3** | Selfhost 기능 확장 | advanced_opt 4개 모듈 포팅 — mir_alias(906줄, 3-pass alias analysis), mir_bounds(584줄, range/induction/elimination), mir_vectorize(651줄, loop/dep/reduction), mir_layout(690줄, reorder/hot-cold/AoS-SoA), mir_optimizer 통합(4-pass pipeline) — 셀프호스트 테스트 16개 |
+| **Phase 4** | 에코시스템 패키지 | vais-crc32 (CRC32 IEEE+Castagnoli), vais-lz4 (순수 Vais LZ4 compress/decompress), vais-aes (FIPS 197 AES-256 ECB/CBC/CTR) — 에코시스템 씨앗 확보 |
+| **Phase 5** | Codegen 버그 수정 & 에코시스템 확장 | elseif.merge 수정 (560+ 라벨), bool i1/i64 정합성, selfhost 20/21 clang, trait dispatch E2E 13개 (475→488), vais-json (752줄) + vais-csv (411줄) |
+| **Phase 6** | %%t Codegen 수정 & Slice 타입 | SSA→Alloca 업그레이드 (21/21 selfhost clang 100%), Slice/SliceMut fat pointer ({i8*,i64}) 타입 전체 파이프라인 (AST/Parser/TC/Codegen Text+Inkwell), E2E 10개 (488→498) — **498 E2E** |
 
 ---
 
@@ -386,6 +389,51 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: E2E 488개 통과 (475→488, +13 trait dispatch), Clippy 0건
 
 진행률: 6/6 (100%) ✅
+
+---
+
+## Phase 6: %%t Codegen 수정 & Slice 타입 도입
+
+> **상태**: ✅ 완료 (2026-02-10)
+> **목표**: 셀프호스트 완전 네이티브 컴파일을 위한 마지막 codegen 버그 수정 + 배열 조작 ergonomics 개선을 위한 Slice 타입 도입
+> **배경**: Phase 5에서 elseif.merge 수정 (20/21 성공), 잔여 %%t 이중기호 버그 1건. 배열 슬라이싱이 malloc 패턴 강제 (COMPARISON.md 지적)
+
+모드: 자동진행
+
+### Stage 1: %%t Codegen 버그 수정
+
+**목표**: mir_optimizer_mir_layout.ll 등에서 `%%t` 이중 % 기호 제거, 21/21 clang 컴파일 달성
+
+- [x] 1. %%t 이중기호 codegen 버그 수정 — SSA→Alloca 업그레이드 on reassign (Opus) ✅ 2026-02-10
+  변경: generate_expr.rs (Assign에서 SSA 변수 감지 시 alloca 동적 생성, LocalVar Alloca 전환) — 21/21 selfhost clang 컴파일 성공 (95.2%→100%)
+
+### Stage 2: Slice 타입 시스템
+
+**목표**: `&[T]` / `&mut [T]` 타입을 AST, 타입 시스템, 타입 체커에 추가
+
+- [x] 2. Slice 타입 정의 — ResolvedType::Slice/SliceMut 추가, AST Type::Slice 추가 (Opus) ✅ 2026-02-10
+  변경: types.rs (Slice/SliceMut variants + Display/mangle/substitute), ast/lib.rs (Type::Slice/SliceMut), parser/types.rs (&[T]/&mut [T] 파싱), resolve.rs, inference.rs (unify/apply/substitute/infer_type_arg), ownership.rs, inkwell/types.rs (fat pointer {i8*, i64}), jit/types.rs, repl.rs, compiler.rs, tree_shaking.rs, formatter.rs
+- [x] 3. Slice 타입 체커 통합 — 유니피케이션, 인덱싱, 소유권 검사 (Sonnet) [blockedBy: 2] ✅ 2026-02-10
+  변경: checker_expr.rs (Slice/SliceMut 인덱싱 + .len() 메서드 추가)
+
+### Stage 3: Slice Codegen
+
+**목표**: fat pointer (ptr, len) 기반 slice codegen 구현
+
+- [x] 4. Slice codegen (Text IR) — generate_expr.rs에 fat pointer 생성/인덱싱/bounds check (Sonnet) [blockedBy: 2] ✅ 2026-02-10
+  변경: generate_expr.rs (Slice extractvalue+bitcast+GEP 인덱싱), types.rs (Slice→{ i8*, i64 } 매핑)
+- [x] 5. Slice codegen (Inkwell) — inkwell gen_types/gen_expr에 slice struct 타입 매핑 (Sonnet) [blockedBy: 2, ∥4] ✅ 2026-02-10
+  변경: inkwell/gen_aggregate.rs (fat pointer struct 감지→extractvalue→bitcast→GEP 인덱싱)
+
+### Stage 4: 테스트 & 검증
+
+**목표**: E2E 테스트 추가, quicksort 예제 개선
+
+- [x] 6. Slice E2E 테스트 10개 추가 (Sonnet) [blockedBy: 3, 4, 5] ✅ 2026-02-10
+  변경: e2e_tests.rs (slice_type_tests 모듈 — parse/mut/len/nested/param_return/str/struct/mut_len/multi_param/return_type)
+- [x] 7. 통합 검증 — E2E 498 통과 (488→498, +10 slice), Clippy 0건 (Opus) [blockedBy: 1~6] ✅ 2026-02-10
+
+진행률: 7/7 (100%) ✅
 
 ---
 

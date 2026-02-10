@@ -30,6 +30,7 @@ impl TypeMapper {
             ResolvedType::Pointer(_) => self.pointer_type,
             ResolvedType::Ref(_) => self.pointer_type,
             ResolvedType::RefMut(_) => self.pointer_type,
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => self.pointer_type, // Fat pointer represented as pointer to {ptr, len} struct
             ResolvedType::Array(_) => self.pointer_type,
             ResolvedType::Map(_, _) => self.pointer_type,
             ResolvedType::Named { .. } => self.pointer_type,

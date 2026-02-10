@@ -1721,10 +1721,31 @@ impl CodeGenerator {
                     if let Some(local) = self.locals.get(name).cloned() {
                         if !local.is_param() {
                             let llvm_ty = self.type_to_llvm(&local.ty);
-                            // For struct types (Named), the local is a double pointer (%Type**).
-                            // We need to alloca a new struct, store the value, then update the pointer.
-                            if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca()
+
+                            // If the variable was originally SSA, we need to upgrade it to alloca
+                            // because SSA values cannot be reassigned with store.
+                            if local.is_ssa() {
+                                let alloca_name =
+                                    format!("{}.alloca.{}", name, counter);
+                                *counter += 1;
+                                ir.push_str(&format!(
+                                    "  %{} = alloca {}\n",
+                                    alloca_name, llvm_ty
+                                ));
+                                ir.push_str(&format!(
+                                    "  store {} {}, {}* %{}\n",
+                                    llvm_ty, val, llvm_ty, alloca_name
+                                ));
+                                // Upgrade from SSA to Alloca so future reads use load
+                                self.locals.insert(
+                                    name.clone(),
+                                    LocalVar::alloca(local.ty.clone(), alloca_name),
+                                );
+                            } else if matches!(&local.ty, ResolvedType::Named { .. })
+                                && local.is_alloca()
                             {
+                                // For struct types (Named), the local is a double pointer (%Type**).
+                                // We need to alloca a new struct, store the value, then update the pointer.
                                 let tmp_ptr = self.next_temp(counter);
                                 ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
                                 ir.push_str(&format!(
@@ -2184,7 +2205,9 @@ impl CodeGenerator {
                 match arr_type {
                     ResolvedType::Array(_)
                     | ResolvedType::ConstArray { .. }
-                    | ResolvedType::Pointer(_) => {
+                    | ResolvedType::Pointer(_)
+                    | ResolvedType::Slice(_)
+                    | ResolvedType::SliceMut(_) => {
                         // OK - indexable type
                     }
                     _ => {
@@ -2205,22 +2228,62 @@ impl CodeGenerator {
                     ResolvedType::Array(inner) => self.type_to_llvm(inner),
                     ResolvedType::ConstArray { element, .. } => self.type_to_llvm(element),
                     ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
+                    ResolvedType::Slice(inner) | ResolvedType::SliceMut(inner) => {
+                        self.type_to_llvm(inner)
+                    }
                     _ => "i64".to_string(),
                 };
 
-                // Get element pointer
-                let elem_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr {}, {}* {}, i64 {}\n",
-                    elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
-                ));
+                // Handle indexing differently for Slice types vs regular arrays/pointers
+                let result = if matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                {
+                    // For Slice types, extract data pointer from fat pointer struct
+                    // Slice is { i8* data, i64 length }
+                    let data_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                        data_ptr, arr_val
+                    ));
 
-                // Load element
-                let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
-                    result, elem_llvm_type, elem_llvm_type, elem_ptr
-                ));
+                    // Bitcast i8* to typed pointer
+                    let typed_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = bitcast i8* {} to {}*\n",
+                        typed_ptr, data_ptr, elem_llvm_type
+                    ));
+
+                    // Get element pointer
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                        elem_ptr, elem_llvm_type, elem_llvm_type, typed_ptr, idx_val
+                    ));
+
+                    // Load element
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        result, elem_llvm_type, elem_llvm_type, elem_ptr
+                    ));
+
+                    result
+                } else {
+                    // For regular arrays/pointers, use direct GEP
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                        elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
+                    ));
+
+                    // Load element
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        result, elem_llvm_type, elem_llvm_type, elem_ptr
+                    ));
+
+                    result
+                };
 
                 Ok((result, ir))
             }

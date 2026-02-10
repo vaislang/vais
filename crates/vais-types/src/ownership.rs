@@ -1061,6 +1061,12 @@ impl OwnershipChecker {
             Type::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))
             }
+            Type::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
             }

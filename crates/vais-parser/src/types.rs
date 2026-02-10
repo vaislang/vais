@@ -442,18 +442,31 @@ impl Parser {
             if is_mut {
                 self.advance();
             }
-            let inner = self.parse_base_type()?;
-            match (lifetime, is_mut) {
-                (Some(lt), true) => Type::RefMutLifetime {
-                    lifetime: lt,
-                    inner: Box::new(inner),
-                },
-                (Some(lt), false) => Type::RefLifetime {
-                    lifetime: lt,
-                    inner: Box::new(inner),
-                },
-                (None, true) => Type::RefMut(Box::new(inner)),
-                (None, false) => Type::Ref(Box::new(inner)),
+            // Check for slice type: &[T] or &mut [T]
+            if lifetime.is_none() && self.check(&Token::LBracket) {
+                let lbracket_span = self.current_span();
+                self.advance();
+                let elem_type = self.parse_type()?;
+                self.expect_closing(&Token::RBracket, lbracket_span)?;
+                if is_mut {
+                    Type::SliceMut(Box::new(elem_type))
+                } else {
+                    Type::Slice(Box::new(elem_type))
+                }
+            } else {
+                let inner = self.parse_base_type()?;
+                match (lifetime, is_mut) {
+                    (Some(lt), true) => Type::RefMutLifetime {
+                        lifetime: lt,
+                        inner: Box::new(inner),
+                    },
+                    (Some(lt), false) => Type::RefLifetime {
+                        lifetime: lt,
+                        inner: Box::new(inner),
+                    },
+                    (None, true) => Type::RefMut(Box::new(inner)),
+                    (None, false) => Type::Ref(Box::new(inner)),
+                }
             }
         } else if self.check(&Token::Dyn) {
             // dyn Trait or dyn Trait<T>

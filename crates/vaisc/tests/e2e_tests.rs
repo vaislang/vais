@@ -13543,3 +13543,153 @@ F main() -> i64 {
         Err(e) => panic!("Test failed: {}", e),
     }
 }
+
+// ==================== Slice Type Tests ====================
+
+/// Assert that source compiles successfully (parse + type check + codegen to IR)
+fn assert_compiles(source: &str) {
+    match compile_to_ir(source) {
+        Ok(_) => {}
+        Err(e) => panic!("Expected compilation to succeed, but got error: {}", e),
+    }
+}
+
+#[test]
+fn test_slice_type_parse() {
+    let source = r#"
+F foo(s: &[i64]) -> i64 {
+    0
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_mut_type_parse() {
+    let source = r#"
+F bar(s: &mut [i64]) {
+    s[0] = 42
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_len_method() {
+    let source = r#"
+F baz(s: &[i64]) -> i64 {
+    s.len()
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_nested_generic() {
+    let source = r#"
+F qux(s: &[&[i64]]) -> i64 {
+    0
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_param_return() {
+    let source = r#"
+F identity(s: &[i64]) -> &[i64] {
+    s
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_with_str() {
+    let source = r#"
+F first_char(s: &[str]) -> str {
+    "empty"
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_in_struct() {
+    let source = r#"
+S Foo {
+    data: &[i64]
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_mut_len() {
+    let source = r#"
+F len_mut(s: &mut [f64]) -> i64 {
+    s.len()
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_multi_param() {
+    let source = r#"
+F add_first(a: &[i64], b: &[i64]) -> i64 {
+    0
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn test_slice_return_type() {
+    let source = r#"
+F get_slice(input: &[i64]) -> &[i64] {
+    input
+}
+
+F main() -> i64 {
+    0
+}
+"#;
+    assert_compiles(source);
+}

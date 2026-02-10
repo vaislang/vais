@@ -854,6 +854,8 @@ impl Formatter {
             Type::Pointer(inner) => format!("*{}", self.format_type(&inner.node)),
             Type::Ref(inner) => format!("&{}", self.format_type(&inner.node)),
             Type::RefMut(inner) => format!("&mut {}", self.format_type(&inner.node)),
+            Type::Slice(inner) => format!("&[{}]", self.format_type(&inner.node)),
+            Type::SliceMut(inner) => format!("&mut [{}]", self.format_type(&inner.node)),
             Type::Fn { params, ret } => {
                 let ps: Vec<String> = params.iter().map(|p| self.format_type(&p.node)).collect();
                 format!("({}) -> {}", ps.join(", "), self.format_type(&ret.node))

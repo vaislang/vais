@@ -103,6 +103,54 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let arr_val = self.generate_expr(arr)?;
         let idx_val = self.generate_expr(index)?;
 
+        // Check if this is a slice (fat pointer struct with 2 fields: ptr + len)
+        if arr_val.is_struct_value() {
+            let struct_val = arr_val.into_struct_value();
+            let struct_type = struct_val.get_type();
+
+            // Slice is { i8*, i64 } - check if it has exactly 2 fields
+            if struct_type.count_fields() == 2 {
+                // This is likely a slice - extract data pointer (field 0)
+                let data_ptr = self
+                    .builder
+                    .build_extract_value(struct_val, 0, "data_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // The data pointer is i8* - we need to treat it as i64* for indexing
+                // (This assumes element type is i64 - ideally we'd track the actual element type)
+                let elem_type = self.context.i64_type();
+                let typed_ptr = self
+                    .builder
+                    .build_bitcast(
+                        data_ptr,
+                        elem_type.ptr_type(AddressSpace::default()),
+                        "typed_ptr",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                let idx_int = idx_val.into_int_value();
+
+                // GEP to get element pointer
+                let elem_ptr = unsafe {
+                    self.builder
+                        .build_gep(
+                            elem_type,
+                            typed_ptr.into_pointer_value(),
+                            &[idx_int],
+                            "elem_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
+
+                // Load element
+                return self
+                    .builder
+                    .build_load(elem_type, elem_ptr, "elem")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()));
+            }
+        }
+
+        // Regular array/pointer indexing
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();
 

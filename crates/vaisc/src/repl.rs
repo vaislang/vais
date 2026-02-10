@@ -457,6 +457,8 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         Pointer(inner) => format!("*{}", format_type(inner)),
         Ref(inner) => format!("&{}", format_type(inner)),
         RefMut(inner) => format!("&mut {}", format_type(inner)),
+        Slice(inner) => format!("&[{}]", format_type(inner)),
+        SliceMut(inner) => format!("&mut [{}]", format_type(inner)),
         Array(inner) => format!("[{}]", format_type(inner)),
         ConstArray { element, size } => format!("[{}; {:?}]", format_type(element), size),
         Optional(inner) => format!("Option<{}>", format_type(inner)),

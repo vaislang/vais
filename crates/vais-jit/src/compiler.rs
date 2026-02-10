@@ -302,6 +302,8 @@ impl JitCompiler {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
+            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
+            Type::SliceMut(inner) => ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node))),
             Type::Array(inner) => ResolvedType::Array(Box::new(self.resolve_type(&inner.node))),
             Type::Map(key, val) => ResolvedType::Map(
                 Box::new(self.resolve_type(&key.node)),

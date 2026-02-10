@@ -713,6 +713,10 @@ pub enum Type {
     Ref(Box<Spanned<Type>>),
     /// Mutable reference: `&mut T` or `&'a mut T` (with lifetime)
     RefMut(Box<Spanned<Type>>),
+    /// Immutable slice: `&[T]` — fat pointer (ptr, len)
+    Slice(Box<Spanned<Type>>),
+    /// Mutable slice: `&mut [T]` — fat pointer (ptr, len)
+    SliceMut(Box<Spanned<Type>>),
     /// Reference with explicit lifetime: `&'a T`
     RefLifetime {
         lifetime: String,
@@ -1176,6 +1180,8 @@ impl std::fmt::Display for Type {
             Type::Pointer(inner) => write!(f, "*{}", inner.node),
             Type::Ref(inner) => write!(f, "&{}", inner.node),
             Type::RefMut(inner) => write!(f, "&mut {}", inner.node),
+            Type::Slice(inner) => write!(f, "&[{}]", inner.node),
+            Type::SliceMut(inner) => write!(f, "&mut [{}]", inner.node),
             Type::Fn { params, ret } => {
                 write!(f, "(")?;
                 for (i, p) in params.iter().enumerate() {

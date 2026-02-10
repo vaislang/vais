@@ -82,6 +82,17 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
+                // Slice is a fat pointer: { ptr: i8*, len: i64 }
+                let ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default());
+                let len_type = self.context.i64_type();
+                self.context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false)
+                    .into()
+            }
             ResolvedType::Named { name, .. } => {
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()

@@ -108,6 +108,8 @@ impl TypeChecker {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
+            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
+            Type::SliceMut(inner) => ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node))),
             Type::Fn { params, ret } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.resolve_type(&p.node)).collect(),
                 ret: Box::new(self.resolve_type(&ret.node)),

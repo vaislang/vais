@@ -84,6 +84,8 @@ impl TypeChecker {
             }
             (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
+            (ResolvedType::Slice(a), ResolvedType::Slice(b)) => self.unify(a, b),
+            (ResolvedType::SliceMut(a), ResolvedType::SliceMut(b)) => self.unify(a, b),
             (ResolvedType::Pointer(a), ResolvedType::Pointer(b)) => self.unify(a, b),
             (ResolvedType::Range(a), ResolvedType::Range(b)) => self.unify(a, b),
             (ResolvedType::Future(a), ResolvedType::Future(b)) => self.unify(a, b),
@@ -269,6 +271,12 @@ impl TypeChecker {
             ResolvedType::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.apply_substitutions(inner)))
             }
+            ResolvedType::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.apply_substitutions(inner)))
+            }
+            ResolvedType::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.apply_substitutions(inner)))
+            }
             ResolvedType::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.apply_substitutions(inner)))
             }
@@ -359,6 +367,12 @@ impl TypeChecker {
             }
             ResolvedType::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.substitute_generics(inner, substitutions)))
             }
             ResolvedType::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.substitute_generics(inner, substitutions)))
@@ -499,6 +513,12 @@ impl TypeChecker {
                 self.infer_type_arg(inner_param, inner_arg, type_args)
             }
             (ResolvedType::RefMut(inner_param), ResolvedType::RefMut(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Slice(inner_param), ResolvedType::Slice(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::SliceMut(inner_param), ResolvedType::SliceMut(inner_arg)) => {
                 self.infer_type_arg(inner_param, inner_arg, type_args)
             }
             (ResolvedType::Optional(inner_param), ResolvedType::Optional(inner_arg)) => {

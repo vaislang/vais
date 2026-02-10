@@ -704,6 +704,20 @@ impl TypeChecker {
                     }
                 }
 
+                // Built-in slice methods
+                if matches!(&receiver_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                    && method.node.as_str() == "len"
+                {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: None,
+                        });
+                    }
+                    return Ok(ResolvedType::I64);
+                }
+
                 // Try to find similar method names for suggestion
                 let suggestion = types::find_similar_name(
                     &method.node,
@@ -921,6 +935,32 @@ impl TypeChecker {
                         if is_slice {
                             // Slice of pointer returns a pointer
                             Ok(ResolvedType::Pointer(elem_type))
+                        } else if !index_type.is_integer() {
+                            Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: None,
+                            })
+                        } else {
+                            Ok(*elem_type)
+                        }
+                    }
+                    ResolvedType::Slice(elem_type) => {
+                        if is_slice {
+                            Ok(ResolvedType::Slice(elem_type))
+                        } else if !index_type.is_integer() {
+                            Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: None,
+                            })
+                        } else {
+                            Ok(*elem_type)
+                        }
+                    }
+                    ResolvedType::SliceMut(elem_type) => {
+                        if is_slice {
+                            Ok(ResolvedType::SliceMut(elem_type))
                         } else if !index_type.is_integer() {
                             Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
