@@ -11,7 +11,9 @@
         <div class="container">
             <h1>Vais Package Registry</h1>
             <nav>
-                <a href="/">Home</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/">Search</a>
+                <a href="/#categories">Categories</a>
                 <a href="/api/v1/health">API Health</a>
             </nav>
         </div>
@@ -21,14 +23,25 @@
         <section class="search-section">
             <h2>Search Packages</h2>
             <form action="/" method="get" class="search-form">
-                <input
-                    type="text"
-                    name="q"
-                    placeholder="Search packages..."
-                    value="{{SEARCH_QUERY}}"
-                    autofocus
-                >
-                <button type="submit">Search</button>
+                <div class="search-input-group">
+                    <input
+                        type="text"
+                        name="q"
+                        placeholder="Search packages..."
+                        value="{{SEARCH_QUERY}}"
+                        autofocus
+                    >
+                    <select name="sort" class="sort-select">
+                        <option value="downloads" {{SORT_DOWNLOADS}}>Most Downloads</option>
+                        <option value="newest" {{SORT_NEWEST}}>Newest</option>
+                        <option value="name" {{SORT_NAME}}>Name</option>
+                        <option value="relevance" {{SORT_RELEVANCE}}>Relevance</option>
+                    </select>
+                    <button type="submit">Search</button>
+                </div>
+                <div class="category-chips" id="categories">
+                    {{CATEGORY_CHIPS}}
+                </div>
             </form>
         </section>
 

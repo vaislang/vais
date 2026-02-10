@@ -163,6 +163,42 @@ async fn create_schema(pool: &DbPool) -> ServerResult<()> {
     .await
     .ok(); // Ignore if already exists with different schema
 
+    // FTS5 synchronization triggers
+    sqlx::query(
+        r#"
+        CREATE TRIGGER IF NOT EXISTS packages_fts_insert AFTER INSERT ON packages BEGIN
+            INSERT INTO packages_fts(rowid, name, description, keywords)
+            VALUES (new.rowid, new.name, new.description, new.keywords);
+        END;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    sqlx::query(
+        r#"
+        CREATE TRIGGER IF NOT EXISTS packages_fts_update AFTER UPDATE ON packages BEGIN
+            UPDATE packages_fts SET name = new.name, description = new.description, keywords = new.keywords
+            WHERE rowid = new.rowid;
+        END;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    sqlx::query(
+        r#"
+        CREATE TRIGGER IF NOT EXISTS packages_fts_delete AFTER DELETE ON packages BEGIN
+            DELETE FROM packages_fts WHERE rowid = old.rowid;
+        END;
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+
     Ok(())
 }
 
@@ -822,6 +858,115 @@ pub async fn get_category_counts(pool: &DbPool) -> ServerResult<Vec<CategoryCoun
     result.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
 
     Ok(result)
+}
+
+/// Get registry statistics
+pub async fn get_registry_stats(pool: &DbPool) -> ServerResult<crate::models::RegistryStats> {
+    // Get total packages
+    let total_packages: i64 = sqlx::query("SELECT COUNT(*) as count FROM packages")
+        .fetch_one(pool)
+        .await?
+        .get("count");
+
+    // Get total downloads from packages table
+    let total_downloads: i64 = sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
+        .fetch_one(pool)
+        .await?
+        .get("total");
+
+    // Get total versions
+    let total_versions: i64 = sqlx::query("SELECT COUNT(*) as count FROM package_versions")
+        .fetch_one(pool)
+        .await?
+        .get("count");
+
+    Ok(crate::models::RegistryStats {
+        total_packages,
+        total_downloads,
+        total_versions,
+    })
+}
+
+/// Get recently updated packages
+pub async fn get_recent_packages(
+    pool: &DbPool,
+    limit: usize,
+) -> ServerResult<Vec<PackageSearchEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT p.name, p.description, p.keywords, p.categories, p.downloads, p.updated_at,
+               (SELECT version FROM package_versions WHERE package_id = p.id AND yanked = 0
+                ORDER BY created_at DESC LIMIT 1) as latest_version
+        FROM packages p
+        ORDER BY p.updated_at DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit as i64)
+    .fetch_all(pool)
+    .await?;
+
+    let packages = rows
+        .into_iter()
+        .filter_map(|r| {
+            let latest: Option<String> = r.get("latest_version");
+            latest.map(|v| PackageSearchEntry {
+                name: r.get("name"),
+                description: r.get("description"),
+                latest_version: v,
+                downloads: r.get("downloads"),
+                keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
+                categories: serde_json::from_str(r.get::<&str, _>("categories"))
+                    .unwrap_or_default(),
+                updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+        })
+        .collect();
+
+    Ok(packages)
+}
+
+/// Get popular packages by downloads
+pub async fn get_popular_packages(
+    pool: &DbPool,
+    limit: usize,
+) -> ServerResult<Vec<PackageSearchEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT p.name, p.description, p.keywords, p.categories, p.downloads, p.updated_at,
+               (SELECT version FROM package_versions WHERE package_id = p.id AND yanked = 0
+                ORDER BY created_at DESC LIMIT 1) as latest_version
+        FROM packages p
+        ORDER BY p.downloads DESC, p.name ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit as i64)
+    .fetch_all(pool)
+    .await?;
+
+    let packages = rows
+        .into_iter()
+        .filter_map(|r| {
+            let latest: Option<String> = r.get("latest_version");
+            latest.map(|v| PackageSearchEntry {
+                name: r.get("name"),
+                description: r.get("description"),
+                latest_version: v,
+                downloads: r.get("downloads"),
+                keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
+                categories: serde_json::from_str(r.get::<&str, _>("categories"))
+                    .unwrap_or_default(),
+                updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+        })
+        .collect();
+
+    Ok(packages)
 }
 
 // ==================== Index Generation ====================

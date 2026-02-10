@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Vais Package Registry</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Vais Package Registry</h1>
+            <nav>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/">Search</a>
+                <a href="/#categories">Categories</a>
+                <a href="/api/v1/health">API Health</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="dashboard-stats">
+            <h2>Registry Statistics</h2>
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-number">{{TOTAL_PACKAGES}}</div>
+                    <div class="stat-label">Total Packages</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{TOTAL_DOWNLOADS}}</div>
+                    <div class="stat-label">Total Downloads</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>Recent Updates</h2>
+            <div class="dashboard-packages">
+                {{RECENT_PACKAGES}}
+            </div>
+        </section>
+
+        <section class="dashboard-section">
+            <h2>Popular Packages</h2>
+            <div class="dashboard-packages">
+                {{POPULAR_PACKAGES}}
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Vais Package Registry - Open Source Package Management</p>
+        </div>
+    </footer>
+</body>
+</html>

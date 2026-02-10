@@ -1,0 +1,143 @@
+# WASM Todo App — Interactive DOM-based task manager
+#
+# Compile: vaisc --target wasm32-unknown-unknown wasm_todo_app.vais
+#
+# JS Usage:
+#   const wasm = await WebAssembly.instantiateStreaming(fetch('wasm_todo_app.wasm'), {
+#     env: {
+#       console_log: (ptr, len) => console.log(readString(ptr, len)),
+#       dom_create_element: (tag_ptr, tag_len) => createDOMElement(tag_ptr, tag_len),
+#       dom_set_text: (elem_id, ptr, len) => setElementText(elem_id, ptr, len),
+#       dom_append_child: (parent_id, child_id) => appendChild(parent_id, child_id),
+#       dom_remove_child: (parent_id, child_id) => removeChild(parent_id, child_id),
+#       dom_add_event_listener: (elem_id, event_ptr, event_len, callback_id) => ...
+#     }
+#   });
+#   wasm.exports.init();
+#   wasm.exports.add_todo(titlePtr, titleLen);
+
+# Import DOM manipulation functions
+#[wasm_import("env", "console_log")]
+N F console_log(ptr: i64, len: i64) -> i64
+
+#[wasm_import("env", "dom_create_element")]
+N F dom_create_element(tag_ptr: i64, tag_len: i64) -> i64
+
+#[wasm_import("env", "dom_set_text")]
+N F dom_set_text(elem_id: i64, ptr: i64, len: i64) -> i64
+
+#[wasm_import("env", "dom_append_child")]
+N F dom_append_child(parent_id: i64, child_id: i64) -> i64
+
+#[wasm_import("env", "dom_remove_child")]
+N F dom_remove_child(parent_id: i64, child_id: i64) -> i64
+
+#[wasm_import("env", "dom_add_event_listener")]
+N F dom_add_event_listener(elem_id: i64, event_ptr: i64, event_len: i64, callback_id: i64) -> i64
+
+# Todo item structure (simulated with parallel arrays)
+G todo_ids := mut [0; 100]
+G todo_titles_ptr := mut [0; 100]
+G todo_titles_len := mut [0; 100]
+G todo_completed := mut [0; 100]
+G todo_count := mut 0
+G next_id := mut 1
+
+# Initialize the todo app
+#[wasm_export("init")]
+F init() -> i64 {
+    msg := "Todo app initialized"
+    _ := console_log(msg as i64, 22)
+    0
+}
+
+# Add a new todo item
+#[wasm_export("add_todo")]
+F add_todo(title_ptr: i64, title_len: i64) -> i64 {
+    I todo_count >= 100 {
+        _ := console_log("Error: Todo list full" as i64, 21)
+        R -1
+    }
+
+    idx := todo_count
+    todo_ids[idx] = next_id
+    todo_titles_ptr[idx] = title_ptr
+    todo_titles_len[idx] = title_len
+    todo_completed[idx] = 0
+
+    todo_count = todo_count + 1
+    current_id := next_id
+    next_id = next_id + 1
+
+    current_id
+}
+
+# Remove a todo item by ID
+#[wasm_export("remove_todo")]
+F remove_todo(id: i64) -> i64 {
+    idx := find_todo_index(id)
+    I idx < 0 {
+        R -1
+    }
+
+    # Shift remaining items
+    i := mut idx
+    L i < todo_count - 1 {
+        todo_ids[i] = todo_ids[i + 1]
+        todo_titles_ptr[i] = todo_titles_ptr[i + 1]
+        todo_titles_len[i] = todo_titles_len[i + 1]
+        todo_completed[i] = todo_completed[i + 1]
+        i = i + 1
+    }
+
+    todo_count = todo_count - 1
+    0
+}
+
+# Toggle completion status
+#[wasm_export("toggle_todo")]
+F toggle_todo(id: i64) -> i64 {
+    idx := find_todo_index(id)
+    I idx < 0 {
+        R -1
+    }
+
+    current := todo_completed[idx]
+    todo_completed[idx] = I current == 0 { 1 } E { 0 }
+    todo_completed[idx]
+}
+
+# Get total count
+#[wasm_export("get_count")]
+F get_count() -> i64 = todo_count
+
+# Get completed count
+#[wasm_export("get_completed_count")]
+F get_completed_count() -> i64 {
+    count := mut 0
+    i := mut 0
+    L i < todo_count {
+        I todo_completed[i] == 1 {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    count
+}
+
+# Helper: find todo index by ID
+F find_todo_index(id: i64) -> i64 {
+    i := mut 0
+    L i < todo_count {
+        I todo_ids[i] == id {
+            R i
+        }
+        i = i + 1
+    }
+    -1
+}
+
+F main() -> i64 {
+    _ := init()
+    0
+}

@@ -532,6 +532,14 @@ fn default_browse_sort() -> String {
     "downloads".to_string()
 }
 
+/// Get registry statistics
+pub async fn stats(
+    State(state): State<AppState>,
+) -> ServerResult<Json<RegistryStats>> {
+    let stats = db::get_registry_stats(&state.pool).await?;
+    Ok(Json(stats))
+}
+
 /// Validate version string
 fn validate_version(version: &str) -> ServerResult<()> {
     // Simple semver validation

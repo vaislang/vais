@@ -1,0 +1,166 @@
+# WASM Calculator — Advanced mathematical operations with memory
+#
+# Compile: vaisc --target wasm32-unknown-unknown wasm_calculator.vais
+#
+# JS Usage:
+#   const wasm = await WebAssembly.instantiateStreaming(fetch('wasm_calculator.wasm'));
+#   console.log(wasm.exports.add(5, 3));           # 8
+#   console.log(wasm.exports.multiply(4, 7));      # 28
+#   console.log(wasm.exports.power(2, 10));        # 1024
+#   console.log(wasm.exports.factorial(5));        # 120
+#   console.log(wasm.exports.calculate(1, 10, 5)); # 15 (op 1 = add)
+#   console.log(wasm.exports.get_memory());        # Last result
+
+# Memory for last calculation result
+G memory := mut 0
+
+# Basic arithmetic operations
+#[wasm_export("add")]
+F add(a: i64, b: i64) -> i64 {
+    result := a + b
+    memory = result
+    result
+}
+
+#[wasm_export("subtract")]
+F subtract(a: i64, b: i64) -> i64 {
+    result := a - b
+    memory = result
+    result
+}
+
+#[wasm_export("multiply")]
+F multiply(a: i64, b: i64) -> i64 {
+    result := a * b
+    memory = result
+    result
+}
+
+#[wasm_export("divide")]
+F divide(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R -1  # Error: division by zero
+    }
+    result := a / b
+    memory = result
+    result
+}
+
+# Advanced operations
+#[wasm_export("power")]
+F power(base: i64, exp: i64) -> i64 {
+    I exp < 0 {
+        R -1  # Error: negative exponent not supported
+    }
+    I exp == 0 {
+        memory = 1
+        R 1
+    }
+
+    result := mut base
+    i := mut 1
+    L i < exp {
+        result = result * base
+        i = i + 1
+    }
+    memory = result
+    result
+}
+
+#[wasm_export("sqrt")]
+F sqrt(n: i64) -> i64 {
+    I n < 0 {
+        R -1  # Error: negative input
+    }
+    I n == 0 {
+        R 0
+    }
+
+    # Integer square root using Newton's method
+    x := mut n
+    y := mut (n + 1) / 2
+
+    L y < x {
+        x = y
+        y = (x + n / x) / 2
+    }
+    memory = x
+    x
+}
+
+#[wasm_export("factorial")]
+F factorial(n: i64) -> i64 {
+    I n < 0 {
+        R -1  # Error: negative input
+    }
+    I n <= 1 {
+        memory = 1
+        R 1
+    }
+
+    result := mut 1
+    i := mut 2
+    L i <= n {
+        result = result * i
+        i = i + 1
+    }
+    memory = result
+    result
+}
+
+#[wasm_export("mod_op")]
+F mod_op(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R -1  # Error: modulo by zero
+    }
+    result := a % b
+    memory = result
+    result
+}
+
+#[wasm_export("abs_val")]
+F abs_val(n: i64) -> i64 {
+    result := I n < 0 { -n } E { n }
+    memory = result
+    result
+}
+
+# Generic calculation interface
+# op codes: 1=add, 2=subtract, 3=multiply, 4=divide, 5=power, 6=mod
+#[wasm_export("calculate")]
+F calculate(op: i64, a: i64, b: i64) -> i64 {
+    M op {
+        1 => add(a, b),
+        2 => subtract(a, b),
+        3 => multiply(a, b),
+        4 => divide(a, b),
+        5 => power(a, b),
+        6 => mod_op(a, b),
+        _ => -1
+    }
+}
+
+# Memory operations
+#[wasm_export("get_memory")]
+F get_memory() -> i64 = memory
+
+#[wasm_export("set_memory")]
+F set_memory(value: i64) -> i64 {
+    memory = value
+    0
+}
+
+#[wasm_export("clear_memory")]
+F clear_memory() -> i64 {
+    memory = 0
+    0
+}
+
+F main() -> i64 {
+    # Test basic operations
+    _ := add(10, 5)
+    _ := multiply(4, 7)
+    _ := power(2, 8)
+    _ := factorial(5)
+    0
+}

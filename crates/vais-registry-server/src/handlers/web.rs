@@ -9,12 +9,21 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 use serde::Deserialize;
+use sqlx::Row;
 
 /// Query parameters for search
 #[derive(Debug, Deserialize)]
 pub struct WebSearchQuery {
     #[serde(default)]
     pub q: String,
+    #[serde(default = "default_sort")]
+    pub sort: String,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+fn default_sort() -> String {
+    "downloads".to_string()
 }
 
 /// Home page with search
@@ -24,9 +33,47 @@ pub async fn index(
 ) -> ServerResult<Html<String>> {
     let template = include_str!("../../static/index.html");
 
+    // Get category counts for filter chips
+    let categories = db::get_category_counts(&state.pool).await.unwrap_or_default();
+    let category_chips = if !categories.is_empty() {
+        let chips: Vec<String> = categories
+            .iter()
+            .take(10) // Show top 10 categories
+            .map(|cat| {
+                let active = query.category.as_ref() == Some(&cat.name);
+                let active_class = if active { " active" } else { "" };
+                format!(
+                    r#"<a href="/?q={}&category={}&sort={}" class="category-chip{}">
+                        {}
+                        <span class="category-count">({})</span>
+                    </a>"#,
+                    html_escape(&query.q),
+                    html_escape(&cat.name),
+                    html_escape(&query.sort),
+                    active_class,
+                    html_escape(&cat.name),
+                    cat.count
+                )
+            })
+            .collect();
+        chips.join("\n")
+    } else {
+        String::new()
+    };
+
     let search_results = if !query.q.is_empty() {
-        // Perform search
-        match db::search_packages(&state.pool, &query.q, 20, 0).await {
+        // Perform advanced search
+        match db::search_packages_advanced(
+            &state.pool,
+            &query.q,
+            20,
+            0,
+            &query.sort,
+            query.category.as_deref(),
+            None,
+        )
+        .await
+        {
             Ok((packages, _total)) => {
                 if packages.is_empty() {
                     r#"<div class="no-results">
@@ -88,9 +135,28 @@ pub async fn index(
             .to_string()
     };
 
+    // Sort selection attributes
+    let sort_downloads = if query.sort == "downloads" {
+        "selected"
+    } else {
+        ""
+    };
+    let sort_newest = if query.sort == "newest" { "selected" } else { "" };
+    let sort_name = if query.sort == "name" { "selected" } else { "" };
+    let sort_relevance = if query.sort == "relevance" {
+        "selected"
+    } else {
+        ""
+    };
+
     let html = template
         .replace("{{SEARCH_QUERY}}", &html_escape(&query.q))
-        .replace("{{SEARCH_RESULTS}}", &search_results);
+        .replace("{{SEARCH_RESULTS}}", &search_results)
+        .replace("{{CATEGORY_CHIPS}}", &category_chips)
+        .replace("{{SORT_DOWNLOADS}}", sort_downloads)
+        .replace("{{SORT_NEWEST}}", sort_newest)
+        .replace("{{SORT_NAME}}", sort_name)
+        .replace("{{SORT_RELEVANCE}}", sort_relevance);
 
     Ok(Html(html))
 }
@@ -288,6 +354,108 @@ pub async fn serve_css() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         css,
     )
+}
+
+/// Dashboard page with statistics
+pub async fn dashboard(State(state): State<AppState>) -> ServerResult<Html<String>> {
+    let template = include_str!("../../static/dashboard.html");
+
+    // Get total packages count
+    let total_packages_result = sqlx::query("SELECT COUNT(*) as count FROM packages")
+        .fetch_one(&state.pool)
+        .await;
+    let total_packages: i64 = total_packages_result
+        .map(|row| row.get("count"))
+        .unwrap_or(0);
+
+    // Get total downloads
+    let total_downloads_result = sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
+        .fetch_one(&state.pool)
+        .await;
+    let total_downloads: i64 = total_downloads_result
+        .map(|row| row.get("total"))
+        .unwrap_or(0);
+
+    // Get recent packages (10 most recently updated)
+    let recent_packages = db::search_packages_advanced(&state.pool, "", 10, 0, "newest", None, None)
+        .await
+        .unwrap_or((vec![], 0))
+        .0;
+
+    let recent_html = if recent_packages.is_empty() {
+        "<p>No packages yet.</p>".to_string()
+    } else {
+        let mut html = String::new();
+        for pkg in recent_packages {
+            let description = pkg
+                .description
+                .as_deref()
+                .unwrap_or("No description available.");
+            html.push_str(&format!(
+                r#"<div class="package-card">
+                    <h3><a href="/packages/{}">{}</a></h3>
+                    <p class="package-description">{}</p>
+                    <div class="package-info">
+                        <span>Version: {}</span>
+                        <span>Downloads: {}</span>
+                        <span>Updated: {}</span>
+                    </div>
+                </div>"#,
+                html_escape(&pkg.name),
+                html_escape(&pkg.name),
+                html_escape(description),
+                html_escape(&pkg.latest_version),
+                pkg.downloads,
+                pkg.updated_at.format("%Y-%m-%d")
+            ));
+        }
+        html
+    };
+
+    // Get popular packages (10 most downloaded)
+    let popular_packages =
+        db::search_packages_advanced(&state.pool, "", 10, 0, "downloads", None, None)
+            .await
+            .unwrap_or((vec![], 0))
+            .0;
+
+    let popular_html = if popular_packages.is_empty() {
+        "<p>No packages yet.</p>".to_string()
+    } else {
+        let mut html = String::new();
+        for pkg in popular_packages {
+            let description = pkg
+                .description
+                .as_deref()
+                .unwrap_or("No description available.");
+            html.push_str(&format!(
+                r#"<div class="package-card">
+                    <h3><a href="/packages/{}">{}</a></h3>
+                    <p class="package-description">{}</p>
+                    <div class="package-info">
+                        <span>Version: {}</span>
+                        <span>Downloads: {}</span>
+                        <span>Updated: {}</span>
+                    </div>
+                </div>"#,
+                html_escape(&pkg.name),
+                html_escape(&pkg.name),
+                html_escape(description),
+                html_escape(&pkg.latest_version),
+                pkg.downloads,
+                pkg.updated_at.format("%Y-%m-%d")
+            ));
+        }
+        html
+    };
+
+    let html = template
+        .replace("{{TOTAL_PACKAGES}}", &total_packages.to_string())
+        .replace("{{TOTAL_DOWNLOADS}}", &total_downloads.to_string())
+        .replace("{{RECENT_PACKAGES}}", &recent_html)
+        .replace("{{POPULAR_PACKAGES}}", &popular_html);
+
+    Ok(Html(html))
 }
 
 /// HTML escape helper

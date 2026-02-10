@@ -1,0 +1,178 @@
+# WASM API Client — HTTP client pattern with JSON handling
+#
+# Compile: vaisc --target wasm32-unknown-unknown wasm_api_client.vais
+#
+# JS Usage:
+#   const wasm = await WebAssembly.instantiateStreaming(fetch('wasm_api_client.wasm'), {
+#     env: {
+#       fetch_get: async (url_ptr, url_len) => fetchAndReturnPtr(url_ptr, url_len),
+#       fetch_post: async (url_ptr, url_len, body_ptr, body_len) => ...,
+#       json_parse_field: (json_ptr, json_len, field_ptr, field_len) => ...,
+#       json_stringify: (obj_ptr) => ...,
+#       console_log: (ptr, len) => console.log(readString(ptr, len))
+#     }
+#   });
+#   const userId = wasm.exports.get_user_by_id(123);
+#
+# WASI Runtime: wasmtime wasm_api_client.wasm --invoke get_users
+
+# Import HTTP fetch functions
+#[wasm_import("env", "fetch_get")]
+N F fetch_get(url_ptr: i64, url_len: i64) -> i64
+
+#[wasm_import("env", "fetch_post")]
+N F fetch_post(url_ptr: i64, url_len: i64, body_ptr: i64, body_len: i64) -> i64
+
+#[wasm_import("env", "json_parse_field")]
+N F json_parse_field(json_ptr: i64, json_len: i64, field_ptr: i64, field_len: i64) -> i64
+
+#[wasm_import("env", "json_stringify")]
+N F json_stringify(obj_ptr: i64) -> i64
+
+#[wasm_import("env", "console_log")]
+N F console_log(ptr: i64, len: i64) -> i64
+
+# Global state for response caching
+G last_response_ptr := mut 0
+G last_response_len := mut 0
+G last_status_code := mut 0
+
+# Get all users from API
+#[wasm_export("get_users")]
+F get_users() -> i64 {
+    url := "https://api.example.com/users"
+    response_ptr := fetch_get(url as i64, 30)
+
+    I response_ptr < 0 {
+        _ := console_log("Error: Failed to fetch users" as i64, 27)
+        last_status_code = 500
+        R -1
+    }
+
+    last_response_ptr = response_ptr
+    last_status_code = 200
+    response_ptr
+}
+
+# Get specific user by ID
+#[wasm_export("get_user_by_id")]
+F get_user_by_id(user_id: i64) -> i64 {
+    # Construct URL: /users/{id}
+    base_url := "https://api.example.com/users/"
+    url_len := 31 + count_digits(user_id)
+
+    response_ptr := fetch_get(base_url as i64, url_len)
+
+    I response_ptr < 0 {
+        _ := console_log("Error: User not found" as i64, 20)
+        last_status_code = 404
+        R -1
+    }
+
+    last_response_ptr = response_ptr
+    last_status_code = 200
+    response_ptr
+}
+
+# Create new user
+#[wasm_export("create_user")]
+F create_user(name_ptr: i64, name_len: i64, email_ptr: i64, email_len: i64) -> i64 {
+    url := "https://api.example.com/users"
+
+    # Simple JSON body construction (in real app, use proper serialization)
+    body := "{\n  \"name\": \"placeholder\",\n  \"email\": \"placeholder\"\n}"
+    body_len := 56
+
+    response_ptr := fetch_post(url as i64, 30, body as i64, body_len)
+
+    I response_ptr < 0 {
+        _ := console_log("Error: Failed to create user" as i64, 28)
+        last_status_code = 500
+        R -1
+    }
+
+    last_response_ptr = response_ptr
+    last_status_code = 201
+    response_ptr
+}
+
+# Parse JSON field from response
+#[wasm_export("get_field")]
+F get_field(field_ptr: i64, field_len: i64) -> i64 {
+    I last_response_ptr == 0 {
+        R -1
+    }
+
+    json_parse_field(last_response_ptr, last_response_len, field_ptr, field_len)
+}
+
+# Format response with status code
+#[wasm_export("format_response")]
+F format_response() -> i64 {
+    I last_status_code == 200 {
+        msg := "Success: 200 OK"
+        _ := console_log(msg as i64, 15)
+    } E I last_status_code == 201 {
+        msg := "Created: 201"
+        _ := console_log(msg as i64, 12)
+    } E I last_status_code == 404 {
+        msg := "Not Found: 404"
+        _ := console_log(msg as i64, 14)
+    } E {
+        msg := "Error: Unknown status"
+        _ := console_log(msg as i64, 20)
+    }
+    last_status_code
+}
+
+# Get last HTTP status code
+#[wasm_export("get_status_code")]
+F get_status_code() -> i64 = last_status_code
+
+# Helper: count digits in number
+F count_digits(n: i64) -> i64 {
+    I n == 0 {
+        R 1
+    }
+
+    count := mut 0
+    num := mut I n < 0 { -n } E { n }
+
+    L num > 0 {
+        count = count + 1
+        num = num / 10
+    }
+
+    I n < 0 { count + 1 } E { count }
+}
+
+# Retry mechanism for failed requests
+#[wasm_export("retry_get")]
+F retry_get(url_ptr: i64, url_len: i64, max_retries: i64) -> i64 {
+    attempts := mut 0
+
+    L attempts < max_retries {
+        response := fetch_get(url_ptr, url_len)
+
+        I response >= 0 {
+            last_response_ptr = response
+            last_status_code = 200
+            R response
+        }
+
+        attempts = attempts + 1
+        msg := "Retrying request..."
+        _ := console_log(msg as i64, 18)
+    }
+
+    last_status_code = 500
+    -1
+}
+
+F main() -> i64 {
+    # Test API client
+    _ := get_users()
+    _ := get_user_by_id(42)
+    _ := format_response()
+    0
+}

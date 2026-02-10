@@ -37,6 +37,16 @@
 # 표준 라이브러리
 
 - [표준 라이브러리 레퍼런스](./stdlib/stdlib.md)
+- [Vec](./stdlib/vec.md)
+- [HashMap](./stdlib/hashmap.md)
+- [File I/O](./stdlib/file_io.md)
+- [Networking](./stdlib/net.md)
+- [Thread](./stdlib/thread.md)
+- [Channel](./stdlib/channel.md)
+- [Sync](./stdlib/sync.md)
+- [JSON](./stdlib/json.md)
+- [Regex](./stdlib/regex.md)
+- [Crypto](./stdlib/crypto.md)
 - [GC 구현](./stdlib/gc-implementation.md)
 - [GC 빠른 레퍼런스](./stdlib/gc-quick-reference.md)
 
@@ -73,8 +83,10 @@
   - [C++ 지원](./advanced/bindgen/cpp-support.md)
   - [C++ 빠른 시작](./advanced/bindgen/cpp-quickstart.md)
 - [WASM 컴포넌트](./advanced/wasm/README.md)
+  - [Getting Started](./advanced/wasm/getting-started.md)
   - [컴포넌트 모델](./advanced/wasm/component-model.md)
   - [JS 인터롭](./advanced/wasm/js-interop.md)
+  - [WASI](./advanced/wasm/wasi.md)
 - [Async 런타임](./advanced/async-runtime.md)
 
 # 보안

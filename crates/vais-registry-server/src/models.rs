@@ -254,6 +254,14 @@ pub struct CategoryCount {
     pub count: i64,
 }
 
+/// Registry statistics
+#[derive(Debug, Serialize)]
+pub struct RegistryStats {
+    pub total_packages: i64,
+    pub total_downloads: i64,
+    pub total_versions: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct PackageSearchEntry {
     pub name: String,
