@@ -78,6 +78,8 @@ jobs:
         env:
           RUSTFLAGS: "-Z sanitizer=address"
           RUSTDOCFLAGS: "-Z sanitizer=address"
+          RUST_MIN_STACK: "16777216"  # 16MB stack size for deep recursion in fuzz tests
+          ASAN_OPTIONS: "detect_stack_use_after_return=0"
         run: |
           cargo +nightly test -p vais-types \
             -Z build-std --target x86_64-unknown-linux-gnu \

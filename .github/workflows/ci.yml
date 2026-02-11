@@ -67,7 +67,7 @@ jobs:
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=17.0.6 -y
+          choco install llvm --version=17.0.6 --allow-downgrade -y
           echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
@@ -119,7 +119,7 @@ jobs:
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=17.0.6 -y
+          choco install llvm --version=17.0.6 --allow-downgrade -y
           echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
@@ -172,7 +172,7 @@ jobs:
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm --version=17.0.6 -y
+          choco install llvm --version=17.0.6 --allow-downgrade -y
           echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies

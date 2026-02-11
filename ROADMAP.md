@@ -138,6 +138,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 11** | 에코시스템 확장 | Registry 웹 UI (FTS5 검색/카테고리), Std 문서 10개 모듈, stdlib.md 재구성, WASM 문서 4개 + 예제 3개 |
 | **Phase 12** | 컴파일러 고도화 | JIT 티어 전환 (OSR/deopt), GPU 벤치마크 92개, pread/pwrite POSIX, SIMD SSE2/NEON, SHA-256 FIPS 180-4, LLVM LlvmOptHints, Incremental CacheMissReason |
 | **Phase 13** | 보안+품질 강화 | std/crypto AES-256 FIPS 197 교체 (1,359줄), str 비교 Copy 전환 (move→copy), JIT panic→Result (0 panic), 런타임 벤치마크 프레임워크 — **504 E2E**, JIT 37 |
+| **Phase 14** | CI 실패 수정 | Windows LLVM --allow-downgrade, ASan fuzz_tests 스택 오버플로우 (16MB 스레드 + ASan depth 축소) |
 
 ---
 
@@ -763,6 +764,25 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 통합 검증 — E2E 504 통과(+6), Clippy 0건, JIT 37 통과(+3) (Opus) [blockedBy: 1~4] ✅ 2026-02-11
 
 진행률: 5/5 (100%) ✅
+
+---
+
+## Phase 14: CI 실패 수정
+
+> **상태**: ✅ 완료 (2026-02-11)
+> **목표**: CI (Windows LLVM 다운그레이드 실패) 및 ASan (fuzz_tests SEGV) 수정
+> **배경**: Phase 13 이후 CI 2건 failing — Windows Clippy (LLVM 20→17 다운그레이드 거부), ASan fuzz_tests (스택 오버플로우)
+
+모드: 자동진행
+
+- [x] 1. CI Windows LLVM 설치 --allow-downgrade 추가 (Sonnet) ✅ 2026-02-11
+  변경: ci.yml 3곳 `choco install llvm --version=17.0.6 --allow-downgrade -y`
+- [x] 2. ASan fuzz_tests 스택 오버플로우 수정 (Sonnet) [∥1] ✅ 2026-02-11
+  변경: fuzz_tests.rs (3개 테스트 16MB 스택 스레드 래핑, ASan 감지 depth/count 축소), asan.yml (RUST_MIN_STACK=16MB, ASAN_OPTIONS)
+- [x] 3. 통합 검증 및 커밋 (Opus) [blockedBy: 1, 2] ✅ 2026-02-11
+  변경: E2E 504 통과, Clippy 0건, fuzz 11개 통과
+
+진행률: 3/3 (100%) ✅
 
 ---
 

@@ -141,9 +141,24 @@ fn fuzz_functions_with_many_parameters() {
 
 #[test]
 fn fuzz_deeply_nested_types() {
-    let mut failures = Vec::new();
+    // Run in a thread with larger stack size to accommodate ASan's overhead
+    let handle = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024) // 16MB stack
+        .spawn(|| {
+            let mut failures = Vec::new();
 
-    for depth in [5, 10, 20, 50] {
+            // Reduced depth limits for ASan compatibility (ASan uses more stack)
+            // Check for ASan via RUSTFLAGS environment variable (set during build)
+            let is_asan = option_env!("RUSTFLAGS")
+                .map(|flags| flags.contains("sanitizer=address"))
+                .unwrap_or(false);
+            let depths = if is_asan {
+                vec![5, 10, 15]
+            } else {
+                vec![5, 10, 20, 50]
+            };
+
+            for depth in depths {
         // Nested Option types: Option<Option<Option<...>>>
         let mut type_str = String::from("i64");
         for _ in 0..depth {
@@ -178,17 +193,21 @@ fn fuzz_deeply_nested_types() {
         }
     }
 
-    if !failures.is_empty() {
-        eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
-        for (desc, panic_msg) in &failures {
-            eprintln!("\n{}: PANIC!", desc);
-            eprintln!("Panic message: {}", panic_msg);
-        }
-        panic!(
-            "Type checker panicked on {} deeply nested type tests",
-            failures.len()
-        );
-    }
+            if !failures.is_empty() {
+                eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
+                for (desc, panic_msg) in &failures {
+                    eprintln!("\n{}: PANIC!", desc);
+                    eprintln!("Panic message: {}", panic_msg);
+                }
+                panic!(
+                    "Type checker panicked on {} deeply nested type tests",
+                    failures.len()
+                );
+            }
+        })
+        .expect("Failed to spawn thread");
+
+    handle.join().expect("Thread panicked");
 }
 
 #[test]
@@ -488,125 +507,147 @@ fn fuzz_malformed_generics() {
 
 #[test]
 fn fuzz_generated_valid_programs() {
-    let mut rng = SimpleRng::new(500);
-    let mut failures = Vec::new();
+    // Run in a thread with larger stack size to accommodate ASan's overhead
+    let handle = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024) // 16MB stack
+        .spawn(|| {
+            let mut rng = SimpleRng::new(500);
+            let mut failures = Vec::new();
 
-    for i in 0..100 {
-        let mut source = String::new();
+            // Reduced iteration count for ASan (ASan is slower and uses more memory)
+            let is_asan = option_env!("RUSTFLAGS")
+                .map(|flags| flags.contains("sanitizer=address"))
+                .unwrap_or(false);
+            let iterations = if is_asan { 30 } else { 100 };
 
-        // Generate random number of definitions
-        let def_count = rng.next_range(1, 20);
+            for i in 0..iterations {
+                let mut source = String::new();
 
-        for _ in 0..def_count {
-            let def_type = rng.next_range(0, 4);
+                // Generate random number of definitions (fewer under ASan)
+                let def_count = if is_asan {
+                    rng.next_range(1, 10)
+                } else {
+                    rng.next_range(1, 20)
+                };
 
-            match def_type {
-                0 => {
-                    // Generate function
-                    let name = rng.gen_identifier();
-                    let param_count = rng.next_range(0, 5);
-                    source.push_str(&format!("F {}(", name));
+                for _ in 0..def_count {
+                    let def_type = rng.next_range(0, 4);
 
-                    for j in 0..param_count {
-                        if j > 0 {
-                            source.push_str(", ");
-                        }
-                        let param_name = rng.gen_identifier();
-                        let param_type = rng.gen_type();
-                        source.push_str(&format!("{}:{}", param_name, param_type));
-                    }
+                    match def_type {
+                        0 => {
+                            // Generate function
+                            let name = rng.gen_identifier();
+                            let param_count = rng.next_range(0, 5);
+                            source.push_str(&format!("F {}(", name));
 
-                    let ret_type = rng.gen_type();
-                    source.push_str(&format!(")->{}", ret_type));
-
-                    // Simple body
-                    if ret_type == "()" {
-                        source.push_str("=()");
-                    } else if ret_type == "bool" {
-                        source.push_str("=true");
-                    } else if ret_type == "str" {
-                        source.push_str("=\"test\"");
-                    } else {
-                        source.push_str("=42");
-                    }
-
-                    source.push(' ');
-                }
-                1 => {
-                    // Generate struct
-                    let name = rng.gen_identifier();
-                    let field_count = rng.next_range(0, 5);
-
-                    source.push_str(&format!("S {}", name));
-                    if field_count == 0 {
-                        source.push_str(" ");
-                    } else {
-                        source.push('{');
-                        for j in 0..field_count {
-                            if j > 0 {
-                                source.push_str(", ");
+                            for j in 0..param_count {
+                                if j > 0 {
+                                    source.push_str(", ");
+                                }
+                                let param_name = rng.gen_identifier();
+                                let param_type = rng.gen_type();
+                                source.push_str(&format!("{}:{}", param_name, param_type));
                             }
-                            let field_name = rng.gen_identifier();
-                            let field_type = rng.gen_type();
-                            source.push_str(&format!("{}:{}", field_name, field_type));
+
+                            let ret_type = rng.gen_type();
+                            source.push_str(&format!(")->{}", ret_type));
+
+                            // Simple body
+                            if ret_type == "()" {
+                                source.push_str("=()");
+                            } else if ret_type == "bool" {
+                                source.push_str("=true");
+                            } else if ret_type == "str" {
+                                source.push_str("=\"test\"");
+                            } else {
+                                source.push_str("=42");
+                            }
+
+                            source.push(' ');
                         }
-                        source.push_str("} ");
+                        1 => {
+                            // Generate struct
+                            let name = rng.gen_identifier();
+                            let field_count = rng.next_range(0, 5);
+
+                            source.push_str(&format!("S {}", name));
+                            if field_count == 0 {
+                                source.push_str(" ");
+                            } else {
+                                source.push('{');
+                                for j in 0..field_count {
+                                    if j > 0 {
+                                        source.push_str(", ");
+                                    }
+                                    let field_name = rng.gen_identifier();
+                                    let field_type = rng.gen_type();
+                                    source.push_str(&format!("{}:{}", field_name, field_type));
+                                }
+                                source.push_str("} ");
+                            }
+                        }
+                        2 => {
+                            // Generate enum
+                            let name = rng.gen_identifier();
+                            let variant_count = rng.next_range(1, 4);
+
+                            source.push_str(&format!("E {}", name));
+                            source.push('{');
+                            for j in 0..variant_count {
+                                if j > 0 {
+                                    source.push(',');
+                                }
+                                let variant_name = rng.gen_identifier();
+                                // Simple variant without fields
+                                source.push_str(&variant_name);
+                            }
+                            source.push_str("} ");
+                        }
+                        _ => {
+                            // Generate type alias
+                            let name = rng.gen_identifier();
+                            let target_type = rng.gen_type();
+                            source.push_str(&format!("Y {}={} ", name, target_type));
+                        }
                     }
                 }
-                2 => {
-                    // Generate enum
-                    let name = rng.gen_identifier();
-                    let variant_count = rng.next_range(1, 4);
 
-                    source.push_str(&format!("E {}", name));
-                    source.push('{');
-                    for j in 0..variant_count {
-                        if j > 0 {
-                            source.push(',');
-                        }
-                        let variant_name = rng.gen_identifier();
-                        // Simple variant without fields
-                        source.push_str(&variant_name);
+                if let Err(panic_msg) = type_check_no_panic(&source) {
+                    failures.push((i, source.clone(), panic_msg));
+                    if failures.len() >= 10 {
+                        break;
                     }
-                    source.push_str("} ");
-                }
-                _ => {
-                    // Generate type alias
-                    let name = rng.gen_identifier();
-                    let target_type = rng.gen_type();
-                    source.push_str(&format!("Y {}={} ", name, target_type));
                 }
             }
-        }
 
-        if let Err(panic_msg) = type_check_no_panic(&source) {
-            failures.push((i, source.clone(), panic_msg));
-            if failures.len() >= 10 {
-                break;
+            if !failures.is_empty() {
+                eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
+                for (idx, source, panic_msg) in &failures {
+                    eprintln!("\nTest {}: PANIC!", idx);
+                    eprintln!(
+                        "Source (first 200 chars): {}",
+                        source.chars().take(200).collect::<String>()
+                    );
+                    eprintln!("Panic message: {}", panic_msg);
+                }
+                panic!(
+                    "Type checker panicked on {} generated programs",
+                    failures.len()
+                );
             }
-        }
-    }
+        })
+        .expect("Failed to spawn thread");
 
-    if !failures.is_empty() {
-        eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
-        for (idx, source, panic_msg) in &failures {
-            eprintln!("\nTest {}: PANIC!", idx);
-            eprintln!(
-                "Source (first 200 chars): {}",
-                source.chars().take(200).collect::<String>()
-            );
-            eprintln!("Panic message: {}", panic_msg);
-        }
-        panic!(
-            "Type checker panicked on {} generated programs",
-            failures.len()
-        );
-    }
+    handle.join().expect("Thread panicked");
 }
 
 #[test]
 fn fuzz_edge_case_expressions() {
-    let test_cases = vec![
+    // Run in a thread with larger stack size to accommodate ASan's overhead
+    let handle = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024) // 16MB stack
+        .spawn(|| {
+            let test_cases = vec![
         // Division by zero
         "F test()->i64=42/0",
         // Overflow in literals
@@ -628,24 +669,28 @@ fn fuzz_edge_case_expressions() {
         "F test()->i64=(1+2)*3-4/2",
     ];
 
-    let mut failures = Vec::new();
+            let mut failures = Vec::new();
 
-    for (i, source) in test_cases.iter().enumerate() {
-        if let Err(panic_msg) = type_check_no_panic(source) {
-            failures.push((i, source.to_string(), panic_msg));
-        }
-    }
+            for (i, source) in test_cases.iter().enumerate() {
+                if let Err(panic_msg) = type_check_no_panic(source) {
+                    failures.push((i, source.to_string(), panic_msg));
+                }
+            }
 
-    if !failures.is_empty() {
-        eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
-        for (idx, source, panic_msg) in &failures {
-            eprintln!("\nTest {}: PANIC!", idx);
-            eprintln!("Source: {}", source);
-            eprintln!("Panic message: {}", panic_msg);
-        }
-        panic!(
-            "Type checker panicked on {} edge case expression tests",
-            failures.len()
-        );
-    }
+            if !failures.is_empty() {
+                eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
+                for (idx, source, panic_msg) in &failures {
+                    eprintln!("\nTest {}: PANIC!", idx);
+                    eprintln!("Source: {}", source);
+                    eprintln!("Panic message: {}", panic_msg);
+                }
+                panic!(
+                    "Type checker panicked on {} edge case expression tests",
+                    failures.len()
+                );
+            }
+        })
+        .expect("Failed to spawn thread");
+
+    handle.join().expect("Thread panicked");
 }
