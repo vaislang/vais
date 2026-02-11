@@ -140,7 +140,7 @@ impl JitCompiler {
         // Add parameters
         for param in &func.params {
             let ty = self.resolve_type(&param.ty.node);
-            let cl_ty = self.type_mapper.map_type(&ty);
+            let cl_ty = self.type_mapper.map_type(&ty)?;
             sig.params.push(AbiParam::new(cl_ty));
         }
 
@@ -151,7 +151,7 @@ impl JitCompiler {
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 
@@ -178,7 +178,7 @@ impl JitCompiler {
                 let ty = self.resolve_type(&param.ty.node);
                 self.type_mapper.map_type(&ty)
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let ret_ty = func
             .ret_type
@@ -193,7 +193,7 @@ impl JitCompiler {
         }
 
         if !matches!(ret_ty, ResolvedType::Unit) {
-            let cl_ret = self.type_mapper.map_type(&ret_ty);
+            let cl_ret = self.type_mapper.map_type(&ret_ty)?;
             sig.returns.push(AbiParam::new(cl_ret));
         }
 

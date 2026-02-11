@@ -1,0 +1,32 @@
+# Runtime benchmark: Prime counting
+# Counts primes up to 100000 using trial division
+
+F is_prime(n: i64) -> i64 {
+    I n <= 1 { R 0 }
+    I n <= 3 { R 1 }
+    I n % 2 == 0 { R 0 }
+
+    i := mut 3
+    L i * i <= n {
+        I n % i == 0 { R 0 }
+        i = i + 2
+    }
+    1
+}
+
+F count_primes(limit: i64) -> i64 {
+    count := mut 0
+    n := mut 2
+    L n <= limit {
+        I is_prime(n) == 1 {
+            count = count + 1
+        }
+        n = n + 1
+    }
+    count
+}
+
+F main() -> i64 {
+    result := count_primes(100000)
+    result
+}

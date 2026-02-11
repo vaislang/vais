@@ -79,6 +79,7 @@ impl MirType {
             | MirType::F32
             | MirType::F64
             | MirType::Bool
+            | MirType::Str
             | MirType::Unit
             | MirType::Pointer(_)
             | MirType::Ref(_)
@@ -86,7 +87,7 @@ impl MirType {
             | MirType::RefMutLifetime { .. }
             | MirType::Never => true,
             MirType::Tuple(elems) => elems.iter().all(|e| e.is_copy()),
-            _ => false, // Str, Array, Struct, Enum, Function
+            _ => false, // Array, Struct, Enum, Function
         }
     }
 }

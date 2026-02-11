@@ -39,7 +39,49 @@ Single-file compilation time measured with `hyperfine --warmup 3 --min-runs 15`.
 
 ---
 
-## 2. LLM Token Efficiency Benchmark
+## 2. Runtime Execution Performance
+
+Measures the actual execution speed of compiled Vais binaries vs equivalent Rust programs.
+This benchmarks the quality of LLVM IR generation and final binary performance.
+
+### Methodology
+
+1. Compile `.vais` source to LLVM IR with `vaisc --emit-ir`
+2. Link IR to native binary with `clang`
+3. Benchmark binary execution using Criterion
+4. Compare against Rust reference implementations (same algorithms)
+
+### Benchmark Programs
+
+| Program | Description | Input Size |
+|---------|-------------|------------|
+| `bench_fibonacci.vais` | Naive recursive Fibonacci | fib(35) |
+| `bench_compute.vais` | Prime counting (trial division) | primes ≤ 100,000 |
+| `bench_sorting.vais` | Quicksort in-place | 10,000 elements |
+
+### Running the Benchmarks
+
+```bash
+# Requires clang to link LLVM IR to binaries
+cargo bench --bench runtime_bench
+
+# View results in target/criterion/
+open target/criterion/compute/fibonacci/report/index.html
+```
+
+### Expected Results
+
+Vais-compiled binaries should perform **within 10-20% of native Rust** for compute-intensive workloads.
+The LLVM backend applies the same optimizations (inlining, loop unrolling, vectorization) to both languages.
+
+**Note**: Actual numbers depend on your CPU architecture and LLVM version. Run the benchmark locally to measure.
+
+> **Why compare to Rust?** Rust is the gold standard for systems programming performance. Matching
+> Rust's runtime speed validates Vais's LLVM codegen quality while maintaining faster compile times.
+
+---
+
+## 3. LLM Token Efficiency Benchmark
 
 Measures how many LLM tokens each language requires for equivalent programs.
 Uses `tiktoken` with `cl100k_base` encoding (same tokenizer family as GPT-4 and Claude).
@@ -106,8 +148,7 @@ Uses `tiktoken` with `cl100k_base` encoding (same tokenizer family as GPT-4 and 
 
 **Where Vais needs improvement:**
 - **Array manipulation**: Lack of `&mut [T]` slices forces malloc/load_i64/store_i64 patterns
-- **String comparisons**: Each `==` on `str` triggers ownership move, requiring workarounds
-- These are known limitations tracked in the project roadmap
+- This is a known limitation tracked in the project roadmap
 
 **Key insight**: Vais's token efficiency advantage appears in **struct-heavy, type-rich code**
 (the primary use case for AI-generated systems code), while simpler algorithms favor Python/Go's
@@ -116,7 +157,7 @@ Vais delivers significant savings over Rust (+134%) and C (+147%).
 
 ---
 
-## 3. Combined Score
+## 4. Combined Score
 
 Weighting: Compile speed (40%) + Token efficiency for systems code (60%)
 

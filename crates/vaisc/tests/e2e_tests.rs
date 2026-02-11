@@ -13693,3 +13693,131 @@ F main() -> i64 {
 "#;
     assert_compiles(source);
 }
+
+// ==================== String Comparison Tests (Phase 13) ====================
+
+#[test]
+fn e2e_str_reuse_double_comparison() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello"
+    I s == "hello" {
+        I s == "hello" {
+            1
+        } E {
+            0
+        }
+    } E {
+        0
+    }
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn e2e_str_comparison_and_use() {
+    let source = r#"
+F check(s: str) -> i64 {
+    I s == "world" {
+        1
+    } E {
+        0
+    }
+}
+
+F main() -> i64 {
+    s := "world"
+    result := I s == "world" { 1 } E { 0 }
+    # Use s again after comparison
+    check_result := check(s)
+    result + check_result
+}
+"#;
+    assert_exit_code(source, 2);
+}
+
+#[test]
+fn e2e_str_param_comparison() {
+    let source = r#"
+F check_str(input: str) -> i64 {
+    I input == "test" {
+        42
+    } E {
+        0
+    }
+}
+
+F main() -> i64 {
+    check_str("test")
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_str_multiple_comparisons() {
+    let source = r#"
+F main() -> i64 {
+    a := "foo"
+    b := "bar"
+    c := "foo"
+
+    result := mut 0
+    I a == c {
+        result = result + 10
+    }
+    I a == b {
+        result = result + 1
+    }
+    I b == "bar" {
+        result = result + 5
+    }
+
+    result
+}
+"#;
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn e2e_str_comparison_in_loop() {
+    let source = r#"
+F main() -> i64 {
+    target := "match"
+    count := mut 0
+    i := mut 0
+    L {
+        I i >= 3 {
+            B
+        }
+        test := I i == 1 { "match" } E { "other" }
+        I test == target {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    count
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn e2e_str_comparison_inequality() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello"
+    I s != "world" {
+        I s == "hello" {
+            42
+        } E {
+            0
+        }
+    } E {
+        0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}

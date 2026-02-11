@@ -1,0 +1,69 @@
+# Runtime benchmark: Quicksort
+# Sorts 10000 elements and returns checksum
+
+F quicksort(arr: i64, low: i64, high: i64) -> i64 {
+    I low < high {
+        pivot_idx := partition(arr, low, high)
+        quicksort(arr, low, pivot_idx - 1)
+        quicksort(arr, pivot_idx + 1, high)
+    }
+    0
+}
+
+F partition(arr: i64, low: i64, high: i64) -> i64 {
+    pivot := load_i64(arr + high * 8)
+    i := mut low - 1
+    j := mut low
+
+    L j < high {
+        curr := load_i64(arr + j * 8)
+        I curr < pivot {
+            i = i + 1
+            # Swap arr[i] and arr[j]
+            temp_i := load_i64(arr + i * 8)
+            temp_j := load_i64(arr + j * 8)
+            store_i64(arr + i * 8, temp_j)
+            store_i64(arr + j * 8, temp_i)
+        }
+        j = j + 1
+    }
+
+    # Swap arr[i+1] and arr[high]
+    i = i + 1
+    temp_i := load_i64(arr + i * 8)
+    temp_h := load_i64(arr + high * 8)
+    store_i64(arr + i * 8, temp_h)
+    store_i64(arr + high * 8, temp_i)
+
+    i
+}
+
+F checksum(arr: i64, n: i64) -> i64 {
+    sum := mut 0
+    i := mut 0
+    L i < n {
+        sum = sum + load_i64(arr + i * 8)
+        i = i + 1
+    }
+    sum
+}
+
+F main() -> i64 {
+    n := 10000
+    arr := malloc(n * 8)
+
+    # Initialize with descending values
+    i := mut 0
+    L i < n {
+        store_i64(arr + i * 8, n - i)
+        i = i + 1
+    }
+
+    # Sort
+    quicksort(arr, 0, n - 1)
+
+    # Compute checksum
+    result := checksum(arr, n)
+    free(arr)
+    result
+}

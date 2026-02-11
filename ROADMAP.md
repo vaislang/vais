@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 498+, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 504+, 통합 354+) |
 | 표준 라이브러리 | 73개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 46,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -135,6 +135,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 8** | 장기 관찰 항목 처리 | vais-base64/sha256/uuid/regex 4개 패키지 (1,942줄 lib), TCP 10K 벤치마크 (307줄), Endurance Test 프레임워크 (502줄+329줄), 장기 관찰 3건 해결 (⏳→✅) |
 | **Phase 9** | 개발자 경험 강화 | LSP Signature Help/Document Highlight/Range Formatting, DAP Variables/Breakpoint 조건/Step 정밀 제어, VSCode Code Lens 5개 + Snippet 60→90개 — DAP 23 테스트, **498 E2E** |
 | **Phase 10** | 테스트 & 안정성 강화 | Parser 양성 46개 + 음성 43개, vais-query 통합 20개, playground-server E2E 28개, ignored 39건 분류(활성화 대상 0건) — 신규 **136개 테스트**, **498 E2E** |
+| **Phase 11** | 에코시스템 확장 | Registry 웹 UI (FTS5 검색/카테고리), Std 문서 10개 모듈, stdlib.md 재구성, WASM 문서 4개 + 예제 3개 |
+| **Phase 12** | 컴파일러 고도화 | JIT 티어 전환 (OSR/deopt), GPU 벤치마크 92개, pread/pwrite POSIX, SIMD SSE2/NEON, SHA-256 FIPS 180-4, LLVM LlvmOptHints, Incremental CacheMissReason |
+| **Phase 13** | 보안+품질 강화 | std/crypto AES-256 FIPS 197 교체 (1,359줄), str 비교 Copy 전환 (move→copy), JIT panic→Result (0 panic), 런타임 벤치마크 프레임워크 — **504 E2E**, JIT 37 |
 
 ---
 
@@ -721,6 +724,45 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 7. [정확성] file.vais pread/pwrite count<=0 → count<0 + offset<0 검증 추가 (Warning) ✅ 2026-02-11
   변경: std/file.vais — count==0 허용 (POSIX 호환), offset 음수값 거부 추가
 진행률: 7/7 (100%) ✅
+
+---
+
+## Phase 13: 보안+품질 강화
+
+> **상태**: ✅ 완료 (2026-02-11)
+> **목표**: std/crypto AES-256 FIPS 197 교체, 문자열 비교 소유권 ergonomics 개선, JIT 에러 처리 강화, 런타임 실행 벤치마크 추가
+> **배경**: std/crypto AES-256이 XOR 플레이스홀더(보안 위험), str == 시 move 발생(COMPARISON.md 지적), JIT panic 4건, 런타임 실행 벤치마크 전무
+
+모드: 자동진행
+
+### Stage 1: 보안 수정
+
+**목표**: AES-256 플레이스홀더를 FIPS 197 구현으로 교체
+
+- [x] 1. std/crypto AES-256 FIPS 197 교체 — vais-aes 패키지 기반 통합 (Sonnet) ✅ 2026-02-11
+  변경: std/crypto.vais (XOR 90줄 삭제 → FIPS 197 1,359줄 추가: S-Box/InvS-Box, GF(2^8), 14-round key expansion, SubBytes/ShiftRows/MixColumns, ECB/CBC/CTR 모드, PKCS7 패딩)
+
+### Stage 2: 언어 ergonomics & 품질
+
+**목표**: 문자열 비교 소유권 문제 해결, JIT 에러 처리 개선
+
+- [x] 2. str 비교 소유권 Copy 전환 + E2E 테스트 (Sonnet) [∥1] ✅ 2026-02-11
+  변경: vais-mir/src/types.rs (MirType::Str → is_copy()=true), COMPARISON.md (제한사항 제거), e2e_tests.rs (+6개 테스트: double_comparison, comparison_and_use, param_comparison, multiple_comparisons, comparison_in_loop, comparison_inequality)
+- [x] 3. JIT panic→Result 에러 처리 전환 (Sonnet) [∥1] ✅ 2026-02-11
+  변경: vais-jit/src/lib.rs (+4 JitError variants), types.rs (map_type→Result), tiered.rs (as_i64/f64/bool→Result, eval_binary_op/eval_expr 에러 전파), compiler.rs (에러 전파), integration_tests.rs (+3 에러 핸들링 테스트)
+
+### Stage 3: 런타임 벤치마크
+
+**목표**: 컴파일된 바이너리의 실행 성능 비교 프레임워크
+
+- [x] 4. 런타임 실행 벤치마크 프레임워크 (Sonnet) [∥1] ✅ 2026-02-11
+  변경: benches/runtime_bench.rs (재작성 — compile-then-execute Criterion 프레임워크, Rust 비교 포함), examples/bench_fibonacci.vais + bench_compute.vais + bench_sorting.vais (신규), COMPARISON.md (런타임 실행 성능 섹션 추가)
+
+### Stage 4: 통합 검증
+
+- [x] 5. 통합 검증 — E2E 504 통과(+6), Clippy 0건, JIT 37 통과(+3) (Opus) [blockedBy: 1~4] ✅ 2026-02-11
+
+진행률: 5/5 (100%) ✅
 
 ---
 

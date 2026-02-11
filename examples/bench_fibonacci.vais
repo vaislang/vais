@@ -1,0 +1,12 @@
+# Runtime benchmark: Fibonacci (recursive)
+# Computes fib(35) using naive recursive algorithm
+
+F fib(n: i64) -> i64 {
+    I n <= 1 { R n }
+    R @(n - 1) + @(n - 2)
+}
+
+F main() -> i64 {
+    result := fib(35)
+    result
+}

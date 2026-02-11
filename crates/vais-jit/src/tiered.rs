@@ -163,36 +163,41 @@ pub enum Value {
 }
 
 impl Value {
-    /// Converts to i64, panicking if not possible.
-    pub fn as_i64(&self) -> i64 {
+    /// Converts to i64, returning an error if not possible.
+    pub fn as_i64(&self) -> Result<i64, JitError> {
         match self {
-            Value::I64(n) => *n,
+            Value::I64(n) => Ok(*n),
             Value::Bool(b) => {
-                if *b {
-                    1
-                } else {
-                    0
-                }
+                Ok(if *b { 1 } else { 0 })
             }
-            _ => panic!("Cannot convert {:?} to i64", self),
+            _ => Err(JitError::InvalidConversion {
+                from: format!("{:?}", self),
+                to: "i64".to_string(),
+            }),
         }
     }
 
-    /// Converts to f64, panicking if not possible.
-    pub fn as_f64(&self) -> f64 {
+    /// Converts to f64, returning an error if not possible.
+    pub fn as_f64(&self) -> Result<f64, JitError> {
         match self {
-            Value::F64(n) => *n,
-            Value::I64(n) => *n as f64,
-            _ => panic!("Cannot convert {:?} to f64", self),
+            Value::F64(n) => Ok(*n),
+            Value::I64(n) => Ok(*n as f64),
+            _ => Err(JitError::InvalidConversion {
+                from: format!("{:?}", self),
+                to: "f64".to_string(),
+            }),
         }
     }
 
-    /// Converts to bool, panicking if not possible.
-    pub fn as_bool(&self) -> bool {
+    /// Converts to bool, returning an error if not possible.
+    pub fn as_bool(&self) -> Result<bool, JitError> {
         match self {
-            Value::Bool(b) => *b,
-            Value::I64(n) => *n != 0,
-            _ => panic!("Cannot convert {:?} to bool", self),
+            Value::Bool(b) => Ok(*b),
+            Value::I64(n) => Ok(*n != 0),
+            _ => Err(JitError::InvalidConversion {
+                from: format!("{:?}", self),
+                to: "bool".to_string(),
+            }),
         }
     }
 }
@@ -420,12 +425,13 @@ impl Interpreter {
             Expr::If { cond, then, else_ } => {
                 let cond_val = self.eval_expr(&cond.node, locals, profile)?;
                 let branch_id = cond as *const _ as usize;
+                let cond_bool = cond_val.as_bool()?;
 
                 if let Some(p) = profile {
-                    p.record_branch(branch_id, cond_val.as_bool());
+                    p.record_branch(branch_id, cond_bool);
                 }
 
-                if cond_val.as_bool() {
+                if cond_bool {
                     self.eval_block(then, locals, profile)
                 } else if let Some(else_branch) = else_ {
                     self.eval_if_else(else_branch, locals, profile)
@@ -436,7 +442,7 @@ impl Interpreter {
 
             Expr::Ternary { cond, then, else_ } => {
                 let cond_val = self.eval_expr(&cond.node, locals, profile)?;
-                if cond_val.as_bool() {
+                if cond_val.as_bool()? {
                     self.eval_expr(&then.node, locals, profile)
                 } else {
                     self.eval_expr(&else_.node, locals, profile)
@@ -464,7 +470,7 @@ impl Interpreter {
             Expr::While { condition, body } => {
                 let loop_id = body as *const _ as usize;
                 let mut _iteration = 0u64;
-                while self.eval_expr(&condition.node, locals, profile)?.as_bool() {
+                while self.eval_expr(&condition.node, locals, profile)?.as_bool()? {
                     if let Some(p) = profile {
                         p.record_loop(loop_id);
                     }
@@ -515,7 +521,7 @@ impl Interpreter {
     ) -> Result<Value, JitError> {
         match if_else {
             vais_ast::IfElse::ElseIf(cond, stmts, next) => {
-                if self.eval_expr(&cond.node, locals, profile)?.as_bool() {
+                if self.eval_expr(&cond.node, locals, profile)?.as_bool()? {
                     self.eval_block(stmts, locals, profile)
                 } else if let Some(next) = next {
                     self.eval_if_else(next, locals, profile)
@@ -578,8 +584,8 @@ impl Interpreter {
             (BinOp::Gte, Value::F64(a), Value::F64(b)) => Ok(Value::Bool(a >= b)),
 
             // Logical operations
-            (BinOp::And, _, _) => Ok(Value::Bool(lhs.as_bool() && rhs.as_bool())),
-            (BinOp::Or, _, _) => Ok(Value::Bool(lhs.as_bool() || rhs.as_bool())),
+            (BinOp::And, _, _) => Ok(Value::Bool(lhs.as_bool()? && rhs.as_bool()?)),
+            (BinOp::Or, _, _) => Ok(Value::Bool(lhs.as_bool()? || rhs.as_bool()?)),
 
             _ => Err(JitError::Unsupported(format!(
                 "Binary op {:?} on {:?} and {:?}",
@@ -593,7 +599,7 @@ impl Interpreter {
         match (op, &val) {
             (UnaryOp::Neg, Value::I64(n)) => Ok(Value::I64(-n)),
             (UnaryOp::Neg, Value::F64(n)) => Ok(Value::F64(-n)),
-            (UnaryOp::Not, _) => Ok(Value::Bool(!val.as_bool())),
+            (UnaryOp::Not, _) => Ok(Value::Bool(!val.as_bool()?)),
             (UnaryOp::BitNot, Value::I64(n)) => Ok(Value::I64(!n)),
             _ => Err(JitError::Unsupported(format!(
                 "Unary op {:?} on {:?}",
@@ -703,7 +709,7 @@ impl TieredJit {
         // Check for tier promotion
         self.check_promotions()?;
 
-        Ok(result.as_i64())
+        result.as_i64()
     }
 
     /// Checks and performs tier promotions.
@@ -964,7 +970,7 @@ mod tests {
         interp.load_module(&ast);
 
         let result = interp.run_main().unwrap();
-        assert_eq!(result.as_i64(), 42);
+        assert_eq!(result.as_i64().unwrap(), 42);
     }
 
     #[test]
@@ -976,7 +982,7 @@ mod tests {
         interp.load_module(&ast);
 
         let result = interp.run_main().unwrap();
-        assert_eq!(result.as_i64(), 7);
+        assert_eq!(result.as_i64().unwrap(), 7);
     }
 
     #[test]
@@ -988,7 +994,7 @@ mod tests {
         interp.load_module(&ast);
 
         let result = interp.run_main().unwrap();
-        assert_eq!(result.as_i64(), 7);
+        assert_eq!(result.as_i64().unwrap(), 7);
     }
 
     #[test]
@@ -1000,7 +1006,7 @@ mod tests {
         interp.load_module(&ast);
 
         let result = interp.run_main().unwrap();
-        assert_eq!(result.as_i64(), 1);
+        assert_eq!(result.as_i64().unwrap(), 1);
     }
 
     #[test]
@@ -1012,7 +1018,7 @@ mod tests {
         interp.load_module(&ast);
 
         let result = interp.run_main().unwrap();
-        assert_eq!(result.as_i64(), 15);
+        assert_eq!(result.as_i64().unwrap(), 15);
     }
 
     #[test]
