@@ -196,14 +196,14 @@ Vais is designed for both compilation speed and runtime performance.
 
 ### Runtime Performance
 
-Fibonacci(35) benchmark:
+Fibonacci(35) benchmark (Apple M-series ARM64, 2026-02-11):
 
 | Language | Time | Relative |
 |----------|------|----------|
-| **Vais** (optimized) | 48ms | 1.0x |
-| Rust (release) | 45ms | 0.94x |
-| C (gcc -O3) | 44ms | 0.92x |
-| Python | 3200ms | 67x |
+| C (clang -O3) | 32ms | 0.94x |
+| Rust (release) | 33ms | 0.97x |
+| **Vais** (clang -O2) | **34ms** | **1.0x** |
+| Python | 3200ms | ~94x slower |
 
 ### Running Benchmarks
 

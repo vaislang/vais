@@ -1,6 +1,6 @@
 # Vais Language Comparison Benchmark
 
-> **Date**: 2026-02-09
+> **Date**: 2026-02-11
 > **Machine**: Apple M-series ARM64 / macOS Darwin 25.2.0
 > **Tools**: hyperfine 1.20.0, tiktoken cl100k_base (GPT-4/Claude tokenizer)
 
@@ -16,16 +16,16 @@ Single-file compilation time measured with `hyperfine --warmup 3 --min-runs 15`.
 
 | Program | Vais | C (clang) | Go | Rust | Vais vs C | Vais vs Go | Vais vs Rust |
 |---------|------|-----------|----|------|-----------|------------|--------------|
-| fibonacci | **6.0ms** | 54.9ms | 49.6ms | 111.4ms | **9.2x** | **8.3x** | **18.6x** |
-| quicksort | **6.9ms** | 56.1ms | 58.6ms | 122.6ms | **8.1x** | **8.5x** | **17.8x** |
-| http_types | **6.2ms** | 55.0ms | 47.4ms | 125.8ms | **8.9x** | **7.6x** | **20.2x** |
-| linked_list | **6.9ms** | 53.9ms | 52.0ms | 127.7ms | **7.8x** | **7.5x** | **18.5x** |
-| **Average** | **6.5ms** | **55.0ms** | **51.9ms** | **121.9ms** | **8.5x** | **8.0x** | **18.8x** |
+| fibonacci | **6.5ms** | 54.9ms | 49.6ms | 111.4ms | **8.4x** | **7.6x** | **17.1x** |
+| quicksort | **6.5ms** | 56.1ms | 58.6ms | 122.6ms | **8.6x** | **9.0x** | **18.9x** |
+| http_types | **6.3ms** | 55.0ms | 47.4ms | 125.8ms | **8.7x** | **7.5x** | **20.0x** |
+| linked_list | **6.4ms** | 53.9ms | 52.0ms | 127.7ms | **8.4x** | **8.1x** | **20.0x** |
+| **Average** | **6.4ms** | **55.0ms** | **51.9ms** | **121.9ms** | **8.6x** | **8.1x** | **19.0x** |
 
 ### Key Findings
 
-- **Vais is 8-9x faster than C/clang** for single-file compilation
-- **Vais is 8x faster than Go** for single-file compilation
+- **Vais is ~8.6x faster than C/clang** for single-file compilation
+- **Vais is ~8x faster than Go** for single-file compilation
 - **Vais is ~19x faster than Rust** for single-file compilation
 - Vais compilation time is consistently ~6-7ms regardless of program complexity
 - This confirms the Phase 36 result: **800K lines/s throughput** at scale
@@ -69,9 +69,13 @@ cargo bench --bench runtime_bench
 open target/criterion/compute/fibonacci/report/index.html
 ```
 
-### Expected Results
+### Results (2026-02-11, Apple M-series ARM64, clang -O2)
 
-Vais-compiled binaries should perform **within 10-20% of native Rust** for compute-intensive workloads.
+| Program | C (-O3) | Rust (release) | Vais (-O2) | Vais vs C | Vais vs Rust |
+|---------|---------|----------------|------------|-----------|--------------|
+| fibonacci(35) | 32ms | 33ms | 34ms | 1.06x | 1.03x |
+
+Vais-compiled binaries perform **within 3-7% of native C and Rust** for compute-intensive workloads.
 The LLVM backend applies the same optimizations (inlining, loop unrolling, vectorization) to both languages.
 
 **Note**: Actual numbers depend on your CPU architecture and LLVM version. Run the benchmark locally to measure.
@@ -163,7 +167,7 @@ Weighting: Compile speed (40%) + Token efficiency for systems code (60%)
 
 | Language | Compile Speed | Token Efficiency (http_types) | Combined |
 |----------|--------------|------------------------------|----------|
-| **Vais** | **6.5ms (1.0x)** | **184 tokens (1.0x)** | **Best** |
+| **Vais** | **6.4ms (1.0x)** | **184 tokens (1.0x)** | **Best** |
 | Go | 51.9ms (8.0x) | 318 tokens (1.73x) | |
 | C | 55.0ms (8.5x) | 454 tokens (2.47x) | |
 | Rust | 121.9ms (18.8x) | 431 tokens (2.34x) | |
@@ -187,4 +191,5 @@ bash benches/lang-comparison/compile_bench.sh
 
 ## Changelog
 
+- **2026-02-11**: Updated Vais compile speed (6.4ms avg), added runtime results (fib35: 34ms, within 3-7% of C/Rust)
 - **2026-02-09**: Initial benchmark — 4 programs, 5 languages
