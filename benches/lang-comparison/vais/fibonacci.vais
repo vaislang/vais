@@ -1,8 +1,8 @@
 # Fibonacci - recursive and iterative
-F fib_rec(n: i64) -> i64 =
+F fib_rec(n) -> i64 =
     I n <= 1 { n } E { @(n - 1) + @(n - 2) }
 
-F fib_iter(n: i64) -> i64 {
+F fib_iter(n) -> i64 {
     a := mut 0
     b := mut 1
     L _:0..n {
@@ -14,7 +14,7 @@ F fib_iter(n: i64) -> i64 {
 }
 
 F main() -> i64 {
-    printf("%lld\n", fib_rec(20))
-    printf("%lld\n", fib_iter(50))
+    println("~{fib_rec(20)}")
+    println("~{fib_iter(50)}")
     0
 }

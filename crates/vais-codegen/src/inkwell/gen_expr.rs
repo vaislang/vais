@@ -663,6 +663,27 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         callee: &Expr,
         args: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
+        if let Expr::Ident(name) = callee {
+            if self.generated_structs.contains_key(name.as_str())
+                && self.module.get_function(name).is_none()
+            {
+                if let Some(field_names) = self.struct_fields.get(name.as_str()).cloned() {
+                    let fields: Vec<_> = field_names
+                        .iter()
+                        .zip(args.iter())
+                        .map(|(fname, val)| {
+                            (
+                                vais_ast::Spanned::new(fname.clone(), val.span),
+                                val.clone(),
+                            )
+                        })
+                        .collect();
+                    return self.generate_struct_literal(name, &fields);
+                }
+            }
+        }
+
         // Get function name
         let fn_name = match callee {
             Expr::Ident(name) => name.clone(),

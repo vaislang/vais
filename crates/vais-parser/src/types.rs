@@ -614,7 +614,13 @@ impl Parser {
             Token::Vec8i32 => "Vec8i32",
             Token::Vec2i64 => "Vec2i64",
             Token::Vec4i64 => "Vec4i64",
-            Token::Ident(s) => return Ok(s.clone()),
+            Token::Ident(s) => {
+                // Type alias: `i` → `i64` (only in type position)
+                if s == "i" {
+                    return Ok("i64".to_string());
+                }
+                return Ok(s.clone());
+            }
             // Single-letter keywords can be used as type names in generics
             Token::TypeKeyword => "T",
             Token::Function => "F",

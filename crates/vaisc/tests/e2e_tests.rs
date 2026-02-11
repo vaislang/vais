@@ -13821,3 +13821,79 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+#[test]
+fn test_type_alias_i_as_i64_param() {
+    let source = r#"
+F add(x: i, y: i) -> i {
+    x + y
+}
+F main() -> i64 {
+    add(20, 22)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_type_alias_i_as_i64_return() {
+    let source = r#"
+F double(x: i64) -> i {
+    x * 2
+}
+F main() -> i64 {
+    double(21)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_type_alias_i_as_i64_variable() {
+    let source = r#"
+F main() -> i64 {
+    x: i = 42
+    x
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_struct_tuple_literal_basic() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+F main() -> i64 {
+    p := Point(40, 2)
+    p.x + p.y
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_struct_tuple_literal_nested() {
+    let source = r#"
+S Pair { a: i64, b: i64 }
+F make(x: i64, y: i64) -> Pair {
+    Pair(x, y)
+}
+F main() -> i64 {
+    p := make(20, 22)
+    p.a + p.b
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_struct_tuple_literal_three_fields() {
+    let source = r#"
+S Triple { x: i64, y: i64, z: i64 }
+F main() -> i64 {
+    t := Triple(10, 20, 12)
+    t.x + t.y + t.z
+}
+"#;
+    assert_exit_code(source, 42);
+}

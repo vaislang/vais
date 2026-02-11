@@ -448,6 +448,38 @@ impl TypeChecker {
             Expr::Call { func, args } => {
                 // Check if this is a direct call to a known function
                 if let Expr::Ident(func_name) = &func.node {
+                    // Struct tuple literal: `Response(200, 1)` → `Response { status: 200, body: 1 }`
+                    if !self.functions.contains_key(func_name) {
+                        if let Some(struct_def) = self.structs.get(func_name).cloned() {
+                            if args.len() != struct_def.field_order.len() {
+                                return Err(TypeError::ArgCount {
+                                    expected: struct_def.field_order.len(),
+                                    got: args.len(),
+                                    span: None,
+                                });
+                            }
+                            // Desugar to StructLit and type-check
+                            let fields: Vec<_> = struct_def
+                                .field_order
+                                .iter()
+                                .zip(args.iter())
+                                .map(|(fname, val)| {
+                                    (
+                                        vais_ast::Spanned::new(fname.clone(), val.span.clone()),
+                                        val.clone(),
+                                    )
+                                })
+                                .collect();
+                            let struct_lit = vais_ast::Spanned::new(
+                                Expr::StructLit {
+                                    name: vais_ast::Spanned::new(func_name.clone(), func.span.clone()),
+                                    fields,
+                                },
+                                expr.span.clone(),
+                            );
+                            return self.check_expr(&struct_lit);
+                        }
+                    }
                     if let Some(sig) = self.functions.get(func_name).cloned() {
                         if !sig.generics.is_empty() {
                             // Generic function call - infer type arguments

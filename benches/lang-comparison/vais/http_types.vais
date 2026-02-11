@@ -4,13 +4,13 @@ S Response {
     body: i64,
 }
 
-F route(path: i64) -> Response {
+F route(path) -> Response {
     I path == 1 {
-        Response { status: 200, body: 1 }
+        Response(200, 1)
     } E I path == 2 {
-        Response { status: 200, body: 2 }
+        Response(200, 2)
     } E {
-        Response { status: 404, body: 0 }
+        Response(404, 0)
     }
 }
 

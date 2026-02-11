@@ -398,7 +398,9 @@ impl TypeChecker {
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&s.generics);
 
         let mut fields = HashMap::new();
+        let mut field_order = Vec::new();
         for field in &s.fields {
+            field_order.push(field.name.node.clone());
             fields.insert(field.name.node.clone(), self.resolve_type(&field.ty.node));
         }
 
@@ -465,6 +467,7 @@ impl TypeChecker {
                 name,
                 generics: s.generics.iter().map(|g| &g.name.node).cloned().collect(),
                 fields,
+                field_order,
                 methods,
                 repr_c: s
                     .attributes

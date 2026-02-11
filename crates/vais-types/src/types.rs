@@ -1446,6 +1446,7 @@ pub struct StructDef {
     pub name: String,
     pub generics: Vec<String>,
     pub fields: HashMap<String, ResolvedType>,
+    pub field_order: Vec<String>, // Preserves declaration order for tuple literal syntax
     pub methods: HashMap<String, FunctionSig>,
     pub repr_c: bool, // true if #[repr(C)] attribute is present
 }

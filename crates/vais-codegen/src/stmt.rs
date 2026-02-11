@@ -44,7 +44,19 @@ impl CodeGenerator {
                 let inferred_ty = self.infer_expr_type(value);
 
                 // Check if this is a struct literal - handle specially
-                let is_struct_lit = matches!(&value.node, Expr::StructLit { .. });
+                // Also detect struct tuple literal: Point(40, 2) where "Point" is a known struct
+                let is_struct_lit = matches!(&value.node, Expr::StructLit { .. })
+                    || if let Expr::Call { func, .. } = &value.node {
+                        if let Expr::Ident(fn_name) = &func.node {
+                            let resolved = self.resolve_struct_name(fn_name);
+                            self.structs.contains_key(&resolved)
+                                && !self.functions.contains_key(fn_name)
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
 
                 // Check if this is an enum variant constructor call (e.g., Some(42))
                 let is_enum_variant_call = if let Expr::Call { func, .. } = &value.node {

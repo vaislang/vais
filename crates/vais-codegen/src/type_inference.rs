@@ -45,11 +45,18 @@ impl CodeGenerator {
             Expr::StructLit { .. } => false, // struct literal is a pointer
             Expr::If { .. } => true,         // if-else produces a value (phi node)
             Expr::Match { .. } => true,      // match produces a value
-            // Check if Call is an enum variant constructor
+            // Check if Call is an enum variant constructor or struct tuple literal
             Expr::Call { func, .. } => {
                 if let Expr::Ident(name) = &func.node {
                     // Enum variant constructors (e.g., Some(x)) return pointers
                     if self.get_tuple_variant_info(name).is_some() {
+                        return false;
+                    }
+                    // Struct tuple literals (e.g., Point(40, 2)) return pointers
+                    let resolved = self.resolve_struct_name(name);
+                    if self.structs.contains_key(&resolved)
+                        && !self.functions.contains_key(name)
+                    {
                         return false;
                     }
                 }
@@ -143,6 +150,14 @@ impl CodeGenerator {
                             return ResolvedType::I64;
                         }
                         return ret_ty;
+                    }
+                    // Struct tuple literal: Point(40, 2) — not a function, but a struct
+                    let resolved = self.resolve_struct_name(fn_name);
+                    if self.structs.contains_key(&resolved) {
+                        return ResolvedType::Named {
+                            name: resolved,
+                            generics: vec![],
+                        };
                     }
                 }
                 ResolvedType::I64 // Default

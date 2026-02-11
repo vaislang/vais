@@ -543,6 +543,32 @@ impl CodeGenerator {
             Expr::Call { func, args } => {
                 // Check if this is an enum variant constructor or builtin
                 if let Expr::Ident(name) = &func.node {
+                    // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
+                    let resolved = self.resolve_struct_name(name);
+                    if self.structs.contains_key(&resolved) && !self.functions.contains_key(name) {
+                        if let Some(struct_info) = self.structs.get(&resolved).cloned() {
+                            let fields: Vec<_> = struct_info
+                                .fields
+                                .iter()
+                                .zip(args.iter())
+                                .map(|((fname, _), val)| {
+                                    (
+                                        vais_ast::Spanned::new(fname.clone(), val.span),
+                                        val.clone(),
+                                    )
+                                })
+                                .collect();
+                            let struct_lit = vais_ast::Spanned::new(
+                                Expr::StructLit {
+                                    name: vais_ast::Spanned::new(name.clone(), func.span),
+                                    fields,
+                                },
+                                expr.span,
+                            );
+                            return self.generate_expr(&struct_lit, counter);
+                        }
+                    }
+
                     // Handle print/println builtins with format string support
                     if name == "print" || name == "println" {
                         return self.generate_print_call(name, args, counter, expr.span);

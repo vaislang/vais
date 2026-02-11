@@ -809,4 +809,32 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 16: 토큰 효율성 극대화 — 언어 문법 확장
+
+> **상태**: ✅ 완료
+> **목표**: 4개 전략으로 Vais 토큰 수 865→801 (Python 889보다 9.9% 적음)
+> **전략**: (1) 파라미터 타입 추론 활용 (2) println() 빌트인 활용 (3) `i` = `i64` 타입 별칭 (4) 구조체 튜플 리터럴
+
+### Stage 1: 컴파일러 기능 추가
+
+- [x] 1. `i` 타입 별칭 구현 — parser/types.rs에서 "i" → i64 매핑 (Opus) ✅ 2026-02-12
+  변경: crates/vais-parser/src/types.rs (type position에서 "i" → "i64" 매핑)
+- [x] 2. 구조체 튜플 리터럴 — Response(200,1) 문법 (Opus) ✅ 2026-02-12
+  변경: checker_expr.rs, checker_module.rs, types.rs(field_order), generate_expr.rs, stmt_visitor.rs, type_inference.rs, inkwell/gen_expr.rs, codegen-js/expr.rs
+
+### Stage 2: 벤치마크 + 테스트
+
+- [x] 3. 벤치마크 재작성 — 전략 1~4 모두 반영 (Opus) ✅ 2026-02-12
+  변경: fibonacci.vais, quicksort.vais, linked_list.vais, http_types.vais (토큰 865→801)
+- [x] 4. E2E 테스트 추가 — i별칭 3개 + 튜플리터럴 3개 (Sonnet) ✅ 2026-02-12
+  변경: e2e_tests.rs (6개 테스트 추가, 전체 510 통과)
+- [x] 5. 토큰 재측정 + docs 업데이트 (Opus) ✅ 2026-02-12
+  변경: docs/benchmarks.md (801 tokens, 9.9% vs Python, 25.8% vs Rust, 33.9% vs C)
+- [x] 6. E2E 회귀 검증 + Clippy (Opus) ✅ 2026-02-12
+  변경: 510 E2E 통과, Clippy 0건
+
+진행률: 6/6 (100%)
+
+---
+
 **메인테이너**: Steve

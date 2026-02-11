@@ -44,6 +44,7 @@ fn test_repr_c_struct() {
         name: "Point".to_string(),
         generics: vec![],
         fields,
+        field_order: vec!["x".to_string(), "y".to_string()],
         methods: HashMap::new(),
         repr_c: true,
     };

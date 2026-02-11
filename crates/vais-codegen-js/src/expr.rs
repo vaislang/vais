@@ -69,6 +69,24 @@ impl JsCodeGenerator {
 
             // --- Function calls ---
             Expr::Call { func, args } => {
+                // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
+                if let Expr::Ident(name) = &func.node {
+                    if let Some(field_defs) = self.structs.get(name.as_str()).cloned() {
+                        let field_strs: std::result::Result<Vec<String>, _> = field_defs
+                            .iter()
+                            .zip(args.iter())
+                            .map(|((fname, _), fval)| {
+                                let v = self.generate_expr(&fval.node)?;
+                                Ok(format!("{}: {v}", sanitize_js_ident(fname)))
+                            })
+                            .collect();
+                        return Ok(format!(
+                            "new {}({{{}}})",
+                            sanitize_js_ident(name),
+                            field_strs?.join(", ")
+                        ));
+                    }
+                }
                 let f = self.generate_expr(&func.node)?;
                 let args_str = self.generate_args(args)?;
                 Ok(format!("{f}({args_str})"))
