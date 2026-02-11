@@ -786,4 +786,27 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 15: 벤치마크 토큰 효율성 개선
+
+> **상태**: ✅ 완료 (2026-02-12)
+> **목표**: 벤치마크 .vais 프로그램을 기존 Vais 문법 기능(range loop, +=, arr[i], struct field)으로 재작성하여 토큰 효율성 입증
+> **배경**: 현재 벤치마크가 C 스타일(malloc/load_i64/store_i64, 수동 카운터)로 작성되어 Vais 1,085 tokens vs Python 889 tokens로 불리. 기존 기능을 활용하면 대폭 개선 가능
+
+모드: 자동진행
+
+### Stage 1: 벤치마크 재작성
+
+- [x] 1. 벤치마크 .vais 4파일 현대 문법으로 재작성 (Opus) ✅ 2026-02-12
+  변경: fibonacci.vais (expression-body + L _:0..n range loop, 23→20줄), quicksort.vais (*i64 직접 인덱싱 + arr_new/get/set/swap 4함수 제거 + L j:lo..hi + @재귀, 58→34줄), linked_list.vais (L i:1..11 range + +=, 46→43줄)
+- [x] 2. 토큰 재측정 + 결과 비교 분석 (Opus) [blockedBy: 1] ✅ 2026-02-12
+  변경: Vais 1,085→865 tokens (-20.3%), 순위 역전 — Vais(865) < Python(889) < Go(893) < Rust(1,080) < C(1,211)
+- [x] 3. docs/benchmarks.md 업데이트 (Sonnet) [blockedBy: 2] ✅ 2026-02-12
+  변경: docs/benchmarks.md (토큰 효율성 섹션 전면 갱신 — 새 결과 테이블, "Why Fewer Tokens", Honest Assessment)
+- [x] 4. E2E 회귀 검증 + Clippy (Opus) [blockedBy: 1] ✅ 2026-02-12
+  변경: E2E 504 통과, Clippy 0건
+
+진행률: 4/4 (100%) ✅
+
+---
+
 **메인테이너**: Steve
