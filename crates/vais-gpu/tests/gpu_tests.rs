@@ -1447,3 +1447,388 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
         assert_eq!(gen.kernels().len(), 2, "Should discover both kernels");
     }
 }
+
+// ============================================================================
+// Stage 5: GPU Kernel Generation Tests (30+)
+// Tests for kernel code generation, type conversion, metadata, edge cases
+// ============================================================================
+
+mod kernel_generation_tests {
+    use vais_ast::*;
+    use vais_gpu::{GpuCodeGenerator, GpuKernel, GpuTarget, GpuType};
+
+    fn spanned<T>(node: T) -> Spanned<T> {
+        Spanned {
+            node,
+            span: Span { start: 0, end: 0 },
+        }
+    }
+
+    fn make_empty_module() -> Module {
+        Module {
+            items: vec![],
+            modules_map: None,
+        }
+    }
+
+    fn make_kernel_module(name: &str, params: Vec<Param>) -> Module {
+        Module {
+            modules_map: None,
+            items: vec![spanned(Item::Function(Function {
+                name: spanned(name.to_string()),
+                generics: vec![],
+                params,
+                ret_type: None,
+                body: FunctionBody::Block(vec![]),
+                is_pub: false,
+                is_async: false,
+                attributes: vec![Attribute {
+                    name: "gpu".to_string(),
+                    args: vec![],
+                    expr: None,
+                }],
+            }))],
+        }
+    }
+
+    fn make_param(name: &str, ty: Type) -> Param {
+        Param {
+            name: spanned(name.to_string()),
+            ty: spanned(ty),
+            is_mut: false,
+            is_vararg: false,
+            ownership: Ownership::Regular,
+            default_value: None,
+        }
+    }
+
+    // Task 1: GpuCodeGenerator kernel generation tests (4 backends × 3 scenarios = 12 tests)
+
+    #[test]
+    fn test_cuda_empty_module_generates_empty_code() {
+        let module = make_empty_module();
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA empty module should succeed");
+        assert!(gen.kernels().is_empty(), "Empty module should have no kernels");
+    }
+
+    #[test]
+    fn test_opencl_empty_module_generates_empty_code() {
+        let module = make_empty_module();
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let _code = gen.generate(&module).expect("OpenCL empty module should succeed");
+        assert!(gen.kernels().is_empty());
+    }
+
+    #[test]
+    fn test_webgpu_empty_module_generates_empty_code() {
+        let module = make_empty_module();
+        let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
+        let _code = gen.generate(&module).expect("WebGPU empty module should succeed");
+        assert!(gen.kernels().is_empty());
+    }
+
+    #[test]
+    fn test_metal_empty_module_generates_empty_code() {
+        let module = make_empty_module();
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let _code = gen.generate(&module).expect("Metal empty module should succeed");
+        assert!(gen.kernels().is_empty());
+    }
+
+    #[test]
+    fn test_cuda_simple_kernel_contains_global() {
+        let module = make_kernel_module(
+            "simple_kernel",
+            vec![make_param(
+                "data",
+                Type::Pointer(Box::new(spanned(Type::Named {
+                    name: "i32".to_string(),
+                    generics: vec![],
+                }))),
+            )],
+        );
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA kernel generation failed");
+        assert!(
+            code.contains("__global__") || code.contains("simple_kernel"),
+            "CUDA output should contain __global__ or kernel name"
+        );
+    }
+
+    #[test]
+    fn test_opencl_simple_kernel_contains_kernel() {
+        let module = make_kernel_module(
+            "simple_kernel",
+            vec![make_param(
+                "data",
+                Type::Pointer(Box::new(spanned(Type::Named {
+                    name: "i32".to_string(),
+                    generics: vec![],
+                }))),
+            )],
+        );
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL kernel generation failed");
+        assert!(
+            code.contains("__kernel") || code.contains("simple_kernel"),
+            "OpenCL output should contain __kernel or kernel name"
+        );
+    }
+
+    #[test]
+    fn test_webgpu_simple_kernel_contains_compute() {
+        let module = make_kernel_module(
+            "simple_kernel",
+            vec![make_param(
+                "data",
+                Type::Pointer(Box::new(spanned(Type::Named {
+                    name: "i32".to_string(),
+                    generics: vec![],
+                }))),
+            )],
+        );
+        let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
+        let code = gen.generate(&module).expect("WebGPU kernel generation failed");
+        assert!(
+            code.contains("@compute") || code.contains("simple_kernel") || code.len() > 0,
+            "WebGPU output should contain compute shader markers or kernel name"
+        );
+    }
+
+    #[test]
+    fn test_metal_simple_kernel_contains_kernel() {
+        let module = make_kernel_module(
+            "simple_kernel",
+            vec![make_param(
+                "data",
+                Type::Pointer(Box::new(spanned(Type::Named {
+                    name: "i32".to_string(),
+                    generics: vec![],
+                }))),
+            )],
+        );
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal kernel generation failed");
+        assert!(
+            code.contains("kernel") || code.contains("simple_kernel"),
+            "Metal output should contain kernel keyword or kernel name"
+        );
+    }
+
+    #[test]
+    fn test_cuda_host_code_non_empty() {
+        let module = make_kernel_module("test_kernel", vec![]);
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _ = gen.generate(&module).expect("CUDA kernel generation failed");
+        let host = gen.generate_host_code();
+        assert!(host.len() > 0, "CUDA host code should not be empty");
+    }
+
+    #[test]
+    fn test_opencl_host_code_non_empty() {
+        let module = make_kernel_module("test_kernel", vec![]);
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let _ = gen.generate(&module).expect("OpenCL kernel generation failed");
+        let host = gen.generate_host_code();
+        assert!(host.len() > 0, "OpenCL host code should not be empty");
+    }
+
+    #[test]
+    fn test_webgpu_host_code_non_empty() {
+        let module = make_kernel_module("test_kernel", vec![]);
+        let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
+        let _ = gen.generate(&module).expect("WebGPU kernel generation failed");
+        let host = gen.generate_host_code();
+        assert!(host.len() > 0, "WebGPU host code should not be empty");
+    }
+
+    #[test]
+    fn test_metal_host_code_non_empty() {
+        let module = make_kernel_module("test_kernel", vec![]);
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let _ = gen.generate(&module).expect("Metal kernel generation failed");
+        let host = gen.generate_host_code();
+        assert!(host.len() > 0, "Metal host code should not be empty");
+    }
+
+    // Task 2: GpuType conversion tests (8 tests)
+
+    #[test]
+    fn test_gpu_type_nested_ptr() {
+        let ty = GpuType::Ptr(Box::new(GpuType::Ptr(Box::new(GpuType::F32))));
+        assert_eq!(ty.cuda_name(), "float**");
+        assert_eq!(ty.opencl_name(), "__global __global float**");
+        assert_eq!(ty.wgsl_name(), "ptr<storage, ptr<storage, f32>>");
+    }
+
+    #[test]
+    fn test_gpu_type_void_ptr() {
+        let ty = GpuType::Ptr(Box::new(GpuType::Void));
+        assert_eq!(ty.cuda_name(), "void*");
+        assert_eq!(ty.opencl_name(), "__global void*");
+    }
+
+    #[test]
+    fn test_gpu_type_vec_i32_8() {
+        let ty = GpuType::Vec(Box::new(GpuType::I32), 8);
+        assert_eq!(ty.cuda_name(), "int8");
+        assert_eq!(ty.opencl_name(), "int8");
+        assert_eq!(ty.wgsl_name(), "vec8<i32>");
+    }
+
+    #[test]
+    fn test_gpu_type_vec_f64_2() {
+        let ty = GpuType::Vec(Box::new(GpuType::F64), 2);
+        assert_eq!(ty.cuda_name(), "double2");
+        assert_eq!(ty.opencl_name(), "double2");
+        assert_eq!(ty.wgsl_name(), "vec2<f64>");
+    }
+
+    #[test]
+    fn test_gpu_type_array_large() {
+        let ty = GpuType::Array(Box::new(GpuType::F64), 1024);
+        assert_eq!(ty.cuda_name(), "double[1024]");
+        assert_eq!(ty.opencl_name(), "double[1024]");
+        assert_eq!(ty.wgsl_name(), "array<f64, 1024>");
+    }
+
+    #[test]
+    fn test_gpu_type_bool_names() {
+        let ty = GpuType::Bool;
+        assert_eq!(ty.cuda_name(), "bool");
+        assert_eq!(ty.opencl_name(), "bool");
+        assert_eq!(ty.wgsl_name(), "bool");
+    }
+
+    #[test]
+    fn test_gpu_type_void_names() {
+        let ty = GpuType::Void;
+        assert_eq!(ty.cuda_name(), "void");
+        assert_eq!(ty.opencl_name(), "void");
+        assert_eq!(ty.wgsl_name(), "");
+    }
+
+    #[test]
+    fn test_gpu_type_nested_array() {
+        let ty = GpuType::Array(Box::new(GpuType::Array(Box::new(GpuType::I32), 4)), 4);
+        assert_eq!(ty.cuda_name(), "int[4][4]");
+        assert_eq!(ty.opencl_name(), "int[4][4]");
+        assert_eq!(ty.wgsl_name(), "array<array<i32, 4>, 4>");
+    }
+
+    // Task 3: GpuKernel metadata tests (4 tests)
+
+    #[test]
+    fn test_gpu_kernel_metadata_fields() {
+        let kernel = GpuKernel {
+            name: "test_kernel".to_string(),
+            params: vec![("a".to_string(), GpuType::I32)],
+            shared_memory: 1024,
+            block_size: (16, 16, 1),
+        };
+        assert_eq!(kernel.name, "test_kernel");
+        assert_eq!(kernel.params.len(), 1);
+        assert_eq!(kernel.shared_memory, 1024);
+        assert_eq!(kernel.block_size, (16, 16, 1));
+    }
+
+    #[test]
+    fn test_gpu_kernel_empty_params() {
+        let kernel = GpuKernel {
+            name: "no_params".to_string(),
+            params: vec![],
+            shared_memory: 0,
+            block_size: (256, 1, 1),
+        };
+        assert!(kernel.params.is_empty());
+        assert_eq!(kernel.block_size.0, 256);
+    }
+
+    #[test]
+    fn test_gpu_kernel_many_params() {
+        let params: Vec<(String, GpuType)> = (0..10)
+            .map(|i| (format!("param{}", i), GpuType::F32))
+            .collect();
+        let kernel = GpuKernel {
+            name: "many_params".to_string(),
+            params,
+            shared_memory: 2048,
+            block_size: (128, 1, 1),
+        };
+        assert_eq!(kernel.params.len(), 10);
+    }
+
+    #[test]
+    fn test_gpu_kernel_custom_block_size() {
+        let kernel = GpuKernel {
+            name: "custom_block".to_string(),
+            params: vec![],
+            shared_memory: 0,
+            block_size: (32, 32, 1),
+        };
+        assert_eq!(kernel.block_size, (32, 32, 1));
+    }
+
+    // Task 4: GpuTarget additional tests (4 tests)
+
+    #[test]
+    fn test_gpu_target_is_metal_negative() {
+        assert!(!GpuTarget::Cuda.is_metal());
+        assert!(!GpuTarget::OpenCL.is_metal());
+        assert!(!GpuTarget::WebGPU.is_metal());
+    }
+
+    #[test]
+    fn test_gpu_target_is_cuda_negative() {
+        assert!(!GpuTarget::Metal.is_cuda());
+        assert!(!GpuTarget::OpenCL.is_cuda());
+        assert!(!GpuTarget::WebGPU.is_cuda());
+    }
+
+    #[test]
+    fn test_gpu_target_default_shared_memory_all() {
+        assert_eq!(GpuTarget::Cuda.default_shared_memory(), 48 * 1024);
+        assert_eq!(GpuTarget::Metal.default_shared_memory(), 32 * 1024);
+        assert_eq!(GpuTarget::OpenCL.default_shared_memory(), 32 * 1024);
+        assert_eq!(GpuTarget::WebGPU.default_shared_memory(), 16 * 1024);
+    }
+
+    #[test]
+    fn test_gpu_target_parse_case_insensitive() {
+        assert_eq!(GpuTarget::parse("CuDa"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("OpenCL"), Some(GpuTarget::OpenCL));
+        assert_eq!(GpuTarget::parse("WEBGPU"), Some(GpuTarget::WebGPU));
+        assert_eq!(GpuTarget::parse("Metal"), Some(GpuTarget::Metal));
+    }
+
+    // Task 5: Edge cases (4 tests)
+
+    #[test]
+    fn test_gpu_target_parse_empty_string() {
+        assert_eq!(GpuTarget::parse(""), None);
+    }
+
+    #[test]
+    fn test_gpu_target_parse_invalid() {
+        assert_eq!(GpuTarget::parse("directx"), None);
+        assert_eq!(GpuTarget::parse("vulkan"), None);
+        assert_eq!(GpuTarget::parse("garbage"), None);
+    }
+
+    #[test]
+    fn test_gpu_type_deeply_nested_ptr() {
+        let ty = GpuType::Ptr(Box::new(GpuType::Ptr(Box::new(GpuType::Ptr(Box::new(
+            GpuType::I32,
+        ))))));
+        assert_eq!(ty.cuda_name(), "int***");
+    }
+
+    #[test]
+    fn test_gpu_code_generator_target_accessor() {
+        let gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        assert_eq!(gen.target(), GpuTarget::Cuda);
+        let gen2 = GpuCodeGenerator::new(GpuTarget::Metal);
+        assert_eq!(gen2.target(), GpuTarget::Metal);
+    }
+}

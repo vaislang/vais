@@ -56,6 +56,40 @@ impl VectorWidth {
             VectorWidth::Auto => "+avx2",
         }
     }
+
+    /// Auto-detect best vector width for current platform
+    pub fn auto_detect() -> Self {
+        // Default heuristic based on common platforms
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Most modern x86_64 have AVX2
+            VectorWidth::AVX2
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            // ARM NEON is 128-bit
+            VectorWidth::NEON
+        }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            VectorWidth::SSE  // Safe fallback
+        }
+    }
+
+    /// Get the number of f32 elements per vector
+    pub fn f32_lanes(&self) -> u32 {
+        (self.bits() / 32) as u32
+    }
+
+    /// Get the number of f64 elements per vector
+    pub fn f64_lanes(&self) -> u32 {
+        (self.bits() / 64) as u32
+    }
+
+    /// Get the number of i32 elements per vector
+    pub fn i32_lanes(&self) -> u32 {
+        (self.bits() / 32) as u32
+    }
 }
 
 /// Loop dependence type

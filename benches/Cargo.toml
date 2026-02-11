@@ -73,6 +73,11 @@ name = "endurance_bench"
 path = "endurance_bench.rs"
 harness = false
 
+[[bench]]
+name = "gpu_bench"
+path = "gpu_bench.rs"
+harness = false
+
 [[example]]
 name = "gen_large_example"
 path = "fixtures/gen_large_example.rs"
@@ -84,6 +89,7 @@ vais-ast = { path = "../crates/vais-ast" }
 vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
 vais-gc = { path = "../crates/vais-gc" }
+vais-gpu = { path = "../crates/vais-gpu" }
 criterion = { version = "0.8", features = ["html_reports"] }
 rayon = { workspace = true }
 serde = { workspace = true }

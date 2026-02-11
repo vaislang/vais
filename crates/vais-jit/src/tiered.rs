@@ -69,6 +69,14 @@ pub struct FunctionProfile {
     pub loop_counts: RwLock<HashMap<usize, u64>>,
     /// Branch taken/not-taken counts for branch prediction.
     pub branch_counts: RwLock<HashMap<usize, (u64, u64)>>,
+    /// Total accumulated loop iterations across all loops.
+    pub total_loop_iterations: AtomicU64,
+    /// Hot path score (weighted by loop iterations + branch bias).
+    pub hot_path_score: RwLock<f64>,
+    /// Last promoted execution count (to prevent rapid re-promotions).
+    pub last_promoted_at: RwLock<u64>,
+    /// Deoptimization count (tier downgrades due to mismatched assumptions).
+    pub deopt_count: AtomicU64,
 }
 
 impl FunctionProfile {
@@ -80,6 +88,10 @@ impl FunctionProfile {
             compiling: RwLock::new(false),
             loop_counts: RwLock::new(HashMap::new()),
             branch_counts: RwLock::new(HashMap::new()),
+            total_loop_iterations: AtomicU64::new(0),
+            hot_path_score: RwLock::new(0.0),
+            last_promoted_at: RwLock::new(0),
+            deopt_count: AtomicU64::new(0),
         }
     }
 
@@ -92,6 +104,7 @@ impl FunctionProfile {
     pub fn record_loop(&self, loop_id: usize) {
         let mut counts = self.loop_counts.write().unwrap();
         *counts.entry(loop_id).or_insert(0) += 1;
+        self.total_loop_iterations.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Records a branch outcome.
@@ -103,6 +116,30 @@ impl FunctionProfile {
         } else {
             entry.1 += 1;
         }
+    }
+
+    /// Updates the hot path score based on execution profile.
+    pub fn update_hot_path_score(&self) {
+        let score = compute_hot_path_score(self);
+        let mut hot_path_score = self.hot_path_score.write().unwrap();
+        *hot_path_score = score;
+    }
+
+    /// Records a deoptimization event.
+    pub fn record_deopt(&self) -> u64 {
+        self.deopt_count.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// Checks if function is blacklisted from future promotions.
+    pub fn is_blacklisted(&self) -> bool {
+        self.deopt_count.load(Ordering::Relaxed) >= 3
+    }
+
+    /// Marks function as promoted at current execution count.
+    pub fn mark_promoted(&self) {
+        let count = self.execution_count.load(Ordering::Relaxed);
+        let mut last_promoted = self.last_promoted_at.write().unwrap();
+        *last_promoted = count;
     }
 }
 
@@ -214,16 +251,27 @@ impl Interpreter {
     }
 
     /// Checks if a function should be promoted to the next tier.
+    /// Now uses hot path score instead of simple execution count.
     pub fn should_promote(&self, name: &str) -> Option<Tier> {
         let profile = self.get_profile(name)?;
-        let count = profile.execution_count.load(Ordering::Relaxed);
+
+        // Don't promote blacklisted functions
+        if profile.is_blacklisted() {
+            return None;
+        }
+
+        // Update hot path score before checking
+        profile.update_hot_path_score();
+
+        let score = *profile.hot_path_score.read().unwrap();
         let current_tier = *profile.current_tier.read().unwrap();
 
+        // Use hot path score thresholds (same numeric values but now score-based)
         match current_tier {
-            Tier::Interpreter if count >= self.thresholds.interpreter_to_baseline => {
+            Tier::Interpreter if score >= self.thresholds.interpreter_to_baseline as f64 => {
                 Some(Tier::Baseline)
             }
-            Tier::Baseline if count >= self.thresholds.baseline_to_optimizing => {
+            Tier::Baseline if score >= self.thresholds.baseline_to_optimizing as f64 => {
                 Some(Tier::Optimizing)
             }
             _ => None,
@@ -278,7 +326,7 @@ impl Interpreter {
     ) -> Result<Value, JitError> {
         let mut result = Value::Unit;
 
-        for (i, stmt) in stmts.iter().enumerate() {
+        for stmt in stmts.iter() {
             match &stmt.node {
                 Stmt::Let { name, value, .. } => {
                     let val = self.eval_expr(&value.node, locals, profile)?;
@@ -316,12 +364,7 @@ impl Interpreter {
                 }
             }
 
-            // For the last statement, capture its value if it's an expression
-            if i == stmts.len() - 1 {
-                if let Stmt::Expr(expr) = &stmt.node {
-                    result = self.eval_expr(&expr.node, locals, profile)?;
-                }
-            }
+            // Note: last Stmt::Expr value is already captured in the Stmt::Expr arm above
         }
 
         Ok(result)
@@ -402,10 +445,13 @@ impl Interpreter {
 
             Expr::Loop { body, .. } => {
                 let loop_id = body as *const _ as usize;
+                let mut _iteration = 0u64;
                 loop {
                     if let Some(p) = profile {
                         p.record_loop(loop_id);
                     }
+
+                    _iteration += 1;
 
                     match self.eval_block(body, locals, profile) {
                         Ok(Value::Unit) => continue,
@@ -417,10 +463,12 @@ impl Interpreter {
 
             Expr::While { condition, body } => {
                 let loop_id = body as *const _ as usize;
+                let mut _iteration = 0u64;
                 while self.eval_expr(&condition.node, locals, profile)?.as_bool() {
                     if let Some(p) = profile {
                         p.record_loop(loop_id);
                     }
+                    _iteration += 1;
                     self.eval_block(body, locals, profile)?;
                 }
                 Ok(Value::Unit)
@@ -482,10 +530,10 @@ impl Interpreter {
     /// Evaluates a binary operation.
     fn eval_binary_op(&self, op: BinOp, lhs: Value, rhs: Value) -> Result<Value, JitError> {
         match (op, &lhs, &rhs) {
-            // Integer operations
-            (BinOp::Add, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a + b)),
-            (BinOp::Sub, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a - b)),
-            (BinOp::Mul, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a * b)),
+            // Integer operations (wrapping to prevent overflow panic)
+            (BinOp::Add, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_add(*b))),
+            (BinOp::Sub, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_sub(*b))),
+            (BinOp::Mul, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_mul(*b))),
             (BinOp::Div, Value::I64(a), Value::I64(b)) => {
                 if *b == 0 {
                     Err(JitError::Runtime("Division by zero".to_string()))
@@ -511,8 +559,8 @@ impl Interpreter {
             (BinOp::BitAnd, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a & b)),
             (BinOp::BitOr, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a | b)),
             (BinOp::BitXor, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a ^ b)),
-            (BinOp::Shl, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a << b)),
-            (BinOp::Shr, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a >> b)),
+            (BinOp::Shl, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_shl((*b as u32) & 63))),
+            (BinOp::Shr, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_shr((*b as u32) & 63))),
 
             // Comparison operations
             (BinOp::Eq, Value::I64(a), Value::I64(b)) => Ok(Value::Bool(a == b)),
@@ -561,6 +609,47 @@ impl Default for Interpreter {
     }
 }
 
+/// Computes hot path score based on profiling data.
+///
+/// Score = execution_count * 1.0 + total_loop_iterations * 0.5 + branch_bias_score * 0.3
+fn compute_hot_path_score(profile: &FunctionProfile) -> f64 {
+    let execution_count = profile.execution_count.load(Ordering::Relaxed) as f64;
+    let total_loop_iterations = profile.total_loop_iterations.load(Ordering::Relaxed) as f64;
+
+    // Calculate branch bias score (max bias across all branches)
+    let branch_bias_score = {
+        let branch_counts = profile.branch_counts.read().unwrap();
+        branch_counts
+            .values()
+            .map(|(taken, not_taken)| {
+                let total = taken + not_taken;
+                if total == 0 {
+                    0.0
+                } else {
+                    let max_count = (*taken).max(*not_taken);
+                    (max_count as f64) / (total as f64)
+                }
+            })
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0)
+    };
+
+    execution_count * 1.0 + total_loop_iterations * 0.5 + branch_bias_score * 0.3
+}
+
+/// OSR (On-Stack Replacement) point for loop hot spot replacement.
+#[derive(Debug, Clone)]
+pub struct OsrPoint {
+    /// Function name.
+    pub function: String,
+    /// Loop identifier.
+    pub loop_id: usize,
+    /// Target tier to promote to.
+    pub target_tier: Tier,
+    /// Iteration threshold to trigger OSR.
+    pub iteration_threshold: u64,
+}
+
 /// Tiered JIT compiler orchestrator.
 #[allow(dead_code)]
 pub struct TieredJit {
@@ -572,6 +661,8 @@ pub struct TieredJit {
     compiled: HashMap<String, HashMap<Tier, *const u8>>,
     /// Tier thresholds.
     thresholds: TierThresholds,
+    /// OSR points registered for hot loop replacement.
+    osr_points: RwLock<Vec<OsrPoint>>,
 }
 
 impl TieredJit {
@@ -582,6 +673,7 @@ impl TieredJit {
             baseline: Some(crate::JitCompiler::new()?),
             compiled: HashMap::new(),
             thresholds: TierThresholds::default(),
+            osr_points: RwLock::new(Vec::new()),
         })
     }
 
@@ -592,6 +684,7 @@ impl TieredJit {
             baseline: Some(crate::JitCompiler::new()?),
             compiled: HashMap::new(),
             thresholds,
+            osr_points: RwLock::new(Vec::new()),
         })
     }
 
@@ -686,10 +779,11 @@ impl TieredJit {
             }
         }
 
-        // Update tier
+        // Update tier and mark as promoted
         {
             let mut current_tier = profile.current_tier.write().unwrap();
             *current_tier = tier;
+            profile.mark_promoted();
         }
 
         // Clear compiling flag
@@ -699,6 +793,63 @@ impl TieredJit {
         }
 
         Ok(())
+    }
+
+    /// Deoptimizes a function by downgrading it to a lower tier.
+    pub fn deoptimize(&mut self, name: &str) -> Result<(), JitError> {
+        let profile = match self.interpreter.get_profile(name) {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        let current_tier = *profile.current_tier.read().unwrap();
+
+        // Determine downgrade target
+        let new_tier = match current_tier {
+            Tier::Optimizing => Tier::Baseline,
+            Tier::Baseline => Tier::Interpreter,
+            Tier::Interpreter => return Ok(()), // Already at lowest tier
+        };
+
+        // Record deoptimization
+        let deopt_count = profile.record_deopt();
+
+        // Update tier
+        {
+            let mut tier = profile.current_tier.write().unwrap();
+            *tier = new_tier;
+        }
+
+        // Remove compiled code for the old tier
+        if let Some(tiers) = self.compiled.get_mut(name) {
+            tiers.remove(&current_tier);
+        }
+
+        // Check if blacklisted after 3 deopts
+        if deopt_count >= 3 {
+            // Function is now blacklisted from future promotions
+        }
+
+        Ok(())
+    }
+
+    /// Registers an OSR point for hot loop replacement.
+    pub fn register_osr_point(&self, point: OsrPoint) {
+        let mut points = self.osr_points.write().unwrap();
+        points.push(point);
+    }
+
+    /// Checks if an OSR point should trigger tier promotion.
+    pub fn check_osr(&self, func: &str, loop_id: usize, iteration: u64) -> Option<Tier> {
+        let points = self.osr_points.read().unwrap();
+
+        for point in points.iter() {
+            if point.function == func && point.loop_id == loop_id && iteration >= point.iteration_threshold {
+                return Some(point.target_tier);
+            }
+        }
+
+        None
     }
 
     /// Gets the current tier for a function.
@@ -713,6 +864,8 @@ impl TieredJit {
     pub fn get_function_stats(&self, name: &str) -> Option<FunctionStats> {
         let profile = self.interpreter.get_profile(name)?;
 
+        profile.update_hot_path_score();
+
         let execution_count = profile.execution_count.load(Ordering::Relaxed);
         let current_tier = *profile.current_tier.read().unwrap();
         let hot_loops = profile
@@ -722,12 +875,55 @@ impl TieredJit {
             .iter()
             .filter(|(_, count)| **count > 1000)
             .count();
+        let hot_path_score = *profile.hot_path_score.read().unwrap();
+        let deopt_count = profile.deopt_count.load(Ordering::Relaxed);
+        let is_blacklisted = profile.is_blacklisted();
 
         Some(FunctionStats {
             execution_count,
             current_tier,
             hot_loops,
+            hot_path_score,
+            deopt_count,
+            is_blacklisted,
         })
+    }
+
+    /// Gets all function statistics.
+    pub fn get_all_stats(&self) -> HashMap<String, FunctionStats> {
+        let profiles = self.interpreter.profiles.read().unwrap();
+
+        profiles
+            .iter()
+            .map(|(name, profile)| {
+                profile.update_hot_path_score();
+
+                let execution_count = profile.execution_count.load(Ordering::Relaxed);
+                let current_tier = *profile.current_tier.read().unwrap();
+                let hot_loops = profile
+                    .loop_counts
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .filter(|(_, count)| **count > 1000)
+                    .count();
+                let hot_path_score = *profile.hot_path_score.read().unwrap();
+                let deopt_count = profile.deopt_count.load(Ordering::Relaxed);
+                let is_blacklisted = profile.is_blacklisted();
+
+                (
+                    name.clone(),
+                    FunctionStats {
+                        execution_count,
+                        current_tier,
+                        hot_loops,
+                        hot_path_score,
+                        deopt_count,
+                        is_blacklisted,
+                    },
+                )
+            })
+            .collect()
     }
 }
 
@@ -746,6 +942,12 @@ pub struct FunctionStats {
     pub current_tier: Tier,
     /// Number of detected hot loops.
     pub hot_loops: usize,
+    /// Hot path score (weighted profiling metric).
+    pub hot_path_score: f64,
+    /// Number of deoptimizations.
+    pub deopt_count: u64,
+    /// Whether function is blacklisted from promotion.
+    pub is_blacklisted: bool,
 }
 
 #[cfg(test)]
@@ -995,5 +1197,234 @@ mod tests {
         // With high thresholds and single execution, should stay in interpreter tier
         let tier = jit.get_function_tier("main");
         assert!(tier == Tier::Interpreter || tier == Tier::Baseline);
+    }
+
+    #[test]
+    fn test_hot_path_score_calculation() {
+        let source = "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::new();
+        interp.load_module(&ast);
+
+        // Execute function
+        let _ = interp.run_main();
+
+        let profile = interp.get_profile("loop_heavy").unwrap();
+        profile.update_hot_path_score();
+
+        let score = *profile.hot_path_score.read().unwrap();
+
+        // Score should be high due to many loop iterations
+        assert!(score > 50.0, "Hot path score should be > 50.0, got {}", score);
+    }
+
+    #[test]
+    fn test_deoptimization() {
+        let source = "F hot()->i64{42} F main()->i64{hot()}";
+        let ast = parse(source).unwrap();
+
+        let mut jit = TieredJit::new().unwrap();
+        jit.load_module(&ast);
+
+        // Get profile and manually promote to Baseline
+        if let Some(profile) = jit.interpreter.get_profile("hot") {
+            let mut tier = profile.current_tier.write().unwrap();
+            *tier = Tier::Baseline;
+        }
+
+        // Verify tier
+        assert_eq!(jit.get_function_tier("hot"), Tier::Baseline);
+
+        // Deoptimize
+        jit.deoptimize("hot").unwrap();
+
+        // Should be back to Interpreter
+        assert_eq!(jit.get_function_tier("hot"), Tier::Interpreter);
+
+        // Deopt count should be 1
+        let stats = jit.get_function_stats("hot").unwrap();
+        assert_eq!(stats.deopt_count, 1);
+    }
+
+    #[test]
+    fn test_deopt_blacklist() {
+        let source = "F unstable()->i64{1} F main()->i64{unstable()}";
+        let ast = parse(source).unwrap();
+
+        let mut jit = TieredJit::new().unwrap();
+        jit.load_module(&ast);
+
+        let profile = jit.interpreter.get_profile("unstable").unwrap();
+
+        // Manually promote and deopt 3 times
+        for _ in 0..3 {
+            {
+                let mut tier = profile.current_tier.write().unwrap();
+                *tier = Tier::Baseline;
+            }
+            jit.deoptimize("unstable").unwrap();
+        }
+
+        // Should be blacklisted
+        assert!(profile.is_blacklisted());
+
+        // should_promote should return None for blacklisted functions
+        assert!(jit.interpreter.should_promote("unstable").is_none());
+    }
+
+    #[test]
+    fn test_osr_point_registration() {
+        let jit = TieredJit::new().unwrap();
+
+        let osr_point = OsrPoint {
+            function: "hot_loop".to_string(),
+            loop_id: 12345,
+            target_tier: Tier::Baseline,
+            iteration_threshold: 1000,
+        };
+
+        jit.register_osr_point(osr_point.clone());
+
+        let points = jit.osr_points.read().unwrap();
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].function, "hot_loop");
+        assert_eq!(points[0].loop_id, 12345);
+    }
+
+    #[test]
+    fn test_osr_check_threshold() {
+        let jit = TieredJit::new().unwrap();
+
+        let osr_point = OsrPoint {
+            function: "compute".to_string(),
+            loop_id: 99,
+            target_tier: Tier::Optimizing,
+            iteration_threshold: 500,
+        };
+
+        jit.register_osr_point(osr_point);
+
+        // Below threshold - no promotion
+        assert!(jit.check_osr("compute", 99, 300).is_none());
+
+        // At threshold - should promote
+        let tier = jit.check_osr("compute", 99, 500);
+        assert_eq!(tier, Some(Tier::Optimizing));
+
+        // Above threshold - should promote
+        let tier = jit.check_osr("compute", 99, 1000);
+        assert_eq!(tier, Some(Tier::Optimizing));
+    }
+
+    #[test]
+    fn test_dynamic_tier_promotion_with_score() {
+        let thresholds = TierThresholds {
+            interpreter_to_baseline: 50,
+            baseline_to_optimizing: 200,
+        };
+
+        let source = "F work()->i64{x:=0;L{I x>=20{R x} x:=x+1}0} F main()->i64{work()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::with_thresholds(thresholds);
+        interp.load_module(&ast);
+
+        // Execute multiple times to build up score
+        for _ in 0..10 {
+            let _ = interp.call_function("work", &[]);
+        }
+
+        let profile = interp.get_profile("work").unwrap();
+        profile.update_hot_path_score();
+
+        let score = *profile.hot_path_score.read().unwrap();
+
+        // With 10 executions and ~20 loop iterations each, score should be high
+        assert!(score > 50.0, "Score should exceed baseline threshold");
+
+        // Should suggest promotion
+        let promotion = interp.should_promote("work");
+        assert_eq!(promotion, Some(Tier::Baseline));
+    }
+
+    #[test]
+    fn test_total_loop_iterations() {
+        let source = "F looper()->i64{x:=0;L{I x>=10{R x} x:=x+1}0} F main()->i64{looper()}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::new();
+        interp.load_module(&ast);
+
+        let _ = interp.run_main();
+
+        let profile = interp.get_profile("looper").unwrap();
+        let total = profile.total_loop_iterations.load(Ordering::Relaxed);
+
+        // Should have accumulated loop iterations
+        assert!(total >= 10, "Expected at least 10 loop iterations, got {}", total);
+    }
+
+    #[test]
+    fn test_get_all_stats() {
+        let source = "F foo()->i64{1} F bar()->i64{2} F main()->i64{foo()+bar()}";
+        let ast = parse(source).unwrap();
+
+        let mut jit = TieredJit::new().unwrap();
+        jit.load_module(&ast);
+        let _ = jit.interpreter.run_main();
+
+        let all_stats = jit.get_all_stats();
+
+        // Should have stats for all functions
+        assert!(all_stats.contains_key("foo"));
+        assert!(all_stats.contains_key("bar"));
+        assert!(all_stats.contains_key("main"));
+    }
+
+    #[test]
+    fn test_branch_bias_score() {
+        let source = "F biased(x:i64)->i64{I x>0{1}E{0}} F main()->i64{biased(10)}";
+        let ast = parse(source).unwrap();
+
+        let mut interp = Interpreter::new();
+        interp.load_module(&ast);
+
+        // Execute many times with same bias (always true)
+        for _ in 0..20 {
+            let _ = interp.call_function("biased", &[Value::I64(10)]);
+        }
+
+        let profile = interp.get_profile("biased").unwrap();
+        profile.update_hot_path_score();
+
+        let score = *profile.hot_path_score.read().unwrap();
+
+        // Score should include branch bias component
+        assert!(score > 0.0, "Score should be > 0 with branch bias");
+    }
+
+    #[test]
+    fn test_last_promoted_at() {
+        let source = "F func()->i64{1} F main()->i64{func()}";
+        let ast = parse(source).unwrap();
+
+        let mut jit = TieredJit::new().unwrap();
+        jit.load_module(&ast);
+
+        let profile = jit.interpreter.get_profile("func").unwrap();
+
+        // Execute a few times
+        for _ in 0..5 {
+            let _ = jit.interpreter.call_function("func", &[]);
+        }
+
+        let count_before = profile.execution_count.load(Ordering::Relaxed);
+
+        // Mark as promoted
+        profile.mark_promoted();
+
+        let last_promoted = *profile.last_promoted_at.read().unwrap();
+        assert_eq!(last_promoted, count_before);
     }
 }

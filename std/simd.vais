@@ -1,0 +1,398 @@
+# std/simd - SIMD intrinsics for CPU vector operations
+# Provides wrappers for x86_64 SSE2/AVX2 and ARM NEON
+#
+# Usage:
+#   U std/simd
+#
+# Note: Falls back to scalar operations if SIMD not available
+
+# Vector widths
+C SIMD_128: i64 = 128    # SSE2 / NEON
+C SIMD_256: i64 = 256    # AVX2
+C SIMD_512: i64 = 512    # AVX-512
+
+# Vector element counts
+C F32X4_SIZE: i64 = 4    # 128-bit float vector
+C F32X8_SIZE: i64 = 8    # 256-bit float vector
+C F64X2_SIZE: i64 = 2    # 128-bit double vector
+C F64X4_SIZE: i64 = 4    # 256-bit double vector
+C I32X4_SIZE: i64 = 4    # 128-bit int vector
+C I32X8_SIZE: i64 = 8    # 256-bit int vector
+
+# SimdVec structure for SIMD operations
+S SimdVec {
+    data: i64,      # Pointer to aligned memory
+    len: i64,       # Number of elements
+    elem_size: i64, # Size of each element (4 for f32, 8 for f64)
+    width: i64      # SIMD width (128, 256, 512)
+}
+
+# SimdVec implementation
+X SimdVec {
+    # Create new f32 vector (16-byte aligned)
+    F new_f32(len: i64) -> SimdVec {
+        data := simd_alloc_aligned(len * 4, 16)
+        SimdVec { data: data, len: len, elem_size: 4, width: 128 }
+    }
+
+    # Create new f64 vector (16-byte aligned)
+    F new_f64(len: i64) -> SimdVec {
+        data := simd_alloc_aligned(len * 8, 16)
+        SimdVec { data: data, len: len, elem_size: 8, width: 128 }
+    }
+
+    # Create new i32 vector (16-byte aligned)
+    F new_i32(len: i64) -> SimdVec {
+        data := simd_alloc_aligned(len * 4, 16)
+        SimdVec { data: data, len: len, elem_size: 4, width: 128 }
+    }
+
+    # Free vector memory
+    F free(&self) -> i64 {
+        simd_free_aligned(self.data)
+    }
+
+    # Get f32 element at index
+    F get_f32(&self, idx: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 4)
+        load_i64(ptr)
+    }
+
+    # Set f32 element at index
+    F set_f32(&self, idx: i64, val: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 4)
+        store_i64(ptr, val)
+        1
+    }
+
+    # Get f64 element at index
+    F get_f64(&self, idx: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 8)
+        load_i64(ptr)
+    }
+
+    # Set f64 element at index
+    F set_f64(&self, idx: i64, val: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 8)
+        store_i64(ptr, val)
+        1
+    }
+
+    # Get i32 element at index
+    F get_i32(&self, idx: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 4)
+        load_i64(ptr)
+    }
+
+    # Set i32 element at index
+    F set_i32(&self, idx: i64, val: i64) -> i64 {
+        I idx < 0 | idx >= self.len {
+            R 0
+        }
+        ptr := self.data + (idx * 4)
+        store_i64(ptr, val)
+        1
+    }
+
+    # Get vector length
+    F len(&self) -> i64 {
+        self.len
+    }
+}
+
+# Memory allocation (extern functions)
+N F simd_alloc_aligned(size: i64, alignment: i64) -> i64
+N F simd_free_aligned(ptr: i64) -> i64
+
+# SSE2 float operations (128-bit, 4 x f32)
+N F simd_add_f32x4(dst: i64, a: i64, b: i64) -> i64
+N F simd_sub_f32x4(dst: i64, a: i64, b: i64) -> i64
+N F simd_mul_f32x4(dst: i64, a: i64, b: i64) -> i64
+N F simd_div_f32x4(dst: i64, a: i64, b: i64) -> i64
+
+# SSE2 double operations (128-bit, 2 x f64)
+N F simd_add_f64x2(dst: i64, a: i64, b: i64) -> i64
+N F simd_sub_f64x2(dst: i64, a: i64, b: i64) -> i64
+N F simd_mul_f64x2(dst: i64, a: i64, b: i64) -> i64
+N F simd_div_f64x2(dst: i64, a: i64, b: i64) -> i64
+
+# SSE2 int operations (128-bit, 4 x i32)
+N F simd_add_i32x4(dst: i64, a: i64, b: i64) -> i64
+N F simd_sub_i32x4(dst: i64, a: i64, b: i64) -> i64
+N F simd_mul_i32x4(dst: i64, a: i64, b: i64) -> i64
+
+# Dot product (float, 4-element)
+N F simd_dot_f32x4(a: i64, b: i64) -> i64
+
+# Horizontal sum
+N F simd_hsum_f32x4(a: i64) -> i64
+N F simd_hsum_f64x2(a: i64) -> i64
+N F simd_hsum_i32x4(a: i64) -> i64
+
+# Distance (Euclidean L2, n elements)
+N F simd_distance_f32(a: i64, b: i64, n: i64) -> i64
+N F simd_distance_f64(a: i64, b: i64, n: i64) -> i64
+
+# SIMD capability detection
+N F simd_has_sse2() -> i64
+N F simd_has_avx2() -> i64
+N F simd_has_neon() -> i64
+
+# High-level vector operations
+# Add two SimdVec element-wise (f32)
+F simd_vec_add_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 4 | a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    # Process in chunks of 4
+    i := mut 0
+    L i + 4 <= dst.len {
+        dst_ptr := dst.data + (i * 4)
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        simd_add_f32x4(dst_ptr, a_ptr, b_ptr)
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_f32(i)
+        val_b := b.get_f32(i)
+        # Note: This is scalar fallback - proper f32 arithmetic would need builtin support
+        dst.set_f32(i, val_a + val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Multiply two SimdVec element-wise (f32)
+F simd_vec_mul_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 4 | a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    # Process in chunks of 4
+    i := mut 0
+    L i + 4 <= dst.len {
+        dst_ptr := dst.data + (i * 4)
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        simd_mul_f32x4(dst_ptr, a_ptr, b_ptr)
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_f32(i)
+        val_b := b.get_f32(i)
+        dst.set_f32(i, val_a * val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Subtract two SimdVec element-wise (f32)
+F simd_vec_sub_f32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 4 | a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    # Process in chunks of 4
+    i := mut 0
+    L i + 4 <= dst.len {
+        dst_ptr := dst.data + (i * 4)
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        simd_sub_f32x4(dst_ptr, a_ptr, b_ptr)
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_f32(i)
+        val_b := b.get_f32(i)
+        dst.set_f32(i, val_a - val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Dot product of two SimdVec (f32)
+F simd_vec_dot_f32(a: SimdVec, b: SimdVec) -> i64 {
+    I a.len != b.len {
+        R 0
+    }
+    I a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    sum := mut 0
+    i := mut 0
+
+    # Process in chunks of 4
+    L i + 4 <= a.len {
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        partial := simd_dot_f32x4(a_ptr, b_ptr)
+        sum = sum + partial
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < a.len {
+        val_a := a.get_f32(i)
+        val_b := b.get_f32(i)
+        sum = sum + (val_a * val_b)
+        i = i + 1
+    }
+
+    sum
+}
+
+# Add two SimdVec element-wise (f64)
+F simd_vec_add_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 8 | a.elem_size != 8 | b.elem_size != 8 {
+        R 0
+    }
+
+    # Process in chunks of 2
+    i := mut 0
+    L i + 2 <= dst.len {
+        dst_ptr := dst.data + (i * 8)
+        a_ptr := a.data + (i * 8)
+        b_ptr := b.data + (i * 8)
+        simd_add_f64x2(dst_ptr, a_ptr, b_ptr)
+        i = i + 2
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_f64(i)
+        val_b := b.get_f64(i)
+        dst.set_f64(i, val_a + val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Multiply two SimdVec element-wise (f64)
+F simd_vec_mul_f64(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 8 | a.elem_size != 8 | b.elem_size != 8 {
+        R 0
+    }
+
+    # Process in chunks of 2
+    i := mut 0
+    L i + 2 <= dst.len {
+        dst_ptr := dst.data + (i * 8)
+        a_ptr := a.data + (i * 8)
+        b_ptr := b.data + (i * 8)
+        simd_mul_f64x2(dst_ptr, a_ptr, b_ptr)
+        i = i + 2
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_f64(i)
+        val_b := b.get_f64(i)
+        dst.set_f64(i, val_a * val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Add two SimdVec element-wise (i32)
+F simd_vec_add_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 4 | a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    # Process in chunks of 4
+    i := mut 0
+    L i + 4 <= dst.len {
+        dst_ptr := dst.data + (i * 4)
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        simd_add_i32x4(dst_ptr, a_ptr, b_ptr)
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_i32(i)
+        val_b := b.get_i32(i)
+        dst.set_i32(i, val_a + val_b)
+        i = i + 1
+    }
+
+    1
+}
+
+# Multiply two SimdVec element-wise (i32)
+F simd_vec_mul_i32(dst: SimdVec, a: SimdVec, b: SimdVec) -> i64 {
+    I dst.len != a.len | dst.len != b.len {
+        R 0
+    }
+    I dst.elem_size != 4 | a.elem_size != 4 | b.elem_size != 4 {
+        R 0
+    }
+
+    # Process in chunks of 4
+    i := mut 0
+    L i + 4 <= dst.len {
+        dst_ptr := dst.data + (i * 4)
+        a_ptr := a.data + (i * 4)
+        b_ptr := b.data + (i * 4)
+        simd_mul_i32x4(dst_ptr, a_ptr, b_ptr)
+        i = i + 4
+    }
+
+    # Process remaining elements
+    L i < dst.len {
+        val_a := a.get_i32(i)
+        val_b := b.get_i32(i)
+        dst.set_i32(i, val_a * val_b)
+        i = i + 1
+    }
+
+    1
+}

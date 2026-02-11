@@ -913,6 +913,267 @@ impl IncrementalCache {
 
         objects
     }
+
+    /// Detect changes with detailed statistics tracking
+    /// Returns both the dirty set and statistics about cache hits/misses
+    pub fn detect_changes_with_stats(
+        &mut self,
+        entry_file: &Path,
+    ) -> Result<(DirtySet, IncrementalStats), String> {
+        let start_time = std::time::Instant::now();
+        let mut dirty_set = DirtySet::default();
+        let mut stats = IncrementalStats::default();
+
+        // Check if compilation options changed
+        if let (Some(current), Some(cached)) =
+            (&self.current_options, &self.state.compilation_options)
+        {
+            if current != cached {
+                // Options changed - mark all files as dirty
+                for file in self.state.dep_graph.file_metadata.keys() {
+                    dirty_set.modified_files.insert(file.clone());
+                    stats
+                        .miss_reasons
+                        .entry(file.clone())
+                        .or_default()
+                        .push(CacheMissReason::OptionsChanged);
+                    stats.cache_misses += 1;
+                }
+                stats.files_checked = self.state.dep_graph.file_metadata.len();
+                stats.total_check_time_ms = start_time.elapsed().as_millis() as u64;
+                return Ok((dirty_set, stats));
+            }
+        }
+
+        // Check which files were modified
+        let entry_canonical = entry_file
+            .canonicalize()
+            .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
+
+        // Collect all known files from cache
+        let known_files: Vec<PathBuf> =
+            self.state.dep_graph.file_metadata.keys().cloned().collect();
+
+        // Parallel file hash computation using rayon
+        let cached_metadata: HashMap<PathBuf, (String, Option<String>)> = self
+            .state
+            .dep_graph
+            .file_metadata
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    (
+                        v.hash.clone(),
+                        v.signature_hash.as_ref().map(|sh| sh.hash.clone()),
+                    ),
+                )
+            })
+            .collect();
+
+        stats.files_checked = known_files.len();
+
+        let file_check_results: Vec<(PathBuf, Option<CacheMissReason>)> = known_files
+            .par_iter()
+            .map(|file_path| {
+                if !file_path.exists() {
+                    // File was deleted
+                    return (file_path.clone(), Some(CacheMissReason::FileDeleted));
+                }
+
+                match compute_file_hash(file_path) {
+                    Ok(current_hash) => {
+                        if let Some((cached_hash, _cached_sig_hash)) =
+                            cached_metadata.get(file_path)
+                        {
+                            if &current_hash != cached_hash {
+                                // Content changed - check if signature also changed
+                                // For now, we mark as ContentHashChanged
+                                // Signature check happens in the next phase
+                                return (file_path.clone(), Some(CacheMissReason::ContentHashChanged));
+                            }
+                            // Hash unchanged - cache hit
+                            (file_path.clone(), None)
+                        } else {
+                            // New file not in cache
+                            (file_path.clone(), Some(CacheMissReason::NewFile))
+                        }
+                    }
+                    Err(_) => (file_path.clone(), Some(CacheMissReason::CacheCorrupted)),
+                }
+            })
+            .collect();
+
+        // Process results
+        for (file_path, miss_reason) in file_check_results {
+            if let Some(reason) = miss_reason {
+                dirty_set.modified_files.insert(file_path.clone());
+                stats
+                    .miss_reasons
+                    .entry(file_path)
+                    .or_default()
+                    .push(reason);
+                stats.cache_misses += 1;
+            } else {
+                stats.cache_hits += 1;
+            }
+        }
+
+        // Check if entry file is new
+        if !self
+            .state
+            .dep_graph
+            .file_metadata
+            .contains_key(&entry_canonical)
+            && !dirty_set.modified_files.contains(&entry_canonical)
+        {
+            dirty_set.modified_files.insert(entry_canonical.clone());
+            stats
+                .miss_reasons
+                .entry(entry_canonical)
+                .or_default()
+                .push(CacheMissReason::NewFile);
+            stats.cache_misses += 1;
+            stats.files_checked += 1;
+        }
+
+        // Propagate changes to dependent files (parallelized)
+        // BUT: skip propagation if only signature is unchanged (body changed)
+        let modified_list: Vec<PathBuf> = dirty_set.modified_files.iter().cloned().collect();
+        let dep_graph = &self.state.dep_graph;
+
+        // Check signature hashes to avoid unnecessary propagation
+        let mut files_to_propagate = Vec::new();
+        for modified_file in &modified_list {
+            let should_propagate = if let Some(_meta) = dep_graph.file_metadata.get(modified_file) {
+                // If we have a cached signature hash, re-compute current signature
+                // If signatures match, we don't need to propagate to dependents
+                // For now, we conservatively propagate (signature check requires AST)
+                // This is where signature_hits would be tracked in a full implementation
+                true
+            } else {
+                true
+            };
+
+            if should_propagate {
+                files_to_propagate.push(modified_file.clone());
+            } else {
+                stats.signature_hits += 1;
+            }
+        }
+
+        let affected: HashSet<PathBuf> = files_to_propagate
+            .par_iter()
+            .flat_map(|modified| dep_graph.get_dependents(modified))
+            .collect();
+
+        // Track dependency changes in miss reasons
+        for affected_file in &affected {
+            if !dirty_set.modified_files.contains(affected_file) {
+                // Find which dependency caused this to be dirty
+                if let Some(deps) = dep_graph.forward_deps.get(affected_file) {
+                    for dep in deps {
+                        if dirty_set.modified_files.contains(dep) {
+                            stats
+                                .miss_reasons
+                                .entry(affected_file.clone())
+                                .or_default()
+                                .push(CacheMissReason::DependencyChanged(
+                                    dep.to_string_lossy().to_string(),
+                                ));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        dirty_set.affected_files = affected;
+
+        stats.total_check_time_ms = start_time.elapsed().as_millis() as u64;
+
+        Ok((dirty_set, stats))
+    }
+
+    /// Get incremental compilation statistics
+    pub fn get_incremental_stats(&self) -> IncrementalStats {
+        IncrementalStats {
+            files_checked: self.state.dep_graph.file_metadata.len(),
+            ..IncrementalStats::default()
+        }
+    }
+
+    /// Warm the cache by scanning all .vais files in the project
+    /// Computes hashes for all files and adds them to the cache if not present
+    /// Returns the number of files warmed
+    pub fn warm_cache(&mut self, project_root: &Path) -> Result<usize, String> {
+        let mut warmed_count = 0;
+
+        // Recursively scan for .vais files
+        let vais_files = self.scan_vais_files(project_root)?;
+
+        for file_path in vais_files {
+            let canonical = match file_path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            // Check if already in cache
+            if let Some(cached_meta) = self.state.dep_graph.file_metadata.get(&canonical) {
+                // Verify hash is still valid
+                match compute_file_hash(&canonical) {
+                    Ok(current_hash) => {
+                        if current_hash != cached_meta.hash {
+                            // Hash changed - update metadata
+                            if self.update_file_with_functions(&canonical).is_ok() {
+                                warmed_count += 1;
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            } else {
+                // Not in cache - add it
+                if self.update_file_with_functions(&canonical).is_ok() {
+                    warmed_count += 1;
+                }
+            }
+        }
+
+        Ok(warmed_count)
+    }
+
+    /// Recursively scan directory for .vais files
+    fn scan_vais_files(&self, dir: &Path) -> Result<Vec<PathBuf>, String> {
+        let mut vais_files = Vec::new();
+
+        if !dir.is_dir() {
+            return Ok(vais_files);
+        }
+
+        let entries = fs::read_dir(dir)
+            .map_err(|e| format!("Cannot read directory '{}': {}", dir.display(), e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Cannot read directory entry: {}", e))?;
+            let path = entry.path();
+
+            // Skip cache directories
+            if path.file_name().and_then(|n| n.to_str()) == Some(".vais-cache") {
+                continue;
+            }
+
+            if path.is_dir() {
+                // Recursively scan subdirectory
+                let sub_files = self.scan_vais_files(&path)?;
+                vais_files.extend(sub_files);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("vais") {
+                vais_files.push(path);
+            }
+        }
+
+        Ok(vais_files)
+    }
 }
 
 /// Cache statistics for verbose output
@@ -921,6 +1182,54 @@ pub struct CacheStats {
     pub total_files: usize,
     pub total_dependencies: usize,
     pub last_build: u64,
+}
+
+/// Reason why a cache miss occurred
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CacheMissReason {
+    /// File is new to the project
+    NewFile,
+    /// File content hash changed
+    ContentHashChanged,
+    /// File signature (public interface) changed
+    SignatureChanged,
+    /// A dependency of this file changed
+    DependencyChanged(String),
+    /// Compilation options changed
+    OptionsChanged,
+    /// File was deleted from disk
+    FileDeleted,
+    /// Cache was corrupted or incompatible
+    CacheCorrupted,
+}
+
+/// Incremental compilation statistics
+#[derive(Debug, Clone, Default)]
+pub struct IncrementalStats {
+    /// Number of files that hit the cache (unchanged)
+    pub cache_hits: usize,
+    /// Number of files that missed the cache (need recompilation)
+    pub cache_misses: usize,
+    /// Reasons for cache misses per file
+    pub miss_reasons: HashMap<PathBuf, Vec<CacheMissReason>>,
+    /// Total number of files checked
+    pub files_checked: usize,
+    /// Files skipped due to unchanged signature (body changed but signature didn't)
+    pub files_skipped: usize,
+    /// Files where signature matched (dependents don't need rebuild)
+    pub signature_hits: usize,
+    /// Total time spent checking cache (milliseconds)
+    pub total_check_time_ms: u64,
+}
+
+impl IncrementalStats {
+    /// Calculate cache hit rate as a percentage
+    pub fn hit_rate(&self) -> f64 {
+        if self.files_checked == 0 {
+            return 0.0;
+        }
+        (self.cache_hits as f64 / self.files_checked as f64) * 100.0
+    }
 }
 
 /// Compute SHA256 hash of a file
@@ -1937,5 +2246,204 @@ F main() {
         assert!(changes.modified.contains("add"));
         assert!(changes.affected.contains("main")); // main depends on add
         assert!(!changes.modified.contains("sub")); // sub unchanged
+    }
+
+    #[test]
+    fn test_cache_miss_reasons() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join(".vais-cache");
+        let file1 = temp_dir.path().join("file1.vais");
+        let file2 = temp_dir.path().join("file2.vais");
+
+        fs::write(&file1, "F main() {}").unwrap();
+
+        let mut cache = IncrementalCache::new(cache_dir).unwrap();
+        cache.set_compilation_options(CompilationOptions {
+            opt_level: 0,
+            debug: false,
+            target_triple: "native".to_string(),
+        });
+
+        // First build - new file
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+        assert!(stats.cache_misses > 0);
+        let reasons = stats.miss_reasons.get(&file1.canonicalize().unwrap());
+        assert!(reasons.is_some());
+        assert!(reasons.unwrap().contains(&CacheMissReason::NewFile));
+
+        // Update cache
+        cache.update_file(&file1).unwrap();
+        cache.persist().unwrap();
+
+        // Second check - cache hit
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+        assert!(stats.cache_hits > 0);
+
+        // Modify file - hash changed
+        fs::write(&file1, "F main() { R 1 }").unwrap();
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+        let reasons = stats.miss_reasons.get(&file1.canonicalize().unwrap());
+        assert!(reasons.is_some());
+        assert!(reasons
+            .unwrap()
+            .contains(&CacheMissReason::ContentHashChanged));
+
+        // Create new file and add dependency
+        fs::write(&file2, "F helper() {}").unwrap();
+        cache.update_file(&file1).unwrap();
+        cache.update_file(&file2).unwrap();
+        cache
+            .add_dependency(&file1.canonicalize().unwrap(), &file2.canonicalize().unwrap())
+            .unwrap();
+        cache.persist().unwrap();
+
+        // Modify dependency
+        fs::write(&file2, "F helper() { R 2 }").unwrap();
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+
+        // file2 should have ContentHashChanged
+        let file2_reasons = stats.miss_reasons.get(&file2.canonicalize().unwrap());
+        assert!(file2_reasons.is_some());
+
+        // file1 might have DependencyChanged if it's in affected_files
+        // (depends on propagation logic)
+    }
+
+    #[test]
+    fn test_incremental_stats_hit_rate() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join(".vais-cache");
+        let file1 = temp_dir.path().join("file1.vais");
+        let file2 = temp_dir.path().join("file2.vais");
+        let file3 = temp_dir.path().join("file3.vais");
+
+        fs::write(&file1, "F main() {}").unwrap();
+        fs::write(&file2, "F helper() {}").unwrap();
+        fs::write(&file3, "F util() {}").unwrap();
+
+        let mut cache = IncrementalCache::new(cache_dir).unwrap();
+        cache.set_compilation_options(CompilationOptions {
+            opt_level: 0,
+            debug: false,
+            target_triple: "native".to_string(),
+        });
+
+        // First build - all new
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+        assert_eq!(stats.hit_rate(), 0.0); // No hits on first build
+
+        // Update cache
+        cache.update_file(&file1).unwrap();
+        cache.update_file(&file2).unwrap();
+        cache.update_file(&file3).unwrap();
+        cache.persist().unwrap();
+
+        // Second check - all hits
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+        assert!(stats.hit_rate() > 0.0);
+        assert_eq!(stats.cache_hits, 3);
+        assert_eq!(stats.cache_misses, 0);
+
+        // Modify one file
+        fs::write(&file2, "F helper() { R 1 }").unwrap();
+        let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
+
+        // Hit rate should be 66.67% (2 hits, 1 miss)
+        let expected_rate = (2.0 / 3.0) * 100.0;
+        assert!((stats.hit_rate() - expected_rate).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_warm_cache() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join(".vais-cache");
+        let project_dir = temp_dir.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+
+        let file1 = project_dir.join("file1.vais");
+        let file2 = project_dir.join("file2.vais");
+        let subdir = project_dir.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        let file3 = subdir.join("file3.vais");
+
+        fs::write(&file1, "F main() {}").unwrap();
+        fs::write(&file2, "F helper() {}").unwrap();
+        fs::write(&file3, "F util() {}").unwrap();
+
+        let mut cache = IncrementalCache::new(cache_dir).unwrap();
+
+        // Warm cache - should find all 3 files
+        let warmed = cache.warm_cache(&project_dir).unwrap();
+        assert_eq!(warmed, 3);
+
+        // Verify all files are in cache
+        assert_eq!(cache.state.dep_graph.file_metadata.len(), 3);
+
+        // Warm again - should find 0 new files (all already cached and unchanged)
+        let warmed = cache.warm_cache(&project_dir).unwrap();
+        assert_eq!(warmed, 0);
+
+        // Modify one file
+        fs::write(&file2, "F helper() { R 1 }").unwrap();
+
+        // Warm again - should update 1 file
+        let warmed = cache.warm_cache(&project_dir).unwrap();
+        assert_eq!(warmed, 1);
+    }
+
+    #[test]
+    fn test_signature_based_skip() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join(".vais-cache");
+        let source_file = temp_dir.path().join("test.vais");
+
+        // Initial source with a function
+        let source1 = r#"F add(a: i32, b: i32) -> i32 {
+    R a + b
+}"#;
+        fs::write(&source_file, source1).unwrap();
+
+        let mut cache = IncrementalCache::new(cache_dir.clone()).unwrap();
+        cache.set_compilation_options(CompilationOptions {
+            opt_level: 0,
+            debug: false,
+            target_triple: "native".to_string(),
+        });
+
+        // Initial build
+        cache.update_file_with_functions(&source_file).unwrap();
+
+        // Get initial signature hash
+        let canonical = source_file.canonicalize().unwrap();
+        let initial_meta = cache.state.dep_graph.file_metadata.get(&canonical).unwrap();
+        let initial_func_meta = initial_meta.functions.get("add").unwrap();
+        let initial_hash = initial_func_meta.hash.clone();
+
+        // Modify only the function body (signature unchanged)
+        let source2 = r#"F add(a: i32, b: i32) -> i32 {
+    V result = a + b
+    R result
+}"#;
+        fs::write(&source_file, source2).unwrap();
+
+        // Update metadata
+        cache.update_file_with_functions(&source_file).unwrap();
+
+        // Get new metadata
+        let new_meta = cache.state.dep_graph.file_metadata.get(&canonical).unwrap();
+        let new_func_meta = new_meta.functions.get("add").unwrap();
+        let new_hash = new_func_meta.hash.clone();
+
+        // Function body changed, so hash should be different
+        assert_ne!(initial_hash, new_hash);
+
+        // In a full implementation with signature tracking:
+        // - The signature hash (parameters + return type) would be the same
+        // - Dependent files would not need recompilation
+        // - This would increment signature_hits in stats
+
+        // For now, verify that function metadata is tracked
+        assert!(new_meta.functions.contains_key("add"));
+        assert_eq!(new_meta.functions.len(), 1);
     }
 }

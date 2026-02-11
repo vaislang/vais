@@ -175,6 +175,159 @@ fn apply_data_layout_hints(ir: &str, cache_line_size: usize) -> String {
     result
 }
 
+/// LLVM metadata annotations for Inkwell backend
+#[derive(Debug, Clone, Default)]
+pub struct LlvmOptHints {
+    /// Loop unrolling hints: (function_name, loop_id, unroll_count)
+    pub unroll_hints: Vec<(String, usize, u32)>,
+    /// Vectorization hints: (function_name, loop_id, vector_width)
+    pub vectorize_hints: Vec<(String, usize, VectorWidth)>,
+    /// Function inlining hints: (function_name, priority: 0=never, 1=normal, 2=always)
+    pub inline_hints: Vec<(String, u8)>,
+    /// Alignment hints: (struct_name, alignment_bytes)
+    pub alignment_hints: Vec<(String, usize)>,
+    /// No-alias hints for pointer parameters: (function_name, param_index)
+    pub noalias_hints: Vec<(String, usize)>,
+}
+
+/// Analyze IR and generate optimization hints for Inkwell backend
+pub fn generate_inkwell_hints(ir: &str, config: &AdvancedOptConfig) -> LlvmOptHints {
+    let mut hints = LlvmOptHints::default();
+
+    // Use existing analysis passes to generate hints
+    if config.alias_analysis {
+        let alias_info = analyze_aliases(ir);
+        // Extract no-alias hints from alias analysis
+        // Iterate through functions by extracting them from IR
+        let function_names = extract_all_function_names(ir);
+        for func_name in function_names {
+            if let Some(summary) = alias_info.get_function_summary(&func_name) {
+                for (param_idx, _) in summary.param_aliases.iter().enumerate() {
+                    if !summary.escapes.contains(&param_idx) {
+                        hints.noalias_hints.push((func_name.clone(), param_idx));
+                    }
+                }
+            }
+        }
+    }
+
+    if config.auto_vectorize {
+        let vectorizer = analyze_vectorization(ir, config.vector_width);
+        for (loop_id, candidate) in vectorizer.candidates.iter().enumerate() {
+            if candidate.is_vectorizable {
+                // Extract function name from loop header context
+                let function_name = extract_function_for_loop(ir, &candidate.header);
+                hints.vectorize_hints.push((
+                    function_name,
+                    loop_id,
+                    config.vector_width,
+                ));
+            }
+        }
+    }
+
+    if config.data_layout_opt {
+        // Analyze struct definitions for alignment hints
+        for line in ir.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('%') && trimmed.contains(" = type {") {
+                let struct_name = trimmed.split_whitespace().next().unwrap_or("").to_string();
+                let estimated = estimate_struct_size_from_line(trimmed);
+                if estimated >= config.cache_line_size {
+                    hints.alignment_hints.push((struct_name, config.cache_line_size));
+                }
+            }
+        }
+    }
+
+    // Generate loop unrolling hints based on bounds check elimination
+    if config.bounds_check_elim {
+        let bounds = analyze_bounds_checks(ir);
+        // For each eliminable bounds check, suggest loop unrolling
+        for (loop_id, check) in bounds.eliminable.iter().enumerate() {
+            let function_name = extract_function_for_variable(ir, &check.index_var);
+            hints.unroll_hints.push((
+                function_name,
+                loop_id,
+                if config.aggressive { 8 } else { 4 },
+            ));
+        }
+    }
+
+    hints
+}
+
+/// Helper to estimate struct size from a type definition line
+fn estimate_struct_size_from_line(line: &str) -> usize {
+    // Parse "{ i64, i64, i8* }" etc.
+    if let Some(start) = line.find('{') {
+        if let Some(end) = line.rfind('}') {
+            let fields: Vec<&str> = line[start+1..end].split(',').collect();
+            return fields.iter().map(|f| estimate_type_size(f.trim())).sum();
+        }
+    }
+    0
+}
+
+/// Extract function name for a loop header label
+fn extract_function_for_loop(ir: &str, loop_header: &str) -> String {
+    let mut current_func = String::from("unknown");
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("define ") {
+            if let Some(name) = extract_func_name_from_def(trimmed) {
+                current_func = name;
+            }
+        }
+        if trimmed == format!("{}:", loop_header) {
+            return current_func;
+        }
+    }
+    current_func
+}
+
+/// Extract function name for a variable
+fn extract_function_for_variable(ir: &str, var: &str) -> String {
+    let mut current_func = String::from("unknown");
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("define ") {
+            if let Some(name) = extract_func_name_from_def(trimmed) {
+                current_func = name;
+            }
+        }
+        if trimmed.contains(var) {
+            return current_func;
+        }
+    }
+    current_func
+}
+
+/// Extract function name from a define line
+fn extract_func_name_from_def(line: &str) -> Option<String> {
+    if let Some(at_pos) = line.find('@') {
+        let rest = &line[at_pos + 1..];
+        if let Some(paren_pos) = rest.find('(') {
+            return Some(rest[..paren_pos].to_string());
+        }
+    }
+    None
+}
+
+/// Extract all function names from IR
+fn extract_all_function_names(ir: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("define ") {
+            if let Some(name) = extract_func_name_from_def(trimmed) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
 /// Estimate struct size from field types
 fn estimate_struct_size(fields: &[(String, String)]) -> usize {
     fields.iter().map(|(_, ty)| estimate_type_size(ty)).sum()
@@ -238,5 +391,66 @@ mod tests {
         assert_eq!(estimate_type_size("i8*"), 8);
         assert_eq!(estimate_type_size("[4 x i32]"), 16);
         assert_eq!(estimate_type_size("<4 x float>"), 16);
+    }
+
+    #[test]
+    fn test_generate_inkwell_hints_empty() {
+        let config = AdvancedOptConfig::from_opt_level(OptLevel::O0);
+        let hints = generate_inkwell_hints("", &config);
+        assert!(hints.unroll_hints.is_empty());
+        assert!(hints.vectorize_hints.is_empty());
+    }
+
+    #[test]
+    fn test_generate_inkwell_hints_with_struct() {
+        let config = AdvancedOptConfig::from_opt_level(OptLevel::O2);
+        let ir = "%MyStruct = type { i64, i64, i64, i64, i64, i64, i64, i64, i64 }";
+        let hints = generate_inkwell_hints(ir, &config);
+        assert!(!hints.alignment_hints.is_empty());
+    }
+
+    #[test]
+    fn test_vector_width_auto_detect() {
+        let width = VectorWidth::auto_detect();
+        assert!(width.bits() >= 128);
+    }
+
+    #[test]
+    fn test_vector_width_lanes() {
+        assert_eq!(VectorWidth::SSE.f32_lanes(), 4);
+        assert_eq!(VectorWidth::AVX2.f32_lanes(), 8);
+        assert_eq!(VectorWidth::SSE.f64_lanes(), 2);
+        assert_eq!(VectorWidth::AVX2.f64_lanes(), 4);
+        assert_eq!(VectorWidth::AVX512.i32_lanes(), 16);
+    }
+
+    #[test]
+    fn test_llvm_opt_hints_default() {
+        let hints = LlvmOptHints::default();
+        assert!(hints.unroll_hints.is_empty());
+        assert!(hints.inline_hints.is_empty());
+        assert!(hints.noalias_hints.is_empty());
+    }
+
+    #[test]
+    fn test_estimate_struct_size_from_line() {
+        assert_eq!(estimate_struct_size_from_line("%Foo = type { i64, i64 }"), 16);
+        assert_eq!(estimate_struct_size_from_line("%Bar = type { i32, i8 }"), 5);
+        assert_eq!(estimate_struct_size_from_line(""), 0);
+    }
+
+    #[test]
+    fn test_advanced_opt_o0_disables_all() {
+        let config = AdvancedOptConfig::from_opt_level(OptLevel::O0);
+        assert!(!config.alias_analysis);
+        assert!(!config.auto_vectorize);
+        assert!(!config.data_layout_opt);
+        assert!(!config.bounds_check_elim);
+    }
+
+    #[test]
+    fn test_advanced_opt_o3_enables_aggressive() {
+        let config = AdvancedOptConfig::from_opt_level(OptLevel::O3);
+        assert!(config.aggressive);
     }
 }

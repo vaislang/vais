@@ -4,16 +4,132 @@
 # Usage:
 #   import std/crypto
 #
-# WARNING: This is an educational implementation.
-# DO NOT use in production without formal security review.
+# SHA-256 is now a full FIPS 180-4 compliant implementation.
+# AES-256 remains a simplified XOR-based educational placeholder.
+#
+# WARNING: While SHA-256 is production-grade, AES-256 is not.
+# DO NOT use AES-256 in production without replacing with FIPS 197 implementation.
 
 # ============================================
-# SHA-256 Hash Function
+# SHA-256 Hash Function (FIPS 180-4 compliant)
 # ============================================
 
-# SHA-256 constants (first 32 bits of fractional parts of cube roots of first 64 primes)
+# SHA-256 constants
 C SHA256_BLOCK_SIZE: i64 = 64    # 512 bits
 C SHA256_DIGEST_SIZE: i64 = 32   # 256 bits
+
+# ============================================
+# SHA-256 Round Constants K[64]
+# ============================================
+# First 32 bits of fractional parts of cube roots of first 64 primes
+
+F sha256_k(i: i64) -> i64 {
+    I i == 0 { R 1116352408 }   # 0x428a2f98
+    I i == 1 { R 1899447441 }   # 0x71374491
+    I i == 2 { R 3049323471 }   # 0xb5c0fbcf
+    I i == 3 { R 3921009573 }   # 0xe9b5dba5
+    I i == 4 { R 961987163 }    # 0x3956c25b
+    I i == 5 { R 1508970993 }   # 0x59f111f1
+    I i == 6 { R 2453635748 }   # 0x923f82a4
+    I i == 7 { R 2870763221 }   # 0xab1c5ed5
+    I i == 8 { R 3624381080 }   # 0xd807aa98
+    I i == 9 { R 310598401 }    # 0x12835b01
+    I i == 10 { R 607225278 }   # 0x243185be
+    I i == 11 { R 1426881987 }  # 0x550c7dc3
+    I i == 12 { R 1925078388 }  # 0x72be5d74
+    I i == 13 { R 2162078206 }  # 0x80deb1fe
+    I i == 14 { R 2614888103 }  # 0x9bdc06a7
+    I i == 15 { R 3248222580 }  # 0xc19bf174
+    I i == 16 { R 3835390401 }  # 0xe49b69c1
+    I i == 17 { R 4022224774 }  # 0xefbe4786
+    I i == 18 { R 264347078 }   # 0x0fc19dc6
+    I i == 19 { R 604807628 }   # 0x240ca1cc
+    I i == 20 { R 770255983 }   # 0x2de92c6f
+    I i == 21 { R 1249150122 }  # 0x4a7484aa
+    I i == 22 { R 1555081692 }  # 0x5cb0a9dc
+    I i == 23 { R 1996064986 }  # 0x76f988da
+    I i == 24 { R 2554220882 }  # 0x983e5152
+    I i == 25 { R 2821834349 }  # 0xa831c66d
+    I i == 26 { R 2952996808 }  # 0xb00327c8
+    I i == 27 { R 3210313671 }  # 0xbf597fc7
+    I i == 28 { R 3336571891 }  # 0xc6e00bf3
+    I i == 29 { R 3584528711 }  # 0xd5a79147
+    I i == 30 { R 113926993 }   # 0x06ca6351
+    I i == 31 { R 338241895 }   # 0x14292967
+    I i == 32 { R 666307205 }   # 0x27b70a85
+    I i == 33 { R 773529912 }   # 0x2e1b2138
+    I i == 34 { R 1294757372 }  # 0x4d2c6dfc
+    I i == 35 { R 1396182291 }  # 0x53380d13
+    I i == 36 { R 1695183700 }  # 0x650a7354
+    I i == 37 { R 1986661051 }  # 0x766a0abb
+    I i == 38 { R 2177026350 }  # 0x81c2c92e
+    I i == 39 { R 2456956037 }  # 0x92722c85
+    I i == 40 { R 2730485921 }  # 0xa2bfe8a1
+    I i == 41 { R 2820302411 }  # 0xa81a664b
+    I i == 42 { R 3259730800 }  # 0xc24b8b70
+    I i == 43 { R 3345764771 }  # 0xc76c51a3
+    I i == 44 { R 3516065817 }  # 0xd192e819
+    I i == 45 { R 3600352804 }  # 0xd6990624
+    I i == 46 { R 4094571909 }  # 0xf40e3585
+    I i == 47 { R 275423344 }   # 0x106aa070
+    I i == 48 { R 430227734 }   # 0x19a4c116
+    I i == 49 { R 506948616 }   # 0x1e376c08
+    I i == 50 { R 659060556 }   # 0x2748774c
+    I i == 51 { R 883997877 }   # 0x34b0bcb5
+    I i == 52 { R 958139571 }   # 0x391c0cb3
+    I i == 53 { R 1322822218 }  # 0x4ed8aa4a
+    I i == 54 { R 1537002063 }  # 0x5b9cca4f
+    I i == 55 { R 1747873779 }  # 0x682e6ff3
+    I i == 56 { R 1955562222 }  # 0x748f82ee
+    I i == 57 { R 2024104815 }  # 0x78a5636f
+    I i == 58 { R 2227730452 }  # 0x84c87814
+    I i == 59 { R 2361852424 }  # 0x8cc70208
+    I i == 60 { R 2428436474 }  # 0x90befffa
+    I i == 61 { R 2756734187 }  # 0xa4506ceb
+    I i == 62 { R 3204031479 }  # 0xbef9a3f7
+    I i == 63 { R 3329325298 }  # 0xc67178f2
+    0
+}
+
+# ============================================
+# SHA-256 Bitwise Helper Functions
+# ============================================
+
+# Right rotate (32-bit)
+F rotr32(x: i64, n: i64) -> i64 {
+    x := x & 4294967295  # mask to 32 bits
+    ((x >> n) | (x << (32 - n))) & 4294967295
+}
+
+# SHA-256 Ch function: (x AND y) XOR (NOT x AND z)
+F sha256_ch(x: i64, y: i64, z: i64) -> i64 {
+    ((x & y) ^ ((x ^ 4294967295) & z)) & 4294967295
+}
+
+# SHA-256 Maj function: (x AND y) XOR (x AND z) XOR (y AND z)
+F sha256_maj(x: i64, y: i64, z: i64) -> i64 {
+    ((x & y) ^ (x & z) ^ (y & z)) & 4294967295
+}
+
+# SHA-256 Σ0 (Sigma0): ROTR(2) XOR ROTR(13) XOR ROTR(22)
+F sha256_sigma0(x: i64) -> i64 {
+    (rotr32(x, 2) ^ rotr32(x, 13) ^ rotr32(x, 22)) & 4294967295
+}
+
+# SHA-256 Σ1 (Sigma1): ROTR(6) XOR ROTR(11) XOR ROTR(25)
+F sha256_sigma1(x: i64) -> i64 {
+    (rotr32(x, 6) ^ rotr32(x, 11) ^ rotr32(x, 25)) & 4294967295
+}
+
+# SHA-256 σ0 (sigma0): ROTR(7) XOR ROTR(18) XOR SHR(3)
+F sha256_gamma0(x: i64) -> i64 {
+    (rotr32(x, 7) ^ rotr32(x, 18) ^ ((x & 4294967295) >> 3)) & 4294967295
+}
+
+# SHA-256 σ1 (sigma1): ROTR(17) XOR ROTR(19) XOR SHR(10)
+F sha256_gamma1(x: i64) -> i64 {
+    (rotr32(x, 17) ^ rotr32(x, 19) ^ ((x & 4294967295) >> 10)) & 4294967295
+}
 
 # SHA-256 context
 S Sha256 {
@@ -52,12 +168,12 @@ X Sha256 {
     F update(&self, data: i64, data_len: i64) -> i64 {
         i := 0
         L i < data_len {
-            # Copy byte to buffer
-            store_i64(self.buffer + self.buf_len, load_i64(data + i))
+            # Copy single byte to buffer
+            store_byte(self.buffer + self.buf_len, load_byte(data + i))
             self.buf_len = self.buf_len + 1
 
             # Process block when buffer is full
-            L self.buf_len == SHA256_BLOCK_SIZE {
+            I self.buf_len == SHA256_BLOCK_SIZE {
                 self.process_block()
                 self.buf_len = 0
             }
@@ -68,22 +184,70 @@ X Sha256 {
         0
     }
 
-    # Process a single 512-bit block
+    # Process a single 512-bit block (FIPS 180-4 compliant)
     F process_block(&self) -> i64 {
-        # SHA-256 block processing
-        # This is a simplified version - real implementation would do
-        # full message schedule expansion and 64 rounds of compression
+        # Allocate message schedule W[64] (64 * 8 bytes = 512 bytes)
+        w := malloc(512)
+
+        # Prepare message schedule W[0..15] from buffer (big-endian 32-bit words)
         i := 0
-        L i < 8 {
-            h := load_i64(self.state + i * 8)
-            b := load_i64(self.buffer + i * 8)
-            # Simplified mixing function
-            h = h ^ b
-            h = h + (h * 31)
-            h = h & 4294967295  # Mask to 32 bits
-            store_i64(self.state + i * 8, h)
+        L i < 16 {
+            # Read 4 bytes from buffer as big-endian 32-bit word
+            b0 := load_byte(self.buffer + i * 4) & 255
+            b1 := load_byte(self.buffer + i * 4 + 1) & 255
+            b2 := load_byte(self.buffer + i * 4 + 2) & 255
+            b3 := load_byte(self.buffer + i * 4 + 3) & 255
+            store_i64(w + i * 8, (b0 << 24) | (b1 << 16) | (b2 << 8) | b3)
             i = i + 1
         }
+
+        # Extend message schedule W[16..63]
+        i = 16
+        L i < 64 {
+            s0 := sha256_gamma0(load_i64(w + (i - 15) * 8))
+            s1 := sha256_gamma1(load_i64(w + (i - 2) * 8))
+            val := (load_i64(w + (i - 16) * 8) + s0 + load_i64(w + (i - 7) * 8) + s1) & 4294967295
+            store_i64(w + i * 8, val)
+            i = i + 1
+        }
+
+        # Initialize working variables from current hash state
+        a := load_i64(self.state)
+        b := load_i64(self.state + 8)
+        c := load_i64(self.state + 16)
+        d := load_i64(self.state + 24)
+        e := load_i64(self.state + 32)
+        f := load_i64(self.state + 40)
+        g := load_i64(self.state + 48)
+        h := load_i64(self.state + 56)
+
+        # 64 rounds of SHA-256 compression
+        i = 0
+        L i < 64 {
+            t1 := (h + sha256_sigma1(e) + sha256_ch(e, f, g) + sha256_k(i) + load_i64(w + i * 8)) & 4294967295
+            t2 := (sha256_sigma0(a) + sha256_maj(a, b, c)) & 4294967295
+            h = g
+            g = f
+            f = e
+            e = (d + t1) & 4294967295
+            d = c
+            c = b
+            b = a
+            a = (t1 + t2) & 4294967295
+            i = i + 1
+        }
+
+        # Update hash state (add working variables to current state)
+        store_i64(self.state,      (load_i64(self.state) + a) & 4294967295)
+        store_i64(self.state + 8,  (load_i64(self.state + 8) + b) & 4294967295)
+        store_i64(self.state + 16, (load_i64(self.state + 16) + c) & 4294967295)
+        store_i64(self.state + 24, (load_i64(self.state + 24) + d) & 4294967295)
+        store_i64(self.state + 32, (load_i64(self.state + 32) + e) & 4294967295)
+        store_i64(self.state + 40, (load_i64(self.state + 40) + f) & 4294967295)
+        store_i64(self.state + 48, (load_i64(self.state + 48) + g) & 4294967295)
+        store_i64(self.state + 56, (load_i64(self.state + 56) + h) & 4294967295)
+
+        free(w)
         0
     }
 
@@ -91,13 +255,13 @@ X Sha256 {
     F finalize(&self) -> i64 {
         # Pad the message
         # Add 0x80 byte
-        store_i64(self.buffer + self.buf_len, 128)
+        store_byte(self.buffer + self.buf_len, 128)
         self.buf_len = self.buf_len + 1
 
         # Pad with zeros until we have room for length
         L self.buf_len > 56 {
             L self.buf_len < 64 {
-                store_i64(self.buffer + self.buf_len, 0)
+                store_byte(self.buffer + self.buf_len, 0)
                 self.buf_len = self.buf_len + 1
             }
             self.process_block()
@@ -105,13 +269,20 @@ X Sha256 {
         }
 
         L self.buf_len < 56 {
-            store_i64(self.buffer + self.buf_len, 0)
+            store_byte(self.buffer + self.buf_len, 0)
             self.buf_len = self.buf_len + 1
         }
 
-        # Append length in bits (big-endian)
+        # Append length in bits as big-endian 64-bit value (FIPS 180-4)
         bit_len := self.total_len * 8
-        store_i64(self.buffer + 56, bit_len)
+        store_byte(self.buffer + 56, (bit_len >> 56) & 255)
+        store_byte(self.buffer + 57, (bit_len >> 48) & 255)
+        store_byte(self.buffer + 58, (bit_len >> 40) & 255)
+        store_byte(self.buffer + 59, (bit_len >> 32) & 255)
+        store_byte(self.buffer + 60, (bit_len >> 24) & 255)
+        store_byte(self.buffer + 61, (bit_len >> 16) & 255)
+        store_byte(self.buffer + 62, (bit_len >> 8) & 255)
+        store_byte(self.buffer + 63, bit_len & 255)
         self.process_block()
 
         # Return state as digest
@@ -162,10 +333,10 @@ X Hmac {
         padded_key := malloc(SHA256_BLOCK_SIZE)
         i := 0
         L i < SHA256_BLOCK_SIZE {
-            L i < self.key_len {
-                store_i64(padded_key + i, load_i64(self.key + i))
-            } ! {
-                store_i64(padded_key + i, 0)
+            I i < self.key_len {
+                store_byte(padded_key + i, load_byte(self.key + i))
+            } E {
+                store_byte(padded_key + i, 0)
             }
             i = i + 1
         }
@@ -174,8 +345,8 @@ X Hmac {
         inner_key := malloc(SHA256_BLOCK_SIZE)
         i = 0
         L i < SHA256_BLOCK_SIZE {
-            k := load_i64(padded_key + i)
-            store_i64(inner_key + i, k ^ 54)  # ipad = 0x36
+            k := load_byte(padded_key + i) & 255
+            store_byte(inner_key + i, k ^ 54)  # ipad = 0x36
             i = i + 1
         }
 
@@ -188,8 +359,8 @@ X Hmac {
         outer_key := malloc(SHA256_BLOCK_SIZE)
         i = 0
         L i < SHA256_BLOCK_SIZE {
-            k := load_i64(padded_key + i)
-            store_i64(outer_key + i, k ^ 92)  # opad = 0x5c
+            k := load_byte(padded_key + i) & 255
+            store_byte(outer_key + i, k ^ 92)  # opad = 0x5c
             i = i + 1
         }
 
@@ -210,8 +381,14 @@ X Hmac {
 # ============================================
 # AES-256 (Simplified - XOR-based placeholder)
 # ============================================
-# NOTE: This is a simplified educational implementation using XOR.
-# A real AES-256 would require SubBytes, ShiftRows, MixColumns, AddRoundKey.
+# TODO: Replace with FIPS 197 AES-256 implementation (see packages/vais-aes for reference).
+# A production implementation requires:
+#   - S-Box (SubBytes) and Inverse S-Box
+#   - ShiftRows and InvShiftRows
+#   - MixColumns and InvMixColumns
+#   - Proper key schedule (RotWord, SubWord, Rcon)
+#   - 14 rounds with correct transformations
+# Current implementation is XOR-based educational placeholder only.
 
 C AES_BLOCK_SIZE: i64 = 16     # 128 bits
 C AES_KEY_SIZE: i64 = 32       # 256 bits
@@ -229,7 +406,7 @@ X Aes256 {
         # Copy original key as first round key
         i := 0
         L i < AES_KEY_SIZE {
-            store_i64(round_keys + i, load_i64(key + i))
+            store_byte(round_keys + i, load_byte(key + i))
             i = i + 1
         }
         # Generate subsequent round keys (simplified)
@@ -237,9 +414,9 @@ X Aes256 {
         L r <= AES_ROUNDS {
             j := 0
             L j < AES_KEY_SIZE {
-                prev := load_i64(round_keys + (r - 1) * AES_KEY_SIZE + j)
+                prev := load_byte(round_keys + (r - 1) * AES_KEY_SIZE + j) & 255
                 # Simplified key schedule (XOR with round constant)
-                store_i64(round_keys + r * AES_KEY_SIZE + j, prev ^ (r * 31 + j))
+                store_byte(round_keys + r * AES_KEY_SIZE + j, prev ^ (r * 31 + j))
                 j = j + 1
             }
             r = r + 1
@@ -254,9 +431,9 @@ X Aes256 {
         L r <= AES_ROUNDS {
             i := 0
             L i < AES_BLOCK_SIZE {
-                b := load_i64(block + i)
-                k := load_i64(self.round_keys + r * AES_KEY_SIZE + i)
-                store_i64(block + i, b ^ k)
+                b := load_byte(block + i) & 255
+                k := load_byte(self.round_keys + r * AES_KEY_SIZE + i) & 255
+                store_byte(block + i, b ^ k)
                 i = i + 1
             }
             r = r + 1
@@ -270,9 +447,9 @@ X Aes256 {
         L r >= 0 {
             i := 0
             L i < AES_BLOCK_SIZE {
-                b := load_i64(block + i)
-                k := load_i64(self.round_keys + r * AES_KEY_SIZE + i)
-                store_i64(block + i, b ^ k)
+                b := load_byte(block + i) & 255
+                k := load_byte(self.round_keys + r * AES_KEY_SIZE + i) & 255
+                store_byte(block + i, b ^ k)
                 i = i + 1
             }
             r = r - 1
@@ -285,7 +462,7 @@ X Aes256 {
         i := 0
         total := AES_KEY_SIZE * (AES_ROUNDS + 1)
         L i < total {
-            store_i64(self.round_keys + i, 0)
+            store_byte(self.round_keys + i, 0)
             i = i + 1
         }
         free(self.round_keys)
@@ -301,7 +478,9 @@ X Aes256 {
 F sha256(data: i64, len: i64) -> i64 {
     hasher := Sha256::new()
     hasher.update(data, len)
-    hasher.digest_i64()
+    result := hasher.digest_i64()
+    hasher.cleanup()
+    result
 }
 
 # Compute HMAC-SHA256

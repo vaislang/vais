@@ -56,7 +56,7 @@ mod types;
 pub use compiler::JitCompiler;
 pub use runtime::JitRuntime;
 pub use tiered::{
-    FunctionProfile, FunctionStats, Interpreter, Tier, TierThresholds, TieredJit, Value,
+    FunctionProfile, FunctionStats, Interpreter, OsrPoint, Tier, TierThresholds, TieredJit, Value,
 };
 pub use types::TypeMapper;
 
