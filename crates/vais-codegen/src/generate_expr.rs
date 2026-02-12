@@ -857,27 +857,7 @@ impl CodeGenerator {
                         .map(|f| !f.is_extern)
                         .unwrap_or(false);
                     if name == "print_i64" && args.len() == 1 && !has_user_print_i64 {
-                        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
-                        let mut ir = arg_ir;
-                        let fmt_str = "%ld";
-                        let fmt_name = self.make_string_name();
-                        self.string_counter += 1;
-                        self.string_constants
-                            .push((fmt_name.clone(), fmt_str.to_string()));
-                        let fmt_len = fmt_str.len() + 1;
-                        let fmt_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
-                            fmt_ptr, fmt_len, fmt_len, fmt_name
-                        ));
-                        let i32_result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
-                            i32_result, fmt_ptr, arg_val
-                        ));
-                        let result = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
-                        return Ok((result, ir));
+                        return self.generate_print_i64_builtin(args, counter);
                     }
 
                     let has_user_print_f64 = self
@@ -886,27 +866,7 @@ impl CodeGenerator {
                         .map(|f| !f.is_extern)
                         .unwrap_or(false);
                     if name == "print_f64" && args.len() == 1 && !has_user_print_f64 {
-                        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
-                        let mut ir = arg_ir;
-                        let fmt_str = "%f";
-                        let fmt_name = self.make_string_name();
-                        self.string_counter += 1;
-                        self.string_constants
-                            .push((fmt_name.clone(), fmt_str.to_string()));
-                        let fmt_len = fmt_str.len() + 1;
-                        let fmt_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
-                            fmt_ptr, fmt_len, fmt_len, fmt_name
-                        ));
-                        let i32_result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
-                            i32_result, fmt_ptr, arg_val
-                        ));
-                        let result = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
-                        return Ok((result, ir));
+                        return self.generate_print_f64_builtin(args, counter);
                     }
                 }
 

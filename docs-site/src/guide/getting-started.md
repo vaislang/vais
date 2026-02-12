@@ -42,11 +42,12 @@ sudo mv vaisc /usr/local/bin/
 `hello.vais` 파일을 생성합니다:
 
 ```vais
-F main() -> i64 {
-    puts("Hello, Vais!")
-    0
+F main() {
+    println("Hello, Vais!")
 }
 ```
+
+> **참고**: `main()` 함수는 반환 타입을 생략할 수 있습니다. 생략 시 암시적으로 `i64` 반환 타입이 적용되며, 명시적 `R`(return) 없이 종료하면 `0`을 반환합니다. 명시적으로 `F main() -> i64 { ... }` 형태도 여전히 지원됩니다.
 
 ### 컴파일 및 실행
 
@@ -420,11 +421,23 @@ F sum_array(arr: [i64; 5]) -> i64 {
     result
 }
 
-F main() -> i64 {
+F main() {
     numbers := [1, 2, 3, 4, 5]
     total := sum_array(numbers)
-    puts("Sum: {total}")
-    0
+    println("Sum: ~{total}")
+}
+```
+
+### 배열 요소 교환
+
+`swap(ptr, idx1, idx2)` 빌트인으로 배열 요소를 교환할 수 있습니다:
+
+```vais
+F main() {
+    arr: *i64 = [10, 20, 30]
+    swap(arr, 0, 2)       # arr[0]과 arr[2] 교환
+    # arr = [30, 20, 10]
+    println("~{load_i64(arr + 0 * 8)}")  # 30
 }
 ```
 

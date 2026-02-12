@@ -19,21 +19,14 @@ F partition(arr: i64, low: i64, high: i64) -> i64 {
         curr := load_i64(arr + j * 8)
         I curr < pivot {
             i = i + 1
-            # Swap arr[i] and arr[j]
-            temp_i := load_i64(arr + i * 8)
-            temp_j := load_i64(arr + j * 8)
-            store_i64(arr + i * 8, temp_j)
-            store_i64(arr + j * 8, temp_i)
+            swap(arr, i, j)
         }
         j = j + 1
     }
 
     # Swap arr[i+1] and arr[high]
     i = i + 1
-    temp_i := load_i64(arr + i * 8)
-    temp_h := load_i64(arr + high * 8)
-    store_i64(arr + i * 8, temp_h)
-    store_i64(arr + high * 8, temp_i)
+    swap(arr, i, high)
 
     i
 }
@@ -48,7 +41,7 @@ F checksum(arr: i64, n: i64) -> i64 {
     sum
 }
 
-F main() -> i64 {
+F main() {
     n := 10000
     arr := malloc(n * 8)
 
@@ -65,5 +58,5 @@ F main() -> i64 {
     # Compute checksum
     result := checksum(arr, n)
     free(arr)
-    result
+    println("~{result}")
 }

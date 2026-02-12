@@ -2549,7 +2549,7 @@ impl CodeGenerator {
     }
 
     /// Generate print_i64 builtin call
-    fn generate_print_i64_builtin(
+    pub(crate) fn generate_print_i64_builtin(
         &mut self,
         args: &[Spanned<Expr>],
         counter: &mut usize,
@@ -2557,7 +2557,7 @@ impl CodeGenerator {
         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
         let mut ir = arg_ir;
         let fmt_str = "%ld";
-        let fmt_name = format!(".str.{}", self.string_counter);
+        let fmt_name = self.make_string_name();
         self.string_counter += 1;
         self.string_constants
             .push((fmt_name.clone(), fmt_str.to_string()));
@@ -2578,7 +2578,7 @@ impl CodeGenerator {
     }
 
     /// Generate print_f64 builtin call
-    fn generate_print_f64_builtin(
+    pub(crate) fn generate_print_f64_builtin(
         &mut self,
         args: &[Spanned<Expr>],
         counter: &mut usize,
@@ -2586,7 +2586,7 @@ impl CodeGenerator {
         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
         let mut ir = arg_ir;
         let fmt_str = "%f";
-        let fmt_name = format!(".str.{}", self.string_counter);
+        let fmt_name = self.make_string_name();
         self.string_counter += 1;
         self.string_constants
             .push((fmt_name.clone(), fmt_str.to_string()));

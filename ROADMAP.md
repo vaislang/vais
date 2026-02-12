@@ -899,4 +899,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 18: 코드 정리 & 문서 동기화 (2026-02-12)
+
+모드: 자동진행
+- [x] 1. README 수치 업데이트 — E2E 520, Phase 17 기능 반영 ✅
+  변경: README.md (E2E 498→520)
+- [x] 2. 예제 현대화 — bench_sorting.vais swap 빌트인 적용 ✅
+  변경: examples/bench_sorting.vais (수동 swap→swap() 빌트인, main() auto-return)
+- [x] 3. generate_expr.rs 빌트인 위임 정리 — print_i64/f64 → expr_helpers ✅
+  변경: generate_expr.rs (-36줄 inline), expr_helpers.rs (pub(crate), make_string_name)
+- [x] 4. docs-site auto-return/swap 소개 — getting-started.md 업데이트 ✅
+  변경: getting-started.md (Hello World auto-return, swap 빌트인 섹션 추가)
+진행률: 4/4 (100%)
+
+---
+
 **메인테이너**: Steve

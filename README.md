@@ -100,7 +100,7 @@ docs-site/         # mdBook documentation
 ```bash
 cargo build --release
 cargo test                                     # Run all 2,500+ tests
-cargo test -p vaisc --test e2e_tests           # Run 498 E2E tests
+cargo test -p vaisc --test e2e_tests           # Run 520 E2E tests
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
