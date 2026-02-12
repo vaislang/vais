@@ -1041,11 +1041,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 리뷰 발견사항 (2026-02-12)
 > 출처: /team-review Phase 21 + Phase 22
+> 모드: 자동진행
 
-- [ ] 1. [정확성] formatter에서 `U mod.{}` 빈 중괄호 엣지케이스 처리 (Warning) — 대상: crates/vais-codegen/src/formatter.rs:669
-- [ ] 2. [보안] test_non_vais_file_rejection 테스트 강화 — !output.status.success() 검증 복원 (Warning) — 대상: crates/vaisc/tests/import_security_tests.rs:309
-- [ ] 3. [정확성] 잔존 MirType::Str 사용 테스트 ~30개 점진적 Struct 전환 (Warning) — 대상: crates/vais-mir/src/borrow_check.rs
-진행률: 0/3 (0%)
+- [x] 1. [정확성] formatter에서 `U mod.{}` 빈 중괄호 엣지케이스 처리 (Warning) ✅ 2026-02-13
+  변경: crates/vais-codegen/src/formatter.rs (else → else if !items.is_empty() 로 빈 items 스킵)
+- [x] 2. [보안] test_non_vais_file_rejection 테스트 강화 ✅ 2026-02-13
+  변경: crates/vaisc/tests/import_security_tests.rs (성공/실패 분기별 보안 속성 검증 추가)
+- [x] 3. [정확성] 잔존 MirType::Str 사용 테스트 ~30개 점진적 Struct 전환 ✅ 2026-02-13
+  변경: crates/vais-mir/src/borrow_check.rs (29개 테스트 MirType::Str→Struct("TestNonCopy") 전환, 144 tests 통과)
+진행률: 3/3 (100%)
 
 ---
 

@@ -1462,18 +1462,18 @@ mod tests {
         // Move a value, then drop it (should not error - drop is no-op after move)
         let body = Body {
             name: "test_move_no_drop".to_string(),
-            params: vec![MirType::Str],
-            return_type: MirType::Str,
+            params: vec![MirType::Struct("TestNonCopy".into())],
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -1524,24 +1524,24 @@ mod tests {
         // Move a value, then reassign it, then use it (should be OK)
         let body = Body {
             name: "test_reassign".to_string(),
-            params: vec![MirType::Str],
-            return_type: MirType::Str,
+            params: vec![MirType::Struct("TestNonCopy".into())],
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -1638,7 +1638,7 @@ mod tests {
         // (This test now actually detects mutable borrow conflicts!)
         let body = Body {
             name: "test_borrow_conflict".to_string(),
-            params: vec![MirType::Str],
+            params: vec![MirType::Struct("TestNonCopy".into())],
             return_type: MirType::Unit,
             locals: vec![
                 LocalDecl {
@@ -1649,19 +1649,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None, // Mutable local = mutable borrows
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -1750,18 +1750,18 @@ mod tests {
         // Return a non-copy value (should not cause errors)
         let body = Body {
             name: "test_return".to_string(),
-            params: vec![MirType::Str],
-            return_type: MirType::Str,
+            params: vec![MirType::Struct("TestNonCopy".into())],
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2023,19 +2023,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None, // Mutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2085,25 +2085,25 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None, // Mutable local
                 },
                 LocalDecl {
                     name: Some("y".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None, // Immutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2152,25 +2152,25 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None, // Immutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r3".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2253,13 +2253,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2411,7 +2411,7 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2494,19 +2494,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp1".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp2".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2662,13 +2662,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2827,25 +2827,25 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r3".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2931,19 +2931,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("y".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3095,13 +3095,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -3191,13 +3191,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3284,13 +3284,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3361,25 +3361,25 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -3418,29 +3418,29 @@ mod tests {
         let body = Body {
             name: "test_nll_move_after_borrow".to_string(),
             params: vec![],
-            return_type: MirType::Str,
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3501,25 +3501,25 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3594,19 +3594,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -3650,19 +3650,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3712,19 +3712,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -3798,19 +3798,19 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3874,31 +3874,31 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp1".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp2".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3947,7 +3947,7 @@ mod tests {
             name: "test_single_lifetime".to_string(),
             params: vec![MirType::RefLifetime {
                 lifetime: "a".to_string(),
-                inner: Box::new(MirType::Str),
+                inner: Box::new(MirType::Struct("TestNonCopy".into())),
             }],
             return_type: MirType::Unit,
             locals: vec![
@@ -3961,7 +3961,7 @@ mod tests {
                     name: Some("x".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -3970,7 +3970,7 @@ mod tests {
                     name: Some("temp".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -4091,11 +4091,11 @@ mod tests {
             params: vec![
                 MirType::RefLifetime {
                     lifetime: "a".to_string(),
-                    inner: Box::new(MirType::Str),
+                    inner: Box::new(MirType::Struct("TestNonCopy".into())),
                 },
                 MirType::RefLifetime {
                     lifetime: "b".to_string(),
-                    inner: Box::new(MirType::Str),
+                    inner: Box::new(MirType::Struct("TestNonCopy".into())),
                 },
             ],
             return_type: MirType::Unit,
@@ -4110,7 +4110,7 @@ mod tests {
                     name: Some("x".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -4119,7 +4119,7 @@ mod tests {
                     name: Some("y".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "b".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("b".to_string()),
@@ -4128,7 +4128,7 @@ mod tests {
                     name: Some("temp_a".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -4220,7 +4220,7 @@ mod tests {
             name: "test_ref_copy".to_string(),
             params: vec![MirType::RefLifetime {
                 lifetime: "a".to_string(),
-                inner: Box::new(MirType::Str),
+                inner: Box::new(MirType::Struct("TestNonCopy".into())),
             }],
             return_type: MirType::Unit,
             locals: vec![
@@ -4234,7 +4234,7 @@ mod tests {
                     name: Some("x".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -4243,7 +4243,7 @@ mod tests {
                     name: Some("temp1".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),
@@ -4252,7 +4252,7 @@ mod tests {
                     name: Some("temp2".to_string()),
                     ty: MirType::RefLifetime {
                         lifetime: "a".to_string(),
-                        inner: Box::new(MirType::Str),
+                        inner: Box::new(MirType::Struct("TestNonCopy".into())),
                     },
                     is_mutable: false,
                     lifetime: Some("a".to_string()),

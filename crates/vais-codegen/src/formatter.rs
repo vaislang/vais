@@ -670,7 +670,7 @@ impl Formatter {
             if items.len() == 1 {
                 self.output.push('.');
                 self.output.push_str(&items[0].node);
-            } else {
+            } else if !items.is_empty() {
                 self.output.push_str(".{");
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {

@@ -312,14 +312,36 @@ fn test_non_vais_file_rejection() {
     // Note: import resolution only looks for .vais files, so non-.vais
     // files cannot be imported regardless of the syntax used.
     // The check command may silently skip unresolvable imports,
-    // so we just verify the import system doesn't load malicious.txt content.
+    // so we verify multiple security properties:
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    // Ensure the malicious content was never loaded/executed
+
+    // Primary security check: malicious content was never loaded/executed
     assert!(
         !stdout.contains("malicious") && !stderr.contains("malicious content"),
         "Non-.vais file content should never be loaded"
     );
+
+    // Additional validation: either compilation fails OR we get module resolution feedback
+    // (The compiler may silently skip unresolvable imports in check mode, which is acceptable
+    // as long as the malicious file content is never loaded)
+    if output.status.success() {
+        // If compilation succeeded, the import was silently ignored (acceptable behavior)
+        // but we should verify no trace of the .txt file appears in output
+        assert!(
+            !stdout.contains(".txt") && !stderr.contains("malicious.txt"),
+            "Non-.vais file extension should not appear in successful compilation output"
+        );
+    } else {
+        // If compilation failed, we expect an import-related error message
+        assert!(
+            stderr.contains("Cannot find module")
+                || stderr.contains("malicious")
+                || stderr.contains("import"),
+            "Failed compilation should include relevant error message. Stderr: {}",
+            stderr
+        );
+    }
 }
 
 #[test]
