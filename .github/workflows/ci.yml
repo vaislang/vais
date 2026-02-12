@@ -89,9 +89,17 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo clippy --workspace --exclude vais-python --exclude vais-node -- -D warnings
 
-      - name: Run clippy (Windows - exclude LLVM crates)
+      - name: Run clippy (Windows - non-LLVM crates only)
         if: runner.os == 'Windows'
-        run: cargo clippy --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc -- -D warnings
+        run: >
+          cargo clippy
+          -p vais-ast -p vais-lexer -p vais-parser -p vais-types
+          -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
+          -p vais-profiler -p vais-security -p vais-supply-chain
+          -p vais-testgen -p vais-hotreload -p vais-dynload
+          -p vais-registry-server -p vais-playground-server
+          -- -D warnings
 
   # ---------- Cargo check ----------
   check:
@@ -148,9 +156,16 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo check --workspace --exclude vais-python --exclude vais-node
 
-      - name: Run cargo check (Windows - exclude LLVM crates)
+      - name: Run cargo check (Windows - non-LLVM crates only)
         if: runner.os == 'Windows'
-        run: cargo check --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc
+        run: >
+          cargo check
+          -p vais-ast -p vais-lexer -p vais-parser -p vais-types
+          -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
+          -p vais-profiler -p vais-security -p vais-supply-chain
+          -p vais-testgen -p vais-hotreload -p vais-dynload
+          -p vais-registry-server -p vais-playground-server
 
   # ---------- Tests ----------
   test:
@@ -208,9 +223,16 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo test --workspace --exclude vais-python --exclude vais-node
 
-      - name: Run tests (Windows - exclude LLVM crates)
+      - name: Run tests (Windows - non-LLVM crates only)
         if: runner.os == 'Windows'
-        run: cargo test --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc
+        run: >
+          cargo test
+          -p vais-ast -p vais-lexer -p vais-parser -p vais-types
+          -p vais-mir -p vais-codegen-js -p vais-i18n -p vais-macro
+          -p vais-gc -p vais-gpu -p vais-plugin -p vais-bindgen
+          -p vais-profiler -p vais-security -p vais-supply-chain
+          -p vais-testgen -p vais-hotreload -p vais-dynload
+          -p vais-registry-server -p vais-playground-server
 
   # ---------- Coverage (Ubuntu only) ----------
   coverage:
