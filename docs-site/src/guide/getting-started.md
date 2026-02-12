@@ -4,29 +4,21 @@ Vais는 AI 최적화된 시스템 프로그래밍 언어입니다. 단일 문자
 
 ## 설치
 
-### 시스템 요구사항
-
-- Rust 1.70 이상
-- LLVM 17
-- Git
-
-### 소스에서 빌드
+### Homebrew (macOS / Linux) — 추천
 
 ```bash
-# Vais 저장소 클론
-git clone https://github.com/vaislang/vais.git
-cd vais
-
-# 컴파일러 빌드
-cargo build --release
-
-# 설치 (선택 사항)
-cargo install --path crates/vaisc
+brew tap vaislang/tap && brew install vais
 ```
 
-### 바이너리 설치
+### Cargo
 
-최신 릴리스에서 직접 다운로드할 수 있습니다:
+```bash
+cargo install vaisc
+```
+
+### 바이너리 다운로드
+
+[GitHub Releases](https://github.com/vaislang/vais/releases/latest)에서 플랫폼별 바이너리를 다운로드할 수 있습니다:
 
 ```bash
 # macOS / Linux
@@ -34,6 +26,25 @@ curl -L https://github.com/vaislang/vais/releases/latest/download/vaisc-$(uname 
 chmod +x vaisc
 sudo mv vaisc /usr/local/bin/
 ```
+
+### Docker
+
+```bash
+docker run -it vaislang/vais:latest
+```
+
+### 소스에서 빌드 (개발자용)
+
+컴파일러 개발에 참여하려면 소스에서 직접 빌드합니다:
+
+```bash
+git clone https://github.com/vaislang/vais.git
+cd vais
+cargo build --release
+cargo install --path crates/vaisc
+```
+
+> **요구사항**: Rust 1.70+, LLVM 17, Git
 
 ## Hello World
 

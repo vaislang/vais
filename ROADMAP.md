@@ -1053,4 +1053,37 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 23: 홈페이지 & Docs 개선 (2026-02-13)
+
+> **상태**: ✅ 완료 (2026-02-13)
+> **목표**: 홈페이지 개선 + docs 설치 안내 현대화 + 문서 구조 정리
+
+### Stage 1: 홈페이지 개선 ✅
+
+- [x] 1. 코드 비교 탭 UI 추가 (Vais vs Rust/Python/Go/C 전환) (Opus)
+- [x] 2. 바 차트 언어별 고유 색상 분화 (Opus)
+- [x] 3. Compile Speed 속도순 정렬 + bar-label 폭 수정 (Opus)
+- [x] 4. Self-Hosting 수치 50K+ LOC + 테스트 수치 반영, nav 순서 수정 (Opus)
+
+### Stage 2: Docs 설치 안내 현대화
+
+- [x] 5. quick-start.md — `cargo build` → `vaisc` 직접 호출로 전면 교체 (Opus) ✅ 2026-02-13
+- [x] 6. onboarding.md — `cargo run --bin vaisc --` 12건 → `vaisc` 일괄 교체 (Opus) ✅ 2026-02-13
+- [x] 7. getting-started.md — 설치 섹션에 `brew install` / 바이너리 다운로드를 1순위로 배치, 소스 빌드는 "개발자용" 하위 섹션으로 이동 (Opus) ✅ 2026-02-13
+
+### Stage 3: Docs 구조 정리
+
+- [x] 8. 시작하기 3중 중복 해소 — quick-start + tutorial + guide/getting-started를 하나로 통합, 나머지는 리다이렉트 (Opus) ✅ 2026-02-13
+- [x] 9. SUMMARY.md 슬림화 — 가이드 중복 제거 (guide/ vs guides/), 온보딩을 Contributing 하위로 이동 (Opus) ✅ 2026-02-13
+
+### Verification
+
+| 기준 | 조건 |
+|------|------|
+| docs 빌드 | mdbook build 성공 |
+| cargo 명령 | docs에서 일반 사용자용 `cargo run --bin` 0건 |
+| 설치 안내 | 1순위 brew/바이너리, 2순위 cargo install, 3순위 소스 빌드 |
+
+---
+
 **메인테이너**: Steve

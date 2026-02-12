@@ -4,11 +4,15 @@ Vais 프로그래밍 언어를 빠르게 시작하는 방법입니다.
 
 ## 설치
 
-먼저 Vais 컴파일러를 설치합니다:
-
 ```bash
-cargo build --release
+# macOS / Linux (Homebrew)
+brew tap vaislang/tap && brew install vais
+
+# 또는 Cargo
+cargo install vaisc
 ```
+
+> 소스에서 직접 빌드하려면 [Getting Started](../guide/getting-started.md#소스에서-빌드) 가이드를 참고하세요.
 
 ## 첫 번째 프로그램
 
@@ -16,26 +20,19 @@ cargo build --release
 
 ```vais
 F main() {
-    print("Hello, Vais!")
+    puts("Hello, Vais!")
 }
 ```
 
 ## 컴파일 및 실행
 
-프로그램을 컴파일하고 실행합니다:
-
 ```bash
 # 컴파일
-./target/release/vaisc build hello.vais -o hello
-
-# 실행
+vaisc build hello.vais -o hello
 ./hello
-```
 
-또는 직접 실행:
-
-```bash
-./target/release/vaisc run hello.vais
+# 또는 직접 실행
+vaisc run hello.vais
 ```
 
 ## 다음 단계

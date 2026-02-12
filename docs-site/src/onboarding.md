@@ -127,10 +127,10 @@ F main() -> i64 = max(42, 10)  # 42 반환
 
 ```bash
 # 컴파일 및 실행
-cargo run --bin vaisc -- examples/hello.vais
+vaisc examples/hello.vais
 
 # REPL 사용 (대화형)
-cargo run --bin vaisc -- repl
+vaisc repl
 ```
 
 ---
@@ -631,29 +631,29 @@ F process_vectors<T: MathOps>(v1: T, v2: T, scale: i64) -> T {
 
 ```bash
 # 기본 컴파일
-cargo run --bin vaisc -- build hello.vais -o hello
+vaisc build hello.vais -o hello
 
 # 최적화 레벨 설정
-cargo run --bin vaisc -- build hello.vais -O 2
+vaisc build hello.vais -O 2
 
 # 여러 파일 컴파일
-cargo run --bin vaisc -- build main.vais utils.vais -o myapp
+vaisc build main.vais utils.vais -o myapp
 
 # 직접 실행 (컴파일 + 실행)
-cargo run --bin vaisc -- run hello.vais
+vaisc run hello.vais
 
 # LLVM IR 생성
-cargo run --bin vaisc -- emit-llvm hello.vais
+vaisc emit-llvm hello.vais
 
 # 어셈블리 출력
-cargo run --bin vaisc -- emit-asm hello.vais
+vaisc emit-asm hello.vais
 ```
 
 #### REPL 사용
 
 ```bash
 # REPL 시작
-cargo run --bin vaisc -- repl
+vaisc repl
 
 # REPL 내에서:
 > x := 42
@@ -1254,13 +1254,13 @@ F main() -> i64 {
 ### 디버깅
 ```bash
 # 상세 컴파일 메시지
-cargo run --bin vaisc -- build --verbose hello.vais
+vaisc build --verbose hello.vais
 
 # LLVM IR 검사
-cargo run --bin vaisc -- emit-llvm hello.vais > output.ll
+vaisc emit-llvm hello.vais > output.ll
 
 # 최적화 확인
-cargo run --bin vaisc -- build -O 3 hello.vais
+vaisc build -O 3 hello.vais
 ```
 
 ### 성능 최적화

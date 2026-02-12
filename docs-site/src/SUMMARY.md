@@ -4,23 +4,20 @@
 
 # 시작하기
 
-- [팀 온보딩 가이드](./onboarding.md)
 - [설치](./getting-started/installation.md)
-- [튜토리얼](./getting-started/tutorial.md)
 - [빠른 시작](./getting-started/quick-start.md)
+- [튜토리얼](./getting-started/tutorial.md)
+- [Getting Started (상세)](./guide/getting-started.md)
 
 # 가이드
 
-- [Getting Started](./guide/getting-started.md)
 - [에러 처리 패턴](./guide/error-handling.md)
-- [성능 튜닝](./guide/performance.md)
+- [성능 최적화](./guides/performance.md)
 - [코딩 스타일](./guide/style-guide.md)
-- [FAQ](./guide/faq.md)
-- [Ecosystem Packages](./guide/ecosystem-packages.md)
 - [Rust에서 Vais로 전환하기](./guides/migration-from-rust.md)
 - [C/C++에서 Vais로 전환하기](./guides/migration-from-c.md)
 - [Cookbook — 실전 레시피](./guides/cookbook.md)
-- [성능 최적화 가이드](./guides/performance.md)
+- [Ecosystem Packages](./guide/ecosystem-packages.md)
 - [트러블슈팅 & FAQ](./troubleshooting.md)
 
 # 언어 레퍼런스
@@ -32,7 +29,6 @@
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
 - [컴파일 타임 기능](./language/comptime-feature.md)
-- [타입 추론 개선](./language/iterator-type-inference.md)
 
 # 표준 라이브러리
 
@@ -47,8 +43,6 @@
 - [JSON](./stdlib/json.md)
 - [Regex](./stdlib/regex.md)
 - [Crypto](./stdlib/crypto.md)
-- [GC 구현](./stdlib/gc-implementation.md)
-- [GC 빠른 레퍼런스](./stdlib/gc-quick-reference.md)
 
 # 컴파일러
 
@@ -200,8 +194,13 @@
 
 ---
 
-# 프로덕션 배포
+# Contributing
 
+- [팀 온보딩 가이드](./onboarding.md)
+- [기여 가이드](./contributing/contributing.md)
+- [구현 요약](./contributing/implementation-summaries.md)
+- [리팩토링 요약](./contributing/refactoring-summary.md)
+- [로드맵](./contributing/roadmap.md)
 - [Production Readiness Checklist](./production-checklist.md)
 
 ---
