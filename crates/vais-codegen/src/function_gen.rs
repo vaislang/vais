@@ -706,6 +706,7 @@ impl CodeGenerator {
         }
     }
 
+    /// Convenience wrapper for generate_function_with_span with default span.
     #[allow(dead_code)]
     pub(crate) fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
         self.generate_function_with_span(f, Span::default())
@@ -1137,6 +1138,8 @@ impl CodeGenerator {
     /// Generate a method for a struct
     /// Methods are compiled as functions with the struct pointer as implicit first argument
     /// Static methods (without &self) don't have the implicit self parameter
+    ///
+    /// Convenience wrapper for generate_method_with_span with default span.
     #[allow(dead_code)]
     pub(crate) fn generate_method(
         &mut self,

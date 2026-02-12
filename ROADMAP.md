@@ -59,7 +59,7 @@ crates/
 └── vaisc/             # CLI 컴파일러 & REPL ✅
 
 std/               # 표준 라이브러리 (.vais + C 런타임) ✅
-examples/          # 예제 코드 (138+ 파일) ✅
+examples/          # 예제 코드 (181 파일) ✅
 selfhost/          # Self-hosting 컴파일러 ✅
 benches/           # 벤치마크 스위트 (criterion) ✅
 playground/        # 웹 플레이그라운드 프론트엔드 ✅
@@ -77,9 +77,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 504+, 통합 354+) |
-| 표준 라이브러리 | 73개 .vais + 19개 C 런타임 |
-| 셀프호스트 코드 | 46,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
+| 전체 테스트 | 2,500+ (E2E 520, 통합 354+) |
+| 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
+| 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
 | 토큰 절감 | 시스템 코드에서 Rust 대비 57%, C 대비 60% 절감 |
 | 컴파일 속도 비교 | C 대비 8.5x, Go 대비 8x, Rust 대비 19x faster (단일 파일 IR 생성) |
@@ -928,6 +928,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 검증 — 빌드 + E2E 520 + Clippy 0건 (Opus 직접) ✅
   결과: Build OK, E2E 520/520, Clippy 0건
 진행률: 5/5 (100%)
+
+## Phase 20: 코드 품질 & 테스트 구조 개선 (2026-02-12)
+
+모드: 자동진행
+- [x] 1. Clippy 경고 3건 수정 (Sonnet 위임) ✅
+  변경: checker_expr.rs (Span.clone()→Copy 전환 3건)
+- [x] 2. 문서 수치 업데이트 (Sonnet 위임) ✅
+  변경: README.md/ROADMAP.md/CLAUDE.md (E2E 504→520, 예제 172→181, selfhost 46K→50K LOC)
+- [x] 3. e2e_tests.rs 모듈 분할 (Opus 직접) ✅
+  변경: tests/e2e_tests.rs (14,031줄 단일파일) → tests/e2e/ (main.rs + helpers.rs + 9개 모듈). 520 E2E 전부 통과
+- [x] 4. dead_code 감사 및 정리 (Sonnet 위임) ✅
+  변경: 220+ 줄 미사용 코드 삭제 (gpu/common.rs, codegen-js, mir, jit, profiler), 모듈 레벨 allow 정리
+진행률: 4/4 (100%)
 
 ---
 

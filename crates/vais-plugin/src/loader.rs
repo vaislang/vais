@@ -38,7 +38,8 @@ pub struct LoadedPlugin {
     pub plugin_type: PluginType,
     /// Type-specific plugin interface
     plugin_impl: PluginImpl,
-    /// Library handle (kept alive to prevent unloading)
+    /// Library handle (kept alive to prevent unloading).
+    /// Must be retained for RAII - dropping this would unload the plugin's symbols.
     #[allow(dead_code)]
     library: Library,
 }

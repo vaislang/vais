@@ -9,7 +9,8 @@ use vais_ast::{Expr, IfElse, Literal, MatchArm, Pattern, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    /// Generate code for if-else branches (legacy, for backward compat)
+    /// Generate code for if-else branches.
+    /// Legacy API for backward compatibility; use generate_if_else_with_term for new code.
     #[allow(dead_code)]
     pub(crate) fn generate_if_else(
         &mut self,

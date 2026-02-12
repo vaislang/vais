@@ -1,6 +1,7 @@
+#![allow(dead_code)] // GPU common utilities reserved for backend use
 //! Common utilities for GPU code generation
 
-use vais_ast::{BinOp, Expr, UnaryOp};
+use vais_ast::{BinOp, UnaryOp};
 
 /// Convert Vais binary operator to GPU operator string
 pub fn binary_op_str(op: &BinOp) -> &'static str {
@@ -32,25 +33,6 @@ pub fn unary_op_str(op: &UnaryOp) -> &'static str {
         UnaryOp::Neg => "-",
         UnaryOp::Not => "!",
         UnaryOp::BitNot => "~",
-    }
-}
-
-/// Check if an expression is GPU-compatible
-#[allow(dead_code)]
-pub fn is_gpu_compatible_expr(expr: &Expr) -> bool {
-    match expr {
-        Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::Ident(_) => true,
-        Expr::Binary { left, right, .. } => {
-            is_gpu_compatible_expr(&left.node) && is_gpu_compatible_expr(&right.node)
-        }
-        Expr::Unary { expr, .. } => is_gpu_compatible_expr(&expr.node),
-        Expr::Index { expr, index } => {
-            is_gpu_compatible_expr(&expr.node) && is_gpu_compatible_expr(&index.node)
-        }
-        Expr::Field { expr, .. } => is_gpu_compatible_expr(&expr.node),
-        Expr::Call { .. } => true, // Will be validated separately
-        Expr::If { .. } => true,   // Conditional is OK
-        _ => false,                // Closures, async, etc. not supported
     }
 }
 
@@ -191,22 +173,6 @@ impl GpuBuiltins {
     }
 }
 
-/// Indent a block of code
-#[allow(dead_code)]
-pub fn indent(code: &str, spaces: usize) -> String {
-    let prefix = " ".repeat(spaces);
-    code.lines()
-        .map(|line| {
-            if line.trim().is_empty() {
-                String::new()
-            } else {
-                format!("{}{}", prefix, line)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,12 +195,5 @@ mod tests {
             GpuBuiltins::cuda_builtin("sync_threads"),
             Some("__syncthreads")
         );
-    }
-
-    #[test]
-    fn test_indent() {
-        let code = "int x = 0;\nint y = 1;";
-        let indented = indent(code, 4);
-        assert!(indented.starts_with("    int x"));
     }
 }

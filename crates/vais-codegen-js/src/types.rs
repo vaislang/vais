@@ -74,22 +74,6 @@ pub fn type_to_js(ty: &Type) -> String {
     }
 }
 
-/// Check if a Vais type maps to a JS number (vs bigint, etc.)
-#[allow(dead_code)]
-pub fn is_numeric_type(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" | "f32"
-            | "f64"
-    )
-}
-
-/// Check if a Vais type maps to a JS string
-#[allow(dead_code)]
-pub fn is_string_type(name: &str) -> bool {
-    matches!(name, "str" | "String")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

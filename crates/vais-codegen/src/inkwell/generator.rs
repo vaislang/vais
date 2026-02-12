@@ -25,7 +25,8 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: inkwell::basic_block::BasicBlock<'ctx>,
 }
 
-/// Closure information for captured variables
+/// Closure information for captured variables.
+/// Reserved for full closure implementation.
 #[derive(Clone)]
 #[allow(dead_code)]
 pub(super) struct ClosureInfo<'ctx> {
@@ -52,7 +53,7 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Type mapper for Vais -> LLVM type conversion
     pub(super) type_mapper: TypeMapper<'ctx>,
 
-    /// Target architecture
+    /// Target architecture (reserved for target-specific codegen).
     #[allow(dead_code)]
     pub(super) target: TargetTriple,
 

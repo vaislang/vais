@@ -122,6 +122,7 @@ struct CompileWasmRequest {
     source: String,
     #[serde(default = "default_wasm32")]
     target: String,
+    /// Optimization flag (reserved for future optimization levels).
     #[serde(default)]
     #[allow(dead_code)]
     optimize: bool,

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use cranelift::prelude::*;
 use cranelift_codegen::ir::BlockArg;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataDescription, FuncId, Linkage, Module};
+use cranelift_module::{FuncId, Linkage, Module};
 
 use vais_ast::{
     BinOp, Expr, Function, FunctionBody, Item, Module as AstModule, Spanned, Stmt, Type, UnaryOp,
@@ -24,14 +24,8 @@ pub struct JitCompiler {
     builder_context: FunctionBuilderContext,
     /// Cranelift codegen context.
     ctx: codegen::Context,
-    /// Data section description.
-    #[allow(dead_code)]
-    data_description: DataDescription,
     /// Type mapper for Vais -> Cranelift type conversion.
     type_mapper: TypeMapper,
-    /// JIT runtime for external function resolution.
-    #[allow(dead_code)]
-    runtime: JitRuntime,
     /// Map of compiled function names to their IDs.
     compiled_functions: HashMap<String, FuncId>,
     /// Map of external function names to their IDs.
@@ -77,9 +71,7 @@ impl JitCompiler {
             module,
             builder_context: FunctionBuilderContext::new(),
             ctx: codegen::Context::new(),
-            data_description: DataDescription::new(),
             type_mapper: TypeMapper::new(pointer_type),
-            runtime,
             compiled_functions: HashMap::new(),
             external_functions: HashMap::new(),
         })

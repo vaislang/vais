@@ -11,7 +11,8 @@ use wasmtime::{Caller, Linker};
 use crate::error::{DynloadError, Result};
 use crate::manifest::PluginCapability;
 
-/// Type alias for host function implementation
+/// Type alias for host function implementation.
+/// Reserved for dynamic host function registration.
 #[allow(dead_code)]
 pub type HostFunctionImpl =
     Box<dyn Fn(&[wasmtime::Val]) -> Result<Vec<wasmtime::Val>> + Send + Sync>;

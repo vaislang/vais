@@ -138,7 +138,8 @@ impl TypeChecker {
         }
     }
 
-    /// Verify trait bounds when calling a generic function
+    /// Verify trait bounds when calling a generic function.
+    /// Reserved for stricter trait bound checking.
     #[allow(dead_code)]
     pub(crate) fn verify_trait_bounds(
         &self,

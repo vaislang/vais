@@ -766,17 +766,6 @@ fn extract_branch_targets(line: &str) -> Vec<String> {
     targets
 }
 
-#[allow(dead_code)]
-fn get_current_label(line: &str) -> Option<String> {
-    // Parse a label definition line (e.g., "loop:" -> "loop")
-    let trimmed = line.trim();
-    if trimmed.ends_with(':') && !trimmed.contains(' ') {
-        Some(trimmed.trim_end_matches(':').to_string())
-    } else {
-        None
-    }
-}
-
 fn parse_memory_access(line: &str, is_write: bool) -> Option<MemoryAccess> {
     // Extract base pointer and index from load/store instructions
     let base = if is_write {

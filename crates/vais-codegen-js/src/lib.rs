@@ -1,3 +1,4 @@
+#![allow(dead_code)] // JS codegen metadata structs used internally
 //! Vais JavaScript Code Generator
 //!
 //! Generates JavaScript (ESM) from typed Vais AST.
@@ -84,14 +85,12 @@ pub struct JsCodeGenerator {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct EnumVariantInfo {
     pub name: String,
     pub fields: VariantFieldsInfo,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) enum VariantFieldsInfo {
     Unit,
     Tuple(usize),
@@ -99,7 +98,6 @@ pub(crate) enum VariantFieldsInfo {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct TraitMethodInfo {
     pub name: String,
     pub params: Vec<String>,
@@ -107,7 +105,6 @@ pub(crate) struct TraitMethodInfo {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ImplInfo {
     pub trait_name: Option<String>,
     pub methods: Vec<(String, String)>,

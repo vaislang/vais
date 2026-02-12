@@ -703,23 +703,6 @@ impl JsCodeGenerator {
         }
     }
 
-    /// Ensure __unwrap helper
-    #[allow(dead_code)]
-    pub(crate) fn ensure_unwrap_helper(&mut self) {
-        let helper = "function __unwrap(val) {\n  if (val === null || val === undefined) throw new Error(\"Unwrap on null/undefined\");\n  if (val.__tag === \"Err\" || val.__tag === \"None\") throw new Error(\"Unwrap on \" + val.__tag);\n  return val.__tag !== undefined ? val.__data[0] : val;\n}".to_string();
-        if !self.helpers.iter().any(|h| h.contains("__unwrap")) {
-            self.helpers.push(helper);
-        }
-    }
-
-    /// Ensure __unwrapOrThrow helper
-    #[allow(dead_code)]
-    pub(crate) fn ensure_unwrap_or_throw_helper(&mut self) {
-        let helper = "function __unwrapOrThrow(val) {\n  if (val === null || val === undefined) throw val;\n  if (val.__tag === \"Err\" || val.__tag === \"None\") throw val;\n  return val.__tag !== undefined ? val.__data[0] : val;\n}".to_string();
-        if !self.helpers.iter().any(|h| h.contains("__unwrapOrThrow")) {
-            self.helpers.push(helper);
-        }
-    }
 }
 
 /// Convert Vais BinOp to JavaScript operator string

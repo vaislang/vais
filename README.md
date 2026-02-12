@@ -17,8 +17,8 @@ Vais is designed to minimize token usage while maximizing code expressiveness, m
 - **Memory Safety** - Borrow checker with Non-Lexical Lifetimes (NLL), `--strict-borrow` mode
 - **Slice Types** - `&[T]` / `&mut [T]` with fat pointer implementation
 - **Parallel Compilation** - DAG-based parallel type-check and codegen (2-4x speedup)
-- **Self-Hosting** - 46,000+ LOC bootstrap compiler, 21/21 clang 100% success
-- **Rich Ecosystem** - 28+ crates, 73 stdlib modules, growing package ecosystem
+- **Self-Hosting** - 50,000+ LOC bootstrap compiler, 21/21 clang 100% success
+- **Rich Ecosystem** - 28+ crates, 74 stdlib modules, growing package ecosystem
 
 ## Quick Example
 
@@ -84,12 +84,12 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (73 modules)
-selfhost/          # Self-hosting compiler (46,000+ LOC)
+std/               # Standard library (74 modules)
+selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs/              # Documentation
-examples/          # Example programs (172+ files)
+examples/          # Example programs (181 files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 docs-site/         # mdBook documentation
@@ -165,11 +165,11 @@ Coverage is measured automatically on every push and pull request to `main` and 
 - [x] Parser (recursive descent)
 - [x] Type checker (generics, traits, type inference, GATs, object safety)
 - [x] Code generator (LLVM IR via inkwell, JavaScript ESM, WASM)
-- [x] Standard library (73 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
+- [x] Standard library (74 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
 - [x] Borrow checker (Non-Lexical Lifetimes, CFG-based dataflow, `--strict-borrow`)
 - [x] Slice types (`&[T]` / `&mut [T]` with fat pointers)
 - [x] Parallel compilation (DAG-based dependency resolution, 2-4x speedup)
-- [x] Self-hosting compiler (46,000+ LOC, 21/21 clang success, Bootstrap Phase 38)
+- [x] Self-hosting compiler (50,000+ LOC, 21/21 clang success, Bootstrap Phase 38)
 - [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
 - [x] REPL (interactive environment)
 - [x] VSCode extension + IntelliJ plugin (syntax highlighting, LSP integration)
@@ -192,7 +192,7 @@ Vais is designed for both compilation speed and runtime performance.
 | Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec | 4.14x speedup with parallel |
 | **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** | **50K lines → 63ms** |
 
-**Self-Hosting Bootstrap:** 46,000+ LOC, 21/21 clang compilation success (100%)
+**Self-Hosting Bootstrap:** 50,000+ LOC, 21/21 clang compilation success (100%)
 
 ### Runtime Performance
 

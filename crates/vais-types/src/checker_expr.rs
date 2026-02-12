@@ -465,17 +465,17 @@ impl TypeChecker {
                                 .zip(args.iter())
                                 .map(|(fname, val)| {
                                     (
-                                        vais_ast::Spanned::new(fname.clone(), val.span.clone()),
+                                        vais_ast::Spanned::new(fname.clone(), val.span),
                                         val.clone(),
                                     )
                                 })
                                 .collect();
                             let struct_lit = vais_ast::Spanned::new(
                                 Expr::StructLit {
-                                    name: vais_ast::Spanned::new(func_name.clone(), func.span.clone()),
+                                    name: vais_ast::Spanned::new(func_name.clone(), func.span),
                                     fields,
                                 },
-                                expr.span.clone(),
+                                expr.span,
                             );
                             return self.check_expr(&struct_lit);
                         }

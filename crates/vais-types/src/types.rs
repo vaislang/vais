@@ -1514,7 +1514,8 @@ impl Linearity {
     }
 }
 
-/// Variable info (internal to type checker)
+/// Variable info (internal to type checker).
+/// Reserved for linear/affine type tracking.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(crate) struct VarInfo {

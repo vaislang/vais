@@ -31,6 +31,7 @@ enum DocKind {
     Trait,
     Constant,
     ExternFunction,
+    /// Module-level documentation (reserved for future use).
     #[allow(dead_code)]
     Module,
 }

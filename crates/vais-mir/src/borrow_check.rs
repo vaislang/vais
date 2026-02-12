@@ -177,15 +177,6 @@ struct LivenessInfo {
     last_use: HashMap<Local, Location>,
 }
 
-/// Lifetime constraint for borrow checking.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct LifetimeConstraint {
-    longer: String,   // must outlive shorter
-    shorter: String,
-    location: Location,
-}
-
 /// State information for a single basic block.
 #[derive(Debug, Clone)]
 struct BlockState {

@@ -1,3 +1,4 @@
+#![allow(dead_code)] // Registry subsystem — many APIs reserved for CLI commands
 //! Package registry system for Vais
 //!
 //! This module provides functionality for:

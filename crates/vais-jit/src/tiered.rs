@@ -1,3 +1,4 @@
+#![allow(dead_code)] // Tiered JIT reserved for production use
 //! Tiered JIT compilation system.
 //!
 //! Implements a multi-tier compilation strategy:
@@ -657,7 +658,6 @@ pub struct OsrPoint {
 }
 
 /// Tiered JIT compiler orchestrator.
-#[allow(dead_code)]
 pub struct TieredJit {
     /// Interpreter for Tier 0.
     pub interpreter: Interpreter,

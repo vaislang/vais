@@ -1,3 +1,4 @@
+#![allow(dead_code)] // Incremental compilation features reserved for future use
 //! Incremental Compilation Cache for Vais Compiler
 //!
 //! Provides file-hash based caching to avoid unnecessary recompilation.

@@ -3,14 +3,11 @@
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
 
 mod commands;
-#[allow(dead_code)]
 mod doc_gen;
 mod error_formatter;
 mod imports;
-#[allow(dead_code)]
 mod incremental;
 mod package;
-#[allow(dead_code)]
 mod registry;
 mod repl;
 mod runtime;

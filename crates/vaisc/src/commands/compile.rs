@@ -285,6 +285,8 @@ pub(crate) fn compile_per_module(
 /// then type-checks them in parallel using rayon. Results are merged sequentially
 /// after each level completes. This approach avoids lock contention while maintaining
 /// correctness.
+///
+/// Reserved for parallel compilation mode (Phase 2 implementation).
 #[allow(dead_code)]
 pub fn parallel_type_check(
     final_ast: &vais_ast::Module,
@@ -433,6 +435,8 @@ pub fn parallel_type_check(
 /// then generates IR in parallel using rayon. Results are collected sequentially
 /// after each level completes. This approach maximizes parallelism while respecting
 /// module dependencies.
+///
+/// Reserved for parallel compilation mode (Phase 2 implementation).
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub fn parallel_codegen(
@@ -1244,6 +1248,8 @@ pub(crate) fn add_runtime_libs(
 /// 3. Main thread consumes parsed modules and type-checks them immediately
 /// 4. After type-checking completes, generates IR for all modules in parallel
 /// 5. Independent modules are parsed concurrently within each dependency level
+///
+/// Reserved for pipelined compilation mode (Phase 2 implementation).
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub fn pipeline_compile(

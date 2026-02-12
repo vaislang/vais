@@ -7,6 +7,8 @@ use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned, UnaryOp};
 use vais_types::ResolvedType;
 
+/// Text IR backend helpers (superseded by Inkwell backend).
+/// Kept for backward compatibility and testing.
 #[allow(dead_code)]
 impl CodeGenerator {
     /// Generate code for a literal expression (Int, Float, Bool, String, Unit)

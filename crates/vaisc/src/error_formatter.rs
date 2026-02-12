@@ -34,7 +34,8 @@ impl ErrorFormatContext {
     }
 }
 
-/// Trait for types that can be formatted as errors with context
+/// Trait for types that can be formatted as errors with context.
+/// Reserved for extensible error formatting system.
 #[allow(dead_code)]
 pub trait FormattableError {
     /// Format the error with the given context
@@ -129,7 +130,8 @@ pub fn format_parse_error(error: &ParseError, source: &str, path: &Path) -> Stri
     error.format_with_context(&context)
 }
 
-/// Format any error implementing FormattableError
+/// Format any error implementing FormattableError.
+/// Generic entry point for extensible error formatting.
 #[allow(dead_code)]
 pub fn format_error<E: FormattableError>(error: &E, source: &str, path: &Path) -> String {
     let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());

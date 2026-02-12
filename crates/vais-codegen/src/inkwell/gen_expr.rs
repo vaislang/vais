@@ -323,6 +323,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
+    /// Generate LLVM value for a literal (helper for expression generation).
     #[allow(dead_code)]
     pub(super) fn generate_literal(
         &mut self,

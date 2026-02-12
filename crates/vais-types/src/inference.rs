@@ -487,6 +487,7 @@ impl TypeChecker {
 
     /// Infer generic type arguments from a parameter type and an argument type.
     /// This is used to match a generic parameter with an actual argument.
+    /// Reserved for future bidirectional type inference.
     #[allow(dead_code)]
     pub(crate) fn infer_type_arg(
         &mut self,
@@ -757,6 +758,7 @@ impl TypeChecker {
 
     /// Check a generic function call with bidirectional type checking.
     /// Uses both argument types and expected return type to infer type arguments.
+    /// Reserved for future bidirectional type inference.
     #[allow(dead_code)]
     pub(crate) fn check_generic_function_call_bidirectional(
         &mut self,

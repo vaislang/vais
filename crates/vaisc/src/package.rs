@@ -87,7 +87,8 @@ pub struct WorkspaceConfig {
     pub dependencies: HashMap<String, Dependency>,
 }
 
-/// A resolved workspace with all member packages
+/// A resolved workspace with all member packages.
+/// Used by workspace resolution functions for multi-package builds.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ResolvedWorkspace {
@@ -383,7 +384,8 @@ pub struct ResolvedDependency {
     pub _manifest: PackageManifest,
 }
 
-/// Resolve only path dependencies for a package (legacy behavior)
+/// Resolve only path dependencies for a package (legacy behavior).
+/// Superseded by SemVer resolver; kept for backward compatibility.
 #[allow(dead_code)]
 pub fn resolve_dependencies(
     manifest: &PackageManifest,

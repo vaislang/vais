@@ -78,7 +78,8 @@ impl TypeChecker {
         }
     }
 
-    /// Check linear/affine variable usage at scope exit
+    /// Check linear/affine variable usage at scope exit.
+    /// Reserved for future linear type system enforcement.
     #[allow(dead_code)]
     pub(crate) fn check_linear_vars_at_scope_exit(&self) -> TypeResult<()> {
         if let Some(scope) = self.scopes.last() {

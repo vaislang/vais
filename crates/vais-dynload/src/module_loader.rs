@@ -194,7 +194,8 @@ pub struct ModuleLoader {
     _watcher: Option<RecommendedWatcher>,
     /// Channel for file change events
     event_rx: Option<Receiver<notify::Result<Event>>>,
-    /// Event sender for file changes
+    /// Event sender for file changes.
+    /// Kept alive to maintain the channel; dropping would close event_rx.
     #[allow(dead_code)]
     event_tx: Option<Sender<notify::Result<Event>>>,
     /// Callbacks for reload events

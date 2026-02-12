@@ -66,8 +66,6 @@ impl SampleCollector {
 #[derive(Debug)]
 struct AllocationInfo {
     size: usize,
-    #[allow(dead_code)]
-    timestamp: usize,
 }
 
 #[derive(Debug)]
@@ -95,13 +93,7 @@ impl MemoryTracker {
     }
 
     pub fn record_allocation(&mut self, size: usize, address: usize) {
-        self.allocations.insert(
-            address,
-            AllocationInfo {
-                size,
-                timestamp: self.allocation_counter,
-            },
-        );
+        self.allocations.insert(address, AllocationInfo { size });
 
         self.total_allocations += 1;
         self.total_allocated_bytes += size;

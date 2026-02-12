@@ -130,7 +130,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         vais_types::mangle_name(name, generics)
     }
 
-    /// Map a type to LLVM, handling generics through substitution
+    /// Map a type to LLVM, handling generics through substitution.
+    /// Helper for generic type resolution.
     #[allow(dead_code)]
     pub(super) fn map_type_with_generics(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
         // First substitute any generic parameters

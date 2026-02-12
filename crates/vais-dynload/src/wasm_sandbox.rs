@@ -312,6 +312,7 @@ pub struct WasmInstance {
     instance: Instance,
     store: Store<SandboxState>,
     name: String,
+    /// Module handle kept alive for potential re-instantiation.
     #[allow(dead_code)]
     module: Module,
 }

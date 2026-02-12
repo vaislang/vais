@@ -342,6 +342,8 @@ impl Parser {
     /// Synchronize to the next expression boundary for error recovery.
     /// Skips tokens until an expression delimiter is found.
     /// Returns the list of skipped tokens (as strings for debugging).
+    ///
+    /// Reserved for IDE/LSP error recovery mode.
     #[allow(dead_code)]
     fn synchronize_expression(&mut self) -> Vec<String> {
         let mut skipped = Vec::new();
