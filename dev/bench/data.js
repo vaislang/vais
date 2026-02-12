@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770936380306,
+  "lastUpdate": 1770939254389,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -19487,6 +19487,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1806291,
             "range": "± 17957",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "b60d8b64685cb12a4892ccee86fea4b6090c5022",
+          "message": "fix: resolve 43 team-review findings across website, playground, and docs\n\n- docs: fix ~{expr} string interpolation syntax in 8 files (35 instances)\n- docs: fix C→G constant keyword, E I else-if syntax, stdlib count 73→74\n- docs: remove 12 broken API doc links in stdlib.md\n- docs: update ecosystem-packages with 4 new packages (total 9)\n- docs: modernize legacy ~ mut syntax to := mut (27 instances)\n- docs: update faq.md maturity info and progress bars\n- playground: fix keyword highlighting for uppercase single-char keywords\n- playground: remove non-Vais keywords (let, in, unsafe)\n- playground: fix mock interpolation matching ~{expr}\n- playground: fix async-await example, type inference name collision\n- website: fix \"less→fewer tokens\" grammar, blog W trait keyword\n- website: fix dist/blog GitHub URLs and broken Quick Start links\n- website: rebuild dist/ with latest source changes\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-13T08:27:24+09:00",
+          "tree_id": "bb686acddbb17071f3461c5936cb1e41891c8574",
+          "url": "https://github.com/vaislang/vais/commit/b60d8b64685cb12a4892ccee86fea4b6090c5022"
+        },
+        "date": 1770939253612,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2423,
+            "range": "± 24",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5426,
+            "range": "± 156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6297,
+            "range": "± 58",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11115,
+            "range": "± 123",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18344,
+            "range": "± 116",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34743,
+            "range": "± 156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29881,
+            "range": "± 96",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66704,
+            "range": "± 251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 294774,
+            "range": "± 1251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 448485,
+            "range": "± 1441",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 109866,
+            "range": "± 471",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 772905,
+            "range": "± 2782",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 167052,
+            "range": "± 638",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 195748,
+            "range": "± 808",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 202553,
+            "range": "± 815",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 245029,
+            "range": "± 1138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 525875,
+            "range": "± 3006",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 736226,
+            "range": "± 2913",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 401959,
+            "range": "± 2893",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1167633,
+            "range": "± 14157",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39138,
+            "range": "± 320",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 195241,
+            "range": "± 1610",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 374741,
+            "range": "± 3222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1836594,
+            "range": "± 15959",
             "unit": "ns/iter"
           }
         ]
