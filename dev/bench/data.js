@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770820782015,
+  "lastUpdate": 1770854505464,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -16967,6 +16967,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1838605,
             "range": "± 50393",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "c04e5e0233a2ae8cad3fe15ce41438c303529602",
+          "message": "feat: Phase 16 — token efficiency: `i` type alias, struct tuple literals, benchmark 865→801 tokens\n\n- Add `i` as type alias for `i64` in type position (parser/types.rs)\n- Add struct tuple literal syntax: `Point(40, 2)` desugars to `Point { x: 40, y: 2 }`\n  - Type checker: detect Call on struct name, desugar to StructLit (checker_expr.rs)\n  - Text IR codegen: desugar in generate_expr.rs, fix stmt_visitor.rs/type_inference.rs\n  - Inkwell codegen: desugar in gen_expr.rs\n  - JS codegen: desugar in expr.rs\n  - field_order added to StructDef for positional mapping\n- Rewrite benchmarks with param type inference + println() + struct tuple literals\n- Token count: Vais 801 (Python 889, Go 893, Rust 1080, C 1211)\n  - 9.9% fewer than Python, 25.8% fewer than Rust, 33.9% fewer than C\n- E2E: 510 passed (+6), Clippy 0 warnings\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-12T08:55:02+09:00",
+          "tree_id": "7846636ff8ffbf15e33c771f00162a5b3e6dcca2",
+          "url": "https://github.com/vaislang/vais/commit/c04e5e0233a2ae8cad3fe15ce41438c303529602"
+        },
+        "date": 1770854505006,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2431,
+            "range": "± 22",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5298,
+            "range": "± 45",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5822,
+            "range": "± 254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11182,
+            "range": "± 70",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17540,
+            "range": "± 69",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34237,
+            "range": "± 343",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29804,
+            "range": "± 100",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 65746,
+            "range": "± 283",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 293211,
+            "range": "± 2522",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 447224,
+            "range": "± 20636",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 109901,
+            "range": "± 512",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 771025,
+            "range": "± 10117",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 167224,
+            "range": "± 978",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 196245,
+            "range": "± 1153",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 206252,
+            "range": "± 4808",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 251481,
+            "range": "± 4119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 533880,
+            "range": "± 6151",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 748316,
+            "range": "± 2489",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 412091,
+            "range": "± 3410",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1172538,
+            "range": "± 112636",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 37443,
+            "range": "± 537",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 197040,
+            "range": "± 6877",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 379103,
+            "range": "± 3313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1840763,
+            "range": "± 33082",
             "unit": "ns/iter"
           }
         ]
