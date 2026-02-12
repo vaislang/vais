@@ -46,7 +46,8 @@ fn assert_error_contains(source: &str, expected_fragment: &str) {
         Err(e) => assert!(
             e.contains(expected_fragment),
             "Error message does not contain {:?}.\nActual error: {}",
-            expected_fragment, e
+            expected_fragment,
+            e
         ),
     }
 }

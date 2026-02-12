@@ -7,7 +7,9 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
-use vais_ast::{Attribute, Expr, Function, FunctionBody, Item, Module, Param, Span, Spanned, Stmt, Type};
+use vais_ast::{
+    Attribute, Expr, Function, FunctionBody, Item, Module, Param, Span, Spanned, Stmt, Type,
+};
 use vais_gpu::{GpuCodeGenerator, GpuKernel, GpuTarget, GpuType};
 
 /// Create a matrix multiplication kernel for benchmarking
@@ -97,7 +99,10 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
         params: vec![
             Param {
                 name: Spanned::new("a".to_string(), dummy_span),
-                ty: Spanned::new(Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))), dummy_span),
+                ty: Spanned::new(
+                    Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))),
+                    dummy_span,
+                ),
                 is_mut: false,
                 is_vararg: false,
                 ownership: vais_ast::Ownership::Regular,
@@ -105,7 +110,10 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
             },
             Param {
                 name: Spanned::new("b".to_string(), dummy_span),
-                ty: Spanned::new(Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))), dummy_span),
+                ty: Spanned::new(
+                    Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))),
+                    dummy_span,
+                ),
                 is_mut: false,
                 is_vararg: false,
                 ownership: vais_ast::Ownership::Regular,
@@ -113,7 +121,10 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
             },
             Param {
                 name: Spanned::new("c".to_string(), dummy_span),
-                ty: Spanned::new(Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))), dummy_span),
+                ty: Spanned::new(
+                    Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))),
+                    dummy_span,
+                ),
                 is_mut: false,
                 is_vararg: false,
                 ownership: vais_ast::Ownership::Regular,
@@ -129,9 +140,10 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
             },
         ],
         ret_type: Some(Spanned::new(Type::Unit, dummy_span)),
-        body: FunctionBody::Block(vec![
-            Spanned::new(Stmt::Expr(Box::new(Spanned::new(Expr::Int(0), dummy_span))), dummy_span),
-        ]),
+        body: FunctionBody::Block(vec![Spanned::new(
+            Stmt::Expr(Box::new(Spanned::new(Expr::Int(0), dummy_span))),
+            dummy_span,
+        )]),
         is_pub: false,
         is_async: false,
         attributes: vec![Attribute {
@@ -351,7 +363,10 @@ fn bench_type_conversion(c: &mut Criterion) {
         ("i32", GpuType::I32),
         ("i64", GpuType::I64),
         ("ptr_f32", GpuType::Ptr(Box::new(GpuType::F32))),
-        ("array_f32_1024", GpuType::Array(Box::new(GpuType::F32), 1024)),
+        (
+            "array_f32_1024",
+            GpuType::Array(Box::new(GpuType::F32), 1024),
+        ),
         ("vec4_f32", GpuType::Vec(Box::new(GpuType::F32), 4)),
     ];
 
@@ -368,12 +383,10 @@ fn bench_type_conversion(c: &mut Criterion) {
                 BenchmarkId::new(target.name().to_string(), type_name),
                 &(gpu_type, target),
                 |b, (ty, target)| {
-                    b.iter(|| {
-                        match target {
-                            GpuTarget::Cuda => black_box(ty).cuda_name(),
-                            GpuTarget::OpenCL => black_box(ty).opencl_name(),
-                            GpuTarget::WebGPU | GpuTarget::Metal => black_box(ty).wgsl_name(),
-                        }
+                    b.iter(|| match target {
+                        GpuTarget::Cuda => black_box(ty).cuda_name(),
+                        GpuTarget::OpenCL => black_box(ty).opencl_name(),
+                        GpuTarget::WebGPU | GpuTarget::Metal => black_box(ty).wgsl_name(),
                     })
                 },
             );
@@ -416,7 +429,10 @@ fn bench_full_gpu_pipeline(c: &mut Criterion) {
                 params: vec![
                     Param {
                         name: Spanned::new("input".to_string(), dummy_span),
-                        ty: Spanned::new(Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))), dummy_span),
+                        ty: Spanned::new(
+                            Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))),
+                            dummy_span,
+                        ),
                         is_mut: false,
                         is_vararg: false,
                         ownership: vais_ast::Ownership::Regular,
@@ -424,7 +440,10 @@ fn bench_full_gpu_pipeline(c: &mut Criterion) {
                     },
                     Param {
                         name: Spanned::new("output".to_string(), dummy_span),
-                        ty: Spanned::new(Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))), dummy_span),
+                        ty: Spanned::new(
+                            Type::Pointer(Box::new(Spanned::new(f32_type.clone(), dummy_span))),
+                            dummy_span,
+                        ),
                         is_mut: false,
                         is_vararg: false,
                         ownership: vais_ast::Ownership::Regular,
@@ -440,9 +459,10 @@ fn bench_full_gpu_pipeline(c: &mut Criterion) {
                     },
                 ],
                 ret_type: Some(Spanned::new(Type::Unit, dummy_span)),
-                body: FunctionBody::Block(vec![
-                    Spanned::new(Stmt::Expr(Box::new(Spanned::new(Expr::Int(0), dummy_span))), dummy_span),
-                ]),
+                body: FunctionBody::Block(vec![Spanned::new(
+                    Stmt::Expr(Box::new(Spanned::new(Expr::Int(0), dummy_span))),
+                    dummy_span,
+                )]),
                 is_pub: false,
                 is_async: false,
                 attributes: vec![Attribute {

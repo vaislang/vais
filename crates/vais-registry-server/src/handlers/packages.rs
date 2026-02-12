@@ -533,9 +533,7 @@ fn default_browse_sort() -> String {
 }
 
 /// Get registry statistics
-pub async fn stats(
-    State(state): State<AppState>,
-) -> ServerResult<Json<RegistryStats>> {
+pub async fn stats(State(state): State<AppState>) -> ServerResult<Json<RegistryStats>> {
     let stats = db::get_registry_stats(&state.pool).await?;
     Ok(Json(stats))
 }

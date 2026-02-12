@@ -2099,10 +2099,7 @@ fn test_wasm_serializer_types() {
 
     // Complex type sizes (ptr + len for wasm32)
     assert_eq!(ser.wit_type_size(&WitType::String), 8);
-    assert_eq!(
-        ser.wit_type_size(&WitType::List(Box::new(WitType::S32))),
-        8
-    );
+    assert_eq!(ser.wit_type_size(&WitType::List(Box::new(WitType::S32))), 8);
 
     // Alignment
     assert_eq!(ser.aligned_size(&WitType::Bool), 4); // 1 → 4

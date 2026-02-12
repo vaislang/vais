@@ -991,7 +991,10 @@ impl IncrementalCache {
                                 // Content changed - check if signature also changed
                                 // For now, we mark as ContentHashChanged
                                 // Signature check happens in the next phase
-                                return (file_path.clone(), Some(CacheMissReason::ContentHashChanged));
+                                return (
+                                    file_path.clone(),
+                                    Some(CacheMissReason::ContentHashChanged),
+                                );
                             }
                             // Hash unchanged - cache hit
                             (file_path.clone(), None)
@@ -2294,7 +2297,10 @@ F main() {
         cache.update_file(&file1).unwrap();
         cache.update_file(&file2).unwrap();
         cache
-            .add_dependency(&file1.canonicalize().unwrap(), &file2.canonicalize().unwrap())
+            .add_dependency(
+                &file1.canonicalize().unwrap(),
+                &file2.canonicalize().unwrap(),
+            )
             .unwrap();
         cache.persist().unwrap();
 

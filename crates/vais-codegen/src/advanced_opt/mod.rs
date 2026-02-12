@@ -217,11 +217,9 @@ pub fn generate_inkwell_hints(ir: &str, config: &AdvancedOptConfig) -> LlvmOptHi
             if candidate.is_vectorizable {
                 // Extract function name from loop header context
                 let function_name = extract_function_for_loop(ir, &candidate.header);
-                hints.vectorize_hints.push((
-                    function_name,
-                    loop_id,
-                    config.vector_width,
-                ));
+                hints
+                    .vectorize_hints
+                    .push((function_name, loop_id, config.vector_width));
             }
         }
     }
@@ -234,7 +232,9 @@ pub fn generate_inkwell_hints(ir: &str, config: &AdvancedOptConfig) -> LlvmOptHi
                 let struct_name = trimmed.split_whitespace().next().unwrap_or("").to_string();
                 let estimated = estimate_struct_size_from_line(trimmed);
                 if estimated >= config.cache_line_size {
-                    hints.alignment_hints.push((struct_name, config.cache_line_size));
+                    hints
+                        .alignment_hints
+                        .push((struct_name, config.cache_line_size));
                 }
             }
         }
@@ -262,7 +262,7 @@ fn estimate_struct_size_from_line(line: &str) -> usize {
     // Parse "{ i64, i64, i8* }" etc.
     if let Some(start) = line.find('{') {
         if let Some(end) = line.rfind('}') {
-            let fields: Vec<&str> = line[start+1..end].split(',').collect();
+            let fields: Vec<&str> = line[start + 1..end].split(',').collect();
             return fields.iter().map(|f| estimate_type_size(f.trim())).sum();
         }
     }
@@ -434,7 +434,10 @@ mod tests {
 
     #[test]
     fn test_estimate_struct_size_from_line() {
-        assert_eq!(estimate_struct_size_from_line("%Foo = type { i64, i64 }"), 16);
+        assert_eq!(
+            estimate_struct_size_from_line("%Foo = type { i64, i64 }"),
+            16
+        );
         assert_eq!(estimate_struct_size_from_line("%Bar = type { i32, i8 }"), 5);
         assert_eq!(estimate_struct_size_from_line(""), 0);
     }

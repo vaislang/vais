@@ -168,9 +168,7 @@ impl Value {
     pub fn as_i64(&self) -> Result<i64, JitError> {
         match self {
             Value::I64(n) => Ok(*n),
-            Value::Bool(b) => {
-                Ok(if *b { 1 } else { 0 })
-            }
+            Value::Bool(b) => Ok(if *b { 1 } else { 0 }),
             _ => Err(JitError::InvalidConversion {
                 from: format!("{:?}", self),
                 to: "i64".to_string(),
@@ -471,7 +469,10 @@ impl Interpreter {
             Expr::While { condition, body } => {
                 let loop_id = body as *const _ as usize;
                 let mut _iteration = 0u64;
-                while self.eval_expr(&condition.node, locals, profile)?.as_bool()? {
+                while self
+                    .eval_expr(&condition.node, locals, profile)?
+                    .as_bool()?
+                {
                     if let Some(p) = profile {
                         p.record_loop(loop_id);
                     }
@@ -566,8 +567,12 @@ impl Interpreter {
             (BinOp::BitAnd, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a & b)),
             (BinOp::BitOr, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a | b)),
             (BinOp::BitXor, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a ^ b)),
-            (BinOp::Shl, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_shl((*b as u32) & 63))),
-            (BinOp::Shr, Value::I64(a), Value::I64(b)) => Ok(Value::I64(a.wrapping_shr((*b as u32) & 63))),
+            (BinOp::Shl, Value::I64(a), Value::I64(b)) => {
+                Ok(Value::I64(a.wrapping_shl((*b as u32) & 63)))
+            }
+            (BinOp::Shr, Value::I64(a), Value::I64(b)) => {
+                Ok(Value::I64(a.wrapping_shr((*b as u32) & 63)))
+            }
 
             // Comparison operations
             (BinOp::Eq, Value::I64(a), Value::I64(b)) => Ok(Value::Bool(a == b)),
@@ -850,7 +855,10 @@ impl TieredJit {
         let points = self.osr_points.read().unwrap();
 
         for point in points.iter() {
-            if point.function == func && point.loop_id == loop_id && iteration >= point.iteration_threshold {
+            if point.function == func
+                && point.loop_id == loop_id
+                && iteration >= point.iteration_threshold
+            {
                 return Some(point.target_tier);
             }
         }
@@ -1207,7 +1215,8 @@ mod tests {
 
     #[test]
     fn test_hot_path_score_calculation() {
-        let source = "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
+        let source =
+            "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
         let ast = parse(source).unwrap();
 
         let mut interp = Interpreter::new();
@@ -1222,7 +1231,11 @@ mod tests {
         let score = *profile.hot_path_score.read().unwrap();
 
         // Score should be high due to many loop iterations
-        assert!(score > 50.0, "Hot path score should be > 50.0, got {}", score);
+        assert!(
+            score > 50.0,
+            "Hot path score should be > 50.0, got {}",
+            score
+        );
     }
 
     #[test]
@@ -1368,7 +1381,11 @@ mod tests {
         let total = profile.total_loop_iterations.load(Ordering::Relaxed);
 
         // Should have accumulated loop iterations
-        assert!(total >= 10, "Expected at least 10 loop iterations, got {}", total);
+        assert!(
+            total >= 10,
+            "Expected at least 10 loop iterations, got {}",
+            total
+        );
     }
 
     #[test]

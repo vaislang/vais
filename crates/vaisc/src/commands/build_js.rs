@@ -223,10 +223,7 @@ pub(crate) fn cmd_build_js(
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("output.js.map");
-        let js_with_sourcemap = format!(
-            "{}//# sourceMappingURL={}\n",
-            js_output, map_filename
-        );
+        let js_with_sourcemap = format!("{}//# sourceMappingURL={}\n", js_output, map_filename);
         fs::write(&out_path, js_with_sourcemap)
             .map_err(|e| format!("Cannot write '{}': {}", out_path.display(), e))?;
 
@@ -246,9 +243,7 @@ pub(crate) fn cmd_build_js(
     let total_time = start.elapsed();
 
     // Print output info
-    let file_size = fs::metadata(&out_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let file_size = fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
     let size_str = if file_size > 1024 * 1024 {
         format!("{:.1} MB", file_size as f64 / (1024.0 * 1024.0))
     } else if file_size > 1024 {

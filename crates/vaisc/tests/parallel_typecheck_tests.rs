@@ -201,7 +201,11 @@ fn test_dependency_graph_independent_modules() {
 
     let levels = dep_graph.topological_sort();
 
-    assert_eq!(levels.len(), 1, "Independent modules should be in one level");
+    assert_eq!(
+        levels.len(),
+        1,
+        "Independent modules should be in one level"
+    );
     assert_eq!(
         levels[0].len(),
         3,

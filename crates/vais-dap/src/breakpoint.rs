@@ -10,7 +10,7 @@ use crate::protocol::types::{Breakpoint, FunctionBreakpoint, Source, SourceBreak
 /// Hit counter for tracking breakpoint hits
 #[derive(Debug, Default)]
 pub struct HitCounter {
-    counts: HashMap<i64, u64>,  // breakpoint_id -> hit_count
+    counts: HashMap<i64, u64>, // breakpoint_id -> hit_count
 }
 
 impl HitCounter {
@@ -57,11 +57,17 @@ pub fn parse_hit_condition(cond: &str) -> Option<HitConditionOp> {
     let cond = cond.trim();
 
     if let Some(rest) = cond.strip_prefix(">=") {
-        rest.trim().parse::<u64>().ok().map(HitConditionOp::GreaterEqual)
+        rest.trim()
+            .parse::<u64>()
+            .ok()
+            .map(HitConditionOp::GreaterEqual)
     } else if let Some(rest) = cond.strip_prefix('>') {
         rest.trim().parse::<u64>().ok().map(HitConditionOp::Greater)
     } else if let Some(rest) = cond.strip_prefix('%') {
-        rest.trim().parse::<u64>().ok().map(HitConditionOp::Multiple)
+        rest.trim()
+            .parse::<u64>()
+            .ok()
+            .map(HitConditionOp::Multiple)
     } else if let Some(rest) = cond.strip_prefix('=') {
         rest.trim().parse::<u64>().ok().map(HitConditionOp::Equal)
     } else {
@@ -82,9 +88,9 @@ pub fn evaluate_hit_condition(op: &HitConditionOp, hit_count: u64) -> bool {
 /// Result of recording a breakpoint hit
 #[derive(Debug, PartialEq)]
 pub enum HitResult {
-    Break,          // Break execution
-    Skip,           // Condition not met, continue
-    Log(String),    // Logpoint, log message and continue
+    Break,       // Break execution
+    Skip,        // Condition not met, continue
+    Log(String), // Logpoint, log message and continue
 }
 
 /// Manages breakpoints for a debug session
@@ -422,7 +428,10 @@ mod tests {
     fn test_parse_hit_condition_equal() {
         assert_eq!(parse_hit_condition("5"), Some(HitConditionOp::Equal(5)));
         assert_eq!(parse_hit_condition("= 5"), Some(HitConditionOp::Equal(5)));
-        assert_eq!(parse_hit_condition("  =  10  "), Some(HitConditionOp::Equal(10)));
+        assert_eq!(
+            parse_hit_condition("  =  10  "),
+            Some(HitConditionOp::Equal(10))
+        );
         assert_eq!(parse_hit_condition("invalid"), None);
     }
 
@@ -430,16 +439,31 @@ mod tests {
     fn test_parse_hit_condition_greater() {
         assert_eq!(parse_hit_condition("> 3"), Some(HitConditionOp::Greater(3)));
         assert_eq!(parse_hit_condition(">5"), Some(HitConditionOp::Greater(5)));
-        assert_eq!(parse_hit_condition(">= 3"), Some(HitConditionOp::GreaterEqual(3)));
-        assert_eq!(parse_hit_condition(">=10"), Some(HitConditionOp::GreaterEqual(10)));
-        assert_eq!(parse_hit_condition("  >=  7  "), Some(HitConditionOp::GreaterEqual(7)));
+        assert_eq!(
+            parse_hit_condition(">= 3"),
+            Some(HitConditionOp::GreaterEqual(3))
+        );
+        assert_eq!(
+            parse_hit_condition(">=10"),
+            Some(HitConditionOp::GreaterEqual(10))
+        );
+        assert_eq!(
+            parse_hit_condition("  >=  7  "),
+            Some(HitConditionOp::GreaterEqual(7))
+        );
     }
 
     #[test]
     fn test_parse_hit_condition_multiple() {
-        assert_eq!(parse_hit_condition("% 10"), Some(HitConditionOp::Multiple(10)));
+        assert_eq!(
+            parse_hit_condition("% 10"),
+            Some(HitConditionOp::Multiple(10))
+        );
         assert_eq!(parse_hit_condition("%5"), Some(HitConditionOp::Multiple(5)));
-        assert_eq!(parse_hit_condition("  %  3  "), Some(HitConditionOp::Multiple(3)));
+        assert_eq!(
+            parse_hit_condition("  %  3  "),
+            Some(HitConditionOp::Multiple(3))
+        );
     }
 
     #[test]
@@ -544,11 +568,17 @@ mod tests {
         };
 
         // Should return log message
-        assert_eq!(manager.record_hit(&bp), HitResult::Log("Value: {x}".to_string()));
+        assert_eq!(
+            manager.record_hit(&bp),
+            HitResult::Log("Value: {x}".to_string())
+        );
         assert_eq!(manager.get_hit_count(1), 1);
 
         // Second hit should also log
-        assert_eq!(manager.record_hit(&bp), HitResult::Log("Value: {x}".to_string()));
+        assert_eq!(
+            manager.record_hit(&bp),
+            HitResult::Log("Value: {x}".to_string())
+        );
         assert_eq!(manager.get_hit_count(1), 2);
     }
 

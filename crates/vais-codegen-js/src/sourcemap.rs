@@ -85,7 +85,10 @@ impl SourceMap {
     pub fn to_inline_comment(&self) -> String {
         let json = self.to_json();
         let base64 = base64_encode(json.as_bytes());
-        format!("//# sourceMappingURL=data:application/json;charset=utf-8;base64,{}", base64)
+        format!(
+            "//# sourceMappingURL=data:application/json;charset=utf-8;base64,{}",
+            base64
+        )
     }
 
     /// Generate a file reference source map comment
@@ -310,7 +313,7 @@ mod tests {
     #[test]
     fn test_multiple_mappings_same_line() {
         let mut map = SourceMap::new("test.vais", "test.js");
-        map.add_mapping(0, 0, 0, 0);  // Column 0
+        map.add_mapping(0, 0, 0, 0); // Column 0
         map.add_mapping(0, 10, 0, 5); // Column 10, delta +10, src col delta +5
 
         let encoded = map.encode_mappings();
@@ -353,10 +356,14 @@ mod tests {
         map.add_mapping(0, 0, 0, 0);
 
         let comment = map.to_inline_comment();
-        assert!(comment.starts_with("//# sourceMappingURL=data:application/json;charset=utf-8;base64,"));
+        assert!(
+            comment.starts_with("//# sourceMappingURL=data:application/json;charset=utf-8;base64,")
+        );
 
         // Verify it contains valid base64
-        let base64_part = comment.strip_prefix("//# sourceMappingURL=data:application/json;charset=utf-8;base64,").unwrap();
+        let base64_part = comment
+            .strip_prefix("//# sourceMappingURL=data:application/json;charset=utf-8;base64,")
+            .unwrap();
         assert!(!base64_part.is_empty());
     }
 
@@ -403,10 +410,10 @@ mod tests {
         // JS (line 1):   return a + b;
         // JS (line 2): }
 
-        map.add_mapping(0, 0, 0, 0);   // function -> F
-        map.add_mapping(0, 9, 0, 2);   // add -> add
-        map.add_mapping(1, 2, 0, 37);  // return -> R or body start
-        map.add_mapping(1, 9, 0, 38);  // a -> a
+        map.add_mapping(0, 0, 0, 0); // function -> F
+        map.add_mapping(0, 9, 0, 2); // add -> add
+        map.add_mapping(1, 2, 0, 37); // return -> R or body start
+        map.add_mapping(1, 9, 0, 38); // a -> a
         map.add_mapping(1, 13, 0, 42); // b -> b
 
         let json = map.to_json();

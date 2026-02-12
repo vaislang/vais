@@ -173,7 +173,9 @@ impl FunctionLowerer {
     /// Lower a statement.
     fn lower_stmt(&mut self, stmt: &Spanned<Stmt>) -> Operand {
         match &stmt.node {
-            Stmt::Let { name, value, ty, .. } => {
+            Stmt::Let {
+                name, value, ty, ..
+            } => {
                 let val = self.lower_expr(value);
                 let mir_type = ty
                     .as_ref()

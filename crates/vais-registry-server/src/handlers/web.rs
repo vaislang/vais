@@ -34,7 +34,9 @@ pub async fn index(
     let template = include_str!("../../static/index.html");
 
     // Get category counts for filter chips
-    let categories = db::get_category_counts(&state.pool).await.unwrap_or_default();
+    let categories = db::get_category_counts(&state.pool)
+        .await
+        .unwrap_or_default();
     let category_chips = if !categories.is_empty() {
         let chips: Vec<String> = categories
             .iter()
@@ -141,7 +143,11 @@ pub async fn index(
     } else {
         ""
     };
-    let sort_newest = if query.sort == "newest" { "selected" } else { "" };
+    let sort_newest = if query.sort == "newest" {
+        "selected"
+    } else {
+        ""
+    };
     let sort_name = if query.sort == "name" { "selected" } else { "" };
     let sort_relevance = if query.sort == "relevance" {
         "selected"
@@ -369,18 +375,20 @@ pub async fn dashboard(State(state): State<AppState>) -> ServerResult<Html<Strin
         .unwrap_or(0);
 
     // Get total downloads
-    let total_downloads_result = sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
-        .fetch_one(&state.pool)
-        .await;
+    let total_downloads_result =
+        sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
+            .fetch_one(&state.pool)
+            .await;
     let total_downloads: i64 = total_downloads_result
         .map(|row| row.get("total"))
         .unwrap_or(0);
 
     // Get recent packages (10 most recently updated)
-    let recent_packages = db::search_packages_advanced(&state.pool, "", 10, 0, "newest", None, None)
-        .await
-        .unwrap_or((vec![], 0))
-        .0;
+    let recent_packages =
+        db::search_packages_advanced(&state.pool, "", 10, 0, "newest", None, None)
+            .await
+            .unwrap_or((vec![], 0))
+            .0;
 
     let recent_html = if recent_packages.is_empty() {
         "<p>No packages yet.</p>".to_string()

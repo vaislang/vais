@@ -147,11 +147,7 @@ impl VariableManager {
     pub fn create_scopes_with_globals(&mut self, frame_id: i64) -> Vec<Scope> {
         let mut scopes = Vec::new();
 
-        for scope_kind in [
-            ScopeKind::Locals,
-            ScopeKind::Arguments,
-            ScopeKind::Globals,
-        ] {
+        for scope_kind in [ScopeKind::Locals, ScopeKind::Arguments, ScopeKind::Globals] {
             let ref_id = self.next_ref();
 
             self.ref_map.insert(
@@ -366,7 +362,9 @@ impl VariableManager {
             }
 
             // Look for the child in cached variables
-            let cached_children = self.cached_variables.get(&current_var.variables_reference)?;
+            let cached_children = self
+                .cached_variables
+                .get(&current_var.variables_reference)?;
             current_var = cached_children.iter().find(|v| v.name == *part)?;
         }
 

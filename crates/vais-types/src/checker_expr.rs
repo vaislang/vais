@@ -464,10 +464,7 @@ impl TypeChecker {
                                 .iter()
                                 .zip(args.iter())
                                 .map(|(fname, val)| {
-                                    (
-                                        vais_ast::Spanned::new(fname.clone(), val.span),
-                                        val.clone(),
-                                    )
+                                    (vais_ast::Spanned::new(fname.clone(), val.span), val.clone())
                                 })
                                 .collect();
                             let struct_lit = vais_ast::Spanned::new(
@@ -737,8 +734,10 @@ impl TypeChecker {
                 }
 
                 // Built-in slice methods
-                if matches!(&receiver_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
-                    && method.node.as_str() == "len"
+                if matches!(
+                    &receiver_type,
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                ) && method.node.as_str() == "len"
                 {
                     if !args.is_empty() {
                         return Err(TypeError::ArgCount {

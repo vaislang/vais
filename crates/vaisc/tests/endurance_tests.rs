@@ -111,7 +111,7 @@ fn generate_malformed_program(variant: usize) -> String {
         5 => "F test() -> i64 { a := 5 R }".to_string(), // Incomplete return
         6 => "F loop_test() -> i64 { L { B } R 0".to_string(), // Missing closing brace
         7 => "F bad_if(x: i64) -> i64 { I x > 0 { R x } E }".to_string(), // Incomplete else
-        _ => "F broken() -> i64 { R }".to_string(), // Incomplete return value
+        _ => "F broken() -> i64 { R }".to_string(),  // Incomplete return value
     }
 }
 
@@ -200,9 +200,12 @@ fn test_endurance_incremental_growth() {
         }
     }
 
-    println!("\nSuccess rate: {}/{} ({:.1}%)",
-        success_count, iterations,
-        (success_count as f64 / iterations as f64) * 100.0);
+    println!(
+        "\nSuccess rate: {}/{} ({:.1}%)",
+        success_count,
+        iterations,
+        (success_count as f64 / iterations as f64) * 100.0
+    );
 
     // Assert that at least 95% of iterations succeeded
     assert!(
@@ -225,7 +228,10 @@ fn test_endurance_scaling() {
         let source = generate_large_program(target_lines);
         let actual_lines = source.lines().count();
 
-        println!("Testing {} lines (target: {})...", actual_lines, target_lines);
+        println!(
+            "Testing {} lines (target: {})...",
+            actual_lines, target_lines
+        );
 
         let start = std::time::Instant::now();
 
@@ -386,9 +392,21 @@ fn test_endurance_error_recovery() {
     }
 
     println!("\nResults:");
-    println!("  Parse errors:  {} ({:.1}%)", parse_errors, (parse_errors as f64 / iterations as f64) * 100.0);
-    println!("  Type errors:   {} ({:.1}%)", type_errors, (type_errors as f64 / iterations as f64) * 100.0);
-    println!("  Panics:        {} ({:.1}%)", panics, (panics as f64 / iterations as f64) * 100.0);
+    println!(
+        "  Parse errors:  {} ({:.1}%)",
+        parse_errors,
+        (parse_errors as f64 / iterations as f64) * 100.0
+    );
+    println!(
+        "  Type errors:   {} ({:.1}%)",
+        type_errors,
+        (type_errors as f64 / iterations as f64) * 100.0
+    );
+    println!(
+        "  Panics:        {} ({:.1}%)",
+        panics,
+        (panics as f64 / iterations as f64) * 100.0
+    );
 
     // Assert no panics occurred
     assert_eq!(
@@ -399,9 +417,12 @@ fn test_endurance_error_recovery() {
 
     // Assert that most malformed programs were caught
     let caught = parse_errors + type_errors;
-    println!("\nCaught {}/{} malformed programs ({:.1}%)",
-        caught, iterations,
-        (caught as f64 / iterations as f64) * 100.0);
+    println!(
+        "\nCaught {}/{} malformed programs ({:.1}%)",
+        caught,
+        iterations,
+        (caught as f64 / iterations as f64) * 100.0
+    );
 
     println!("Status: PASSED (no panics on malformed input)");
 }
@@ -439,7 +460,11 @@ fn test_endurance_memory_stability() {
         let avg_allocs = round_total / iterations_per_round;
         round_allocs.push(avg_allocs);
 
-        println!("  Round {}: avg {} allocs per iteration", round + 1, avg_allocs);
+        println!(
+            "  Round {}: avg {} allocs per iteration",
+            round + 1,
+            avg_allocs
+        );
     }
 
     // Check for linear growth between first and last round

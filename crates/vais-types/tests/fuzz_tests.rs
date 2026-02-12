@@ -159,39 +159,39 @@ fn fuzz_deeply_nested_types() {
             };
 
             for depth in depths {
-        // Nested Option types: Option<Option<Option<...>>>
-        let mut type_str = String::from("i64");
-        for _ in 0..depth {
-            type_str = format!("Option<{}>", type_str);
-        }
-        let source = format!("E Option<T>{{Some(T),None}} F test()->{}=None", type_str);
+                // Nested Option types: Option<Option<Option<...>>>
+                let mut type_str = String::from("i64");
+                for _ in 0..depth {
+                    type_str = format!("Option<{}>", type_str);
+                }
+                let source = format!("E Option<T>{{Some(T),None}} F test()->{}=None", type_str);
 
-        if let Err(panic_msg) = type_check_no_panic(&source) {
-            failures.push((format!("Option depth {}", depth), panic_msg));
-        }
+                if let Err(panic_msg) = type_check_no_panic(&source) {
+                    failures.push((format!("Option depth {}", depth), panic_msg));
+                }
 
-        // Nested tuple types: ((((i64, i64), i64), i64), i64)
-        let mut tuple_type = String::from("i64");
-        for _ in 0..depth {
-            tuple_type = format!("({}, i64)", tuple_type);
-        }
-        let source2 = format!("F test()->{}=(42, 42)", tuple_type);
+                // Nested tuple types: ((((i64, i64), i64), i64), i64)
+                let mut tuple_type = String::from("i64");
+                for _ in 0..depth {
+                    tuple_type = format!("({}, i64)", tuple_type);
+                }
+                let source2 = format!("F test()->{}=(42, 42)", tuple_type);
 
-        if let Err(panic_msg) = type_check_no_panic(&source2) {
-            failures.push((format!("Tuple depth {}", depth), panic_msg));
-        }
+                if let Err(panic_msg) = type_check_no_panic(&source2) {
+                    failures.push((format!("Tuple depth {}", depth), panic_msg));
+                }
 
-        // Nested function types: fn(fn(fn(i64)->i64)->i64)->i64
-        let mut fn_type = String::from("i64");
-        for _ in 0..depth {
-            fn_type = format!("fn({})->i64", fn_type);
-        }
-        let source3 = format!("F test(f:{})->i64=42", fn_type);
+                // Nested function types: fn(fn(fn(i64)->i64)->i64)->i64
+                let mut fn_type = String::from("i64");
+                for _ in 0..depth {
+                    fn_type = format!("fn({})->i64", fn_type);
+                }
+                let source3 = format!("F test(f:{})->i64=42", fn_type);
 
-        if let Err(panic_msg) = type_check_no_panic(&source3) {
-            failures.push((format!("Function type depth {}", depth), panic_msg));
-        }
-    }
+                if let Err(panic_msg) = type_check_no_panic(&source3) {
+                    failures.push((format!("Function type depth {}", depth), panic_msg));
+                }
+            }
 
             if !failures.is_empty() {
                 eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
@@ -648,26 +648,26 @@ fn fuzz_edge_case_expressions() {
         .stack_size(16 * 1024 * 1024) // 16MB stack
         .spawn(|| {
             let test_cases = vec![
-        // Division by zero
-        "F test()->i64=42/0",
-        // Overflow in literals
-        "F test()->i64=99999999999999999999999999999",
-        // Deep expression nesting
-        "F test()->i64=((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)",
-        // Many chained operations
-        "F test()->i64=1+2+3+4+5+6+7+8+9+10+11+12+13+14+15+16+17+18+19+20",
-        // Complex boolean expression
-        "F test()->bool=true&&false||true&&false||true&&false||true",
-        // Deeply nested field access (if struct exists)
-        "S A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
-        // Empty string operations
-        "F test()->str=\"\"",
-        // Negative numbers
-        "F test()->i64=-42",
-        "F test()->i64=-(-(-42))",
-        // Mixed operations
-        "F test()->i64=(1+2)*3-4/2",
-    ];
+                // Division by zero
+                "F test()->i64=42/0",
+                // Overflow in literals
+                "F test()->i64=99999999999999999999999999999",
+                // Deep expression nesting
+                "F test()->i64=((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)",
+                // Many chained operations
+                "F test()->i64=1+2+3+4+5+6+7+8+9+10+11+12+13+14+15+16+17+18+19+20",
+                // Complex boolean expression
+                "F test()->bool=true&&false||true&&false||true&&false||true",
+                // Deeply nested field access (if struct exists)
+                "S A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
+                // Empty string operations
+                "F test()->str=\"\"",
+                // Negative numbers
+                "F test()->i64=-42",
+                "F test()->i64=-(-(-42))",
+                // Mixed operations
+                "F test()->i64=(1+2)*3-4/2",
+            ];
 
             let mut failures = Vec::new();
 

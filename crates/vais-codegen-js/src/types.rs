@@ -47,9 +47,7 @@ pub fn type_to_js(ty: &Type) -> String {
             "i64" | "u64" | "i128" | "u128" => "number".to_string(),
             "bool" => "boolean".to_string(),
             "str" | "String" => "string".to_string(),
-            _ => {
-                name.clone()
-            }
+            _ => name.clone(),
         },
         Type::Unit => "void".to_string(),
         Type::Array(inner) => format!("Array<{}>", type_to_js(&inner.node)),

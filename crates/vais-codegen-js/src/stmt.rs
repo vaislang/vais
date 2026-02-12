@@ -65,9 +65,7 @@ impl JsCodeGenerator {
                 Ok(format!("/* defer: {e} */"))
             }
 
-            Stmt::Error { message, .. } => {
-                Ok(format!("/* parse error: {message} */"))
-            }
+            Stmt::Error { message, .. } => Ok(format!("/* parse error: {message} */")),
         }
     }
 
@@ -171,10 +169,7 @@ mod tests {
     #[test]
     fn test_return_statement() {
         let mut gen = JsCodeGenerator::new();
-        let stmt = Stmt::Return(Some(Box::new(Spanned::new(
-            Expr::Int(1),
-            Span::new(2, 3),
-        ))));
+        let stmt = Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(1), Span::new(2, 3)))));
         let result = gen.generate_stmt(&stmt).unwrap();
         assert_eq!(result, "return 1;");
     }

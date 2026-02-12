@@ -674,10 +674,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .iter()
                         .zip(args.iter())
                         .map(|(fname, val)| {
-                            (
-                                vais_ast::Spanned::new(fname.clone(), val.span),
-                                val.clone(),
-                            )
+                            (vais_ast::Spanned::new(fname.clone(), val.span), val.clone())
                         })
                         .collect();
                     return self.generate_struct_literal(name, &fields);

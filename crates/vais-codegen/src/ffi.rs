@@ -697,7 +697,10 @@ mod tests {
                 name: Spanned::new("msg".to_string(), Span::new(0, 3)),
                 ty: Spanned::new(
                     Type::Pointer(Box::new(Spanned::new(
-                        Type::Named { name: "i8".to_string(), generics: vec![] },
+                        Type::Named {
+                            name: "i8".to_string(),
+                            generics: vec![],
+                        },
                         Span::new(0, 2),
                     ))),
                     Span::new(0, 3),
@@ -737,8 +740,12 @@ mod tests {
         use crate::TargetTriple;
 
         let mut gen = CodeGenerator::new_with_target("test", TargetTriple::Wasm32Unknown);
-        gen.wasm_imports.insert("js_alert".to_string(), ("env".to_string(), "alert".to_string()));
-        gen.wasm_exports.insert("add".to_string(), "add".to_string());
+        gen.wasm_imports.insert(
+            "js_alert".to_string(),
+            ("env".to_string(), "alert".to_string()),
+        );
+        gen.wasm_exports
+            .insert("add".to_string(), "add".to_string());
 
         let metadata = gen.generate_wasm_metadata();
         assert!(metadata.contains("wasm-import-module"));

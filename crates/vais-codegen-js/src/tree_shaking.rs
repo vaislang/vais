@@ -204,7 +204,11 @@ impl TreeShaker {
                 }
             }
             // Other items don't produce dependencies we track
-            Item::Use(_) | Item::ExternBlock(_) | Item::Union(_) | Item::Macro(_) | Item::Error { .. } => {}
+            Item::Use(_)
+            | Item::ExternBlock(_)
+            | Item::Union(_)
+            | Item::Macro(_)
+            | Item::Error { .. } => {}
         }
     }
 
@@ -225,9 +229,14 @@ impl TreeShaker {
                     Self::collect_type_deps(&ty.node, deps);
                 }
             }
-            Type::Array(elem_type) | Type::Optional(elem_type) | Type::Result(elem_type)
-            | Type::Pointer(elem_type) | Type::Ref(elem_type) | Type::RefMut(elem_type)
-            | Type::Slice(elem_type) | Type::SliceMut(elem_type)
+            Type::Array(elem_type)
+            | Type::Optional(elem_type)
+            | Type::Result(elem_type)
+            | Type::Pointer(elem_type)
+            | Type::Ref(elem_type)
+            | Type::RefMut(elem_type)
+            | Type::Slice(elem_type)
+            | Type::SliceMut(elem_type)
             | Type::Lazy(elem_type) => {
                 Self::collect_type_deps(&elem_type.node, deps);
             }
@@ -247,7 +256,10 @@ impl TreeShaker {
                 }
                 Self::collect_type_deps(&ret.node, deps);
             }
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 // Track the trait name
                 if !Self::is_builtin_type(trait_name) {
                     deps.insert(trait_name.clone());
@@ -256,7 +268,12 @@ impl TreeShaker {
                     Self::collect_type_deps(&generic.node, deps);
                 }
             }
-            Type::Associated { base, trait_name, generics, .. } => {
+            Type::Associated {
+                base,
+                trait_name,
+                generics,
+                ..
+            } => {
                 Self::collect_type_deps(&base.node, deps);
                 if let Some(trait_n) = trait_name {
                     if !Self::is_builtin_type(trait_n) {
@@ -270,7 +287,9 @@ impl TreeShaker {
             Type::Linear(inner) | Type::Affine(inner) => {
                 Self::collect_type_deps(&inner.node, deps);
             }
-            Type::Dependent { base, predicate, .. } => {
+            Type::Dependent {
+                base, predicate, ..
+            } => {
                 Self::collect_type_deps(&base.node, deps);
                 Self::collect_expr_deps(&predicate.node, deps);
             }
@@ -300,7 +319,9 @@ impl TreeShaker {
                     Self::collect_expr_deps(&arg.node, deps);
                 }
             }
-            Expr::StaticMethodCall { type_name, args, .. } => {
+            Expr::StaticMethodCall {
+                type_name, args, ..
+            } => {
                 deps.insert(type_name.node.clone());
                 for arg in args {
                     Self::collect_expr_deps(&arg.node, deps);
@@ -469,8 +490,14 @@ impl TreeShaker {
                 }
             }
             // Literals don't reference other items
-            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
-            | Expr::StringInterp(_) | Expr::Unit | Expr::SelfCall | Expr::Error { .. } => {}
+            Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Bool(_)
+            | Expr::String(_)
+            | Expr::StringInterp(_)
+            | Expr::Unit
+            | Expr::SelfCall
+            | Expr::Error { .. } => {}
         }
     }
 
@@ -558,10 +585,25 @@ impl TreeShaker {
     fn is_builtin_type(name: &str) -> bool {
         matches!(
             name,
-            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" |
-            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" |
-            "f32" | "f64" | "bool" | "char" | "str" | "String" |
-            "()" | "unit"
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "i128"
+                | "isize"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "u128"
+                | "usize"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "char"
+                | "str"
+                | "String"
+                | "()"
+                | "unit"
         )
     }
 
@@ -635,7 +677,11 @@ impl TreeShaker {
                 }
             }
             // Always keep imports, extern blocks, unions, and macros
-            Item::Use(_) | Item::ExternBlock(_) | Item::Union(_) | Item::Macro(_) | Item::Error { .. } => true,
+            Item::Use(_)
+            | Item::ExternBlock(_)
+            | Item::Union(_)
+            | Item::Macro(_)
+            | Item::Error { .. } => true,
         }
     }
 

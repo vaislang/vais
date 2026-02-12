@@ -21,15 +21,18 @@ fn create_vais_file(dir: &std::path::Path, name: &str, content: &str) -> PathBuf
 fn test_single_module_codegen() {
     let temp_dir = TempDir::new().unwrap();
 
-    let main_file = create_vais_file(
-        temp_dir.path(),
-        "main.vais",
-        "F main() -> i32 { R 42 }",
-    );
+    let main_file = create_vais_file(temp_dir.path(), "main.vais", "F main() -> i32 { R 42 }");
 
     // Run vaisc to compile
     let output = Command::new("cargo")
-        .args(["run", "--bin", "vaisc", "--", "--emit-ir", main_file.to_str().unwrap()])
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "--emit-ir",
+            main_file.to_str().unwrap(),
+        ])
         .output();
 
     if let Ok(result) = output {
@@ -39,7 +42,10 @@ fn test_single_module_codegen() {
             assert!(ir_file.exists(), "IR file should be generated");
 
             let ir_content = fs::read_to_string(&ir_file).expect("Failed to read IR");
-            assert!(ir_content.contains("define"), "IR should contain function definition");
+            assert!(
+                ir_content.contains("define"),
+                "IR should contain function definition"
+            );
         }
     }
 }
@@ -85,7 +91,10 @@ fn test_dependency_graph_levels() {
             let mut reverse_deps: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
             for (from, tos) in &self.forward_deps {
                 for to in tos {
-                    reverse_deps.entry(to.clone()).or_default().push(from.clone());
+                    reverse_deps
+                        .entry(to.clone())
+                        .or_default()
+                        .push(from.clone());
                 }
             }
 
@@ -151,15 +160,24 @@ fn test_dependency_graph_levels() {
 
     // First level should contain only base (no dependencies)
     assert_eq!(levels[0].len(), 1, "First level should have 1 module");
-    assert!(levels[0].contains(&base_file), "First level should contain base");
+    assert!(
+        levels[0].contains(&base_file),
+        "First level should contain base"
+    );
 
     // Second level should contain util
     assert_eq!(levels[1].len(), 1, "Second level should have 1 module");
-    assert!(levels[1].contains(&util_file), "Second level should contain util");
+    assert!(
+        levels[1].contains(&util_file),
+        "Second level should contain util"
+    );
 
     // Third level should contain main
     assert_eq!(levels[2].len(), 1, "Third level should have 1 module");
-    assert!(levels[2].contains(&main_file), "Third level should contain main");
+    assert!(
+        levels[2].contains(&main_file),
+        "Third level should contain main"
+    );
 }
 
 /// Test 3: Verify parallel processing of independent modules
@@ -177,13 +195,24 @@ fn test_independent_modules_parallel() {
     // Both files should compile independently
     for file in &[file_a, file_b] {
         let output = Command::new("cargo")
-            .args(["run", "--bin", "vaisc", "--", "--emit-ir", file.to_str().unwrap()])
+            .args([
+                "run",
+                "--bin",
+                "vaisc",
+                "--",
+                "--emit-ir",
+                file.to_str().unwrap(),
+            ])
             .output();
 
         if let Ok(result) = output {
             if result.status.success() {
                 let ir_file = file.with_extension("ll");
-                assert!(ir_file.exists(), "IR file should be generated for {:?}", file);
+                assert!(
+                    ir_file.exists(),
+                    "IR file should be generated for {:?}",
+                    file
+                );
             }
         }
     }
@@ -207,11 +236,16 @@ fn test_diamond_dependency_pattern() {
 
     impl DepGraph {
         fn new() -> Self {
-            Self { deps: HashMap::new() }
+            Self {
+                deps: HashMap::new(),
+            }
         }
 
         fn add(&mut self, from: &str, to: &str) {
-            self.deps.entry(from.to_string()).or_default().push(to.to_string());
+            self.deps
+                .entry(from.to_string())
+                .or_default()
+                .push(to.to_string());
         }
 
         fn levels(&self) -> Vec<Vec<String>> {
@@ -223,7 +257,10 @@ fn test_diamond_dependency_pattern() {
             let mut reverse_deps: HashMap<String, Vec<String>> = HashMap::new();
             for (from, tos) in &self.deps {
                 for to in tos {
-                    reverse_deps.entry(to.clone()).or_default().push(from.clone());
+                    reverse_deps
+                        .entry(to.clone())
+                        .or_default()
+                        .push(from.clone());
                 }
             }
 
@@ -285,15 +322,26 @@ fn test_diamond_dependency_pattern() {
     assert!(levels.len() >= 3, "Should have at least 3 levels");
 
     // Base should be in first level
-    assert!(levels[0].contains(&"base".to_string()), "Base should be in first level");
+    assert!(
+        levels[0].contains(&"base".to_string()),
+        "Base should be in first level"
+    );
 
     // Left and right should be in second level (parallel)
-    assert!(levels[1].len() >= 2, "Second level should have at least 2 modules");
-    assert!(levels[1].contains(&"left".to_string()) && levels[1].contains(&"right".to_string()),
-            "Second level should contain left and right modules");
+    assert!(
+        levels[1].len() >= 2,
+        "Second level should have at least 2 modules"
+    );
+    assert!(
+        levels[1].contains(&"left".to_string()) && levels[1].contains(&"right".to_string()),
+        "Second level should contain left and right modules"
+    );
 
     // Top should be in third level
-    assert!(levels[2].contains(&"top".to_string()), "Top should be in third level");
+    assert!(
+        levels[2].contains(&"top".to_string()),
+        "Top should be in third level"
+    );
 }
 
 /// Test 5: Hash computation for IR content caching
@@ -319,7 +367,10 @@ fn test_ir_content_hash() {
     assert_eq!(hash_1, hash_3, "Same IR content should produce same hash");
 
     // Different content = different hash
-    assert_ne!(hash_1, hash_2, "Different IR content should produce different hash");
+    assert_ne!(
+        hash_1, hash_2,
+        "Different IR content should produce different hash"
+    );
 
     // Hash should be 64 chars (SHA256 hex)
     assert_eq!(hash_1.len(), 64, "SHA256 hash should be 64 hex characters");
@@ -342,7 +393,11 @@ fn test_module_stem_extraction() {
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
 
-        assert_eq!(stem, expected_stem, "Stem extraction failed for {}", path_str);
+        assert_eq!(
+            stem, expected_stem,
+            "Stem extraction failed for {}",
+            path_str
+        );
     }
 }
 
@@ -417,7 +472,14 @@ fn test_empty_module() {
 
     // Try to compile - should handle gracefully
     let output = Command::new("cargo")
-        .args(["run", "--bin", "vaisc", "--", "--emit-ir", empty_file.to_str().unwrap()])
+        .args([
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "--emit-ir",
+            empty_file.to_str().unwrap(),
+        ])
         .output();
 
     // We don't assert success here as empty modules might be rejected by parser,

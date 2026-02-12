@@ -7,7 +7,6 @@
 //! tests that specifically verify runtime output correctness.
 
 #[allow(dead_code)]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -163,7 +162,9 @@ fn assert_stdout_contains(source: &str, expected: &str) {
             assert!(
                 result.stdout.contains(expected),
                 "Expected stdout to contain {:?}, got {:?}.\nstderr: {}",
-                expected, result.stdout, result.stderr
+                expected,
+                result.stdout,
+                result.stderr
             );
         }
         Err(e) => panic!("Compilation/execution failed: {}", e),
@@ -552,7 +553,10 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_stdout_lines(source, &["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"]);
+    assert_stdout_lines(
+        source,
+        &["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"],
+    );
 }
 
 #[test]
@@ -1344,8 +1348,7 @@ fn exec_smoke_examples_batch() {
         }
         match compile_and_run_file(&path) {
             Ok(result) => {
-                if result.stderr.contains("SIGSEGV")
-                    || result.stderr.contains("segmentation fault")
+                if result.stderr.contains("SIGSEGV") || result.stderr.contains("segmentation fault")
                 {
                     failed.push(format!("{}: CRASHED (exit {})", name, result.exit_code));
                 } else {

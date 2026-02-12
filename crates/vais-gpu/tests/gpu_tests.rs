@@ -1508,15 +1508,22 @@ mod kernel_generation_tests {
     fn test_cuda_empty_module_generates_empty_code() {
         let module = make_empty_module();
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
-        let _code = gen.generate(&module).expect("CUDA empty module should succeed");
-        assert!(gen.kernels().is_empty(), "Empty module should have no kernels");
+        let _code = gen
+            .generate(&module)
+            .expect("CUDA empty module should succeed");
+        assert!(
+            gen.kernels().is_empty(),
+            "Empty module should have no kernels"
+        );
     }
 
     #[test]
     fn test_opencl_empty_module_generates_empty_code() {
         let module = make_empty_module();
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
-        let _code = gen.generate(&module).expect("OpenCL empty module should succeed");
+        let _code = gen
+            .generate(&module)
+            .expect("OpenCL empty module should succeed");
         assert!(gen.kernels().is_empty());
     }
 
@@ -1524,7 +1531,9 @@ mod kernel_generation_tests {
     fn test_webgpu_empty_module_generates_empty_code() {
         let module = make_empty_module();
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
-        let _code = gen.generate(&module).expect("WebGPU empty module should succeed");
+        let _code = gen
+            .generate(&module)
+            .expect("WebGPU empty module should succeed");
         assert!(gen.kernels().is_empty());
     }
 
@@ -1532,7 +1541,9 @@ mod kernel_generation_tests {
     fn test_metal_empty_module_generates_empty_code() {
         let module = make_empty_module();
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
-        let _code = gen.generate(&module).expect("Metal empty module should succeed");
+        let _code = gen
+            .generate(&module)
+            .expect("Metal empty module should succeed");
         assert!(gen.kernels().is_empty());
     }
 
@@ -1549,7 +1560,9 @@ mod kernel_generation_tests {
             )],
         );
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
-        let code = gen.generate(&module).expect("CUDA kernel generation failed");
+        let code = gen
+            .generate(&module)
+            .expect("CUDA kernel generation failed");
         assert!(
             code.contains("__global__") || code.contains("simple_kernel"),
             "CUDA output should contain __global__ or kernel name"
@@ -1569,7 +1582,9 @@ mod kernel_generation_tests {
             )],
         );
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
-        let code = gen.generate(&module).expect("OpenCL kernel generation failed");
+        let code = gen
+            .generate(&module)
+            .expect("OpenCL kernel generation failed");
         assert!(
             code.contains("__kernel") || code.contains("simple_kernel"),
             "OpenCL output should contain __kernel or kernel name"
@@ -1589,7 +1604,9 @@ mod kernel_generation_tests {
             )],
         );
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
-        let code = gen.generate(&module).expect("WebGPU kernel generation failed");
+        let code = gen
+            .generate(&module)
+            .expect("WebGPU kernel generation failed");
         assert!(
             code.contains("@compute") || code.contains("simple_kernel") || code.len() > 0,
             "WebGPU output should contain compute shader markers or kernel name"
@@ -1609,7 +1626,9 @@ mod kernel_generation_tests {
             )],
         );
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
-        let code = gen.generate(&module).expect("Metal kernel generation failed");
+        let code = gen
+            .generate(&module)
+            .expect("Metal kernel generation failed");
         assert!(
             code.contains("kernel") || code.contains("simple_kernel"),
             "Metal output should contain kernel keyword or kernel name"
@@ -1620,7 +1639,9 @@ mod kernel_generation_tests {
     fn test_cuda_host_code_non_empty() {
         let module = make_kernel_module("test_kernel", vec![]);
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
-        let _ = gen.generate(&module).expect("CUDA kernel generation failed");
+        let _ = gen
+            .generate(&module)
+            .expect("CUDA kernel generation failed");
         let host = gen.generate_host_code();
         assert!(host.len() > 0, "CUDA host code should not be empty");
     }
@@ -1629,7 +1650,9 @@ mod kernel_generation_tests {
     fn test_opencl_host_code_non_empty() {
         let module = make_kernel_module("test_kernel", vec![]);
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
-        let _ = gen.generate(&module).expect("OpenCL kernel generation failed");
+        let _ = gen
+            .generate(&module)
+            .expect("OpenCL kernel generation failed");
         let host = gen.generate_host_code();
         assert!(host.len() > 0, "OpenCL host code should not be empty");
     }
@@ -1638,7 +1661,9 @@ mod kernel_generation_tests {
     fn test_webgpu_host_code_non_empty() {
         let module = make_kernel_module("test_kernel", vec![]);
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
-        let _ = gen.generate(&module).expect("WebGPU kernel generation failed");
+        let _ = gen
+            .generate(&module)
+            .expect("WebGPU kernel generation failed");
         let host = gen.generate_host_code();
         assert!(host.len() > 0, "WebGPU host code should not be empty");
     }
@@ -1647,7 +1672,9 @@ mod kernel_generation_tests {
     fn test_metal_host_code_non_empty() {
         let module = make_kernel_module("test_kernel", vec![]);
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
-        let _ = gen.generate(&module).expect("Metal kernel generation failed");
+        let _ = gen
+            .generate(&module)
+            .expect("Metal kernel generation failed");
         let host = gen.generate_host_code();
         assert!(host.len() > 0, "Metal host code should not be empty");
     }

@@ -72,7 +72,7 @@ impl VectorWidth {
         }
         #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
         {
-            VectorWidth::SSE  // Safe fallback
+            VectorWidth::SSE // Safe fallback
         }
     }
 

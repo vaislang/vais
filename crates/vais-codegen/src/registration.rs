@@ -85,7 +85,11 @@ impl CodeGenerator {
         // Check for wasm_export attribute
         for attr in &f.attributes {
             if attr.name == "wasm_export" {
-                let export_name = attr.args.first().cloned().unwrap_or_else(|| func_name.clone());
+                let export_name = attr
+                    .args
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| func_name.clone());
                 self.wasm_exports.insert(func_name.clone(), export_name);
             }
         }
@@ -326,9 +330,18 @@ impl CodeGenerator {
         // Check for wasm_import attribute
         for attr in &func.attributes {
             if attr.name == "wasm_import" {
-                let module_name = attr.args.first().cloned().unwrap_or_else(|| "env".to_string());
-                let import_name = attr.args.get(1).cloned().unwrap_or_else(|| func_name.clone());
-                self.wasm_imports.insert(func_name.clone(), (module_name, import_name));
+                let module_name = attr
+                    .args
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "env".to_string());
+                let import_name = attr
+                    .args
+                    .get(1)
+                    .cloned()
+                    .unwrap_or_else(|| func_name.clone());
+                self.wasm_imports
+                    .insert(func_name.clone(), (module_name, import_name));
             }
         }
 

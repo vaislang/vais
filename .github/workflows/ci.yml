@@ -66,9 +66,11 @@ jobs:
 
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install llvm --version=17.0.6 --allow-downgrade -y
-          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+          $llvmPrefix = "C:\Program Files\LLVM"
+          echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -83,8 +85,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-clippy-
 
-      - name: Run clippy
+      - name: Run clippy (Linux/macOS)
+        if: runner.os != 'Windows'
         run: cargo clippy --workspace --exclude vais-python --exclude vais-node -- -D warnings
+
+      - name: Run clippy (Windows - exclude LLVM crates)
+        if: runner.os == 'Windows'
+        run: cargo clippy --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc -- -D warnings
 
   # ---------- Cargo check ----------
   check:
@@ -118,9 +125,11 @@ jobs:
 
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install llvm --version=17.0.6 --allow-downgrade -y
-          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+          $llvmPrefix = "C:\Program Files\LLVM"
+          echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -135,8 +144,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-check-
 
-      - name: Run cargo check
+      - name: Run cargo check (Linux/macOS)
+        if: runner.os != 'Windows'
         run: cargo check --workspace --exclude vais-python --exclude vais-node
+
+      - name: Run cargo check (Windows - exclude LLVM crates)
+        if: runner.os == 'Windows'
+        run: cargo check --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc
 
   # ---------- Tests ----------
   test:
@@ -171,9 +185,11 @@ jobs:
 
       - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install llvm --version=17.0.6 --allow-downgrade -y
-          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+          $llvmPrefix = "C:\Program Files\LLVM"
+          echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -188,8 +204,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-test-
 
-      - name: Run tests
+      - name: Run tests (Linux/macOS)
+        if: runner.os != 'Windows'
         run: cargo test --workspace --exclude vais-python --exclude vais-node
+
+      - name: Run tests (Windows - exclude LLVM crates)
+        if: runner.os == 'Windows'
+        run: cargo test --workspace --exclude vais-python --exclude vais-node --exclude vais-codegen --exclude vais-jit --exclude vaisc
 
   # ---------- Coverage (Ubuntu only) ----------
   coverage:

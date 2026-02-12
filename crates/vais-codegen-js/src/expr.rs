@@ -45,11 +45,7 @@ impl JsCodeGenerator {
                 let op_str = unaryop_to_js(op);
                 Ok(format!("{op_str}{e}"))
             }
-            Expr::Ternary {
-                cond,
-                then,
-                else_,
-            } => {
+            Expr::Ternary { cond, then, else_ } => {
                 let c = self.generate_expr(&cond.node)?;
                 let t = self.generate_expr(&then.node)?;
                 let e = self.generate_expr(&else_.node)?;
@@ -98,7 +94,10 @@ impl JsCodeGenerator {
             } => {
                 let recv = self.generate_expr(&receiver.node)?;
                 let args_str = self.generate_args(args)?;
-                Ok(format!("{recv}.{}({args_str})", sanitize_js_ident(&method.node)))
+                Ok(format!(
+                    "{recv}.{}({args_str})",
+                    sanitize_js_ident(&method.node)
+                ))
             }
             Expr::StaticMethodCall {
                 type_name,
@@ -185,8 +184,10 @@ impl JsCodeGenerator {
 
             // --- Lambda ---
             Expr::Lambda { params, body, .. } => {
-                let param_strs: Vec<String> =
-                    params.iter().map(|p| sanitize_js_ident(&p.name.node)).collect();
+                let param_strs: Vec<String> = params
+                    .iter()
+                    .map(|p| sanitize_js_ident(&p.name.node))
+                    .collect();
                 let body_js = self.generate_expr(&body.node)?;
                 Ok(format!("({}) => {body_js}", param_strs.join(", ")))
             }
@@ -205,7 +206,7 @@ impl JsCodeGenerator {
             Expr::Try(inner) => {
                 // ?  operator: extract value or return early
                 let e = self.generate_expr(&inner.node)?;
-                Ok(format!("__unwrapOrThrow({e})", ))
+                Ok(format!("__unwrapOrThrow({e})",))
             }
             Expr::Unwrap(inner) => {
                 let e = self.generate_expr(&inner.node)?;
@@ -226,9 +227,7 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 match &ty.node {
                     Type::Named { name, .. } => match name.as_str() {
-                        "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => {
-                            Ok(format!("({e} | 0)"))
-                        }
+                        "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ok(format!("({e} | 0)")),
                         "i64" | "u64" | "i128" | "u128" => Ok(format!("Number({e})")),
                         "f32" | "f64" => Ok(format!("Number({e})")),
                         "bool" => Ok(format!("Boolean({e})")),
@@ -269,10 +268,7 @@ impl JsCodeGenerator {
             }
 
             // --- Assert ---
-            Expr::Assert {
-                condition,
-                message,
-            } => {
+            Expr::Assert { condition, message } => {
                 let c = self.generate_expr(&condition.node)?;
                 match message {
                     Some(msg) => {
@@ -290,11 +286,12 @@ impl JsCodeGenerator {
             Expr::MacroInvoke(inv) => {
                 // Macro invocations are normally expanded during parsing
                 // Generate as a function call placeholder
-                Ok(format!("{}(/* macro */)", sanitize_js_ident(&inv.name.node)))
+                Ok(format!(
+                    "{}(/* macro */)",
+                    sanitize_js_ident(&inv.name.node)
+                ))
             }
-            Expr::Error { message, .. } => {
-                Ok(format!("/* codegen error: {} */", message))
-            }
+            Expr::Error { message, .. } => Ok(format!("/* codegen error: {} */", message)),
         }
     }
 
@@ -352,7 +349,7 @@ impl JsCodeGenerator {
 
         output.push('\n');
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -451,11 +448,7 @@ impl JsCodeGenerator {
     }
 
     /// Generate match expression as switch or if-else chain (as IIFE)
-    fn generate_match_expr(
-        &mut self,
-        expr: &Spanned<Expr>,
-        arms: &[MatchArm],
-    ) -> Result<String> {
+    fn generate_match_expr(&mut self, expr: &Spanned<Expr>, arms: &[MatchArm]) -> Result<String> {
         let indent = self.indent();
         let val = self.generate_expr(&expr.node)?;
         let match_var = self.next_label();
@@ -496,7 +489,7 @@ impl JsCodeGenerator {
         }
 
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -512,7 +505,7 @@ impl JsCodeGenerator {
         let body = self.generate_stmts_as_return(stmts)?;
         output.push_str(&format!("{}{body}\n", self.indent()));
         self.indent_level -= 1;
-        output.push_str(&format!("{indent}}})()", ));
+        output.push_str(&format!("{indent}}})()",));
         Ok(output)
     }
 
@@ -589,13 +582,12 @@ impl JsCodeGenerator {
                 };
                 Ok(format!("{val_name} === {lit_js}"))
             }
-            Pattern::Variant { name, .. } => {
-                Ok(format!("{val_name}.__tag === \"{}\"", name.node))
-            }
+            Pattern::Variant { name, .. } => Ok(format!("{val_name}.__tag === \"{}\"", name.node)),
             Pattern::Tuple(pats) => {
                 let mut conditions = Vec::new();
                 for (i, pat) in pats.iter().enumerate() {
-                    let sub = self.generate_pattern_condition(&pat.node, &format!("{val_name}[{i}]"))?;
+                    let sub =
+                        self.generate_pattern_condition(&pat.node, &format!("{val_name}[{i}]"))?;
                     if sub != "true" {
                         conditions.push(sub);
                     }
@@ -606,12 +598,10 @@ impl JsCodeGenerator {
                     Ok(conditions.join(" && "))
                 }
             }
-            Pattern::Struct { name, .. } => {
-                Ok(format!(
-                    "{val_name} instanceof {}",
-                    sanitize_js_ident(&name.node)
-                ))
-            }
+            Pattern::Struct { name, .. } => Ok(format!(
+                "{val_name} instanceof {}",
+                sanitize_js_ident(&name.node)
+            )),
             Pattern::Range {
                 start,
                 end,
@@ -657,13 +647,12 @@ impl JsCodeGenerator {
         val_name: &str,
     ) -> Result<String> {
         match pattern {
-            Pattern::Ident(name) => {
-                Ok(format!("const {} = {val_name};", sanitize_js_ident(name)))
-            }
+            Pattern::Ident(name) => Ok(format!("const {} = {val_name};", sanitize_js_ident(name))),
             Pattern::Variant { fields, .. } => {
                 let mut bindings = Vec::new();
                 for (i, f) in fields.iter().enumerate() {
-                    let b = self.generate_pattern_bindings(&f.node, &format!("{val_name}.__data[{i}]"))?;
+                    let b = self
+                        .generate_pattern_bindings(&f.node, &format!("{val_name}.__data[{i}]"))?;
                     if !b.is_empty() {
                         bindings.push(b);
                     }
@@ -702,7 +691,6 @@ impl JsCodeGenerator {
             self.helpers.push(helper);
         }
     }
-
 }
 
 /// Convert Vais BinOp to JavaScript operator string

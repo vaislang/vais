@@ -18,7 +18,11 @@ fn test_generate_code_basic() {
 
     // Verify it parses
     let result = parse(&code);
-    assert!(result.is_ok(), "Generated code should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Generated code should parse: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -119,7 +123,7 @@ fn test_generate_large_project_contains_variety() {
 
     // Control flow
     assert!(code.contains("I ")); // if
-    assert!(code.contains("L {"));  // loop
+    assert!(code.contains("L {")); // loop
     assert!(code.contains("M ")); // match
     assert!(code.contains("R ")); // return
 

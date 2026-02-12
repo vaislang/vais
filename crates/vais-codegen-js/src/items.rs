@@ -16,7 +16,7 @@ impl JsCodeGenerator {
             Item::Const(c) => self.generate_const(c),
             Item::Global(g) => self.generate_global(g),
             Item::TypeAlias(_) => Ok(String::new()), // No runtime representation
-            Item::Use(u) => self.generate_use(u),     // Generate ESM import
+            Item::Use(u) => self.generate_use(u),    // Generate ESM import
             Item::ExternBlock(ext) => self.generate_extern_block(ext),
             Item::Macro(_) => Ok(String::new()), // Macros are expanded during parsing
             Item::Union(u) => self.generate_union(u),
@@ -55,7 +55,8 @@ impl JsCodeGenerator {
 
         // Generate generic annotation comment if present
         let generic_comment = if !func.generics.is_empty() {
-            let generic_names: Vec<String> = func.generics.iter().map(|g| g.name.node.clone()).collect();
+            let generic_names: Vec<String> =
+                func.generics.iter().map(|g| g.name.node.clone()).collect();
             format!(" /* <{}> */", generic_names.join(", "))
         } else {
             String::new()
@@ -87,13 +88,17 @@ impl JsCodeGenerator {
 
         // Generate generic annotation comment if present
         let generic_comment = if !s.generics.is_empty() {
-            let generic_names: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
+            let generic_names: Vec<String> =
+                s.generics.iter().map(|g| g.name.node.clone()).collect();
             format!(" /* <{}> */", generic_names.join(", "))
         } else {
             String::new()
         };
 
-        let mut output = format!("{indent}{export_prefix}class {name}{} {{\n", generic_comment);
+        let mut output = format!(
+            "{indent}{export_prefix}class {name}{} {{\n",
+            generic_comment
+        );
         self.indent_level += 1;
         let inner = self.indent();
 
@@ -168,8 +173,7 @@ impl JsCodeGenerator {
                     ));
                 }
                 VariantFields::Tuple(types) => {
-                    let params: Vec<String> =
-                        (0..types.len()).map(|i| format!("__{i}")).collect();
+                    let params: Vec<String> = (0..types.len()).map(|i| format!("__{i}")).collect();
                     output.push_str(&format!(
                         "{inner}{vname}({}) {{ return {{ __tag: \"{vname}\", __data: [{}] }}; }},\n",
                         params.join(", "),
@@ -177,8 +181,10 @@ impl JsCodeGenerator {
                     ));
                 }
                 VariantFields::Struct(fields) => {
-                    let params: Vec<String> =
-                        fields.iter().map(|f| sanitize_js_ident(&f.name.node)).collect();
+                    let params: Vec<String> = fields
+                        .iter()
+                        .map(|f| sanitize_js_ident(&f.name.node))
+                        .collect();
                     output.push_str(&format!(
                         "{inner}{vname}({}) {{ return {{ __tag: \"{vname}\", __data: [{}] }}; }},\n",
                         params.join(", "),
@@ -205,8 +211,12 @@ impl JsCodeGenerator {
 
         if enum_name == "Result" {
             // is_Ok, is_Err
-            output.push_str(&format!("{indent}{enum_name}.is_Ok = function(val) {{ return val.__tag === \"Ok\"; }};\n"));
-            output.push_str(&format!("{indent}{enum_name}.is_Err = function(val) {{ return val.__tag === \"Err\"; }};\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.is_Ok = function(val) {{ return val.__tag === \"Ok\"; }};\n"
+            ));
+            output.push_str(&format!(
+                "{indent}{enum_name}.is_Err = function(val) {{ return val.__tag === \"Err\"; }};\n"
+            ));
 
             // unwrap
             output.push_str(&format!("{indent}{enum_name}.unwrap = function(val) {{\n"));
@@ -218,10 +228,14 @@ impl JsCodeGenerator {
             output.push_str(&format!("{indent}}};\n"));
 
             // unwrap_or
-            output.push_str(&format!("{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"
+            ));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}return val.__tag === \"Ok\" ? val.__data[0] : defaultValue;\n"));
+            output.push_str(&format!(
+                "{inner}return val.__tag === \"Ok\" ? val.__data[0] : defaultValue;\n"
+            ));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
@@ -242,16 +256,22 @@ impl JsCodeGenerator {
             output.push_str(&format!("{indent}{enum_name}.unwrap = function(val) {{\n"));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}if (val.__tag === \"None\") throw new Error(\"Called unwrap on None\");\n"));
+            output.push_str(&format!(
+                "{inner}if (val.__tag === \"None\") throw new Error(\"Called unwrap on None\");\n"
+            ));
             output.push_str(&format!("{inner}return val.__data[0];\n"));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
             // unwrap_or
-            output.push_str(&format!("{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"));
+            output.push_str(&format!(
+                "{indent}{enum_name}.unwrap_or = function(val, defaultValue) {{\n"
+            ));
             self.indent_level += 1;
             let inner = self.indent();
-            output.push_str(&format!("{inner}return val.__tag === \"Some\" ? val.__data[0] : defaultValue;\n"));
+            output.push_str(&format!(
+                "{inner}return val.__tag === \"Some\" ? val.__data[0] : defaultValue;\n"
+            ));
             self.indent_level -= 1;
             output.push_str(&format!("{indent}}};\n"));
 
@@ -284,9 +304,7 @@ impl JsCodeGenerator {
             let trait_name_sanitized = sanitize_js_ident(&trait_name.node);
 
             // Initialize __implements set if not exists
-            output.push_str(&format!(
-                "{indent}if (!{type_name}.__implements) {{\n"
-            ));
+            output.push_str(&format!("{indent}if (!{type_name}.__implements) {{\n"));
             self.indent_level += 1;
             let inner = self.indent();
             output.push_str(&format!("{inner}{type_name}.__implements = new Set();\n"));
@@ -341,13 +359,10 @@ impl JsCodeGenerator {
         }
 
         // Track impl info
-        self.impls
-            .entry(type_name)
-            .or_default()
-            .push(ImplInfo {
-                trait_name: imp.trait_name.as_ref().map(|t| t.node.clone()),
-                methods: method_entries,
-            });
+        self.impls.entry(type_name).or_default().push(ImplInfo {
+            trait_name: imp.trait_name.as_ref().map(|t| t.node.clone()),
+            methods: method_entries,
+        });
 
         Ok(output)
     }
@@ -376,10 +391,7 @@ impl JsCodeGenerator {
         let indent = self.indent();
         let async_prefix = if func.is_async { "async " } else { "" };
 
-        let mut output = format!(
-            "{indent}{async_prefix}{name}({}) {{\n",
-            params.join(", ")
-        );
+        let mut output = format!("{indent}{async_prefix}{name}({}) {{\n", params.join(", "));
         self.indent_level += 1;
         let body = self.generate_function_body(&func.body)?;
         output.push_str(&body);
@@ -490,12 +502,8 @@ impl JsCodeGenerator {
             "{inner}constructor(value) {{ this._value = value; }}\n"
         ));
         for fname in &field_names {
-            output.push_str(&format!(
-                "{inner}get {fname}() {{ return this._value; }}\n"
-            ));
-            output.push_str(&format!(
-                "{inner}set {fname}(v) {{ this._value = v; }}\n"
-            ));
+            output.push_str(&format!("{inner}get {fname}() {{ return this._value; }}\n"));
+            output.push_str(&format!("{inner}set {fname}(v) {{ this._value = v; }}\n"));
         }
         self.indent_level -= 1;
         output.push_str(&format!("{indent}}}\n"));

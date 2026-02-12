@@ -7,23 +7,39 @@
 //! - Derive system
 //! - AST expansion with HygienicContext
 
-use vais_macro::{
-    // Core
-    tokens_to_string, MacroExpander, MacroRegistry,
-    // Proc macros
-    LiteralToken, ProcMacro, ProcMacroError, ProcMacroKind, ProcMacroRegistry, ProcMacroResult,
-    TokenStream, TokenTree,
-    // Async
-    register_async_macros, AsyncMacroExpander, JOIN_MACRO, SELECT_MACRO, TIMEOUT_MACRO,
-    // Derive
-    process_derives, DeriveRegistry,
-    // Expansion
-    collect_macros, expand_macros, AstExpander, HygienicContext,
-};
 use vais_ast::{
     Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
     MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module, RepetitionKind, Span,
     Spanned,
+};
+use vais_macro::{
+    // Expansion
+    collect_macros,
+    expand_macros,
+    // Derive
+    process_derives,
+    // Async
+    register_async_macros,
+    // Core
+    tokens_to_string,
+    AstExpander,
+    AsyncMacroExpander,
+    DeriveRegistry,
+    HygienicContext,
+    // Proc macros
+    LiteralToken,
+    MacroExpander,
+    MacroRegistry,
+    ProcMacro,
+    ProcMacroError,
+    ProcMacroKind,
+    ProcMacroRegistry,
+    ProcMacroResult,
+    TokenStream,
+    TokenTree,
+    JOIN_MACRO,
+    SELECT_MACRO,
+    TIMEOUT_MACRO,
 };
 
 // ============================ 1. MacroRegistry Basic Operations ============================
@@ -129,9 +145,7 @@ fn test_expander_simple_substitution() {
                 name: "x".to_string(),
                 kind: MetaVarKind::Expr,
             }]),
-            template: MacroTemplate::Sequence(vec![MacroTemplateElement::MetaVar(
-                "x".to_string(),
-            )]),
+            template: MacroTemplate::Sequence(vec![MacroTemplateElement::MetaVar("x".to_string())]),
         }],
         is_pub: false,
     });
@@ -294,9 +308,13 @@ fn test_builtin_concat_macro() {
     let concat = registry.get("concat").unwrap();
 
     let mut input = TokenStream::new();
-    input.push(TokenTree::Literal(LiteralToken::String("hello".to_string())));
+    input.push(TokenTree::Literal(LiteralToken::String(
+        "hello".to_string(),
+    )));
     input.push(TokenTree::Punct(','));
-    input.push(TokenTree::Literal(LiteralToken::String(" world".to_string())));
+    input.push(TokenTree::Literal(LiteralToken::String(
+        " world".to_string(),
+    )));
 
     let result = concat.expand(input).unwrap();
     assert_eq!(result.len(), 1);

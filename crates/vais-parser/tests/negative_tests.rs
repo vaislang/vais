@@ -4,8 +4,8 @@
 //! errors for invalid Vais source code. It also tests error recovery
 //! mechanisms to ensure parsing can continue after encountering errors.
 
-use vais_parser::{parse, parse_with_recovery};
 use vais_ast::{Item, Stmt};
+use vais_parser::{parse, parse_with_recovery};
 
 // ==================== Basic Syntax Error Tests ====================
 
@@ -267,7 +267,10 @@ fn test_error_impl_without_target() {
     // Impl keyword without target type
     let source = "X { F method() -> i64 = 42 }";
     let result = parse(source);
-    assert!(result.is_err(), "Expected error for impl without target type");
+    assert!(
+        result.is_err(),
+        "Expected error for impl without target type"
+    );
 }
 
 #[test]
@@ -405,9 +408,7 @@ W ValidTrait { F method() -> i64 }
     let valid_count = module
         .items
         .iter()
-        .filter(|item| {
-            !matches!(&item.node, Item::Error { .. })
-        })
+        .filter(|item| !matches!(&item.node, Item::Error { .. }))
         .count();
 
     assert!(
@@ -431,7 +432,10 @@ F test() -> i64 {
 "#;
     let (module, errors) = parse_with_recovery(source);
 
-    assert!(!errors.is_empty(), "Expected error for incomplete statement");
+    assert!(
+        !errors.is_empty(),
+        "Expected error for incomplete statement"
+    );
 
     // Function should still be parsed with error nodes
     assert_eq!(module.items.len(), 1);
@@ -440,10 +444,7 @@ F test() -> i64 {
     };
 
     let expected_name = "test";
-    assert_eq!(
-        f.name.node, expected_name,
-        "Function name should be 'test'"
-    );
+    assert_eq!(f.name.node, expected_name, "Function name should be 'test'");
 }
 
 #[test]
@@ -468,11 +469,7 @@ F broken2{
         );
 
         if let Some(span) = span_opt {
-            assert!(
-                span.start <= span.end,
-                "Span should be valid: {:?}",
-                span
-            );
+            assert!(span.start <= span.end, "Span should be valid: {:?}", span);
         }
     }
 
@@ -502,7 +499,10 @@ F recovered() -> i64 = 100
         .iter()
         .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "recovered"));
 
-    assert!(has_recovered, "Should have recovered to parse 'recovered' function");
+    assert!(
+        has_recovered,
+        "Should have recovered to parse 'recovered' function"
+    );
 }
 
 #[test]
@@ -521,7 +521,10 @@ F outer() -> i64 {
     let (module, errors) = parse_with_recovery(source);
 
     // Should have errors for incomplete statement
-    assert!(!errors.is_empty(), "Expected errors for incomplete statement");
+    assert!(
+        !errors.is_empty(),
+        "Expected errors for incomplete statement"
+    );
 
     // Function should still be present
     assert!(!module.items.is_empty(), "Should have parsed the function");
@@ -593,10 +596,7 @@ fn test_recovery_error_message_quality() {
     let error = &errors[0];
     let msg = error.to_string();
 
-    assert!(
-        !msg.is_empty(),
-        "Error message should not be empty"
-    );
+    assert!(!msg.is_empty(), "Error message should not be empty");
 
     // Should have error code
     let code = error.error_code();
@@ -620,7 +620,10 @@ F recovered() -> i64 = 42
 
     // Check if recovery was able to parse subsequent items
     // Recovery effectiveness varies - we mainly verify errors are collected
-    let _ = module.items.iter().any(|item| matches!(&item.node, Item::Function(_)));
+    let _ = module
+        .items
+        .iter()
+        .any(|item| matches!(&item.node, Item::Function(_)));
 }
 
 #[test]
@@ -690,7 +693,10 @@ F test_stmt_recovery() -> i64 {
 "#;
     let (module, errors) = parse_with_recovery(source);
 
-    assert!(!errors.is_empty(), "Expected error for incomplete statement");
+    assert!(
+        !errors.is_empty(),
+        "Expected error for incomplete statement"
+    );
 
     // Function should be parsed
     let Item::Function(f) = &module.items[0].node else {
@@ -706,7 +712,10 @@ F test_stmt_recovery() -> i64 {
         _ => panic!("Expected block body"),
     };
 
-    assert!(!body_block.is_empty(), "Function body should have statements");
+    assert!(
+        !body_block.is_empty(),
+        "Function body should have statements"
+    );
 
     // Should have at least one error statement
     let has_error_stmt = body_block

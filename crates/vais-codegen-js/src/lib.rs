@@ -178,12 +178,7 @@ impl JsCodeGenerator {
                 let fields: Vec<(String, String)> = s
                     .fields
                     .iter()
-                    .map(|f| {
-                        (
-                            f.name.node.clone(),
-                            types::type_to_js(&f.ty.node),
-                        )
-                    })
+                    .map(|f| (f.name.node.clone(), types::type_to_js(&f.ty.node)))
                     .collect();
                 self.structs.insert(s.name.node.clone(), fields);
             }
@@ -195,14 +190,10 @@ impl JsCodeGenerator {
                         name: v.name.node.clone(),
                         fields: match &v.fields {
                             VariantFields::Unit => VariantFieldsInfo::Unit,
-                            VariantFields::Tuple(types) => {
-                                VariantFieldsInfo::Tuple(types.len())
-                            }
-                            VariantFields::Struct(fields) => {
-                                VariantFieldsInfo::Struct(
-                                    fields.iter().map(|f| f.name.node.clone()).collect(),
-                                )
-                            }
+                            VariantFields::Tuple(types) => VariantFieldsInfo::Tuple(types.len()),
+                            VariantFields::Struct(fields) => VariantFieldsInfo::Struct(
+                                fields.iter().map(|f| f.name.node.clone()).collect(),
+                            ),
                         },
                     })
                     .collect();

@@ -280,7 +280,10 @@ fn test_vaisc_compile_simple_source() {
         assert!(output_path.exists(), "Output binary should exist");
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        println!("Compilation failed (expected in some environments): {}", stderr);
+        println!(
+            "Compilation failed (expected in some environments): {}",
+            stderr
+        );
     }
 }
 
@@ -311,7 +314,10 @@ fn test_vaisc_error_format() {
     let error_output = if !stderr.is_empty() { stderr } else { stdout };
 
     // Error output should not be empty
-    assert!(!error_output.trim().is_empty(), "Error output should not be empty");
+    assert!(
+        !error_output.trim().is_empty(),
+        "Error output should not be empty"
+    );
 }
 
 // Task 4: API Contract Tests (3 tests)
@@ -330,7 +336,10 @@ fn test_success_response_has_no_errors() {
     };
 
     assert!(resp.success);
-    assert!(resp.errors.is_empty(), "Success response should have no errors");
+    assert!(
+        resp.errors.is_empty(),
+        "Success response should have no errors"
+    );
 }
 
 #[test]
@@ -352,7 +361,10 @@ fn test_failure_response_has_errors() {
     };
 
     assert!(!resp.success);
-    assert!(!resp.errors.is_empty(), "Failure response should have errors");
+    assert!(
+        !resp.errors.is_empty(),
+        "Failure response should have errors"
+    );
 }
 
 #[test]
@@ -663,8 +675,7 @@ fn test_special_characters_in_source() {
     };
 
     let json = serde_json::to_string(&req).expect("Failed to serialize");
-    let parsed: serde_json::Value =
-        serde_json::from_str(&json).expect("Failed to parse back");
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("Failed to parse back");
 
     let source_val = parsed["source"].as_str().expect("Should be string");
     assert!(source_val.contains("Hello"));

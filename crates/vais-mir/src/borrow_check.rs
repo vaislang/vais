@@ -84,49 +84,77 @@ pub enum BorrowError {
 impl fmt::Display for BorrowError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BorrowError::UseAfterMove { local, moved_at, used_at } => {
+            BorrowError::UseAfterMove {
+                local,
+                moved_at,
+                used_at,
+            } => {
                 write!(
                     f,
                     "error[E100]: use of moved value `{}`\n  --> moved at {}\n  --> used at {}",
                     local.0, moved_at, used_at
                 )
             }
-            BorrowError::DoubleFree { local, first_drop, second_drop } => {
+            BorrowError::DoubleFree {
+                local,
+                first_drop,
+                second_drop,
+            } => {
                 write!(
                     f,
                     "error[E101]: value `{}` dropped twice\n  --> first drop at {}\n  --> second drop at {}",
                     local.0, first_drop, second_drop
                 )
             }
-            BorrowError::UseAfterFree { local, freed_at, used_at } => {
+            BorrowError::UseAfterFree {
+                local,
+                freed_at,
+                used_at,
+            } => {
                 write!(
                     f,
                     "error[E102]: use of freed value `{}`\n  --> freed at {}\n  --> used at {}",
                     local.0, freed_at, used_at
                 )
             }
-            BorrowError::MutableBorrowConflict { local, first_borrow, second_borrow } => {
+            BorrowError::MutableBorrowConflict {
+                local,
+                first_borrow,
+                second_borrow,
+            } => {
                 write!(
                     f,
                     "error[E103]: cannot borrow `{}` as mutable more than once\n  --> first mutable borrow at {}\n  --> second mutable borrow at {}",
                     local.0, first_borrow, second_borrow
                 )
             }
-            BorrowError::BorrowWhileMutablyBorrowed { local, mutable_borrow, shared_borrow } => {
+            BorrowError::BorrowWhileMutablyBorrowed {
+                local,
+                mutable_borrow,
+                shared_borrow,
+            } => {
                 write!(
                     f,
                     "error[E104]: cannot borrow `{}` as shared while mutably borrowed\n  --> mutable borrow at {}\n  --> shared borrow at {}",
                     local.0, mutable_borrow, shared_borrow
                 )
             }
-            BorrowError::MoveWhileBorrowed { local, borrow_at, move_at } => {
+            BorrowError::MoveWhileBorrowed {
+                local,
+                borrow_at,
+                move_at,
+            } => {
                 write!(
                     f,
                     "error[E105]: cannot move `{}` while borrowed\n  --> borrowed at {}\n  --> moved at {}",
                     local.0, borrow_at, move_at
                 )
             }
-            BorrowError::LifetimeViolation { shorter, longer, location } => {
+            BorrowError::LifetimeViolation {
+                shorter,
+                longer,
+                location,
+            } => {
                 write!(
                     f,
                     "error[E106]: lifetime '{}' does not outlive '{}'\n  --> at {}",
@@ -296,7 +324,8 @@ impl<'a> BorrowChecker<'a> {
                     // Check for conflicts with other borrows of the same local
                     let has_conflict = borrows.iter().any(|other| {
                         other.location != borrow.location
-                            && (other.kind == BorrowKind::Shared || other.kind == BorrowKind::Mutable)
+                            && (other.kind == BorrowKind::Shared
+                                || other.kind == BorrowKind::Mutable)
                     });
 
                     activations.push((*borrowed_local, idx, has_conflict, borrow.location));
@@ -332,7 +361,11 @@ impl<'a> BorrowChecker<'a> {
             return;
         }
 
-        let state = self.local_states.get(&local).cloned().unwrap_or(LocalState::Uninitialized);
+        let state = self
+            .local_states
+            .get(&local)
+            .cloned()
+            .unwrap_or(LocalState::Uninitialized);
 
         match state {
             LocalState::Moved(moved_at) => {
@@ -376,7 +409,11 @@ impl<'a> BorrowChecker<'a> {
         }
 
         // Check current state
-        let state = self.local_states.get(&local).cloned().unwrap_or(LocalState::Uninitialized);
+        let state = self
+            .local_states
+            .get(&local)
+            .cloned()
+            .unwrap_or(LocalState::Uninitialized);
 
         match state {
             LocalState::Dropped(freed_at) => {
@@ -413,7 +450,13 @@ impl<'a> BorrowChecker<'a> {
     }
 
     /// Record a borrow of a place.
-    fn record_borrow(&mut self, place: &Place, kind: BorrowKind, location: Location, borrow_target: Option<Local>) {
+    fn record_borrow(
+        &mut self,
+        place: &Place,
+        kind: BorrowKind,
+        location: Location,
+        borrow_target: Option<Local>,
+    ) {
         let local = place.local;
 
         // Check for existing borrows
@@ -446,7 +489,8 @@ impl<'a> BorrowChecker<'a> {
                     // Multiple shared borrows are OK
                 }
                 // Two-phase borrow interactions
-                (BorrowKind::ReservedMutable, BorrowKind::Shared) | (BorrowKind::Shared, BorrowKind::ReservedMutable) => {
+                (BorrowKind::ReservedMutable, BorrowKind::Shared)
+                | (BorrowKind::Shared, BorrowKind::ReservedMutable) => {
                     // Reserved mutable + shared is OK (not yet activated)
                 }
                 (BorrowKind::ReservedMutable, BorrowKind::ReservedMutable) => {
@@ -488,7 +532,11 @@ impl<'a> BorrowChecker<'a> {
             return;
         }
 
-        let state = self.local_states.get(&local).cloned().unwrap_or(LocalState::Uninitialized);
+        let state = self
+            .local_states
+            .get(&local)
+            .cloned()
+            .unwrap_or(LocalState::Uninitialized);
 
         match state {
             LocalState::Dropped(first_drop) => {
@@ -503,7 +551,8 @@ impl<'a> BorrowChecker<'a> {
                 // (the value was already moved, so drop has nothing to do)
             }
             LocalState::Owned(_) | LocalState::Uninitialized => {
-                self.local_states.insert(local, LocalState::Dropped(location));
+                self.local_states
+                    .insert(local, LocalState::Dropped(location));
             }
         }
     }
@@ -603,7 +652,11 @@ impl<'a> BorrowChecker<'a> {
                 // Check that the return place (_0) is properly initialized
                 let return_local = Local(0);
                 if !self.is_copy(return_local) {
-                    let state = self.local_states.get(&return_local).cloned().unwrap_or(LocalState::Uninitialized);
+                    let state = self
+                        .local_states
+                        .get(&return_local)
+                        .cloned()
+                        .unwrap_or(LocalState::Uninitialized);
                     match state {
                         LocalState::Moved(moved_at) => {
                             self.errors.push(BorrowError::UseAfterMove {
@@ -748,7 +801,11 @@ impl<'a> BorrowChecker<'a> {
         block_id: BasicBlockId,
         entry_states: &HashMap<Local, LocalState>,
         entry_borrows: &HashMap<Local, Vec<BorrowInfo>>,
-    ) -> (HashMap<Local, LocalState>, HashMap<Local, Vec<BorrowInfo>>, Vec<BorrowError>) {
+    ) -> (
+        HashMap<Local, LocalState>,
+        HashMap<Local, Vec<BorrowInfo>>,
+        Vec<BorrowError>,
+    ) {
         // Set up temporary state for this block
         self.local_states = entry_states.clone();
         self.active_borrows = entry_borrows.clone();
@@ -778,7 +835,11 @@ impl<'a> BorrowChecker<'a> {
         block_errors.append(&mut self.errors);
 
         // Return exit state
-        (self.local_states.clone(), self.active_borrows.clone(), block_errors)
+        (
+            self.local_states.clone(),
+            self.active_borrows.clone(),
+            block_errors,
+        )
     }
 
     /// Run the borrow checker on the body using worklist-based CFG analysis.
@@ -809,7 +870,10 @@ impl<'a> BorrowChecker<'a> {
             let block = &self.body.basic_blocks[block_id.0 as usize];
 
             // Compute entry state by joining predecessors
-            let preds = predecessors.get(&block_id).map(|v| v.as_slice()).unwrap_or(&[]);
+            let preds = predecessors
+                .get(&block_id)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
             let (entry_states, entry_borrows) =
                 Self::join_states(preds, &self.block_states, &initial_states, &initial_borrows);
 
@@ -1074,8 +1138,13 @@ pub fn cfg_predecessors(body: &Body) -> HashMap<BasicBlockId, Vec<BasicBlockId>>
         if let Some(ref terminator) = block.terminator {
             let successors = match terminator {
                 Terminator::Goto(target) => vec![*target],
-                Terminator::SwitchInt { targets, otherwise, .. } => {
-                    let mut succ = targets.iter().map(|(_, target)| *target).collect::<Vec<_>>();
+                Terminator::SwitchInt {
+                    targets, otherwise, ..
+                } => {
+                    let mut succ = targets
+                        .iter()
+                        .map(|(_, target)| *target)
+                        .collect::<Vec<_>>();
                     succ.push(*otherwise);
                     succ
                 }
@@ -1105,8 +1174,13 @@ pub fn cfg_successors(body: &Body) -> HashMap<BasicBlockId, Vec<BasicBlockId>> {
         if let Some(ref terminator) = block.terminator {
             let succ = match terminator {
                 Terminator::Goto(target) => vec![*target],
-                Terminator::SwitchInt { targets, otherwise, .. } => {
-                    let mut s = targets.iter().map(|(_, target)| *target).collect::<Vec<_>>();
+                Terminator::SwitchInt {
+                    targets, otherwise, ..
+                } => {
+                    let mut s = targets
+                        .iter()
+                        .map(|(_, target)| *target)
+                        .collect::<Vec<_>>();
                     s.push(*otherwise);
                     s
                 }
@@ -1162,7 +1236,9 @@ fn apply_lifetime_elision(body: &Body) -> Body {
         for output_lt in &return_lifetimes {
             if input_lt != output_lt {
                 // Add bound: output_lt: input_lt (output must outlive input)
-                new_body.lifetime_bounds.push((output_lt.clone(), vec![input_lt.clone()]));
+                new_body
+                    .lifetime_bounds
+                    .push((output_lt.clone(), vec![input_lt.clone()]));
             }
         }
     }
@@ -1245,12 +1321,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: ty.clone(),
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1296,12 +1374,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1345,12 +1425,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1386,12 +1468,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1446,17 +1530,20 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1485,7 +1572,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Reassignment should reinitialize the local");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Reassignment should reinitialize the local"
+        );
     }
 
     #[test]
@@ -1499,17 +1590,20 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1550,22 +1644,26 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None, // Mutable local = mutable borrows
+                    is_mutable: true,
+                    lifetime: None, // Mutable local = mutable borrows
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1604,17 +1702,20 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1655,12 +1756,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1699,12 +1802,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1743,12 +1848,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::I64,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::I64,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![
@@ -1792,14 +1899,26 @@ mod tests {
 
         // bb0 should have successors bb1, bb2
         assert_eq!(successors.get(&BasicBlockId(0)).unwrap().len(), 2);
-        assert!(successors.get(&BasicBlockId(0)).unwrap().contains(&BasicBlockId(1)));
-        assert!(successors.get(&BasicBlockId(0)).unwrap().contains(&BasicBlockId(2)));
+        assert!(successors
+            .get(&BasicBlockId(0))
+            .unwrap()
+            .contains(&BasicBlockId(1)));
+        assert!(successors
+            .get(&BasicBlockId(0))
+            .unwrap()
+            .contains(&BasicBlockId(2)));
 
         // bb1 should have successor bb3
-        assert_eq!(successors.get(&BasicBlockId(1)).unwrap(), &vec![BasicBlockId(3)]);
+        assert_eq!(
+            successors.get(&BasicBlockId(1)).unwrap(),
+            &vec![BasicBlockId(3)]
+        );
 
         // bb2 should have successor bb3
-        assert_eq!(successors.get(&BasicBlockId(2)).unwrap(), &vec![BasicBlockId(3)]);
+        assert_eq!(
+            successors.get(&BasicBlockId(2)).unwrap(),
+            &vec![BasicBlockId(3)]
+        );
 
         // bb3 should have no successors (Return)
         assert_eq!(successors.get(&BasicBlockId(3)).unwrap().len(), 0);
@@ -1816,12 +1935,14 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::I64,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::I64,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![
@@ -1863,15 +1984,27 @@ mod tests {
         assert!(predecessors.get(&BasicBlockId(0)).is_none());
 
         // bb1 should have predecessor bb0
-        assert_eq!(predecessors.get(&BasicBlockId(1)).unwrap(), &vec![BasicBlockId(0)]);
+        assert_eq!(
+            predecessors.get(&BasicBlockId(1)).unwrap(),
+            &vec![BasicBlockId(0)]
+        );
 
         // bb2 should have predecessor bb0
-        assert_eq!(predecessors.get(&BasicBlockId(2)).unwrap(), &vec![BasicBlockId(0)]);
+        assert_eq!(
+            predecessors.get(&BasicBlockId(2)).unwrap(),
+            &vec![BasicBlockId(0)]
+        );
 
         // bb3 should have predecessors bb1 and bb2
         assert_eq!(predecessors.get(&BasicBlockId(3)).unwrap().len(), 2);
-        assert!(predecessors.get(&BasicBlockId(3)).unwrap().contains(&BasicBlockId(1)));
-        assert!(predecessors.get(&BasicBlockId(3)).unwrap().contains(&BasicBlockId(2)));
+        assert!(predecessors
+            .get(&BasicBlockId(3))
+            .unwrap()
+            .contains(&BasicBlockId(1)));
+        assert!(predecessors
+            .get(&BasicBlockId(3))
+            .unwrap()
+            .contains(&BasicBlockId(2)));
     }
 
     #[test]
@@ -1885,22 +2018,26 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None, // Mutable local
+                    is_mutable: true,
+                    lifetime: None, // Mutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -1943,27 +2080,32 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None, // Mutable local
+                    is_mutable: true,
+                    lifetime: None, // Mutable local
                 },
                 LocalDecl {
                     name: Some("y".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None, // Immutable local
+                    is_mutable: false,
+                    lifetime: None, // Immutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -2005,27 +2147,32 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: false, lifetime: None, // Immutable local
+                    is_mutable: false,
+                    lifetime: None, // Immutable local
                 },
                 LocalDecl {
                     name: Some("r1".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r2".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r3".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -2101,17 +2248,20 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
                     ty: MirType::Ref(Box::new(MirType::Str)),
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![BasicBlock {
@@ -2139,7 +2289,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Assignment should invalidate previous borrows");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Assignment should invalidate previous borrows"
+        );
     }
 
     #[test]
@@ -2154,22 +2308,26 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("cond".to_string()),
                     ty: MirType::I64,
-                    is_mutable: false, lifetime: None,
+                    is_mutable: false,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![
@@ -2217,7 +2375,11 @@ mod tests {
 
         let errors = check_body(&body);
         // Should detect use-after-move because x is moved in one branch
-        assert_eq!(errors.len(), 1, "Should detect use-after-move in merge block");
+        assert_eq!(
+            errors.len(),
+            1,
+            "Should detect use-after-move in merge block"
+        );
         match &errors[0] {
             BorrowError::UseAfterMove { local, .. } => {
                 assert_eq!(*local, Local(2), "Error should be for local 2 (x)");
@@ -2238,17 +2400,20 @@ mod tests {
                 LocalDecl {
                     name: Some("_ret".to_string()),
                     ty: MirType::Unit,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("counter".to_string()),
                     ty: MirType::I64,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
                     ty: MirType::Str,
-                    is_mutable: true, lifetime: None,
+                    is_mutable: true,
+                    lifetime: None,
                 },
             ],
             basic_blocks: vec![
@@ -2300,7 +2465,11 @@ mod tests {
 
         let errors = check_body(&body);
         // No errors expected - just testing that it terminates
-        assert_eq!(errors.len(), 0, "Loop analysis should reach fixpoint without errors");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Loop analysis should reach fixpoint without errors"
+        );
     }
 
     #[test]
@@ -2311,11 +2480,36 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp1".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp2".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp1".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp2".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2357,7 +2551,11 @@ mod tests {
             lifetime_bounds: vec![],
         };
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Moving in both branches without merge use is OK");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Moving in both branches without merge use is OK"
+        );
     }
 
     #[test]
@@ -2368,10 +2566,30 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2415,7 +2633,9 @@ mod tests {
         let errors = check_body(&body);
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            BorrowError::UseAfterMove { local, .. } => { assert_eq!(*local, Local(2)); }
+            BorrowError::UseAfterMove { local, .. } => {
+                assert_eq!(*local, Local(2));
+            }
             _ => panic!("Expected UseAfterMove"),
         }
     }
@@ -2428,10 +2648,30 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2479,7 +2719,11 @@ mod tests {
             lifetime_bounds: vec![],
         };
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Reassigning after move should make x Owned");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Reassigning after move should make x Owned"
+        );
     }
 
     #[test]
@@ -2490,10 +2734,30 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2534,7 +2798,9 @@ mod tests {
         let errors = check_body(&body);
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            BorrowError::UseAfterFree { local, .. } => { assert_eq!(*local, Local(2)); }
+            BorrowError::UseAfterFree { local, .. } => {
+                assert_eq!(*local, Local(2));
+            }
             _ => panic!("Expected UseAfterFree"),
         }
     }
@@ -2547,12 +2813,42 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r3".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r3".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2569,17 +2865,26 @@ mod tests {
                 },
                 // bb1: create &mut borrow r1
                 BasicBlock {
-                    statements: vec![Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2))))],
+                    statements: vec![Statement::Assign(
+                        Place::local(Local(3)),
+                        Rvalue::Ref(Place::local(Local(2))),
+                    )],
                     terminator: Some(Terminator::Goto(BasicBlockId(3))),
                 },
                 // bb2: create &mut borrow r2
                 BasicBlock {
-                    statements: vec![Statement::Assign(Place::local(Local(4)), Rvalue::Ref(Place::local(Local(2))))],
+                    statements: vec![Statement::Assign(
+                        Place::local(Local(4)),
+                        Rvalue::Ref(Place::local(Local(2))),
+                    )],
                     terminator: Some(Terminator::Goto(BasicBlockId(3))),
                 },
                 // bb3: merge - both borrows active, create r3 → conflict with both previous borrows
                 BasicBlock {
-                    statements: vec![Statement::Assign(Place::local(Local(5)), Rvalue::Ref(Place::local(Local(2))))],
+                    statements: vec![Statement::Assign(
+                        Place::local(Local(5)),
+                        Rvalue::Ref(Place::local(Local(2))),
+                    )],
                     terminator: Some(Terminator::Return),
                 },
             ],
@@ -2589,10 +2894,16 @@ mod tests {
         };
         let errors = check_body(&body);
         // Merge combines both borrows from branches, new borrow conflicts with both → 2 errors
-        assert_eq!(errors.len(), 2, "Should detect conflicts with both merged borrows");
+        assert_eq!(
+            errors.len(),
+            2,
+            "Should detect conflicts with both merged borrows"
+        );
         for err in &errors {
             match err {
-                BorrowError::MutableBorrowConflict { local, .. } => { assert_eq!(*local, Local(2)); }
+                BorrowError::MutableBorrowConflict { local, .. } => {
+                    assert_eq!(*local, Local(2));
+                }
                 _ => panic!("Expected MutableBorrowConflict, got: {:?}", err),
             }
         }
@@ -2606,11 +2917,36 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("y".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("y".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x and y
@@ -2660,7 +2996,11 @@ mod tests {
         };
         let errors = check_body(&body);
         // Conservative join marks both x and y as moved/uninitialized, but no use at merge → OK
-        assert_eq!(errors.len(), 0, "Diamond CFG with different moves per branch OK");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Diamond CFG with different moves per branch OK"
+        );
     }
 
     #[test]
@@ -2671,9 +3011,24 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize and move x
@@ -2711,7 +3066,9 @@ mod tests {
         let errors = check_body(&body);
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            BorrowError::UseAfterMove { local, .. } => { assert_eq!(*local, Local(1)); }
+            BorrowError::UseAfterMove { local, .. } => {
+                assert_eq!(*local, Local(1));
+            }
             _ => panic!("Expected UseAfterMove"),
         }
     }
@@ -2724,10 +3081,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("i".to_string()), ty: MirType::I64, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("i".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: init
@@ -2756,7 +3133,10 @@ mod tests {
                 // bb2: loop body - create &mut borrow, then loop back
                 BasicBlock {
                     statements: vec![
-                        Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
+                        Statement::Assign(
+                            Place::local(Local(3)),
+                            Rvalue::Ref(Place::local(Local(2))),
+                        ),
                         Statement::Assign(
                             Place::local(Local(1)),
                             Rvalue::BinaryOp(
@@ -2782,7 +3162,9 @@ mod tests {
         // Loop back-edge brings borrow from previous iteration → conflict on second borrow
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            BorrowError::MutableBorrowConflict { local, .. } => { assert_eq!(*local, Local(2)); }
+            BorrowError::MutableBorrowConflict { local, .. } => {
+                assert_eq!(*local, Local(2));
+            }
             _ => panic!("Expected MutableBorrowConflict"),
         }
     }
@@ -2795,10 +3177,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("i".to_string()), ty: MirType::I64, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("i".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: init
@@ -2868,10 +3270,30 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize x
@@ -2914,7 +3336,11 @@ mod tests {
         };
         let errors = check_body(&body);
         // Unreachable branch doesn't contribute to join → x is Owned at merge → OK
-        assert_eq!(errors.len(), 0, "Unreachable branch should not affect merge");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Unreachable branch should not affect merge"
+        );
     }
 
     // ======== NLL Tests ========
@@ -2927,11 +3353,36 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![BasicBlock {
                 statements: vec![
@@ -2969,10 +3420,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Str,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![BasicBlock {
                 statements: vec![
@@ -3001,7 +3472,11 @@ mod tests {
             lifetime_bounds: vec![],
         };
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "NLL should allow move after borrow expires");
+        assert_eq!(
+            errors.len(),
+            0,
+            "NLL should allow move after borrow expires"
+        );
     }
 
     #[test]
@@ -3012,12 +3487,42 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: create first borrow, then try second borrow
@@ -3027,9 +3532,15 @@ mod tests {
                             Place::local(Local(2)),
                             Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
                         ),
-                        Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
+                        Statement::Assign(
+                            Place::local(Local(3)),
+                            Rvalue::Ref(Place::local(Local(2))),
+                        ),
                         // Try second mutable borrow → conflict (r1 still active because used in bb1)
-                        Statement::Assign(Place::local(Local(4)), Rvalue::Ref(Place::local(Local(2)))),
+                        Statement::Assign(
+                            Place::local(Local(4)),
+                            Rvalue::Ref(Place::local(Local(2))),
+                        ),
                     ],
                     terminator: Some(Terminator::SwitchInt {
                         discriminant: Operand::Copy(Place::local(Local(1))),
@@ -3075,10 +3586,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![BasicBlock {
                 statements: vec![
@@ -3111,10 +3642,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![BasicBlock {
                 statements: vec![
@@ -3147,11 +3698,36 @@ mod tests {
             params: vec![MirType::I64],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("cond".to_string()), ty: MirType::I64, is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("cond".to_string()),
+                    ty: MirType::I64,
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: branch
@@ -3169,7 +3745,10 @@ mod tests {
                 // bb1: create borrow, use it, then goto merge
                 BasicBlock {
                     statements: vec![
-                        Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
+                        Statement::Assign(
+                            Place::local(Local(3)),
+                            Rvalue::Ref(Place::local(Local(2))),
+                        ),
                         // Use r1 here (last use in this block)
                         Statement::Nop,
                     ],
@@ -3182,7 +3761,10 @@ mod tests {
                 },
                 // bb3: merge point, create new borrow → OK
                 BasicBlock {
-                    statements: vec![Statement::Assign(Place::local(Local(4)), Rvalue::Ref(Place::local(Local(2))))],
+                    statements: vec![Statement::Assign(
+                        Place::local(Local(4)),
+                        Rvalue::Ref(Place::local(Local(2))),
+                    )],
                     terminator: Some(Terminator::Return),
                 },
             ],
@@ -3208,10 +3790,30 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![
                 // bb0: initialize
@@ -3226,7 +3828,10 @@ mod tests {
                 BasicBlock {
                     statements: vec![
                         // Create borrow
-                        Statement::Assign(Place::local(Local(2)), Rvalue::Ref(Place::local(Local(1)))),
+                        Statement::Assign(
+                            Place::local(Local(2)),
+                            Rvalue::Ref(Place::local(Local(1))),
+                        ),
                         // Use borrow (last use in this block)
                         Statement::Assign(
                             Place::local(Local(3)),
@@ -3246,7 +3851,11 @@ mod tests {
             lifetime_bounds: vec![],
         };
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Loop borrow used in same iteration should be OK");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Loop borrow used in same iteration should be OK"
+        );
     }
 
     #[test]
@@ -3257,12 +3866,42 @@ mod tests {
             params: vec![],
             return_type: MirType::Unit,
             locals: vec![
-                LocalDecl { name: Some("_ret".to_string()), ty: MirType::Unit, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("x".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("r1".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("r2".to_string()), ty: MirType::Ref(Box::new(MirType::Str)), is_mutable: false, lifetime: None },
-                LocalDecl { name: Some("temp1".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
-                LocalDecl { name: Some("temp2".to_string()), ty: MirType::Str, is_mutable: true, lifetime: None },
+                LocalDecl {
+                    name: Some("_ret".to_string()),
+                    ty: MirType::Unit,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("x".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r1".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("r2".to_string()),
+                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    is_mutable: false,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp1".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
+                LocalDecl {
+                    name: Some("temp2".to_string()),
+                    ty: MirType::Str,
+                    is_mutable: true,
+                    lifetime: None,
+                },
             ],
             basic_blocks: vec![BasicBlock {
                 statements: vec![
@@ -3436,7 +4075,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Multiple refs with same lifetime should be OK");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Multiple refs with same lifetime should be OK"
+        );
     }
 
     #[test]
@@ -3507,7 +4150,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Outlives constraint satisfied should have no errors");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Outlives constraint satisfied should have no errors"
+        );
     }
 
     #[test]
@@ -3559,7 +4206,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Lifetime elision should work without errors");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Lifetime elision should work without errors"
+        );
     }
 
     #[test]
@@ -3748,7 +4399,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 1, "Should detect use-after-move for non-copy type");
+        assert_eq!(
+            errors.len(),
+            1,
+            "Should detect use-after-move for non-copy type"
+        );
         match &errors[0] {
             BorrowError::UseAfterMove { local, .. } => {
                 assert_eq!(*local, Local(1));
@@ -3891,7 +4546,11 @@ mod tests {
         };
 
         let errors = check_body(&body);
-        assert_eq!(errors.len(), 0, "Multiple lifetime params should work without errors");
+        assert_eq!(
+            errors.len(),
+            0,
+            "Multiple lifetime params should work without errors"
+        );
     }
 
     #[test]

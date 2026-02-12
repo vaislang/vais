@@ -68,7 +68,10 @@ pub(crate) async fn handle_completion(
     Ok(Some(CompletionResponse::Array(items)))
 }
 
-fn method_completions(backend: &VaisBackend, uri: &tower_lsp::lsp_types::Url) -> Vec<CompletionItem> {
+fn method_completions(
+    backend: &VaisBackend,
+    uri: &tower_lsp::lsp_types::Url,
+) -> Vec<CompletionItem> {
     let mut items = vec![];
 
     // Add common method completions
@@ -122,10 +125,7 @@ fn method_completions(backend: &VaisBackend, uri: &tower_lsp::lsp_types::Url) ->
                         items.push(CompletionItem {
                             label: method.node.name.node.clone(),
                             kind: Some(CompletionItemKind::METHOD),
-                            detail: Some(format!(
-                                "Method of {:?}",
-                                impl_block.target_type.node
-                            )),
+                            detail: Some(format!("Method of {:?}", impl_block.target_type.node)),
                             insert_text: Some(format!(
                                 "{}({})",
                                 method.node.name.node,
@@ -542,11 +542,7 @@ fn document_symbol_completions(
                                             )
                                         })
                                         .collect();
-                                    format!(
-                                        "{} {{ {} }}",
-                                        variant.name.node,
-                                        fields_str.join(", ")
-                                    )
+                                    format!("{} {{ {} }}", variant.name.node, fields_str.join(", "))
                                 }
                             };
 

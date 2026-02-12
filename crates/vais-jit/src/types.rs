@@ -42,18 +42,12 @@ impl TypeMapper {
             ResolvedType::Tuple(_) => Ok(self.pointer_type),
             ResolvedType::Range(_) => Ok(self.pointer_type),
             ResolvedType::Future(_) => Ok(self.pointer_type),
-            ResolvedType::Generic(_) => {
-                Err(JitError::UnsubstitutedGeneric)
-            }
-            ResolvedType::Var(_) => {
-                Err(JitError::UnresolvedTypeVar)
-            }
+            ResolvedType::Generic(_) => Err(JitError::UnsubstitutedGeneric),
+            ResolvedType::Var(_) => Err(JitError::UnresolvedTypeVar),
             ResolvedType::Unknown => Ok(self.pointer_type),
             ResolvedType::Never => Ok(types::I64), // Never type should not occur in JIT, but default to i64
             ResolvedType::ConstArray { .. } => Ok(self.pointer_type), // Const arrays are represented as pointers
-            ResolvedType::ConstGeneric(_) => {
-                Err(JitError::UnsubstitutedConstGeneric)
-            }
+            ResolvedType::ConstGeneric(_) => Err(JitError::UnsubstitutedConstGeneric),
             ResolvedType::Vector { element, lanes } => {
                 // Map SIMD vector types to Cranelift vector types
                 let elem_type = self.map_type(element)?;

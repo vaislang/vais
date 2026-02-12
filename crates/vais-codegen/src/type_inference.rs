@@ -54,9 +54,7 @@ impl CodeGenerator {
                     }
                     // Struct tuple literals (e.g., Point(40, 2)) return pointers
                     let resolved = self.resolve_struct_name(name);
-                    if self.structs.contains_key(&resolved)
-                        && !self.functions.contains_key(name)
-                    {
+                    if self.structs.contains_key(&resolved) && !self.functions.contains_key(name) {
                         return false;
                     }
                 }

@@ -22,9 +22,9 @@ use vais_parser::parse;
 use vais_types::TypeChecker;
 
 #[cfg(feature = "jit")]
-use vais_jit::JitCompiler;
-#[cfg(feature = "jit")]
 use std::collections::HashMap;
+#[cfg(feature = "jit")]
+use vais_jit::JitCompiler;
 
 /// REPL helper with completion, validation, and highlighting
 struct ReplHelper {
@@ -831,9 +831,19 @@ fn handle_jit_stats_command(state: &ReplState, definitions: &[String]) {
     println!("{}", "JIT Engine Status:".bold().cyan());
     println!();
     println!("  Mode:                  {}", "Cranelift JIT".green());
-    println!("  Defined functions:     {}", definitions.iter().filter(|d| d.starts_with("F ")).count());
+    println!(
+        "  Defined functions:     {}",
+        definitions.iter().filter(|d| d.starts_with("F ")).count()
+    );
     println!("  Expressions evaluated: {}", state.expression_count);
-    println!("  Cache state:           {}", if state.cache_dirty { "dirty".yellow() } else { "clean".green() });
+    println!(
+        "  Cache state:           {}",
+        if state.cache_dirty {
+            "dirty".yellow()
+        } else {
+            "clean".green()
+        }
+    );
     println!();
     println!("{}", "Optimization Tiers:".bold());
     println!("  All functions:         {}", "Baseline JIT".cyan());
@@ -858,12 +868,19 @@ fn handle_tier_command(func_name: &str, definitions: &[String]) {
     });
 
     if !func_exists {
-        println!("{} Function '{}' not defined", "Error:".red().bold(), func_name);
+        println!(
+            "{} Function '{}' not defined",
+            "Error:".red().bold(),
+            func_name
+        );
         println!("Use :defs to see available functions");
         return;
     }
 
-    println!("{}", format!("Tier info for '{}':", func_name).bold().cyan());
+    println!(
+        "{}",
+        format!("Tier info for '{}':", func_name).bold().cyan()
+    );
     println!();
     println!("  Current tier:     {}", "Baseline JIT".cyan());
     println!("  Backend:          {}", "Cranelift".green());
@@ -876,7 +893,12 @@ fn handle_tier_command(func_name: &str, definitions: &[String]) {
 
 /// Handle an expression evaluation using JIT compilation
 #[cfg(feature = "jit")]
-fn handle_expression_jit(input: &str, definitions: &[String], jit: &mut JitCompiler, state: &mut ReplState) {
+fn handle_expression_jit(
+    input: &str,
+    definitions: &[String],
+    jit: &mut JitCompiler,
+    state: &mut ReplState,
+) {
     let mut source = String::new();
     for def in definitions {
         source.push_str(def);
@@ -900,7 +922,11 @@ fn handle_expression_jit(input: &str, definitions: &[String], jit: &mut JitCompi
 
 /// Evaluate a REPL expression using JIT compilation
 #[cfg(feature = "jit")]
-fn evaluate_expr_jit(source: &str, jit: &mut JitCompiler, state: &mut ReplState) -> Result<String, String> {
+fn evaluate_expr_jit(
+    source: &str,
+    jit: &mut JitCompiler,
+    state: &mut ReplState,
+) -> Result<String, String> {
     // Parse
     let ast = parse(source).map_err(|e| format!("Parse error: {}", e))?;
 
@@ -917,13 +943,11 @@ fn evaluate_expr_jit(source: &str, jit: &mut JitCompiler, state: &mut ReplState)
     }
 
     // JIT compile and run (with graceful degradation)
-    let result = jit
-        .compile_and_run_main(&ast)
-        .map_err(|e| {
-            // Mark cache as dirty on JIT failure to trigger reset on next attempt
-            state.cache_dirty = true;
-            format!("JIT compilation failed: {}", e)
-        })?;
+    let result = jit.compile_and_run_main(&ast).map_err(|e| {
+        // Mark cache as dirty on JIT failure to trigger reset on next attempt
+        state.cache_dirty = true;
+        format!("JIT compilation failed: {}", e)
+    })?;
 
     Ok(format!("{}", result))
 }

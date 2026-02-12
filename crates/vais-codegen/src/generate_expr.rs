@@ -4,8 +4,8 @@ use vais_ast::*;
 use vais_types::ResolvedType;
 
 use crate::{
-    CodeGenerator, CodegenResult, CodegenError, LocalVar, LoopLabels, ClosureInfo,
-    suggest_similar, format_did_you_mean,
+    format_did_you_mean, suggest_similar, ClosureInfo, CodeGenerator, CodegenError, CodegenResult,
+    LocalVar, LoopLabels,
 };
 
 impl CodeGenerator {
@@ -552,10 +552,7 @@ impl CodeGenerator {
                                 .iter()
                                 .zip(args.iter())
                                 .map(|((fname, _), val)| {
-                                    (
-                                        vais_ast::Spanned::new(fname.clone(), val.span),
-                                        val.clone(),
-                                    )
+                                    (vais_ast::Spanned::new(fname.clone(), val.span), val.clone())
                                 })
                                 .collect();
                             let struct_lit = vais_ast::Spanned::new(
@@ -676,14 +673,20 @@ impl CodeGenerator {
                             1 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i8*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = load i8, i8* {}\n", tmp2, tmp1));
                                 ir.push_str(&format!("  {} = zext i8 {} to i64\n", result, tmp2));
                             }
                             2 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i16*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i16*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = load i16, i16* {}\n", tmp2, tmp1));
                                 ir.push_str(&format!("  {} = zext i16 {} to i64\n", result, tmp2));
                             }
@@ -691,28 +694,52 @@ impl CodeGenerator {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
                                 let tmp3 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to float*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to float*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = load float, float* {}\n", tmp2, tmp1));
-                                ir.push_str(&format!("  {} = fpext float {} to double\n", tmp3, tmp2));
-                                ir.push_str(&format!("  {} = bitcast double {} to i64\n", result, tmp3));
+                                ir.push_str(&format!(
+                                    "  {} = fpext float {} to double\n",
+                                    tmp3, tmp2
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = bitcast double {} to i64\n",
+                                    result, tmp3
+                                ));
                             }
                             4 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i32*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i32*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = load i32, i32* {}\n", tmp2, tmp1));
                                 ir.push_str(&format!("  {} = zext i32 {} to i64\n", result, tmp2));
                             }
                             _ if matches!(resolved_t, ResolvedType::F64) => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to double*\n", tmp1, ptr_val));
-                                ir.push_str(&format!("  {} = load double, double* {}\n", tmp2, tmp1));
-                                ir.push_str(&format!("  {} = bitcast double {} to i64\n", result, tmp2));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to double*\n",
+                                    tmp1, ptr_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = load double, double* {}\n",
+                                    tmp2, tmp1
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = bitcast double {} to i64\n",
+                                    result, tmp2
+                                ));
                             }
                             _ => {
                                 let tmp1 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i64*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = load i64, i64* {}\n", result, tmp1));
                             }
                         }
@@ -734,43 +761,79 @@ impl CodeGenerator {
                             1 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i8*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  {} = trunc i64 {} to i8\n", tmp2, val_val));
                                 ir.push_str(&format!("  store i8 {}, i8* {}\n", tmp2, tmp1));
                             }
                             2 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i16*\n", tmp1, ptr_val));
-                                ir.push_str(&format!("  {} = trunc i64 {} to i16\n", tmp2, val_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i16*\n",
+                                    tmp1, ptr_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = trunc i64 {} to i16\n",
+                                    tmp2, val_val
+                                ));
                                 ir.push_str(&format!("  store i16 {}, i16* {}\n", tmp2, tmp1));
                             }
                             4 if matches!(resolved_t, ResolvedType::F32) => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
                                 let tmp3 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to float*\n", tmp1, ptr_val));
-                                ir.push_str(&format!("  {} = bitcast i64 {} to double\n", tmp2, val_val));
-                                ir.push_str(&format!("  {} = fptrunc double {} to float\n", tmp3, tmp2));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to float*\n",
+                                    tmp1, ptr_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = bitcast i64 {} to double\n",
+                                    tmp2, val_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = fptrunc double {} to float\n",
+                                    tmp3, tmp2
+                                ));
                                 ir.push_str(&format!("  store float {}, float* {}\n", tmp3, tmp1));
                             }
                             4 => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i32*\n", tmp1, ptr_val));
-                                ir.push_str(&format!("  {} = trunc i64 {} to i32\n", tmp2, val_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i32*\n",
+                                    tmp1, ptr_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = trunc i64 {} to i32\n",
+                                    tmp2, val_val
+                                ));
                                 ir.push_str(&format!("  store i32 {}, i32* {}\n", tmp2, tmp1));
                             }
                             _ if matches!(resolved_t, ResolvedType::F64) => {
                                 let tmp1 = self.next_temp(counter);
                                 let tmp2 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to double*\n", tmp1, ptr_val));
-                                ir.push_str(&format!("  {} = bitcast i64 {} to double\n", tmp2, val_val));
-                                ir.push_str(&format!("  store double {}, double* {}\n", tmp2, tmp1));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to double*\n",
+                                    tmp1, ptr_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = bitcast i64 {} to double\n",
+                                    tmp2, val_val
+                                ));
+                                ir.push_str(&format!(
+                                    "  store double {}, double* {}\n",
+                                    tmp2, tmp1
+                                ));
                             }
                             _ => {
                                 let tmp1 = self.next_temp(counter);
-                                ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", tmp1, ptr_val));
+                                ir.push_str(&format!(
+                                    "  {} = inttoptr i64 {} to i64*\n",
+                                    tmp1, ptr_val
+                                ));
                                 ir.push_str(&format!("  store i64 {}, i64* {}\n", val_val, tmp1));
                             }
                         }
@@ -1631,7 +1694,8 @@ impl CodeGenerator {
                     ir.push_str(&cond_ir);
 
                     // Convert to i1 for branch (type-aware: skips for bool/i1)
-                    let (cond_bool, conv_ir) = self.generate_cond_to_i1(iter_expr, &cond_val, counter);
+                    let (cond_bool, conv_ir) =
+                        self.generate_cond_to_i1(iter_expr, &cond_val, counter);
                     ir.push_str(&conv_ir);
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
@@ -1737,13 +1801,9 @@ impl CodeGenerator {
                             // If the variable was originally SSA, we need to upgrade it to alloca
                             // because SSA values cannot be reassigned with store.
                             if local.is_ssa() {
-                                let alloca_name =
-                                    format!("{}.alloca.{}", name, counter);
+                                let alloca_name = format!("{}.alloca.{}", name, counter);
                                 *counter += 1;
-                                ir.push_str(&format!(
-                                    "  %{} = alloca {}\n",
-                                    alloca_name, llvm_ty
-                                ));
+                                ir.push_str(&format!("  %{} = alloca {}\n", alloca_name, llvm_ty));
                                 ir.push_str(&format!(
                                     "  store {} {}, {}* %{}\n",
                                     llvm_ty, val, llvm_ty, alloca_name
@@ -2247,55 +2307,55 @@ impl CodeGenerator {
                 };
 
                 // Handle indexing differently for Slice types vs regular arrays/pointers
-                let result = if matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
-                {
-                    // For Slice types, extract data pointer from fat pointer struct
-                    // Slice is { i8* data, i64 length }
-                    let data_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
-                        data_ptr, arr_val
-                    ));
+                let result =
+                    if matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_)) {
+                        // For Slice types, extract data pointer from fat pointer struct
+                        // Slice is { i8* data, i64 length }
+                        let data_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                            data_ptr, arr_val
+                        ));
 
-                    // Bitcast i8* to typed pointer
-                    let typed_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = bitcast i8* {} to {}*\n",
-                        typed_ptr, data_ptr, elem_llvm_type
-                    ));
+                        // Bitcast i8* to typed pointer
+                        let typed_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = bitcast i8* {} to {}*\n",
+                            typed_ptr, data_ptr, elem_llvm_type
+                        ));
 
-                    // Get element pointer
-                    let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* {}, i64 {}\n",
-                        elem_ptr, elem_llvm_type, elem_llvm_type, typed_ptr, idx_val
-                    ));
+                        // Get element pointer
+                        let elem_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                            elem_ptr, elem_llvm_type, elem_llvm_type, typed_ptr, idx_val
+                        ));
 
-                    // Load element
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
-                        result, elem_llvm_type, elem_llvm_type, elem_ptr
-                    ));
+                        // Load element
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = load {}, {}* {}\n",
+                            result, elem_llvm_type, elem_llvm_type, elem_ptr
+                        ));
 
-                    result
-                } else {
-                    // For regular arrays/pointers, use direct GEP
-                    let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* {}, i64 {}\n",
-                        elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
-                    ));
+                        result
+                    } else {
+                        // For regular arrays/pointers, use direct GEP
+                        let elem_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                            elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
+                        ));
 
-                    // Load element
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
-                        result, elem_llvm_type, elem_llvm_type, elem_ptr
-                    ));
+                        // Load element
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = load {}, {}* {}\n",
+                            result, elem_llvm_type, elem_llvm_type, elem_ptr
+                        ));
 
-                    result
-                };
+                        result
+                    };
 
                 Ok((result, ir))
             }

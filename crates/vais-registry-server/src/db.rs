@@ -869,10 +869,11 @@ pub async fn get_registry_stats(pool: &DbPool) -> ServerResult<crate::models::Re
         .get("count");
 
     // Get total downloads from packages table
-    let total_downloads: i64 = sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
-        .fetch_one(pool)
-        .await?
-        .get("total");
+    let total_downloads: i64 =
+        sqlx::query("SELECT COALESCE(SUM(downloads), 0) as total FROM packages")
+            .fetch_one(pool)
+            .await?
+            .get("total");
 
     // Get total versions
     let total_versions: i64 = sqlx::query("SELECT COUNT(*) as count FROM package_versions")

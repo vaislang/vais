@@ -792,8 +792,12 @@ impl TypeChecker {
             let default = assoc.default.as_ref().map(|ty| self.resolve_type(&ty.node));
 
             // Extract GAT generic parameters and their bounds
-            let gat_generics: Vec<String> =
-                assoc.generics.iter().map(|g| &g.name.node).cloned().collect();
+            let gat_generics: Vec<String> = assoc
+                .generics
+                .iter()
+                .map(|g| &g.name.node)
+                .cloned()
+                .collect();
             let gat_bounds: HashMap<String, Vec<String>> = assoc
                 .generics
                 .iter()

@@ -3,7 +3,7 @@
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 
-use crate::backend::{position_in_range, get_builtin_hover, VaisBackend};
+use crate::backend::{get_builtin_hover, position_in_range, VaisBackend};
 
 pub(crate) async fn handle_hover(
     backend: &VaisBackend,
@@ -194,12 +194,7 @@ pub(crate) async fn handle_hover(
                                         .as_ref()
                                         .map(|r| format!(" -> {:?}", r.node))
                                         .unwrap_or_default();
-                                    format!(
-                                        "    F {}({}){}",
-                                        m.name.node,
-                                        params.join(", "),
-                                        ret
-                                    )
+                                    format!("    F {}({}){}", m.name.node, params.join(", "), ret)
                                 })
                                 .collect();
 

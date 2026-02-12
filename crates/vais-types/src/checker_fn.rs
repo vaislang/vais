@@ -430,9 +430,9 @@ impl TypeChecker {
     fn body_contains_self_call(body: &FunctionBody) -> bool {
         match body {
             FunctionBody::Expr(expr) => Self::expr_contains_self_call(&expr.node),
-            FunctionBody::Block(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            FunctionBody::Block(stmts) => {
+                stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node))
+            }
         }
     }
 
@@ -452,16 +452,10 @@ impl TypeChecker {
                 cond, then, else_, ..
             } => {
                 Self::expr_contains_self_call(&cond.node)
-                    || then
-                        .iter()
-                        .any(|s| Self::stmt_contains_self_call(&s.node))
-                    || else_
-                        .as_ref()
-                        .is_some_and(Self::if_else_contains_self_call)
+                    || then.iter().any(|s| Self::stmt_contains_self_call(&s.node))
+                    || else_.as_ref().is_some_and(Self::if_else_contains_self_call)
             }
-            Expr::Block(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            Expr::Block(stmts) => stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node)),
             Expr::Assign { value, .. } => Self::expr_contains_self_call(&value.node),
             _ => false,
         }
@@ -469,14 +463,10 @@ impl TypeChecker {
 
     fn if_else_contains_self_call(else_branch: &IfElse) -> bool {
         match else_branch {
-            IfElse::Else(stmts) => stmts
-                .iter()
-                .any(|s| Self::stmt_contains_self_call(&s.node)),
+            IfElse::Else(stmts) => stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node)),
             IfElse::ElseIf(cond, stmts, next) => {
                 Self::expr_contains_self_call(&cond.node)
-                    || stmts
-                        .iter()
-                        .any(|s| Self::stmt_contains_self_call(&s.node))
+                    || stmts.iter().any(|s| Self::stmt_contains_self_call(&s.node))
                     || next
                         .as_ref()
                         .is_some_and(|n| Self::if_else_contains_self_call(n))

@@ -237,7 +237,6 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
-
     }
 
     fn register_print_builtins(&mut self) {
@@ -294,7 +293,6 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
-
     }
 
     fn register_memory_builtins(&mut self) {
@@ -522,7 +520,11 @@ impl TypeChecker {
                 generics: vec![],
                 generic_bounds: HashMap::new(),
                 params: vec![
-                    ("ptr".to_string(), ResolvedType::Pointer(Box::new(ResolvedType::I64)), false),
+                    (
+                        "ptr".to_string(),
+                        ResolvedType::Pointer(Box::new(ResolvedType::I64)),
+                        false,
+                    ),
                     ("idx1".to_string(), ResolvedType::I64, false),
                     ("idx2".to_string(), ResolvedType::I64, false),
                 ],
@@ -535,7 +537,6 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
-
     }
 
     fn register_stdlib_builtins(&mut self) {
@@ -856,7 +857,6 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
-
     }
 
     fn register_file_io_builtins(&mut self) {

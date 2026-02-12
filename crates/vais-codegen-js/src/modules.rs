@@ -25,10 +25,7 @@ impl JsCodeGenerator {
         // Check if there's an alias
         if let Some(alias) = &use_item.alias {
             // U module::path as alias → import * as alias from './path.js';
-            Ok(format!(
-                "import * as {} from {module_path};\n",
-                alias.node
-            ))
+            Ok(format!("import * as {} from {module_path};\n", alias.node))
         } else {
             // U module::path → import * as path from './path.js';
             Ok(format!("import * as {module_name} from {module_path};\n"))
@@ -76,10 +73,7 @@ impl JsCodeGenerator {
 
     /// Generate separate .js files for each module in modules_map
     /// Returns HashMap<filename, js_content>
-    pub fn generate_module_to_files(
-        &mut self,
-        module: &Module,
-    ) -> Result<HashMap<String, String>> {
+    pub fn generate_module_to_files(&mut self, module: &Module) -> Result<HashMap<String, String>> {
         let mut files = HashMap::new();
 
         if let Some(ref modules_map) = module.modules_map {
@@ -208,10 +202,7 @@ mod tests {
             path_to_js_filename(Path::new("/path/to/module.vais")),
             "module.js"
         );
-        assert_eq!(
-            path_to_js_filename(Path::new("module.vais")),
-            "module.js"
-        );
+        assert_eq!(path_to_js_filename(Path::new("module.vais")), "module.js");
         assert_eq!(path_to_js_filename(Path::new("module")), "module.js");
     }
 

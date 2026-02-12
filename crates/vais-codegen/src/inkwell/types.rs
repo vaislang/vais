@@ -84,10 +84,7 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
                 // Slice is a fat pointer: { ptr: i8*, len: i64 }
-                let ptr_type = self
-                    .context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default());
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
                 let len_type = self.context.i64_type();
                 self.context
                     .struct_type(&[ptr_type.into(), len_type.into()], false)
@@ -252,9 +249,7 @@ impl<'ctx> TypeMapper<'ctx> {
             | ResolvedType::Ref(_)
             | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 1,
-            ResolvedType::Tuple(elems) => {
-                elems.iter().map(|e| self.align_of(e)).max().unwrap_or(8)
-            }
+            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.align_of(e)).max().unwrap_or(8),
             ResolvedType::Optional(inner) => self.align_of(inner),
             ResolvedType::Result(ok, err) => std::cmp::max(self.align_of(ok), self.align_of(err)),
             _ => 8, // Default for structs, enums, functions

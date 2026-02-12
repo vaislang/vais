@@ -434,7 +434,9 @@ fn test_multifile_mode() {
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut gen = JsCodeGenerator::new();
-    let files = gen.generate_module_to_files(&module).expect("Codegen failed");
+    let files = gen
+        .generate_module_to_files(&module)
+        .expect("Codegen failed");
 
     // Single file mode should produce index.js
     assert!(files.contains_key("index.js"));

@@ -230,7 +230,7 @@ pub(crate) async fn handle_signature_help(
                             let signature = SignatureInformation {
                                 label: sig_label,
                                 documentation: Some(Documentation::String(
-                                    "Function defined in current file".to_string()
+                                    "Function defined in current file".to_string(),
                                 )),
                                 parameters: Some(param_infos),
                                 active_parameter: None,
@@ -239,7 +239,9 @@ pub(crate) async fn handle_signature_help(
                             return Ok(Some(SignatureHelp {
                                 signatures: vec![signature],
                                 active_signature: Some(0),
-                                active_parameter: Some(active_param.min(f.params.len().saturating_sub(1)) as u32),
+                                active_parameter: Some(
+                                    active_param.min(f.params.len().saturating_sub(1)) as u32,
+                                ),
                             }));
                         }
                     }
@@ -298,7 +300,10 @@ pub(crate) async fn handle_signature_help(
                                 return Ok(Some(SignatureHelp {
                                     signatures: vec![signature],
                                     active_signature: Some(0),
-                                    active_parameter: Some(active_param.min(method.node.params.len().saturating_sub(1)) as u32),
+                                    active_parameter: Some(
+                                        active_param.min(method.node.params.len().saturating_sub(1))
+                                            as u32,
+                                    ),
                                 }));
                             }
                         }

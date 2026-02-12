@@ -8,12 +8,12 @@
 
 mod helpers;
 
+mod adoption_types;
+mod advanced;
+mod async_runtime;
 mod basics;
 mod builtins;
-mod async_runtime;
-mod concurrency;
-mod adoption_types;
-mod phase31;
 mod closures_iter;
+mod concurrency;
 mod modules_system;
-mod advanced;
+mod phase31;

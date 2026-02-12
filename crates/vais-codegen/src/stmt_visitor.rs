@@ -91,8 +91,7 @@ impl CodeGenerator {
             || if let Expr::Call { func, .. } = &value.node {
                 if let Expr::Ident(fn_name) = &func.node {
                     let resolved = self.resolve_struct_name(fn_name);
-                    self.structs.contains_key(&resolved)
-                        && !self.functions.contains_key(fn_name)
+                    self.structs.contains_key(&resolved) && !self.functions.contains_key(fn_name)
                 } else {
                     false
                 }

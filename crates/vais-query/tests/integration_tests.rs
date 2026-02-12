@@ -107,7 +107,9 @@ fn test_full_pipeline_tokenize_to_ir() {
     assert!(db.is_cached("pipeline.vais", "type_check"));
 
     // Step 4: Generate IR
-    let ir = db.generate_ir("pipeline.vais", TargetTriple::Native).unwrap();
+    let ir = db
+        .generate_ir("pipeline.vais", TargetTriple::Native)
+        .unwrap();
     assert!(db.is_cached("pipeline.vais", "generate_ir"));
 
     // Verify IR content
@@ -558,9 +560,7 @@ fn test_source_files_list_accuracy() {
     assert_eq!(files_after.len(), 2);
     assert!(files_after.iter().any(|p| p.to_str().unwrap() == "a.vais"));
     assert!(files_after.iter().any(|p| p.to_str().unwrap() == "c.vais"));
-    assert!(!files_after
-        .iter()
-        .any(|p| p.to_str().unwrap() == "b.vais"));
+    assert!(!files_after.iter().any(|p| p.to_str().unwrap() == "b.vais"));
 }
 
 #[test]

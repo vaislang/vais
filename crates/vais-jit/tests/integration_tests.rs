@@ -9,8 +9,8 @@
 //! - Error handling
 
 use vais_jit::{
-    Interpreter, JitCompiler, JitError, JitRuntime, Tier, TierThresholds,
-    TieredJit, TypeMapper, Value,
+    Interpreter, JitCompiler, JitError, JitRuntime, Tier, TierThresholds, TieredJit, TypeMapper,
+    Value,
 };
 use vais_parser;
 use vais_types::ResolvedType;
@@ -21,18 +21,16 @@ use vais_types::ResolvedType;
 
 /// Helper to compile and run Vais source with JIT compiler.
 fn compile_and_run(source: &str) -> Result<i64, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut compiler = JitCompiler::new()?;
     compiler.compile_and_run_main(&module)
 }
 
 /// Helper to interpret Vais source.
 fn interpret(source: &str) -> Result<Value, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut interp = Interpreter::new();
     interp.load_module(&module);
     interp.run_main()
@@ -40,9 +38,8 @@ fn interpret(source: &str) -> Result<Value, JitError> {
 
 /// Helper to run with tiered JIT.
 fn tiered_run(source: &str) -> Result<i64, JitError> {
-    let module = vais_parser::parse(source).map_err(|e| {
-        JitError::Runtime(format!("Parse failed: {}", e))
-    })?;
+    let module = vais_parser::parse(source)
+        .map_err(|e| JitError::Runtime(format!("Parse failed: {}", e)))?;
     let mut jit = TieredJit::new()?;
     jit.run_main(&module)
 }
@@ -334,7 +331,10 @@ fn test_tieredjit_function_stats() {
     // Check if we can get stats
     if let Some(stats) = jit.get_function_stats("helper") {
         assert_eq!(stats.execution_count, 2);
-        assert!(matches!(stats.current_tier, Tier::Interpreter | Tier::Baseline));
+        assert!(matches!(
+            stats.current_tier,
+            Tier::Interpreter | Tier::Baseline
+        ));
     }
 }
 
@@ -367,7 +367,10 @@ fn test_tieredjit_function_tier() {
     let _ = jit.run_main(&module);
 
     let tier = jit.get_function_tier("compute");
-    assert!(matches!(tier, Tier::Interpreter | Tier::Baseline | Tier::Optimizing));
+    assert!(matches!(
+        tier,
+        Tier::Interpreter | Tier::Baseline | Tier::Optimizing
+    ));
 }
 
 // ============================================================================

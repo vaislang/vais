@@ -104,7 +104,10 @@ fn test_single_module_pipeline() {
     // Verify single module creates one level
     assert_eq!(levels.len(), 1, "Single module should create one level");
     assert_eq!(levels[0].len(), 1, "First level should contain one module");
-    assert_eq!(levels[0][0], path, "Level should contain the correct module");
+    assert_eq!(
+        levels[0][0], path,
+        "Level should contain the correct module"
+    );
 
     // Simulate parsing
     let result = vais_parser::parse(source);
@@ -114,7 +117,10 @@ fn test_single_module_pipeline() {
     let ast = result.unwrap();
     let mut checker = vais_types::TypeChecker::new();
     let tc_result = checker.check_module(&ast);
-    assert!(tc_result.is_ok(), "Single module should type-check successfully");
+    assert!(
+        tc_result.is_ok(),
+        "Single module should type-check successfully"
+    );
 }
 
 /// Test 2: Linear dependency chain (A -> B -> C)
@@ -128,9 +134,15 @@ fn test_linear_dependency_chain() {
     // Module A: leaf (no dependencies)
     modules.insert(path_a.clone(), "F func_a() -> i32 { R 10 }".to_string());
     // Module B: depends on A
-    modules.insert(path_b.clone(), "F func_b() -> i32 { R func_a() + 20 }".to_string());
+    modules.insert(
+        path_b.clone(),
+        "F func_b() -> i32 { R func_a() + 20 }".to_string(),
+    );
     // Module C: depends on B
-    modules.insert(path_c.clone(), "F func_c() -> i32 { R func_b() + 30 }".to_string());
+    modules.insert(
+        path_c.clone(),
+        "F func_c() -> i32 { R func_b() + 30 }".to_string(),
+    );
 
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency(path_b.clone(), path_a.clone());
@@ -165,9 +177,18 @@ fn test_diamond_dependency_pattern() {
 
     // Diamond: top -> (left, right) -> base
     modules.insert(path_base.clone(), "F base() -> i32 { R 1 }".to_string());
-    modules.insert(path_left.clone(), "F left() -> i32 { R base() * 2 }".to_string());
-    modules.insert(path_right.clone(), "F right() -> i32 { R base() * 3 }".to_string());
-    modules.insert(path_top.clone(), "F top() -> i32 { R left() + right() }".to_string());
+    modules.insert(
+        path_left.clone(),
+        "F left() -> i32 { R base() * 2 }".to_string(),
+    );
+    modules.insert(
+        path_right.clone(),
+        "F right() -> i32 { R base() * 3 }".to_string(),
+    );
+    modules.insert(
+        path_top.clone(),
+        "F top() -> i32 { R left() + right() }".to_string(),
+    );
 
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency(path_left.clone(), path_base.clone());
@@ -182,12 +203,21 @@ fn test_diamond_dependency_pattern() {
 
     // Level 0: base (no dependencies)
     assert_eq!(levels[0].len(), 1);
-    assert!(levels[0].contains(&path_base), "Level 0 should contain base");
+    assert!(
+        levels[0].contains(&path_base),
+        "Level 0 should contain base"
+    );
 
     // Level 1: left and right (can be processed in parallel)
     assert_eq!(levels[1].len(), 2, "Level 1 should have 2 modules");
-    assert!(levels[1].contains(&path_left), "Level 1 should contain left");
-    assert!(levels[1].contains(&path_right), "Level 1 should contain right");
+    assert!(
+        levels[1].contains(&path_left),
+        "Level 1 should contain left"
+    );
+    assert!(
+        levels[1].contains(&path_right),
+        "Level 1 should contain right"
+    );
 
     // Level 2: top (depends on both left and right)
     assert_eq!(levels[2].len(), 1);
@@ -218,11 +248,19 @@ fn test_independent_modules() {
     let levels = dep_graph.parallel_levels();
 
     // All independent modules should be in one level
-    assert_eq!(levels.len(), 1, "Independent modules should be in one level");
+    assert_eq!(
+        levels.len(),
+        1,
+        "Independent modules should be in one level"
+    );
     assert_eq!(levels[0].len(), 5, "Level should contain all 5 modules");
 
     for path in &paths {
-        assert!(levels[0].contains(path), "Level should contain module {:?}", path);
+        assert!(
+            levels[0].contains(path),
+            "Level should contain module {:?}",
+            path
+        );
     }
 }
 
@@ -252,7 +290,11 @@ fn test_channel_producer_consumer() {
     producer.join().unwrap();
 
     // Verify all values received in order
-    assert_eq!(received, vec![0, 1, 2, 3, 4], "Should receive all values in order");
+    assert_eq!(
+        received,
+        vec![0, 1, 2, 3, 4],
+        "Should receive all values in order"
+    );
 }
 
 /// Test 6: Error propagation in pipeline
@@ -270,7 +312,10 @@ fn test_error_propagation() {
     let parse_err = vais_parser::parse(&modules[&path_err]);
 
     assert!(parse_ok.is_ok(), "Valid module should parse successfully");
-    assert!(parse_err.is_err(), "Invalid module should produce parse error");
+    assert!(
+        parse_err.is_err(),
+        "Invalid module should produce parse error"
+    );
 
     // Error should contain diagnostic info
     if let Err(err) = parse_err {
@@ -365,8 +410,14 @@ fn test_type_checking_pipeline() {
 
     // Verify both functions are registered
     let functions = checker.get_all_functions();
-    assert!(functions.contains_key("add"), "Checker should contain 'add' function");
-    assert!(functions.contains_key("mul"), "Checker should contain 'mul' function");
+    assert!(
+        functions.contains_key("add"),
+        "Checker should contain 'add' function"
+    );
+    assert!(
+        functions.contains_key("mul"),
+        "Checker should contain 'mul' function"
+    );
 }
 
 /// Test 10: Rayon parallel parsing simulation
@@ -417,7 +468,11 @@ fn test_module_stem_extraction() {
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
 
-        assert_eq!(stem, expected_stem, "Stem extraction failed for {}", path_str);
+        assert_eq!(
+            stem, expected_stem,
+            "Stem extraction failed for {}",
+            path_str
+        );
     }
 }
 
@@ -513,16 +568,28 @@ fn test_dependency_resolution_with_imports() {
 
     // Level 0: base (leaf module)
     assert_eq!(levels[0].len(), 1);
-    assert!(levels[0].contains(&path_base), "Level 0 should contain base");
+    assert!(
+        levels[0].contains(&path_base),
+        "Level 0 should contain base"
+    );
 
     // Level 1: utils and math (both depend only on base, can be parallel)
     assert_eq!(levels[1].len(), 2, "Level 1 should have 2 modules");
-    assert!(levels[1].contains(&path_utils), "Level 1 should contain utils");
-    assert!(levels[1].contains(&path_math), "Level 1 should contain math");
+    assert!(
+        levels[1].contains(&path_utils),
+        "Level 1 should contain utils"
+    );
+    assert!(
+        levels[1].contains(&path_math),
+        "Level 1 should contain math"
+    );
 
     // Level 2: main (depends on both utils and math)
     assert_eq!(levels[2].len(), 1);
-    assert!(levels[2].contains(&path_main), "Level 2 should contain main");
+    assert!(
+        levels[2].contains(&path_main),
+        "Level 2 should contain main"
+    );
 
     // Verify that utils and math can be parsed in parallel (same level)
     // This is the key pipeline optimization: while main waits, utils and math
@@ -560,14 +627,20 @@ fn test_realistic_module_sequence() {
     // Simulate pipeline: type-check types module first
     let mut checker = vais_types::TypeChecker::new();
     let types_result = checker.check_module(&types_ast.unwrap());
-    assert!(types_result.is_ok(), "Types module should type-check successfully");
+    assert!(
+        types_result.is_ok(),
+        "Types module should type-check successfully"
+    );
 
     // Now the ops module can be type-checked (it depends on Point from types)
     // Note: In real pipeline, ops would need imports resolved first
     // This test verifies the sequential dependency is respected
 
     let functions = checker.get_all_functions();
-    assert!(functions.contains_key("new_point"), "Should have new_point function");
+    assert!(
+        functions.contains_key("new_point"),
+        "Should have new_point function"
+    );
 }
 
 /// Test 16: Channel error handling and cleanup
@@ -671,7 +744,9 @@ fn test_type_checking_accumulation() {
 
     // Module 1: Define struct
     let mod1 = vais_parser::parse("S User { id: i32, name: str }").unwrap();
-    checker.check_module(&mod1).expect("Module 1 should type-check");
+    checker
+        .check_module(&mod1)
+        .expect("Module 1 should type-check");
 
     // Module 2: Define function using struct from Module 1
     let mod2 = vais_parser::parse("F get_id(u: User) -> i32 { R u.id }").unwrap();
@@ -682,7 +757,10 @@ fn test_type_checking_accumulation() {
     // The test verifies that the checker maintains state between check_module calls
     if result.is_ok() {
         let functions = checker.get_all_functions();
-        assert!(functions.contains_key("get_id"), "Should have get_id function");
+        assert!(
+            functions.contains_key("get_id"),
+            "Should have get_id function"
+        );
     }
 
     // The key insight: pipeline mode processes modules incrementally,
@@ -711,7 +789,11 @@ fn test_parallel_level_independence() {
 
     let levels = dep_graph.parallel_levels();
 
-    assert_eq!(levels.len(), 1, "Independent modules should be in one level");
+    assert_eq!(
+        levels.len(),
+        1,
+        "Independent modules should be in one level"
+    );
     assert_eq!(levels[0].len(), 3, "Level should contain all 3 modules");
 
     // Verify processing order doesn't matter by parsing in different orders
@@ -739,7 +821,11 @@ fn test_parallel_level_independence() {
     let funcs1 = checker1.get_all_functions();
     let funcs2 = checker2.get_all_functions();
 
-    assert_eq!(funcs1.len(), funcs2.len(), "Should have same number of functions");
+    assert_eq!(
+        funcs1.len(),
+        funcs2.len(),
+        "Should have same number of functions"
+    );
     assert!(funcs1.contains_key("a") && funcs2.contains_key("a"));
     assert!(funcs1.contains_key("b") && funcs2.contains_key("b"));
     assert!(funcs1.contains_key("c") && funcs2.contains_key("c"));

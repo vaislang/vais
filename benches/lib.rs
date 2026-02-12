@@ -182,11 +182,7 @@ pub mod utils {
                             "F mod{}_ternary_{}(a: i64, b: i64) -> i64 {{\n",
                             m, f
                         ));
-                        code.push_str(&format!(
-                            "    x := a > b ? a * {} : b * {}\n",
-                            f + 1,
-                            f + 2
-                        ));
+                        code.push_str(&format!("    x := a > b ? a * {} : b * {}\n", f + 1, f + 2));
                         code.push_str(&format!(
                             "    y := x > {} ? x - {} : x + {}\n",
                             f * 10,
@@ -274,7 +270,10 @@ pub mod utils {
             let mut lines = 0;
 
             // Module header
-            code.push_str(&format!("# Module {} — Part of multi-module benchmark\n\n", m));
+            code.push_str(&format!(
+                "# Module {} — Part of multi-module benchmark\n\n",
+                m
+            ));
             lines += 2;
 
             // Import from previous module (if not first)

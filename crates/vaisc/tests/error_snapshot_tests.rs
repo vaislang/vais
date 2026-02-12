@@ -76,13 +76,8 @@ fn assert_error_snapshot(test_name: &str, source: &str) {
     }
 
     // Compare with existing snapshot
-    let expected = fs::read_to_string(&snap_file).unwrap_or_else(|e| {
-        panic!(
-            "Failed to read snapshot {}: {}",
-            snap_file.display(),
-            e
-        )
-    });
+    let expected = fs::read_to_string(&snap_file)
+        .unwrap_or_else(|e| panic!("Failed to read snapshot {}: {}", snap_file.display(), e));
 
     if normalized != expected.trim() {
         panic!(

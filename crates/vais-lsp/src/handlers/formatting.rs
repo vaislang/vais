@@ -45,8 +45,10 @@ pub(crate) async fn handle_range_formatting(
             let actual_end_line = end_line.min(doc.content.len_lines().saturating_sub(1));
 
             // Extract the formatted lines within the range
-            let formatted_start_line = actual_start_line.min(formatted_rope.len_lines().saturating_sub(1));
-            let formatted_end_line = actual_end_line.min(formatted_rope.len_lines().saturating_sub(1));
+            let formatted_start_line =
+                actual_start_line.min(formatted_rope.len_lines().saturating_sub(1));
+            let formatted_end_line =
+                actual_end_line.min(formatted_rope.len_lines().saturating_sub(1));
 
             // Get end line content for range calculation
             let end_line_content = doc.content.line(actual_end_line);
@@ -54,9 +56,12 @@ pub(crate) async fn handle_range_formatting(
             // Extract the formatted text for the range
             let formatted_start_char = formatted_rope.line_to_char(formatted_start_line);
             let formatted_end_line_content = formatted_rope.line(formatted_end_line);
-            let formatted_end_char = formatted_rope.line_to_char(formatted_end_line) + formatted_end_line_content.len_chars();
+            let formatted_end_char = formatted_rope.line_to_char(formatted_end_line)
+                + formatted_end_line_content.len_chars();
 
-            let new_text = if formatted_start_char < formatted_rope.len_chars() && formatted_end_char <= formatted_rope.len_chars() {
+            let new_text = if formatted_start_char < formatted_rope.len_chars()
+                && formatted_end_char <= formatted_rope.len_chars()
+            {
                 formatted_rope
                     .slice(formatted_start_char..formatted_end_char)
                     .to_string()

@@ -1149,16 +1149,18 @@ impl WasmSerializer {
             WitType::U16 | WitType::S16 => 2,
             WitType::U32 | WitType::S32 | WitType::F32 => 4,
             WitType::U64 | WitType::S64 | WitType::F64 => 8,
-            WitType::Char => 4, // Unicode code point
-            WitType::String => 8,  // ptr(4) + len(4) in wasm32
-            WitType::List(_) => 8, // ptr(4) + len(4) in wasm32
-            WitType::Option_(_) => 8, // tag(4) + value(4+)
+            WitType::Char => 4,           // Unicode code point
+            WitType::String => 8,         // ptr(4) + len(4) in wasm32
+            WitType::List(_) => 8,        // ptr(4) + len(4) in wasm32
+            WitType::Option_(_) => 8,     // tag(4) + value(4+)
             WitType::Result_ { .. } => 8, // tag(4) + payload(4+)
-            WitType::Tuple(types) => {
-                types.iter().map(|t| self.aligned_size(t)).sum()
-            }
-            WitType::Record(_) | WitType::Variant(_) | WitType::Enum(_)
-            | WitType::Flags(_) | WitType::Resource(_) | WitType::Named(_) => 4, // pointer
+            WitType::Tuple(types) => types.iter().map(|t| self.aligned_size(t)).sum(),
+            WitType::Record(_)
+            | WitType::Variant(_)
+            | WitType::Enum(_)
+            | WitType::Flags(_)
+            | WitType::Resource(_)
+            | WitType::Named(_) => 4, // pointer
         }
     }
 
@@ -1273,7 +1275,9 @@ impl WasmSerializer {
 
         // readString
         js.push_str("  readString(ptr, len) {\n");
-        js.push_str("    return this.decoder.decode(new Uint8Array(this.memory.buffer, ptr, len));\n");
+        js.push_str(
+            "    return this.decoder.decode(new Uint8Array(this.memory.buffer, ptr, len));\n",
+        );
         js.push_str("  }\n\n");
 
         // writeArray
@@ -1734,8 +1738,8 @@ mod tests {
     fn test_wasm_serializer_alignment() {
         let ser = WasmSerializer::new();
         assert_eq!(ser.aligned_size(&WitType::Bool), 4); // 1 → 4 (aligned)
-        assert_eq!(ser.aligned_size(&WitType::S32), 4);  // 4 → 4 (exact)
-        assert_eq!(ser.aligned_size(&WitType::S64), 8);  // 8 → 8 (exact)
+        assert_eq!(ser.aligned_size(&WitType::S32), 4); // 4 → 4 (exact)
+        assert_eq!(ser.aligned_size(&WitType::S64), 8); // 8 → 8 (exact)
         assert_eq!(ser.aligned_size(&WitType::String), 8);
     }
 
@@ -1793,7 +1797,8 @@ mod tests {
     #[test]
     fn test_wasm_serializer_option_write() {
         let ser = WasmSerializer::new();
-        let write = ser.generate_js_write(&WitType::Option_(Box::new(WitType::S32)), "val", "offset");
+        let write =
+            ser.generate_js_write(&WitType::Option_(Box::new(WitType::S32)), "val", "offset");
         assert!(write.contains("null"));
         assert!(write.contains("undefined"));
         assert!(write.contains("setUint32"));

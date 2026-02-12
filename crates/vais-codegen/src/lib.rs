@@ -1436,7 +1436,8 @@ impl CodeGenerator {
         }
 
         // Add WASM import/export metadata attributes
-        if self.target.is_wasm() && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty()) {
+        if self.target.is_wasm() && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty())
+        {
             ir.push_str("\n; WASM import/export metadata\n");
             ir.push_str(&self.generate_wasm_metadata());
         }
@@ -2093,8 +2094,7 @@ impl CodeGenerator {
         }
 
         // Add WASM import/export metadata attributes
-        if self.target.is_wasm()
-            && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty())
+        if self.target.is_wasm() && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty())
         {
             ir.push_str("\n; WASM import/export metadata\n");
             ir.push_str(&self.generate_wasm_metadata());

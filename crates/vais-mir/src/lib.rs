@@ -16,8 +16,8 @@
 //! - Inlining decisions
 //! - Drop elaboration
 
-mod builder;
 pub mod borrow_check;
+mod builder;
 pub mod emit_llvm;
 pub mod lower;
 pub mod optimize;

@@ -144,7 +144,7 @@ pub struct RawFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StepGranularity {
     #[default]
-    Statement,   // Statement-level (default)
+    Statement, // Statement-level (default)
     Line,        // Line-level
     Instruction, // Instruction-level
 }
@@ -390,7 +390,9 @@ mod tests {
 
         // Step in without target function
         controller.start_step(
-            StepMode::In { target_function: None },
+            StepMode::In {
+                target_function: None,
+            },
             StepGranularity::Statement,
             1,
             10,
@@ -465,7 +467,9 @@ mod tests {
 
         // Reset and test step in with instruction granularity
         controller.start_step(
-            StepMode::In { target_function: None },
+            StepMode::In {
+                target_function: None,
+            },
             StepGranularity::Instruction,
             1,
             10,
@@ -511,10 +515,7 @@ mod tests {
         controller.start_step(StepMode::Out, StepGranularity::Line, 2, 20, 1);
 
         assert!(controller.is_stepping());
-        assert_eq!(
-            controller.current_mode(),
-            Some(&StepMode::Out)
-        );
+        assert_eq!(controller.current_mode(), Some(&StepMode::Out));
 
         // Cancel step
         controller.cancel();

@@ -683,7 +683,11 @@ impl CodeGenerator {
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
             ResolvedType::Named { name, .. } => {
                 if let Some(struct_info) = self.structs.get(name) {
-                    struct_info.fields.iter().map(|(_name, ty)| self.compute_sizeof(ty)).sum()
+                    struct_info
+                        .fields
+                        .iter()
+                        .map(|(_name, ty)| self.compute_sizeof(ty))
+                        .sum()
                 } else {
                     8 // enum (tag + payload) or unknown named type
                 }
@@ -701,14 +705,24 @@ impl CodeGenerator {
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
             ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str | ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Str
+            | ResolvedType::Pointer(_)
+            | ResolvedType::Ref(_)
+            | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 1,
-            ResolvedType::Tuple(elems) => {
-                elems.iter().map(|e| self.compute_alignof(e)).max().unwrap_or(8)
-            }
+            ResolvedType::Tuple(elems) => elems
+                .iter()
+                .map(|e| self.compute_alignof(e))
+                .max()
+                .unwrap_or(8),
             ResolvedType::Named { name, .. } => {
                 if let Some(struct_info) = self.structs.get(name) {
-                    struct_info.fields.iter().map(|(_name, ty)| self.compute_alignof(ty)).max().unwrap_or(8)
+                    struct_info
+                        .fields
+                        .iter()
+                        .map(|(_name, ty)| self.compute_alignof(ty))
+                        .max()
+                        .unwrap_or(8)
                 } else {
                     8 // enum or unknown named type
                 }
@@ -721,8 +735,8 @@ impl CodeGenerator {
 #[cfg(test)]
 mod sizeof_alignof_tests {
     use super::*;
-    use vais_types::ResolvedType;
     use crate::CodeGenerator;
+    use vais_types::ResolvedType;
 
     #[test]
     fn test_tuple_sizeof_sums_elements() {

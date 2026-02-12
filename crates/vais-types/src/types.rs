@@ -650,7 +650,10 @@ impl TypeError {
                 &[("name", name), ("expected", expected), ("found", found)],
             ),
             TypeError::InferFailed {
-                kind, name, context, ..
+                kind,
+                name,
+                context,
+                ..
             } => vais_i18n::get(
                 &key,
                 &[("kind", kind), ("name", name), ("context", context)],

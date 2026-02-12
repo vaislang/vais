@@ -530,7 +530,11 @@ fn test_parse_loop() {
         Item::Function(f) => match &f.body {
             FunctionBody::Block(stmts) => match &stmts[0].node {
                 Stmt::Expr(expr) => match &expr.node {
-                    Expr::Loop { pattern, iter, body } => {
+                    Expr::Loop {
+                        pattern,
+                        iter,
+                        body,
+                    } => {
                         assert!(pattern.is_none());
                         assert!(iter.is_none());
                         assert!(!body.is_empty());

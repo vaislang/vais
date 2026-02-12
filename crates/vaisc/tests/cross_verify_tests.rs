@@ -82,9 +82,7 @@ fn compile_run_rust(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult, St
         .arg("-Wno-override-module");
     #[cfg(not(target_os = "windows"))]
     cmd.arg("-lm");
-    let output = cmd
-        .output()
-        .map_err(|e| format!("clang failed: {}", e))?;
+    let output = cmd.output().map_err(|e| format!("clang failed: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -141,9 +139,7 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
         .arg("-Wno-override-module");
     #[cfg(not(target_os = "windows"))]
     cmd.arg("-lm");
-    let output = cmd
-        .output()
-        .map_err(|e| format!("clang failed: {}", e))?;
+    let output = cmd.output().map_err(|e| format!("clang failed: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

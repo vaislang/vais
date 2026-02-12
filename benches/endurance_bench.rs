@@ -153,41 +153,33 @@ fn bench_scaling(c: &mut Criterion) {
 
     // Test different program sizes
     let sizes = vec![
-        (50, "1K"),       // ~50 funcs ≈ 1K lines
-        (250, "5K"),      // ~250 funcs ≈ 5K lines
-        (500, "10K"),     // ~500 funcs ≈ 10K lines
-        (2500, "50K"),    // ~2500 funcs ≈ 50K lines
+        (50, "1K"),    // ~50 funcs ≈ 1K lines
+        (250, "5K"),   // ~250 funcs ≈ 5K lines
+        (500, "10K"),  // ~500 funcs ≈ 10K lines
+        (2500, "50K"), // ~2500 funcs ≈ 50K lines
     ];
 
     for (num_funcs, label) in sizes {
         let source = utils::generate_code(num_funcs);
         let lines = source.lines().count();
 
-        group.bench_with_input(
-            BenchmarkId::new("parse", label),
-            &source,
-            |b, s| {
-                b.iter(|| {
-                    let result = parse(black_box(s));
-                    black_box(result).expect("Parse failed")
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("parse", label), &source, |b, s| {
+            b.iter(|| {
+                let result = parse(black_box(s));
+                black_box(result).expect("Parse failed")
+            })
+        });
 
         // Pre-parse for type check benchmark
         let module = parse(&source).expect("Parse failed");
 
-        group.bench_with_input(
-            BenchmarkId::new("typecheck", label),
-            &module,
-            |b, m| {
-                b.iter(|| {
-                    let mut checker = TypeChecker::new();
-                    let result = checker.check_module(black_box(m));
-                    black_box(result).ok();
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("typecheck", label), &module, |b, m| {
+            b.iter(|| {
+                let mut checker = TypeChecker::new();
+                let result = checker.check_module(black_box(m));
+                black_box(result).ok();
+            })
+        });
 
         eprintln!("Benchmarked {} ({} lines)", label, lines);
     }
@@ -226,33 +218,28 @@ fn bench_large_project(c: &mut Criterion) {
     let mut group = c.benchmark_group("endurance_large_project");
     group.sample_size(10);
 
-    let sizes = vec![
-        (1000, "10K"),
-        (5000, "50K"),
-        (10000, "100K"),
-    ];
+    let sizes = vec![(1000, "10K"), (5000, "50K"), (10000, "100K")];
 
     for (target_lines, label) in sizes {
         let source = utils::generate_large_project(target_lines);
         let actual_lines = source.lines().count();
 
-        group.bench_with_input(
-            BenchmarkId::new("compile", label),
-            &source,
-            |b, s| {
-                b.iter(|| {
-                    let tokens = tokenize(black_box(s)).expect("Lex failed");
-                    black_box(tokens);
+        group.bench_with_input(BenchmarkId::new("compile", label), &source, |b, s| {
+            b.iter(|| {
+                let tokens = tokenize(black_box(s)).expect("Lex failed");
+                black_box(tokens);
 
-                    let module = parse(black_box(s)).expect("Parse failed");
-                    let mut checker = TypeChecker::new();
-                    let result = checker.check_module(&module);
-                    black_box(result).ok();
-                })
-            },
+                let module = parse(black_box(s)).expect("Parse failed");
+                let mut checker = TypeChecker::new();
+                let result = checker.check_module(&module);
+                black_box(result).ok();
+            })
+        });
+
+        eprintln!(
+            "Benchmarked large project: {} ({} lines)",
+            label, actual_lines
         );
-
-        eprintln!("Benchmarked large project: {} ({} lines)", label, actual_lines);
     }
 
     group.finish();

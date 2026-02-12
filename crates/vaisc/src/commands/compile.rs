@@ -309,9 +309,10 @@ pub fn parallel_type_check(
     }
 
     // Build a map from file path to item indices
-    let modules_map = final_ast.modules_map.as_ref().ok_or_else(|| {
-        "modules_map required for parallel type-checking".to_string()
-    })?;
+    let modules_map = final_ast
+        .modules_map
+        .as_ref()
+        .ok_or_else(|| "modules_map required for parallel type-checking".to_string())?;
 
     // Create a global checker for collecting all type information
     let global_checker = Arc::new(Mutex::new(TypeChecker::new()));
@@ -362,7 +363,9 @@ pub fn parallel_type_check(
                 };
 
                 // Type-check this module
-                checker.check_module(&module).map_err(|e| format!("{}", e))?;
+                checker
+                    .check_module(&module)
+                    .map_err(|e| format!("{}", e))?;
 
                 Ok(checker)
             })
@@ -469,9 +472,10 @@ pub fn parallel_codegen(
     }
 
     // Build a map from file path to item indices
-    let modules_map = final_ast.modules_map.as_ref().ok_or_else(|| {
-        "modules_map required for parallel codegen".to_string()
-    })?;
+    let modules_map = final_ast
+        .modules_map
+        .as_ref()
+        .ok_or_else(|| "modules_map required for parallel codegen".to_string())?;
 
     let effective_opt_level = if debug { 0 } else { opt_level };
     let resolved_functions = checker.get_all_functions().clone();
@@ -797,13 +801,7 @@ pub(crate) fn compile_to_native(
     );
 
     // Add runtime libraries and native dependencies
-    add_runtime_and_native_libs(
-        &mut args,
-        verbose,
-        used_modules,
-        native_deps,
-        ir_path,
-    )?;
+    add_runtime_and_native_libs(&mut args, verbose, used_modules, native_deps, ir_path)?;
 
     if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled() || coverage_mode.is_enabled()) {
         let mut features = vec![];
@@ -1357,13 +1355,14 @@ pub fn pipeline_compile(
         }
 
         // Type-check this module immediately
-        checker.check_module(&module).map_err(|e| {
-            format!("Type error in '{}': {}", module_path.display(), e)
-        })?;
+        checker
+            .check_module(&module)
+            .map_err(|e| format!("Type error in '{}': {}", module_path.display(), e))?;
 
         // Track module items for later codegen
         let num_items = module.items.len();
-        let item_indices: Vec<usize> = (current_item_offset..current_item_offset + num_items).collect();
+        let item_indices: Vec<usize> =
+            (current_item_offset..current_item_offset + num_items).collect();
         modules_map.insert(module_path.clone(), item_indices);
         current_item_offset += num_items;
 

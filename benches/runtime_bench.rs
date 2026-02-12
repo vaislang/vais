@@ -34,9 +34,7 @@ fn compile_vais_to_binary(source_path: &Path) -> Option<PathBuf> {
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let manifest_path = PathBuf::from(&manifest_dir);
-    let project_root = manifest_path
-        .parent()
-        .expect("Failed to get project root");
+    let project_root = manifest_path.parent().expect("Failed to get project root");
 
     let source_abs = project_root.join(source_path);
     if !source_abs.exists() {
@@ -53,10 +51,7 @@ fn compile_vais_to_binary(source_path: &Path) -> Option<PathBuf> {
         .join("target")
         .join("bench_ir")
         .join(format!("{}.ll", stem));
-    let binary_path = project_root
-        .join("target")
-        .join("bench_bin")
-        .join(stem);
+    let binary_path = project_root.join("target").join("bench_bin").join(stem);
 
     // Create output directories
     fs::create_dir_all(ir_path.parent().unwrap()).ok();
