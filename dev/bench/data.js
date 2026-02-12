@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770899261742,
+  "lastUpdate": 1770899829977,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -18311,6 +18311,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1825107,
             "range": "± 30357",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "379f2bc9b2d2e0c39b5fa1675940f1567d4dcc15",
+          "message": "fix: ignore 4 additional pre-existing vais-mir integration test failures\n\nMark borrow_check integration tests as #[ignore]:\n- test_borrow_check_double_move\n- test_borrow_check_double_drop\n- test_borrow_check_use_after_drop\n- test_borrow_check_mixed_valid_invalid\n\nSame root cause as unit test failures — check_body doesn't detect\nthese borrow violations yet.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-12T21:29:58+09:00",
+          "tree_id": "8bdb5ae54fdc5a0ddf6e504abc9d50fa75a22ca7",
+          "url": "https://github.com/vaislang/vais/commit/379f2bc9b2d2e0c39b5fa1675940f1567d4dcc15"
+        },
+        "date": 1770899829165,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2453,
+            "range": "± 74",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5152,
+            "range": "± 66",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5956,
+            "range": "± 166",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11285,
+            "range": "± 133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17931,
+            "range": "± 123",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34029,
+            "range": "± 198",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30307,
+            "range": "± 447",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67783,
+            "range": "± 287",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 293234,
+            "range": "± 918",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 443890,
+            "range": "± 5201",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 109812,
+            "range": "± 1211",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 762971,
+            "range": "± 8487",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 166066,
+            "range": "± 1611",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 194066,
+            "range": "± 4726",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 201014,
+            "range": "± 2687",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 247627,
+            "range": "± 1173",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 522783,
+            "range": "± 2917",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 734547,
+            "range": "± 3622",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 402156,
+            "range": "± 5773",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1162683,
+            "range": "± 7727",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39088,
+            "range": "± 255",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 194250,
+            "range": "± 4826",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 376150,
+            "range": "± 6099",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1837718,
+            "range": "± 14489",
             "unit": "ns/iter"
           }
         ]
