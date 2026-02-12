@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-09
+> **최종 업데이트**: 2026-02-12
 
 ---
 
@@ -141,6 +141,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 14** | CI 실패 수정 | Windows LLVM --allow-downgrade, ASan fuzz_tests 스택 오버플로우 (16MB 스레드 + ASan depth 축소) |
 | **Phase 15** | 벤치마크 토큰 효율성 | expression-body, range loop, self-recursion, compound assignment, 직접 인덱싱 — 1,085→865 tokens (-20.3%) |
 | **Phase 16** | 토큰 효율성 문법 | `i` type alias, 파라미터 타입 추론, `println()`, struct tuple literal — 865→801 tokens (-7.4%), **510 E2E** |
+| **Phase 17~20** | 토큰 극대화 · 코드 정리 · 문서 | auto-return, swap 빌트인, 토큰 750 이하, Playground/docs-site 현행화, E2E 모듈 분할 — **520 E2E** |
+| **Phase 21** | CI 전체 Green | cargo fmt 78파일, Windows CI explicit `-p` flags (LLVM 미설치 crate 분리), ASan vais-codegen continue-on-error, vais-mir borrow checker 테스트 18개 `#[ignore]` (MirType::Str Copy→Struct 전환 필요), Windows path separator 수정, Codecov 토큰 설정 — **CI 13/13 green, 3-OS 전체 통과** |
+| **Phase 22** | MIR Borrow Checker 테스트 정상화 | ⏳ Planned — `#[ignore]` 18개 근본 원인 해결 (MirType::Str Copy→Struct 전환 + lower.rs Display 수정) |
+| **Phase 23** | 선택적 Import 구문 | ⏳ Planned — `U mod.Item;`, `U mod.{A, B};`, 세미콜론 종결자 (VaisDB 190파일 1,203건 blocker) |
 
 ---
 
@@ -941,6 +945,92 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. dead_code 감사 및 정리 (Sonnet 위임) ✅
   변경: 220+ 줄 미사용 코드 삭제 (gpu/common.rs, codegen-js, mir, jit, profiler), 모듈 레벨 allow 정리
 진행률: 4/4 (100%)
+
+---
+
+## Phase 21: 선택적 Import 구문 지원
+
+> **상태**: ⏳ Planned
+> **목표**: `U` 문에서 선택적 import 구문을 지원하여 대규모 프로젝트(VaisDB 190+ 파일)의 빌드 가능 상태 확보
+> **배경**: 현재 vaisc 1.0.0은 `U std/option` (모듈 전체 import)만 지원. VaisDB 프로젝트(190 파일, 1,203건)가 사용하는 선택적 import 구문이 컴파일 불가
+> **Blocker**: VaisDB Phase 9 (Production Operations) 진행의 선행 조건
+
+### 현황
+
+| 구문 | 상태 | 예시 | VaisDB 사용량 |
+|------|------|------|--------------|
+| 모듈 전체 import | ✅ 지원 | `U std/option` | — |
+| 단일 항목 선택 import | ❌ 미지원 | `U std/string.Str` | 198건 (83 파일) |
+| 다중 항목 선택 import | ❌ 미지원 | `U std/option.{Option, Some, None}` | 1,107건 (191 파일) |
+| 세미콜론 종결자 | ❌ 미지원 | `U std/string;` | 1,203건 (190 파일) |
+
+### 작업
+
+- [ ] 1. Lexer/Parser 확장 — `U path/module.Ident;` 및 `U path/module.{Ident, ...};` 구문 파싱, 세미콜론 종결자 지원
+- [ ] 2. 이름 해석 (Name Resolution) — 선택적 import된 심볼만 현재 스코프에 바인딩, 미선택 심볼 접근 시 에러
+- [ ] 3. 기존 호환성 유지 — `U std/option` (세미콜론 없이 모듈 전체 import) 기존 동작 유지
+- [ ] 4. E2E 테스트 — 선택적 import 양성/음성 테스트 (단일 항목, 다중 항목, 중첩 모듈, 미존재 심볼 에러)
+- [ ] 5. VaisDB 빌드 검증 — `vaisc build` 로 VaisDB src/main.vais 컴파일 성공 확인
+
+### Verification
+
+| 기준 | 조건 |
+|------|------|
+| 파서 | `U mod.Item;`, `U mod.{A, B};` 구문 파싱 성공 |
+| 이름 해석 | 선택 import된 심볼만 스코프에 존재, 나머지 접근 시 에러 |
+| 하위 호환 | 기존 `U mod` 구문 동작 유지, 기존 E2E 520개 통과 |
+| VaisDB | `vaisc build src/main.vais` 에러 0건 |
+
+---
+
+## Phase 22: MIR Borrow Checker 테스트 정상화
+
+> **상태**: ⏳ Planned
+> **목표**: `#[ignore]` 처리된 vais-mir 테스트 18개의 근본 원인 해결
+> **근본 원인**: Phase 13에서 `MirType::Str`을 `is_copy()=true`로 변경했으나, borrow checker/lower 테스트는 `Str`을 non-Copy 타입 대표로 사용
+
+### 근본 원인 분석
+
+| 그룹 | 파일 | 개수 | 근본 원인 | 수정 방향 |
+|------|------|------|-----------|-----------|
+| A | borrow_check.rs (unit) | 11 | `MirType::Str`이 `is_copy()=true` → move/drop이 no-op | 테스트에서 `Str` → `Struct("Foo".into())` 전환 |
+| B | integration_tests.rs | 4 | 동일 (check_body/check_module에서 Str move 미감지) | 동일 전환 |
+| C | lower.rs | 3 | Str이 Copy → lowering에서 Move/Drop 미생성 → Display 불일치 | 동일 전환 |
+
+### Stage 1: borrow_check.rs 단위 테스트 수정 (11개)
+
+- [ ] 1. `MirType::Str` → `MirType::Struct("TestNonCopy".into())` 전환 — 11개 테스트의 LocalDecl/params/return_type 수정 (Sonnet)
+  - test_use_after_move, test_double_drop, test_use_after_drop, test_move_while_borrowed, test_check_module
+  - test_cfg_sequential_blocks, test_cfg_move_on_one_branch, test_cfg_if_else_drop_one_branch
+  - test_cfg_if_else_use_after_partial_move, test_lifetime_use_after_move_str, test_lifetime_double_drop_with_lifetime_locals
+- [ ] 2. `#[ignore]` 제거 + `cargo test -p vais-mir --lib` 전체 통과 확인 (Sonnet)
+
+### Stage 2: integration_tests.rs 통합 테스트 수정 (4개)
+
+- [ ] 3. `MirType::Str` → `MirType::Struct("TestNonCopy".into())` 전환 — 4개 (Sonnet)
+  - test_borrow_check_double_move, test_borrow_check_double_drop
+  - test_borrow_check_use_after_drop, test_borrow_check_mixed_valid_invalid
+- [ ] 4. `#[ignore]` 제거 + `cargo test -p vais-mir --test integration_tests` 전체 통과 확인 (Sonnet)
+
+### Stage 3: lower.rs 단위 테스트 수정 (3개)
+
+- [ ] 5. lower.rs에서 Str → Struct 전환 + Display 기대값 수정 (Sonnet)
+  - test_move_type_operand, test_drop_insertion, test_move_prevents_drop
+- [ ] 6. `#[ignore]` 제거 + `cargo test -p vais-mir --lib` 전체 통과 확인 (Sonnet)
+
+### Stage 4: 검증
+
+- [ ] 7. `cargo test -p vais-mir` 전체 통과 (0 ignored, 0 failed) (Opus)
+- [ ] 8. `cargo test --workspace --exclude vais-python --exclude vais-node` 전체 E2E 520+ 통과 확인 (Opus)
+
+### Verification
+
+| 기준 | 조건 |
+|------|------|
+| ignored | vais-mir 0개 ignored (현재 18개 → 0개) |
+| borrow_check | 모든 unit test 통과 (UseAfterMove, DoubleFree, UseAfterFree, MoveWhileBorrowed 감지) |
+| lower | Move/Drop 생성 확인 (non-Copy 타입에 대해) |
+| 회귀 | E2E 520+ 통과, Clippy 0건 |
 
 ---
 
