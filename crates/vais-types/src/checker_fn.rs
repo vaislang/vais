@@ -52,7 +52,14 @@ impl TypeChecker {
             .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
-            .unwrap_or_else(|| self.fresh_type_var());
+            .unwrap_or_else(|| {
+                // main() without return type defaults to i64 (program exit code)
+                if f.name.node == "main" {
+                    ResolvedType::I64
+                } else {
+                    self.fresh_type_var()
+                }
+            });
         self.validate_dyn_trait_object_safety(&ret_type);
         self.current_fn_ret = Some(ret_type.clone());
         self.current_fn_name = Some(f.name.node.clone());
@@ -93,7 +100,16 @@ impl TypeChecker {
         } else {
             body_type.clone()
         };
-        self.unify(&expected_ret, &body_type_deref)?;
+        // main() with implicit i64 return: allow Unit body (auto-return 0)
+        if f.name.node == "main"
+            && ret_type_inferred
+            && expected_ret == ResolvedType::I64
+            && body_type_deref == ResolvedType::Unit
+        {
+            // Skip unification — codegen will insert `ret i64 0`
+        } else {
+            self.unify(&expected_ret, &body_type_deref)?;
+        }
 
         // Resolve inferred return type: if return type was omitted, apply substitutions
         // to resolve the type variable to the concrete type from the body.

@@ -514,6 +514,28 @@ impl TypeChecker {
             },
         );
 
+        // swap: (ptr, idx1, idx2) -> () — swap two i64 elements in array
+        self.functions.insert(
+            "swap".to_string(),
+            FunctionSig {
+                name: "swap".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::Pointer(Box::new(ResolvedType::I64)), false),
+                    ("idx1".to_string(), ResolvedType::I64, false),
+                    ("idx2".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
     }
 
     fn register_stdlib_builtins(&mut self) {

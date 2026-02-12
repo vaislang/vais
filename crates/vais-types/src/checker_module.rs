@@ -269,7 +269,14 @@ impl TypeChecker {
             .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
-            .unwrap_or_else(|| self.fresh_type_var());
+            .unwrap_or_else(|| {
+                // main() without return type defaults to i64 (program exit code)
+                if f.name.node == "main" {
+                    ResolvedType::I64
+                } else {
+                    self.fresh_type_var()
+                }
+            });
 
         // Restore previous generics
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);

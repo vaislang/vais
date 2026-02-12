@@ -772,6 +772,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "format" => return self.generate_format_call(args),
             "store_i64" => return self.generate_store_i64(args),
             "load_i64" => return self.generate_load_i64(args),
+            "swap" => return self.generate_swap(args),
             "store_byte" => return self.generate_store_byte(args),
             "load_byte" => return self.generate_load_byte(args),
             "store_f64" => return self.generate_store_f64(args),

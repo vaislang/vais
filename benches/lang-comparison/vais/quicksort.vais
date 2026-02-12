@@ -1,18 +1,14 @@
 # Quicksort with array partitioning
-F partition(arr, lo, hi) -> i64 {
+F partition(arr, lo, hi) {
     pivot := arr[hi]
     i := mut lo
     L j:lo..hi {
         I arr[j] <= pivot {
-            t := arr[i]
-            arr[i] = arr[j]
-            arr[j] = t
+            swap(arr, i, j)
             i += 1
         }
     }
-    t := arr[i]
-    arr[i] = arr[hi]
-    arr[hi] = t
+    swap(arr, i, hi)
     i
 }
 
@@ -24,11 +20,10 @@ F quicksort(arr, lo, hi) {
     }
 }
 
-F main() -> i64 {
+F main() {
     arr: *i64 = [38, 27, 43, 3, 9, 82, 10, 55, 1, 77]
     quicksort(arr, 0, 9)
     L i:0..10 {
         println("~{arr[i]}")
     }
-    0
 }

@@ -139,6 +139,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 12** | 컴파일러 고도화 | JIT 티어 전환 (OSR/deopt), GPU 벤치마크 92개, pread/pwrite POSIX, SIMD SSE2/NEON, SHA-256 FIPS 180-4, LLVM LlvmOptHints, Incremental CacheMissReason |
 | **Phase 13** | 보안+품질 강화 | std/crypto AES-256 FIPS 197 교체 (1,359줄), str 비교 Copy 전환 (move→copy), JIT panic→Result (0 panic), 런타임 벤치마크 프레임워크 — **504 E2E**, JIT 37 |
 | **Phase 14** | CI 실패 수정 | Windows LLVM --allow-downgrade, ASan fuzz_tests 스택 오버플로우 (16MB 스레드 + ASan depth 축소) |
+| **Phase 15** | 벤치마크 토큰 효율성 | expression-body, range loop, self-recursion, compound assignment, 직접 인덱싱 — 1,085→865 tokens (-20.3%) |
+| **Phase 16** | 토큰 효율성 문법 | `i` type alias, 파라미터 타입 추론, `println()`, struct tuple literal — 865→801 tokens (-7.4%), **510 E2E** |
 
 ---
 
@@ -834,6 +836,61 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: 510 E2E 통과, Clippy 0건
 
 진행률: 6/6 (100%)
+
+---
+
+## Phase 17: 토큰 효율성 750 이하 달성
+
+> **상태**: ✅ 완료 (2026-02-12)
+> **목표**: 벤치마크 801→≤750 토큰 (성능 유지, 런타임 영향 없음)
+> **결과**: 801→721 토큰 (-10.0%), 목표 초과 달성. E2E 518개 통과(+14), Clippy 0건
+> **배경**: Phase 15~16에서 1,085→801 (-26.2%) 달성. 추가 절감을 위해 기존 지원 기능의 벤치마크 적용 + 언어 문법 소폭 확장
+
+### Stage 1: 벤치마크 코드 최적화 (기존 문법 활용, 언어 변경 없음)
+
+**목표**: 이미 지원되는 기능을 벤치마크에 적용하여 토큰 절감
+
+- [x] 1. 비재귀 함수 반환타입 생략 — fib_iter, partition, node_new, list_len, list_sum에서 `-> i64` 제거 ✅
+  변경: benches/lang-comparison/vais/*.vais (4파일 5함수 반환타입 제거)
+- [x] 2. http_types printf→println 전환 — `printf("status=%lld...")` → `println("~{res.status} ~{res.body}")` ✅
+  변경: benches/lang-comparison/vais/http_types.vais (printf 3줄→println 3줄)
+- [x] 3. struct 필드 + 재귀함수 반환 `i` alias 적용 — `i64` → `i` ✅
+  변경: http_types.vais struct 필드 i64→i, fibonacci.vais fib_rec -> i
+- [x] 4. 토큰 재측정 + 검증 — 801→777 토큰 (Stage 1 후) ✅
+  변경: count_tokens.py 실행, E2E 회귀 확인
+
+### Stage 2: main() 자동 반환 구현
+
+**목표**: `F main() -> i64 { ... 0 }` → `F main() { ... }` (main 전용 i64 기본 반환 + 암시적 0)
+
+- [x] 5. 타입 체커 수정 — main() 반환타입 미지정 시 i64 기본값 ✅
+  변경: checker_fn.rs, checker_module.rs (main() → implicit I64, Unit body skip unify)
+- [x] 6. Codegen 수정 — main()이 Unit body일 때 `ret i64 0` 자동 삽입 ✅
+  변경: function_gen.rs (Text IR ret i64 0 삽입, Inkwell은 get_default_value fallback)
+- [x] 7. 벤치마크 적용 + E2E 테스트 — 4개 벤치마크에서 `-> i64` + `0` 제거, 4개 E2E 추가 ✅
+  변경: vais/*.vais main() 반환 제거, e2e_tests.rs +4 (auto_return 3 + explicit 1)
+
+### Stage 3: swap 빌트인 함수
+
+**목표**: 배열 swap 3줄 패턴 → `swap(arr, i, j)` 1줄
+
+- [x] 8. swap 빌트인 등록 — `swap(ptr, idx1, idx2)` → ptrtoint+load+store IR 생성 ✅
+  변경: types/builtins.rs, codegen/builtins.rs, function_gen.rs, generate_expr.rs, inkwell/gen_special.rs, gen_expr.rs, inference.rs (Pointer↔i64 unify)
+- [x] 9. 벤치마크 적용 + 최종 측정 — quicksort.vais swap 2회 교체, 721 토큰 달성 ✅
+  변경: quicksort.vais (manual swap→swap builtin), docs/benchmarks.md 수치 업데이트, e2e_tests.rs +4 swap 테스트
+
+모드: 자동진행
+진행률: 9/9 (100%)
+
+### 리뷰 발견사항 (2026-02-12)
+> 출처: /team-review Phase 17
+
+- [ ] 1. [성능] swap dead code 제거 — generate_expr.rs inline 제거, __swap 헬퍼 호출 패턴 통일 (Warning)
+- [ ] 2. [보안+성능+테스트] Pointer↔i64 implicit unify 범위 문서화/제한 검토 — inference.rs:181 (Warning)
+- [ ] 3. [테스트] Inkwell main() auto-return 명시화 — gen_function.rs (Warning)
+- [ ] 4. [테스트] 누락 E2E 추가 — `F main() { R 5 }`, `F main() { 42 }` (Warning)
+- [ ] 5. [성능] ptrtoint/inttoptr → GEP 전환 검토 — gen_special.rs, generate_expr.rs (Warning)
+진행률: 0/5 (0%)
 
 ---
 

@@ -291,6 +291,16 @@ impl CodeGenerator {
             ResolvedType::Unit
         );
 
+        // swap: swap two i64 elements in array (internal helper)
+        register_helper!(self, "swap" => "__swap",
+            vec![
+                ("ptr".to_string(), ResolvedType::Pointer(Box::new(ResolvedType::I64))),
+                ("idx1".to_string(), ResolvedType::I64),
+                ("idx2".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::Unit
+        );
+
         // load_f64: load 64-bit float from memory (internal helper)
         register_helper!(self, "load_f64" => "__load_f64",
             vec![("ptr".to_string(), ResolvedType::I64)],

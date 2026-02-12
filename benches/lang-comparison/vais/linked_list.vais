@@ -1,5 +1,5 @@
 # Singly linked list (node: [value, next] pair)
-F node_new(val) -> i64 {
+F node_new(val) {
     ptr := malloc(16)
     store_i64(ptr, val)
     store_i64(ptr + 8, 0)
@@ -12,7 +12,7 @@ F list_push(head, val) {
     store_i64(head + 8, nd)
 }
 
-F list_len(head) -> i64 {
+F list_len(head) {
     count := mut 0
     cur := mut load_i64(head + 8)
     L cur != 0 {
@@ -22,7 +22,7 @@ F list_len(head) -> i64 {
     count
 }
 
-F list_sum(head) -> i64 {
+F list_sum(head) {
     total := mut 0
     cur := mut load_i64(head + 8)
     L cur != 0 {
@@ -32,12 +32,11 @@ F list_sum(head) -> i64 {
     total
 }
 
-F main() -> i64 {
+F main() {
     head := node_new(0)
     L i:1..11 {
         list_push(head, i)
     }
     println("~{list_len(head)}")
     println("~{list_sum(head)}")
-    0
 }

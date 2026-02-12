@@ -13897,3 +13897,113 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// === Phase 17: main() auto-return and swap builtin ===
+
+#[test]
+fn test_main_auto_return_println() {
+    // main() without -> i64 should auto-return 0
+    let source = r#"
+F main() {
+    println("hello")
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_main_auto_return_empty() {
+    // main() with empty body should auto-return 0
+    let source = r#"
+F main() {
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_main_auto_return_with_loop() {
+    // main() with loop and no explicit return
+    let source = r#"
+F main() {
+    x := mut 0
+    L i:0..5 {
+        x += i
+    }
+    println("~{x}")
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_main_explicit_return_still_works() {
+    // main() -> i64 with explicit return still works
+    let source = r#"
+F main() -> i64 {
+    42
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_swap_builtin_basic() {
+    // swap(ptr, idx1, idx2) swaps two i64 elements
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [10, 20, 30]
+    swap(arr, 0, 2)
+    arr[0] - arr[2]
+}
+"#;
+    // arr[0]=30, arr[2]=10 → 30-10=20
+    assert_exit_code(source, 20);
+}
+
+#[test]
+fn test_swap_builtin_same_index() {
+    // swap with same index should be no-op
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [42, 99]
+    swap(arr, 0, 0)
+    arr[0]
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_swap_builtin_in_function() {
+    // swap called from another function
+    let source = r#"
+F do_swap(arr: *i64, i: i64, j: i64) {
+    swap(arr, i, j)
+}
+F main() -> i64 {
+    arr: *i64 = [10, 20, 30]
+    do_swap(arr, 0, 2)
+    arr[0] - arr[2]
+}
+"#;
+    // arr[0]=30, arr[2]=10 → 30-10=20
+    assert_exit_code(source, 20);
+}
+
+#[test]
+fn test_swap_builtin_multiple() {
+    // Two consecutive swaps verify both work correctly
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [5, 3, 1, 4, 2]
+    swap(arr, 0, 2)
+    swap(arr, 3, 4)
+    arr[0] + arr[3]
+}
+"#;
+    // After swap(0,2): [1, 3, 5, 4, 2]
+    // After swap(3,4): [1, 3, 5, 2, 4]
+    // arr[0]=1 + arr[3]=2 = 3
+    assert_exit_code(source, 3);
+}

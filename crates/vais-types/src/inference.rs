@@ -178,6 +178,9 @@ impl TypeChecker {
             }
             // Allow implicit integer type conversions (widening and narrowing)
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Pointer <-> i64 implicit conversion (pointers are i64 internally)
+            (ResolvedType::Pointer(_), ResolvedType::I64)
+            | (ResolvedType::I64, ResolvedType::Pointer(_)) => Ok(()),
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)

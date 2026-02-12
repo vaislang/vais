@@ -291,6 +291,23 @@ impl CodeGenerator {
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
 
+        // __swap: swap two i64 elements in array by index
+        ir.push_str("\n; Helper function: swap two i64 elements in array\n");
+        ir.push_str("define void @__swap(i64 %ptr, i64 %idx1, i64 %idx2) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %off1 = mul i64 %idx1, 8\n");
+        ir.push_str("  %addr1 = add i64 %ptr, %off1\n");
+        ir.push_str("  %off2 = mul i64 %idx2, 8\n");
+        ir.push_str("  %addr2 = add i64 %ptr, %off2\n");
+        ir.push_str("  %p1 = inttoptr i64 %addr1 to i64*\n");
+        ir.push_str("  %p2 = inttoptr i64 %addr2 to i64*\n");
+        ir.push_str("  %v1 = load i64, i64* %p1\n");
+        ir.push_str("  %v2 = load i64, i64* %p2\n");
+        ir.push_str("  store i64 %v2, i64* %p1\n");
+        ir.push_str("  store i64 %v1, i64* %p2\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
         // __load_f64: load a 64-bit float from memory address
         ir.push_str("\n; Helper function: load f64 from memory\n");
         ir.push_str("define double @__load_f64(i64 %ptr) {\n");
@@ -879,6 +896,13 @@ impl CodeGenerator {
                     let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                     if ret_type == ResolvedType::Unit {
                         ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                    } else if f.name.node == "main"
+                        && ret_type == ResolvedType::I64
+                        && f.ret_type.is_none()
+                        && value == "void"
+                    {
+                        // main() with implicit i64 return and Unit body: auto-return 0
+                        ir.push_str(&format!("  ret i64 0{}\n", ret_dbg));
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                         if self.is_block_result_value(stmts) {

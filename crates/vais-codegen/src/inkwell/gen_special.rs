@@ -670,6 +670,82 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
+    pub(super) fn generate_swap(
+        &mut self,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // swap(ptr, idx1, idx2) -> void
+        // Swaps two i64 elements in an array. ptr can be PointerValue or IntValue.
+        if args.len() < 3 {
+            return Err(CodegenError::Unsupported(
+                "swap requires 3 args".to_string(),
+            ));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+        let idx1_val = self.generate_expr(&args[1].node)?;
+        let idx2_val = self.generate_expr(&args[2].node)?;
+
+        let i64_type = self.context.i64_type();
+        let i64_ptr_type = i64_type.ptr_type(AddressSpace::default());
+
+        // Convert ptr to i64 if it's a pointer, then compute addresses
+        let ptr_int = if ptr_val.is_pointer_value() {
+            self.builder
+                .build_ptr_to_int(ptr_val.into_pointer_value(), i64_type, "swap_ptr_int")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            ptr_val.into_int_value()
+        };
+
+        let elem_size = i64_type.const_int(8, false);
+
+        // addr1 = ptr + idx1 * 8
+        let off1 = self
+            .builder
+            .build_int_mul(idx1_val.into_int_value(), elem_size, "off1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let addr1 = self
+            .builder
+            .build_int_add(ptr_int, off1, "addr1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let p1 = self
+            .builder
+            .build_int_to_ptr(addr1, i64_ptr_type, "p1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // addr2 = ptr + idx2 * 8
+        let off2 = self
+            .builder
+            .build_int_mul(idx2_val.into_int_value(), elem_size, "off2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let addr2 = self
+            .builder
+            .build_int_add(ptr_int, off2, "addr2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let p2 = self
+            .builder
+            .build_int_to_ptr(addr2, i64_ptr_type, "p2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Load, swap, store
+        let v1 = self
+            .builder
+            .build_load(i64_type, p1, "v1")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let v2 = self
+            .builder
+            .build_load(i64_type, p2, "v2")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(p1, v2)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(p2, v1)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
     pub(super) fn generate_store_byte(
         &mut self,
         args: &[Spanned<Expr>],
