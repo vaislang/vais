@@ -2,7 +2,7 @@
 
 ## 개요
 
-Vais 표준 라이브러리는 **73개의 모듈**로 구성되어 있으며, 시스템 프로그래밍부터 웹 개발까지 다양한 용도를 지원합니다. 모든 모듈은 `std/` 디렉토리에 위치하며, `U std::{module}` 또는 `U {module}` 구문으로 임포트할 수 있습니다.
+Vais 표준 라이브러리는 **74개의 모듈**로 구성되어 있으며, 시스템 프로그래밍부터 웹 개발까지 다양한 용도를 지원합니다. 모든 모듈은 `std/` 디렉토리에 위치하며, `U std::{module}` 또는 `U {module}` 구문으로 임포트할 수 있습니다.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ F main() {
 | `box` | 힙 할당 스마트 포인터 `Box<T>` | [API](../api/box.md) |
 | `rc` | 참조 카운팅 스마트 포인터 `Rc<T>` | [API](../api/rc.md) |
 | `fmt` | 포매팅 유틸리티 | [API](../api/fmt.md) |
-| `error` | 에러 처리 트레이트 및 유틸리티 | [API](../api/error.md) |
+| `error` | 에러 처리 트레이트 및 유틸리티 | API |
 
 ### Collections
 
@@ -52,7 +52,7 @@ F main() {
 | `deque` | 양방향 큐 `Deque<T>` | | [API](../api/deque.md) |
 | `priority_queue` | 우선순위 큐 | | [API](../api/priority_queue.md) |
 | `collections` | 컬렉션 트레이트 및 공통 인터페이스 | | [API](../api/collections.md) |
-| `iter` | 반복자 트레이트 및 어댑터 | | [API](../api/iter.md) |
+| `iter` | 반복자 트레이트 및 어댑터 | | API |
 
 ### I/O & Filesystem
 
@@ -92,9 +92,9 @@ F main() {
 | `async` | Async 런타임 프리미티브 (Barrier, Semaphore, WaitGroup) | | [API](../api/async.md) |
 | `runtime` | Async 런타임 스케줄러 | | [API](../api/runtime.md) |
 | `async_reactor` | 비동기 이벤트 reactor | | [API](../api/async_reactor.md) |
-| `async_io` | 비동기 I/O 추상화 | | [API](../api/async_io.md) |
-| `async_net` | 비동기 네트워크 (TCP/UDP) | | [API](../api/async_net.md) |
-| `async_http` | 비동기 HTTP 서버 | | [API](../api/async_http.md) |
+| `async_io` | 비동기 I/O 추상화 | | API |
+| `async_net` | 비동기 네트워크 (TCP/UDP) | | API |
+| `async_http` | 비동기 HTTP 서버 | | API |
 
 ### Data Processing
 
@@ -150,9 +150,9 @@ F main() {
 |------|------|---------------|
 | `time` | 시간 측정 및 타이머 | [API](../api/time.md) |
 | `datetime` | 날짜/시간 파싱 및 포매팅 | [API](../api/datetime.md) |
-| `process` | 프로세스 생성 및 관리 | [API](../api/process.md) |
-| `signal` | Unix 시그널 처리 | [API](../api/signal.md) |
-| `env` | 환경 변수 접근 | [API](../api/env.md) |
+| `process` | 프로세스 생성 및 관리 | API |
+| `signal` | Unix 시그널 처리 | API |
+| `env` | 환경 변수 접근 | API |
 | `args` | 커맨드라인 인자 파싱 | [API](../api/args.md) |
 | `random` | 난수 생성기 | [API](../api/random.md) |
 | `uuid` | UUID 생성 | [API](../api/uuid.md) |
@@ -169,8 +169,8 @@ GPU 컴퓨팅 및 WASM 런타임을 위한 모듈.
 | 모듈 | 설명 | API Reference |
 |------|------|---------------|
 | `gpu` | GPU 연산 (CUDA/Metal/OpenCL/WebGPU) | [API](../api/gpu.md) |
-| `wasm` | WASM 런타임 인터페이스 (WASI) | [API](../api/wasm.md) |
-| `web` | Web API (Console/Timer/DOM/Fetch/Storage) | [API](../api/web.md) |
+| `wasm` | WASM 런타임 인터페이스 (WASI) | API |
+| `web` | Web API (Console/Timer/DOM/Fetch/Storage) | API |
 | `hot` | Hot reloading 지원 | [API](../api/hot.md) |
 | `dynload` | 동적 모듈 로딩 | [API](../api/dynload.md) |
 
@@ -238,6 +238,6 @@ F main() {
 
 ## 추가 리소스
 
-- [표준 라이브러리 가이드 목록](./index.md)
-- [API Reference 전체 목록](../api/index.md)
-- [Vais 언어 레퍼런스](../reference/index.md)
+- 표준 라이브러리 가이드 목록
+- API Reference 전체 목록
+- Vais 언어 레퍼런스

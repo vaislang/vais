@@ -14,7 +14,7 @@ export function registerVaisLanguage(monaco) {
       'break', 'continue', 'return', 'true', 'false',
       'async', 'await', 'pub', 'mut', 'const', 'static',
       'impl', 'trait', 'where', 'self', 'Self', 'super',
-      'unsafe', 'extern', 'type', 'let', 'in'
+      'extern', 'type'
     ],
 
     typeKeywords: [
@@ -46,7 +46,12 @@ export function registerVaisLanguage(monaco) {
             '@default': 'identifier'
           }
         }],
-        [/[A-Z][\w\$]*/, 'type.identifier'],
+        [/[A-Z][\w\$]*/, {
+          cases: {
+            '@keywords': 'keyword',
+            '@default': 'type.identifier'
+          }
+        }],
 
         // Whitespace
         { include: '@whitespace' },

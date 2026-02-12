@@ -326,8 +326,8 @@ L 1 {
 
 ## See Also
 
-- [Net API Reference](../api/net.md)
-- [HTTP API Reference](../api/http.md)
-- [WebSocket API Reference](../api/websocket.md)
-- [TLS API Reference](../api/tls.md)
-- [Async Networking](../api/async_net.md)
+- Net API Reference
+- HTTP API Reference
+- WebSocket API Reference
+- TLS API Reference
+- Async Networking

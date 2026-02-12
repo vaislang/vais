@@ -146,9 +146,8 @@ name := "Vais"
 counter := mut 0
 counter = counter + 1
 
-# 축약형 (~ = mut)
-# ⚠️ ~ 축약형은 레거시 — := mut 권장
-~ total := 0
+# 가변 변수 예제
+total := mut 0
 total = total + 5
 
 # 타입 명시 (선택 사항)
@@ -197,7 +196,7 @@ I x > 0 {
 # if/else if/else
 I x > 100 {
     puts("greater than 100")
-} I x > 50 {
+} E I x > 50 {
     puts("greater than 50")
 } E {
     puts("50 or less")

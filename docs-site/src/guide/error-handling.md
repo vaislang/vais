@@ -19,10 +19,10 @@ Vais는 여러 에러 처리 패턴을 지원합니다:
 
 ```vais
 # 에러 코드 상수
-C SUCCESS: i64 = 0
-C ERROR_FILE_NOT_FOUND: i64 = 1
-C ERROR_INVALID_INPUT: i64 = 2
-C ERROR_PERMISSION_DENIED: i64 = 3
+G SUCCESS: i64 = 0
+G ERROR_FILE_NOT_FOUND: i64 = 1
+G ERROR_INVALID_INPUT: i64 = 2
+G ERROR_PERMISSION_DENIED: i64 = 3
 
 # 함수에서 에러 코드 반환
 F read_config(path: str) -> i64 {
@@ -95,7 +95,7 @@ F main() -> i64 {
     user := find_user(1)
 
     M user {
-        Option.Some(name) => puts("Found user: {name}"),
+        Option.Some(name) => puts("Found user: ~{name}"),
         Option.None => puts("User not found")
     }
 
@@ -165,8 +165,8 @@ F main() -> i64 {
     result := parse_number("123")
 
     M result {
-        Result.Ok(num) => puts("Parsed: {num}"),
-        Result.Err(err) => puts("Error: {err}")
+        Result.Ok(num) => puts("Parsed: ~{num}"),
+        Result.Err(err) => puts("Error: ~{err}")
     }
 
     0
@@ -234,7 +234,7 @@ F main() -> i64 {
 
     # 0이 기본값 (에러 처리됨)
     actual_timeout := timeout > 0 ? timeout : 30
-    puts("Timeout: {actual_timeout}")
+    puts("Timeout: ~{actual_timeout}")
 
     0
 }
@@ -254,8 +254,8 @@ F main() -> i64 {
     result := divide(10, 2)
 
     M result {
-        Result.Ok(value) => puts("Result: {value}"),
-        Result.Err(msg) => puts("Cannot divide: {msg}")
+        Result.Ok(value) => puts("Result: ~{value}"),
+        Result.Err(msg) => puts("Cannot divide: ~{msg}")
     }
 
     0
@@ -284,12 +284,12 @@ S Logger {
 X Logger {
     F log(&self, level: LogLevel, msg: str) {
         M level {
-            LogLevel.Error => puts("[ERROR] {msg}"),
-            LogLevel.Warn => puts("[WARN] {msg}"),
-            LogLevel.Info => puts("[INFO] {msg}"),
-            LogLevel.Debug => puts("[DEBUG] {msg}"),
+            LogLevel.Error => puts("[ERROR] ~{msg}"),
+            LogLevel.Warn => puts("[WARN] ~{msg}"),
+            LogLevel.Info => puts("[INFO] ~{msg}"),
+            LogLevel.Debug => puts("[DEBUG] ~{msg}"),
             LogLevel.Fatal => {
-                puts("[FATAL] {msg}")
+                puts("[FATAL] ~{msg}")
                 # 프로그램 종료
             }
         }
@@ -407,7 +407,7 @@ F main() -> i64 {
                 M valid {
                     Result.Ok(_) => {
                         puts("Configuration loaded and validated")
-                        puts("Host: {cfg.host}:{cfg.port}")
+                        puts("Host: ~{cfg.host}:~{cfg.port}")
                     },
                     Result.Err(_) => puts("Configuration validation failed")
                 }

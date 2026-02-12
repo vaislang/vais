@@ -90,7 +90,7 @@ F get_nanotime() -> i64 {
 F benchmark<F>(name: str, iterations: i64, f: F) {
     start := get_nanotime()
 
-    ~ i := 0
+    i := mut 0
     L i < iterations {
         f()
         i = i + 1
@@ -100,9 +100,9 @@ F benchmark<F>(name: str, iterations: i64, f: F) {
     elapsed := end - start
 
     avg_ns := elapsed / iterations
-    puts("Benchmark {name}:")
-    puts("  Total: {elapsed} ns")
-    puts("  Avg: {avg_ns} ns/iteration")
+    puts("Benchmark ~{name}:")
+    puts("  Total: ~{elapsed} ns")
+    puts("  Avg: ~{avg_ns} ns/iteration")
 }
 
 # 테스트할 함수
@@ -133,12 +133,12 @@ F fibonacci(n: i64) -> i64 {
 F fibonacci_optimized(n: i64) -> i64 {
     I n <= 1 { R n }
 
-    ~ a := 0
-    ~ b := 1
-    ~ i := 2
+    a := mut 0
+    b := mut 1
+    i := mut 2
 
     L i <= n {
-        ~ c := a + b
+        c := a + b
         a = b
         b = c
         i = i + 1
@@ -162,8 +162,8 @@ S Node {
 }
 
 F create_linked_list(size: i64) -> i64 {
-    ~ head := 0
-    ~ i := 0
+    head := 0
+    i := mut 0
 
     L i < size {
         # 노드 생성 시뮬레이션
@@ -183,14 +183,14 @@ F benchmark_allocation() {
     start := get_time()
     create_linked_list(1000)
     elapsed := get_time() - start
-    puts("Time: {elapsed} ms")
+    puts("Time: ~{elapsed} ms")
 
     # 큰 할당
     puts("Large allocations (10K):")
     start = get_time()
     create_linked_list(10000)
     elapsed = get_time() - start
-    puts("Time: {elapsed} ms")
+    puts("Time: ~{elapsed} ms")
 }
 ```
 
@@ -251,7 +251,7 @@ F stack_example() {
 # 힙 할당 (느림, 제한 없음)
 F heap_example() {
     # 동적 할당 시뮬레이션
-    ~ data := 42
+    data := 42
 }
 
 # 스택 할당이 선호됨
@@ -276,7 +276,7 @@ S Buffer {
 F process_multiple_batches(batches: i64) {
     buffer := Buffer { data: [0; 1000], size: 0 }
 
-    ~ i := 0
+    i := mut 0
     L i < batches {
         # 버퍼 내용 초기화 (재할당 아님)
         buffer.size = 0
@@ -312,8 +312,8 @@ gc-heap-size = "1GB"  # 초기 힙 크기
 ```vais
 # 비효율: 루프에서 계산 반복
 F inefficient() {
-    ~ sum := 0
-    ~ i := 0
+    sum := mut 0
+    i := mut 0
     L i < 1000 {
         # 루프마다 sin 계산
         sum = sum + sin(3.14159 / 2)
@@ -324,8 +324,8 @@ F inefficient() {
 # 효율: 루프 전에 계산
 F efficient() {
     sin_value := sin(3.14159 / 2)  # 한 번만 계산
-    ~ sum := 0
-    ~ i := 0
+    sum := mut 0
+    i := mut 0
     L i < 1000 {
         sum = sum + sin_value
         i = i + 1
@@ -339,8 +339,8 @@ F efficient() {
 # 순차 접근이 많을 때: 배열 사용 (캐시 효율)
 F array_approach() {
     arr := [1, 2, 3, 4, 5]
-    ~ sum := 0
-    ~ i := 0
+    sum := mut 0
+    i := mut 0
     L i < 5 {
         sum = sum + arr[i]
         i = i + 1
@@ -356,8 +356,8 @@ F array_approach() {
 ```vais
 # 비효율: 의존성이 있는 연산
 F inefficient_loop() {
-    ~ result := 0
-    ~ i := 0
+    result := mut 0
+    i := mut 0
     L i < 1000 {
         result = result + (i * i)  # 각 반복이 이전 결과에 의존
         i = i + 1
@@ -366,8 +366,8 @@ F inefficient_loop() {
 
 # 효율: 병렬화 가능한 연산
 F efficient_loop() {
-    ~ sum := 0
-    ~ i := 0
+    sum := mut 0
+    i := mut 0
     L i < 1000 {
         sum = sum + (i * i)  # 같은 연산이지만 더 효율적
         i = i + 1
@@ -385,8 +385,8 @@ SIMD(Single Instruction Multiple Data)를 사용하여 벡터 연산을 가속�
 
 F vector_add(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
     # 일반적인 루프
-    ~ result: [f64; 4]
-    ~ i := 0
+    result: [f64; 4]
+    i := mut 0
     L i < 4 {
         result[i] = a[i] + b[i]
         i = i + 1
@@ -436,7 +436,7 @@ vaisc build --gpu metal myprogram.vais -o myprogram
 ```vais
 # 비효율: 반복되는 계산과 할당
 F naive_prime_check(n: i64) -> bool {
-    ~ i := 2
+    i := mut 2
     L i < n {
         I n % i == 0 { R false }
         i = i + 1
@@ -451,7 +451,7 @@ F optimized_prime_check(n: i64) -> bool {
     I n % 2 == 0 { R false }
 
     # sqrt(n)까지만 확인
-    ~ i := 3
+    i := mut 3
     L i * i <= n {
         I n % i == 0 { R false }
         i = i + 2  # 짝수 생략

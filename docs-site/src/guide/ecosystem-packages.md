@@ -284,13 +284,118 @@ See [CONTRIBUTING.md](../contributing/contributing.md) for details.
 
 ---
 
+### vais-base64
+
+**Base64 encoding and decoding** — RFC 4648 compliant implementation.
+
+**Features:**
+- Standard Base64 alphabet (A-Z, a-z, 0-9, +, /)
+- URL-safe variant (using - and _ instead of + and /)
+- Padding support (= character)
+- Pure Vais implementation with lookup tables
+
+**Usage:**
+```vais
+U vais_base64.{encode, decode}
+
+data := "Hello, Vais!".as_bytes()
+encoded := encode(data[..])
+print(String::from_bytes(encoded))    # "SGVsbG8sIFZhaXMh"
+
+decoded := decode(encoded[..])
+print(String::from_bytes(decoded))    # "Hello, Vais!"
+```
+
+**Implementation:** 6-bit group encoding with base64 alphabet lookup table.
+
+---
+
+### vais-sha256
+
+**SHA-256 cryptographic hash** — FIPS 180-4 compliant implementation.
+
+**Features:**
+- SHA-256 (256-bit hash output)
+- Message scheduling (64 rounds)
+- FIPS 180-4 standard compliance
+- Big-endian length encoding
+- Pure Vais implementation
+
+**Usage:**
+```vais
+U vais_sha256.{sha256, hash_to_hex}
+
+data := "Hello, Vais!".as_bytes()
+hash := sha256(data[..])
+hex_str := hash_to_hex(hash)
+print(hex_str)    # "a591a6d4..."
+```
+
+**Operations:**
+- Ch, Maj, Σ0, Σ1, σ0, σ1 functions
+- Message expansion (16 → 64 words)
+- 64 rounds of compression
+- Big-endian finalization
+
+---
+
+### vais-uuid
+
+**UUID generation** — RFC 4122 Version 4 (random) UUIDs.
+
+**Features:**
+- UUID v4 (random) generation
+- RFC 4122 compliant formatting
+- Hyphenated string representation
+- Pure Vais implementation
+
+**Usage:**
+```vais
+U vais_uuid.{generate_v4, uuid_to_string}
+
+uuid := generate_v4()
+uuid_str := uuid_to_string(uuid)
+print(uuid_str)    # "550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Format:** `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx` (128-bit random with version/variant bits)
+
+---
+
+### vais-regex
+
+**Regular expression engine** — Pattern matching with backtracking.
+
+**Features:**
+- Core regex syntax (., *, +, ?, [], ^, $, |)
+- Character classes ([a-z], [^abc])
+- Anchors (^, $)
+- Alternation (|)
+- Grouping (())
+- Backtracking-based matching
+
+**Usage:**
+```vais
+U vais_regex.{compile, match}
+
+pattern := compile("^[a-z]+@[a-z]+\\.[a-z]+$")
+I match(pattern, "user@example.com") {
+    print("Valid email")
+} E {
+    print("Invalid email")
+}
+```
+
+**Implementation:** NFA-based state machine with backtracking for alternation and grouping.
+
+---
+
 ## Roadmap
 
 Upcoming ecosystem packages:
 
 - **vais-xml** — XML parser/serializer
 - **vais-yaml** — YAML 1.2 support
-- **vais-regex** — Regular expression engine
 - **vais-http** — HTTP client/server (building on `std/http.vais`)
 - **vais-image** — PNG/JPEG/WebP image decoding
 - **vais-markdown** — Markdown to HTML converter

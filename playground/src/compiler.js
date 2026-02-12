@@ -341,11 +341,9 @@ export class VaisCompiler {
       // Match println("...") calls (with simple interpolation)
       const printlnMatch = trimmed.match(/println\("([^"]*)"\)/);
       if (printlnMatch) {
-        // Replace {expr} with <expr> for display
+        // Replace ~{expr} with <expr> for display
         const text = printlnMatch[1]
-          .replace(/\{\{/g, '{')
-          .replace(/\}\}/g, '}')
-          .replace(/\{([^}]+)\}/g, '<$1>');
+          .replace(/~\{([^}]+)\}/g, '<$1>');
         output.push(text);
         continue;
       }

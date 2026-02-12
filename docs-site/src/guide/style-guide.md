@@ -60,7 +60,7 @@ user_count := 0
 total_price := 99.99
 is_valid := true
 temp_buffer := "data"
-~ mutable_counter := 0
+mutable_counter := mut 0
 
 # 나쁬 예
 UserCount := 0              # PascalCase 사용 금지
@@ -75,16 +75,16 @@ x := 0                      # 의미 없는 한 글자 (루프 제외)
 
 ```vais
 # 좋은 예
-C MAX_BUFFER_SIZE: i64 = 1024
-C DEFAULT_TIMEOUT: i64 = 30
-C PI: f64 = 3.14159
-C APP_VERSION: str = "1.0.0"
-C ERROR_FILE_NOT_FOUND: i64 = 1
+G MAX_BUFFER_SIZE: i64 = 1024
+G DEFAULT_TIMEOUT: i64 = 30
+G PI: f64 = 3.14159
+G APP_VERSION: str = "1.0.0"
+G ERROR_FILE_NOT_FOUND: i64 = 1
 
 # 나쁜 예
-C MaxBufferSize: i64 = 1024   # PascalCase 사용 금지
-C max_buffer_size: i64 = 1024 # snake_case 사용 금지
-C maxBufferSize: i64 = 1024   # camelCase 사용 금지
+G MaxBufferSize: i64 = 1024   # PascalCase 사용 금지
+G max_buffer_size: i64 = 1024 # snake_case 사용 금지
+G maxBufferSize: i64 = 1024   # camelCase 사용 금지
 ```
 
 ### Trait 이름
@@ -452,13 +452,13 @@ F query_user_bad(id: i64) -> Result<User> {
 ```vais
 # 좋은 예: 명확한 타입
 F process_data(items: [i64; 10]) -> i64 {
-    ~ sum: i64 = 0
+    sum: i64 := mut 0
     # ...
 }
 
 # 나쁜 예: 타입 생략
 F process_data(items) {
-    ~ sum := 0  # 타입 불명확
+    sum := mut 0  # 타입 불명확
     # ...
 }
 ```
@@ -484,9 +484,9 @@ F process_large_data_bad(data: [i64; 1000]) {
 ```vais
 # 좋은 예: 사전 할당
 F build_results() {
-    ~ results: [i64; 1000]  # 미리 할당
+    results: [i64; 1000]  # 미리 할당
 
-    ~ i := 0
+    i := mut 0
     L i < 1000 {
         results[i] = process(i)
         i = i + 1
@@ -495,7 +495,7 @@ F build_results() {
 
 # 나쁜 예: 반복 할당
 F build_results_bad() {
-    ~ results: [i64]  # 동적 배열 (매번 재할당)
+    results: [i64]  # 동적 배열 (매번 재할당)
     # ...
 }
 ```

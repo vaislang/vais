@@ -9,7 +9,7 @@ Vais provides a comprehensive async runtime with Future-based concurrency, enabl
 Futures represent asynchronous computations that will complete in the future:
 
 ```vais
-U std/async
+U std::async
 
 F fetch_data() -> Future<str> {
     # Async computation
@@ -19,7 +19,7 @@ F fetch_data() -> Future<str> {
 F main() -> i64 {
     future := fetch_data()
     result := Y future  # Await the future
-    puts("Got: {result}")
+    puts("Got: ~{result}")
     0
 }
 ```
@@ -33,11 +33,11 @@ The `Y` operator (await) suspends execution until the future completes.
 Create concurrent tasks that run independently:
 
 ```vais
-U std/async
+U std::async
 
 F background_task(id: i64) -> Future<()> {
     sleep(1000)
-    puts("Task {id} completed")
+    puts("Task ~{id} completed")
 }
 
 F main() -> i64 {
@@ -56,14 +56,14 @@ F main() -> i64 {
 Wait for the first of multiple futures to complete:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     future_a := fetch_data_a()
     future_b := fetch_data_b()
 
     result := select([future_a, future_b])
-    puts("First result: {result}")
+    puts("First result: ~{result}")
     0
 }
 ```
@@ -73,7 +73,7 @@ F main() -> i64 {
 Wait for all futures to complete:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     futures := [
@@ -95,7 +95,7 @@ F main() -> i64 {
 Transform future values:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     future := fetch_number()
@@ -158,7 +158,7 @@ future := fetch_data().fuse()
 Coordinate multiple tasks to reach a synchronization point:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     barrier := Barrier::new(3)
@@ -172,9 +172,9 @@ F main() -> i64 {
 }
 
 F worker(barrier: Barrier, id: i64) -> Future<()> {
-    puts("Worker {id} starting")
+    puts("Worker ~{id} starting")
     Y barrier.wait()
-    puts("Worker {id} past barrier")
+    puts("Worker ~{id} past barrier")
 }
 ```
 
@@ -183,7 +183,7 @@ F worker(barrier: Barrier, id: i64) -> Future<()> {
 Limit concurrent access to a resource:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     sem := Semaphore::new(2)  # Allow 2 concurrent tasks
@@ -197,7 +197,7 @@ F main() -> i64 {
 
 F limited_task(sem: Semaphore, id: i64) -> Future<()> {
     Y sem.acquire()
-    puts("Task {id} running")
+    puts("Task ~{id} running")
     sleep(1000)
     sem.release()
 }
@@ -208,7 +208,7 @@ F limited_task(sem: Semaphore, id: i64) -> Future<()> {
 Wait for a group of tasks to complete:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     wg := WaitGroup::new()
@@ -225,7 +225,7 @@ F main() -> i64 {
 
 F task(wg: WaitGroup, id: i64) -> Future<()> {
     sleep(id * 100)
-    puts("Task {id} done")
+    puts("Task ~{id} done")
     wg.done()
 }
 ```
@@ -235,7 +235,7 @@ F task(wg: WaitGroup, id: i64) -> Future<()> {
 Initialize a value exactly once in a concurrent context:
 
 ```vais
-U std/async
+U std::async
 
 global config: OnceCell<Config> = OnceCell::new()
 
@@ -249,7 +249,7 @@ F get_config() -> Future<Config> {
 Stream values asynchronously:
 
 ```vais
-U std/async
+U std::async
 
 F generate_numbers() -> AsyncStream<i64> {
     stream := AsyncStream::new()
@@ -267,7 +267,7 @@ F main() -> i64 {
 
     L {
         M Y stream.next() {
-            Some(n) => puts("Got: {n}"),
+            Some(n) => puts("Got: ~{n}"),
             None => B
         }
     }
@@ -281,7 +281,7 @@ F main() -> i64 {
 ### File I/O
 
 ```vais
-U std/async_io
+U std::async_io
 
 F main() -> i64 {
     content := Y async_read_file("input.txt")
@@ -293,7 +293,7 @@ F main() -> i64 {
 ### Network I/O
 
 ```vais
-U std/async_net
+U std::async_net
 
 F main() -> i64 {
     listener := Y AsyncTcpListener::bind("127.0.0.1:8080")
@@ -316,7 +316,7 @@ F handle_connection(stream: AsyncTcpStream) -> Future<()> {
 ### HTTP Server
 
 ```vais
-U std/async_http
+U std::async_http
 
 F main() -> i64 {
     server := AsyncHttpServer::new("127.0.0.1:8080")
@@ -335,7 +335,7 @@ F main() -> i64 {
 ### HTTP Client
 
 ```vais
-U std/async_http
+U std::async_http
 
 F main() -> i64 {
     client := AsyncHttpClient::new()
@@ -344,9 +344,9 @@ F main() -> i64 {
     M response.status {
         200 => {
             body := Y response.text()
-            puts("Success: {body}")
+            puts("Success: ~{body}")
         },
-        _ => puts("Error: {response.status}")
+        _ => puts("Error: ~{response.status}")
     }
 
     0
@@ -358,7 +358,7 @@ F main() -> i64 {
 The async runtime can be configured:
 
 ```vais
-U std/async
+U std::async
 
 F main() -> i64 {
     runtime := AsyncRuntime::new()
@@ -394,7 +394,7 @@ F async_main() -> Future<i64> {
 Combine async with Result types:
 
 ```vais
-U std/async
+U std::async
 
 F fetch_data() -> Future<Result<str, Error>> {
     # May fail
@@ -403,8 +403,8 @@ F fetch_data() -> Future<Result<str, Error>> {
 
 F main() -> i64 {
     M Y fetch_data() {
-        Ok(data) => puts("Success: {data}"),
-        Err(e) => puts("Error: {e}")
+        Ok(data) => puts("Success: ~{data}"),
+        Err(e) => puts("Error: ~{e}")
     }
     0
 }

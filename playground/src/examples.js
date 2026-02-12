@@ -311,9 +311,6 @@ F main() -> i64 {
     # Expression interpolation
     puts("1 + 2 = ~{1 + 2}")
 
-    # Escaped braces
-    puts("Use {{braces}} for literal braces")
-
     0
 }`
   },
@@ -374,7 +371,7 @@ F main() -> i64 {
   },
 
   'type-infer-params': {
-    name: 'Type Inference',
+    name: 'Parameter Inference',
     description: 'Variables and return values are inferred',
     code: `# Single expression functions
 F add(a: i64, b: i64) -> i64 = a + b
@@ -481,7 +478,7 @@ A F process() -> i64 {
     a + b                   # 30
 }
 
-F main() -> i64 {
+A F main() -> i64 {
     result := Y process()
     result
 }`
