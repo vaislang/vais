@@ -74,6 +74,20 @@ document.querySelectorAll('.code-tab').forEach((tab) => {
   });
 });
 
+// Compare language tabs
+const tokenCounts = { rust: '97 tokens', python: '112 tokens', go: '108 tokens', c: '115 tokens' };
+document.querySelectorAll('.compare-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const lang = tab.dataset.lang;
+    document.querySelectorAll('.compare-tab').forEach((t) => t.classList.remove('active'));
+    document.querySelectorAll('.compare-lang-panel').forEach((p) => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.compare-lang-panel[data-lang="${lang}"]`)?.classList.add('active');
+    const counter = document.getElementById('compare-token-count');
+    if (counter && tokenCounts[lang]) counter.textContent = tokenCounts[lang];
+  });
+});
+
 // Smooth scroll for anchor links
 document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
   anchor.addEventListener('click', (e) => {

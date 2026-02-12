@@ -32,9 +32,9 @@
         <span class="logo-text">Vais</span>
       </a>
       <div class="nav-links" id="nav-links">
-        <a href="#features">Features</a>
         <a href="#compare">Compare</a>
         <a href="#performance">Performance</a>
+        <a href="#features">Features</a>
         <a href="#playground">Playground</a>
         <a href="/docs/" class="nav-link-docs">Docs</a>
         <a href="/blog/" class="nav-link-blog">Blog</a>
@@ -123,7 +123,7 @@
         for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.
       </p>
       <div class="compare-grid">
-        <!-- Vais -->
+        <!-- Vais (always visible) -->
         <div class="compare-card compare-card-vais">
           <div class="compare-header">
             <span class="compare-lang">Vais</span>
@@ -145,13 +145,19 @@
   <span class="kw">E</span> { <span class="str">"small"</span> }
 }</code></pre>
         </div>
-        <!-- Rust -->
-        <div class="compare-card">
+        <!-- Right side: tabbed language comparison -->
+        <div class="compare-card compare-card-tabbed">
           <div class="compare-header">
-            <span class="compare-lang">Rust</span>
-            <span class="compare-tokens">97 tokens</span>
+            <div class="compare-tabs">
+              <button class="compare-tab active" data-lang="rust">Rust</button>
+              <button class="compare-tab" data-lang="python">Python</button>
+              <button class="compare-tab" data-lang="go">Go</button>
+              <button class="compare-tab" data-lang="c">C</button>
+            </div>
+            <span class="compare-tokens" id="compare-token-count">97 tokens</span>
           </div>
-          <pre class="compare-code"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
+          <!-- Rust -->
+          <pre class="compare-code compare-lang-panel active" data-lang="rust"><code><span class="kw">enum</span> <span class="type">Shape</span> { Circle(<span class="type">f64</span>), Rect(<span class="type">f64</span>, <span class="type">f64</span>) }
 
 <span class="kw">fn</span> <span class="fn">area</span>(s: &amp;<span class="type">Shape</span>) -&gt; <span class="type">f64</span> {
     <span class="kw">match</span> s {
@@ -165,6 +171,66 @@
     <span class="kw">if</span> a &gt; <span class="num">100.0</span> { <span class="str">"large"</span> }
     <span class="kw">else</span> <span class="kw">if</span> a &gt; <span class="num">10.0</span> { <span class="str">"medium"</span> }
     <span class="kw">else</span> { <span class="str">"small"</span> }
+}</code></pre>
+          <!-- Python -->
+          <pre class="compare-code compare-lang-panel" data-lang="python"><code><span class="kw">from</span> <span class="type">enum</span> <span class="kw">import</span> Enum
+<span class="kw">from</span> <span class="type">dataclasses</span> <span class="kw">import</span> dataclass
+<span class="kw">import</span> math
+
+<span class="kw">class</span> <span class="type">Circle</span>:
+    radius: <span class="type">float</span>
+
+<span class="kw">class</span> <span class="type">Rect</span>:
+    width: <span class="type">float</span>; height: <span class="type">float</span>
+
+<span class="kw">def</span> <span class="fn">area</span>(s) -&gt; <span class="type">float</span>:
+    <span class="kw">match</span> s:
+        <span class="kw">case</span> Circle(r): <span class="kw">return</span> <span class="num">3.14</span> * r * r
+        <span class="kw">case</span> Rect(w, h): <span class="kw">return</span> w * h
+
+<span class="kw">def</span> <span class="fn">classify</span>(s) -&gt; <span class="type">str</span>:
+    a = <span class="fn">area</span>(s)
+    <span class="kw">if</span> a &gt; <span class="num">100.0</span>: <span class="kw">return</span> <span class="str">"large"</span>
+    <span class="kw">elif</span> a &gt; <span class="num">10.0</span>: <span class="kw">return</span> <span class="str">"medium"</span>
+    <span class="kw">else</span>: <span class="kw">return</span> <span class="str">"small"</span></code></pre>
+          <!-- Go -->
+          <pre class="compare-code compare-lang-panel" data-lang="go"><code><span class="kw">type</span> <span class="type">Shape</span> <span class="kw">interface</span> { <span class="fn">area</span>() <span class="type">float64</span> }
+
+<span class="kw">type</span> <span class="type">Circle</span> <span class="kw">struct</span> { R <span class="type">float64</span> }
+<span class="kw">type</span> <span class="type">Rect</span> <span class="kw">struct</span>   { W, H <span class="type">float64</span> }
+
+<span class="kw">func</span> (c <span class="type">Circle</span>) <span class="fn">area</span>() <span class="type">float64</span> {
+    <span class="kw">return</span> <span class="num">3.14</span> * c.R * c.R
+}
+<span class="kw">func</span> (r <span class="type">Rect</span>) <span class="fn">area</span>() <span class="type">float64</span> {
+    <span class="kw">return</span> r.W * r.H
+}
+
+<span class="kw">func</span> <span class="fn">classify</span>(s <span class="type">Shape</span>) <span class="type">string</span> {
+    a := s.<span class="fn">area</span>()
+    <span class="kw">if</span> a &gt; <span class="num">100.0</span> { <span class="kw">return</span> <span class="str">"large"</span> }
+    <span class="kw">if</span> a &gt; <span class="num">10.0</span> { <span class="kw">return</span> <span class="str">"medium"</span> }
+    <span class="kw">return</span> <span class="str">"small"</span>
+}</code></pre>
+          <!-- C -->
+          <pre class="compare-code compare-lang-panel" data-lang="c"><code><span class="kw">typedef enum</span> { CIRCLE, RECT } <span class="type">ShapeTag</span>;
+<span class="kw">typedef struct</span> {
+    <span class="type">ShapeTag</span> tag;
+    <span class="kw">union</span> { <span class="type">double</span> r; <span class="kw">struct</span> { <span class="type">double</span> w, h; }; };
+} <span class="type">Shape</span>;
+
+<span class="type">double</span> <span class="fn">area</span>(<span class="type">Shape</span> s) {
+    <span class="kw">switch</span> (s.tag) {
+        <span class="kw">case</span> CIRCLE: <span class="kw">return</span> <span class="num">3.14</span> * s.r * s.r;
+        <span class="kw">case</span> RECT:   <span class="kw">return</span> s.w * s.h;
+    }
+}
+
+<span class="kw">const</span> <span class="type">char</span>* <span class="fn">classify</span>(<span class="type">Shape</span> s) {
+    <span class="type">double</span> a = <span class="fn">area</span>(s);
+    <span class="kw">if</span> (a &gt; <span class="num">100.0</span>) <span class="kw">return</span> <span class="str">"large"</span>;
+    <span class="kw">if</span> (a &gt; <span class="num">10.0</span>)  <span class="kw">return</span> <span class="str">"medium"</span>;
+    <span class="kw">return</span> <span class="str">"small"</span>;
 }</code></pre>
         </div>
       </div>
@@ -181,14 +247,14 @@
           <div class="bar-item">
             <span class="bar-label">Python</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 73%"></div>
+              <div class="bar-fill bar-python" style="width: 73%"></div>
             </div>
             <span class="bar-value">889</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Go</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 74%"></div>
+              <div class="bar-fill bar-go" style="width: 74%"></div>
             </div>
             <span class="bar-value">893</span>
           </div>
@@ -202,7 +268,7 @@
           <div class="bar-item">
             <span class="bar-label">C</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 100%"></div>
+              <div class="bar-fill bar-c" style="width: 100%"></div>
             </div>
             <span class="bar-value">1,211</span>
           </div>
@@ -227,7 +293,7 @@
           <div class="bar-item">
             <span class="bar-label">C</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 94%"></div>
+              <div class="bar-fill bar-c" style="width: 94%"></div>
             </div>
             <span class="bar-value">32ms</span>
           </div>
@@ -258,18 +324,18 @@
             <span class="bar-value">6.4ms</span>
           </div>
           <div class="bar-item">
-            <span class="bar-label">C (clang)</span>
-            <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 45%"></div>
-            </div>
-            <span class="bar-value">55ms</span>
-          </div>
-          <div class="bar-item">
             <span class="bar-label">Go</span>
             <div class="bar-track">
-              <div class="bar-fill bar-rust" style="width: 43%"></div>
+              <div class="bar-fill bar-go" style="width: 43%"></div>
             </div>
             <span class="bar-value">52ms</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">C (clang)</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-c" style="width: 45%"></div>
+            </div>
+            <span class="bar-value">55ms</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
@@ -337,7 +403,7 @@
         <div class="feature-card">
           <div class="feature-icon">🏗️</div>
           <h3>Self-Hosting Compiler</h3>
-          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap with 46,000+ lines of Vais.</p>
+          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 520 E2E tests and 2,500+ total tests.</p>
         </div>
       </div>
     </div>

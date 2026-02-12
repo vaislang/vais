@@ -402,7 +402,7 @@ code {
 
 .compare-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-bottom: 48px;
 }
@@ -456,6 +456,46 @@ code {
   overflow-x: auto;
 }
 
+/* Compare language tabs */
+.compare-tabs {
+  display: flex;
+  gap: 0;
+}
+
+.compare-tab {
+  background: none;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.compare-tab:hover {
+  color: var(--text-muted);
+}
+
+.compare-tab.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.compare-lang-panel {
+  display: none;
+}
+
+.compare-lang-panel.active {
+  display: block;
+}
+
+.compare-card-tabbed {
+  min-height: 0;
+}
+
 /* === Compare Bars === */
 .compare-bar-section {
   max-width: 600px;
@@ -478,7 +518,7 @@ code {
 
 .bar-item {
   display: grid;
-  grid-template-columns: 60px 1fr 40px;
+  grid-template-columns: 75px 1fr 50px;
   align-items: center;
   gap: 12px;
 }
@@ -509,6 +549,14 @@ code {
 
 .bar-python {
   background: #3572a5;
+}
+
+.bar-go {
+  background: #00add8;
+}
+
+.bar-c {
+  background: #555555;
 }
 
 .bar-rust {
