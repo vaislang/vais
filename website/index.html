@@ -88,7 +88,7 @@
 
 <span class="kw">F</span> <span class="fn">main</span>() {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
-  <span class="fn">puts</span>(<span class="str">"fib(10) = {}"</span>, result)
+  <span class="fn">puts</span>(<span class="str">"fib(10) = ~{result}"</span>)
 }</code><code class="code-panel" data-panel="1"><span class="kw">S</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
 
 <span class="kw">F</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
@@ -97,7 +97,7 @@
 
 <span class="kw">F</span> <span class="fn">main</span>() {
   p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
-  <span class="fn">puts</span>(<span class="str">"len = {}"</span>, <span class="fn">len</span>(p))
+  <span class="fn">puts</span>(<span class="str">"len = ~{<span class="fn">len</span>(p)}"</span>)
 }</code><code class="code-panel" data-panel="2"><span class="kw">E</span> <span class="type">Shape</span> {
   Circle(<span class="type">f64</span>),
   Rect(<span class="type">f64</span>, <span class="type">f64</span>),
@@ -119,8 +119,8 @@
     <div class="container">
       <h2 class="section-title">Token Efficiency Matters</h2>
       <p class="section-subtitle">
-        AI models pay per token. Vais uses <strong>~10% fewer tokens</strong> than Rust
-        for equivalent programs — single-char keywords and implicit returns add up across large codebases.
+        AI models pay per token. Vais uses <strong>33% fewer tokens than Rust</strong> and <strong>40% fewer than C</strong>
+        for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.
       </p>
       <div class="compare-grid">
         <!-- Vais -->
@@ -169,25 +169,46 @@
         </div>
       </div>
       <div class="compare-bar-section">
-        <h3 class="compare-bar-title">Token Count Comparison</h3>
+        <h3 class="compare-bar-title">Token Count — 4 Benchmark Programs</h3>
         <div class="compare-bars">
           <div class="bar-item">
             <span class="bar-label">Vais</span>
             <div class="bar-track">
-              <div class="bar-fill bar-vais" style="width: 91%"></div>
+              <div class="bar-fill bar-vais" style="width: 60%"></div>
             </div>
-            <span class="bar-value">88</span>
+            <span class="bar-value">721</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Python</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 73%"></div>
+            </div>
+            <span class="bar-value">889</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Go</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 74%"></div>
+            </div>
+            <span class="bar-value">893</span>
           </div>
           <div class="bar-item">
             <span class="bar-label">Rust</span>
             <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 89%"></div>
+            </div>
+            <span class="bar-value">1,080</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">C</span>
+            <div class="bar-track">
               <div class="bar-fill bar-rust" style="width: 100%"></div>
             </div>
-            <span class="bar-value">97</span>
+            <span class="bar-value">1,211</span>
           </div>
         </div>
         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">
-          Savings grow with codebase size — <code>E</code> vs <code>enum</code>, <code>M</code> vs <code>match</code>, <code>I</code>/<code>E</code> vs <code>if</code>/<code>else</code>, no <code>let</code>/<code>;</code>
+          fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base). See <a href="https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md" style="color: var(--primary);">benchmarks</a>.
         </p>
       </div>
     </div>
@@ -316,7 +337,7 @@
         <div class="feature-card">
           <div class="feature-icon">🏗️</div>
           <h3>Self-Hosting Compiler</h3>
-          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap (Stage1→Stage2→Stage3 fixed point) with 17,800+ lines of Vais.</p>
+          <p>Vais can compile itself. The self-hosting compiler achieves bootstrap with 46,000+ lines of Vais.</p>
         </div>
       </div>
     </div>

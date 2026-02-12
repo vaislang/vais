@@ -136,6 +136,7 @@ counter := mut 0
 counter = counter + 1
 
 # 축약형 (~ = mut)
+# ⚠️ ~ 축약형은 레거시 — := mut 권장
 ~ total := 0
 total = total + 5
 
@@ -152,7 +153,7 @@ F add(a: i64, b: i64) -> i64 = a + b
 
 # 함수 본문 포함
 F greet(name: str) -> str {
-    message := "Hello, {name}!"
+    message := "Hello, ~{name}!"
     message
 }
 
@@ -200,28 +201,28 @@ result := x > 0 ? "positive" : "non-positive"
 ```vais
 # for 루프 (범위)
 F print_range() {
-    L i := 0; i < 5; i = i + 1 {
-        puts("{i}")
+    L i:0..5 {
+        puts("~{i}")
     }
 }
 
 # 무한 루프
 F infinite_loop_example() {
-    ~ count := 0
+    count := mut 0
     L {
         I count >= 10 {
             B
         }
-        puts("{count}")
+        puts("~{count}")
         count = count + 1
     }
 }
 
 # while 루프 (조건 기반)
 F while_example() {
-    ~ x := 0
+    x := mut 0
     L x < 10 {
-        puts("{x}")
+        puts("~{x}")
         x = x + 2
     }
 }
@@ -246,7 +247,7 @@ S Person {
 p := Point { x: 10, y: 20 }
 
 # 필드 접근
-puts("{p.x}, {p.y}")
+puts("~{p.x}, ~{p.y}")
 
 # 구조체 메서드 (impl 블록)
 X Point {
@@ -309,8 +310,8 @@ E Response {
 response := Response.Success("Done")
 
 M response {
-    Response.Success(msg) => puts("Success: {msg}"),
-    Response.Failure(err) => puts("Error: {err}")
+    Response.Success(msg) => puts("Success: ~{msg}"),
+    Response.Failure(err) => puts("Error: ~{err}")
 }
 ```
 
@@ -352,7 +353,7 @@ S Circle {
 # Trait 구현
 X Circle: Drawable {
     F draw(&self) -> i64 {
-        puts("Drawing circle with radius {self.radius}")
+        puts("Drawing circle with radius ~{self.radius}")
         0
     }
 }
@@ -378,11 +379,11 @@ X Calculator {
 }
 
 F main() -> i64 {
-    ~ calc := Calculator { result: 0 }
+    calc := mut Calculator { result: 0 }
     calc.result = calc.add(10)
     calc.result = calc.multiply(2)
     calc.result = calc.subtract(5)
-    puts("Result: {calc.result}")
+    puts("Result: ~{calc.result}")
     0
 }
 ```
@@ -392,7 +393,7 @@ F main() -> i64 {
 ```vais
 F count_chars(s: str) -> i64 {
     # 문자열 길이 계산
-    ~ len := 0
+    len := mut 0
     # (실제로는 s.len() 메서드 사용)
     len
 }
@@ -403,7 +404,7 @@ F main() -> i64 {
 
     # 문자열 보간
     name := "World"
-    message := "Hello, {name}!"
+    message := "Hello, ~{name}!"
     puts(message)
 
     0
@@ -414,8 +415,8 @@ F main() -> i64 {
 
 ```vais
 F sum_array(arr: [i64; 5]) -> i64 {
-    ~ result := 0
-    L i := 0; i < 5; i = i + 1 {
+    result := mut 0
+    L i:0..5 {
         result = result + arr[i]
     }
     result
@@ -428,7 +429,22 @@ F main() {
 }
 ```
 
-### 배열 요소 교환
+### 빌트인 함수
+
+Vais 컴파일러가 제공하는 내장 함수입니다:
+
+| 함수 | 설명 | 예시 |
+|------|------|------|
+| `swap(ptr, i, j)` | 배열 요소 교환 | `swap(arr, 0, 2)` |
+| `sizeof(expr)` | 표현식 크기 (바이트) | `sizeof(x)` |
+| `type_size<T>()` | 타입 T의 크기 | `type_size<i64>()` |
+| `store_byte(ptr, offset, val)` | 바이트 저장 | `store_byte(buf, 0, 65)` |
+| `load_byte(ptr, offset)` | 바이트 로드 | `load_byte(buf, 0)` |
+| `puts(msg)` | 문자열 출력 + 줄바꿈 | `puts("hello")` |
+| `putchar(c)` | 문자 출력 | `putchar(65)` |
+| `println(msg)` | 문자열 출력 + 줄바꿈 | `println("hello")` |
+
+#### swap — 배열 요소 교환
 
 `swap(ptr, idx1, idx2)` 빌트인으로 배열 요소를 교환할 수 있습니다:
 

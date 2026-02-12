@@ -129,7 +129,7 @@ S Point {
     y: f64
 }
 
-I Point {
+X Point {
     F distance_from_origin() -> f64 {
         sqrt(@.x * @.x + @.y * @.y)
     }
@@ -177,10 +177,10 @@ F main() -> i64 {
     }
 
     # While-style with break
-    counter := 0
+    counter := mut 0
     L {
-        I counter >= 5 { break }
-        counter += 1
+        I counter >= 5 { B }
+        counter = counter + 1
     }
 
     0

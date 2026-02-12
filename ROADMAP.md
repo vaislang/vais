@@ -914,4 +914,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 19: 문서/Playground 현행화 & 벤치마크 갱신 (2026-02-12)
+
+모드: 자동진행
+- [x] 1. Playground 예제 & 문서 현행화 (Sonnet 위임) ✅
+  변경: examples.js (hello-world auto-return, destructuring→swap builtin, tilde-mut→mutable-variables), FEATURES.md (I→X impl 수정), vais-language.js (U/P/R/N/G 자동완성 추가, main snippet auto-return)
+- [x] 2. docs-site 최신 기능 문서화 (Sonnet 위임) ✅
+  변경: getting-started.md (문자열 보간 9건 {}→~{}, ~→:= mut 5건, C-style loop→range loop, 빌트인 함수 테이블 추가)
+- [x] 3. Homepage 벤치마크 수치 갱신 (Sonnet 위임) ✅
+  변경: index.html (토큰 ~10%→33%/40%, 비교 바 2→5언어, hero 코드 ~{} 보간, selfhost 17.8K→46K LOC), BASELINE.md (날짜 2026-02-12)
+- [x] 4. E2E 테스트 문법 현행화 & examples 정리 (Opus 직접) ✅
+  변경: examples/package/src/lib.vais (impl→X), E2E {}→~{} 전환은 하위호환 유지 결정
+- [x] 5. 검증 — 빌드 + E2E 520 + Clippy 0건 (Opus 직접) ✅
+  결과: Build OK, E2E 520/520, Clippy 0건
+진행률: 5/5 (100%)
+
+---
+
 **메인테이너**: Steve

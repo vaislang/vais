@@ -4,9 +4,8 @@ export const examples = {
     name: 'Hello World',
     description: 'Simple Hello World program',
     code: `# Hello World example using puts
-F main()->i64 {
+F main() {
     puts("Hello, Vais!")
-    0
 }`
   },
 
@@ -338,7 +337,7 @@ F main() -> i64 {
 }`
   },
 
-  'tilde-mut': {
+  'mutable-variables': {
     name: 'Mutable Variables',
     description: 'Declare mutable variables with mut',
     code: `# Mutable variable example
@@ -357,19 +356,18 @@ F main() -> i64 {
   },
 
   'destructuring': {
-    name: 'Destructuring',
-    description: 'Tuple destructuring with :=',
-    code: `# Tuple destructuring example
+    name: 'Destructuring & Swap',
+    description: 'Tuple destructuring and swap builtin',
+    code: `# Tuple destructuring and swap builtin
 F get_pair() -> (i64, i64) = (10, 20)
-
-F swap(a: i64, b: i64) -> (i64, i64) = (b, a)
 
 F main() -> i64 {
     # Destructure tuple
     (x, y) := get_pair()
 
-    # Destructure swap result
-    (a, b) := swap(1, 2)
+    # swap builtin swaps array elements
+    arr := [10, 20, 30]
+    swap(arr, 0, 2)    # arr = [30, 20, 10]
 
     0
 }`
@@ -398,7 +396,7 @@ F main() -> i64 {
   'minimal': {
     name: 'Minimal Program',
     description: 'Simplest valid program',
-    code: `# Minimal Vais program
+    code: `# Minimal Vais program — expression body
 F main() -> i64 = 0`
   },
 

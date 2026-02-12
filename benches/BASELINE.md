@@ -64,8 +64,8 @@ Tests optimizer effectiveness:
 
 ## Baseline Results
 
-> **Last Updated:** 2026-01-31
-> **Git Commit:** `6f29465` (Phase 15 P2)
+> **Last Updated:** 2026-02-12
+> **Git Commit:** Phase 18
 
 ### Compile-Time Benchmarks
 
