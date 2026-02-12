@@ -13948,6 +13948,28 @@ F main() -> i64 {
 }
 
 #[test]
+fn test_main_auto_return_explicit_r() {
+    // F main() { R 5 } — explicit return in auto-return main
+    let source = r#"
+F main() {
+    R 5
+}
+"#;
+    assert_exit_code(source, 5);
+}
+
+#[test]
+fn test_main_auto_return_expression_body() {
+    // F main() { 42 } — expression value without -> i64 annotation (implicit i64 return)
+    let source = r#"
+F main() {
+    42
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
 fn test_swap_builtin_basic() {
     // swap(ptr, idx1, idx2) swaps two i64 elements
     let source = r#"

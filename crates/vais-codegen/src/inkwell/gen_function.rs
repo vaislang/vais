@@ -210,6 +210,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 .build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         } else if let Some(ert) = expected_ret_type {
+                            // Auto-return: body type doesn't match expected return type.
+                            // For main() with implicit i64 return, the body evaluates to
+                            // Unit but the function signature expects i64 — return 0.
                             let default_val = self.get_default_value(ert);
                             self.builder
                                 .build_return(Some(&default_val))

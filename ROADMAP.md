@@ -885,12 +885,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ### 리뷰 발견사항 (2026-02-12)
 > 출처: /team-review Phase 17
 
-- [ ] 1. [성능] swap dead code 제거 — generate_expr.rs inline 제거, __swap 헬퍼 호출 패턴 통일 (Warning)
-- [ ] 2. [보안+성능+테스트] Pointer↔i64 implicit unify 범위 문서화/제한 검토 — inference.rs:181 (Warning)
-- [ ] 3. [테스트] Inkwell main() auto-return 명시화 — gen_function.rs (Warning)
-- [ ] 4. [테스트] 누락 E2E 추가 — `F main() { R 5 }`, `F main() { 42 }` (Warning)
-- [ ] 5. [성능] ptrtoint/inttoptr → GEP 전환 검토 — gen_special.rs, generate_expr.rs (Warning)
-진행률: 0/5 (0%)
+- [x] 1. [성능] swap dead code 제거 — generate_expr.rs inline 제거, __swap 헬퍼 호출 패턴 통일 (Warning) ✅
+  변경: generate_expr.rs (42줄 inline swap → 10줄 call @__swap 위임), builtins.rs (ptr 파라미터 Pointer→I64)
+- [x] 2. [보안+성능+테스트] Pointer↔i64 implicit unify 범위 문서화/제한 검토 — inference.rs:181 (Warning) ✅
+  변경: inference.rs (unify 규칙에 범위/목적 문서화 — vec_new/malloc/swap 용도, unification only)
+- [x] 3. [테스트] Inkwell main() auto-return 명시화 — gen_function.rs (Warning) ✅
+  변경: gen_function.rs (get_default_value fallback에 main() auto-return 설명 코멘트 추가)
+- [x] 4. [테스트] 누락 E2E 추가 — `F main() { R 5 }`, `F main() { 42 }` (Warning) ✅
+  변경: e2e_tests.rs (+2 테스트: explicit_r exit 5, expression_body exit 42), E2E 520개
+- [x] 5. [성능] ptrtoint/inttoptr → GEP 전환 검토 — gen_special.rs, generate_expr.rs (Warning) ✅
+  변경: gen_special.rs, generate_expr.rs (GEP 전환은 아키텍처 변경 필요 — 현 상태 문서화)
+진행률: 5/5 (100%)
 
 ---
 

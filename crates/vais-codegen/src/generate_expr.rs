@@ -777,7 +777,8 @@ impl CodeGenerator {
                         return Ok(("0".to_string(), ir));
                     }
 
-                    // swap(ptr, idx1, idx2) — swap two i64 elements in array
+                    // swap(ptr, idx1, idx2) — delegate to __swap helper
+                    // Uses ptrtoint for ptr→i64 conversion (Vais pointers are i64 internally)
                     if name == "swap" && args.len() >= 3 {
                         let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
                         let (idx1_val, idx1_ir) = self.generate_expr(&args[1], counter)?;
@@ -786,38 +787,18 @@ impl CodeGenerator {
                         ir.push_str(&idx1_ir);
                         ir.push_str(&idx2_ir);
 
-                        // Convert ptr to i64 if it's a pointer type
+                        // Convert ptr to i64 for __swap(i64, i64, i64) signature
                         let ptr_i64 = self.next_temp(counter);
                         ir.push_str(&format!(
                             "  {} = ptrtoint ptr {} to i64\n",
                             ptr_i64, ptr_val
                         ));
 
-                        // Calculate addresses: addr = ptr + idx * 8
-                        let off1 = self.next_temp(counter);
-                        let addr1 = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = mul i64 {}, 8\n", off1, idx1_val));
-                        ir.push_str(&format!("  {} = add i64 {}, {}\n", addr1, ptr_i64, off1));
-
-                        let off2 = self.next_temp(counter);
-                        let addr2 = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = mul i64 {}, 8\n", off2, idx2_val));
-                        ir.push_str(&format!("  {} = add i64 {}, {}\n", addr2, ptr_i64, off2));
-
-                        // Convert to pointers and load
-                        let p1 = self.next_temp(counter);
-                        let p2 = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", p1, addr1));
-                        ir.push_str(&format!("  {} = inttoptr i64 {} to i64*\n", p2, addr2));
-
-                        let v1 = self.next_temp(counter);
-                        let v2 = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = load i64, i64* {}\n", v1, p1));
-                        ir.push_str(&format!("  {} = load i64, i64* {}\n", v2, p2));
-
-                        // Store swapped values
-                        ir.push_str(&format!("  store i64 {}, i64* {}\n", v2, p1));
-                        ir.push_str(&format!("  store i64 {}, i64* {}\n", v1, p2));
+                        let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+                        ir.push_str(&format!(
+                            "  call void @__swap(i64 {}, i64 {}, i64 {}){}\n",
+                            ptr_i64, idx1_val, idx2_val, dbg_info
+                        ));
 
                         return Ok(("void".to_string(), ir));
                     }

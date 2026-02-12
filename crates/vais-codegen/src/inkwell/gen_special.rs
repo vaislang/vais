@@ -675,6 +675,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         args: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // swap(ptr, idx1, idx2) -> void
+        // NOTE: Uses ptrtoint/inttoptr for address arithmetic because Vais represents
+        // all pointers as i64 internally. A future optimization could use GEP when
+        // the element type is known, but this requires tracking pointer types through
+        // the codegen pipeline (non-trivial architectural change).
         // Swaps two i64 elements in an array. ptr can be PointerValue or IntValue.
         if args.len() < 3 {
             return Err(CodegenError::Unsupported(
