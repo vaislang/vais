@@ -143,6 +143,7 @@ mod tests {
                 .map(|s| Spanned::new(s.to_string(), Span::new(0, s.len())))
                 .collect(),
             alias: alias.map(|s| Spanned::new(s.to_string(), Span::new(0, s.len()))),
+            items: None,
         }
     }
 
@@ -176,6 +177,7 @@ mod tests {
         let use_item = Use {
             path: vec![],
             alias: None,
+            items: None,
         };
         let result = gen.generate_use(&use_item).unwrap();
         assert_eq!(result, "");

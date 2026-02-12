@@ -666,6 +666,22 @@ impl Formatter {
         let path: Vec<&str> = u.path.iter().map(|p| p.node.as_str()).collect();
         self.output.push_str(&path.join("::"));
 
+        if let Some(items) = &u.items {
+            if items.len() == 1 {
+                self.output.push('.');
+                self.output.push_str(&items[0].node);
+            } else {
+                self.output.push_str(".{");
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(&item.node);
+                }
+                self.output.push('}');
+            }
+        }
+
         if let Some(alias) = &u.alias {
             self.output.push_str(" as ");
             self.output.push_str(&alias.node);

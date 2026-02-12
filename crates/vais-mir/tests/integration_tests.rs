@@ -814,29 +814,28 @@ fn test_borrow_check_str_move_detection() {
 }
 
 #[test]
-#[ignore] // Pre-existing borrow checker logic issue — check_body doesn't detect double-move
 fn test_borrow_check_double_move() {
     // Manually construct MIR body with double-move
     let body = Body {
         name: "test_double_move".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
                 lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
                 lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
                 lifetime: None,
             },
@@ -875,12 +874,11 @@ fn test_borrow_check_double_move() {
 }
 
 #[test]
-#[ignore] // Pre-existing borrow checker logic issue — check_body doesn't detect double-drop
 fn test_borrow_check_double_drop() {
     // Manually construct MIR body with double-drop
     let body = Body {
         name: "test_double_drop".to_string(),
-        params: vec![MirType::Str],
+        params: vec![MirType::Struct("TestNonCopy".into())],
         return_type: MirType::Unit,
         locals: vec![
             LocalDecl {
@@ -891,7 +889,7 @@ fn test_borrow_check_double_drop() {
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
                 lifetime: None,
             },
@@ -919,23 +917,22 @@ fn test_borrow_check_double_drop() {
 }
 
 #[test]
-#[ignore] // Pre-existing borrow checker logic issue — check_body doesn't detect use-after-drop
 fn test_borrow_check_use_after_drop() {
     // Manually construct MIR body with use-after-drop
     let body = Body {
         name: "test_use_after_drop".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
                 lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
                 lifetime: None,
             },
@@ -970,7 +967,6 @@ fn test_borrow_check_use_after_drop() {
 }
 
 #[test]
-#[ignore] // Pre-existing borrow checker logic issue — depends on check_module detecting double-move
 fn test_borrow_check_mixed_valid_invalid() {
     // Module with 2 bodies: one valid, one with error
     let mut module = MirModule::new("test_module");
@@ -1009,24 +1005,24 @@ fn test_borrow_check_mixed_valid_invalid() {
     // Body 2: Invalid - str double-move
     let invalid_body = Body {
         name: "invalid".to_string(),
-        params: vec![MirType::Str],
-        return_type: MirType::Str,
+        params: vec![MirType::Struct("TestNonCopy".into())],
+        return_type: MirType::Struct("TestNonCopy".into()),
         locals: vec![
             LocalDecl {
                 name: Some("_ret".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
                 lifetime: None,
             },
             LocalDecl {
                 name: Some("s".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: false,
                 lifetime: None,
             },
             LocalDecl {
                 name: Some("temp".to_string()),
-                ty: MirType::Str,
+                ty: MirType::Struct("TestNonCopy".into()),
                 is_mutable: true,
                 lifetime: None,
             },

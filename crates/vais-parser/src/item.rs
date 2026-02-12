@@ -434,6 +434,8 @@ impl Parser {
     }
 
     /// Parse use statement: `module` or `module/submodule` or `module::submodule`
+    /// Also supports selective imports: `module.Item`, `module.{A, B, C}`
+    /// Optional semicolon terminator: `module;` or `module.Item;`
     fn parse_use(&mut self) -> ParseResult<Use> {
         let mut path = vec![self.parse_ident()?];
 
@@ -443,7 +445,45 @@ impl Parser {
             path.push(self.parse_ident()?);
         }
 
-        Ok(Use { path, alias: None })
+        // Check for selective import: `.Ident` or `.{Ident, ...}`
+        let items = if self.check(&Token::Dot) {
+            self.advance();
+            if self.check(&Token::LBrace) {
+                // Multi-item: `.{A, B, C}`
+                self.advance(); // consume `{`
+                let mut selected = Vec::new();
+                if !self.check(&Token::RBrace) {
+                    selected.push(self.parse_ident()?);
+                    while self.check(&Token::Comma) {
+                        self.advance();
+                        // Allow trailing comma
+                        if self.check(&Token::RBrace) {
+                            break;
+                        }
+                        selected.push(self.parse_ident()?);
+                    }
+                }
+                self.expect(&Token::RBrace)?;
+                Some(selected)
+            } else {
+                // Single item: `.Ident`
+                let item = self.parse_ident()?;
+                Some(vec![item])
+            }
+        } else {
+            None
+        };
+
+        // Optional semicolon terminator
+        if self.check(&Token::Semi) {
+            self.advance();
+        }
+
+        Ok(Use {
+            path,
+            alias: None,
+            items,
+        })
     }
 
     /// Parse constant definition: `C NAME: Type = value`

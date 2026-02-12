@@ -8,11 +8,44 @@ use std::path::{Path, PathBuf};
 use vais_ast::{Item, Module, Spanned};
 use vais_query::QueryDatabase;
 
-pub(crate) fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
-    items
+pub(crate) fn filter_imported_items(
+    items: Vec<Spanned<Item>>,
+    selected: Option<&[Spanned<String>]>,
+) -> Vec<Spanned<Item>> {
+    let filtered = items
         .into_iter()
-        .filter(|item| !matches!(&item.node, Item::Function(f) if f.name.node == "main"))
-        .collect()
+        .filter(|item| !matches!(&item.node, Item::Function(f) if f.name.node == "main"));
+
+    match selected {
+        None => filtered.collect(),
+        Some(names) => {
+            let name_set: std::collections::HashSet<&str> =
+                names.iter().map(|s| s.node.as_str()).collect();
+            filtered
+                .filter(|item| {
+                    let item_name = match &item.node {
+                        Item::Function(f) => Some(f.name.node.as_str()),
+                        Item::Struct(s) => Some(s.name.node.as_str()),
+                        Item::Enum(e) => Some(e.name.node.as_str()),
+                        Item::Union(u) => Some(u.name.node.as_str()),
+                        Item::TypeAlias(t) => Some(t.name.node.as_str()),
+                        Item::Trait(t) => Some(t.name.node.as_str()),
+                        Item::Impl(_) => None, // Always include impls
+                        Item::Const(c) => Some(c.name.node.as_str()),
+                        Item::Global(g) => Some(g.name.node.as_str()),
+                        Item::Macro(m) => Some(m.name.node.as_str()),
+                        Item::ExternBlock(_) => None, // Always include extern blocks
+                        Item::Use(_) => None,          // Always include nested imports
+                        Item::Error { .. } => None,
+                    };
+                    match item_name {
+                        Some(name) => name_set.contains(name),
+                        None => true, // Include unnamed items (impls, extern blocks, etc.)
+                    }
+                })
+                .collect()
+        }
+    }
 }
 
 /// Load a module and recursively resolve its imports
@@ -131,7 +164,10 @@ pub(crate) fn load_module_with_imports_internal(
 
                 // Propagate sub-module mappings with offset, or create new mapping
                 let offset = all_items.len();
-                let filtered = filter_imported_items(imported.items);
+                let filtered = filter_imported_items(
+                    imported.items,
+                    use_stmt.items.as_deref(),
+                );
                 let filtered_len = filtered.len();
 
                 if let Some(sub_map) = imported.modules_map {
@@ -341,7 +377,10 @@ pub(crate) fn load_module_with_imports_parallel(
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
                     let offset = sub_items.len();
-                    let filtered = filter_imported_items(sub_imported.items);
+                    let filtered = filter_imported_items(
+                        sub_imported.items,
+                        use_stmt.items.as_deref(),
+                    );
 
                     // Propagate sub-module mappings or create new
                     if let Some(sub_map) = sub_imported.modules_map {
@@ -383,7 +422,7 @@ pub(crate) fn load_module_with_imports_parallel(
     let mut import_idx = 0;
     for (idx, item) in ast.items.iter().enumerate() {
         match &item.node {
-            Item::Use(_) => {
+            Item::Use(use_stmt) => {
                 if import_idx < import_indices.len() && import_indices[import_idx] == idx {
                     if let Some(imported_module) = parsed_map.remove(&import_paths[import_idx]) {
                         let import_canonical = import_paths[import_idx]
@@ -391,7 +430,10 @@ pub(crate) fn load_module_with_imports_parallel(
                             .unwrap_or_else(|_| import_paths[import_idx].clone());
 
                         let offset = all_items.len();
-                        let filtered = filter_imported_items(imported_module.items);
+                        let filtered = filter_imported_items(
+                            imported_module.items,
+                            use_stmt.items.as_deref(),
+                        );
 
                         // Propagate sub-module mappings or create new
                         if let Some(sub_map) = imported_module.modules_map {

@@ -369,6 +369,9 @@ pub struct Union {
 pub struct Use {
     pub path: Vec<Spanned<String>>,
     pub alias: Option<Spanned<String>>,
+    /// Selective import items: `U mod.Item` or `U mod.{A, B}`
+    /// None means import the entire module (wildcard)
+    pub items: Option<Vec<Spanned<String>>>,
 }
 
 /// Associated type in a trait

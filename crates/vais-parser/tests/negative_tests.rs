@@ -767,3 +767,21 @@ F valid2() -> i64 = 2
     // We don't assert has_struct - just verify it's checked
     let _ = has_struct;
 }
+
+// ==================== Selective Import Negative Tests ====================
+
+#[test]
+fn test_error_use_dot_missing_ident() {
+    // U mod. without an identifier after the dot
+    let source = "U std/option.\nF main() -> i64 = 42";
+    let result = parse(source);
+    assert!(result.is_err(), "Expected error for dot without identifier");
+}
+
+#[test]
+fn test_error_use_braces_missing_close() {
+    // U mod.{A, B without closing brace
+    let source = "U std/option.{Option, Some\nF main() -> i64 = 42";
+    let result = parse(source);
+    assert!(result.is_err(), "Expected error for unclosed braces");
+}

@@ -1206,6 +1206,7 @@ fn test_format_use_statement() {
     let use_stmt = Use {
         path: vec![ident("std"), ident("io"), ident("println")],
         alias: None,
+        items: None,
     };
 
     let module = Module {
@@ -1224,6 +1225,7 @@ fn test_format_use_with_alias() {
     let use_stmt = Use {
         path: vec![ident("std"), ident("collections"), ident("HashMap")],
         alias: Some(ident("Map")),
+        items: None,
     };
 
     let module = Module {

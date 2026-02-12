@@ -671,23 +671,20 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_move_type_operand() {
-        // String type should use Operand::Move (not Copy)
+        // String type uses Copy (str is Copy since Phase 13)
         let source = r#"F take_string(s: str) -> str = s"#;
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
         let display = mir.bodies[0].display();
-        // Should use "Move(" for str parameter (debug format)
-        assert!(display.contains("Move("));
+        // Should use "Copy(" for str parameter (debug format)
+        assert!(display.contains("Copy("));
     }
 
     #[test]
-    #[ignore]
     fn test_drop_insertion() {
-        // Non-Copy locals should have Drop statements inserted before return
-        // Note: Using str type which is non-Copy
+        // Copy types (including str) should NOT have Drop statements
         let source = r#"
             F use_string() -> i64 {
                 s: str = "hello"
@@ -698,8 +695,8 @@ mod tests {
         let mir = lower_module(&module);
 
         let display = mir.bodies[0].display();
-        // The string local should be dropped before return
-        assert!(display.contains("drop("));
+        // The string local should NOT be dropped (str is Copy)
+        assert!(!display.contains("drop("));
     }
 
     #[test]
@@ -721,18 +718,16 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_move_prevents_drop() {
-        // If a non-Copy value is moved, it should NOT be dropped
+        // str is Copy, so it uses Copy instead of Move
         let source = r#"F return_string(s: str) -> str = s"#;
         let module = vais_parser::parse(source).expect("Parse failed");
         let mir = lower_module(&module);
 
         let display = mir.bodies[0].display();
-        // The parameter is moved to return place, so no drop should occur
-        // (The string "s" is moved, not dropped)
-        assert!(display.contains("Move("));
-        // The moved value should NOT be dropped
+        // The parameter is copied to return place (str is Copy)
+        assert!(display.contains("Copy("));
+        // Copy types are not dropped
         assert!(!display.contains("drop("));
     }
 }

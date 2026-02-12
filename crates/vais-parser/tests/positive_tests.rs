@@ -282,6 +282,105 @@ fn test_parse_use_statement() {
             assert_eq!(u.path[0].node, "std");
             assert_eq!(u.path[1].node, "collections");
             assert_eq!(u.path[2].node, "HashMap");
+            assert!(u.items.is_none());
+        }
+        _ => panic!("Expected Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_selective_single() {
+    let source = "U std/string.Str";
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Use(u) => {
+            assert_eq!(u.path.len(), 2);
+            assert_eq!(u.path[0].node, "std");
+            assert_eq!(u.path[1].node, "string");
+            let items = u.items.as_ref().expect("Should have items");
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].node, "Str");
+        }
+        _ => panic!("Expected Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_selective_multi() {
+    let source = "U std/option.{Option, Some, None}";
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Use(u) => {
+            assert_eq!(u.path.len(), 2);
+            assert_eq!(u.path[0].node, "std");
+            assert_eq!(u.path[1].node, "option");
+            let items = u.items.as_ref().expect("Should have items");
+            assert_eq!(items.len(), 3);
+            assert_eq!(items[0].node, "Option");
+            assert_eq!(items[1].node, "Some");
+            assert_eq!(items[2].node, "None");
+        }
+        _ => panic!("Expected Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_with_semicolon() {
+    let source = "U std/option;\nF main() -> i64 = 42";
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    assert_eq!(module.items.len(), 2);
+    match &module.items[0].node {
+        Item::Use(u) => {
+            assert_eq!(u.path.len(), 2);
+            assert_eq!(u.path[0].node, "std");
+            assert_eq!(u.path[1].node, "option");
+            assert!(u.items.is_none());
+        }
+        _ => panic!("Expected Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_selective_with_semicolon() {
+    let source = "U std/option.{Option, None};\nF main() -> i64 = 42";
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    assert_eq!(module.items.len(), 2);
+    match &module.items[0].node {
+        Item::Use(u) => {
+            let items = u.items.as_ref().expect("Should have items");
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].node, "Option");
+            assert_eq!(items[1].node, "None");
+        }
+        _ => panic!("Expected Use"),
+    }
+}
+
+#[test]
+fn test_parse_use_trailing_comma() {
+    let source = "U std/option.{Option, Some,}";
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Use(u) => {
+            let items = u.items.as_ref().expect("Should have items");
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].node, "Option");
+            assert_eq!(items[1].node, "Some");
         }
         _ => panic!("Expected Use"),
     }

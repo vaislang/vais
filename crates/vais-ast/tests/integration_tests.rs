@@ -343,6 +343,7 @@ fn test_item_use() {
     let use_stmt = Use {
         path: vec![sp_string("std", 0, 3), sp_string("io", 5, 7)],
         alias: None,
+        items: None,
     };
 
     let item = Item::Use(use_stmt);

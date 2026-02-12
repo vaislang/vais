@@ -1364,23 +1364,22 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_use_after_move() {
-        // Non-copy type (Str) moved then used again
+        // Non-copy type (Struct) moved then used again
         let body = Body {
             name: "test_move".to_string(),
-            params: vec![MirType::Str],
-            return_type: MirType::Str,
+            params: vec![MirType::Struct("TestNonCopy".into())],
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -1416,12 +1415,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_double_drop() {
         // Drop the same non-copy value twice
         let body = Body {
             name: "test_double_drop".to_string(),
-            params: vec![MirType::Str],
+            params: vec![MirType::Struct("TestNonCopy".into())],
             return_type: MirType::Unit,
             locals: vec![
                 LocalDecl {
@@ -1432,7 +1430,7 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -1582,12 +1580,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_use_after_drop() {
         // Drop a value, then try to use it
         let body = Body {
             name: "test_use_after_drop".to_string(),
-            params: vec![MirType::Str],
+            params: vec![MirType::Struct("TestNonCopy".into())],
             return_type: MirType::Unit,
             locals: vec![
                 LocalDecl {
@@ -1598,13 +1595,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -1695,29 +1692,28 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_move_while_borrowed() {
         // Borrow a value, then try to move it
         let body = Body {
             name: "test_move_borrowed".to_string(),
-            params: vec![MirType::Str],
-            return_type: MirType::Str,
+            params: vec![MirType::Struct("TestNonCopy".into())],
+            return_type: MirType::Struct("TestNonCopy".into()),
             locals: vec![
                 LocalDecl {
                     name: Some("_ret".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("r".to_string()),
-                    ty: MirType::Ref(Box::new(MirType::Str)),
+                    ty: MirType::Ref(Box::new(MirType::Struct("TestNonCopy".into()))),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -1787,7 +1783,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_check_module() {
         // Test checking an entire module
         let body1 = make_test_body(
@@ -1801,7 +1796,7 @@ mod tests {
 
         let body2 = Body {
             name: "test_error".to_string(),
-            params: vec![MirType::Str],
+            params: vec![MirType::Struct("TestNonCopy".into())],
             return_type: MirType::Unit,
             locals: vec![
                 LocalDecl {
@@ -1812,7 +1807,7 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -2302,7 +2297,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cfg_move_on_one_branch() {
         // Test CFG analysis: move on one branch, both branches join
         // This tests that the join correctly marks the value as moved
@@ -2325,13 +2319,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2341,7 +2335,7 @@ mod tests {
                 BasicBlock {
                     statements: vec![Statement::Assign(
                         Place::local(Local(2)),
-                        Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
                     )],
                     terminator: Some(Terminator::SwitchInt {
                         discriminant: Operand::Copy(Place::local(Local(1))),
@@ -2565,7 +2559,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cfg_if_else_use_after_partial_move() {
         // Move in then branch, not in else, then use at merge → error
         let body = Body {
@@ -2587,13 +2580,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2603,7 +2596,7 @@ mod tests {
                 BasicBlock {
                     statements: vec![Statement::Assign(
                         Place::local(Local(2)),
-                        Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
                     )],
                     terminator: Some(Terminator::SwitchInt {
                         discriminant: Operand::Copy(Place::local(Local(1))),
@@ -2734,7 +2727,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cfg_if_else_drop_one_branch() {
         // Drop in then branch, not in else → merge considers Dropped → use → error
         let body = Body {
@@ -2756,13 +2748,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -2772,7 +2764,7 @@ mod tests {
                 BasicBlock {
                     statements: vec![Statement::Assign(
                         Place::local(Local(2)),
-                        Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
                     )],
                     terminator: Some(Terminator::SwitchInt {
                         discriminant: Operand::Copy(Place::local(Local(1))),
@@ -3012,7 +3004,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cfg_sequential_blocks() {
         // Sequential Goto chain: bb0 → bb1 → bb2, move in bb0, use in bb2 → error
         let body = Body {
@@ -3028,13 +3019,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("x".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: true,
                     lifetime: None,
                 },
@@ -3045,7 +3036,7 @@ mod tests {
                     statements: vec![
                         Statement::Assign(
                             Place::local(Local(1)),
-                            Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
+                            Rvalue::Use(Operand::Constant(Constant::Int(0))),
                         ),
                         Statement::Assign(
                             Place::local(Local(2)),
@@ -4360,13 +4351,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_lifetime_use_after_move_str() {
-        // RefLifetime is not used here. Use non-copy MirType::Str to verify
+        // RefLifetime is not used here. Use non-copy MirType::Struct to verify
         // existing UseAfterMove logic still works with lifetime-enabled bodies.
         let body = Body {
             name: "test_use_after_move".to_string(),
-            params: vec![MirType::Str],
+            params: vec![MirType::Struct("TestNonCopy".into())],
             return_type: MirType::Unit,
             locals: vec![
                 LocalDecl {
@@ -4377,13 +4367,13 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
                 LocalDecl {
                     name: Some("temp".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -4564,7 +4554,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_lifetime_double_drop_with_lifetime_locals() {
         // Body with lifetime params, but using non-copy locals that get dropped twice.
         // Should detect DoubleFree (existing behavior maintained).
@@ -4581,7 +4570,7 @@ mod tests {
                 },
                 LocalDecl {
                     name: Some("s".to_string()),
-                    ty: MirType::Str,
+                    ty: MirType::Struct("TestNonCopy".into()),
                     is_mutable: false,
                     lifetime: None,
                 },
@@ -4591,7 +4580,7 @@ mod tests {
                     // Initialize s
                     Statement::Assign(
                         Place::local(Local(1)),
-                        Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
                     ),
                     // First drop
                     Statement::Drop(Place::local(Local(1))),

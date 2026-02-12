@@ -1,2 +1,2 @@
-U malicious.txt
+U malicious/txt
 F main() -> () = ()
