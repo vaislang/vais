@@ -35,7 +35,7 @@ pub(crate) fn filter_imported_items(
                         Item::Global(g) => Some(g.name.node.as_str()),
                         Item::Macro(m) => Some(m.name.node.as_str()),
                         Item::ExternBlock(_) => None, // Always include extern blocks
-                        Item::Use(_) => None,          // Always include nested imports
+                        Item::Use(_) => None,         // Always include nested imports
                         Item::Error { .. } => None,
                     };
                     match item_name {
@@ -164,10 +164,7 @@ pub(crate) fn load_module_with_imports_internal(
 
                 // Propagate sub-module mappings with offset, or create new mapping
                 let offset = all_items.len();
-                let filtered = filter_imported_items(
-                    imported.items,
-                    use_stmt.items.as_deref(),
-                );
+                let filtered = filter_imported_items(imported.items, use_stmt.items.as_deref());
                 let filtered_len = filtered.len();
 
                 if let Some(sub_map) = imported.modules_map {
@@ -377,10 +374,8 @@ pub(crate) fn load_module_with_imports_parallel(
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
                     let offset = sub_items.len();
-                    let filtered = filter_imported_items(
-                        sub_imported.items,
-                        use_stmt.items.as_deref(),
-                    );
+                    let filtered =
+                        filter_imported_items(sub_imported.items, use_stmt.items.as_deref());
 
                     // Propagate sub-module mappings or create new
                     if let Some(sub_map) = sub_imported.modules_map {
@@ -430,10 +425,8 @@ pub(crate) fn load_module_with_imports_parallel(
                             .unwrap_or_else(|_| import_paths[import_idx].clone());
 
                         let offset = all_items.len();
-                        let filtered = filter_imported_items(
-                            imported_module.items,
-                            use_stmt.items.as_deref(),
-                        );
+                        let filtered =
+                            filter_imported_items(imported_module.items, use_stmt.items.as_deref());
 
                         // Propagate sub-module mappings or create new
                         if let Some(sub_map) = imported_module.modules_map {
