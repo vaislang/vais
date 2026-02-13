@@ -95,7 +95,7 @@ impl CodeGenerator {
                 (name.to_string(), is_indirect)
             }
         } else if let Expr::SelfCall = &func.node {
-            (self.fn_ctx.current_function.as_ref().map(|s| s.as_str()).unwrap_or("").to_string(), false) // avoid clone unwrap_or_default
+            (self.fn_ctx.current_function.as_deref().unwrap_or("").to_string(), false) // avoid clone unwrap_or_default
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -270,7 +270,7 @@ impl CodeGenerator {
                 let llvm_var_name = local_info
                     .as_ref()
                     .map(|l| l.llvm_name.as_str())
-                    .unwrap_or(&fn_name)
+                    .unwrap_or(fn_name)
                     .to_string(); // single clone at end
                 let tmp = self.next_temp(counter);
                 ir.push_str(&format!("  {} = load i64, i64* %{}\n", tmp, llvm_var_name));

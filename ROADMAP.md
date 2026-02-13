@@ -1335,6 +1335,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## CI 수정: Clippy 경고 해결 (2026-02-14)
+
+> **상태**: ✅ 완료
+
+- [x] 1. expr_helpers_call.rs clippy 수정 (Opus 직접) ✅ 2026-02-14
+  변경: `as_ref().map(|s| s.as_str())`→`as_deref()`, needless borrow 제거
+- [x] 2. pkg/build.rs clippy 수정 (Opus 직접) ✅ 2026-02-14
+  변경: `#[allow(clippy::too_many_arguments)]` 추가 (Phase 30 분할 시 누락)
+- [x] 3. Codecov unknown 원인 분석 (Opus 직접) ✅ 2026-02-14
+  원인: CODECOV_TOKEN 시크릿 미설정 + test job 실패로 coverage job 스킵
+진행률: 3/3 (100%)
+
+---
+
 ## Phase 31: 에러 메시지 & 진단 개선
 
 > **상태**: 📋 예정

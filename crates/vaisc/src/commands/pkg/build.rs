@@ -56,6 +56,7 @@ pub(super) fn resolve_feature_flags(
 }
 
 /// Build the package and its dependencies
+#[allow(clippy::too_many_arguments)]
 pub(super) fn cmd_pkg_build(
     cwd: &Path,
     release: bool,
