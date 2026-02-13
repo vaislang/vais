@@ -356,6 +356,56 @@ jobs:
           done
         continue-on-error: true
 
+  # ---------- Python/Node binding tests ----------
+  bindings-test:
+    name: Bindings Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [check]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17 (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Install LLVM 17 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@17
+          echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bindings-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bindings-
+
+      - name: Run vais-python integration tests
+        run: cargo test -p vais-python --test integration_tests
+
+      - name: Run vais-node integration tests
+        run: cargo test -p vais-node --test integration_tests
+
   # ---------- Security audit ----------
   audit:
     name: Security Audit

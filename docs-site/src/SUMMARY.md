@@ -17,6 +17,8 @@
 - [Rust에서 Vais로 전환하기](./guides/migration-from-rust.md)
 - [C/C++에서 Vais로 전환하기](./guides/migration-from-c.md)
 - [Cookbook — 실전 레시피](./guides/cookbook.md)
+- [테스트 가이드](./guides/testing.md)
+- [에러 처리 Best Practices](./guides/error-handling.md)
 - [Ecosystem Packages](./guide/ecosystem-packages.md)
 - [트러블슈팅 & FAQ](./troubleshooting.md)
 
@@ -51,6 +53,7 @@
 - [JIT 컴파일](./compiler/jit-compilation.md)
 - [GPU 코드 생성](./compiler/gpu-codegen.md)
 - [JavaScript 코드 생성](./compiler/js-codegen.md)
+- [컴파일러 내부 구조](./compiler/internals.md)
 
 # 개발자 도구
 
@@ -66,6 +69,7 @@
   - [빠른 시작](./tools/vais-tutorial/quickstart.md)
 - [핫 리로드](./tools/hot-reload.md)
 - [코드 커버리지](./tools/coverage.md)
+- [패키지 매니저](./tools/package-manager.md)
 
 # 고급 주제
 

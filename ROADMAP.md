@@ -1262,41 +1262,41 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-## Phase 27: Python/Node 바인딩 테스트 (📋 예정)
+## Phase 27: Python/Node 바인딩 테스트 (✅ 완료)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-13, 모드: 자동진행)
 > **목표**: vais-python, vais-node 바인딩 크레이트에 통합 테스트 추가 (각 20~30개)
 > **영향도**: Medium
 
 ### 현황
 
-| 크레이트 | 기존 테스트 | 목표 |
-|----------|-----------|------|
-| vais-python | test_vais.py (262줄) | +20개 통합 테스트 |
-| vais-node | 0건 | +20개 통합 테스트 |
+| 크레이트 | 기존 테스트 | 추가 | 합계 |
+|----------|-----------|------|------|
+| vais-python | test_vais.py (35개) | +24개 Rust 통합 테스트 | 59개 |
+| vais-node | 0건 | +24개 Rust 통합 테스트 | 24개 |
 
 ### 작업 (Sonnet)
 
-- [ ] 1. vais-python 통합 테스트 — PyO3 컴파일, 라운드트립 변환, 에러 핸들링 (Sonnet)
-- [ ] 2. vais-node 통합 테스트 — NAPI 타입 변환, 비동기 연산, 메모리 관리 (Sonnet)
-- [ ] 3. CI 연동 — Python/Node 테스트를 CI 파이프라인에 추가 (Sonnet)
-- [ ] 4. 검증 — 전체 바인딩 테스트 통과 확인 (Sonnet)
+- [x] 1. vais-python 통합 테스트 — 24개 (tokenize 4 + parse 4 + type check 4 + compile 4 + roundtrip 4 + extra 4)
+- [x] 2. vais-node 통합 테스트 — 24개 (tokenize 4 + parse 4 + type check 4 + compile 4 + error 4 + extra 4)
+- [x] 3. CI 연동 — ci.yml에 bindings-test job 추가 (ubuntu + macos)
+- [x] 4. 검증 — 전체 48개 바인딩 테스트 통과, Clippy 0건
 
 ---
 
-## Phase 28: 문서 보강 (📋 예정)
+## Phase 28: 문서 보강 (✅ 완료)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-13)
 > **목표**: 개발자 온보딩 및 기여자 가이드 문서 보강 — Testing/Error Handling/Compiler Internals
 > **영향도**: Medium
 
 ### 작업 (Sonnet)
 
-- [ ] 1. Testing Guide — docs-site/src/guides/testing.md (단위/통합/속성 기반 테스트 작성법) (Sonnet)
-- [ ] 2. Error Handling Best Practices — docs-site/src/guides/error-handling.md (Result 패턴, 커스텀 에러) (Sonnet)
-- [ ] 3. Compiler Internals — docs-site/src/compiler/internals.md (컴파일 파이프라인 상세, IR 설계) (Sonnet)
-- [ ] 4. Package Manager 통합 문서 — docs-site/src/tools/package-manager.md (init/install/publish 가이드) (Sonnet)
-- [ ] 5. SUMMARY.md 업데이트 — 신규 문서 목차 반영 (Sonnet)
+- [x] 1. Testing Guide — docs-site/src/guides/testing.md (단위/통합/속성/E2E/벤치마크/커버리지/CI)
+- [x] 2. Error Handling Best Practices — docs-site/src/guides/error-handling.md (Result/Option/?/!/커스텀에러/실전예제)
+- [x] 3. Compiler Internals — docs-site/src/compiler/internals.md (파이프라인/렉서/파서/타입체커/MIR/코드생성/JIT)
+- [x] 4. Package Manager 통합 문서 — docs-site/src/tools/package-manager.md (init/install/publish/workspace/lockfile)
+- [x] 5. SUMMARY.md 업데이트 — 4개 신규 문서 목차 반영
 
 ---
 
