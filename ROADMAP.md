@@ -1317,9 +1317,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 30: 대형 파일 모듈 분할 (Round 2)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-13)
 > **목표**: 1500줄 이상 대형 파일 5개 모듈 분할 — borrow_check.rs(4.6K), codegen/lib.rs(3.5K), pkg.rs(2.6K), incremental.rs(2.5K), parser/lib.rs(2.4K)
 > **영향도**: Medium — 유지보수성 향상, 코드 탐색 용이
+
+- [x] 1. borrow_check.rs 모듈 분할 (Sonnet) ✅ 2026-02-13
+  변경: vais-mir/src/borrow_check/ (4,606줄 → mod.rs 227 + checker.rs 811 + cfg.rs 181 + lifetime.rs 112 + tests.rs 3,295)
+- [x] 2. codegen/lib.rs 모듈 분할 (Sonnet) ✅ 2026-02-13
+  변경: vais-codegen/src/ (lib.rs 3,532→3,352줄, +error.rs 84줄, +state.rs 121줄)
+- [x] 3. pkg.rs 모듈 분할 (Sonnet) ✅ 2026-02-13
+  변경: vaisc/src/commands/pkg/ (2,634줄 → mod.rs 458 + build.rs 508 + check.rs 147 + install.rs 274 + publish.rs 381 + registry.rs 188 + util.rs 778)
+- [x] 4. incremental.rs 모듈 분할 (Sonnet) ✅ 2026-02-13
+  변경: vaisc/src/incremental/ (2,456줄 → mod.rs 36 + types.rs 148 + graph.rs 156 + cache.rs 873 + detect.rs 665 + stats.rs 59 + tests.rs 558)
+- [x] 5. parser/lib.rs 테스트 분리 (Sonnet) ✅ 2026-02-13
+  변경: vais-parser/src/ (lib.rs 2,399→897줄, +parser_tests.rs 1,501줄)
+진행률: 5/5 (100%)
 
 ---
 

@@ -29,6 +29,7 @@ mod control_flow;
 pub mod cross_compile;
 pub mod debug;
 mod diagnostics;
+mod error;
 mod expr;
 mod expr_helpers;
 mod expr_helpers_call;
@@ -49,6 +50,7 @@ mod nested_field_tests;
 pub mod optimize;
 pub mod parallel;
 mod registration;
+mod state;
 mod stmt;
 mod stmt_visitor;
 mod string_ops;
@@ -74,8 +76,16 @@ pub use visitor::{ExprVisitor, ItemVisitor, StmtVisitor};
 
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
+// Re-export error types
+pub use error::{CodegenError, CodegenResult};
+
+// Re-export state types
+pub use state::DecreasesInfo;
+pub(crate) use state::{
+    ContractState, FunctionContext, GenericState, LambdaState, StringPool, TypeRegistry,
+};
+
 use std::collections::HashMap;
-use thiserror::Error;
 use vais_ast::*;
 use vais_types::ResolvedType;
 
@@ -111,194 +121,15 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
 
 pub use target::TargetTriple;
 pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
+#[cfg(test)]
+use diagnostics::{_suggest_type_conversion, edit_distance};
 // Re-export type structs from types module
 pub(crate) use types::*;
-
-/// Error type for code generation failures.
-///
-/// Represents various kinds of errors that can occur during LLVM IR generation,
-/// including undefined references, type mismatches, and unsupported features.
-#[derive(Debug, Error)]
-pub enum CodegenError {
-    /// Reference to an undefined variable
-    #[error("Undefined variable: {0}")]
-    UndefinedVar(String),
-
-    /// Call to an undefined function
-    #[error("Undefined function: {0}")]
-    UndefinedFunction(String),
-
-    /// Type-related error during code generation
-    #[error("Type error: {0}")]
-    TypeError(String),
-
-    /// LLVM-specific error
-    #[error("LLVM error: {0}")]
-    LlvmError(String),
-
-    /// Feature not yet implemented in code generation
-    #[error("Unsupported feature: {0}")]
-    Unsupported(String),
-
-    /// Recursion depth limit exceeded (infinite type recursion)
-    #[error("Recursion depth limit exceeded: {0}")]
-    RecursionLimitExceeded(String),
-}
-
-impl CodegenError {
-    /// Get the error code for this codegen error
-    pub fn error_code(&self) -> &str {
-        match self {
-            CodegenError::UndefinedVar(_) => "C001",
-            CodegenError::UndefinedFunction(_) => "C002",
-            CodegenError::TypeError(_) => "C003",
-            CodegenError::LlvmError(_) => "C004",
-            CodegenError::Unsupported(_) => "C005",
-            CodegenError::RecursionLimitExceeded(_) => "C006",
-        }
-    }
-
-    /// Get a help message for this error
-    pub fn help(&self) -> Option<String> {
-        match self {
-            CodegenError::UndefinedVar(msg) => {
-                if msg.contains("Did you mean") {
-                    None // suggestion already embedded
-                } else {
-                    Some("check that the variable is defined before use".to_string())
-                }
-            }
-            CodegenError::UndefinedFunction(msg) => {
-                if msg.contains("Did you mean") {
-                    None
-                } else {
-                    Some("check that the function is defined before calling it".to_string())
-                }
-            }
-            CodegenError::TypeError(_) => {
-                Some("ensure all operands have compatible types".to_string())
-            }
-            CodegenError::Unsupported(feature) => Some(format!(
-                "'{}' is not yet implemented in code generation",
-                feature
-            )),
-            CodegenError::RecursionLimitExceeded(_) => {
-                Some("consider reducing nesting depth or refactoring recursive types".to_string())
-            }
-            CodegenError::LlvmError(_) => None,
-        }
-    }
-}
-
-type CodegenResult<T> = Result<T, CodegenError>;
-
-// ============================================================================
 
 /// Result of generating a block of statements
 /// (value, ir_code, is_terminated)
 /// is_terminated is true if the block ends with break, continue, or return
 type _BlockResult = (String, String, bool);
-
-/// Type definitions registry — functions, structs, enums, unions, constants, globals, traits
-pub(crate) struct TypeRegistry {
-    /// All function names declared in the module (including generics, before instantiation)
-    pub(crate) declared_functions: std::collections::HashSet<String>,
-    /// Function signatures for lookup
-    pub(crate) functions: HashMap<String, FunctionInfo>,
-    /// Struct definitions
-    pub(crate) structs: HashMap<String, StructInfo>,
-    /// Enum definitions
-    pub(crate) enums: HashMap<String, EnumInfo>,
-    /// Union definitions (untagged, C-style)
-    pub(crate) unions: HashMap<String, UnionInfo>,
-    /// Constant definitions
-    pub(crate) constants: HashMap<String, types::ConstInfo>,
-    /// Global variable definitions
-    pub(crate) globals: HashMap<String, types::GlobalInfo>,
-    /// Trait definitions for vtable generation
-    pub(crate) trait_defs: HashMap<String, vais_types::TraitDef>,
-    /// Trait implementations: (impl_type, trait_name) -> method_impls
-    pub(crate) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
-    /// Resolved function signatures from type checker (for inferred parameter types)
-    pub(crate) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
-}
-
-/// Generic type system state — templates, instantiations, substitutions
-pub(crate) struct GenericState {
-    /// Generic struct AST definitions (before monomorphization)
-    pub(crate) struct_defs: HashMap<String, std::rc::Rc<vais_ast::Struct>>,
-    /// Generic struct name aliases (base_name -> mangled_name, e.g., "Box" -> "Box$i64")
-    pub(crate) struct_aliases: HashMap<String, String>,
-    /// Generated struct instantiations (mangled_name -> already_generated)
-    pub(crate) generated_structs: HashMap<String, bool>,
-    /// Generic function templates stored for specialization (base_name -> Function)
-    pub(crate) function_templates: HashMap<String, std::rc::Rc<Function>>,
-    /// Generic function instantiation map: base_name -> Vec<(type_args, mangled_name)>
-    pub(crate) fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
-    /// Generated function instantiations (mangled_name -> already_generated)
-    pub(crate) generated_functions: HashMap<String, bool>,
-    /// Generic substitutions for current function/method
-    pub(crate) substitutions: HashMap<String, ResolvedType>,
-}
-
-/// Current function compilation context — locals, labels, control flow
-pub(crate) struct FunctionContext {
-    /// Current function being compiled
-    pub(crate) current_function: Option<String>,
-    /// Current function's return type (for generating ret instructions in nested contexts)
-    pub(crate) current_return_type: Option<ResolvedType>,
-    /// Local variables in current function
-    pub(crate) locals: HashMap<String, LocalVar>,
-    /// Label counter for unique basic block names
-    pub(crate) label_counter: usize,
-    /// Stack of loop labels for break/continue
-    pub(crate) loop_stack: Vec<LoopLabels>,
-    /// Stack of deferred expressions per function (LIFO order)
-    pub(crate) defer_stack: Vec<vais_ast::Spanned<vais_ast::Expr>>,
-    /// Current basic block name (for phi node predecessor tracking)
-    pub(crate) current_block: String,
-    /// Current source file being compiled (for contract error messages)
-    pub(crate) current_file: Option<String>,
-}
-
-/// Lambda, closure, and async function state
-pub(crate) struct LambdaState {
-    /// Generated LLVM IR for lambda functions, emitted after the main body
-    pub(crate) generated_ir: Vec<String>,
-    /// Closure information for each lambda variable (maps var_name -> closure_info)
-    pub(crate) closures: HashMap<String, ClosureInfo>,
-    /// Last generated lambda info (for Let statement to pick up)
-    pub(crate) last_lambda_info: Option<ClosureInfo>,
-    /// Async function state machine counter
-    pub(crate) async_state_counter: usize,
-    /// Async await points
-    pub(crate) async_await_points: Vec<AsyncAwaitPoint>,
-    /// Current async function info
-    pub(crate) current_async_function: Option<AsyncFunctionInfo>,
-}
-
-/// String constant pool — string literals, counters, module prefix
-pub(crate) struct StringPool {
-    /// String constants for global storage (name, value)
-    pub(crate) constants: Vec<(String, String)>,
-    /// Counter for string constant names
-    pub(crate) counter: usize,
-    /// Module-specific prefix for string constants (avoids collisions in multi-module builds)
-    pub(crate) prefix: Option<String>,
-}
-
-/// Contract verification state — pre/post conditions, old() snapshots, decreases
-pub(crate) struct ContractState {
-    /// Contract string constants (separate from regular strings)
-    pub(crate) contract_constants: HashMap<String, String>,
-    /// Counter for contract string constant names
-    pub(crate) contract_counter: usize,
-    /// Pre-state snapshots for old() expressions in ensures clauses
-    /// Maps snapshot variable name -> allocated storage name
-    pub(crate) old_snapshots: HashMap<String, String>,
-    /// Decreases expressions for current function (for termination proof)
-    pub(crate) current_decreases_info: Option<DecreasesInfo>,
-}
 
 /// LLVM IR Code Generator for Vais 0.0.1
 ///
@@ -360,17 +191,6 @@ pub struct CodeGenerator {
 
     // WASM export metadata: function_name -> export_name
     pub(crate) wasm_exports: HashMap<String, String>,
-}
-
-/// Information about a function's decreases clause for termination proof
-#[derive(Clone)]
-pub struct DecreasesInfo {
-    /// Storage variable name for the initial decreases value
-    pub storage_name: String,
-    /// The decreases expression from the attribute (already boxed)
-    pub expr: Box<vais_ast::Spanned<vais_ast::Expr>>,
-    /// Function name with decreases clause
-    pub function_name: String,
 }
 
 impl CodeGenerator {
