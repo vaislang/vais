@@ -1133,13 +1133,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ### 2차 리뷰 발견사항 (2026-02-13)
 > 출처: /team-review (자동진행 완료 후)
+> 모드: 자동진행
 
-- [ ] 1. [보안] GPU host_code fallback 경고 메시지 노출 제한 (Warning) — 대상: crates/vais-gpu/src/lib.rs
-- [ ] 2. [성능] RwLock poisoning 시 에러 복구 전략 추가 (Warning) — 대상: crates/vais-jit/src/tiered.rs
-- [ ] 3. [아키텍처] function_gen.rs 미전환 call site 2건 완료 (Warning) — 대상: crates/vais-codegen/src/function_gen.rs
-- [ ] 4. [아키텍처] FunctionSig simple()/builtin() dead code 정리 (Warning) — 대상: crates/vais-types/src/types.rs
-- [ ] 5. [품질] contracts.rs 들여쓰기 일관성 확인 (Warning) — 대상: crates/vais-codegen/src/contracts.rs
-진행률: 0/5 (0%)
+- [x] 1. [보안] GPU host_code fallback 경고 메시지 노출 제한 (Warning) ✅ 2026-02-13
+  변경: vais-gpu/src/lib.rs (generate_host_code() → GpuResult<String> 반환, 4 백엔드 에러 처리), build.rs (Result 핸들링 + eprintln 경고)
+- [x] 2. [성능] RwLock poisoning 시 에러 복구 전략 추가 (Warning) ✅ 2026-02-13
+  변경: vais-jit/src/tiered.rs (26건 .expect()→.unwrap_or_else(|e| e.into_inner()) 전환, 프로덕션 코드만)
+- [x] 3. [아키텍처] function_gen.rs 미전환 call site 2건 완료 (Warning) ✅ 2026-02-13
+  변경: function_gen.rs (generate_specialized_function→initialize_function_state(), generate_async_function→resolve_fn_return_type())
+- [x] 4. [아키텍처] FunctionSig simple()/builtin() dead code 정리 (Warning) ✅ 2026-02-13
+  변경: vais-types/src/types.rs (simple()/builtin() 28줄 삭제, 호출처 0건 확인)
+- [x] 5. [품질] contracts.rs 들여쓰기 일관성 확인 (Warning) ✅ 2026-02-13
+  변경: 없음 (검사 결과 4-space 일관 들여쓰기 확인, 이슈 없음)
+진행률: 5/5 (100%)
 
 ---
 

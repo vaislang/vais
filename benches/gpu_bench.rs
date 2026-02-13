@@ -344,7 +344,7 @@ fn bench_host_code_generation(c: &mut Criterion) {
                     // Generate module first to populate kernels
                     let _ = gen.generate(&module);
                     // Then generate host code
-                    gen.generate_host_code()
+                    gen.generate_host_code().ok()
                 })
             },
         );

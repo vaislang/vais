@@ -312,31 +312,39 @@ impl GpuCodeGenerator {
     }
 
     /// Generate host code for launching kernels
-    pub fn generate_host_code(&self) -> String {
+    pub fn generate_host_code(&self) -> GpuResult<String> {
         match self.target {
             GpuTarget::Cuda => {
                 #[cfg(feature = "cuda")]
-                return cuda::generate_host_code(&self.kernels);
+                return Ok(cuda::generate_host_code(&self.kernels));
                 #[cfg(not(feature = "cuda"))]
-                return String::from("// CUDA backend not enabled");
+                return Err(GpuError::BackendError(
+                    "CUDA backend not enabled. Enable the 'cuda' feature".to_string(),
+                ));
             }
             GpuTarget::OpenCL => {
                 #[cfg(feature = "opencl")]
-                return opencl::generate_host_code(&self.kernels);
+                return Ok(opencl::generate_host_code(&self.kernels));
                 #[cfg(not(feature = "opencl"))]
-                return String::from("// OpenCL backend not enabled");
+                return Err(GpuError::BackendError(
+                    "OpenCL backend not enabled. Enable the 'opencl' feature".to_string(),
+                ));
             }
             GpuTarget::WebGPU => {
                 #[cfg(feature = "webgpu")]
-                return webgpu::generate_host_code(&self.kernels, "Main");
+                return Ok(webgpu::generate_host_code(&self.kernels, "Main"));
                 #[cfg(not(feature = "webgpu"))]
-                return String::from("// WebGPU backend not enabled");
+                return Err(GpuError::BackendError(
+                    "WebGPU backend not enabled. Enable the 'webgpu' feature".to_string(),
+                ));
             }
             GpuTarget::Metal => {
                 #[cfg(feature = "metal")]
-                return metal::generate_host_code(&self.kernels, "Main");
+                return Ok(metal::generate_host_code(&self.kernels, "Main"));
                 #[cfg(not(feature = "metal"))]
-                return String::from("// Metal backend not enabled");
+                return Err(GpuError::BackendError(
+                    "Metal backend not enabled. Enable the 'metal' feature".to_string(),
+                ));
             }
         }
     }
@@ -425,5 +433,20 @@ mod tests {
     fn test_gpu_target_shared_memory() {
         assert_eq!(GpuTarget::Cuda.default_shared_memory(), 48 * 1024);
         assert_eq!(GpuTarget::Metal.default_shared_memory(), 32 * 1024);
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn test_generate_host_code_error_when_backend_disabled() {
+        // Test that generate_host_code returns an error when backend is not enabled
+        let gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let result = gen.generate_host_code();
+        assert!(result.is_err());
+        if let Err(GpuError::BackendError(msg)) = result {
+            assert!(msg.contains("CUDA backend not enabled"));
+            assert!(msg.contains("'cuda' feature"));
+        } else {
+            panic!("Expected BackendError");
+        }
     }
 }

@@ -1413,34 +1413,6 @@ impl Default for FunctionSig {
 }
 
 impl FunctionSig {
-    /// Create a simple function signature with minimal fields
-    pub fn simple(
-        name: &str,
-        params: Vec<(String, ResolvedType, bool)>,
-        ret: ResolvedType,
-    ) -> Self {
-        Self {
-            name: name.to_string(),
-            params,
-            ret,
-            ..Default::default()
-        }
-    }
-
-    /// Create a builtin function signature (with IO effects for output functions)
-    pub fn builtin(
-        name: &str,
-        params: Vec<(String, ResolvedType, bool)>,
-        ret: ResolvedType,
-    ) -> Self {
-        Self {
-            name: name.to_string(),
-            params,
-            ret,
-            ..Default::default()
-        }
-    }
-
     /// Return the minimum number of required arguments
     pub fn min_args(&self) -> usize {
         self.required_params.unwrap_or(self.params.len())

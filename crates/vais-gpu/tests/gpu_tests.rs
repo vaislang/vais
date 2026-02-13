@@ -503,7 +503,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(
             host.contains("cudaMalloc") || host.contains("cuda") || host.len() > 0,
             "Host code should contain CUDA runtime calls"
@@ -515,7 +515,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let _code = gen.generate(&module).expect("Metal codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(
             host.contains("MTL") || host.contains("Metal") || host.len() > 0,
             "Host code should contain Metal runtime calls"
@@ -824,7 +824,7 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
 
         // Host code should reference CUDA runtime API functions
         assert!(
@@ -994,7 +994,7 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
         let _code = gen.generate(&module).expect("OpenCL codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
 
         // Host code should reference OpenCL API
         assert!(
@@ -1188,7 +1188,7 @@ F stream_process(input: *f64, output: *f64, n: i64) {
         let module = parse(STREAM_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         // Host code should be generated (stream management is in runtime, not codegen)
         assert!(host.len() > 0, "Host code should be non-empty");
     }
@@ -1327,7 +1327,7 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
         let module = parse(PROFILED_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(
             host.len() > 0,
             "Host code should be generated for profiling"
@@ -1409,7 +1409,7 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(METAL_VECTOR_ADD).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let _code = gen.generate(&module).expect("Metal codegen failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
 
         // Host code should reference Metal API
         assert!(
@@ -1689,7 +1689,7 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("CUDA kernel generation failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(host.len() > 0, "CUDA host code should not be empty");
     }
 
@@ -1700,7 +1700,7 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("OpenCL kernel generation failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(host.len() > 0, "OpenCL host code should not be empty");
     }
 
@@ -1711,7 +1711,7 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("WebGPU kernel generation failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(host.len() > 0, "WebGPU host code should not be empty");
     }
 
@@ -1722,7 +1722,7 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("Metal kernel generation failed");
-        let host = gen.generate_host_code();
+        let host = gen.generate_host_code().expect("Host code generation failed");
         assert!(host.len() > 0, "Metal host code should not be empty");
     }
 

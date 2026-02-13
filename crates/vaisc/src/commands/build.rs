@@ -100,28 +100,39 @@ pub(crate) fn cmd_build_gpu(
 
     // Generate host code template if requested
     if emit_host {
-        let host_code = generator.generate_host_code();
-        let host_ext = match target {
-            GpuTarget::Cuda => "host.cu",
-            GpuTarget::OpenCL => "host.c",
-            GpuTarget::WebGPU => "host.ts",
-            GpuTarget::Metal => "host.swift",
-        };
-        let host_path = input
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|stem| PathBuf::from(format!("{}.{}", stem, host_ext)))
-            .unwrap_or_else(|| PathBuf::from(format!("output.{}", host_ext)));
+        match generator.generate_host_code() {
+            Ok(host_code) => {
+                let host_ext = match target {
+                    GpuTarget::Cuda => "host.cu",
+                    GpuTarget::OpenCL => "host.c",
+                    GpuTarget::WebGPU => "host.ts",
+                    GpuTarget::Metal => "host.swift",
+                };
+                let host_path = input
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|stem| PathBuf::from(format!("{}.{}", stem, host_ext)))
+                    .unwrap_or_else(|| PathBuf::from(format!("output.{}", host_ext)));
 
-        fs::write(&host_path, &host_code)
-            .map_err(|e| format!("Failed to write host code {}: {}", host_path.display(), e))?;
+                fs::write(&host_path, &host_code).map_err(|e| {
+                    format!("Failed to write host code {}: {}", host_path.display(), e)
+                })?;
 
-        println!(
-            "{} Generated host code: {} ({})",
-            "✓".green().bold(),
-            host_path.display(),
-            target.name()
-        );
+                println!(
+                    "{} Generated host code: {} ({})",
+                    "✓".green().bold(),
+                    host_path.display(),
+                    target.name()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "{} Warning: Could not generate host code: {}",
+                    "⚠".yellow().bold(),
+                    e
+                );
+            }
+        }
     }
 
     // Compile generated GPU code if --gpu-compile is specified

@@ -134,10 +134,7 @@ impl CodeGenerator {
         // Save and set generic substitutions
         let old_subst = std::mem::replace(&mut self.generic_substitutions, substitutions.clone());
 
-        self.current_function = Some(inst.mangled_name.to_string());
-        self.locals.clear();
-        self.label_counter = 0;
-        self.loop_stack.clear();
+        self.initialize_function_state(&inst.mangled_name);
 
         // Generate parameters with substituted types
         let params: Vec<_> = generic_fn
@@ -967,14 +964,7 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = if let Some(t) = f.ret_type.as_ref() {
-            self.ast_type_to_resolved(&t.node)
-        } else {
-            self.functions
-                .get(func_name)
-                .map(|info| info.signature.ret.clone())
-                .unwrap_or(ResolvedType::Unit)
-        };
+        let ret_type = self.resolve_fn_return_type(f, func_name);
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
