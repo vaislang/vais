@@ -161,7 +161,7 @@ impl CodeGenerator {
             // This significantly reduces stack usage
             self.fn_ctx.locals.insert(
                 name.node.clone(),
-                LocalVar::ssa(resolved_ty.clone(), val.clone()),
+                LocalVar::ssa(resolved_ty.clone(), val),
             );
             // If this was a lambda with captures, register the closure info
             if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
@@ -174,11 +174,6 @@ impl CodeGenerator {
             // Generate unique LLVM name for this variable (to handle loops)
             let llvm_name = format!("{}.{}", name.node, counter);
             *counter += 1;
-
-            self.fn_ctx.locals.insert(
-                name.node.clone(),
-                LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
-            );
 
             let mut ir = val_ir;
             let llvm_ty = self.type_to_llvm(&resolved_ty);
@@ -216,6 +211,12 @@ impl CodeGenerator {
                 self.lambdas.closures.insert(name.node.clone(), closure_info);
             }
 
+            // Insert local var AFTER generating IR to avoid borrow conflicts
+            self.fn_ctx.locals.insert(
+                name.node.clone(),
+                LocalVar::alloca(resolved_ty, llvm_name),
+            );
+
             Ok(("void".to_string(), ir))
         }
     }
@@ -227,6 +228,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> GenResult {
         if let Some(labels) = self.fn_ctx.loop_stack.last() {
+            // Clone to avoid borrow conflict with generate_expr
             let break_label = labels.break_label.clone();
             let mut ir = String::new();
             if let Some(expr) = value {
@@ -248,6 +250,7 @@ impl CodeGenerator {
     /// Generate continue statement
     fn generate_continue_stmt(&mut self) -> GenResult {
         if let Some(labels) = self.fn_ctx.loop_stack.last() {
+            // Clone to avoid potential borrow issues
             let continue_label = labels.continue_label.clone();
             let ir = format!("  br label %{}\n", continue_label);
             Ok(("void".to_string(), ir))
@@ -277,7 +280,8 @@ impl CodeGenerator {
             // Get return type from current function context
             let ret_type = self
                 .fn_ctx.current_return_type
-                .clone()
+                .as_ref()
+                .cloned()
                 .unwrap_or(ResolvedType::I64);
             let llvm_ty = self.type_to_llvm(&ret_type);
 

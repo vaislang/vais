@@ -64,7 +64,7 @@ impl CodeGenerator {
 
                 // Then branch
                 writeln!(ir, "{}:", then_label).unwrap();
-                self.fn_ctx.current_block = then_label.clone();
+                self.fn_ctx.current_block = then_label; // move: label not used after
                 let (then_val, then_ir, then_terminated) =
                     self.generate_block_stmts(then_stmts, counter)?;
                 ir.push_str(&then_ir);
@@ -75,10 +75,10 @@ impl CodeGenerator {
                     writeln!(ir, "  {} = load {}, {}* {}", loaded, llvm_type, llvm_type, then_val).unwrap();
                     loaded
                 } else {
-                    then_val.clone()
+                    then_val // move: not used after
                 };
 
-                let then_actual_block = self.fn_ctx.current_block.clone();
+                let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
                 let then_from_label = if !then_terminated {
                     writeln!(ir, "  br label %{}", local_merge).unwrap();
                     then_actual_block
@@ -88,7 +88,7 @@ impl CodeGenerator {
 
                 // Else branch
                 writeln!(ir, "{}:", else_label).unwrap();
-                self.fn_ctx.current_block = else_label.clone();
+                self.fn_ctx.current_block = else_label; // move: not used after
                 let has_else = else_branch.is_some();
                 let (else_val, else_ir, else_terminated, nested_last_block) =
                     if let Some(nested) = else_branch {
@@ -110,7 +110,7 @@ impl CodeGenerator {
                     writeln!(ir, "  {} = load {}, {}* {}", loaded, llvm_type, llvm_type, else_val).unwrap();
                     loaded
                 } else {
-                    else_val.clone()
+                    else_val // move: not used after
                 };
 
                 let else_from_label = if !else_terminated {
@@ -119,7 +119,7 @@ impl CodeGenerator {
                     if !nested_last_block.is_empty() {
                         nested_last_block
                     } else {
-                        self.fn_ctx.current_block.clone()
+                        std::mem::take(&mut self.fn_ctx.current_block) // take ownership
                     }
                 } else {
                     String::new()

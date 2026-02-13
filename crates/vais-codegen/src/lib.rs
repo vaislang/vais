@@ -940,6 +940,7 @@ impl CodeGenerator {
     }
 
     /// Get current generic substitution for a type parameter
+    #[inline]
     pub(crate) fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
         self.generics.substitutions.get(param).cloned()
     }
@@ -956,6 +957,7 @@ impl CodeGenerator {
 
     /// Resolve a struct name, checking aliases for generic specializations.
     /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
+    #[inline]
     pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
         if self.types.structs.contains_key(name) {
             return name.to_string();
@@ -967,6 +969,7 @@ impl CodeGenerator {
     }
 
     /// Generate mangled name for a generic struct
+    #[inline]
     pub(crate) fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }
@@ -1814,6 +1817,7 @@ impl CodeGenerator {
 
     // Function generation functions are in function_gen.rs module
 
+    #[inline]
     fn next_temp(&self, counter: &mut usize) -> String {
         let tmp = format!("%t.{}", counter);
         *counter += 1;

@@ -15,7 +15,7 @@ impl CodeGenerator {
         params: &[Param],
         body: &Spanned<Expr>,
     ) -> Vec<String> {
-        let param_names: HashSet<_> = params.iter().map(|p| p.name.node.clone()).collect();
+        let param_names: HashSet<String> = params.iter().map(|p| p.name.node.clone()).collect();
         let mut free_vars = Vec::new();
         self.collect_free_vars_in_expr(&body.node, &param_names, &mut free_vars);
         // Deduplicate while preserving order
@@ -199,9 +199,15 @@ impl CodeGenerator {
                 self.collect_free_vars_in_expr(&value.node, bound, free);
                 bound.insert(name.node.clone());
             }
-            Stmt::Expr(e) => self.collect_free_vars_in_expr(&e.node, bound, free),
-            Stmt::Return(Some(e)) => self.collect_free_vars_in_expr(&e.node, bound, free),
-            Stmt::Break(Some(e)) => self.collect_free_vars_in_expr(&e.node, bound, free),
+            Stmt::Expr(e) => {
+                self.collect_free_vars_in_expr(&e.node, bound, free);
+            }
+            Stmt::Return(Some(e)) => {
+                self.collect_free_vars_in_expr(&e.node, bound, free);
+            }
+            Stmt::Break(Some(e)) => {
+                self.collect_free_vars_in_expr(&e.node, bound, free);
+            }
             _ => {}
         }
     }
@@ -235,7 +241,7 @@ impl CodeGenerator {
     pub(crate) fn collect_pattern_bindings(&self, pattern: &Pattern, bound: &mut HashSet<String>) {
         match pattern {
             Pattern::Ident(name) => {
-                bound.insert(name.clone());
+                bound.insert(name.to_string());
             }
             Pattern::Tuple(patterns) => {
                 for p in patterns {
@@ -248,7 +254,7 @@ impl CodeGenerator {
                         self.collect_pattern_bindings(&p.node, bound);
                     } else {
                         // Field shorthand: {x} binds x
-                        bound.insert(name.node.clone());
+                        bound.insert(name.node.to_string());
                     }
                 }
             }

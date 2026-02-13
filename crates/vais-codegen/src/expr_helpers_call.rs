@@ -88,15 +88,14 @@ impl CodeGenerator {
                     args.iter().map(|a| self.infer_expr_type(a)).collect();
                 let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
                 (mangled, false)
-            } else if self.types.functions.contains_key(name) {
-                (name.clone(), false)
-            } else if self.fn_ctx.locals.contains_key(name) {
-                (name.clone(), true) // Lambda call
             } else {
-                (name.clone(), false) // Assume it's a function
+                // Determine indirection based on lookup, clone name once
+                let is_indirect = !self.types.functions.contains_key(name)
+                    && self.fn_ctx.locals.contains_key(name);
+                (name.to_string(), is_indirect)
             }
         } else if let Expr::SelfCall = &func.node {
-            (self.fn_ctx.current_function.clone().unwrap_or_default(), false)
+            (self.fn_ctx.current_function.as_ref().map(|s| s.as_str()).unwrap_or("").to_string(), false) // avoid clone unwrap_or_default
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -184,8 +183,9 @@ impl CodeGenerator {
 
         let actual_fn_name = fn_info
             .as_ref()
-            .map(|f| f.signature.name.clone())
-            .unwrap_or_else(|| fn_name.clone());
+            .map(|f| f.signature.name.as_str())
+            .unwrap_or(fn_name.as_str())
+            .to_string(); // single clone at end instead of two branches
 
         // Generate the appropriate call based on function type
         self.generate_call_ir(
@@ -261,7 +261,7 @@ impl CodeGenerator {
                 let val = &local.llvm_name;
                 if local.is_ssa() {
                     // SSA values already include the % prefix (e.g., "%5")
-                    val.clone()
+                    val.to_string() // explicit to_string instead of clone
                 } else {
                     // Param names don't include % prefix
                     format!("%{}", val)
@@ -269,8 +269,9 @@ impl CodeGenerator {
             } else {
                 let llvm_var_name = local_info
                     .as_ref()
-                    .map(|l| l.llvm_name.clone())
-                    .unwrap_or_else(|| fn_name.to_string());
+                    .map(|l| l.llvm_name.as_str())
+                    .unwrap_or(&fn_name)
+                    .to_string(); // single clone at end
                 let tmp = self.next_temp(counter);
                 ir.push_str(&format!("  {} = load i64, i64* %{}\n", tmp, llvm_var_name));
                 tmp

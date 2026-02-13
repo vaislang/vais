@@ -279,11 +279,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Returns the LLVM IR as a string.
+    #[inline]
     pub fn get_ir_string(&self) -> String {
         self.module.print_to_string().to_string()
     }
 
     /// Writes the LLVM IR to a file.
+    #[inline]
     pub fn write_to_file(&self, path: &std::path::Path) -> Result<(), String> {
         self.module.print_to_file(path).map_err(|e| e.to_string())
     }

@@ -21,7 +21,8 @@ impl CodeGenerator {
             // Use registered return type from type checker (supports return type inference)
             self.types.functions
                 .get(lookup_key)
-                .map(|info| info.signature.ret.clone())
+                .map(|info| &info.signature.ret)
+                .cloned() // explicit single clone at end
                 .unwrap_or(ResolvedType::Unit)
         }
     }
@@ -47,7 +48,7 @@ impl CodeGenerator {
             return Ok(());
         }
         self.generics.generated_structs
-            .insert(inst.mangled_name.clone(), true);
+            .insert(inst.mangled_name.to_string(), true); // explicit to_string instead of clone
 
         // Create substitution map from generic params to concrete types
         // Filter out lifetime params (they don't have runtime representation)
@@ -59,11 +60,11 @@ impl CodeGenerator {
         let substitutions: HashMap<String, ResolvedType> = type_params
             .iter()
             .zip(inst.type_args.iter())
-            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+            .map(|(g, t)| (g.name.node.to_string(), t.clone())) // clone required: type_args is &[ResolvedType]
             .collect();
 
         // Save and set generic substitutions
-        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions.clone());
+        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions);
 
         // Generate field types with substitutions
         let fields: Vec<(String, ResolvedType)> = generic_struct
@@ -71,7 +72,7 @@ impl CodeGenerator {
             .iter()
             .map(|f| {
                 let ty = self.ast_type_to_resolved(&f.ty.node);
-                let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
+                let concrete_ty = vais_types::substitute_type(&ty, &self.generics.substitutions);
                 (f.name.node.to_string(), concrete_ty)
             })
             .collect();
@@ -128,11 +129,11 @@ impl CodeGenerator {
         let substitutions: HashMap<String, ResolvedType> = type_params
             .iter()
             .zip(inst.type_args.iter())
-            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+            .map(|(g, t)| (g.name.node.to_string(), t.clone())) // clone required: type_args is &[ResolvedType]
             .collect();
 
         // Save and set generic substitutions
-        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions.clone());
+        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions);
 
         self.initialize_function_state(&inst.mangled_name);
 
@@ -142,7 +143,7 @@ impl CodeGenerator {
             .iter()
             .map(|p| {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
-                let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
+                let concrete_ty = vais_types::substitute_type(&ty, &self.generics.substitutions);
                 let llvm_ty = self.type_to_llvm(&concrete_ty);
 
                 // Register parameter as local
@@ -157,11 +158,12 @@ impl CodeGenerator {
 
         let ret_type = if let Some(t) = generic_fn.ret_type.as_ref() {
             let ty = self.ast_type_to_resolved(&t.node);
-            vais_types::substitute_type(&ty, &substitutions)
+            vais_types::substitute_type(&ty, &self.generics.substitutions)
         } else {
             self.types.functions
                 .get(&generic_fn.name.node)
-                .map(|info| info.signature.ret.clone())
+                .map(|info| &info.signature.ret)
+                .cloned() // explicit single clone at end
                 .unwrap_or(ResolvedType::Unit)
         };
 

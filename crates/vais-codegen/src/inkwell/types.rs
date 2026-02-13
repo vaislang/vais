@@ -27,6 +27,7 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Gets a registered struct type by name.
+    #[inline]
     pub fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
         self.struct_types.get(name).copied()
     }

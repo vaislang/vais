@@ -302,6 +302,7 @@ impl CodeGenerator {
     // === SIMD Intrinsic Support ===
 
     /// Check if a function name is a SIMD intrinsic
+    #[inline]
     pub(crate) fn is_simd_intrinsic(name: &str) -> bool {
         name.starts_with("vec")
             && (name.ends_with("f32")

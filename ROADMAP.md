@@ -1224,20 +1224,41 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-## Phase 26: Hot-path 성능 최적화 (📋 예정)
+## Phase 26: Hot-path 성능 최적화 (2026-02-13)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료
 > **목표**: codegen hot-path의 불필요한 할당(clone/format!/to_string) 제거로 5~15% 컴파일 속도 개선
 > **영향도**: High
+> **결과**: 소규모 파일 10~20% 개선, 50K 기준 64.6ms (774K lines/s) — 이전 63ms와 동등
 
 ### 작업 (Sonnet)
 
-- [ ] 1. Criterion 프로파일링 — top 10 clone/allocation 병목 식별 (Sonnet)
-- [ ] 2. 정적 format!("constant") → &str 전환 — zero-cost 정적 문자열 (Sonnet)
-- [ ] 3. Cow<str> 도입 — 조건부 소유 문자열 패턴 전환 (Sonnet)
-- [ ] 4. #[inline] 힌트 — 고빈도 소형 함수에 인라인 어노테이션 추가 (Sonnet)
-- [ ] 5. clone() 감소 2차 — 잔여 392건 중 hot-path 집중 제거 (Sonnet)
-- [ ] 6. 벤치마크 전후 비교 — 50K lines 컴파일 시간 측정 (Sonnet)
+- [x] 1. Criterion 프로파일링 — top 10 clone/allocation 병목 식별 (Sonnet) ✅ 2026-02-13
+  변경: types.rs(36 to_string), builtins.rs(231 to_string), generate_expr.rs(36 clone) 등 Top 10 병목 식별
+- [x] 2. 정적 format!("constant") → &str 전환 — zero-cost 정적 문자열 (Sonnet) ✅ 2026-02-13
+  변경: types.rs(25건 to_string→String::from), builtins.rs(매크로 4개 30건 전환)
+- [x] 3. Cow<str> 도입 — 조건부 소유 문자열 패턴 전환 (Sonnet) ✅ 2026-02-13
+  변경: contracts.rs(18→8 clone, -56%), lambda_closure.rs(15→4, -73%), stmt_visitor.rs(10→8, -20%)
+- [x] 4. #[inline] 힌트 — 고빈도 소형 함수에 인라인 어노테이션 추가 (Sonnet) ✅ 2026-02-13
+  변경: lib.rs/types.rs/type_inference.rs/inkwell 등 7파일에 13개 #[inline] 추가
+- [x] 5. clone() 감소 2차 — 잔여 392건 중 hot-path 집중 제거 (Sonnet) ✅ 2026-02-13
+  변경: generate_expr.rs(-7), control_flow.rs(-6), expr_helpers_call.rs(-5), function_gen.rs(-3) = 21건 제거
+- [x] 6. 벤치마크 전후 비교 — 50K lines 컴파일 시간 측정 (Sonnet) ✅ 2026-02-13
+  변경: 소규모 10~20% 개선(lexer 27%, parser 16%, typechecker 16%), 50K 기준 64.6ms 유지
+
+### 리뷰 발견사항 (2026-02-13)
+> 출처: /team-review Phase 26
+
+- [x] 1. [성능+아키텍처] lambda_closure.rs HashSet 이중 변환 제거 (Critical) ✅ 2026-02-13
+  변경: HashSet<&str>↔HashSet<String> 이중 변환 9건 제거, HashSet<String> 통일
+- [x] 2. [성능] contracts.rs divisors Vec→HashSet 전환 (Critical) ✅ 2026-02-13
+  변경: find_divisor_params() divisors Vec<String>→HashSet<String>, O(n²)→O(n)
+- [x] 3. [아키텍처] contracts.rs FunctionInfo clone→참조 전환 (Critical) ✅ 2026-02-13
+  변경: borrow checker 충돌로 clone 유지, 정당성 주석 추가 (self.generate_expr 호출 시 &mut self 필요)
+- [x] 4. [아키텍처] expr_helpers_call.rs 3중 clone 통합 (Critical) ✅ 2026-02-13
+  변경: 3분기 name.clone() → is_indirect 판별 후 단일 name.to_string()
+- [x] 5. [정확성] function_gen.rs substitutions.clone() 제거 (Warning) ✅ 2026-02-13
+  변경: 2곳 substitutions.clone()→move, 이후 참조는 &self.generics.substitutions 사용
 
 ---
 

@@ -15,10 +15,10 @@ fn convert_params(params: Vec<(String, ResolvedType)>) -> Vec<(String, ResolvedT
 macro_rules! register_extern {
     ($gen:expr, $name:expr, $params:expr, $ret:expr) => {
         $gen.types.functions.insert(
-            $name.to_string(),
+            String::from($name),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: $name.to_string(),
+                    name: String::from($name),
                     generics: vec![],
                     generic_bounds: HashMap::new(),
                     params: convert_params($params),
@@ -31,16 +31,16 @@ macro_rules! register_extern {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                _extern_abi: Some("C".to_string()),
+                _extern_abi: Some(String::from("C")),
             },
         );
     };
     ($gen:expr, $key:expr => $name:expr, $params:expr, $ret:expr) => {
         $gen.types.functions.insert(
-            $key.to_string(),
+            String::from($key),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: $name.to_string(),
+                    name: String::from($name),
                     generics: vec![],
                     generic_bounds: HashMap::new(),
                     params: convert_params($params),
@@ -53,7 +53,7 @@ macro_rules! register_extern {
                     inferred_effects: None,
                 },
                 is_extern: true,
-                _extern_abi: Some("C".to_string()),
+                _extern_abi: Some(String::from("C")),
             },
         );
     };
@@ -63,10 +63,10 @@ macro_rules! register_extern {
 macro_rules! register_helper {
     ($gen:expr, $key:expr => $name:expr, $params:expr, $ret:expr) => {
         $gen.types.functions.insert(
-            $key.to_string(),
+            String::from($key),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: $name.to_string(),
+                    name: String::from($name),
                     generics: vec![],
                     generic_bounds: HashMap::new(),
                     params: convert_params($params),
@@ -92,10 +92,10 @@ macro_rules! register_vararg {
             let p: Vec<(String, ResolvedType)> = $params;
             let req = p.len();
             $gen.types.functions.insert(
-                $name.to_string(),
+                String::from($name),
                 FunctionInfo {
                     signature: FunctionSig {
-                        name: $name.to_string(),
+                        name: String::from($name),
                         generics: vec![],
                         generic_bounds: HashMap::new(),
                         params: convert_params(p),
@@ -108,7 +108,7 @@ macro_rules! register_vararg {
                         inferred_effects: None,
                     },
                     is_extern: true,
-                    _extern_abi: Some("C".to_string()),
+                    _extern_abi: Some(String::from("C")),
                 },
             );
         }
@@ -118,10 +118,10 @@ macro_rules! register_vararg {
             let p: Vec<(String, ResolvedType)> = $params;
             let req = p.len();
             $gen.types.functions.insert(
-                $name.to_string(),
+                String::from($name),
                 FunctionInfo {
                     signature: FunctionSig {
-                        name: $name.to_string(),
+                        name: String::from($name),
                         generics: vec![],
                         generic_bounds: HashMap::new(),
                         params: convert_params(p),
@@ -145,10 +145,10 @@ macro_rules! register_vararg {
 macro_rules! register_builtin {
     ($gen:expr, $name:expr, $params:expr, $ret:expr) => {
         $gen.types.functions.insert(
-            $name.to_string(),
+            String::from($name),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: $name.to_string(),
+                    name: String::from($name),
                     generics: vec![],
                     generic_bounds: HashMap::new(),
                     params: $params,

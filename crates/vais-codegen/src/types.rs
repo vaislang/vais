@@ -214,7 +214,7 @@ impl CodeGenerator {
                 #[cfg(debug_assertions)]
                 eprintln!("Warning: {}", e);
                 let _ = e;
-                "i64".to_string()
+                String::from("i64")
             }
         };
 
@@ -240,21 +240,21 @@ impl CodeGenerator {
     /// Inner implementation of type_to_llvm (actual conversion logic)
     fn type_to_llvm_impl_inner(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
         Ok(match ty {
-            ResolvedType::I8 => "i8".to_string(),
-            ResolvedType::I16 => "i16".to_string(),
-            ResolvedType::I32 => "i32".to_string(),
-            ResolvedType::I64 => "i64".to_string(),
-            ResolvedType::I128 => "i128".to_string(),
-            ResolvedType::U8 => "i8".to_string(),
-            ResolvedType::U16 => "i16".to_string(),
-            ResolvedType::U32 => "i32".to_string(),
-            ResolvedType::U64 => "i64".to_string(),
-            ResolvedType::U128 => "i128".to_string(),
-            ResolvedType::F32 => "float".to_string(),
-            ResolvedType::F64 => "double".to_string(),
-            ResolvedType::Bool => "i1".to_string(),
-            ResolvedType::Str => "i8*".to_string(),
-            ResolvedType::Unit => "void".to_string(),
+            ResolvedType::I8 => String::from("i8"),
+            ResolvedType::I16 => String::from("i16"),
+            ResolvedType::I32 => String::from("i32"),
+            ResolvedType::I64 => String::from("i64"),
+            ResolvedType::I128 => String::from("i128"),
+            ResolvedType::U8 => String::from("i8"),
+            ResolvedType::U16 => String::from("i16"),
+            ResolvedType::U32 => String::from("i32"),
+            ResolvedType::U64 => String::from("i64"),
+            ResolvedType::U128 => String::from("i128"),
+            ResolvedType::F32 => String::from("float"),
+            ResolvedType::F64 => String::from("double"),
+            ResolvedType::Bool => String::from("i1"),
+            ResolvedType::Str => String::from("i8*"),
+            ResolvedType::Unit => String::from("void"),
             ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
             ResolvedType::ConstArray { element, size } => {
                 // Const-sized array: [N x T]
@@ -286,12 +286,12 @@ impl CodeGenerator {
             ResolvedType::Range(_inner) => {
                 // Range is represented as a struct with start and end fields
                 // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
-                "%Range".to_string()
+                String::from("%Range")
             }
             ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                    "i64".to_string()
+                    String::from("i64")
                 } else if !generics.is_empty() {
                     // In Vais, all values are i64-sized, so struct/enum/union layout is the same
                     // regardless of type arguments. Use base name for enums, structs, and unions.
@@ -328,7 +328,7 @@ impl CodeGenerator {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
                     // Fallback to i64 for unresolved generics
-                    "i64".to_string()
+                    String::from("i64")
                 }
             }
             ResolvedType::ConstGeneric(param) => {
@@ -337,7 +337,7 @@ impl CodeGenerator {
                 #[cfg(debug_assertions)]
                 eprintln!("Warning: Unresolved const generic parameter: {}", param);
                 let _ = param;
-                "i64".to_string()
+                String::from("i64")
             }
             ResolvedType::Vector { element, lanes } => {
                 // SIMD vector type: <lanes x element_type>
@@ -386,7 +386,7 @@ impl CodeGenerator {
             ResolvedType::Lifetime(_) => {
                 // Lifetimes don't have a runtime representation
                 // This shouldn't normally be reached in codegen
-                "i64".to_string()
+                String::from("i64")
             }
             ResolvedType::Map(key, _val) => {
                 // Map is represented as a pointer to key array (parallel arrays)
@@ -409,9 +409,9 @@ impl CodeGenerator {
             }
             ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
                 // Slice is a fat pointer: { i8* data, i64 length }
-                "{ i8*, i64 }".to_string()
+                String::from("{ i8*, i64 }")
             }
-            _ => "i64".to_string(), // Default fallback
+            _ => String::from("i64"), // Default fallback
         })
     }
 
@@ -632,7 +632,7 @@ impl CodeGenerator {
             .iter()
             .map(|(_, ty)| self.type_to_llvm(ty))
             .max_by_key(|s| self.estimate_type_size(s))
-            .unwrap_or_else(|| "i64".to_string());
+            .unwrap_or_else(|| String::from("i64"));
 
         format!("%{} = type {{ {} }}", name, largest_type)
     }

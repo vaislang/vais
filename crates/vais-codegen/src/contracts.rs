@@ -24,6 +24,7 @@
 //! ```
 
 use crate::{CodeGenerator, CodegenResult};
+use std::collections::HashSet;
 use std::fmt::Write;
 use vais_ast::{BinOp, Expr, Function, IfElse, Spanned, Type};
 use vais_types::ResolvedType;
@@ -94,7 +95,7 @@ impl CodeGenerator {
         // Use alloca since we stored the return value at return_var_name
         self.fn_ctx.locals.insert(
             "return".to_string(),
-            crate::types::LocalVar::alloca(ret_type.clone(), return_var_name.clone()),
+            crate::types::LocalVar::alloca(ret_type.clone(), return_var_name),
         );
 
         for (idx, attr) in f.attributes.iter().enumerate() {
@@ -162,10 +163,7 @@ impl CodeGenerator {
         // Create string constants for error message
         let condition_str =
             self.get_or_create_contract_string(&format!("{} condition #{}", kind, idx));
-        let file_name = self
-            .fn_ctx.current_file
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -198,15 +196,17 @@ impl CodeGenerator {
         let const_name = format!("@.str.contract.{}", self.contracts.contract_counter);
         self.contracts.contract_counter += 1;
 
-        self.contracts.contract_constants
-            .insert(s.to_string(), const_name.clone());
-
-        format!(
+        let gep_expr = format!(
             "getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
             s.len() + 1,
             s.len() + 1,
             const_name
-        )
+        );
+
+        self.contracts.contract_constants
+            .insert(s.to_string(), const_name);
+
+        gep_expr
     }
 
     /// Generate declarations for contract runtime functions
@@ -370,10 +370,7 @@ impl CodeGenerator {
 
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str = self.get_or_create_contract_string(&format!("{} != null", param_name));
-        let file_name = self
-            .fn_ctx.current_file
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -410,14 +407,15 @@ impl CodeGenerator {
 
     /// Find parameters that are used as divisors in division operations
     fn find_divisor_params(&self, f: &Function) -> Vec<String> {
-        let mut divisors = Vec::new();
+        // Use HashSet for O(1) duplicate detection instead of O(n) Vec search
+        let mut divisors = HashSet::new();
 
-        // Collect integer parameter names
-        let int_params: Vec<String> = f
+        // Collect integer parameter names (using &str to avoid clone)
+        let int_params: Vec<&str> = f
             .params
             .iter()
             .filter(|p| self.is_integer_type(&p.ty.node))
-            .map(|p| p.name.node.clone())
+            .map(|p| p.name.node.as_str())
             .collect();
 
         // Analyze function body for division operations
@@ -432,7 +430,8 @@ impl CodeGenerator {
             }
         }
 
-        divisors
+        // Convert HashSet to Vec for return
+        divisors.into_iter().collect()
     }
 
     /// Check if a type is an integer type
@@ -449,7 +448,7 @@ impl CodeGenerator {
     }
 
     /// Find divisor variables in an expression
-    fn find_divisors_in_expr(&self, expr: &Expr, params: &[String], divisors: &mut Vec<String>) {
+    fn find_divisors_in_expr(&self, expr: &Expr, params: &[&str], divisors: &mut HashSet<String>) {
         match expr {
             Expr::Binary {
                 op, right, left, ..
@@ -457,8 +456,9 @@ impl CodeGenerator {
                 if matches!(op, BinOp::Div | BinOp::Mod) {
                     // Check if right-hand side is a parameter
                     if let Expr::Ident(name) = &right.node {
-                        if params.contains(name) && !divisors.contains(name) {
-                            divisors.push(name.clone());
+                        if params.contains(&name.as_str()) {
+                            // HashSet::insert automatically handles duplicates - O(1) check
+                            divisors.insert(name.clone());
                         }
                     }
                 }
@@ -498,8 +498,8 @@ impl CodeGenerator {
     fn find_divisors_in_stmt(
         &self,
         stmt: &vais_ast::Stmt,
-        params: &[String],
-        divisors: &mut Vec<String>,
+        params: &[&str],
+        divisors: &mut HashSet<String>,
     ) {
         match stmt {
             vais_ast::Stmt::Let { value, .. } => {
@@ -519,8 +519,8 @@ impl CodeGenerator {
     fn find_divisors_in_if_else(
         &self,
         branch: &IfElse,
-        params: &[String],
-        divisors: &mut Vec<String>,
+        params: &[&str],
+        divisors: &mut HashSet<String>,
     ) {
         match branch {
             IfElse::ElseIf(cond, then, else_) => {
@@ -569,10 +569,7 @@ impl CodeGenerator {
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str =
             self.get_or_create_contract_string(&format!("{} != 0 (division by zero)", param_name));
-        let file_name = self
-            .fn_ctx.current_file
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -809,17 +806,10 @@ impl CodeGenerator {
             let kind_value = 3; // CONTRACT_INVARIANT
             let condition_str = self
                 .get_or_create_contract_string(&format!("invariant #{} of {}", idx, struct_name));
-            let file_name = self
-                .fn_ctx.current_file
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string());
+            let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
+            let func_name = self.fn_ctx.current_function.as_deref().unwrap_or("unknown").to_string();
             let file_str = self.get_or_create_contract_string(&file_name);
-            let func_str = self.get_or_create_contract_string(
-                &self
-                    .fn_ctx.current_function
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
-            );
+            let func_str = self.get_or_create_contract_string(&func_name);
             let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
 
             writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})", kind_value, condition_str, file_str, line, func_str).unwrap();
@@ -995,7 +985,7 @@ impl CodeGenerator {
 
                     // Store decreases info for recursive call checking
                     self.contracts.current_decreases_info = Some(crate::DecreasesInfo {
-                        storage_name: storage_name.clone(),
+                        storage_name,
                         expr: expr.clone(),
                         function_name: f.name.node.clone(),
                     });
@@ -1063,12 +1053,20 @@ impl CodeGenerator {
         // we evaluate the decreases expression using the call arguments
 
         // First, save current locals state.
-        // NOTE: clone required (not take) because generate_expr for args below
-        // needs current locals to resolve variables in the calling scope.
+        // NOTE: This is a full HashMap clone - required because we need to:
+        // 1. Generate expressions for call arguments (needs current scope)
+        // 2. Temporarily rebind parameters to new values
+        // 3. Restore original bindings after decreases check
+        // This is expensive but necessary for correctness in recursive call analysis.
         let saved_locals = self.fn_ctx.locals.clone();
 
         // Get the function info to map parameters
         let func_name = &decreases_info.function_name;
+
+        // NOTE: Cannot use direct reference here - borrow checker conflict.
+        // We need to modify self.fn_ctx.locals (line 1087) while holding a reference
+        // to self.types.functions, which would violate Rust's borrowing rules.
+        // The clone is necessary to avoid simultaneous mutable and immutable borrows of self.
         let func_info = self.types.functions.get(func_name).cloned();
 
         if let Some(ref info) = func_info {
@@ -1092,7 +1090,7 @@ impl CodeGenerator {
 
                     // Register in locals so generate_expr can find it
                     self.fn_ctx.locals.insert(
-                        param_name.clone(),
+                        param_name.to_string(),
                         crate::types::LocalVar::alloca(param_type.clone(), temp_var),
                     );
                 }
@@ -1148,9 +1146,9 @@ impl CodeGenerator {
     }
 
     /// Get the function name with decreases clause (if any)
-    pub(crate) fn _get_decreases_function_name(&self) -> Option<String> {
+    pub(crate) fn _get_decreases_function_name(&self) -> Option<&str> {
         self.contracts.current_decreases_info
             .as_ref()
-            .map(|info| info.function_name.clone())
+            .map(|info| info.function_name.as_str())
     }
 }

@@ -101,6 +101,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     // ========== Generic Type Handling ==========
 
     /// Get current generic substitution for a type parameter
+    #[inline]
     pub fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
         self.generic_substitutions.get(param).cloned()
     }
@@ -121,11 +122,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generate mangled name for a generic struct
+    #[inline]
     pub fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }
 
     /// Generate mangled name for a generic function
+    #[inline]
     pub fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }

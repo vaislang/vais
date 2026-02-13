@@ -22,17 +22,15 @@ impl CodeGenerator {
                 // Create a global string constant
                 let name = self.make_string_name();
                 self.strings.counter += 1;
-                self.strings.constants.push((name.clone(), s.clone()));
+                let len = s.len() + 1;
+                let gep = format!(
+                    "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                    len, len, name
+                );
+                self.strings.constants.push((name, s.clone())); // name moved after GEP creation
 
                 // Return a getelementptr to the string constant
-                let len = s.len() + 1;
-                Ok((
-                    format!(
-                        "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
-                        len, len, name
-                    ),
-                    String::new(),
-                ))
+                Ok((gep, String::new()))
             }
             Expr::StringInterp(parts) => {
                 // Desugar string interpolation into a format() call.
@@ -453,7 +451,7 @@ impl CodeGenerator {
 
                 // Then block
                 ir.push_str(&format!("{}:\n", then_label));
-                self.fn_ctx.current_block = then_label.clone();
+                self.fn_ctx.current_block = then_label; // move ownership
                 let (then_val, then_ir, then_terminated) =
                     self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
@@ -467,10 +465,10 @@ impl CodeGenerator {
                     ));
                     loaded
                 } else {
-                    then_val.clone()
+                    then_val // move: then_val not needed after phi
                 };
 
-                let then_actual_block = self.fn_ctx.current_block.clone();
+                let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
                 // Only emit branch to merge if block is not terminated
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
@@ -481,7 +479,7 @@ impl CodeGenerator {
 
                 // Else block
                 ir.push_str(&format!("{}:\n", else_label));
-                self.fn_ctx.current_block = else_label.clone();
+                self.fn_ctx.current_block = else_label; // move ownership
                 let (else_val, else_ir, else_terminated, nested_last_block, has_else) =
                     if let Some(else_branch) = else_ {
                         let (v, i, t, last) =
@@ -507,7 +505,7 @@ impl CodeGenerator {
                     ));
                     loaded
                 } else {
-                    else_val.clone()
+                    else_val // move: else_val not needed after phi
                 };
 
                 // Only emit branch to merge if block is not terminated
@@ -517,7 +515,7 @@ impl CodeGenerator {
                     if !nested_last_block.is_empty() {
                         nested_last_block
                     } else {
-                        self.fn_ctx.current_block.clone()
+                        std::mem::take(&mut self.fn_ctx.current_block) // take ownership
                     }
                 } else {
                     String::new()
@@ -525,7 +523,7 @@ impl CodeGenerator {
 
                 // Merge block with phi node
                 ir.push_str(&format!("{}:\n", merge_label));
-                self.fn_ctx.current_block = merge_label.clone();
+                self.fn_ctx.current_block = merge_label; // move ownership
                 let result = self.next_temp(counter);
 
                 // Check if the block type is void/unit - if so, don't generate phi nodes
@@ -594,8 +592,8 @@ impl CodeGenerator {
 
                 // Push loop labels for break/continue
                 self.fn_ctx.loop_stack.push(LoopLabels {
-                    continue_label: loop_start.clone(),
-                    break_label: loop_end.clone(),
+                    continue_label: loop_start.clone(), // keep: used in continue stmt
+                    break_label: loop_end.clone(),      // keep: used in break stmt
                 });
 
                 let mut ir = String::new();
@@ -658,8 +656,8 @@ impl CodeGenerator {
 
                 // Push loop labels for break/continue
                 self.fn_ctx.loop_stack.push(LoopLabels {
-                    continue_label: loop_start.clone(),
-                    break_label: loop_end.clone(),
+                    continue_label: loop_start.clone(), // keep: used in continue stmt
+                    break_label: loop_end.clone(),      // keep: used in break stmt
                 });
 
                 let mut ir = String::new();

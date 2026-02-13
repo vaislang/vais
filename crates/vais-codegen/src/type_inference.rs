@@ -9,6 +9,7 @@ use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Infer type of a statement block (for if-else phi nodes)
+    #[inline]
     pub(crate) fn infer_block_type(&self, stmts: &[Spanned<Stmt>]) -> ResolvedType {
         // Look at the last statement to determine block type
         if let Some(last_stmt) = stmts.last() {
@@ -25,6 +26,7 @@ impl CodeGenerator {
     /// Check if block's last expression is a value (not a pointer to struct)
     /// Returns true if the value from generate_block_stmts is already a value,
     /// false if it's a pointer that needs to be loaded
+    #[inline]
     pub(crate) fn is_block_result_value(&self, stmts: &[Spanned<Stmt>]) -> bool {
         if let Some(last_stmt) = stmts.last() {
             match &last_stmt.node {
