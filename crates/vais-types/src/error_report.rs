@@ -36,6 +36,7 @@ impl<'a> ErrorReporter<'a> {
         span: Option<Span>,
         message: &str,
         help: Option<&str>,
+        secondary_spans: &[(Span, String)],
     ) -> String {
         let mut output = String::new();
 
@@ -93,6 +94,32 @@ impl<'a> ErrorReporter<'a> {
                 "=".cyan().bold(),
                 format!("help: {}", help_text).cyan()
             ));
+        }
+
+        // Add secondary spans
+        for (sec_span, label) in secondary_spans {
+            if let Some(context) = self.get_source_context(*sec_span) {
+                output.push_str(&format!("   {} {}\n", "=".cyan().bold(), "note:".cyan()));
+                let location = if let Some(filename) = self.filename {
+                    format!("{}:{}:{}", filename, context.line, context.column)
+                } else {
+                    format!("line {}:{}", context.line, context.column)
+                };
+                output.push_str(&format!("  {} {}\n", "-->".cyan().bold(), location));
+                output.push_str(&format!(
+                    " {} {} {}\n",
+                    format!("{:>3}", context.line).cyan().bold(),
+                    "|".cyan().bold(),
+                    context.line_text
+                ));
+                output.push_str(&format!(
+                    "   {} {}{} {}\n",
+                    "|".cyan().bold(),
+                    " ".repeat(context.column - 1),
+                    "^".repeat(context.span_length.max(1)).blue().bold(),
+                    label.blue()
+                ));
+            }
         }
 
         output
@@ -218,7 +245,7 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.to_string(),
             self.help().as_deref(),
-        )
+        &[])
     }
 
     /// Format the error with source context using localized messages
@@ -236,7 +263,7 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.localized_message(),
             self.localized_help().as_deref(),
-        )
+        &[])
     }
 }
 
@@ -256,6 +283,7 @@ mod tests {
             Some(span),
             "expected i64, found Str",
             Some("consider converting the string to a number"),
+            &[],
         );
 
         println!("{}", output);
@@ -275,6 +303,7 @@ mod tests {
             None,
             "type inference failed",
             None,
+            &[],
         );
 
         println!("{}", output);

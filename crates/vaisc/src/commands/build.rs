@@ -992,17 +992,51 @@ pub(crate) fn cmd_build(
             }
         }
 
+        // Enable multi-error collection to report all type errors at once
+        checker.multi_error_mode = true;
+
         if let Err(e) = checker.check_module(&final_ast) {
             // If suggest_fixes is enabled, print suggested fixes
             if suggest_fixes {
                 print_suggested_fixes(&e, &main_source);
             }
+            // Also print any additional collected errors
+            for collected_err in checker.get_collected_errors() {
+                eprintln!(
+                    "{}",
+                    error_formatter::format_type_error(collected_err, &main_source, input)
+                );
+            }
             // Update cache: TC failed
             if let Some(ref mut c) = cache {
                 incremental::update_tc_cache(c, &final_ast, false);
             }
+            let total_errors = 1 + checker.get_collected_errors().len();
+            if total_errors > 1 {
+                eprintln!(
+                    "{}: {} errors found",
+                    "error".red().bold(),
+                    total_errors
+                );
+            }
             // Format error with source context
             return Err(error_formatter::format_type_error(&e, &main_source, input));
+        }
+
+        // Even if check_module succeeded, there may be collected errors
+        if !checker.get_collected_errors().is_empty() {
+            for collected_err in checker.get_collected_errors() {
+                eprintln!(
+                    "{}",
+                    error_formatter::format_type_error(collected_err, &main_source, input)
+                );
+            }
+            // Update cache: TC failed
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, &final_ast, false);
+            }
+            let total_errors = checker.get_collected_errors().len();
+            return Err(format!("{} type error(s) found", total_errors));
         }
 
         // Update cache: TC passed

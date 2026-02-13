@@ -6,6 +6,7 @@
 
 use vais_lexer::tokenize;
 use vais_parser::parse;
+use vais_types::TypeError;
 use vais_types::TypeChecker;
 
 /// Type-check source code, returning the error string if type checking fails
@@ -37,6 +38,35 @@ fn type_check_help(source: &str) -> Option<String> {
         Err(e) => e.help(),
         Ok(()) => panic!("Expected type error, but type checking succeeded"),
     }
+}
+
+/// Type-check source code, returning the TypeError if type checking fails
+fn type_check_type_error(source: &str) -> TypeError {
+    let _tokens = tokenize(source).expect("Lexer should succeed");
+    let module = parse(source).expect("Parser should succeed");
+    let mut checker = TypeChecker::new();
+    match checker.check_module(&module) {
+        Err(e) => e,
+        Ok(()) => panic!("Expected type error, but type checking succeeded"),
+    }
+}
+
+/// Type-check with multi-error mode, returning all collected errors
+fn type_check_multi_errors(source: &str) -> Vec<String> {
+    let _tokens = tokenize(source).expect("Lexer should succeed");
+    let module = parse(source).expect("Parser should succeed");
+    let mut checker = TypeChecker::new();
+    checker.multi_error_mode = true;
+    let main_err = checker.check_module(&module).err();
+    let mut errors: Vec<String> = checker
+        .get_collected_errors()
+        .iter()
+        .map(|e| format!("{}", e))
+        .collect();
+    if let Some(e) = main_err {
+        errors.push(format!("{}", e));
+    }
+    errors
 }
 
 /// Parse source code, expecting a parse error, and return the error string
@@ -290,5 +320,200 @@ fn error_undefined_function_suggests_similar() {
             );
         }
         Ok(()) => panic!("Expected type error for undefined function"),
+    }
+}
+
+// ==================== Phase 31: New help() Coverage Tests ====================
+
+#[test]
+fn help_not_callable_has_message() {
+    // Calling a non-function value
+    let help = type_check_help("F main() -> i64 { x := 5\n x() }");
+    assert!(
+        help.is_some(),
+        "NotCallable should provide help message"
+    );
+    let text = help.unwrap();
+    assert!(
+        text.contains("not callable") || text.contains("functions"),
+        "Help should explain only functions are callable: got '{}'",
+        text
+    );
+}
+
+#[test]
+fn help_arg_count_has_message() {
+    // Wrong number of arguments
+    let help = type_check_help("F add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add(1)");
+    assert!(
+        help.is_some(),
+        "ArgCount should provide help message"
+    );
+    let text = help.unwrap();
+    assert!(
+        text.contains("2") && text.contains("1"),
+        "Help should mention expected vs actual count: got '{}'",
+        text
+    );
+}
+
+#[test]
+fn help_duplicate_has_message() {
+    // Test directly: Duplicate definition error has help
+    let err = TypeError::Duplicate("foo".to_string(), None);
+    let help = err.help();
+    assert!(
+        help.is_some(),
+        "Duplicate should provide help message"
+    );
+    let text = help.unwrap();
+    assert!(
+        text.contains("already defined") || text.contains("renaming"),
+        "Help should suggest renaming: got '{}'",
+        text
+    );
+}
+
+#[test]
+fn help_immutable_assign_has_message() {
+    // Test directly: ImmutableAssign error has help
+    let err = TypeError::ImmutableAssign("x".to_string(), None);
+    let help = err.help();
+    assert!(
+        help.is_some(),
+        "ImmutableAssign should provide help message"
+    );
+    let text = help.unwrap();
+    assert!(
+        text.contains("mutable") || text.contains("mut"),
+        "Help should suggest declaring as mutable: got '{}'",
+        text
+    );
+}
+
+// ==================== Phase 31: Secondary Spans Tests ====================
+
+#[test]
+fn secondary_spans_use_after_move() {
+    // Test the secondary_spans method directly
+    let err = TypeError::UseAfterMove {
+        var_name: "x".to_string(),
+        moved_at: Some(vais_ast::Span::new(10, 15)),
+        use_at: Some(vais_ast::Span::new(20, 25)),
+    };
+    let spans = err.secondary_spans();
+    assert_eq!(spans.len(), 1, "UseAfterMove should have 1 secondary span");
+    assert!(
+        spans[0].1.contains("moved here"),
+        "Secondary span should say 'moved here': got '{}'",
+        spans[0].1
+    );
+}
+
+#[test]
+fn secondary_spans_borrow_conflict() {
+    let err = TypeError::BorrowConflict {
+        var_name: "x".to_string(),
+        existing_borrow_at: Some(vais_ast::Span::new(5, 10)),
+        new_borrow_at: Some(vais_ast::Span::new(15, 20)),
+        existing_is_mut: true,
+        new_is_mut: false,
+    };
+    let spans = err.secondary_spans();
+    assert_eq!(spans.len(), 1, "BorrowConflict should have 1 secondary span");
+    assert!(
+        spans[0].1.contains("mutable borrow"),
+        "Should mention mutable borrow: got '{}'",
+        spans[0].1
+    );
+}
+
+#[test]
+fn secondary_spans_empty_for_simple_errors() {
+    let err = TypeError::Mismatch {
+        expected: "i64".to_string(),
+        found: "bool".to_string(),
+        span: None,
+    };
+    let spans = err.secondary_spans();
+    assert!(
+        spans.is_empty(),
+        "Mismatch should have no secondary spans"
+    );
+}
+
+// ==================== Phase 31: Multi-Error Collection Tests ====================
+
+#[test]
+fn multi_error_collects_multiple_errors() {
+    // Two functions with errors — multi_error_mode should collect both
+    let source = "F foo() -> i64 = true\nF bar() -> i64 = true\nF main() -> i64 = 0";
+    let errors = type_check_multi_errors(source);
+    assert!(
+        errors.len() >= 2,
+        "Multi-error mode should collect at least 2 errors, got {}: {:?}",
+        errors.len(),
+        errors
+    );
+}
+
+#[test]
+fn multi_error_mode_disabled_returns_first_error_only() {
+    // Without multi_error_mode, only first error is returned
+    let source = "F foo() -> i64 = true\nF bar() -> i64 = true\nF main() -> i64 = 0";
+    let _tokens = tokenize(source).expect("Lexer should succeed");
+    let module = parse(source).expect("Parser should succeed");
+    let mut checker = TypeChecker::new();
+    // multi_error_mode defaults to false
+    let result = checker.check_module(&module);
+    assert!(result.is_err(), "Should return error");
+    assert!(
+        checker.get_collected_errors().is_empty(),
+        "Without multi_error_mode, no errors should be collected: got {:?}",
+        checker.get_collected_errors().len()
+    );
+}
+
+// ==================== Phase 31: Error Code Tests ====================
+
+#[test]
+fn error_code_format_is_exxxx() {
+    let err = type_check_type_error("F main() -> i64 = true");
+    let code = err.error_code();
+    assert!(
+        code.starts_with('E') || code.starts_with('C'),
+        "Error code should start with 'E' or 'C': got '{}'",
+        code
+    );
+    assert!(
+        code.len() == 4,
+        "Error code should be 4 characters (e.g., E001): got '{}'",
+        code
+    );
+}
+
+#[test]
+fn error_help_coverage_all_variants() {
+    // Test that all manually constructable error variants have help()
+    let variants: Vec<TypeError> = vec![
+        TypeError::Mismatch { expected: "i64".into(), found: "bool".into(), span: None },
+        TypeError::UndefinedVar { name: "x".into(), span: None, suggestion: Some("y".into()) },
+        TypeError::UndefinedType { name: "Foo".into(), span: None, suggestion: None },
+        TypeError::UndefinedFunction { name: "foo".into(), span: None, suggestion: None },
+        TypeError::NotCallable("i64".into(), None),
+        TypeError::ArgCount { expected: 2, got: 1, span: None },
+        TypeError::CannotInfer,
+        TypeError::Duplicate("foo".into(), None),
+        TypeError::ImmutableAssign("x".into(), None),
+    ];
+
+    for variant in &variants {
+        let help = variant.help();
+        assert!(
+            help.is_some(),
+            "Error variant {} (code: {}) should have help message",
+            variant,
+            variant.error_code()
+        );
     }
 }

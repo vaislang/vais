@@ -67,7 +67,7 @@ impl FormattableError for TypeError {
         let message = self.localized_message();
         let help = self.localized_help();
 
-        reporter.format_error(self.error_code(), &title, span, &message, help.as_deref())
+        reporter.format_error(self.error_code(), &title, span, &message, help.as_deref(), &self.secondary_spans())
     }
 
     fn error_code(&self) -> &str {
@@ -98,7 +98,7 @@ impl FormattableError for ParseError {
         let title = self.localized_title();
         let message = self.localized_message();
 
-        reporter.format_error(self.error_code(), &title, span, &message, None)
+        reporter.format_error(self.error_code(), &title, span, &message, None, &[])
     }
 
     fn error_code(&self) -> &str {

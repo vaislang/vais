@@ -332,6 +332,67 @@ impl TypeError {
         }
     }
 
+
+    /// Get secondary spans with labels for multi-location errors
+    pub fn secondary_spans(&self) -> Vec<(Span, String)> {
+        match self {
+            TypeError::UseAfterMove { moved_at, .. } => {
+                if let Some(span) = moved_at {
+                    vec![(*span, "value moved here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::BorrowConflict { existing_borrow_at, existing_is_mut, .. } => {
+                if let Some(span) = existing_borrow_at {
+                    let label = if *existing_is_mut {
+                        "first mutable borrow occurs here"
+                    } else {
+                        "first borrow occurs here"
+                    };
+                    vec![(*span, label.to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::AssignWhileBorrowed { borrow_at, .. } => {
+                if let Some(span) = borrow_at {
+                    vec![(*span, "borrow occurs here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::DanglingReference { source_defined_at, .. } => {
+                if let Some(span) = source_defined_at {
+                    vec![(*span, "source variable defined here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::BorrowAfterMove { moved_at, .. } => {
+                if let Some(span) = moved_at {
+                    vec![(*span, "value moved here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::ReturnLocalRef { defined_at, .. } => {
+                if let Some(span) = defined_at {
+                    vec![(*span, "local variable defined here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            TypeError::MoveAfterUse { first_use_at, .. } => {
+                if let Some(span) = first_use_at {
+                    vec![(*span, "first use occurs here".to_string())]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    }
     /// Get the error code for this error
     pub fn error_code(&self) -> &str {
         match self {
@@ -509,6 +570,34 @@ impl TypeError {
             }
             TypeError::InferFailed { suggestion, .. } => {
                 suggestion.clone()
+            }
+            TypeError::NotCallable(type_name, _) => {
+                Some(format!("expression of type `{}` is not callable; only functions and closures can be called", type_name))
+            }
+            TypeError::ArgCount { expected, got, .. } => {
+                if *expected == 0 {
+                    Some(format!("this function takes no arguments but {} {} supplied", got, if *got == 1 { "was" } else { "were" }))
+                } else {
+                    Some(format!("this function takes {} argument{} but {} {} supplied", expected, if *expected == 1 { "" } else { "s" }, got, if *got == 1 { "was" } else { "were" }))
+                }
+            }
+            TypeError::CannotInfer => {
+                Some("add explicit type annotation to resolve ambiguity".to_string())
+            }
+            TypeError::Duplicate(name, _) => {
+                Some(format!("the name `{}` is already defined in this scope; consider renaming one of the definitions", name))
+            }
+            TypeError::NonExhaustiveMatch(missing, _) => {
+                Some(format!("ensure all possible values are covered; add pattern{} for {} or use `_ =>` as a wildcard", if missing.contains(',') { "s" } else { "" }, missing))
+            }
+            TypeError::UnreachablePattern(arm, _) => {
+                Some(format!("pattern at arm {} will never be matched because previous patterns already cover all cases; consider removing it", arm))
+            }
+            TypeError::DependentPredicateNotBool { found, .. } => {
+                Some(format!("refinement predicates must evaluate to `bool`, but this expression has type `{}`", found))
+            }
+            TypeError::RefinementViolation { predicate, .. } => {
+                Some(format!("the value does not satisfy the refinement predicate `{}`; ensure the value meets the constraint", predicate))
             }
             _ => None,
         }

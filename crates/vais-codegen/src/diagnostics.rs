@@ -106,8 +106,7 @@ pub(crate) fn format_did_you_mean(suggestions: &[String]) -> String {
 }
 
 /// Suggest type conversion hints based on common type mismatches
-#[cfg(test)]
-pub(crate) fn _suggest_type_conversion(expected: &str, found: &str) -> String {
+pub(crate) fn suggest_type_conversion(expected: &str, found: &str) -> String {
     // Common numeric conversions
     if expected.starts_with('i') && found.starts_with('f') {
         return format!(". Consider using `as {}` for explicit conversion", expected);

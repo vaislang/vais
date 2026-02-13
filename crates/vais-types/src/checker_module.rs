@@ -76,7 +76,10 @@ impl TypeChecker {
         // Second pass: check function bodies
         for item in &module.items {
             match &item.node {
-                Item::Function(f) => self.check_function(f)?,
+                Item::Function(f) => {
+                    let result = self.check_function(f);
+                    self.try_or_collect(result)?;
+                }
                 Item::Impl(impl_block) => {
                     // Check impl method bodies
                     // Get struct generics if the target is a struct
@@ -105,11 +108,12 @@ impl TypeChecker {
                     all_generics.extend_from_slice(&impl_block.generics);
 
                     for method in &impl_block.methods {
-                        self.check_impl_method(
+                        let result = self.check_impl_method(
                             &impl_block.target_type.node,
                             &method.node,
                             &all_generics,
-                        )?;
+                        );
+                        self.try_or_collect(result)?;
                     }
                 }
                 _ => {}

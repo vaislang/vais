@@ -146,6 +146,10 @@ pub struct TypeChecker {
 
     // Number of items imported from other modules (skip ownership checking for these)
     pub(crate) imported_item_count: usize,
+
+    // Multi-error collection mode: when true, errors are collected instead of returning immediately
+    pub multi_error_mode: bool,
+    pub collected_errors: Vec<TypeError>,
 }
 
 impl TypeChecker {
@@ -175,6 +179,8 @@ impl TypeChecker {
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
             ownership_check_mode: Some(false), // warn-only by default
             imported_item_count: 0,
+            multi_error_mode: false,
+            collected_errors: Vec::new(),
         };
         checker.register_builtins();
         checker
@@ -193,6 +199,26 @@ impl TypeChecker {
     /// Set the number of imported items to skip during ownership checking
     pub fn set_imported_item_count(&mut self, count: usize) {
         self.imported_item_count = count;
+    }
+
+    /// Collect an error instead of returning it immediately (when multi_error_mode is on)
+    pub fn try_or_collect(&mut self, result: Result<(), TypeError>) -> Result<(), TypeError> {
+        match result {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if self.multi_error_mode && self.collected_errors.len() < 20 {
+                    self.collected_errors.push(e);
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Get collected errors from multi-error mode
+    pub fn get_collected_errors(&self) -> &[TypeError] {
+        &self.collected_errors
     }
 
     /// Get warnings collected during type checking
@@ -293,6 +319,7 @@ impl TypeChecker {
         self.trait_impls.extend(other.trait_impls);
         self.constants.extend(other.constants);
         self.warnings.extend(other.warnings);
+        self.collected_errors.extend(other.collected_errors);
 
         for inst in other.generic_instantiations {
             self.add_instantiation(inst);
