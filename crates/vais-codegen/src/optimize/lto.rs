@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::extract_function_name;
+
 /// Link-Time Optimization mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LtoMode {
@@ -159,15 +161,6 @@ fn parse_all_functions(ir: &str) -> Vec<FunctionAnalysis> {
     }
 
     functions
-}
-
-/// Extract function name from a define line
-fn extract_function_name(define_line: &str) -> Option<String> {
-    // Pattern: define ... @function_name(
-    let at_pos = define_line.find('@')?;
-    let paren_pos = define_line[at_pos..].find('(')?;
-    let name = &define_line[at_pos + 1..at_pos + paren_pos];
-    Some(name.to_string())
 }
 
 /// Check if a function body has no side effects

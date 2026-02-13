@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use super::extract_function_name;
+
 /// Profile-Guided Optimization mode
 ///
 /// PGO works in two phases:
@@ -302,15 +304,6 @@ pub fn annotate_function_hotness(
     }
 
     result
-}
-
-/// Extract function name from a define line
-fn extract_function_name(define_line: &str) -> Option<String> {
-    // Pattern: define ... @function_name(
-    let at_pos = define_line.find('@')?;
-    let paren_pos = define_line[at_pos..].find('(')?;
-    let name = &define_line[at_pos + 1..at_pos + paren_pos];
-    Some(name.to_string())
 }
 
 #[cfg(test)]

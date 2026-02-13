@@ -9,17 +9,7 @@ pub(crate) mod ir_passes;
 pub(crate) mod lto;
 pub(crate) mod inlining;
 
-// Re-export public types and functions
-pub use pgo::{
-    PgoMode, PgoConfig, CoverageMode,
-    instrument_ir_for_pgo, apply_pgo_hints, annotate_function_hotness,
-};
-pub use lto::{
-    LtoMode, prepare_ir_for_lto, interprocedural_analysis, cross_module_dce,
-    InterproceduralInfo,
-};
-
-// Re-export IR optimization passes for use within the crate (parallel.rs needs these)
+// Re-export for parallel.rs wildcard import (use crate::optimize::*)
 pub(crate) use ir_passes::{
     constant_folding, dead_store_elimination, branch_optimization,
     conditional_branch_simplification, strength_reduction,
@@ -27,6 +17,9 @@ pub(crate) use ir_passes::{
     loop_invariant_motion,
 };
 pub(crate) use inlining::aggressive_inline;
+
+// PGO and LTO types/functions are used only within this module,
+// so no re-export needed (accessed via pgo:: and lto:: prefixes)
 
 /// Optimization level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,18 +44,18 @@ impl OptLevel {
 
 /// Apply optimization passes to LLVM IR
 pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
-    optimize_ir_with_pgo(ir, level, &PgoMode::None)
+    optimize_ir_with_pgo(ir, level, &pgo::PgoMode::None)
 }
 
 /// Apply optimization passes to LLVM IR with optional PGO support
 ///
 /// When PGO is in Generate mode, instrumentation hints are added.
 /// When PGO is in Use mode, profile data guides inlining and optimization decisions.
-pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &PgoMode) -> String {
+pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &pgo::PgoMode) -> String {
     if level == OptLevel::O0 {
         // Even at O0, apply PGO instrumentation if requested
-        if let PgoMode::Generate(_) = pgo {
-            return instrument_ir_for_pgo(ir);
+        if let pgo::PgoMode::Generate(_) = pgo {
+            return pgo::instrument_ir_for_pgo(ir);
         }
         return ir.to_string();
     }
@@ -70,8 +63,8 @@ pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &PgoMode) -> String 
     let mut result = ir.to_string();
 
     // PGO Generate: add instrumentation
-    if let PgoMode::Generate(_) = pgo {
-        result = instrument_ir_for_pgo(&result);
+    if let pgo::PgoMode::Generate(_) = pgo {
+        result = pgo::instrument_ir_for_pgo(&result);
     }
 
     // O1+: Basic optimizations (before inlining to simplify function bodies)
@@ -98,8 +91,8 @@ pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &PgoMode) -> String 
     }
 
     // PGO Use: apply profile-guided hints (hot/cold function annotations)
-    if let PgoMode::Use(profile_path) = pgo {
-        result = apply_pgo_hints(&result, profile_path);
+    if let pgo::PgoMode::Use(profile_path) = pgo {
+        result = pgo::apply_pgo_hints(&result, profile_path);
     }
 
     // O2+: CSE and DCE after inlining to clean up
@@ -129,4 +122,16 @@ pub fn optimize_ir_advanced(ir: &str, level: OptLevel) -> String {
     // Then apply advanced optimizations based on level
     let config = AdvancedOptConfig::from_opt_level(level);
     apply_advanced_optimizations(&result, &config)
+}
+
+/// Extract function name from a define line
+///
+/// Pattern: define ... @function_name(...)
+/// Returns the function name without the @ prefix.
+pub(crate) fn extract_function_name(define_line: &str) -> Option<String> {
+    // Pattern: define ... @function_name(
+    let at_pos = define_line.find('@')?;
+    let paren_pos = define_line[at_pos..].find('(')?;
+    let name = &define_line[at_pos + 1..at_pos + paren_pos];
+    Some(name.to_string())
 }

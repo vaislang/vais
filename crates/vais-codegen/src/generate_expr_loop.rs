@@ -1,6 +1,6 @@
 //! Range-based for loop code generation for LLVM IR.
 
-use vais_ast::*;
+use vais_ast::{Expr, Pattern, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 use crate::{CodeGenerator, CodegenResult, LocalVar, LoopLabels};

@@ -1,6 +1,6 @@
 //! Struct and union literal expression code generation for LLVM IR.
 
-use vais_ast::*;
+use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
 use crate::{

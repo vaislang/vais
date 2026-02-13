@@ -1213,10 +1213,14 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ### 리뷰 발견사항 (2026-02-13)
 > 출처: /team-review Phase 25
 
-- [ ] 1. [성능] extract_function_name() 중복 제거 (Warning) — 대상: optimize/{ir_passes,lto,inlining}.rs
-- [ ] 2. [성능] 와일드카드 import → 명시적 import 전환 (Warning) — 대상: generate_expr_{call,loop,struct}.rs
-- [ ] 3. [성능] optimize/mod.rs re-export 패턴 정리 (Warning) — 대상: optimize/mod.rs
-진행률: 0/3 (0%)
+모드: 자동진행
+- [x] 1. [성능] extract_function_name() 중복 제거 (Warning) ✅
+  변경: optimize/{ir_passes,lto,pgo}.rs 중복 정의 제거 → optimize/mod.rs pub(crate) fn 공통 추출 (-16줄)
+- [x] 2. [성능] 와일드카드 import → 명시적 import 전환 (Warning) ✅
+  변경: generate_expr_{call,loop,struct}.rs `use vais_ast::*` → 명시적 import (Expr, Spanned, Pattern, Stmt)
+- [x] 3. [성능] optimize/mod.rs re-export 패턴 정리 (Warning) ✅
+  변경: optimize/mod.rs `pub use` pgo/lto → 삭제 (외부 미사용), 직접 `pgo::` 경로 호출로 전환
+진행률: 3/3 (100%)
 
 ---
 
