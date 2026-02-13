@@ -14,7 +14,7 @@ fn convert_params(params: Vec<(String, ResolvedType)>) -> Vec<(String, ResolvedT
 /// Macro for registering extern functions with less boilerplate
 macro_rules! register_extern {
     ($gen:expr, $name:expr, $params:expr, $ret:expr) => {
-        $gen.functions.insert(
+        $gen.types.functions.insert(
             $name.to_string(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -36,7 +36,7 @@ macro_rules! register_extern {
         );
     };
     ($gen:expr, $key:expr => $name:expr, $params:expr, $ret:expr) => {
-        $gen.functions.insert(
+        $gen.types.functions.insert(
             $key.to_string(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -62,7 +62,7 @@ macro_rules! register_extern {
 /// Macro for registering internal helper functions
 macro_rules! register_helper {
     ($gen:expr, $key:expr => $name:expr, $params:expr, $ret:expr) => {
-        $gen.functions.insert(
+        $gen.types.functions.insert(
             $key.to_string(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -91,7 +91,7 @@ macro_rules! register_vararg {
         {
             let p: Vec<(String, ResolvedType)> = $params;
             let req = p.len();
-            $gen.functions.insert(
+            $gen.types.functions.insert(
                 $name.to_string(),
                 FunctionInfo {
                     signature: FunctionSig {
@@ -117,7 +117,7 @@ macro_rules! register_vararg {
         {
             let p: Vec<(String, ResolvedType)> = $params;
             let req = p.len();
-            $gen.functions.insert(
+            $gen.types.functions.insert(
                 $name.to_string(),
                 FunctionInfo {
                     signature: FunctionSig {
@@ -144,7 +144,7 @@ macro_rules! register_vararg {
 /// Macro for registering non-extern builtin functions (params already include mutability)
 macro_rules! register_builtin {
     ($gen:expr, $name:expr, $params:expr, $ret:expr) => {
-        $gen.functions.insert(
+        $gen.types.functions.insert(
             $name.to_string(),
             FunctionInfo {
                 signature: FunctionSig {

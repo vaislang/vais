@@ -19,7 +19,7 @@ impl CodeGenerator {
             .iter()
             .any(|p| matches!(p.ty.node, vais_ast::Type::Infer));
         let params: Vec<_> = if has_inferred {
-            if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+            if let Some(resolved_sig) = self.types.resolved_function_sigs.get(&f.name.node) {
                 resolved_sig.params.clone()
             } else {
                 f.params
@@ -44,7 +44,7 @@ impl CodeGenerator {
 
         let ret_type = if let Some(t) = f.ret_type.as_ref() {
             self.ast_type_to_resolved(&t.node)
-        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+        } else if let Some(resolved_sig) = self.types.resolved_function_sigs.get(&f.name.node) {
             resolved_sig.ret.clone()
         } else {
             ResolvedType::Unit
@@ -52,7 +52,7 @@ impl CodeGenerator {
 
         let func_name = f.name.node.to_string();
 
-        self.functions.insert(
+        self.types.functions.insert(
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -129,15 +129,15 @@ impl CodeGenerator {
 
         let ret_type = if let Some(t) = f.ret_type.as_ref() {
             self.ast_type_to_resolved(&t.node)
-        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&method_name) {
+        } else if let Some(resolved_sig) = self.types.resolved_function_sigs.get(&method_name) {
             resolved_sig.ret.clone()
-        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+        } else if let Some(resolved_sig) = self.types.resolved_function_sigs.get(&f.name.node) {
             resolved_sig.ret.clone()
         } else {
             ResolvedType::Unit
         };
 
-        self.functions.insert(
+        self.types.functions.insert(
             method_name.to_string(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -184,7 +184,7 @@ impl CodeGenerator {
             .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
             .collect();
 
-        self.structs.insert(
+        self.types.structs.insert(
             s.name.node.to_string(),
             StructInfo {
                 _name: s.name.node.to_string(),
@@ -232,7 +232,7 @@ impl CodeGenerator {
             });
         }
 
-        self.enums.insert(
+        self.types.enums.insert(
             e.name.node.to_string(),
             EnumInfo {
                 name: e.name.node.to_string(),
@@ -253,7 +253,7 @@ impl CodeGenerator {
             })
             .collect();
 
-        self.unions.insert(
+        self.types.unions.insert(
             u.name.node.to_string(),
             UnionInfo {
                 _name: u.name.node.to_string(),
@@ -273,7 +273,7 @@ impl CodeGenerator {
 
         // Check if this is already registered as a builtin helper function
         // Builtin helpers have is_extern=false and should not be overridden
-        if let Some(existing) = self.functions.get(&func_name) {
+        if let Some(existing) = self.types.functions.get(&func_name) {
             if !existing.is_extern {
                 // This is a builtin helper function - don't override it
                 // Just skip the registration silently
@@ -292,13 +292,13 @@ impl CodeGenerator {
 
         let ret_type = if let Some(t) = func.ret_type.as_ref() {
             self.ast_type_to_resolved(&t.node)
-        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func_name) {
+        } else if let Some(resolved_sig) = self.types.resolved_function_sigs.get(&func_name) {
             resolved_sig.ret.clone()
         } else {
             ResolvedType::Unit
         };
 
-        self.functions.insert(
+        self.types.functions.insert(
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
@@ -337,7 +337,7 @@ impl CodeGenerator {
     /// Register a constant definition
     pub(crate) fn register_const(&mut self, const_def: &vais_ast::ConstDef) -> CodegenResult<()> {
         // Store constant in the constants map for later lookup
-        self.constants.insert(
+        self.types.constants.insert(
             const_def.name.node.clone(),
             crate::types::ConstInfo {
                 _name: const_def.name.node.clone(),
@@ -354,7 +354,7 @@ impl CodeGenerator {
         global_def: &vais_ast::GlobalDef,
     ) -> CodegenResult<()> {
         // Store global in the globals map for later code generation
-        self.globals.insert(
+        self.types.globals.insert(
             global_def.name.node.clone(),
             crate::types::GlobalInfo {
                 _name: global_def.name.node.clone(),

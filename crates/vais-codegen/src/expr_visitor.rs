@@ -134,9 +134,9 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str, _counter: &mut usize) -> GenResult {
-        let name = format!(".str.{}", self.string_counter);
-        self.string_counter += 1;
-        self.string_constants.push((name.clone(), s.to_string()));
+        let name = format!(".str.{}", self.strings.counter);
+        self.strings.counter += 1;
+        self.strings.constants.push((name.clone(), s.to_string()));
 
         let len = s.len() + 1;
         Ok((
@@ -153,7 +153,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_ident(&mut self, name: &str, counter: &mut usize) -> GenResult {
-        if let Some(local) = self.locals.get(name).cloned() {
+        if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
             if local.is_param() {
                 Ok((format!("%{}", local.llvm_name), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
@@ -183,7 +183,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_self_call(&mut self) -> GenResult {
-        if let Some(fn_name) = &self.current_function {
+        if let Some(fn_name) = &self.fn_ctx.current_function {
             Ok((format!("@{}", fn_name), String::new()))
         } else {
             Err(CodegenError::UndefinedFunction("@".to_string()))
@@ -341,7 +341,7 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_ref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         if let Expr::Ident(name) = &inner.node {
-            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if local.is_alloca() {
                     // Alloca variables already have an address
                     return Ok((format!("%{}", local.llvm_name), String::new()));
@@ -465,9 +465,9 @@ impl ExprVisitor for CodeGenerator {
             }
             vais_types::ComptimeValue::String(s) => {
                 // Create a global string constant
-                let name = format!(".str.{}", self.string_counter);
-                self.string_counter += 1;
-                self.string_constants.push((name.clone(), s.clone()));
+                let name = format!(".str.{}", self.strings.counter);
+                self.strings.counter += 1;
+                self.strings.constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;
                 Ok((
                     format!(
@@ -649,7 +649,7 @@ impl ExprVisitor for CodeGenerator {
 
         // Check if the inner expression is an identifier (variable reference)
         if let Expr::Ident(name) = &inner.node {
-            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
                 let mut ir = String::new();
 

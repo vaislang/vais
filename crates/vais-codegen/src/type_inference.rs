@@ -54,7 +54,7 @@ impl CodeGenerator {
                     }
                     // Struct tuple literals (e.g., Point(40, 2)) return pointers
                     let resolved = self.resolve_struct_name(name);
-                    if self.structs.contains_key(&resolved) && !self.functions.contains_key(name) {
+                    if self.types.structs.contains_key(&resolved) && !self.types.functions.contains_key(name) {
                         return false;
                     }
                 }
@@ -69,7 +69,7 @@ impl CodeGenerator {
                 if self.is_unit_enum_variant(name) {
                     return false;
                 }
-                if let Some(local) = self.locals.get(name) {
+                if let Some(local) = self.fn_ctx.locals.get(name) {
                     // The `self` parameter in methods is passed as a pointer (%Struct* %self),
                     // not by value, so it should not be treated as a value expression.
                     if name == "self"
@@ -103,7 +103,7 @@ impl CodeGenerator {
             Expr::String(_) | Expr::StringInterp(_) => ResolvedType::Str,
             // @ refers to self in methods
             Expr::SelfCall => {
-                if let Some(local) = self.locals.get("self") {
+                if let Some(local) = self.fn_ctx.locals.get("self") {
                     local.ty.clone()
                 } else {
                     ResolvedType::I64
@@ -111,11 +111,11 @@ impl CodeGenerator {
             }
             Expr::Ident(name) => {
                 // Look up local variable type
-                if let Some(local) = self.locals.get(name) {
+                if let Some(local) = self.fn_ctx.locals.get(name) {
                     local.ty.clone()
                 } else if self.is_unit_enum_variant(name) {
                     // Unit enum variant (e.g., None)
-                    for enum_info in self.enums.values() {
+                    for enum_info in self.types.enums.values() {
                         for variant in &enum_info.variants {
                             if variant.name == *name {
                                 return ResolvedType::Named {
@@ -141,7 +141,7 @@ impl CodeGenerator {
                         };
                     }
                     // Check function info
-                    if let Some(fn_info) = self.functions.get(fn_name) {
+                    if let Some(fn_info) = self.types.functions.get(fn_name) {
                         let ret_ty = fn_info.signature.ret.clone();
                         // Convert i32 returns to i64 since codegen promotes them
                         if ret_ty == ResolvedType::I32 {
@@ -151,7 +151,7 @@ impl CodeGenerator {
                     }
                     // Struct tuple literal: Point(40, 2) — not a function, but a struct
                     let resolved = self.resolve_struct_name(fn_name);
-                    if self.structs.contains_key(&resolved) {
+                    if self.types.structs.contains_key(&resolved) {
                         return ResolvedType::Named {
                             name: resolved,
                             generics: vec![],
@@ -189,7 +189,7 @@ impl CodeGenerator {
             },
             Expr::StructLit { name, fields } => {
                 // First try to get the struct from non-generic structs
-                if let Some(struct_info) = self.structs.get(&name.node) {
+                if let Some(struct_info) = self.types.structs.get(&name.node) {
                     // Collect generic parameters from struct fields
                     let mut generic_params = Vec::new();
                     for (_, field_ty) in &struct_info.fields {
@@ -231,7 +231,7 @@ impl CodeGenerator {
                 }
 
                 // Try to get from generic struct definitions (AST)
-                if let Some(generic_struct) = self.generic_struct_defs.get(&name.node) {
+                if let Some(generic_struct) = self.generics.struct_defs.get(&name.node) {
                     // Infer generic type arguments from field values
                     if !generic_struct.generics.is_empty() {
                         let mut inferred_types = Vec::new();
@@ -329,7 +329,7 @@ impl CodeGenerator {
 
                 if let ResolvedType::Named { name, .. } = &recv_type {
                     let method_name = format!("{}_{}", name, method.node);
-                    if let Some(fn_info) = self.functions.get(&method_name) {
+                    if let Some(fn_info) = self.types.functions.get(&method_name) {
                         return fn_info.signature.ret.clone();
                     }
                 }
@@ -340,7 +340,7 @@ impl CodeGenerator {
             } => {
                 // Get static method return type from function info
                 let method_name = format!("{}_{}", type_name.node, method.node);
-                if let Some(fn_info) = self.functions.get(&method_name) {
+                if let Some(fn_info) = self.types.functions.get(&method_name) {
                     return fn_info.signature.ret.clone();
                 }
                 ResolvedType::I64
@@ -386,7 +386,7 @@ impl CodeGenerator {
                     name: struct_name, ..
                 } = &obj_type
                 {
-                    if let Some(struct_info) = self.structs.get(struct_name) {
+                    if let Some(struct_info) = self.types.structs.get(struct_name) {
                         for (field_name, field_type) in &struct_info.fields {
                             if field_name == &field.node {
                                 return field_type.clone();

@@ -70,7 +70,7 @@ impl CodeGenerator {
                     )));
                 }
                 // Check if it's a known struct
-                if let Some(_struct_info) = self.structs.get(name) {
+                if let Some(_struct_info) = self.types.structs.get(name) {
                     // Struct is valid for FFI
                     Ok(())
                 } else {
@@ -211,7 +211,7 @@ impl CodeGenerator {
             ..Default::default()
         };
 
-        self.functions.insert(
+        self.types.functions.insert(
             func_name.clone(),
             FunctionInfo {
                 signature: func_sig,
@@ -224,7 +224,7 @@ impl CodeGenerator {
         // Large structs use sret (struct return) parameter
         let ret_llvm = self.type_to_llvm(&ret_type);
         let (actual_ret_type, sret_param) = if let ResolvedType::Named { name, .. } = &ret_type {
-            if let Some(_struct_info) = self.structs.get(name) {
+            if let Some(_struct_info) = self.types.structs.get(name) {
                 let struct_size = self._type_size(&ret_type);
                 if !Self::_should_pass_struct_by_value(struct_size) {
                     // Large struct: use sret parameter, return void
@@ -254,7 +254,7 @@ impl CodeGenerator {
         for (i, ty) in param_types.iter().enumerate() {
             let llvm_ty = self.type_to_llvm(ty);
             let param_str = if let ResolvedType::Named { name, .. } = ty {
-                if let Some(_struct_info) = self.structs.get(name) {
+                if let Some(_struct_info) = self.types.structs.get(name) {
                     let struct_size = self._type_size(ty);
                     if !Self::_should_pass_struct_by_value(struct_size) {
                         // Large struct: pass by pointer with byval
@@ -388,7 +388,7 @@ impl CodeGenerator {
 
         // Look up function signature
         let func_info = self
-            .functions
+            .types.functions
             .get(func_name)
             .ok_or_else(|| CodegenError::UndefinedFunction(func_name.to_string()))?;
 

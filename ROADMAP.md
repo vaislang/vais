@@ -1097,7 +1097,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: lib.rs (generate_module_with_instantiations: 로컬 HashMap 제거, self.generic_function_templates/generic_struct_defs 직접 사용)
 - [x] 4. [아키텍처] generate_expr() 3,061줄 → 카테고리별 서브함수 분할 ✅ 2026-02-13
   변경: generate_expr.rs (Call 963줄→generate_expr_call(), StructLit 124줄→generate_expr_struct_lit())
-- [ ] 5. [아키텍처] CodeGenerator 49필드 → sub-struct 그룹화 (연기 — 다중 세션 필요)
+- [x] 5. [아키텍처] CodeGenerator 49필드 → sub-struct 그룹화 ✅ 2026-02-13 (Phase 24에서 해결)
+  변경: lib.rs (TypeRegistry/GenericState/FunctionContext/StringPool/LambdaState 5개 sub-struct, 53→16 직접필드)
 - [x] 6. [아키텍처] generate_module* 3함수 공통 코드 헬퍼 추출 ✅ 2026-02-13
   변경: lib.rs (+emit_module_header/emit_string_constants/emit_body_lambdas_vtables, 3함수 중복 ~90줄 제거)
 - [x] 7. [빌드] wasmtime 전이 deps → feature flag 게이팅 (이미 완료) ✅ 2026-02-13
@@ -1129,7 +1130,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: Cargo.toml (thiserror 1.0→2.0), vais-gpu/macro/bindgen Cargo.toml (workspace = true 전환)
 - [x] 21. [빌드] once_cell → std::sync::OnceLock 전환 ✅ 2026-02-13
   변경: vais-i18n/Cargo.toml (once_cell 제거), vais-i18n/src/lib.rs (OnceCell→OnceLock)
-진행률: 20/21 (95%) — Critical 8/9 완료 (#5 연기), Warning 12/12 완료
+진행률: 21/21 (100%) — Critical 9/9 완료, Warning 12/12 완료
 
 ### 2차 리뷰 발견사항 (2026-02-13)
 > 출처: /team-review (자동진행 완료 후)
@@ -1146,6 +1147,38 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. [품질] contracts.rs 들여쓰기 일관성 확인 (Warning) ✅ 2026-02-13
   변경: 없음 (검사 결과 4-space 일관 들여쓰기 확인, 이슈 없음)
 진행률: 5/5 (100%)
+
+---
+
+## Phase 24: CodeGenerator sub-struct 그룹화 (2026-02-13)
+
+> **상태**: ✅ 완료 (2026-02-13)
+> **목표**: CodeGenerator 53필드 → 5개 sub-struct + 16 직접필드로 분할
+> **배경**: 리뷰 발견사항 #5 (연기됨) 해결
+
+모드: 자동진행
+- [x] 1. TypeRegistry sub-struct 추출 — 10필드 (functions, structs, enums, unions, constants, globals, trait_defs, trait_impl_methods, resolved_function_sigs, declared_functions) ✅
+  변경: lib.rs (TypeRegistry struct 정의, CodeGenerator에 types 필드), 18+ impl 파일에서 self.field → self.types.field 변환 (131건), builtins.rs 매크로 4개 수정
+- [x] 2. GenericState sub-struct 추출 — 7필드 (struct_defs, struct_aliases, generated_structs, function_templates, fn_instantiations, generated_functions, substitutions) ✅
+  변경: lib.rs (GenericState struct 정의), 13파일에서 self.generic_* → self.generics.* 변환 (59건)
+- [x] 3. FunctionContext sub-struct 추출 — 8필드 (current_function, current_return_type, locals, label_counter, loop_stack, defer_stack, current_block, current_file) ✅
+  변경: lib.rs (FunctionContext struct 정의), 20파일에서 self.field → self.fn_ctx.field 변환 (203건)
+- [x] 4. StringPool sub-struct 추출 — 5필드 (constants, counter, prefix, contract_constants, contract_counter) ✅
+  변경: lib.rs (StringPool struct 정의), 8파일에서 self.string_* → self.strings.* 변환 (54건)
+- [x] 5. LambdaState sub-struct 추출 — 6필드 (functions, closures, last_lambda_info, async_state_counter, async_await_points, current_async_function) ✅
+  변경: lib.rs (LambdaState struct 정의), 7파일에서 self.lambda_*/closures/async_* → self.lambdas.* 변환 (20건)
+- [x] 6. 검증 — Build OK, E2E 520/520, Clippy 0건 ✅
+- [x] 7. ROADMAP 업데이트 ✅
+진행률: 7/7 (100%)
+
+## 리뷰 발견사항 (2026-02-13)
+> 출처: /team-review Phase 24
+
+- [ ] 1. [아키텍처] vtable_generator 필드에 trait_defs 교차 참조 코멘트 추가 (Warning) — 대상: lib.rs:887
+- [ ] 2. [아키텍처] make_string_name() 미사용 8건 마이그레이션 (Warning, pre-existing) — 대상: expr.rs, expr_helpers.rs, expr_visitor.rs, control_flow.rs
+- [ ] 3. [아키텍처] LambdaState.functions 이름 변경 검토 (Warning) — 대상: lib.rs:817
+- [ ] 4. [아키텍처] ContractState sub-struct 검토 — old_snapshots/decreases + contract strings (Warning) — 대상: lib.rs:893-898
+진행률: 0/4 (0%)
 
 ---
 

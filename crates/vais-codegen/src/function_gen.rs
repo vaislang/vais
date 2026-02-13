@@ -19,7 +19,7 @@ impl CodeGenerator {
             self.ast_type_to_resolved(&t.node)
         } else {
             // Use registered return type from type checker (supports return type inference)
-            self.functions
+            self.types.functions
                 .get(lookup_key)
                 .map(|info| info.signature.ret.clone())
                 .unwrap_or(ResolvedType::Unit)
@@ -29,10 +29,10 @@ impl CodeGenerator {
     /// Initialize function state for code generation.
     /// Clears locals, resets label counter and loop stack.
     fn initialize_function_state(&mut self, func_name: &str) {
-        self.current_function = Some(func_name.to_string());
-        self.locals.clear();
-        self.label_counter = 0;
-        self.loop_stack.clear();
+        self.fn_ctx.current_function = Some(func_name.to_string());
+        self.fn_ctx.locals.clear();
+        self.fn_ctx.label_counter = 0;
+        self.fn_ctx.loop_stack.clear();
     }
 
     /// Generate a specialized struct type from a generic struct template
@@ -43,10 +43,10 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> CodegenResult<()> {
         // Skip if already generated
-        if self.generated_structs.contains_key(&inst.mangled_name) {
+        if self.generics.generated_structs.contains_key(&inst.mangled_name) {
             return Ok(());
         }
-        self.generated_structs
+        self.generics.generated_structs
             .insert(inst.mangled_name.clone(), true);
 
         // Create substitution map from generic params to concrete types
@@ -63,7 +63,7 @@ impl CodeGenerator {
             .collect();
 
         // Save and set generic substitutions
-        let old_subst = std::mem::replace(&mut self.generic_substitutions, substitutions.clone());
+        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions.clone());
 
         // Generate field types with substitutions
         let fields: Vec<(String, ResolvedType)> = generic_struct
@@ -91,16 +91,16 @@ impl CodeGenerator {
             _repr_c: false,
             _invariants: Vec::new(),
         };
-        self.structs
+        self.types.structs
             .insert(inst.mangled_name.to_string(), struct_info);
 
         // Register a name mapping from base name to mangled name
         // so struct literals and field accesses in generic impl methods can resolve it
-        self.generic_struct_aliases
+        self.generics.struct_aliases
             .insert(inst.base_name.to_string(), inst.mangled_name.to_string());
 
         // Restore old substitutions
-        self.generic_substitutions = old_subst;
+        self.generics.substitutions = old_subst;
 
         Ok(())
     }
@@ -112,10 +112,10 @@ impl CodeGenerator {
         inst: &vais_types::GenericInstantiation,
     ) -> CodegenResult<String> {
         // Skip if already generated
-        if self.generated_functions.contains_key(&inst.mangled_name) {
+        if self.generics.generated_functions.contains_key(&inst.mangled_name) {
             return Ok(String::new());
         }
-        self.generated_functions
+        self.generics.generated_functions
             .insert(inst.mangled_name.clone(), true);
 
         // Create substitution map from generic params to concrete types
@@ -132,7 +132,7 @@ impl CodeGenerator {
             .collect();
 
         // Save and set generic substitutions
-        let old_subst = std::mem::replace(&mut self.generic_substitutions, substitutions.clone());
+        let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions.clone());
 
         self.initialize_function_state(&inst.mangled_name);
 
@@ -146,7 +146,7 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(&concrete_ty);
 
                 // Register parameter as local
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
                     LocalVar::param(concrete_ty, p.name.node.to_string()),
                 );
@@ -159,7 +159,7 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&t.node);
             vais_types::substitute_type(&ty, &substitutions)
         } else {
-            self.functions
+            self.types.functions
                 .get(&generic_fn.name.node)
                 .map(|info| info.signature.ret.clone())
                 .unwrap_or(ResolvedType::Unit)
@@ -184,7 +184,7 @@ impl CodeGenerator {
             params.join(", ")
         ));
         ir.push_str("entry:\n");
-        self.current_block = "entry".to_string();
+        self.fn_ctx.current_block = "entry".to_string();
 
         // Generate function body
         let mut counter = 0;
@@ -226,8 +226,8 @@ impl CodeGenerator {
         ir.push_str("}\n");
 
         // Restore state
-        self.generic_substitutions = old_subst;
-        self.current_function = None;
+        self.generics.substitutions = old_subst;
+        self.fn_ctx.current_function = None;
 
         Ok(ir)
     }
@@ -755,7 +755,7 @@ impl CodeGenerator {
 
         // Get registered function signature for resolved param types (supports Type::Infer)
         let registered_param_types: Vec<_> = self
-            .functions
+            .types.functions
             .get(&f.name.node)
             .map(|info| {
                 info.signature
@@ -780,7 +780,7 @@ impl CodeGenerator {
 
                 // Register parameter as local (SSA value, not alloca)
                 // For params, llvm_name matches the source name
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
                     LocalVar::param(ty.clone(), p.name.node.to_string()),
                 );
@@ -792,7 +792,7 @@ impl CodeGenerator {
         let ret_type = self.resolve_fn_return_type(f, &f.name.node);
 
         // Store current return type for nested return statements
-        self.current_return_type = Some(ret_type.clone());
+        self.fn_ctx.current_return_type = Some(ret_type.clone());
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
@@ -832,7 +832,7 @@ impl CodeGenerator {
                 ));
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
                     LocalVar::ssa(ty.clone(), param_ptr),
                 );
@@ -938,8 +938,8 @@ impl CodeGenerator {
 
         ir.push_str("}\n");
 
-        self.current_function = None;
-        self.current_return_type = None;
+        self.fn_ctx.current_function = None;
+        self.fn_ctx.current_return_type = None;
         self.clear_decreases_info();
         Ok(ir)
     }
@@ -969,9 +969,9 @@ impl CodeGenerator {
         let ret_llvm = self.type_to_llvm(&ret_type);
 
         // Reset async state tracking
-        self.async_state_counter = 0;
-        self.async_await_points.clear();
-        self.current_async_function = Some(AsyncFunctionInfo {
+        self.lambdas.async_state_counter = 0;
+        self.lambdas.async_await_points.clear();
+        self.lambdas.current_async_function = Some(AsyncFunctionInfo {
             _name: func_name.to_string(),
             _state_struct: state_struct_name.to_string(),
             _captured_vars: params.clone(),
@@ -1040,10 +1040,10 @@ impl CodeGenerator {
         ir.push_str("}\n\n");
 
         // 3. Generate poll function: implements state machine
-        self.current_function = Some(format!("{}__poll", func_name));
-        self.locals.clear();
-        self.label_counter = 0;
-        self.loop_stack.clear();
+        self.fn_ctx.current_function = Some(format!("{}__poll", func_name));
+        self.fn_ctx.locals.clear();
+        self.fn_ctx.label_counter = 0;
+        self.fn_ctx.loop_stack.clear();
 
         ir.push_str(&format!("; Poll function for async {}\n", func_name));
         ir.push_str(&format!(
@@ -1075,7 +1075,7 @@ impl CodeGenerator {
                 name, name
             ));
 
-            self.locals
+            self.fn_ctx.locals
                 .insert(name.clone(), LocalVar::param(ty.clone(), name.clone()));
         }
 
@@ -1133,8 +1133,8 @@ impl CodeGenerator {
 
         ir.push_str("}\n");
 
-        self.current_function = None;
-        self.current_async_function = None;
+        self.fn_ctx.current_function = None;
+        self.lambdas.current_async_function = None;
 
         Ok(ir)
     }
@@ -1189,7 +1189,7 @@ impl CodeGenerator {
             params.push(format!("{} %self", struct_ty));
 
             // Register self
-            self.locals.insert(
+            self.fn_ctx.locals.insert(
                 "self".to_string(),
                 LocalVar::param(
                     ResolvedType::Named {
@@ -1211,7 +1211,7 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let llvm_ty = self.type_to_llvm(&ty);
 
-            self.locals.insert(
+            self.fn_ctx.locals.insert(
                 p.name.node.to_string(),
                 LocalVar::param(ty.clone(), p.name.node.to_string()),
             );
@@ -1222,7 +1222,7 @@ impl CodeGenerator {
         let ret_type = self.resolve_fn_return_type(f, &f.name.node);
 
         // Store current return type for nested return statements
-        self.current_return_type = Some(ret_type.clone());
+        self.fn_ctx.current_return_type = Some(ret_type.clone());
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
@@ -1259,7 +1259,7 @@ impl CodeGenerator {
                     llvm_ty, p.name.node, llvm_ty, param_ptr
                 ));
                 // Update locals to use the pointer instead of the value
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
                     LocalVar::alloca(ty.clone(), param_ptr.trim_start_matches('%').to_string()),
                 );
@@ -1323,8 +1323,8 @@ impl CodeGenerator {
 
         ir.push_str("}\n");
 
-        self.current_function = None;
-        self.current_return_type = None;
+        self.fn_ctx.current_function = None;
+        self.fn_ctx.current_return_type = None;
         Ok(ir)
     }
 
@@ -1496,7 +1496,7 @@ impl CodeGenerator {
         ir.push_str("; _start entry point (calls main)\n");
         ir.push_str("define void @_start() {\n");
         ir.push_str("entry:\n");
-        if self.functions.contains_key("main") {
+        if self.types.functions.contains_key("main") {
             ir.push_str("  %ret = call i64 @main()\n");
         }
         ir.push_str("  ret void\n");
@@ -1509,7 +1509,7 @@ impl CodeGenerator {
         ir.push_str("; WASI _start entry point\n");
         ir.push_str("define void @_start() {\n");
         ir.push_str("entry:\n");
-        if self.functions.contains_key("main") {
+        if self.types.functions.contains_key("main") {
             ir.push_str("  %ret = call i64 @main()\n");
             ir.push_str("  ; Exit with main's return code\n");
             ir.push_str("  %code = trunc i64 %ret to i32\n");

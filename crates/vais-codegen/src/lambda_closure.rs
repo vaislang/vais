@@ -33,7 +33,7 @@ impl CodeGenerator {
         match expr {
             Expr::Ident(name) => {
                 // Only capture if it's in our locals (exists in outer scope)
-                if !bound.contains(name) && self.locals.contains_key(name) {
+                if !bound.contains(name) && self.fn_ctx.locals.contains_key(name) {
                     free.push(name.clone());
                 }
             }

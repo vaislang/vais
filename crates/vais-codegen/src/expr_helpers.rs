@@ -15,7 +15,7 @@ impl CodeGenerator {
         name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        for enum_info in self.enums.values() {
+        for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == name {
                     let mut ir = String::new();
@@ -302,7 +302,7 @@ impl CodeGenerator {
             // Handle print_i64/print_f64 builtins
             if name == "print_i64" && args.len() == 1 {
                 let has_user_fn = self
-                    .functions
+                    .types.functions
                     .get("print_i64")
                     .map(|f| !f.is_extern)
                     .unwrap_or(false);
@@ -312,7 +312,7 @@ impl CodeGenerator {
             }
             if name == "print_f64" && args.len() == 1 {
                 let has_user_fn = self
-                    .functions
+                    .types.functions
                     .get("print_f64")
                     .map(|f| !f.is_extern)
                     .unwrap_or(false);
@@ -340,20 +340,20 @@ impl CodeGenerator {
         // Check if this is a direct function call or indirect (lambda) call
         let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
             // Check if this is a generic function that needs monomorphization
-            if let Some(instantiations_list) = self.generic_fn_instantiations.get(name) {
+            if let Some(instantiations_list) = self.generics.fn_instantiations.get(name) {
                 let arg_types: Vec<vais_types::ResolvedType> =
                     args.iter().map(|a| self.infer_expr_type(a)).collect();
                 let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
                 (mangled, false)
-            } else if self.functions.contains_key(name) {
+            } else if self.types.functions.contains_key(name) {
                 (name.clone(), false)
-            } else if self.locals.contains_key(name) {
+            } else if self.fn_ctx.locals.contains_key(name) {
                 (name.clone(), true) // Lambda call
             } else {
                 (name.clone(), false) // Assume it's a function
             }
         } else if let Expr::SelfCall = &func.node {
-            (self.current_function.clone().unwrap_or_default(), false)
+            (self.fn_ctx.current_function.clone().unwrap_or_default(), false)
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -362,7 +362,7 @@ impl CodeGenerator {
 
         // Look up function info for parameter types
         let fn_info = if !is_indirect {
-            self.functions.get(&fn_name).cloned()
+            self.types.functions.get(&fn_name).cloned()
         } else {
             None
         };
@@ -474,7 +474,7 @@ impl CodeGenerator {
 
         if is_indirect {
             // Indirect call (lambda)
-            let closure_info = self.closures.get(fn_name).cloned();
+            let closure_info = self.lambdas.closures.get(fn_name).cloned();
 
             let mut all_args = Vec::new();
             if let Some(ref info) = closure_info {
@@ -498,7 +498,7 @@ impl CodeGenerator {
             }
 
             // Get the local variable info
-            let local_info = self.locals.get(fn_name).cloned();
+            let local_info = self.fn_ctx.locals.get(fn_name).cloned();
             let is_ssa_or_param = local_info
                 .as_ref()
                 .map(|l| l.is_ssa() || l.is_param())
@@ -585,13 +585,13 @@ impl CodeGenerator {
             self.generate_puts_ptr_call(arg_vals, counter, span, ir)
         } else if ret_ty == "void" {
             let is_vararg = self
-                .functions
+                .types.functions
                 .get(fn_name)
                 .map(|f| f.signature.is_vararg)
                 .unwrap_or(false);
             if is_vararg {
                 let param_types: Vec<String> = self
-                    .functions
+                    .types.functions
                     .get(fn_name)
                     .map(|f| {
                         f.signature
@@ -620,14 +620,14 @@ impl CodeGenerator {
             Ok(("void".to_string(), std::mem::take(ir)))
         } else {
             let is_vararg = self
-                .functions
+                .types.functions
                 .get(fn_name)
                 .map(|f| f.signature.is_vararg)
                 .unwrap_or(false);
             let tmp = self.next_temp(counter);
             if is_vararg {
                 let param_types: Vec<String> = self
-                    .functions
+                    .types.functions
                     .get(fn_name)
                     .map(|f| {
                         f.signature
@@ -885,9 +885,9 @@ impl CodeGenerator {
                     ));
                 } else {
                     // For print with non-literal, use printf with %s
-                    let fmt_name = format!(".str.{}", self.string_counter);
-                    self.string_counter += 1;
-                    self.string_constants
+                    let fmt_name = format!(".str.{}", self.strings.counter);
+                    self.strings.counter += 1;
+                    self.strings.constants
                         .push((fmt_name.clone(), "%s".to_string()));
                     let fmt_len = 3; // "%s" + null
                     let fmt_ptr = format!(
@@ -964,9 +964,9 @@ impl CodeGenerator {
         }
 
         // Create global string constant for the C format string
-        let fmt_name = format!(".str.{}", self.string_counter);
-        self.string_counter += 1;
-        self.string_constants
+        let fmt_name = format!(".str.{}", self.strings.counter);
+        self.strings.counter += 1;
+        self.strings.constants
             .push((fmt_name.clone(), c_format.clone()));
         let fmt_len = c_format.len() + 1; // +1 for null terminator
         let fmt_ptr = format!(
@@ -1003,13 +1003,13 @@ impl CodeGenerator {
         // If no extra args and println, use puts for efficiency
         if extra_args.is_empty() && fn_name == "println" {
             // Remove the printf format string (with \n) we added above
-            self.string_constants.pop();
-            self.string_counter -= 1;
+            self.strings.constants.pop();
+            self.strings.counter -= 1;
             // Create puts string (without trailing \n, since puts adds one)
             let puts_str = &c_format[..c_format.len() - 1];
-            let puts_name = format!(".str.{}", self.string_counter);
-            self.string_counter += 1;
-            self.string_constants
+            let puts_name = format!(".str.{}", self.strings.counter);
+            self.strings.counter += 1;
+            self.strings.constants
                 .push((puts_name.clone(), puts_str.to_string()));
             let puts_len = puts_str.len() + 1;
             let puts_ptr = format!(
@@ -1116,9 +1116,9 @@ impl CodeGenerator {
         }
 
         // Create global string constant for the C format string
-        let fmt_name = format!(".str.{}", self.string_counter);
-        self.string_counter += 1;
-        self.string_constants
+        let fmt_name = format!(".str.{}", self.strings.counter);
+        self.strings.counter += 1;
+        self.strings.constants
             .push((fmt_name.clone(), c_format.clone()));
         let fmt_len = c_format.len() + 1;
         let fmt_ptr = format!(
@@ -1156,7 +1156,7 @@ impl CodeGenerator {
 
         // If no extra args, just return the format string directly
         if extra_args.is_empty() {
-            let str_name = format!(".str.{}", self.string_counter - 1);
+            let str_name = format!(".str.{}", self.strings.counter - 1);
             // Already pushed the constant above, reuse it
             let ptr = format!(
                 "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
@@ -1223,10 +1223,10 @@ impl CodeGenerator {
 
         // Then block
         ir.push_str(&format!("{}:\n", then_label));
-        self.current_block.clone_from(&then_label);
+        self.fn_ctx.current_block.clone_from(&then_label);
         let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
         ir.push_str(&then_ir);
-        let then_actual_block = self.current_block.clone();
+        let then_actual_block = self.fn_ctx.current_block.clone();
         let then_from_label = if !then_terminated {
             ir.push_str(&format!("  br label %{}\n", merge_label));
             then_actual_block
@@ -1236,7 +1236,7 @@ impl CodeGenerator {
 
         // Else block
         ir.push_str(&format!("{}:\n", else_label));
-        self.current_block.clone_from(&else_label);
+        self.fn_ctx.current_block.clone_from(&else_label);
         let (else_val, else_ir, else_terminated, nested_last_block, has_else) =
             if let Some(else_branch) = else_ {
                 let (v, i, t, last) =
@@ -1251,7 +1251,7 @@ impl CodeGenerator {
             if !nested_last_block.is_empty() {
                 nested_last_block
             } else {
-                self.current_block.clone()
+                self.fn_ctx.current_block.clone()
             }
         } else {
             String::new()
@@ -1259,7 +1259,7 @@ impl CodeGenerator {
 
         // Merge block
         ir.push_str(&format!("{}:\n", merge_label));
-        self.current_block.clone_from(&merge_label);
+        self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
 
         if !has_else {
@@ -1297,7 +1297,7 @@ impl CodeGenerator {
         let loop_body = self.next_label("loop.body");
         let loop_end = self.next_label("loop.end");
 
-        self.loop_stack.push(LoopLabels {
+        self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
         });
@@ -1337,7 +1337,7 @@ impl CodeGenerator {
         }
 
         ir.push_str(&format!("{}:\n", loop_end));
-        self.loop_stack.pop();
+        self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))
     }
@@ -1353,7 +1353,7 @@ impl CodeGenerator {
         let loop_body = self.next_label("while.body");
         let loop_end = self.next_label("while.end");
 
-        self.loop_stack.push(LoopLabels {
+        self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
         });
@@ -1388,7 +1388,7 @@ impl CodeGenerator {
 
         // Loop end
         ir.push_str(&format!("{}:\n", loop_end));
-        self.loop_stack.pop();
+        self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))
     }
@@ -1438,7 +1438,7 @@ impl CodeGenerator {
         let mut ir = val_ir;
 
         if let Expr::Ident(name) = &target.node {
-            if let Some(local) = self.locals.get(name).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                 if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     // For struct types (Named), the local is a double pointer (%Type**).
@@ -1471,12 +1471,12 @@ impl CodeGenerator {
             ir.push_str(&obj_ir);
 
             if let Expr::Ident(var_name) = &obj_expr.node {
-                if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
+                if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
                     if let ResolvedType::Named {
                         name: struct_name, ..
                     } = &local.ty
                     {
-                        if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                        if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
                             if let Some(field_idx) = struct_info
                                 .fields
                                 .iter()
@@ -1539,7 +1539,7 @@ impl CodeGenerator {
         ));
 
         if let Expr::Ident(name) = &target.node {
-            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     ir.push_str(&format!(
@@ -1646,7 +1646,7 @@ impl CodeGenerator {
         let type_name = &resolved_name;
 
         // First check if it's a struct
-        if let Some(struct_info) = self.structs.get(type_name).cloned() {
+        if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
             let mut ir = String::new();
 
             // Check if this struct has generic parameters
@@ -1739,7 +1739,7 @@ impl CodeGenerator {
 
             Ok((struct_ptr, ir))
         // Then check if it's a union
-        } else if let Some(union_info) = self.unions.get(type_name).cloned() {
+        } else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
             let mut ir = String::new();
 
             // Allocate union on stack
@@ -1842,7 +1842,7 @@ impl CodeGenerator {
         let mut ir = obj_ir;
 
         if let Expr::Ident(var_name) = &obj.node {
-            if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
+            if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
                 if let ResolvedType::Named {
                     name: orig_type_name,
                     ..
@@ -1850,7 +1850,7 @@ impl CodeGenerator {
                 {
                     let type_name = &self.resolve_struct_name(orig_type_name);
                     // First check if it's a struct
-                    if let Some(struct_info) = self.structs.get(type_name).cloned() {
+                    if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
                         let field_idx = struct_info
                             .fields
                             .iter()
@@ -1880,7 +1880,7 @@ impl CodeGenerator {
                         return Ok((result, ir));
                     }
                     // Then check if it's a union
-                    else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                    else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
                         let field_ty = union_info
                             .fields
                             .iter()
@@ -1929,7 +1929,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let (recv_val, recv_ir, recv_type) = if matches!(&receiver.node, Expr::SelfCall) {
-            if let Some(local) = self.locals.get("self") {
+            if let Some(local) = self.fn_ctx.locals.get("self") {
                 let recv_type = local.ty.clone();
                 ("%self".to_string(), String::new(), recv_type)
             } else {
@@ -1977,7 +1977,7 @@ impl CodeGenerator {
         }
 
         let ret_type = if let ResolvedType::Named { name, .. } = &recv_type {
-            if let Some(_struct_info) = self.structs.get(name) {
+            if let Some(_struct_info) = self.types.structs.get(name) {
                 "i64"
             } else {
                 "i64"
@@ -2020,7 +2020,7 @@ impl CodeGenerator {
         }
 
         let ret_type = self
-            .functions
+            .types.functions
             .get(&full_method_name)
             .map(|info| self.type_to_llvm(&info.signature.ret))
             .unwrap_or_else(|| "i64".to_string());
@@ -2112,8 +2112,8 @@ impl CodeGenerator {
         body: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let lambda_name = format!("__lambda_{}", self.label_counter);
-        self.label_counter += 1;
+        let lambda_name = format!("__lambda_{}", self.fn_ctx.label_counter);
+        self.fn_ctx.label_counter += 1;
 
         let capture_names = self.find_lambda_captures(params, body);
 
@@ -2121,7 +2121,7 @@ impl CodeGenerator {
         let mut capture_ir = String::new();
 
         for cap_name in &capture_names {
-            if let Some(local) = self.locals.get(cap_name) {
+            if let Some(local) = self.fn_ctx.locals.get(cap_name) {
                 let ty = local.ty.clone();
                 if local.is_param() {
                     captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
@@ -2157,14 +2157,14 @@ impl CodeGenerator {
         }
 
         // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
-        // so empty self.locals after take is acceptable (never accessed post-error).
-        let saved_function = self.current_function.take();
-        let saved_locals = std::mem::take(&mut self.locals);
+        // so empty self.fn_ctx.locals after take is acceptable (never accessed post-error).
+        let saved_function = self.fn_ctx.current_function.take();
+        let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
 
-        self.current_function = Some(lambda_name.clone());
+        self.fn_ctx.current_function = Some(lambda_name.clone());
 
         for (cap_name, cap_ty, _) in &captured_vars {
-            self.locals.insert(
+            self.fn_ctx.locals.insert(
                 cap_name.clone(),
                 LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
             );
@@ -2172,7 +2172,7 @@ impl CodeGenerator {
 
         for p in params {
             let ty = self.ast_type_to_resolved(&p.ty.node);
-            self.locals.insert(
+            self.fn_ctx.locals.insert(
                 p.name.node.clone(),
                 LocalVar::param(ty, p.name.node.clone()),
             );
@@ -2189,10 +2189,10 @@ impl CodeGenerator {
         lambda_ir.push_str(&body_ir);
         lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
 
-        self.lambda_functions.push(lambda_ir);
+        self.lambdas.functions.push(lambda_ir);
 
-        self.current_function = saved_function;
-        self.locals = saved_locals;
+        self.fn_ctx.current_function = saved_function;
+        self.fn_ctx.locals = saved_locals;
 
         // Emit ptrtoint as a proper instruction (not a constant expression)
         // so the result is a clean SSA temp that can be used anywhere
@@ -2205,10 +2205,10 @@ impl CodeGenerator {
         ));
 
         if captured_vars.is_empty() {
-            self.last_lambda_info = None;
+            self.lambdas.last_lambda_info = None;
             Ok((fn_ptr_tmp, capture_ir))
         } else {
-            self.last_lambda_info = Some(ClosureInfo {
+            self.lambdas.last_lambda_info = Some(ClosureInfo {
                 func_name: lambda_name.clone(),
                 captures: captured_vars
                     .iter()
@@ -2559,8 +2559,8 @@ impl CodeGenerator {
         let mut ir = arg_ir;
         let fmt_str = "%ld";
         let fmt_name = self.make_string_name();
-        self.string_counter += 1;
-        self.string_constants
+        self.strings.counter += 1;
+        self.strings.constants
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
@@ -2588,8 +2588,8 @@ impl CodeGenerator {
         let mut ir = arg_ir;
         let fmt_str = "%f";
         let fmt_name = self.make_string_name();
-        self.string_counter += 1;
-        self.string_constants
+        self.strings.counter += 1;
+        self.strings.constants
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);

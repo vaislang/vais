@@ -41,8 +41,8 @@ impl CodeGenerator {
         };
         ir.push_str(&end_ir);
 
-        let counter_var = format!("%loop_counter.{}", self.label_counter);
-        self.label_counter += 1;
+        let counter_var = format!("%loop_counter.{}", self.fn_ctx.label_counter);
+        self.fn_ctx.label_counter += 1;
         ir.push_str(&format!("  {} = alloca i64\n", counter_var));
         ir.push_str(&format!(
             "  store i64 {}, i64* {}\n",
@@ -53,7 +53,7 @@ impl CodeGenerator {
             let var_name = format!("{}.for", name);
             let llvm_name = format!("%{}", var_name);
             ir.push_str(&format!("  {} = alloca i64\n", llvm_name));
-            self.locals.insert(
+            self.fn_ctx.locals.insert(
                 name.clone(),
                 LocalVar::alloca(ResolvedType::I64, var_name.clone()),
             );
@@ -67,7 +67,7 @@ impl CodeGenerator {
         let loop_inc = self.next_label("for.inc");
         let loop_end = self.next_label("for.end");
 
-        self.loop_stack.push(LoopLabels {
+        self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
         });
@@ -125,7 +125,7 @@ impl CodeGenerator {
         ir.push_str(&format!("  br label %{}\n", loop_cond));
 
         ir.push_str(&format!("{}:\n", loop_end));
-        self.loop_stack.pop();
+        self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))
     }
@@ -142,8 +142,8 @@ impl CodeGenerator {
             Expr::String(s) => {
                 // Create a global string constant
                 let name = self.make_string_name();
-                self.string_counter += 1;
-                self.string_constants.push((name.clone(), s.clone()));
+                self.strings.counter += 1;
+                self.strings.constants.push((name.clone(), s.clone()));
 
                 // Return a getelementptr to the string constant
                 let len = s.len() + 1;
@@ -181,7 +181,7 @@ impl CodeGenerator {
             Expr::Unit => Ok(("void".to_string(), String::new())),
 
             Expr::Ident(name) => {
-                if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                     if local.is_param() {
                         // Parameters are SSA values, use directly
                         Ok((format!("%{}", local.llvm_name), String::new()))
@@ -214,7 +214,7 @@ impl CodeGenerator {
                 } else if self.is_unit_enum_variant(name) {
                     // Unit enum variant (e.g., None)
                     // Create enum value on stack with just the tag
-                    for enum_info in self.enums.values() {
+                    for enum_info in self.types.enums.values() {
                         for (tag, variant) in enum_info.variants.iter().enumerate() {
                             if variant.name == *name {
                                 let mut ir = String::new();
@@ -236,13 +236,13 @@ impl CodeGenerator {
                     }
                     // Fallback if not found (shouldn't happen)
                     Ok((format!("@{}", name), String::new()))
-                } else if let Some(const_info) = self.constants.get(name).cloned() {
+                } else if let Some(const_info) = self.types.constants.get(name).cloned() {
                     // Constant reference - inline the constant value
                     self.generate_expr(&const_info.value, counter)
-                } else if self.functions.contains_key(name.as_str()) {
+                } else if self.types.functions.contains_key(name.as_str()) {
                     // Function reference
                     Ok((format!("@{}", name), String::new()))
-                } else if let Some(self_local) = self.locals.get("self").cloned() {
+                } else if let Some(self_local) = self.fn_ctx.locals.get("self").cloned() {
                     // Implicit self: check if name is a field of the self struct
                     let self_type = match &self_local.ty {
                         ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
@@ -255,7 +255,7 @@ impl CodeGenerator {
                     } = &self_type
                     {
                         let resolved_name = self.resolve_struct_name(type_name);
-                        if let Some(struct_info) = self.structs.get(&resolved_name).cloned() {
+                        if let Some(struct_info) = self.types.structs.get(&resolved_name).cloned() {
                             if let Some(field_idx) =
                                 struct_info.fields.iter().position(|(n, _)| n == name)
                             {
@@ -282,10 +282,10 @@ impl CodeGenerator {
                     }
                     // Not a field, fall through to error
                     let mut candidates: Vec<&str> = Vec::new();
-                    for var_name in self.locals.keys() {
+                    for var_name in self.fn_ctx.locals.keys() {
                         candidates.push(var_name.as_str());
                     }
-                    for func_name in self.functions.keys() {
+                    for func_name in self.types.functions.keys() {
                         candidates.push(func_name.as_str());
                     }
                     let suggestions = suggest_similar(name, &candidates, 3);
@@ -299,17 +299,17 @@ impl CodeGenerator {
                     let mut candidates: Vec<&str> = Vec::new();
 
                     // Add local variables
-                    for var_name in self.locals.keys() {
+                    for var_name in self.fn_ctx.locals.keys() {
                         candidates.push(var_name.as_str());
                     }
 
                     // Add function names
-                    for func_name in self.functions.keys() {
+                    for func_name in self.types.functions.keys() {
                         candidates.push(func_name.as_str());
                     }
 
                     // Add "self" if we're in a method context
-                    if self.current_function.is_some() {
+                    if self.fn_ctx.current_function.is_some() {
                         candidates.push("self");
                     }
 
@@ -325,7 +325,7 @@ impl CodeGenerator {
 
             Expr::SelfCall => {
                 // @ refers to current function
-                if let Some(fn_name) = &self.current_function {
+                if let Some(fn_name) = &self.fn_ctx.current_function {
                     Ok((format!("@{}", fn_name), String::new()))
                 } else {
                     Err(CodegenError::UndefinedFunction("@".to_string()))
@@ -574,7 +574,7 @@ impl CodeGenerator {
 
                 // Then block
                 ir.push_str(&format!("{}:\n", then_label));
-                self.current_block = then_label.clone();
+                self.fn_ctx.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) =
                     self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
@@ -591,7 +591,7 @@ impl CodeGenerator {
                     then_val.clone()
                 };
 
-                let then_actual_block = self.current_block.clone();
+                let then_actual_block = self.fn_ctx.current_block.clone();
                 // Only emit branch to merge if block is not terminated
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
@@ -602,7 +602,7 @@ impl CodeGenerator {
 
                 // Else block
                 ir.push_str(&format!("{}:\n", else_label));
-                self.current_block = else_label.clone();
+                self.fn_ctx.current_block = else_label.clone();
                 let (else_val, else_ir, else_terminated, nested_last_block, has_else) =
                     if let Some(else_branch) = else_ {
                         let (v, i, t, last) =
@@ -638,7 +638,7 @@ impl CodeGenerator {
                     if !nested_last_block.is_empty() {
                         nested_last_block
                     } else {
-                        self.current_block.clone()
+                        self.fn_ctx.current_block.clone()
                     }
                 } else {
                     String::new()
@@ -646,7 +646,7 @@ impl CodeGenerator {
 
                 // Merge block with phi node
                 ir.push_str(&format!("{}:\n", merge_label));
-                self.current_block = merge_label.clone();
+                self.fn_ctx.current_block = merge_label.clone();
                 let result = self.next_temp(counter);
 
                 // Check if the block type is void/unit - if so, don't generate phi nodes
@@ -714,7 +714,7 @@ impl CodeGenerator {
                 let loop_end = self.next_label("loop.end");
 
                 // Push loop labels for break/continue
-                self.loop_stack.push(LoopLabels {
+                self.fn_ctx.loop_stack.push(LoopLabels {
                     continue_label: loop_start.clone(),
                     break_label: loop_end.clone(),
                 });
@@ -765,7 +765,7 @@ impl CodeGenerator {
                 // Loop end
                 ir.push_str(&format!("{}:\n", loop_end));
 
-                self.loop_stack.pop();
+                self.fn_ctx.loop_stack.pop();
 
                 // Loop returns void by default (use break with value for expression)
                 Ok(("0".to_string(), ir))
@@ -778,7 +778,7 @@ impl CodeGenerator {
                 let loop_end = self.next_label("while.end");
 
                 // Push loop labels for break/continue
-                self.loop_stack.push(LoopLabels {
+                self.fn_ctx.loop_stack.push(LoopLabels {
                     continue_label: loop_start.clone(),
                     break_label: loop_end.clone(),
                 });
@@ -815,7 +815,7 @@ impl CodeGenerator {
                 // Loop end
                 ir.push_str(&format!("{}:\n", loop_end));
 
-                self.loop_stack.pop();
+                self.fn_ctx.loop_stack.pop();
 
                 Ok(("0".to_string(), ir))
             }
@@ -832,7 +832,7 @@ impl CodeGenerator {
                 let mut ir = val_ir;
 
                 if let Expr::Ident(name) = &target.node {
-                    if let Some(local) = self.locals.get(name).cloned() {
+                    if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                         if !local.is_param() {
                             let llvm_ty = self.type_to_llvm(&local.ty);
 
@@ -847,7 +847,7 @@ impl CodeGenerator {
                                     llvm_ty, val, llvm_ty, alloca_name
                                 ));
                                 // Upgrade from SSA to Alloca so future reads use load
-                                self.locals.insert(
+                                self.fn_ctx.locals.insert(
                                     name.clone(),
                                     LocalVar::alloca(local.ty.clone(), alloca_name),
                                 );
@@ -920,13 +920,13 @@ impl CodeGenerator {
 
                     // Get struct or union info
                     if let Expr::Ident(var_name) = &obj_expr.node {
-                        if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
+                        if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
                             if let ResolvedType::Named {
                                 name: type_name, ..
                             } = &local.ty
                             {
                                 // First check struct
-                                if let Some(struct_info) = self.structs.get(type_name).cloned() {
+                                if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
                                     if let Some(field_idx) = struct_info
                                         .fields
                                         .iter()
@@ -947,7 +947,7 @@ impl CodeGenerator {
                                     }
                                 }
                                 // Then check union
-                                else if let Some(union_info) = self.unions.get(type_name).cloned()
+                                else if let Some(union_info) = self.types.unions.get(type_name).cloned()
                                 {
                                     if let Some((_, field_ty)) =
                                         union_info.fields.iter().find(|(n, _)| n == &field.node)
@@ -1005,7 +1005,7 @@ impl CodeGenerator {
 
                 // Store back
                 if let Expr::Ident(name) = &target.node {
-                    if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                    if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                         if !local.is_param() {
                             let llvm_ty = self.type_to_llvm(&local.ty);
                             ir.push_str(&format!(
@@ -1295,7 +1295,7 @@ impl CodeGenerator {
                 {
                     let type_name = &self.resolve_struct_name(orig_type_name);
                     // First check if it's a struct
-                    if let Some(struct_info) = self.structs.get(type_name).cloned() {
+                    if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
                         let field_idx = struct_info
                             .fields
                             .iter()
@@ -1341,7 +1341,7 @@ impl CodeGenerator {
                         }
                     }
                     // Then check if it's a union
-                    else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                    else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
                         let field_ty = union_info
                             .fields
                             .iter()
@@ -1395,7 +1395,7 @@ impl CodeGenerator {
                 // Special case: @.method() means self.method() (call another method on self)
                 let (recv_val, recv_ir, recv_type) = if matches!(&receiver.node, Expr::SelfCall) {
                     // When receiver is @, use %self instead of the function pointer
-                    if let Some(local) = self.locals.get("self") {
+                    if let Some(local) = self.fn_ctx.locals.get("self") {
                         let recv_type = local.ty.clone();
                         ("%self".to_string(), String::new(), recv_type)
                     } else {
@@ -1487,7 +1487,7 @@ impl CodeGenerator {
 
                 // Determine return type from function registry
                 let ret_type = self
-                    .functions
+                    .types.functions
                     .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
@@ -1528,7 +1528,7 @@ impl CodeGenerator {
 
                 // Get return type from method signature
                 let ret_type = self
-                    .functions
+                    .types.functions
                     .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
@@ -1552,7 +1552,7 @@ impl CodeGenerator {
             Expr::Ref(inner) => {
                 // For simple references, just return the address
                 if let Expr::Ident(name) = &inner.node {
-                    if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                    if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                         if local.is_alloca() {
                             // Alloca variables already have an address
                             return Ok((format!("%{}", local.llvm_name), String::new()));
@@ -1750,8 +1750,8 @@ impl CodeGenerator {
                     vais_types::ComptimeValue::String(s) => {
                         // Create a global string constant
                         let name = self.make_string_name();
-                        self.string_counter += 1;
-                        self.string_constants.push((name.clone(), s.clone()));
+                        self.strings.counter += 1;
+                        self.strings.constants.push((name.clone(), s.clone()));
                         let len = s.len() + 1;
                         Ok((
                             format!(
@@ -1858,8 +1858,8 @@ impl CodeGenerator {
                 captures: _,
             } => {
                 // Generate a unique function name for this lambda
-                let lambda_name = format!("__lambda_{}", self.label_counter);
-                self.label_counter += 1;
+                let lambda_name = format!("__lambda_{}", self.fn_ctx.label_counter);
+                self.fn_ctx.label_counter += 1;
 
                 // Find captured variables by analyzing free variables in lambda body
                 let capture_names = self.find_lambda_captures(params, body);
@@ -1869,7 +1869,7 @@ impl CodeGenerator {
                 let mut capture_ir = String::new();
 
                 for cap_name in &capture_names {
-                    if let Some(local) = self.locals.get(cap_name) {
+                    if let Some(local) = self.fn_ctx.locals.get(cap_name) {
                         let ty = local.ty.clone();
                         // Load captured value if it's a local variable
                         if local.is_param() {
@@ -1917,16 +1917,16 @@ impl CodeGenerator {
 
                 // Store current function state (move instead of clone to avoid HashMap allocation).
                 // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
-                // so empty self.locals after take is acceptable (never accessed post-error).
-                let saved_function = self.current_function.take();
-                let saved_locals = std::mem::take(&mut self.locals);
+                // so empty self.fn_ctx.locals after take is acceptable (never accessed post-error).
+                let saved_function = self.fn_ctx.current_function.take();
+                let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
 
                 // Set up lambda context
-                self.current_function = Some(lambda_name.clone());
+                self.fn_ctx.current_function = Some(lambda_name.clone());
 
                 // Register captured variables as locals (using capture parameter names)
                 for (cap_name, cap_ty, _) in &captured_vars {
-                    self.locals.insert(
+                    self.fn_ctx.locals.insert(
                         cap_name.clone(),
                         LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
                     );
@@ -1935,7 +1935,7 @@ impl CodeGenerator {
                 // Register original parameters as locals
                 for p in params {
                     let ty = self.ast_type_to_resolved(&p.ty.node);
-                    self.locals.insert(
+                    self.fn_ctx.locals.insert(
                         p.name.node.clone(),
                         LocalVar::param(ty, p.name.node.clone()),
                     );
@@ -1955,11 +1955,11 @@ impl CodeGenerator {
                 lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
 
                 // Store lambda function for later emission
-                self.lambda_functions.push(lambda_ir);
+                self.lambdas.functions.push(lambda_ir);
 
                 // Restore function context
-                self.current_function = saved_function;
-                self.locals = saved_locals;
+                self.fn_ctx.current_function = saved_function;
+                self.fn_ctx.locals = saved_locals;
 
                 // Emit ptrtoint as a proper instruction (not a constant expression)
                 // so the result is a clean SSA temp that can be used anywhere
@@ -1973,11 +1973,11 @@ impl CodeGenerator {
 
                 // Store lambda info for Let statement to pick up
                 if captured_vars.is_empty() {
-                    self.last_lambda_info = None;
+                    self.lambdas.last_lambda_info = None;
                     Ok((fn_ptr_tmp, capture_ir))
                 } else {
                     // Store closure info with captured variable values
-                    self.last_lambda_info = Some(ClosureInfo {
+                    self.lambdas.last_lambda_info = Some(ClosureInfo {
                         func_name: lambda_name.clone(),
                         captures: captured_vars
                             .iter()
@@ -2121,8 +2121,8 @@ impl CodeGenerator {
         if let Expr::Ident(name) = &func.node {
             // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
             let resolved = self.resolve_struct_name(name);
-            if self.structs.contains_key(&resolved) && !self.functions.contains_key(name) {
-                if let Some(struct_info) = self.structs.get(&resolved).cloned() {
+            if self.types.structs.contains_key(&resolved) && !self.types.functions.contains_key(name) {
+                if let Some(struct_info) = self.types.structs.get(&resolved).cloned() {
                     let fields: Vec<_> = struct_info
                         .fields
                         .iter()
@@ -2491,7 +2491,7 @@ impl CodeGenerator {
             // Handle print_i64/print_f64 builtins: emit printf call
             // Skip if user defined their own function with the same name
             let has_user_print_i64 = self
-                .functions
+                .types.functions
                 .get("print_i64")
                 .map(|f| !f.is_extern)
                 .unwrap_or(false);
@@ -2500,7 +2500,7 @@ impl CodeGenerator {
             }
 
             let has_user_print_f64 = self
-                .functions
+                .types.functions
                 .get("print_f64")
                 .map(|f| !f.is_extern)
                 .unwrap_or(false);
@@ -2512,7 +2512,7 @@ impl CodeGenerator {
         // Check if this is a direct function call or indirect (lambda) call
         let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
             // Check if this is a generic function that needs monomorphization
-            if let Some(instantiations_list) = self.generic_fn_instantiations.get(name) {
+            if let Some(instantiations_list) = self.generics.fn_instantiations.get(name) {
                 // Infer argument types to select the right specialization
                 let arg_types: Vec<ResolvedType> =
                     args.iter().map(|a| self.infer_expr_type(a)).collect();
@@ -2521,11 +2521,11 @@ impl CodeGenerator {
                 let mangled =
                     self.resolve_generic_call(name, &arg_types, instantiations_list);
                 (mangled, false)
-            } else if self.functions.contains_key(name) {
+            } else if self.types.functions.contains_key(name) {
                 (name.clone(), false)
-            } else if self.locals.contains_key(name) {
+            } else if self.fn_ctx.locals.contains_key(name) {
                 (name.clone(), true) // Lambda call
-            } else if self.declared_functions.contains(name) {
+            } else if self.types.declared_functions.contains(name) {
                 // Function declared in module (may be generic, will instantiate later)
                 (name.clone(), false)
             } else {
@@ -2533,17 +2533,17 @@ impl CodeGenerator {
                 let mut candidates: Vec<&str> = Vec::new();
 
                 // Add declared function names (including generics)
-                for func_name in &self.declared_functions {
+                for func_name in &self.types.declared_functions {
                     candidates.push(func_name.as_str());
                 }
 
                 // Add instantiated function names
-                for func_name in self.functions.keys() {
+                for func_name in self.types.functions.keys() {
                     candidates.push(func_name.as_str());
                 }
 
                 // Add local variables (could be lambdas)
-                for var_name in self.locals.keys() {
+                for var_name in self.fn_ctx.locals.keys() {
                     candidates.push(var_name.as_str());
                 }
 
@@ -2555,7 +2555,7 @@ impl CodeGenerator {
                 )));
             }
         } else if let Expr::SelfCall = &func.node {
-            (self.current_function.clone().unwrap_or_default(), false)
+            (self.fn_ctx.current_function.clone().unwrap_or_default(), false)
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -2564,7 +2564,7 @@ impl CodeGenerator {
 
         // Look up function info for parameter types (only for direct calls)
         let fn_info = if !is_indirect {
-            self.functions.get(&fn_name).cloned()
+            self.types.functions.get(&fn_name).cloned()
         } else {
             None
         };
@@ -2741,7 +2741,7 @@ impl CodeGenerator {
 
         if is_indirect {
             // Check if this is a closure with captured variables
-            let closure_info = self.closures.get(&fn_name).cloned();
+            let closure_info = self.lambdas.closures.get(&fn_name).cloned();
 
             // Prepend captured values to arguments if this is a closure
             let mut all_args = Vec::new();
@@ -2767,7 +2767,7 @@ impl CodeGenerator {
             }
 
             // Get the local variable info
-            let local_info = self.locals.get(&fn_name).cloned();
+            let local_info = self.fn_ctx.locals.get(&fn_name).cloned();
             let is_ssa_or_param = local_info
                 .as_ref()
                 .map(|l| l.is_ssa() || l.is_param())
@@ -3093,7 +3093,7 @@ impl CodeGenerator {
         let type_name = &resolved_name;
 
         // First check if it's a struct
-        if let Some(struct_info) = self.structs.get(type_name).cloned() {
+        if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
             let mut ir = String::new();
 
             // Allocate struct on stack
@@ -3157,7 +3157,7 @@ impl CodeGenerator {
             // Return pointer to struct
             Ok((struct_ptr, ir))
         // Then check if it's a union
-        } else if let Some(union_info) = self.unions.get(type_name).cloned() {
+        } else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
             let mut ir = String::new();
 
             // Allocate union on stack

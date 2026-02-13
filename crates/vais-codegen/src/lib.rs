@@ -749,12 +749,116 @@ fn _suggest_type_conversion(expected: &str, found: &str) -> String {
 /// is_terminated is true if the block ends with break, continue, or return
 type _BlockResult = (String, String, bool);
 
+/// Type definitions registry — functions, structs, enums, unions, constants, globals, traits
+pub(crate) struct TypeRegistry {
+    /// All function names declared in the module (including generics, before instantiation)
+    pub(crate) declared_functions: std::collections::HashSet<String>,
+    /// Function signatures for lookup
+    pub(crate) functions: HashMap<String, FunctionInfo>,
+    /// Struct definitions
+    pub(crate) structs: HashMap<String, StructInfo>,
+    /// Enum definitions
+    pub(crate) enums: HashMap<String, EnumInfo>,
+    /// Union definitions (untagged, C-style)
+    pub(crate) unions: HashMap<String, UnionInfo>,
+    /// Constant definitions
+    pub(crate) constants: HashMap<String, types::ConstInfo>,
+    /// Global variable definitions
+    pub(crate) globals: HashMap<String, types::GlobalInfo>,
+    /// Trait definitions for vtable generation
+    pub(crate) trait_defs: HashMap<String, vais_types::TraitDef>,
+    /// Trait implementations: (impl_type, trait_name) -> method_impls
+    pub(crate) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
+    /// Resolved function signatures from type checker (for inferred parameter types)
+    pub(crate) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
+}
+
+/// Generic type system state — templates, instantiations, substitutions
+pub(crate) struct GenericState {
+    /// Generic struct AST definitions (before monomorphization)
+    pub(crate) struct_defs: HashMap<String, std::rc::Rc<vais_ast::Struct>>,
+    /// Generic struct name aliases (base_name -> mangled_name, e.g., "Box" -> "Box$i64")
+    pub(crate) struct_aliases: HashMap<String, String>,
+    /// Generated struct instantiations (mangled_name -> already_generated)
+    pub(crate) generated_structs: HashMap<String, bool>,
+    /// Generic function templates stored for specialization (base_name -> Function)
+    pub(crate) function_templates: HashMap<String, std::rc::Rc<Function>>,
+    /// Generic function instantiation map: base_name -> Vec<(type_args, mangled_name)>
+    pub(crate) fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
+    /// Generated function instantiations (mangled_name -> already_generated)
+    pub(crate) generated_functions: HashMap<String, bool>,
+    /// Generic substitutions for current function/method
+    pub(crate) substitutions: HashMap<String, ResolvedType>,
+}
+
+/// Current function compilation context — locals, labels, control flow
+pub(crate) struct FunctionContext {
+    /// Current function being compiled
+    pub(crate) current_function: Option<String>,
+    /// Current function's return type (for generating ret instructions in nested contexts)
+    pub(crate) current_return_type: Option<ResolvedType>,
+    /// Local variables in current function
+    pub(crate) locals: HashMap<String, LocalVar>,
+    /// Label counter for unique basic block names
+    pub(crate) label_counter: usize,
+    /// Stack of loop labels for break/continue
+    pub(crate) loop_stack: Vec<LoopLabels>,
+    /// Stack of deferred expressions per function (LIFO order)
+    pub(crate) defer_stack: Vec<vais_ast::Spanned<vais_ast::Expr>>,
+    /// Current basic block name (for phi node predecessor tracking)
+    pub(crate) current_block: String,
+    /// Current source file being compiled (for contract error messages)
+    pub(crate) current_file: Option<String>,
+}
+
+/// Lambda, closure, and async function state
+pub(crate) struct LambdaState {
+    /// Lambda functions generated during compilation
+    pub(crate) functions: Vec<String>,
+    /// Closure information for each lambda variable (maps var_name -> closure_info)
+    pub(crate) closures: HashMap<String, ClosureInfo>,
+    /// Last generated lambda info (for Let statement to pick up)
+    pub(crate) last_lambda_info: Option<ClosureInfo>,
+    /// Async function state machine counter
+    pub(crate) async_state_counter: usize,
+    /// Async await points
+    pub(crate) async_await_points: Vec<AsyncAwaitPoint>,
+    /// Current async function info
+    pub(crate) current_async_function: Option<AsyncFunctionInfo>,
+}
+
+/// String constant pool — string literals, counters, module prefix
+pub(crate) struct StringPool {
+    /// String constants for global storage (name, value)
+    pub(crate) constants: Vec<(String, String)>,
+    /// Counter for string constant names
+    pub(crate) counter: usize,
+    /// Module-specific prefix for string constants (avoids collisions in multi-module builds)
+    pub(crate) prefix: Option<String>,
+    /// Contract string constants (separate from regular strings)
+    pub(crate) contract_constants: HashMap<String, String>,
+    /// Counter for contract string constant names
+    pub(crate) contract_counter: usize,
+}
+
 /// LLVM IR Code Generator for Vais 0.0.1
 ///
 /// Generates LLVM IR text from typed AST for native code generation via clang.
 pub struct CodeGenerator {
-    // All function names declared in the module (including generics, before instantiation)
-    declared_functions: std::collections::HashSet<String>,
+    // Type definitions registry
+    pub(crate) types: TypeRegistry,
+
+    // Generic type system state
+    pub(crate) generics: GenericState,
+
+    // Current function compilation context
+    pub(crate) fn_ctx: FunctionContext,
+
+    // String constant pool
+    pub(crate) strings: StringPool,
+
+    // Lambda/closure/async state
+    pub(crate) lambdas: LambdaState,
 
     // Module name
     module_name: String,
@@ -762,83 +866,14 @@ pub struct CodeGenerator {
     // Target architecture
     target: TargetTriple,
 
-    // Function signatures for lookup
-    functions: HashMap<String, FunctionInfo>,
-
-    // Struct definitions
-    structs: HashMap<String, StructInfo>,
-
-    // Generic struct AST definitions (before monomorphization)
-    generic_struct_defs: HashMap<String, std::rc::Rc<vais_ast::Struct>>,
-
-    // Enum definitions
-    enums: HashMap<String, EnumInfo>,
-
-    // Union definitions (untagged, C-style)
-    unions: HashMap<String, UnionInfo>,
-
-    // Current function being compiled
-    current_function: Option<String>,
-
-    // Current function's return type (for generating ret instructions in nested contexts)
-    current_return_type: Option<ResolvedType>,
-
-    // Local variables in current function
-    locals: HashMap<String, LocalVar>,
-
-    // Label counter for unique basic block names
-    label_counter: usize,
-
-    // Stack of loop labels for break/continue
-    loop_stack: Vec<LoopLabels>,
-
-    // Stack of deferred expressions per function (LIFO order)
-    defer_stack: Vec<vais_ast::Spanned<vais_ast::Expr>>,
-
-    // String constants for global storage
-    string_constants: Vec<(String, String)>, // (name, value)
-
-    // Counter for string constant names
-    string_counter: usize,
-
-    // Lambda functions generated during compilation
-    lambda_functions: Vec<String>,
-
-    // Closure information for each lambda variable (maps var_name -> closure_info)
-    closures: HashMap<String, ClosureInfo>,
-
-    // Last generated lambda info (for Let statement to pick up)
-    last_lambda_info: Option<ClosureInfo>,
-
-    // Async function state machine info
-    async_state_counter: usize,
-    async_await_points: Vec<AsyncAwaitPoint>,
-    current_async_function: Option<AsyncFunctionInfo>,
-
     // Flag to emit unwrap panic message and abort declaration
     needs_unwrap_panic: bool,
 
     // Flag to emit string helper functions
     needs_string_helpers: bool,
 
-    // Current basic block name (for phi node predecessor tracking)
-    current_block: String,
-
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
-
-    // Generic substitutions for current function/method
-    // Maps generic param name (e.g., "T") to concrete type (e.g., ResolvedType::I64)
-    generic_substitutions: HashMap<String, ResolvedType>,
-
-    // Generated struct instantiations (mangled_name -> already_generated)
-    generated_structs: HashMap<String, bool>,
-
-    // Generic struct name aliases (base_name -> mangled_name, e.g., "Box" -> "Box$i64")
-    generic_struct_aliases: HashMap<String, String>,
-
-    // Generated function instantiations (mangled_name -> already_generated)
-    generated_functions: HashMap<String, bool>,
 
     // Cache for type_to_llvm conversions to avoid repeated computations
     // Uses interior mutability to allow caching through immutable references
@@ -851,23 +886,8 @@ pub struct CodeGenerator {
     // VTable generator for trait objects (dyn Trait)
     vtable_generator: vtable::VtableGenerator,
 
-    // Trait definitions for vtable generation
-    trait_defs: HashMap<String, vais_types::TraitDef>,
-
-    // Trait implementations: (impl_type, trait_name) -> method_impls
-    trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
-
     // Release mode flag (disables contract checks)
     release_mode: bool,
-
-    // Current source file being compiled (for contract error messages)
-    current_file: Option<String>,
-
-    // Contract string constants (separate from regular strings)
-    contract_string_constants: HashMap<String, String>,
-
-    // Counter for contract string constant names
-    contract_string_counter: usize,
 
     // Pre-state snapshots for old() expressions in ensures clauses
     // Maps snapshot variable name -> allocated storage name
@@ -877,27 +897,8 @@ pub struct CodeGenerator {
     // Maps function name -> (storage_var_name, decreases_expr_span)
     current_decreases_info: Option<DecreasesInfo>,
 
-    // Constant definitions
-    constants: HashMap<String, types::ConstInfo>,
-
-    // Global variable definitions
-    globals: HashMap<String, types::GlobalInfo>,
-
     // Type recursion depth tracking (prevents infinite recursion)
     type_recursion_depth: std::cell::Cell<usize>,
-
-    // Generic function instantiation map: base_name -> Vec<(type_args, mangled_name)>
-    // Used to resolve generic function calls to their mangled specialized names
-    generic_fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
-
-    // Generic function templates stored for specialization (base_name -> Function)
-    generic_function_templates: HashMap<String, std::rc::Rc<Function>>,
-
-    // Resolved function signatures from type checker (for inferred parameter types)
-    resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
-
-    // Module-specific prefix for string constants (avoids collisions in multi-module builds)
-    string_prefix: Option<String>,
 
     // WASM import metadata: function_name -> (module_name, import_name)
     pub(crate) wasm_imports: HashMap<String, (String, String)>,
@@ -939,55 +940,65 @@ impl CodeGenerator {
     /// * `target` - Target architecture for code generation
     pub fn new_with_target(module_name: &str, target: TargetTriple) -> Self {
         let mut gen = Self {
-            declared_functions: std::collections::HashSet::new(),
+            types: TypeRegistry {
+                declared_functions: std::collections::HashSet::new(),
+                functions: HashMap::new(),
+                structs: HashMap::new(),
+                enums: HashMap::new(),
+                unions: HashMap::new(),
+                constants: HashMap::new(),
+                globals: HashMap::new(),
+                trait_defs: HashMap::new(),
+                trait_impl_methods: HashMap::new(),
+                resolved_function_sigs: HashMap::new(),
+            },
+            generics: GenericState {
+                struct_defs: HashMap::new(),
+                struct_aliases: HashMap::new(),
+                generated_structs: HashMap::new(),
+                function_templates: HashMap::new(),
+                fn_instantiations: HashMap::new(),
+                generated_functions: HashMap::new(),
+                substitutions: HashMap::new(),
+            },
+            fn_ctx: FunctionContext {
+                current_function: None,
+                current_return_type: None,
+                locals: HashMap::new(),
+                label_counter: 0,
+                loop_stack: Vec::new(),
+                defer_stack: Vec::new(),
+                current_block: "entry".to_string(),
+                current_file: None,
+            },
+            strings: StringPool {
+                constants: Vec::new(),
+                counter: 0,
+                prefix: None,
+                contract_constants: HashMap::new(),
+                contract_counter: 0,
+            },
+            lambdas: LambdaState {
+                functions: Vec::new(),
+                closures: HashMap::new(),
+                last_lambda_info: None,
+                async_state_counter: 0,
+                async_await_points: Vec::new(),
+                current_async_function: None,
+            },
             module_name: module_name.to_string(),
             target,
-            functions: HashMap::new(),
-            structs: HashMap::new(),
-            generic_struct_defs: HashMap::new(),
-            enums: HashMap::new(),
-            unions: HashMap::new(),
-            current_function: None,
-            current_return_type: None,
-            locals: HashMap::new(),
-            label_counter: 0,
-            loop_stack: Vec::new(),
-            defer_stack: Vec::new(),
-            string_constants: Vec::new(),
-            string_counter: 0,
-            lambda_functions: Vec::new(),
-            closures: HashMap::new(),
-            last_lambda_info: None,
-            async_state_counter: 0,
-            async_await_points: Vec::new(),
-            current_async_function: None,
             needs_unwrap_panic: false,
             needs_string_helpers: false,
-            current_block: "entry".to_string(),
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
-            generic_substitutions: HashMap::new(),
-            generated_structs: HashMap::new(),
-            generic_struct_aliases: HashMap::new(),
-            generated_functions: HashMap::new(),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),
             gc_enabled: false,
             gc_threshold: 1048576, // 1 MB default
             vtable_generator: vtable::VtableGenerator::new(),
-            trait_defs: HashMap::new(),
-            trait_impl_methods: HashMap::new(),
             release_mode: false,
-            current_file: None,
-            contract_string_constants: HashMap::new(),
-            contract_string_counter: 0,
             old_snapshots: HashMap::new(),
             current_decreases_info: None,
-            constants: HashMap::new(),
-            globals: HashMap::new(),
             type_recursion_depth: std::cell::Cell::new(0),
-            generic_fn_instantiations: HashMap::new(),
-            generic_function_templates: HashMap::new(),
-            resolved_function_sigs: HashMap::new(),
-            string_prefix: None,
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
         };
@@ -1050,12 +1061,12 @@ impl CodeGenerator {
     /// Set resolved function signatures from the type checker.
     /// Used to provide inferred parameter types for functions with Type::Infer parameters.
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
-        self.resolved_function_sigs = resolved;
+        self.types.resolved_function_sigs = resolved;
     }
 
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
     pub fn set_string_prefix(&mut self, prefix: &str) {
-        self.string_prefix = Some(prefix.to_string());
+        self.strings.prefix = Some(prefix.to_string());
     }
 
     /// Generate WASM import/export attribute sections
@@ -1091,10 +1102,10 @@ impl CodeGenerator {
 
     /// Generate a unique string constant name, with optional module prefix
     fn make_string_name(&self) -> String {
-        if let Some(ref prefix) = self.string_prefix {
-            format!("{}.str.{}", prefix, self.string_counter)
+        if let Some(ref prefix) = self.strings.prefix {
+            format!("{}.str.{}", prefix, self.strings.counter)
         } else {
-            format!(".str.{}", self.string_counter)
+            format!(".str.{}", self.strings.counter)
         }
     }
 
@@ -1128,7 +1139,7 @@ impl CodeGenerator {
                 abi_version_len, abi_version
             ));
         }
-        for (name, value) in &self.string_constants {
+        for (name, value) in &self.strings.constants {
             let escaped = escape_llvm_string(value);
             let len = value.len() + 1;
             ir.push_str(&format!(
@@ -1136,7 +1147,7 @@ impl CodeGenerator {
                 name, len, escaped
             ));
         }
-        if !self.string_constants.is_empty() {
+        if !self.strings.constants.is_empty() {
             ir.push('\n');
         }
         if self.needs_unwrap_panic {
@@ -1148,7 +1159,7 @@ impl CodeGenerator {
     /// Emit body IR, lambda functions, and vtable globals.
     fn emit_body_lambdas_vtables(&self, ir: &mut String, body_ir: &str) {
         ir.push_str(body_ir);
-        for lambda_ir in &self.lambda_functions {
+        for lambda_ir in &self.lambdas.functions {
             ir.push('\n');
             ir.push_str(lambda_ir);
         }
@@ -1212,7 +1223,7 @@ impl CodeGenerator {
         // Snapshot builtin function keys (registered in constructor, before AST items)
         // These should NOT appear as cross-module extern declarations.
         let builtin_fn_keys: std::collections::HashSet<String> =
-            self.functions.keys().cloned().collect();
+            self.types.functions.keys().cloned().collect();
 
         // First pass: register ALL type definitions (structs, enums, unions) from full module
         // and register functions — tracking which are "ours" vs external
@@ -1280,15 +1291,15 @@ impl CodeGenerator {
         }
 
         // Generate struct types (all modules need these)
-        for (name, info) in &self.structs {
+        for (name, info) in &self.types.structs {
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
-        for (name, info) in &self.enums {
+        for (name, info) in &self.types.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
-        for (name, info) in &self.unions {
+        for (name, info) in &self.types.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
@@ -1297,7 +1308,7 @@ impl CodeGenerator {
         // Builtin helpers (is_extern = false) are handled separately below.
         let mut declared_fns = std::collections::HashSet::new();
         let mut sorted_fns: Vec<_> = self
-            .functions
+            .types.functions
             .iter()
             .filter(|(_, info)| info.is_extern)
             .collect();
@@ -1333,7 +1344,7 @@ impl CodeGenerator {
         // Generate extern declarations for cross-module Vais functions
         // (functions registered from AST but not in this module's item set)
         // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
-        for (name, info) in &self.functions {
+        for (name, info) in &self.types.functions {
             if !info.is_extern
                 && !module_functions.contains(name)
                 && !declared_fns.contains(name)
@@ -1402,7 +1413,7 @@ impl CodeGenerator {
             let mut sorted_helpers: Vec<_> = builtin_fn_keys.iter().collect();
             sorted_helpers.sort();
             for key in sorted_helpers {
-                if let Some(info) = self.functions.get(key) {
+                if let Some(info) = self.types.functions.get(key) {
                     if !info.is_extern
                         && !declared_fns.contains(&info.signature.name)
                         && !module_functions.contains(key)
@@ -1425,7 +1436,7 @@ impl CodeGenerator {
             }
         }
 
-        if !self.contract_string_constants.is_empty() {
+        if !self.strings.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }
@@ -1452,7 +1463,7 @@ impl CodeGenerator {
 
     /// Set current source file for error messages
     pub fn set_source_file(&mut self, file: &str) {
-        self.current_file = Some(file.to_string());
+        self.fn_ctx.current_file = Some(file.to_string());
     }
 
     /// Check if a function call is recursive (calls the current function with decreases clause)
@@ -1473,26 +1484,26 @@ impl CodeGenerator {
 
     /// Get current generic substitution for a type parameter
     pub(crate) fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
-        self.generic_substitutions.get(param).cloned()
+        self.generics.substitutions.get(param).cloned()
     }
 
     /// Set generic substitutions for the current context
     pub(crate) fn _set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
-        self.generic_substitutions = subst;
+        self.generics.substitutions = subst;
     }
 
     /// Clear generic substitutions
     pub(crate) fn _clear_generic_substitutions(&mut self) {
-        self.generic_substitutions.clear();
+        self.generics.substitutions.clear();
     }
 
     /// Resolve a struct name, checking aliases for generic specializations.
     /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
     pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
-        if self.structs.contains_key(name) {
+        if self.types.structs.contains_key(name) {
             return name.to_string();
         }
-        if let Some(mangled) = self.generic_struct_aliases.get(name) {
+        if let Some(mangled) = self.generics.struct_aliases.get(name) {
             return mangled.clone();
         }
         name.to_string()
@@ -1548,7 +1559,7 @@ impl CodeGenerator {
             ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
             ResolvedType::Named { name, .. } => {
                 // Calculate struct size
-                if let Some(info) = self.structs.get(name) {
+                if let Some(info) = self.types.structs.get(name) {
                     info.fields.iter().map(|(_, t)| self._type_size(t)).sum()
                 } else {
                     8 // Default to pointer size
@@ -1556,7 +1567,7 @@ impl CodeGenerator {
             }
             ResolvedType::Generic(param) => {
                 // Try to get concrete type from substitutions
-                if let Some(concrete) = self.generic_substitutions.get(param) {
+                if let Some(concrete) = self.generics.substitutions.get(param) {
                     self._type_size(concrete)
                 } else {
                     8 // Default to i64 size
@@ -1573,7 +1584,7 @@ impl CodeGenerator {
 
     /// Register a trait definition for vtable generation
     pub fn register_trait(&mut self, trait_def: vais_types::TraitDef) {
-        self.trait_defs.insert(trait_def.name.clone(), trait_def);
+        self.types.trait_defs.insert(trait_def.name.clone(), trait_def);
     }
 
     /// Register a trait from AST definition (converts AST Trait to TraitDef)
@@ -1630,7 +1641,7 @@ impl CodeGenerator {
         trait_name: &str,
         method_impls: HashMap<String, String>,
     ) {
-        self.trait_impl_methods.insert(
+        self.types.trait_impl_methods.insert(
             (impl_type.to_string(), trait_name.to_string()),
             method_impls,
         );
@@ -1642,9 +1653,9 @@ impl CodeGenerator {
         impl_type: &str,
         trait_name: &str,
     ) -> Option<vtable::VtableInfo> {
-        let trait_def = self.trait_defs.get(trait_name)?.clone();
+        let trait_def = self.types.trait_defs.get(trait_name)?.clone();
         let method_impls = self
-            .trait_impl_methods
+            .types.trait_impl_methods
             .get(&(impl_type.to_string(), trait_name.to_string()))
             .cloned()
             .unwrap_or_default();
@@ -1660,7 +1671,7 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         for vtable_info in self.vtable_generator.get_vtables() {
-            if let Some(trait_def) = self.trait_defs.get(&vtable_info.trait_name) {
+            if let Some(trait_def) = self.types.trait_defs.get(&vtable_info.trait_name) {
                 let type_size = 8; // Default size, could be refined
                 let type_align = 8; // Default alignment
 
@@ -1713,7 +1724,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let trait_def = self
-            .trait_defs
+            .types.trait_defs
             .get(trait_name)
             .ok_or_else(|| CodegenError::Unsupported(format!("Unknown trait: {}", trait_name)))?;
 
@@ -1759,8 +1770,8 @@ impl CodeGenerator {
             "Invalid label prefix: '{}'. Must be non-empty and contain only alphanumeric, '.', or '_' characters.",
             prefix
         );
-        let label = format!("{}{}", prefix, self.label_counter);
-        self.label_counter += 1;
+        let label = format!("{}{}", prefix, self.fn_ctx.label_counter);
+        self.fn_ctx.label_counter += 1;
         label
     }
 
@@ -1900,19 +1911,19 @@ impl CodeGenerator {
         }
 
         // Generate struct types
-        for (name, info) in &self.structs {
+        for (name, info) in &self.types.structs {
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
 
         // Generate enum types
-        for (name, info) in &self.enums {
+        for (name, info) in &self.types.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
-        for (name, info) in &self.unions {
+        for (name, info) in &self.types.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
@@ -1922,7 +1933,7 @@ impl CodeGenerator {
         // to ensure correct C type signatures in declare statements
         let mut declared_fns = std::collections::HashSet::new();
         let mut sorted_fns: Vec<_> = self
-            .functions
+            .types.functions
             .iter()
             .filter(|(_, info)| info.is_extern)
             .collect();
@@ -2016,7 +2027,7 @@ impl CodeGenerator {
         }
 
         // Add contract runtime declarations if any contracts are present
-        if !self.contract_string_constants.is_empty() {
+        if !self.strings.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }
@@ -2075,11 +2086,11 @@ impl CodeGenerator {
             match &item.node {
                 Item::Function(f) => {
                     // Track this function name (generic or not)
-                    self.declared_functions.insert(f.name.node.clone());
+                    self.types.declared_functions.insert(f.name.node.clone());
 
                     if !f.generics.is_empty() {
                         // Store generic function for later specialization
-                        self.generic_function_templates
+                        self.generics.function_templates
                             .insert(f.name.node.clone(), std::rc::Rc::new(f.clone()));
                     } else {
                         self.register_function(f)?;
@@ -2088,7 +2099,7 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     if !s.generics.is_empty() {
                         // Store generic struct for later specialization
-                        self.generic_struct_defs
+                        self.generics.struct_defs
                             .insert(s.name.node.clone(), std::rc::Rc::new(s.clone()));
                     } else {
                         self.register_struct(s)?;
@@ -2138,9 +2149,9 @@ impl CodeGenerator {
         // Build generic function instantiation mapping and register specialized function signatures
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
-                if let Some(generic_fn) = self.generic_function_templates.get(&inst.base_name).cloned() {
+                if let Some(generic_fn) = self.generics.function_templates.get(&inst.base_name).cloned() {
                     // Build instantiation mapping: base_name -> [(type_args, mangled_name)]
-                    self.generic_fn_instantiations
+                    self.generics.fn_instantiations
                         .entry(inst.base_name.clone())
                         .or_default()
                         .push((inst.type_args.clone(), inst.mangled_name.clone()));
@@ -2173,7 +2184,7 @@ impl CodeGenerator {
                         })
                         .unwrap_or(ResolvedType::Unit);
 
-                    self.functions.insert(
+                    self.types.functions.insert(
                         inst.mangled_name.clone(),
                         FunctionInfo {
                             signature: vais_types::FunctionSig {
@@ -2194,15 +2205,15 @@ impl CodeGenerator {
         // Generate specialized struct types from instantiations
         for inst in instantiations {
             if let vais_types::InstantiationKind::Struct = inst.kind {
-                if let Some(generic_struct) = self.generic_struct_defs.get(&inst.base_name).cloned() {
+                if let Some(generic_struct) = self.generics.struct_defs.get(&inst.base_name).cloned() {
                     self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
                 }
             }
         }
 
         // Generate non-generic struct types (skip already-emitted specialized generics)
-        for (name, info) in &self.structs {
-            if self.generated_structs.contains_key(name) {
+        for (name, info) in &self.types.structs {
+            if self.generics.generated_structs.contains_key(name) {
                 continue;
             }
             ir.push_str(&self.generate_struct_type(name, info));
@@ -2210,13 +2221,13 @@ impl CodeGenerator {
         }
 
         // Generate enum types
-        for (name, info) in &self.enums {
+        for (name, info) in &self.types.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
-        for (name, info) in &self.unions {
+        for (name, info) in &self.types.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
@@ -2225,7 +2236,7 @@ impl CodeGenerator {
         // Prioritize non-aliased functions (key == name) over aliased ones (key != name)
         let mut declared_fns = std::collections::HashSet::new();
         let mut sorted_fns: Vec<_> = self
-            .functions
+            .types.functions
             .iter()
             .filter(|(_, info)| info.is_extern)
             .collect();
@@ -2244,7 +2255,7 @@ impl CodeGenerator {
         // Generate specialized functions from instantiations
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
-                if let Some(generic_fn) = self.generic_function_templates.get(&inst.base_name).cloned() {
+                if let Some(generic_fn) = self.generics.function_templates.get(&inst.base_name).cloned() {
                     body_ir.push_str(&self.generate_specialized_function(&generic_fn, inst)?);
                     body_ir.push('\n');
                 }
@@ -2321,7 +2332,7 @@ impl CodeGenerator {
         }
 
         // Add contract runtime declarations if any contracts are present
-        if !self.contract_string_constants.is_empty() {
+        if !self.strings.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }
@@ -2367,7 +2378,7 @@ impl CodeGenerator {
         }
 
         // Look up the generic function template to map argument types to type parameters
-        if let Some(template) = self.generic_function_templates.get(base_name) {
+        if let Some(template) = self.generics.function_templates.get(base_name) {
             let type_params: Vec<&String> = template
                 .generics
                 .iter()
@@ -2404,7 +2415,7 @@ impl CodeGenerator {
 
         // Fallback: try to mangle based on argument types directly
         let mangled = vais_types::mangle_name(base_name, arg_types);
-        if self.functions.contains_key(&mangled) {
+        if self.types.functions.contains_key(&mangled) {
             return mangled;
         }
 

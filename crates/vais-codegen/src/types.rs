@@ -295,9 +295,9 @@ impl CodeGenerator {
                 } else if !generics.is_empty() {
                     // In Vais, all values are i64-sized, so struct/enum/union layout is the same
                     // regardless of type arguments. Use base name for enums, structs, and unions.
-                    if self.enums.contains_key(name)
-                        || self.structs.contains_key(name)
-                        || self.unions.contains_key(name)
+                    if self.types.enums.contains_key(name)
+                        || self.types.structs.contains_key(name)
+                        || self.types.unions.contains_key(name)
                     {
                         format!("%{}", name)
                     } else {
@@ -682,7 +682,7 @@ impl CodeGenerator {
             ResolvedType::Result(_, _) => 8, // tag + value in i64
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
             ResolvedType::Named { name, .. } => {
-                if let Some(struct_info) = self.structs.get(name) {
+                if let Some(struct_info) = self.types.structs.get(name) {
                     struct_info
                         .fields
                         .iter()
@@ -716,7 +716,7 @@ impl CodeGenerator {
                 .max()
                 .unwrap_or(8),
             ResolvedType::Named { name, .. } => {
-                if let Some(struct_info) = self.structs.get(name) {
+                if let Some(struct_info) = self.types.structs.get(name) {
                     struct_info
                         .fields
                         .iter()

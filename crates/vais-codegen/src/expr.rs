@@ -18,9 +18,9 @@ impl CodeGenerator {
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
-                let name = format!(".str.{}", self.string_counter);
-                self.string_counter += 1;
-                self.string_constants.push((name.clone(), s.clone()));
+                let name = format!(".str.{}", self.strings.counter);
+                self.strings.counter += 1;
+                self.strings.constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;
                 Ok((
                     format!(
@@ -43,7 +43,7 @@ impl CodeGenerator {
         name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        if let Some(local) = self.locals.get(name).cloned() {
+        if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
             if local.is_param() {
                 Ok((format!("%{}", local.llvm_name), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
@@ -65,9 +65,9 @@ impl CodeGenerator {
             }
         } else if name == "self" {
             Ok(("%self".to_string(), String::new()))
-        } else if self.functions.contains_key(name) {
+        } else if self.types.functions.contains_key(name) {
             Ok((format!("@{}", name), String::new()))
-        } else if let Some(self_local) = self.locals.get("self").cloned() {
+        } else if let Some(self_local) = self.fn_ctx.locals.get("self").cloned() {
             // Implicit self: check if name is a field of the self struct
             let self_type = match &self_local.ty {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
@@ -78,7 +78,7 @@ impl CodeGenerator {
             } = &self_type
             {
                 let resolved_name = self.resolve_struct_name(type_name);
-                if let Some(struct_info) = self.structs.get(&resolved_name).cloned() {
+                if let Some(struct_info) = self.types.structs.get(&resolved_name).cloned() {
                     if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name)
                     {
                         let field_ty = &struct_info.fields[field_idx].1;
@@ -105,10 +105,10 @@ impl CodeGenerator {
             }
             // Not a field, fall through to error
             let mut candidates: Vec<&str> = Vec::new();
-            for var_name in self.locals.keys() {
+            for var_name in self.fn_ctx.locals.keys() {
                 candidates.push(var_name.as_str());
             }
-            for func_name in self.functions.keys() {
+            for func_name in self.types.functions.keys() {
                 candidates.push(func_name.as_str());
             }
             candidates.push("self");
@@ -123,17 +123,17 @@ impl CodeGenerator {
             let mut candidates: Vec<&str> = Vec::new();
 
             // Add local variables
-            for var_name in self.locals.keys() {
+            for var_name in self.fn_ctx.locals.keys() {
                 candidates.push(var_name.as_str());
             }
 
             // Add function names
-            for func_name in self.functions.keys() {
+            for func_name in self.types.functions.keys() {
                 candidates.push(func_name.as_str());
             }
 
             // Add "self" if we're in a method context
-            if self.current_function.is_some() {
+            if self.fn_ctx.current_function.is_some() {
                 candidates.push("self");
             }
 
@@ -275,7 +275,7 @@ impl CodeGenerator {
 
         match &target.node {
             Expr::Ident(name) => {
-                if let Some(local) = self.locals.get(name).cloned() {
+                if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     let ir = format!(
                         "{}  store {} {}, {}* %{}\n",
@@ -284,7 +284,7 @@ impl CodeGenerator {
                     Ok((val.clone(), ir))
                 } else {
                     // Collect all available symbols for suggestions
-                    let candidates: Vec<&str> = self.locals.keys().map(|s| s.as_str()).collect();
+                    let candidates: Vec<&str> = self.fn_ctx.locals.keys().map(|s| s.as_str()).collect();
 
                     let suggestions = crate::suggest_similar(name, &candidates, 3);
                     let suggestion_text = crate::format_did_you_mean(&suggestions);
@@ -364,7 +364,7 @@ impl CodeGenerator {
             name: struct_name, ..
         } = &obj_type
         {
-            if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+            if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
                 let field_idx = struct_info
                     .fields
                     .iter()
@@ -453,7 +453,7 @@ impl CodeGenerator {
         // Now store back
         match &target.node {
             Expr::Ident(name) => {
-                if let Some(local) = self.locals.get(name).cloned() {
+                if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     let ir = format!(
                         "{}  store {} {}, {}* %{}\n",

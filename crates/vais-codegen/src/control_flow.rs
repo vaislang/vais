@@ -64,7 +64,7 @@ impl CodeGenerator {
 
                 // Then branch
                 writeln!(ir, "{}:", then_label).unwrap();
-                self.current_block = then_label.clone();
+                self.fn_ctx.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) =
                     self.generate_block_stmts(then_stmts, counter)?;
                 ir.push_str(&then_ir);
@@ -78,7 +78,7 @@ impl CodeGenerator {
                     then_val.clone()
                 };
 
-                let then_actual_block = self.current_block.clone();
+                let then_actual_block = self.fn_ctx.current_block.clone();
                 let then_from_label = if !then_terminated {
                     writeln!(ir, "  br label %{}", local_merge).unwrap();
                     then_actual_block
@@ -88,7 +88,7 @@ impl CodeGenerator {
 
                 // Else branch
                 writeln!(ir, "{}:", else_label).unwrap();
-                self.current_block = else_label.clone();
+                self.fn_ctx.current_block = else_label.clone();
                 let has_else = else_branch.is_some();
                 let (else_val, else_ir, else_terminated, nested_last_block) =
                     if let Some(nested) = else_branch {
@@ -119,7 +119,7 @@ impl CodeGenerator {
                     if !nested_last_block.is_empty() {
                         nested_last_block
                     } else {
-                        self.current_block.clone()
+                        self.fn_ctx.current_block.clone()
                     }
                 } else {
                     String::new()
@@ -139,7 +139,7 @@ impl CodeGenerator {
 
                 // Merge
                 writeln!(ir, "{}:", local_merge).unwrap();
-                self.current_block = local_merge.clone();
+                self.fn_ctx.current_block = local_merge.clone();
                 let result = self.next_temp(counter);
 
                 // Check if the block type is void/unit - if so, don't generate phi nodes
@@ -489,9 +489,9 @@ impl CodeGenerator {
                     let mut ir = String::new();
 
                     // Create string constant for the pattern
-                    let const_name = format!(".str_pat.{}", self.string_counter);
-                    self.string_counter += 1;
-                    self.string_constants.push((const_name.clone(), s.clone()));
+                    let const_name = format!(".str_pat.{}", self.strings.counter);
+                    self.strings.counter += 1;
+                    self.strings.constants.push((const_name.clone(), s.clone()));
 
                     // Get pointer to the constant string
                     let str_ptr = self.next_temp(counter);
@@ -632,7 +632,7 @@ impl CodeGenerator {
                 let mut ir = String::new();
                 let mut checks: Vec<String> = Vec::new();
 
-                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
                     for (field_name, field_pat) in fields {
                         // Find field index
                         if let Some(field_idx) = struct_info
@@ -677,7 +677,7 @@ impl CodeGenerator {
 
     /// Get the tag value for an enum variant
     pub(crate) fn get_enum_variant_tag(&self, variant_name: &str) -> i32 {
-        for enum_info in self.enums.values() {
+        for enum_info in self.types.enums.values() {
             for (i, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == variant_name {
                     return i as i32;
@@ -689,7 +689,7 @@ impl CodeGenerator {
 
     /// Get the enum name that contains a given variant
     pub(crate) fn get_enum_name_for_variant(&self, variant_name: &str) -> Option<String> {
-        for enum_info in self.enums.values() {
+        for enum_info in self.types.enums.values() {
             for variant in &enum_info.variants {
                 if variant.name == variant_name {
                     return Some(enum_info.name.clone());
@@ -702,7 +702,7 @@ impl CodeGenerator {
     /// Check if a name is a unit enum variant (not a binding)
     pub(crate) fn is_unit_enum_variant(&self, name: &str) -> bool {
         use crate::types::EnumVariantFields;
-        for enum_info in self.enums.values() {
+        for enum_info in self.types.enums.values() {
             for variant in &enum_info.variants {
                 if variant.name == name {
                     return matches!(variant.fields, EnumVariantFields::Unit);
@@ -715,7 +715,7 @@ impl CodeGenerator {
     /// Check if a name is a tuple enum variant and get its enum name and tag
     pub(crate) fn get_tuple_variant_info(&self, name: &str) -> Option<(String, i32)> {
         use crate::types::EnumVariantFields;
-        for enum_info in self.enums.values() {
+        for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == name && matches!(variant.fields, EnumVariantFields::Tuple(_)) {
                     return Some((enum_info.name.clone(), tag as i32));
@@ -748,7 +748,7 @@ impl CodeGenerator {
                 let _llvm_name = format!("{}.{}", name, counter);
                 *counter += 1;
 
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     name.clone(),
                     LocalVar::ssa(ty.clone(), match_val.to_string()),
                 );
@@ -815,7 +815,7 @@ impl CodeGenerator {
                 let struct_name = &name.node;
                 let mut ir = String::new();
 
-                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
                     for (field_name, field_pat) in fields {
                         // If field_pat is None, bind the field to its own name
                         if let Some(field_idx) = struct_info
@@ -839,7 +839,7 @@ impl CodeGenerator {
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Bind to field name directly using SSA style
-                                self.locals.insert(
+                                self.fn_ctx.locals.insert(
                                     field_name.node.clone(),
                                     LocalVar::ssa(field_ty.clone(), field_val.clone()),
                                 );

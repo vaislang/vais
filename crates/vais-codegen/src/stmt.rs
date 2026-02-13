@@ -49,8 +49,8 @@ impl CodeGenerator {
                     || if let Expr::Call { func, .. } = &value.node {
                         if let Expr::Ident(fn_name) = &func.node {
                             let resolved = self.resolve_struct_name(fn_name);
-                            self.structs.contains_key(&resolved)
-                                && !self.functions.contains_key(fn_name)
+                            self.types.structs.contains_key(&resolved)
+                                && !self.types.functions.contains_key(fn_name)
                         } else {
                             false
                         }
@@ -126,14 +126,14 @@ impl CodeGenerator {
                 if use_ssa {
                     // SSA style: directly alias the value, no alloca needed
                     // The llvm_name will refer to the computed value directly
-                    self.locals.insert(
+                    self.fn_ctx.locals.insert(
                         name.node.clone(),
                         LocalVar::ssa(resolved_ty.clone(), val.clone()),
                     );
                     // No additional IR needed - we just register the mapping
                 } else {
                     // Traditional alloca style
-                    self.locals.insert(
+                    self.fn_ctx.locals.insert(
                         name.node.clone(),
                         LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
                     );
@@ -174,8 +174,8 @@ impl CodeGenerator {
                 }
 
                 // If this was a lambda with captures, register the closure info
-                if let Some(closure_info) = self.last_lambda_info.take() {
-                    self.closures.insert(name.node.clone(), closure_info);
+                if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
+                    self.lambdas.closures.insert(name.node.clone(), closure_info);
                 }
 
                 Ok(("void".to_string(), ir))
@@ -192,8 +192,8 @@ impl CodeGenerator {
                     let (val, mut ir) = self.generate_expr(expr, counter)?;
 
                     // Get the return type of the current function
-                    let (ret_type, ret_resolved) = if let Some(fn_name) = &self.current_function {
-                        self.functions
+                    let (ret_type, ret_resolved) = if let Some(fn_name) = &self.fn_ctx.current_function {
+                        self.types.functions
                             .get(fn_name)
                             .map(|info| {
                                 (
@@ -209,7 +209,7 @@ impl CodeGenerator {
                     // For struct-typed local variables, we get a pointer from generate_expr
                     // but we need to return by value, so dereference the pointer
                     let final_val = if let Expr::Ident(name) = &expr.node {
-                        if let Some(local) = self.locals.get(name) {
+                        if let Some(local) = self.fn_ctx.locals.get(name) {
                             if !local.is_param()
                                 && matches!(local.ty, ResolvedType::Named { .. })
                                 && matches!(ret_resolved, ResolvedType::Named { .. })
@@ -249,7 +249,7 @@ impl CodeGenerator {
                 }
             }
             Stmt::Break(value) => {
-                if let Some(labels) = self.loop_stack.last() {
+                if let Some(labels) = self.fn_ctx.loop_stack.last() {
                     let break_label = labels.break_label.clone();
                     let mut ir = String::new();
                     if let Some(expr) = value {
@@ -269,7 +269,7 @@ impl CodeGenerator {
                 }
             }
             Stmt::Continue => {
-                if let Some(labels) = self.loop_stack.last() {
+                if let Some(labels) = self.fn_ctx.loop_stack.last() {
                     let continue_label = labels.continue_label.clone();
                     let ir = format!("  br label %{}\n", continue_label);
                     Ok(("void".to_string(), ir))
@@ -283,7 +283,7 @@ impl CodeGenerator {
             Stmt::Defer(expr) => {
                 // Add the deferred expression to the stack
                 // It will be executed when the function exits (in LIFO order)
-                self.defer_stack.push(expr.as_ref().clone());
+                self.fn_ctx.defer_stack.push(expr.as_ref().clone());
                 // No IR generated here - defer is processed at function exit
                 Ok(("void".to_string(), String::new()))
             }
@@ -357,7 +357,7 @@ impl CodeGenerator {
             }
             Pattern::Ident(name) => {
                 // Register as SSA local (immutable binding)
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     name.clone(),
                     LocalVar::ssa(resolved_ty.clone(), val.to_string()),
                 );
@@ -376,7 +376,7 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         // Process deferred expressions in reverse order (LIFO)
-        let defers: Vec<_> = self.defer_stack.iter().rev().cloned().collect();
+        let defers: Vec<_> = self.fn_ctx.defer_stack.iter().rev().cloned().collect();
         for defer_expr in defers {
             ir.push_str("  ; defer cleanup\n");
             let (_, defer_ir) = self.generate_expr(&defer_expr, counter)?;
@@ -388,6 +388,6 @@ impl CodeGenerator {
 
     /// Clear the defer stack (called when entering a new function)
     pub(crate) fn clear_defer_stack(&mut self) {
-        self.defer_stack.clear();
+        self.fn_ctx.defer_stack.clear();
     }
 }

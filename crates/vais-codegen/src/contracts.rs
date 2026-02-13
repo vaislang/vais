@@ -92,7 +92,7 @@ impl CodeGenerator {
 
         // Register 'return' in locals for expression generation
         // Use alloca since we stored the return value at return_var_name
-        self.locals.insert(
+        self.fn_ctx.locals.insert(
             "return".to_string(),
             crate::types::LocalVar::alloca(ret_type.clone(), return_var_name.clone()),
         );
@@ -108,7 +108,7 @@ impl CodeGenerator {
         }
 
         // Remove 'return' from locals
-        self.locals.remove("return");
+        self.fn_ctx.locals.remove("return");
 
         Ok(ir)
     }
@@ -163,7 +163,7 @@ impl CodeGenerator {
         let condition_str =
             self.get_or_create_contract_string(&format!("{} condition #{}", kind, idx));
         let file_name = self
-            .current_file
+            .fn_ctx.current_file
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
@@ -185,7 +185,7 @@ impl CodeGenerator {
     /// Get or create a contract string constant, returning an i8* GEP expression
     fn get_or_create_contract_string(&mut self, s: &str) -> String {
         // Check if we already have this string
-        if let Some(name) = self.contract_string_constants.get(s) {
+        if let Some(name) = self.strings.contract_constants.get(s) {
             return format!(
                 "getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
                 s.len() + 1,
@@ -195,10 +195,10 @@ impl CodeGenerator {
         }
 
         // Create a new string constant
-        let const_name = format!("@.str.contract.{}", self.contract_string_counter);
-        self.contract_string_counter += 1;
+        let const_name = format!("@.str.contract.{}", self.strings.contract_counter);
+        self.strings.contract_counter += 1;
 
-        self.contract_string_constants
+        self.strings.contract_constants
             .insert(s.to_string(), const_name.clone());
 
         format!(
@@ -212,7 +212,7 @@ impl CodeGenerator {
     /// Generate declarations for contract runtime functions
     pub(crate) fn generate_contract_declarations(&self) -> String {
         // Only generate if we have any contracts
-        if self.contract_string_constants.is_empty() && self.release_mode {
+        if self.strings.contract_constants.is_empty() && self.release_mode {
             return String::new();
         }
 
@@ -230,7 +230,7 @@ impl CodeGenerator {
     pub(crate) fn generate_contract_string_constants(&self) -> String {
         let mut ir = String::new();
 
-        for (s, name) in &self.contract_string_constants {
+        for (s, name) in &self.strings.contract_constants {
             let escaped = escape_string_for_llvm(s);
             writeln!(ir, "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", name, s.len() + 1, escaped).unwrap();
         }
@@ -371,7 +371,7 @@ impl CodeGenerator {
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str = self.get_or_create_contract_string(&format!("{} != null", param_name));
         let file_name = self
-            .current_file
+            .fn_ctx.current_file
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
@@ -570,7 +570,7 @@ impl CodeGenerator {
         let condition_str =
             self.get_or_create_contract_string(&format!("{} != 0 (division by zero)", param_name));
         let file_name = self
-            .current_file
+            .fn_ctx.current_file
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
@@ -667,7 +667,7 @@ impl CodeGenerator {
             // Default message
             let default_msg = format!(
                 "Assertion failed at {}:{}",
-                self.current_file.as_deref().unwrap_or("unknown"),
+                self.fn_ctx.current_file.as_deref().unwrap_or("unknown"),
                 self.debug_info.offset_to_line(condition.span.start)
             );
 
@@ -721,7 +721,7 @@ impl CodeGenerator {
 
             let fail_msg = format!(
                 "Assumption violated at {}:{}",
-                self.current_file.as_deref().unwrap_or("unknown"),
+                self.fn_ctx.current_file.as_deref().unwrap_or("unknown"),
                 self.debug_info.offset_to_line(condition.span.start)
             );
             let msg_const = self.get_or_create_contract_string(&fail_msg);
@@ -752,7 +752,7 @@ impl CodeGenerator {
         }
 
         // Look up struct's invariant attributes
-        let struct_info = self.structs.get(struct_name).cloned();
+        let struct_info = self.types.structs.get(struct_name).cloned();
         let invariants = struct_info
             .as_ref()
             .map(|s| s._invariants.clone())
@@ -768,10 +768,10 @@ impl CodeGenerator {
             // Generate the invariant condition
             // Note: The invariant expression can reference struct fields via 'self'
             // We need to set up 'self' to point to struct_ptr
-            let saved_self = self.locals.get("self").cloned();
+            let saved_self = self.fn_ctx.locals.get("self").cloned();
 
             if let Some(_si) = &struct_info {
-                self.locals.insert(
+                self.fn_ctx.locals.insert(
                     "self".to_string(),
                     crate::types::LocalVar::param(
                         ResolvedType::Named {
@@ -788,9 +788,9 @@ impl CodeGenerator {
 
             // Restore self
             if let Some(prev) = saved_self {
-                self.locals.insert("self".to_string(), prev);
+                self.fn_ctx.locals.insert("self".to_string(), prev);
             } else {
-                self.locals.remove("self");
+                self.fn_ctx.locals.remove("self");
             }
 
             // Generate check
@@ -810,13 +810,13 @@ impl CodeGenerator {
             let condition_str = self
                 .get_or_create_contract_string(&format!("invariant #{} of {}", idx, struct_name));
             let file_name = self
-                .current_file
+                .fn_ctx.current_file
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string());
             let file_str = self.get_or_create_contract_string(&file_name);
             let func_str = self.get_or_create_contract_string(
                 &self
-                    .current_function
+                    .fn_ctx.current_function
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string()),
             );
@@ -1065,11 +1065,11 @@ impl CodeGenerator {
         // First, save current locals state.
         // NOTE: clone required (not take) because generate_expr for args below
         // needs current locals to resolve variables in the calling scope.
-        let saved_locals = self.locals.clone();
+        let saved_locals = self.fn_ctx.locals.clone();
 
         // Get the function info to map parameters
         let func_name = &decreases_info.function_name;
-        let func_info = self.functions.get(func_name).cloned();
+        let func_info = self.types.functions.get(func_name).cloned();
 
         if let Some(ref info) = func_info {
             // Temporarily rebind parameters to call argument values
@@ -1091,7 +1091,7 @@ impl CodeGenerator {
                     writeln!(ir, "  store {} {}, {}* %{}", ty, arg_val, ty, temp_var).unwrap();
 
                     // Register in locals so generate_expr can find it
-                    self.locals.insert(
+                    self.fn_ctx.locals.insert(
                         param_name.clone(),
                         crate::types::LocalVar::alloca(param_type.clone(), temp_var),
                     );
@@ -1104,7 +1104,7 @@ impl CodeGenerator {
         ir.push_str(&new_ir);
 
         // Restore saved locals
-        self.locals = saved_locals;
+        self.fn_ctx.locals = saved_locals;
 
         // Load the original decreases value
         let old_value = self.next_temp(counter);
