@@ -10,8 +10,8 @@ use crate::ownership;
 use crate::traits::TraitImpl;
 use crate::traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
 use crate::types::{
-    self, EffectAnnotation, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult,
-    UnionDef, VariantFieldTypes,
+    self, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult, UnionDef,
+    VariantFieldTypes,
 };
 
 impl TypeChecker {
@@ -314,11 +314,8 @@ impl TypeChecker {
                 params,
                 ret,
                 is_async: f.is_async,
-                is_vararg: false,
                 required_params,
-                contracts: None, // Contracts will be extracted in check_function
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -359,16 +356,10 @@ impl TypeChecker {
             name.clone(),
             FunctionSig {
                 name,
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params,
                 ret,
-                is_async: false,
                 is_vararg: func.is_vararg,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -456,11 +447,7 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
             );
         }
@@ -631,7 +618,7 @@ impl TypeChecker {
                 );
                 return Err(TypeError::UndefinedType {
                     name: format!("trait {}", trait_name_str),
-                    span: None,
+                    span: Some(trait_name.span),
                     suggestion,
                 });
             }
@@ -660,7 +647,7 @@ impl TypeChecker {
                                 assoc_name, trait_name_str
                             ),
                             found: "missing".to_string(),
-                            span: None,
+                            span: None, // No span available for associated type validation
                         });
                     }
                 }
@@ -682,7 +669,7 @@ impl TypeChecker {
                                 method_name, trait_name_str
                             ),
                             found: "missing".to_string(),
-                            span: None,
+                            span: None, // No span available for trait method validation
                         });
                     }
                 }
@@ -735,11 +722,7 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
             ));
         }

@@ -1394,6 +1394,24 @@ pub struct FunctionSig {
     pub inferred_effects: Option<EffectSet>,
 }
 
+impl Default for FunctionSig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            generics: vec![],
+            generic_bounds: HashMap::new(),
+            params: vec![],
+            ret: ResolvedType::Unit,
+            is_async: false,
+            is_vararg: false,
+            required_params: None,
+            contracts: None,
+            effect_annotation: EffectAnnotation::Infer,
+            inferred_effects: None,
+        }
+    }
+}
+
 impl FunctionSig {
     /// Create a simple function signature with minimal fields
     pub fn simple(
@@ -1403,16 +1421,9 @@ impl FunctionSig {
     ) -> Self {
         Self {
             name: name.to_string(),
-            generics: vec![],
-            generic_bounds: HashMap::new(),
             params,
             ret,
-            is_async: false,
-            is_vararg: false,
-            required_params: None,
-            contracts: None,
-            effect_annotation: EffectAnnotation::Infer,
-            inferred_effects: None,
+            ..Default::default()
         }
     }
 
@@ -1424,16 +1435,9 @@ impl FunctionSig {
     ) -> Self {
         Self {
             name: name.to_string(),
-            generics: vec![],
-            generic_bounds: HashMap::new(),
             params,
             ret,
-            is_async: false,
-            is_vararg: false,
-            required_params: None,
-            contracts: None,
-            effect_annotation: EffectAnnotation::Infer,
-            inferred_effects: None,
+            ..Default::default()
         }
     }
 

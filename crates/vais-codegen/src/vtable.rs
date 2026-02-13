@@ -19,6 +19,7 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Write;
 use vais_types::{ResolvedType, TraitDef};
 
 /// LLVM IR type for trait object (fat pointer)
@@ -72,8 +73,7 @@ impl VtableGenerator {
         let mut ir = String::new();
 
         for drop_fn in &self.drop_functions {
-            ir.push_str(&format!(
-                r#"
+            write!(ir, r#"
 define void @{}(i8* %ptr) {{
 entry:
   %is_null = icmp eq i8* %ptr, null
@@ -87,9 +87,7 @@ do_free:
 done:
   ret void
 }}
-"#,
-                drop_fn
-            ));
+"#, drop_fn).unwrap();
         }
 
         ir
@@ -273,23 +271,14 @@ done:
         let alloc_name = format!("%trait_data_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = call i8* @malloc(i64 8)\n", // Simplified: assume 8 bytes
-            alloc_name
-        ));
+        writeln!(ir, "  {} = call i8* @malloc(i64 8)", alloc_name).unwrap(); // Simplified: assume 8 bytes
 
         // Store the concrete value
         let cast_ptr = format!("%trait_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = bitcast i8* {} to {}*\n",
-            cast_ptr, alloc_name, concrete_type
-        ));
-        ir.push_str(&format!(
-            "  store {} {}, {}* {}\n",
-            concrete_type, concrete_value, concrete_type, cast_ptr
-        ));
+        writeln!(ir, "  {} = bitcast i8* {} to {}*", cast_ptr, alloc_name, concrete_type).unwrap();
+        writeln!(ir, "  store {} {}, {}* {}", concrete_type, concrete_value, concrete_type, cast_ptr).unwrap();
 
         // Build the trait object struct
         let trait_obj_tmp1 = format!("%trait_obj_{}", *temp_counter);
@@ -301,22 +290,11 @@ done:
         let vtable_cast = format!("%vtable_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = bitcast {}* {} to i8*\n",
-            vtable_cast,
-            "%vtable_type",
-            vtable_info.global_name // Placeholder type
-        ));
+        writeln!(ir, "  {} = bitcast %vtable_type* {} to i8*", vtable_cast, vtable_info.global_name).unwrap(); // Placeholder type
 
         // Create the trait object { data_ptr, vtable_ptr }
-        ir.push_str(&format!(
-            "  {} = insertvalue {} undef, i8* {}, 0\n",
-            trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name
-        ));
-        ir.push_str(&format!(
-            "  {} = insertvalue {} {}, i8* {}, 1\n",
-            trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast
-        ));
+        writeln!(ir, "  {} = insertvalue {} undef, i8* {}, 0", trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name).unwrap();
+        writeln!(ir, "  {} = insertvalue {} {}, i8* {}, 1", trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast).unwrap();
 
         (ir, trait_obj_tmp2)
     }
@@ -338,29 +316,20 @@ done:
         let data_ptr = format!("%dyn_data_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 0\n",
-            data_ptr, TRAIT_OBJECT_TYPE, trait_object
-        ));
+        writeln!(ir, "  {} = extractvalue {} {}, 0", data_ptr, TRAIT_OBJECT_TYPE, trait_object).unwrap();
 
         // Extract vtable pointer from trait object
         let vtable_ptr = format!("%dyn_vtable_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 1\n",
-            vtable_ptr, TRAIT_OBJECT_TYPE, trait_object
-        ));
+        writeln!(ir, "  {} = extractvalue {} {}, 1", vtable_ptr, TRAIT_OBJECT_TYPE, trait_object).unwrap();
 
         // Cast vtable pointer to the correct vtable type
         let vtable_type = Self::vtable_struct_type(trait_def);
         let vtable_cast = format!("%vtable_typed_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = bitcast i8* {} to {}*\n",
-            vtable_cast, vtable_ptr, vtable_type
-        ));
+        writeln!(ir, "  {} = bitcast i8* {} to {}*", vtable_cast, vtable_ptr, vtable_type).unwrap();
 
         // Get the method function pointer from vtable
         // Method index is offset by 3 (drop, size, align)
@@ -368,10 +337,7 @@ done:
         let fn_ptr_ptr = format!("%fn_ptr_ptr_{}", *temp_counter);
         *temp_counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n",
-            fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot
-        ));
+        writeln!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 {}", fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot).unwrap();
 
         // Load the function pointer
         let fn_ptr = format!("%fn_ptr_{}", *temp_counter);
@@ -385,10 +351,7 @@ done:
             format!("{}(i8*, {})*", ret_type, extra_arg_types)
         };
 
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
-            fn_ptr, fn_type, fn_type, fn_ptr_ptr
-        ));
+        writeln!(ir, "  {} = load {}, {}* {}", fn_ptr, fn_type, fn_type, fn_ptr_ptr).unwrap();
 
         // Build argument list: data_ptr followed by method arguments
         let mut call_args = vec![format!("i8* {}", data_ptr)];
@@ -398,24 +361,13 @@ done:
 
         // Generate the indirect call
         let result = if ret_type == "void" {
-            ir.push_str(&format!(
-                "  call {} {}({})\n",
-                ret_type,
-                fn_ptr,
-                call_args.join(", ")
-            ));
+            writeln!(ir, "  call {} {}({})", ret_type, fn_ptr, call_args.join(", ")).unwrap();
             "".to_string()
         } else {
             let result_name = format!("%dyn_result_{}", *temp_counter);
             *temp_counter += 1;
 
-            ir.push_str(&format!(
-                "  {} = call {} {}({})\n",
-                result_name,
-                ret_type,
-                fn_ptr,
-                call_args.join(", ")
-            ));
+            writeln!(ir, "  {} = call {} {}({})", result_name, ret_type, fn_ptr, call_args.join(", ")).unwrap();
             result_name
         };
 

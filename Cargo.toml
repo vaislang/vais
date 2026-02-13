@@ -77,7 +77,7 @@ description = "Vais - AI-optimized systems programming language with LLVM backen
 
 [workspace.dependencies]
 # Core
-thiserror = "1.0"
+thiserror = "2.0"
 miette = { version = "7.0", features = ["fancy"] }
 
 # Parsing

@@ -1,37 +1,55 @@
 //! GPU code generation tests
 
+#[cfg(feature = "metal")]
 use vais_gpu::metal::MetalBuiltins;
 use vais_gpu::simd::{SimdIntrinsics, SimdTarget, SimdVectorType};
 use vais_gpu::{GpuCodeGenerator, GpuError, GpuTarget, GpuType};
 
 #[test]
 fn test_gpu_target_from_str() {
-    assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::parse("ptx"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::parse("nvidia"), Some(GpuTarget::Cuda));
+    #[cfg(feature = "cuda")]
+    {
+        assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("ptx"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("nvidia"), Some(GpuTarget::Cuda));
+    }
 
-    assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
-    assert_eq!(GpuTarget::parse("cl"), Some(GpuTarget::OpenCL));
+    #[cfg(feature = "opencl")]
+    {
+        assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
+        assert_eq!(GpuTarget::parse("cl"), Some(GpuTarget::OpenCL));
+    }
 
-    assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
-    assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
+    #[cfg(feature = "webgpu")]
+    {
+        assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
+        assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
+    }
 
     assert_eq!(GpuTarget::parse("unknown"), None);
     assert_eq!(GpuTarget::parse(""), None);
 }
 
 #[test]
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu"))]
 fn test_gpu_target_extension() {
+    #[cfg(feature = "cuda")]
     assert_eq!(GpuTarget::Cuda.extension(), "cu");
+    #[cfg(feature = "opencl")]
     assert_eq!(GpuTarget::OpenCL.extension(), "cl");
+    #[cfg(feature = "webgpu")]
     assert_eq!(GpuTarget::WebGPU.extension(), "wgsl");
 }
 
 #[test]
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu"))]
 fn test_gpu_target_name() {
+    #[cfg(feature = "cuda")]
     assert_eq!(GpuTarget::Cuda.name(), "CUDA");
+    #[cfg(feature = "opencl")]
     assert_eq!(GpuTarget::OpenCL.name(), "OpenCL");
+    #[cfg(feature = "webgpu")]
     assert_eq!(GpuTarget::WebGPU.name(), "WebGPU");
 }
 
@@ -135,6 +153,7 @@ fn test_gpu_type_void() {
     assert_eq!(ty.wgsl_name(), "");
 }
 
+#[cfg(feature = "cuda")]
 mod cuda_codegen_tests {
     use vais_ast::*;
     use vais_gpu::{GpuCodeGenerator, GpuTarget, GpuType};
@@ -288,34 +307,43 @@ mod cuda_codegen_tests {
 }
 
 mod common_tests {
+    #[cfg(feature = "cuda")]
     use vais_gpu::cuda;
+    #[cfg(feature = "metal")]
     use vais_gpu::metal;
+    #[cfg(feature = "opencl")]
     use vais_gpu::opencl;
+    #[cfg(feature = "webgpu")]
     use vais_gpu::webgpu;
 
     #[test]
+    #[cfg(feature = "cuda")]
     fn test_cuda_module_exists() {
         // Just verify the module compiles
         let _ = cuda::generate_host_code(&[]);
     }
 
     #[test]
+    #[cfg(feature = "opencl")]
     fn test_opencl_module_exists() {
         let _ = opencl::generate_host_code(&[]);
     }
 
     #[test]
+    #[cfg(feature = "webgpu")]
     fn test_webgpu_module_exists() {
         let _ = webgpu::generate_host_code(&[], "");
     }
 
     #[test]
+    #[cfg(feature = "metal")]
     fn test_metal_module_exists() {
         let _ = metal::generate_host_code(&[], "Test");
     }
 }
 
 // Metal backend tests
+#[cfg(feature = "metal")]
 mod metal_tests {
     use super::*;
 
@@ -389,6 +417,7 @@ mod metal_tests {
 }
 
 // End-to-end GPU codegen tests (parse .vais source → generate GPU code)
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_gpu_codegen {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -414,6 +443,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
 "#;
 
     #[test]
+    #[cfg(feature = "cuda")]
     fn test_e2e_cuda_codegen() {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
@@ -430,6 +460,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
     }
 
     #[test]
+    #[cfg(feature = "opencl")]
     fn test_e2e_opencl_codegen() {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
@@ -442,6 +473,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
     }
 
     #[test]
+    #[cfg(feature = "webgpu")]
     fn test_e2e_webgpu_codegen() {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
@@ -454,6 +486,7 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
     }
 
     #[test]
+    #[cfg(feature = "metal")]
     fn test_e2e_metal_codegen() {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
@@ -490,14 +523,20 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
     }
 
     #[test]
+    #[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
     fn test_e2e_scalar_kernel_all_backends() {
         let module = parse(SCALAR_KERNEL).expect("parse failed");
-        for target in &[
-            GpuTarget::Cuda,
-            GpuTarget::OpenCL,
-            GpuTarget::WebGPU,
-            GpuTarget::Metal,
-        ] {
+        let mut targets = vec![];
+        #[cfg(feature = "cuda")]
+        targets.push(GpuTarget::Cuda);
+        #[cfg(feature = "opencl")]
+        targets.push(GpuTarget::OpenCL);
+        #[cfg(feature = "webgpu")]
+        targets.push(GpuTarget::WebGPU);
+        #[cfg(feature = "metal")]
+        targets.push(GpuTarget::Metal);
+
+        for target in &targets {
             let mut gen = GpuCodeGenerator::new(*target);
             let code = gen
                 .generate(&module)
@@ -733,6 +772,7 @@ mod simd_tests {
 
 // E2E GPU runtime integration tests
 // These verify the full pipeline: .vais source → GPU codegen → host code with runtime API calls
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_gpu_runtime {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -913,6 +953,7 @@ F reduce_sum(data: *f64, result: *f64, n: i64) {
 }
 
 // E2E OpenCL runtime integration tests
+#[cfg(feature = "opencl")]
 mod e2e_opencl_runtime {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1044,6 +1085,7 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
 // Unified Memory, Stream/Async, Multi-GPU, Profiling
 // ============================================================================
 
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_unified_memory {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1111,6 +1153,7 @@ F unified_add(data: *f64, n: i64) {
     }
 }
 
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_stream_async {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1183,6 +1226,7 @@ F stream_process(input: *f64, output: *f64, n: i64) {
     }
 }
 
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_multi_gpu {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1251,6 +1295,7 @@ F gpu_work_b(data: *f64, n: i64) {
     }
 }
 
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod e2e_profiling {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1323,6 +1368,7 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
 }
 
 // E2E Metal runtime integration tests
+#[cfg(feature = "metal")]
 mod e2e_metal_runtime {
     use vais_gpu::metal::MetalBuiltins;
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
@@ -1453,6 +1499,7 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
 // Tests for kernel code generation, type conversion, metadata, edge cases
 // ============================================================================
 
+#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
 mod kernel_generation_tests {
     use vais_ast::*;
     use vais_gpu::{GpuCodeGenerator, GpuKernel, GpuTarget, GpuType};

@@ -24,6 +24,7 @@
 //! ```
 
 use crate::{CodeGenerator, CodegenResult};
+use std::fmt::Write;
 use vais_ast::{BinOp, Expr, Function, IfElse, Spanned, Type};
 use vais_types::ResolvedType;
 
@@ -86,14 +87,8 @@ impl CodeGenerator {
         let return_var_name = format!("__contract_return.{}", *counter);
         *counter += 1;
 
-        ir.push_str(&format!(
-            "  %{} = alloca {}\n",
-            return_var_name, return_llvm
-        ));
-        ir.push_str(&format!(
-            "  store {} {}, {}* %{}\n",
-            return_llvm, return_value, return_llvm, return_var_name
-        ));
+        writeln!(ir, "  %{} = alloca {}", return_var_name, return_llvm).unwrap();
+        writeln!(ir, "  store {} {}, {}* %{}", return_llvm, return_value, return_llvm, return_var_name).unwrap();
 
         // Register 'return' in locals for expression generation
         // Use alloca since we stored the return value at return_var_name
@@ -153,16 +148,13 @@ impl CodeGenerator {
         // VAIS uses i64 for bool, but LLVM branch needs i1
         let cond_i1 = format!("%contract_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
+        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
         // Branch based on condition
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cond_i1, ok_label, fail_label
-        ));
+        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
         // Failure block
-        ir.push_str(&format!("{}:\n", fail_label));
+        writeln!(ir, "{}:", fail_label).unwrap();
 
         // Contract kind: 1 = requires, 2 = ensures
         let kind_value = if kind == "requires" { 1 } else { 2 };
@@ -181,14 +173,11 @@ impl CodeGenerator {
         let line = self.debug_info.offset_to_line(expr.span.start) as i64;
 
         // Call __contract_fail
-        ir.push_str(&format!(
-            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})\n",
-            kind_value, condition_str, file_str, line, func_str
-        ));
+        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})", kind_value, condition_str, file_str, line, func_str).unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
-        ir.push_str(&format!("{}:\n", ok_label));
+        writeln!(ir, "{}:", ok_label).unwrap();
 
         Ok(ir)
     }
@@ -243,12 +232,7 @@ impl CodeGenerator {
 
         for (s, name) in &self.contract_string_constants {
             let escaped = escape_string_for_llvm(s);
-            ir.push_str(&format!(
-                "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
-                name,
-                s.len() + 1,
-                escaped
-            ));
+            writeln!(ir, "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", name, s.len() + 1, escaped).unwrap();
         }
 
         ir
@@ -377,18 +361,12 @@ impl CodeGenerator {
         let cond_i1 = format!("%nonnull_cond_{}", *counter);
         *counter += 1;
 
-        ir.push_str(&format!(
-            "  {} = icmp ne i8* {}, null\n",
-            cond_i1, param_ptr
-        ));
+        writeln!(ir, "  {} = icmp ne i8* {}, null", cond_i1, param_ptr).unwrap();
 
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cond_i1, ok_label, fail_label
-        ));
+        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
         // Failure block
-        ir.push_str(&format!("{}:\n", fail_label));
+        writeln!(ir, "{}:", fail_label).unwrap();
 
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str = self.get_or_create_contract_string(&format!("{} != null", param_name));
@@ -399,14 +377,11 @@ impl CodeGenerator {
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
-        ir.push_str(&format!(
-            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})\n",
-            kind_value, condition_str, file_str, func_str
-        ));
+        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})", kind_value, condition_str, file_str, func_str).unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
-        ir.push_str(&format!("{}:\n", ok_label));
+        writeln!(ir, "{}:", ok_label).unwrap();
 
         Ok(ir)
     }
@@ -584,15 +559,12 @@ impl CodeGenerator {
         // Check if not zero
         let cond_i1 = format!("%nonzero_cond_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, param_ref));
+        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, param_ref).unwrap();
 
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cond_i1, ok_label, fail_label
-        ));
+        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
         // Failure block
-        ir.push_str(&format!("{}:\n", fail_label));
+        writeln!(ir, "{}:", fail_label).unwrap();
 
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str =
@@ -604,14 +576,11 @@ impl CodeGenerator {
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
-        ir.push_str(&format!(
-            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})\n",
-            kind_value, condition_str, file_str, func_str
-        ));
+        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})", kind_value, condition_str, file_str, func_str).unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
-        ir.push_str(&format!("{}:\n", ok_label));
+        writeln!(ir, "{}:", ok_label).unwrap();
 
         Ok(ir)
     }
@@ -646,7 +615,7 @@ fn escape_string_for_llvm(s: &str) -> String {
             c => {
                 // Escape non-printable characters as hex
                 for byte in c.to_string().as_bytes() {
-                    result.push_str(&format!("\\{:02X}", byte));
+                    write!(result, "\\{:02X}", byte).unwrap();
                 }
             }
         }
@@ -680,16 +649,13 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assert_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
+        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
         // Branch based on condition
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cond_i1, ok_label, fail_label
-        ));
+        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
         // Failure block
-        ir.push_str(&format!("{}:\n", fail_label));
+        writeln!(ir, "{}:", fail_label).unwrap();
 
         // Generate error message
         let msg_str = if let Some(msg_expr) = message {
@@ -709,11 +675,11 @@ impl CodeGenerator {
         };
 
         // Call __panic to terminate
-        ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_str));
+        writeln!(ir, "  call i64 @__panic(i8* {})", msg_str).unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
-        ir.push_str(&format!("{}:\n", ok_label));
+        writeln!(ir, "{}:", ok_label).unwrap();
 
         // Assert returns unit (0)
         Ok(("0".to_string(), ir))
@@ -737,24 +703,21 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assume_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
+        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
         if self.release_mode {
             // In release mode, use LLVM assume intrinsic for optimization hints
-            ir.push_str(&format!("  call void @llvm.assume(i1 {})\n", cond_i1));
+            writeln!(ir, "  call void @llvm.assume(i1 {})", cond_i1).unwrap();
         } else {
             // In debug mode, check the assumption
             let ok_label = format!("assume_ok_{}", *counter);
             let fail_label = format!("assume_fail_{}", *counter);
             *counter += 1;
 
-            ir.push_str(&format!(
-                "  br i1 {}, label %{}, label %{}\n",
-                cond_i1, ok_label, fail_label
-            ));
+            writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
             // Failure block
-            ir.push_str(&format!("{}:\n", fail_label));
+            writeln!(ir, "{}:", fail_label).unwrap();
 
             let fail_msg = format!(
                 "Assumption violated at {}:{}",
@@ -763,11 +726,11 @@ impl CodeGenerator {
             );
             let msg_const = self.get_or_create_contract_string(&fail_msg);
 
-            ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
+            writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
             ir.push_str("  unreachable\n");
 
             // Success block
-            ir.push_str(&format!("{}:\n", ok_label));
+            writeln!(ir, "{}:", ok_label).unwrap();
         }
 
         // Assume returns unit (0)
@@ -836,15 +799,12 @@ impl CodeGenerator {
 
             let cond_i1 = format!("%invariant_cond_i1_{}", *counter);
             *counter += 1;
-            ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
+            writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
-            ir.push_str(&format!(
-                "  br i1 {}, label %{}, label %{}\n",
-                cond_i1, ok_label, fail_label
-            ));
+            writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
 
             // Failure block
-            ir.push_str(&format!("{}:\n", fail_label));
+            writeln!(ir, "{}:", fail_label).unwrap();
 
             let kind_value = 3; // CONTRACT_INVARIANT
             let condition_str = self
@@ -862,14 +822,11 @@ impl CodeGenerator {
             );
             let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
 
-            ir.push_str(&format!(
-                "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})\n",
-                kind_value, condition_str, file_str, line, func_str
-            ));
+            writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})", kind_value, condition_str, file_str, line, func_str).unwrap();
             ir.push_str("  unreachable\n");
 
             // Success block
-            ir.push_str(&format!("{}:\n", ok_label));
+            writeln!(ir, "{}:", ok_label).unwrap();
         }
 
         Ok(ir)
@@ -921,11 +878,8 @@ impl CodeGenerator {
                 let ty = self.infer_expr_type(inner);
                 let llvm_ty = self.type_to_llvm(&ty);
 
-                ir.push_str(&format!("  %{} = alloca {}\n", snapshot_name, llvm_ty));
-                ir.push_str(&format!(
-                    "  store {} {}, {}* %{}\n",
-                    llvm_ty, value, llvm_ty, snapshot_name
-                ));
+                writeln!(ir, "  %{} = alloca {}", snapshot_name, llvm_ty).unwrap();
+                writeln!(ir, "  store {} {}, {}* %{}", llvm_ty, value, llvm_ty, snapshot_name).unwrap();
 
                 // Register the snapshot
                 let old_var_name = format!("__old_{}", *counter);
@@ -1036,8 +990,8 @@ impl CodeGenerator {
 
                     // Store the initial value for comparison in recursive calls
                     let storage_name = format!("__decreases_{}_{}", f.name.node, idx);
-                    ir.push_str(&format!("  %{} = alloca i64\n", storage_name));
-                    ir.push_str(&format!("  store i64 {}, i64* %{}\n", value, storage_name));
+                    writeln!(ir, "  %{} = alloca i64", storage_name).unwrap();
+                    writeln!(ir, "  store i64 {}, i64* %{}", value, storage_name).unwrap();
 
                     // Store decreases info for recursive call checking
                     self.current_decreases_info = Some(crate::DecreasesInfo {
@@ -1053,25 +1007,22 @@ impl CodeGenerator {
 
                     let cmp_result = format!("%decreases_cmp_{}", *counter);
                     *counter += 1;
-                    ir.push_str(&format!("  {} = icmp sge i64 {}, 0\n", cmp_result, value));
-                    ir.push_str(&format!(
-                        "  br i1 {}, label %{}, label %{}\n",
-                        cmp_result, ok_label, fail_label
-                    ));
+                    writeln!(ir, "  {} = icmp sge i64 {}, 0", cmp_result, value).unwrap();
+                    writeln!(ir, "  br i1 {}, label %{}, label %{}", cmp_result, ok_label, fail_label).unwrap();
 
                     // Failure block
-                    ir.push_str(&format!("{}:\n", fail_label));
+                    writeln!(ir, "{}:", fail_label).unwrap();
 
                     let fail_msg = format!(
                         "decreases expression must be non-negative in function '{}'",
                         f.name.node
                     );
                     let msg_const = self.get_or_create_contract_string(&fail_msg);
-                    ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
+                    writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
                     ir.push_str("  unreachable\n");
 
                     // Success block
-                    ir.push_str(&format!("{}:\n", ok_label));
+                    writeln!(ir, "{}:", ok_label).unwrap();
                 }
             }
         }
@@ -1111,7 +1062,9 @@ impl CodeGenerator {
         // For the common case of `#[decreases(n)]` where n is the first parameter,
         // we evaluate the decreases expression using the call arguments
 
-        // First, save current locals state
+        // First, save current locals state.
+        // NOTE: clone required (not take) because generate_expr for args below
+        // needs current locals to resolve variables in the calling scope.
         let saved_locals = self.locals.clone();
 
         // Get the function info to map parameters
@@ -1134,11 +1087,8 @@ impl CodeGenerator {
                     let temp_var = format!("__decreases_arg_{}_{}", i, *counter);
                     *counter += 1;
                     let ty = self.type_to_llvm(param_type);
-                    ir.push_str(&format!("  %{} = alloca {}\n", temp_var, ty));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
-                        ty, arg_val, ty, temp_var
-                    ));
+                    writeln!(ir, "  %{} = alloca {}", temp_var, ty).unwrap();
+                    writeln!(ir, "  store {} {}, {}* %{}", ty, arg_val, ty, temp_var).unwrap();
 
                     // Register in locals so generate_expr can find it
                     self.locals.insert(
@@ -1158,10 +1108,7 @@ impl CodeGenerator {
 
         // Load the original decreases value
         let old_value = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load i64, i64* %{}\n",
-            old_value, decreases_info.storage_name
-        ));
+        writeln!(ir, "  {} = load i64, i64* %{}", old_value, decreases_info.storage_name).unwrap();
 
         // Check that new_value < old_value (strictly decreasing)
         let ok_label = format!("decreases_check_ok_{}", *counter);
@@ -1170,28 +1117,22 @@ impl CodeGenerator {
 
         let cmp_result = format!("%decreases_strict_cmp_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!(
-            "  {} = icmp slt i64 {}, {}\n",
-            cmp_result, new_value, old_value
-        ));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
-            cmp_result, ok_label, fail_label
-        ));
+        writeln!(ir, "  {} = icmp slt i64 {}, {}", cmp_result, new_value, old_value).unwrap();
+        writeln!(ir, "  br i1 {}, label %{}, label %{}", cmp_result, ok_label, fail_label).unwrap();
 
         // Failure block
-        ir.push_str(&format!("{}:\n", fail_label));
+        writeln!(ir, "{}:", fail_label).unwrap();
 
         let fail_msg = format!(
             "decreases expression must strictly decrease on recursive call in '{}'",
             decreases_info.function_name
         );
         let msg_const = self.get_or_create_contract_string(&fail_msg);
-        ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
+        writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
-        ir.push_str(&format!("{}:\n", ok_label));
+        writeln!(ir, "{}:", ok_label).unwrap();
 
         Ok(ir)
     }

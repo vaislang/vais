@@ -2178,16 +2178,10 @@ impl CodeGenerator {
                         FunctionInfo {
                             signature: vais_types::FunctionSig {
                                 name: inst.mangled_name.clone(),
-                                generics: vec![],
-                                generic_bounds: HashMap::new(),
                                 params,
                                 ret: ret_type,
                                 is_async: generic_fn.is_async,
-                                is_vararg: false,
-                                required_params: None,
-                                contracts: None,
-                                effect_annotation: vais_types::EffectAnnotation::Infer,
-                                inferred_effects: None,
+                                ..Default::default()
                             },
                             is_extern: false,
                             _extern_abi: None,

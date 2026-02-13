@@ -2156,11 +2156,12 @@ impl CodeGenerator {
             param_types.push(llvm_ty);
         }
 
-        let saved_function = self.current_function.clone();
-        let saved_locals = self.locals.clone();
+        // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
+        // so empty self.locals after take is acceptable (never accessed post-error).
+        let saved_function = self.current_function.take();
+        let saved_locals = std::mem::take(&mut self.locals);
 
         self.current_function = Some(lambda_name.clone());
-        self.locals.clear();
 
         for (cap_name, cap_ty, _) in &captured_vars {
             self.locals.insert(

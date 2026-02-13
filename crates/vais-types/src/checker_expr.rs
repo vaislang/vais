@@ -217,7 +217,7 @@ impl TypeChecker {
                 }
                 Err(TypeError::UndefinedFunction {
                     name: "@".to_string(),
-                    span: None,
+                    span: Some(expr.span),
                     suggestion: None,
                 })
             }
@@ -237,7 +237,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: left_type.to_string(),
-                                span: None,
+                                span: Some(left.span),
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -253,7 +253,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: left_type.to_string(),
-                                span: None,
+                                span: Some(left.span),
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -280,7 +280,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: left_type.to_string(),
-                                span: None,
+                                span: Some(left.span),
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -297,7 +297,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: inner_type.to_string(),
-                                span: None,
+                                span: Some(inner.span),
                             });
                         }
                         Ok(inner_type)
@@ -311,7 +311,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: inner_type.to_string(),
-                                span: None,
+                                span: Some(inner.span),
                             });
                         }
                         Ok(inner_type)
@@ -455,7 +455,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: struct_def.field_order.len(),
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             // Desugar to StructLit and type-check
@@ -489,7 +489,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: max_args,
                                 got: args.len(),
-                                span: None,
+                                span: Some(expr.span),
                             });
                         }
                         // Type-check provided arguments against param types
@@ -516,7 +516,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: params.len(),
                                 got: args.len(),
-                                span: None,
+                                span: Some(expr.span),
                             });
                         }
 
@@ -582,7 +582,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: param_types.len(),
                                 got: args.len(),
-                                span: None,
+                                span: Some(expr.span),
                             });
                         }
 
@@ -637,7 +637,7 @@ impl TypeChecker {
                         return Err(TypeError::ArgCount {
                             expected: param_types.len(),
                             got: args.len(),
-                            span: None,
+                            span: Some(expr.span),
                         });
                     }
 
@@ -664,7 +664,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 0,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             return Ok(ResolvedType::I64);
@@ -674,7 +674,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 1,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             let arg_type = self.check_expr(&args[0])?;
@@ -686,7 +686,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 1,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             let arg_type = self.check_expr(&args[0])?;
@@ -698,7 +698,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 1,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             let arg_type = self.check_expr(&args[0])?;
@@ -710,7 +710,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 2,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             let start_type = self.check_expr(&args[0])?;
@@ -724,7 +724,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: 0,
                                     got: args.len(),
-                                    span: None,
+                                    span: Some(expr.span),
                                 });
                             }
                             return Ok(ResolvedType::Bool);
@@ -743,7 +743,7 @@ impl TypeChecker {
                         return Err(TypeError::ArgCount {
                             expected: 0,
                             got: args.len(),
-                            span: None,
+                            span: Some(expr.span),
                         });
                     }
                     return Ok(ResolvedType::I64);
@@ -756,7 +756,7 @@ impl TypeChecker {
                 );
                 Err(TypeError::UndefinedFunction {
                     name: method.node.clone(),
-                    span: None,
+                    span: Some(method.span),
                     suggestion,
                 })
             }
@@ -795,7 +795,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: param_types.len(),
                                 got: args.len(),
-                                span: None,
+                                span: Some(expr.span),
                             });
                         }
 
@@ -871,7 +871,7 @@ impl TypeChecker {
                 };
                 Err(TypeError::UndefinedFunction {
                     name: format!("{}::{}", type_name.node, method.node),
-                    span: None,
+                    span: Some(method.span),
                     suggestion,
                 })
             }
@@ -931,7 +931,7 @@ impl TypeChecker {
                     field: field.node.clone(),
                     type_name: display_type_name,
                     suggestion,
-                    span: None,
+                    span: Some(field.span),
                 })
             }
 
@@ -951,7 +951,7 @@ impl TypeChecker {
                             Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
-                                span: None,
+                                span: Some(index.span),
                             })
                         } else {
                             Ok(*elem_type)
@@ -970,7 +970,7 @@ impl TypeChecker {
                             Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
-                                span: None,
+                                span: Some(index.span),
                             })
                         } else {
                             Ok(*elem_type)
@@ -983,7 +983,7 @@ impl TypeChecker {
                             Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
-                                span: None,
+                                span: Some(index.span),
                             })
                         } else {
                             Ok(*elem_type)
@@ -996,7 +996,7 @@ impl TypeChecker {
                             Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
-                                span: None,
+                                span: Some(index.span),
                             })
                         } else {
                             Ok(*elem_type)
@@ -1005,7 +1005,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
                         found: inner_type.to_string(),
-                        span: None,
+                        span: Some(expr.span),
                     }),
                 }
             }
@@ -1095,7 +1095,7 @@ impl TypeChecker {
                             );
                             return Err(TypeError::UndefinedVar {
                                 name: field_name.node.clone(),
-                                span: None,
+                                span: Some(field_name.span),
                                 suggestion,
                             });
                         }
@@ -1145,7 +1145,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: "exactly one field for union initialization".to_string(),
                             found: format!("{} fields", fields.len()),
-                            span: None,
+                            span: Some(expr.span),
                         });
                     }
 
@@ -1163,7 +1163,7 @@ impl TypeChecker {
                         );
                         return Err(TypeError::UndefinedVar {
                             name: field_name.node.clone(),
-                            span: None,
+                            span: Some(field_name.span),
                             suggestion,
                         });
                     }
@@ -1195,7 +1195,7 @@ impl TypeChecker {
                         types::find_similar_name(&name.node, type_candidates.into_iter());
                     Err(TypeError::UndefinedType {
                         name: name.node.clone(),
-                        span: None,
+                        span: Some(name.span),
                         suggestion,
                     })
                 }
@@ -1214,7 +1214,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: "integer type".to_string(),
                             found: start_type.to_string(),
-                            span: None,
+                            span: Some(start_expr.span),
                         });
                     }
 
@@ -1225,7 +1225,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer type".to_string(),
                                 found: end_type.to_string(),
-                                span: None,
+                                span: Some(end_expr.span),
                             });
                         }
                         self.unify(&start_type, &end_type)?;
@@ -1239,7 +1239,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: "integer type".to_string(),
                             found: end_type.to_string(),
-                            span: None,
+                            span: Some(end_expr.span),
                         });
                     }
                     end_type
@@ -1269,7 +1269,7 @@ impl TypeChecker {
                     Err(TypeError::Mismatch {
                         expected: "Future<T>".to_string(),
                         found: inner_type.to_string(),
-                        span: None,
+                        span: Some(inner.span),
                     })
                 }
             }
@@ -1367,7 +1367,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "Optional or Result".to_string(),
                         found: inner_type.to_string(),
-                        span: None,
+                        span: Some(inner.span),
                     }),
                 }
             }
@@ -1391,7 +1391,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "reference or pointer".to_string(),
                         found: inner_type.to_string(),
-                        span: None,
+                        span: Some(inner.span),
                     }),
                 }
             }
@@ -1447,7 +1447,7 @@ impl TypeChecker {
 
                         return Err(TypeError::UndefinedVar {
                             name: var.clone(),
-                            span: None,
+                            span: Some(expr.span),
                             suggestion,
                         });
                     }

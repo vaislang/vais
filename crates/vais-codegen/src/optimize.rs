@@ -274,7 +274,7 @@ impl PgoConfig {
 /// This function inserts profile instrumentation metadata and function attributes
 /// to help LLVM's PGO passes.
 pub fn instrument_ir_for_pgo(ir: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(ir.len());
 
     for line in ir.lines() {
         // Add profile instrumentation function attribute
@@ -322,7 +322,7 @@ pub fn annotate_function_hotness(
     hot_funcs: &HashSet<String>,
     cold_funcs: &HashSet<String>,
 ) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(ir.len());
 
     for line in ir.lines() {
         if line.starts_with("define ") {
@@ -456,7 +456,7 @@ pub fn optimize_ir_advanced(ir: &str, level: OptLevel) -> String {
 
 /// Constant folding - evaluate constant expressions at compile time
 pub(crate) fn constant_folding(ir: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(ir.len());
 
     for line in ir.lines() {
         let trimmed = line.trim();
@@ -643,7 +643,7 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
 
 /// Common subexpression elimination
 pub(crate) fn common_subexpression_elimination(ir: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(ir.len());
     let mut expr_to_var: HashMap<String, String> = HashMap::new();
 
     for line in ir.lines() {
@@ -697,7 +697,7 @@ fn extract_binop_expr(line: &str) -> Option<(String, String)> {
 
 /// Strength reduction - replace expensive operations with cheaper ones
 pub(crate) fn strength_reduction(ir: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(ir.len());
 
     for line in ir.lines() {
         let trimmed = line.trim();

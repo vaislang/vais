@@ -246,7 +246,7 @@ impl CodeGenerator {
     /// Generate LLVM IR for string helper functions.
     /// Uses inttoptr/ptrtoint for interop with existing malloc(i64)->i64 and memcpy(i64,i64,i64)->i64
     pub(crate) fn generate_string_helper_functions(&self) -> String {
-        let mut ir = String::new();
+        let mut ir = String::with_capacity(2048);
 
         // __vais_str_concat: concatenate two strings
         ir.push_str("\n; String helper: concatenate two strings\n");
@@ -338,7 +338,7 @@ impl CodeGenerator {
 
     /// Generate extern declarations for string runtime functions (only new ones not in builtins)
     pub(crate) fn generate_string_extern_declarations(&self) -> String {
-        let mut ir = String::new();
+        let mut ir = String::with_capacity(256);
         ir.push_str("\n; String runtime extern declarations\n");
         // strstr is new (not in builtins.rs)
         ir.push_str("declare i8* @strstr(i8*, i8*)\n");

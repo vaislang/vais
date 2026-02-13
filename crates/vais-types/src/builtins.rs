@@ -27,16 +27,10 @@ impl TypeChecker {
             "printf".to_string(),
             FunctionSig {
                 name: "printf".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
                 is_vararg: true,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -45,16 +39,9 @@ impl TypeChecker {
             "puts".to_string(),
             FunctionSig {
                 name: "puts".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -63,16 +50,9 @@ impl TypeChecker {
             "putchar".to_string(),
             FunctionSig {
                 name: "putchar".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -81,16 +61,9 @@ impl TypeChecker {
             "malloc".to_string(),
             FunctionSig {
                 name: "malloc".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("size".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -99,16 +72,9 @@ impl TypeChecker {
             "free".to_string(),
             FunctionSig {
                 name: "free".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -118,19 +84,13 @@ impl TypeChecker {
             FunctionSig {
                 name: "sizeof".to_string(),
                 generics: vec!["T".to_string()],
-                generic_bounds: HashMap::new(),
                 params: vec![(
                     "val".to_string(),
                     ResolvedType::Generic("T".to_string()),
                     false,
                 )],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -140,19 +100,13 @@ impl TypeChecker {
             FunctionSig {
                 name: "alignof".to_string(),
                 generics: vec!["T".to_string()],
-                generic_bounds: HashMap::new(),
                 params: vec![(
                     "val".to_string(),
                     ResolvedType::Generic("T".to_string()),
                     false,
                 )],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -163,15 +117,9 @@ impl TypeChecker {
             FunctionSig {
                 name: "type_size".to_string(),
                 generics: vec!["T".to_string()],
-                generic_bounds: HashMap::new(),
                 params: vec![],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -182,15 +130,9 @@ impl TypeChecker {
             FunctionSig {
                 name: "load_typed".to_string(),
                 generics: vec!["T".to_string()],
-                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::Generic("T".to_string()),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -201,7 +143,6 @@ impl TypeChecker {
             FunctionSig {
                 name: "store_typed".to_string(),
                 generics: vec!["T".to_string()],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     (
@@ -211,12 +152,7 @@ impl TypeChecker {
                     ),
                 ],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -225,16 +161,9 @@ impl TypeChecker {
             "exit".to_string(),
             FunctionSig {
                 name: "exit".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("code".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -245,16 +174,11 @@ impl TypeChecker {
             "print".to_string(),
             FunctionSig {
                 name: "print".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::Unit,
-                is_async: false,
                 is_vararg: true,
                 required_params: Some(1),
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -263,16 +187,11 @@ impl TypeChecker {
             "println".to_string(),
             FunctionSig {
                 name: "println".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::Unit,
-                is_async: false,
                 is_vararg: true,
                 required_params: Some(1),
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -281,16 +200,11 @@ impl TypeChecker {
             "format".to_string(),
             FunctionSig {
                 name: "format".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::Str,
-                is_async: false,
                 is_vararg: true,
                 required_params: Some(1),
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -301,20 +215,13 @@ impl TypeChecker {
             "memcpy".to_string(),
             FunctionSig {
                 name: "memcpy".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("dest".to_string(), ResolvedType::I64, false),
                     ("src".to_string(), ResolvedType::I64, false),
                     ("n".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -323,20 +230,13 @@ impl TypeChecker {
             "memcmp".to_string(),
             FunctionSig {
                 name: "memcmp".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("s1".to_string(), ResolvedType::I64, false),
                     ("s2".to_string(), ResolvedType::I64, false),
                     ("n".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -345,20 +245,13 @@ impl TypeChecker {
             "memcpy_str".to_string(),
             FunctionSig {
                 name: "memcpy_str".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("dest".to_string(), ResolvedType::I64, false),
                     ("src".to_string(), ResolvedType::Str, false),
                     ("n".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -367,16 +260,9 @@ impl TypeChecker {
             "strlen".to_string(),
             FunctionSig {
                 name: "strlen".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -385,16 +271,9 @@ impl TypeChecker {
             "str_to_ptr".to_string(),
             FunctionSig {
                 name: "str_to_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -403,16 +282,9 @@ impl TypeChecker {
             "ptr_to_str".to_string(),
             FunctionSig {
                 name: "ptr_to_str".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("p".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::Str,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -421,16 +293,9 @@ impl TypeChecker {
             "puts_ptr".to_string(),
             FunctionSig {
                 name: "puts_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -439,16 +304,9 @@ impl TypeChecker {
             "load_byte".to_string(),
             FunctionSig {
                 name: "load_byte".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -457,19 +315,12 @@ impl TypeChecker {
             "store_byte".to_string(),
             FunctionSig {
                 name: "store_byte".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("val".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -478,16 +329,9 @@ impl TypeChecker {
             "load_i64".to_string(),
             FunctionSig {
                 name: "load_i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -496,19 +340,12 @@ impl TypeChecker {
             "store_i64".to_string(),
             FunctionSig {
                 name: "store_i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("val".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -517,8 +354,6 @@ impl TypeChecker {
             "swap".to_string(),
             FunctionSig {
                 name: "swap".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     (
                         "ptr".to_string(),
@@ -529,12 +364,7 @@ impl TypeChecker {
                     ("idx2".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -547,16 +377,9 @@ impl TypeChecker {
             "atoi".to_string(),
             FunctionSig {
                 name: "atoi".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -565,16 +388,9 @@ impl TypeChecker {
             "atol".to_string(),
             FunctionSig {
                 name: "atol".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -583,16 +399,9 @@ impl TypeChecker {
             "atof".to_string(),
             FunctionSig {
                 name: "atof".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -601,20 +410,13 @@ impl TypeChecker {
             "fgets_ptr".to_string(),
             FunctionSig {
                 name: "fgets_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("buffer".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -623,16 +425,9 @@ impl TypeChecker {
             "atol_ptr".to_string(),
             FunctionSig {
                 name: "atol_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -641,16 +436,9 @@ impl TypeChecker {
             "atof_ptr".to_string(),
             FunctionSig {
                 name: "atof_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -659,16 +447,9 @@ impl TypeChecker {
             "labs".to_string(),
             FunctionSig {
                 name: "labs".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("x".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -677,16 +458,9 @@ impl TypeChecker {
             "fabs".to_string(),
             FunctionSig {
                 name: "fabs".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("x".to_string(), ResolvedType::F64, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -695,16 +469,9 @@ impl TypeChecker {
             "sqrt".to_string(),
             FunctionSig {
                 name: "sqrt".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("x".to_string(), ResolvedType::F64, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -713,16 +480,9 @@ impl TypeChecker {
             "rand".to_string(),
             FunctionSig {
                 name: "rand".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -731,16 +491,9 @@ impl TypeChecker {
             "srand".to_string(),
             FunctionSig {
                 name: "srand".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("seed".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::Unit,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -749,16 +502,9 @@ impl TypeChecker {
             "isdigit".to_string(),
             FunctionSig {
                 name: "isdigit".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -767,16 +513,9 @@ impl TypeChecker {
             "isalpha".to_string(),
             FunctionSig {
                 name: "isalpha".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -785,16 +524,9 @@ impl TypeChecker {
             "toupper".to_string(),
             FunctionSig {
                 name: "toupper".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -803,16 +535,9 @@ impl TypeChecker {
             "tolower".to_string(),
             FunctionSig {
                 name: "tolower".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -821,19 +546,12 @@ impl TypeChecker {
             "strcpy".to_string(),
             FunctionSig {
                 name: "strcpy".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("dest".to_string(), ResolvedType::I64, false),
                     ("src".to_string(), ResolvedType::Str, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -842,19 +560,12 @@ impl TypeChecker {
             "strcat".to_string(),
             FunctionSig {
                 name: "strcat".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("dest".to_string(), ResolvedType::I64, false),
                     ("src".to_string(), ResolvedType::Str, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -867,19 +578,12 @@ impl TypeChecker {
             "fopen".to_string(),
             FunctionSig {
                 name: "fopen".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::Str, false),
                     ("mode".to_string(), ResolvedType::Str, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -888,19 +592,12 @@ impl TypeChecker {
             "fopen_ptr".to_string(),
             FunctionSig {
                 name: "fopen_ptr".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::I64, false),
                     ("mode".to_string(), ResolvedType::Str, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -909,16 +606,9 @@ impl TypeChecker {
             "fclose".to_string(),
             FunctionSig {
                 name: "fclose".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -927,8 +617,6 @@ impl TypeChecker {
             "fread".to_string(),
             FunctionSig {
                 name: "fread".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
@@ -936,12 +624,7 @@ impl TypeChecker {
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -950,8 +633,6 @@ impl TypeChecker {
             "fwrite".to_string(),
             FunctionSig {
                 name: "fwrite".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
@@ -959,12 +640,7 @@ impl TypeChecker {
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -973,16 +649,9 @@ impl TypeChecker {
             "fgetc".to_string(),
             FunctionSig {
                 name: "fgetc".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -991,19 +660,12 @@ impl TypeChecker {
             "fputc".to_string(),
             FunctionSig {
                 name: "fputc".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("c".to_string(), ResolvedType::I64, false),
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1012,20 +674,13 @@ impl TypeChecker {
             "fgets".to_string(),
             FunctionSig {
                 name: "fgets".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("str".to_string(), ResolvedType::I64, false),
                     ("n".to_string(), ResolvedType::I64, false),
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1034,19 +689,12 @@ impl TypeChecker {
             "fputs".to_string(),
             FunctionSig {
                 name: "fputs".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("str".to_string(), ResolvedType::Str, false),
                     ("stream".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1055,20 +703,13 @@ impl TypeChecker {
             "fseek".to_string(),
             FunctionSig {
                 name: "fseek".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("stream".to_string(), ResolvedType::I64, false),
                     ("offset".to_string(), ResolvedType::I64, false),
                     ("origin".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1077,16 +718,9 @@ impl TypeChecker {
             "ftell".to_string(),
             FunctionSig {
                 name: "ftell".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1095,16 +729,9 @@ impl TypeChecker {
             "fflush".to_string(),
             FunctionSig {
                 name: "fflush".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1113,16 +740,9 @@ impl TypeChecker {
             "feof".to_string(),
             FunctionSig {
                 name: "feof".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1131,16 +751,9 @@ impl TypeChecker {
             "fileno".to_string(),
             FunctionSig {
                 name: "fileno".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1149,16 +762,9 @@ impl TypeChecker {
             "fsync".to_string(),
             FunctionSig {
                 name: "fsync".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("fd".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1167,16 +773,9 @@ impl TypeChecker {
             "fdatasync".to_string(),
             FunctionSig {
                 name: "fdatasync".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("fd".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1185,8 +784,6 @@ impl TypeChecker {
             "mmap".to_string(),
             FunctionSig {
                 name: "mmap".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("addr".to_string(), ResolvedType::I64, false),
                     ("len".to_string(), ResolvedType::I64, false),
@@ -1196,12 +793,7 @@ impl TypeChecker {
                     ("offset".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1210,19 +802,12 @@ impl TypeChecker {
             "munmap".to_string(),
             FunctionSig {
                 name: "munmap".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("addr".to_string(), ResolvedType::I64, false),
                     ("len".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1231,20 +816,13 @@ impl TypeChecker {
             "msync".to_string(),
             FunctionSig {
                 name: "msync".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("addr".to_string(), ResolvedType::I64, false),
                     ("len".to_string(), ResolvedType::I64, false),
                     ("flags".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1253,20 +831,13 @@ impl TypeChecker {
             "madvise".to_string(),
             FunctionSig {
                 name: "madvise".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("addr".to_string(), ResolvedType::I64, false),
                     ("len".to_string(), ResolvedType::I64, false),
                     ("advice".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1275,20 +846,13 @@ impl TypeChecker {
             "posix_open".to_string(),
             FunctionSig {
                 name: "posix_open".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::Str, false),
                     ("flags".to_string(), ResolvedType::I64, false),
                     ("mode".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1297,16 +861,9 @@ impl TypeChecker {
             "posix_close".to_string(),
             FunctionSig {
                 name: "posix_close".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("fd".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1315,16 +872,9 @@ impl TypeChecker {
             "remove".to_string(),
             FunctionSig {
                 name: "remove".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1333,19 +883,12 @@ impl TypeChecker {
             "flock".to_string(),
             FunctionSig {
                 name: "flock".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("fd".to_string(), ResolvedType::I64, false),
                     ("operation".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1354,19 +897,12 @@ impl TypeChecker {
             "mkdir".to_string(),
             FunctionSig {
                 name: "mkdir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::Str, false),
                     ("mode".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1375,16 +911,9 @@ impl TypeChecker {
             "rmdir".to_string(),
             FunctionSig {
                 name: "rmdir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1393,16 +922,9 @@ impl TypeChecker {
             "opendir".to_string(),
             FunctionSig {
                 name: "opendir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1411,16 +933,9 @@ impl TypeChecker {
             "readdir".to_string(),
             FunctionSig {
                 name: "readdir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("dirp".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1429,16 +944,9 @@ impl TypeChecker {
             "closedir".to_string(),
             FunctionSig {
                 name: "closedir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("dirp".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1447,19 +955,12 @@ impl TypeChecker {
             "rename_file".to_string(),
             FunctionSig {
                 name: "rename_file".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("old".to_string(), ResolvedType::Str, false),
                     ("new_path".to_string(), ResolvedType::Str, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1468,16 +969,9 @@ impl TypeChecker {
             "unlink".to_string(),
             FunctionSig {
                 name: "unlink".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1486,16 +980,9 @@ impl TypeChecker {
             "stat_size".to_string(),
             FunctionSig {
                 name: "stat_size".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1504,16 +991,9 @@ impl TypeChecker {
             "stat_mtime".to_string(),
             FunctionSig {
                 name: "stat_mtime".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1522,19 +1002,12 @@ impl TypeChecker {
             "getcwd".to_string(),
             FunctionSig {
                 name: "getcwd".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("buf".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1543,16 +1016,9 @@ impl TypeChecker {
             "chdir".to_string(),
             FunctionSig {
                 name: "chdir".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("path".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1561,19 +1027,12 @@ impl TypeChecker {
             "access".to_string(),
             FunctionSig {
                 name: "access".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::Str, false),
                     ("mode".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -1623,19 +1082,12 @@ impl TypeChecker {
             "vec2f32".to_string(),
             FunctionSig {
                 name: "vec2f32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::F32, false),
                     ("y".to_string(), ResolvedType::F32, false),
                 ],
                 ret: vec2f32.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1644,8 +1096,6 @@ impl TypeChecker {
             "vec4f32".to_string(),
             FunctionSig {
                 name: "vec4f32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::F32, false),
                     ("y".to_string(), ResolvedType::F32, false),
@@ -1653,12 +1103,7 @@ impl TypeChecker {
                     ("w".to_string(), ResolvedType::F32, false),
                 ],
                 ret: vec4f32.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1667,8 +1112,6 @@ impl TypeChecker {
             "vec8f32".to_string(),
             FunctionSig {
                 name: "vec8f32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("a".to_string(), ResolvedType::F32, false),
                     ("b".to_string(), ResolvedType::F32, false),
@@ -1680,12 +1123,7 @@ impl TypeChecker {
                     ("h".to_string(), ResolvedType::F32, false),
                 ],
                 ret: vec8f32.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1694,19 +1132,12 @@ impl TypeChecker {
             "vec2f64".to_string(),
             FunctionSig {
                 name: "vec2f64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::F64, false),
                     ("y".to_string(), ResolvedType::F64, false),
                 ],
                 ret: vec2f64.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1715,8 +1146,6 @@ impl TypeChecker {
             "vec4f64".to_string(),
             FunctionSig {
                 name: "vec4f64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::F64, false),
                     ("y".to_string(), ResolvedType::F64, false),
@@ -1724,12 +1153,7 @@ impl TypeChecker {
                     ("w".to_string(), ResolvedType::F64, false),
                 ],
                 ret: vec4f64.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1738,8 +1162,6 @@ impl TypeChecker {
             "vec4i32".to_string(),
             FunctionSig {
                 name: "vec4i32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::I32, false),
                     ("y".to_string(), ResolvedType::I32, false),
@@ -1747,12 +1169,7 @@ impl TypeChecker {
                     ("w".to_string(), ResolvedType::I32, false),
                 ],
                 ret: vec4i32.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1761,8 +1178,6 @@ impl TypeChecker {
             "vec8i32".to_string(),
             FunctionSig {
                 name: "vec8i32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("a".to_string(), ResolvedType::I32, false),
                     ("b".to_string(), ResolvedType::I32, false),
@@ -1774,12 +1189,7 @@ impl TypeChecker {
                     ("h".to_string(), ResolvedType::I32, false),
                 ],
                 ret: vec8i32.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1788,19 +1198,12 @@ impl TypeChecker {
             "vec2i64".to_string(),
             FunctionSig {
                 name: "vec2i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::I64, false),
                     ("y".to_string(), ResolvedType::I64, false),
                 ],
                 ret: vec2i64.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1809,8 +1212,6 @@ impl TypeChecker {
             "vec4i64".to_string(),
             FunctionSig {
                 name: "vec4i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![
                     ("x".to_string(), ResolvedType::I64, false),
                     ("y".to_string(), ResolvedType::I64, false),
@@ -1818,12 +1219,7 @@ impl TypeChecker {
                     ("w".to_string(), ResolvedType::I64, false),
                 ],
                 ret: vec4i64.clone(),
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1834,21 +1230,14 @@ impl TypeChecker {
                 self.functions.insert(
                     $name.to_string(),
                     FunctionSig {
-                        name: $name.to_string(),
-                        generics: vec![],
-                        generic_bounds: HashMap::new(),
-                        params: vec![
+                name: $name.to_string(),
+                params: vec![
                             ("a".to_string(), $vec_ty.clone(), false),
                             ("b".to_string(), $vec_ty.clone(), false),
                         ],
-                        ret: $vec_ty.clone(),
-                        is_async: false,
-                        is_vararg: false,
-                        required_params: None,
-                        contracts: None,
-                        effect_annotation: EffectAnnotation::Infer,
-                        inferred_effects: None,
-                    },
+                ret: $vec_ty.clone(),
+                ..Default::default()
+            },
                 );
             };
         }
@@ -1903,16 +1292,9 @@ impl TypeChecker {
             "simd_reduce_add_vec4f32".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec4f32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec4f32.clone(), false)],
                 ret: ResolvedType::F32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1921,16 +1303,9 @@ impl TypeChecker {
             "simd_reduce_add_vec8f32".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec8f32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec8f32, false)],
                 ret: ResolvedType::F32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1939,16 +1314,9 @@ impl TypeChecker {
             "simd_reduce_add_vec2f64".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec2f64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec2f64, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1957,16 +1325,9 @@ impl TypeChecker {
             "simd_reduce_add_vec4f64".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec4f64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec4f64, false)],
                 ret: ResolvedType::F64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1975,16 +1336,9 @@ impl TypeChecker {
             "simd_reduce_add_vec4i32".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec4i32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec4i32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -1993,16 +1347,9 @@ impl TypeChecker {
             "simd_reduce_add_vec8i32".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec8i32".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec8i32, false)],
                 ret: ResolvedType::I32,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -2011,16 +1358,9 @@ impl TypeChecker {
             "simd_reduce_add_vec2i64".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec2i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec2i64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -2029,16 +1369,9 @@ impl TypeChecker {
             "simd_reduce_add_vec4i64".to_string(),
             FunctionSig {
                 name: "simd_reduce_add_vec4i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("v".to_string(), vec4i64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -2051,16 +1384,9 @@ impl TypeChecker {
             "print_i64".to_string(),
             FunctionSig {
                 name: "print_i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("n".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -2069,16 +1395,9 @@ impl TypeChecker {
             "print_f64".to_string(),
             FunctionSig {
                 name: "print_f64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("n".to_string(), ResolvedType::F64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -2087,16 +1406,9 @@ impl TypeChecker {
             "puts_str".to_string(),
             FunctionSig {
                 name: "puts_str".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
 
@@ -2105,16 +1417,9 @@ impl TypeChecker {
             "println_i64".to_string(),
             FunctionSig {
                 name: "println_i64".to_string(),
-                generics: vec![],
-                generic_bounds: HashMap::new(),
                 params: vec![("n".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
-                is_async: false,
-                is_vararg: false,
-                required_params: None,
-                contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                ..Default::default()
             },
         );
     }
@@ -2157,16 +1462,9 @@ impl TypeChecker {
                 name.to_string(),
                 FunctionSig {
                     name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
                     params,
                     ret,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
             );
         }
@@ -2311,16 +1609,9 @@ impl TypeChecker {
                 name.to_string(),
                 FunctionSig {
                     name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
                     params: vec![("x".to_string(), ResolvedType::F64, false)],
                     ret: ResolvedType::F64,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
             );
         }
@@ -2330,21 +1621,14 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                    name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
-                    params: vec![
+                name: name.to_string(),
+                params: vec![
                         ("a".to_string(), ResolvedType::F64, false),
                         ("b".to_string(), ResolvedType::F64, false),
                     ],
-                    ret: ResolvedType::F64,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
-                },
+                ret: ResolvedType::F64,
+                ..Default::default()
+            },
             );
         }
 
@@ -2354,18 +1638,11 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                    name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
-                    params: vec![("x".to_string(), ResolvedType::I64, false)],
-                    ret: ResolvedType::I64,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
-                },
+                name: name.to_string(),
+                params: vec![("x".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
             );
         }
 
@@ -2374,21 +1651,14 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                    name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
-                    params: vec![
+                name: name.to_string(),
+                params: vec![
                         ("a".to_string(), ResolvedType::I64, false),
                         ("b".to_string(), ResolvedType::I64, false),
                     ],
-                    ret: ResolvedType::I64,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
-                },
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
             );
         }
 
@@ -2400,22 +1670,15 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                    name: name.to_string(),
-                    generics: vec![],
-                    generic_bounds: HashMap::new(),
-                    params: vec![
+                name: name.to_string(),
+                params: vec![
                         ("x".to_string(), ty.clone(), false),
                         ("min".to_string(), ty.clone(), false),
                         ("max".to_string(), ty.clone(), false),
                     ],
-                    ret: ty,
-                    is_async: false,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: EffectAnnotation::Infer,
-                    inferred_effects: None,
-                },
+                ret: ty,
+                ..Default::default()
+            },
             );
         }
     }
@@ -2467,3 +1730,4 @@ impl TypeChecker {
         }
     }
 }
+

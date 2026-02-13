@@ -502,14 +502,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let lambda_fn = self.module.add_function(&lambda_name, fn_type, None);
         self.lambda_functions.push(lambda_fn);
 
-        // Save current state
+        // Save current state (move instead of clone to avoid HashMap allocation).
+        // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
+        // so empty self.locals after take is acceptable (never accessed post-error).
         let saved_function = self.current_function;
-        let saved_locals = self.locals.clone();
+        let saved_locals = std::mem::take(&mut self.locals);
         let saved_insert_block = self.builder.get_insert_block();
 
         // Set up lambda context
         self.current_function = Some(lambda_fn);
-        self.locals.clear();
 
         // Create entry block for lambda
         let entry = self.context.append_basic_block(lambda_fn, "entry");

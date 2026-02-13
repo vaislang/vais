@@ -36,7 +36,7 @@ impl Formatter {
     pub fn new(config: FormatConfig) -> Self {
         Self {
             config,
-            output: String::new(),
+            output: String::with_capacity(4096),
             indent_level: 0,
         }
     }
@@ -431,7 +431,7 @@ impl Formatter {
             .params
             .iter()
             .map(|p| {
-                let mut s = String::new();
+                let mut s = String::with_capacity(64);
                 if p.is_mut {
                     s.push_str("mut ");
                 }
@@ -1439,7 +1439,7 @@ impl Formatter {
                 end,
                 inclusive,
             } => {
-                let mut s = String::new();
+                let mut s = String::with_capacity(64);
                 if let Some(st) = start {
                     s.push_str(&self.format_expr(&st.node));
                 }
@@ -1548,7 +1548,7 @@ impl Formatter {
     }
 
     fn format_macro_tokens(&self, tokens: &[MacroToken]) -> String {
-        let mut result = String::new();
+        let mut result = String::with_capacity(256);
         for token in tokens {
             match token {
                 MacroToken::Ident(s) => result.push_str(s),
@@ -1591,7 +1591,7 @@ impl Formatter {
                 is_mut,
                 ..
             } => {
-                let mut s = String::new();
+                let mut s = String::with_capacity(64);
                 if *is_mut {
                     s.push_str("mut ");
                 }
@@ -1611,7 +1611,7 @@ impl Formatter {
                 value,
                 is_mut,
             } => {
-                let mut s = String::new();
+                let mut s = String::with_capacity(64);
                 if *is_mut {
                     s.push_str("mut ");
                 }
@@ -1723,7 +1723,7 @@ impl Formatter {
                 end,
                 inclusive,
             } => {
-                let mut s = String::new();
+                let mut s = String::with_capacity(64);
                 if let Some(st) = start {
                     s.push_str(&self.format_pattern(&st.node));
                 }

@@ -201,20 +201,14 @@ impl CodeGenerator {
         // Register the function signature
         let func_sig = vais_types::FunctionSig {
             name: func_name.clone(),
-            generics: vec![],
-            generic_bounds: std::collections::HashMap::new(),
             params: param_types
                 .iter()
                 .enumerate()
                 .map(|(i, ty)| (format!("arg{}", i), ty.clone(), false))
                 .collect(),
             ret: ret_type.clone(),
-            is_async: false,
             is_vararg: func.is_vararg,
-            required_params: None,
-            contracts: None,
-            effect_annotation: vais_types::EffectAnnotation::Infer,
-            inferred_effects: None,
+            ..Default::default()
         };
 
         self.functions.insert(

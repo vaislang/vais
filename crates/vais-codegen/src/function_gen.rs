@@ -10,6 +10,31 @@ use vais_ast::{Function, FunctionBody, GenericParamKind, Span, Struct};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    /// Resolve the return type of a function, using either:
+    /// 1. Explicit return type from AST
+    /// 2. Registered return type from type checker (for inference)
+    /// 3. Default to Unit if not found
+    fn resolve_fn_return_type(&self, f: &Function, lookup_key: &str) -> ResolvedType {
+        if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else {
+            // Use registered return type from type checker (supports return type inference)
+            self.functions
+                .get(lookup_key)
+                .map(|info| info.signature.ret.clone())
+                .unwrap_or(ResolvedType::Unit)
+        }
+    }
+
+    /// Initialize function state for code generation.
+    /// Clears locals, resets label counter and loop stack.
+    fn initialize_function_state(&mut self, func_name: &str) {
+        self.current_function = Some(func_name.to_string());
+        self.locals.clear();
+        self.label_counter = 0;
+        self.loop_stack.clear();
+    }
+
     /// Generate a specialized struct type from a generic struct template
     pub(crate) fn generate_specialized_struct_type(
         &mut self,
@@ -722,10 +747,7 @@ impl CodeGenerator {
             return self.generate_async_function(f);
         }
 
-        self.current_function = Some(f.name.node.to_string());
-        self.locals.clear();
-        self.label_counter = 0;
-        self.loop_stack.clear();
+        self.initialize_function_state(&f.name.node);
         self.clear_defer_stack();
 
         // Create debug info for this function
@@ -770,15 +792,7 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = if let Some(t) = f.ret_type.as_ref() {
-            self.ast_type_to_resolved(&t.node)
-        } else {
-            // Use registered return type from type checker (supports return type inference)
-            self.functions
-                .get(&f.name.node)
-                .map(|info| info.signature.ret.clone())
-                .unwrap_or(ResolvedType::Unit)
-        };
+        let ret_type = self.resolve_fn_return_type(f, &f.name.node);
 
         // Store current return type for nested return statements
         self.current_return_type = Some(ret_type.clone());
@@ -1162,10 +1176,7 @@ impl CodeGenerator {
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
-        self.current_function = Some(method_name.to_string());
-        self.locals.clear();
-        self.label_counter = 0;
-        self.loop_stack.clear();
+        self.initialize_function_state(&method_name);
 
         // Create debug info for this method
         let func_line = self.debug_info.offset_to_line(span.start);
@@ -1218,14 +1229,7 @@ impl CodeGenerator {
             params.push(format!("{} %{}", llvm_ty, p.name.node));
         }
 
-        let ret_type = if let Some(t) = f.ret_type.as_ref() {
-            self.ast_type_to_resolved(&t.node)
-        } else {
-            self.functions
-                .get(&f.name.node)
-                .map(|info| info.signature.ret.clone())
-                .unwrap_or(ResolvedType::Unit)
-        };
+        let ret_type = self.resolve_fn_return_type(f, &f.name.node);
 
         // Store current return type for nested return statements
         self.current_return_type = Some(ret_type.clone());

@@ -1915,13 +1915,14 @@ impl CodeGenerator {
                     param_types.push(llvm_ty);
                 }
 
-                // Store current function state
-                let saved_function = self.current_function.clone();
-                let saved_locals = self.locals.clone();
+                // Store current function state (move instead of clone to avoid HashMap allocation).
+                // SAFETY: if generate_expr below returns Err, the entire codegen aborts,
+                // so empty self.locals after take is acceptable (never accessed post-error).
+                let saved_function = self.current_function.take();
+                let saved_locals = std::mem::take(&mut self.locals);
 
                 // Set up lambda context
                 self.current_function = Some(lambda_name.clone());
-                self.locals.clear();
 
                 // Register captured variables as locals (using capture parameter names)
                 for (cap_name, cap_ty, _) in &captured_vars {

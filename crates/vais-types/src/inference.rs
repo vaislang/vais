@@ -228,7 +228,7 @@ impl TypeChecker {
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),
-                span: None,
+                span: None,  // No span available in unify()
             }),
         }
     }
@@ -433,7 +433,7 @@ impl TypeChecker {
             return Err(TypeError::ArgCount {
                 expected: sig.params.len(),
                 got: args.len(),
-                span: None,
+                span: None,  // No span available in generic call helper
             });
         }
 
@@ -771,7 +771,7 @@ impl TypeChecker {
             return Err(TypeError::ArgCount {
                 expected: sig.params.len(),
                 got: args.len(),
-                span: None,
+                span: None,  // No span available in bidirectional helper
             });
         }
 

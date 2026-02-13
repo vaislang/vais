@@ -64,10 +64,10 @@ impl ParallelConfig {
 ///
 /// Returns the non-function preamble and a list of (function_name, function_ir) pairs
 pub fn split_ir_into_functions(ir: &str) -> (String, Vec<(String, String)>) {
-    let mut preamble = String::new();
+    let mut preamble = String::with_capacity(ir.len() / 4);
     let mut functions: Vec<(String, String)> = Vec::new();
     let mut current_fn_name: Option<String> = None;
-    let mut current_fn_ir = String::new();
+    let mut current_fn_ir = String::with_capacity(1024);
     let mut in_function = false;
     let mut brace_depth: i32 = 0;
 

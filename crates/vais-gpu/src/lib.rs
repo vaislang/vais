@@ -18,10 +18,14 @@
 //! ```
 
 mod common;
+#[cfg(feature = "cuda")]
 pub mod cuda;
+#[cfg(feature = "metal")]
 pub mod metal;
+#[cfg(feature = "opencl")]
 pub mod opencl;
 pub mod simd;
+#[cfg(feature = "webgpu")]
 pub mod webgpu;
 
 use thiserror::Error;
@@ -45,10 +49,30 @@ impl GpuTarget {
     /// Parse target from string
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "cuda" | "ptx" | "nvidia" => Some(Self::Cuda),
-            "opencl" | "cl" => Some(Self::OpenCL),
-            "webgpu" | "wgsl" => Some(Self::WebGPU),
-            "metal" | "msl" | "apple" => Some(Self::Metal),
+            "cuda" | "ptx" | "nvidia" => {
+                #[cfg(feature = "cuda")]
+                return Some(Self::Cuda);
+                #[cfg(not(feature = "cuda"))]
+                return None;
+            }
+            "opencl" | "cl" => {
+                #[cfg(feature = "opencl")]
+                return Some(Self::OpenCL);
+                #[cfg(not(feature = "opencl"))]
+                return None;
+            }
+            "webgpu" | "wgsl" => {
+                #[cfg(feature = "webgpu")]
+                return Some(Self::WebGPU);
+                #[cfg(not(feature = "webgpu"))]
+                return None;
+            }
+            "metal" | "msl" | "apple" => {
+                #[cfg(feature = "metal")]
+                return Some(Self::Metal);
+                #[cfg(not(feature = "metal"))]
+                return None;
+            }
             _ => None,
         }
     }
@@ -249,22 +273,71 @@ impl GpuCodeGenerator {
     }
 
     /// Generate GPU code from a Vais module
+    #[allow(unused_variables)]
     pub fn generate(&mut self, module: &Module) -> GpuResult<String> {
         match self.target {
-            GpuTarget::Cuda => cuda::generate(module, &mut self.kernels),
-            GpuTarget::OpenCL => opencl::generate(module, &mut self.kernels),
-            GpuTarget::WebGPU => webgpu::generate(module, &mut self.kernels),
-            GpuTarget::Metal => metal::generate(module, &mut self.kernels),
+            GpuTarget::Cuda => {
+                #[cfg(feature = "cuda")]
+                return cuda::generate(module, &mut self.kernels);
+                #[cfg(not(feature = "cuda"))]
+                return Err(GpuError::BackendError(
+                    "CUDA backend not enabled. Enable the 'cuda' feature".to_string(),
+                ));
+            }
+            GpuTarget::OpenCL => {
+                #[cfg(feature = "opencl")]
+                return opencl::generate(module, &mut self.kernels);
+                #[cfg(not(feature = "opencl"))]
+                return Err(GpuError::BackendError(
+                    "OpenCL backend not enabled. Enable the 'opencl' feature".to_string(),
+                ));
+            }
+            GpuTarget::WebGPU => {
+                #[cfg(feature = "webgpu")]
+                return webgpu::generate(module, &mut self.kernels);
+                #[cfg(not(feature = "webgpu"))]
+                return Err(GpuError::BackendError(
+                    "WebGPU backend not enabled. Enable the 'webgpu' feature".to_string(),
+                ));
+            }
+            GpuTarget::Metal => {
+                #[cfg(feature = "metal")]
+                return metal::generate(module, &mut self.kernels);
+                #[cfg(not(feature = "metal"))]
+                return Err(GpuError::BackendError(
+                    "Metal backend not enabled. Enable the 'metal' feature".to_string(),
+                ));
+            }
         }
     }
 
     /// Generate host code for launching kernels
     pub fn generate_host_code(&self) -> String {
         match self.target {
-            GpuTarget::Cuda => cuda::generate_host_code(&self.kernels),
-            GpuTarget::OpenCL => opencl::generate_host_code(&self.kernels),
-            GpuTarget::WebGPU => webgpu::generate_host_code(&self.kernels, "Main"),
-            GpuTarget::Metal => metal::generate_host_code(&self.kernels, "Main"),
+            GpuTarget::Cuda => {
+                #[cfg(feature = "cuda")]
+                return cuda::generate_host_code(&self.kernels);
+                #[cfg(not(feature = "cuda"))]
+                return String::from("// CUDA backend not enabled");
+            }
+            GpuTarget::OpenCL => {
+                #[cfg(feature = "opencl")]
+                return opencl::generate_host_code(&self.kernels);
+                #[cfg(not(feature = "opencl"))]
+                return String::from("// OpenCL backend not enabled");
+            }
+            GpuTarget::WebGPU => {
+                #[cfg(feature = "webgpu")]
+                return webgpu::generate_host_code(&self.kernels, "Main");
+                #[cfg(not(feature = "webgpu"))]
+                return String::from("// WebGPU backend not enabled");
+            }
+            GpuTarget::Metal => {
+                #[cfg(feature = "metal")]
+                return metal::generate_host_code(&self.kernels, "Main");
+                #[cfg(not(feature = "metal"))]
+                return String::from("// Metal backend not enabled");
+            }
         }
     }
 
@@ -280,13 +353,25 @@ mod tests {
 
     #[test]
     fn test_gpu_target_from_str() {
-        assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
-        assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
-        assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
-        assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
-        assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
-        assert_eq!(GpuTarget::parse("metal"), Some(GpuTarget::Metal));
-        assert_eq!(GpuTarget::parse("msl"), Some(GpuTarget::Metal));
+        #[cfg(feature = "cuda")]
+        {
+            assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
+            assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
+        }
+        #[cfg(feature = "opencl")]
+        {
+            assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
+        }
+        #[cfg(feature = "webgpu")]
+        {
+            assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
+            assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
+        }
+        #[cfg(feature = "metal")]
+        {
+            assert_eq!(GpuTarget::parse("metal"), Some(GpuTarget::Metal));
+            assert_eq!(GpuTarget::parse("msl"), Some(GpuTarget::Metal));
+        }
         assert_eq!(GpuTarget::parse("unknown"), None);
     }
 
@@ -303,14 +388,31 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_target_extension() {
+    #[cfg(feature = "cuda")]
+    fn test_gpu_target_extension_cuda() {
         assert_eq!(GpuTarget::Cuda.extension(), "cu");
+    }
+
+    #[test]
+    #[cfg(feature = "opencl")]
+    fn test_gpu_target_extension_opencl() {
         assert_eq!(GpuTarget::OpenCL.extension(), "cl");
+    }
+
+    #[test]
+    #[cfg(feature = "webgpu")]
+    fn test_gpu_target_extension_webgpu() {
         assert_eq!(GpuTarget::WebGPU.extension(), "wgsl");
+    }
+
+    #[test]
+    #[cfg(feature = "metal")]
+    fn test_gpu_target_extension_metal() {
         assert_eq!(GpuTarget::Metal.extension(), "metal");
     }
 
     #[test]
+    #[cfg(all(feature = "cuda", feature = "metal"))]
     fn test_gpu_target_methods() {
         assert!(GpuTarget::Metal.is_metal());
         assert!(!GpuTarget::Cuda.is_metal());
@@ -319,6 +421,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "cuda", feature = "metal"))]
     fn test_gpu_target_shared_memory() {
         assert_eq!(GpuTarget::Cuda.default_shared_memory(), 48 * 1024);
         assert_eq!(GpuTarget::Metal.default_shared_memory(), 32 * 1024);

@@ -1105,22 +1105,41 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 9. [빌드] tokio "full" → per-crate 최소 features (이미 완료) ✅ 2026-02-13
 
 ### Warning
-- [ ] 10. [성능] 람다 locals HashMap clone → scope chain 전환
-- [ ] 11. [성능] push_str(&format!()) → write!() 전환
-- [ ] 12. [성능] String::new() → String::with_capacity()
+- [x] 10. [성능] 람다 locals HashMap clone → scope chain 전환 ✅ 2026-02-13
+  변경: generate_expr.rs, expr_helpers.rs, gen_aggregate.rs (locals.clone()→std::mem::take, 3곳 zero-copy 전환)
+- [x] 11. [성능] push_str(&format!()) → write!() 전환 ✅ 2026-02-13
+  변경: control_flow.rs(66건), contracts.rs(51건), vtable.rs(14건) — 131건 write!/writeln! 전환
+- [x] 12. [성능] String::new() → String::with_capacity() ✅ 2026-02-13
+  변경: optimize.rs(5건), parallel.rs(2건), formatter.rs(7건), string_ops.rs(2건) — hot-path 16건 capacity 최적화
 - [x] 13. [아키텍처] register_file_io_builtins() 보일러플레이트 축소 ✅ 2026-02-13
   변경: builtins.rs (+register_vararg!/register_builtin! 매크로, IO 6함수 ~70줄 절감)
-- [ ] 14. [아키텍처] generate_method/function_with_span 중복 추출
+- [x] 14. [아키텍처] generate_method/function_with_span 중복 추출 ✅ 2026-02-13
+  변경: function_gen.rs (+resolve_fn_return_type, +initialize_function_state 헬퍼, 26줄 중복 제거)
 - [x] 15. [아키텍처] borrow_check.rs 인라인 테스트 → 별도 파일 분리 ✅ 2026-02-13
   변경: borrow_check.rs (4,606→1,309줄, -71.6%), tests/borrow_check_tests.rs (49 tests 분리)
-- [ ] 16. [품질] FunctionSig Default/builder 패턴 도입
-- [ ] 17. [품질] TypeError span: None 57건 → 소스 위치 전달
-- [ ] 18. [품질] tiered.rs RwLock unwrap 95건 → graceful 에러 처리
-- [ ] 19. [빌드] vais-gpu 비선택 의존성 → feature flag 게이팅
-- [ ] 20. [빌드] workspace 공통 deps 통일
+- [x] 16. [품질] FunctionSig Default/builder 패턴 도입 ✅ 2026-02-13
+  변경: types.rs (+Default impl), builtins.rs(107건), checker_module.rs(4건), registration.rs(3건), ffi.rs(1건), lib.rs(1건) — 116건 ..Default::default() 전환
+- [x] 17. [품질] TypeError span: None 57건 → 소스 위치 전달 ✅ 2026-02-13
+  변경: checker_expr.rs(38건 Some(span)), checker_module.rs(1건), 나머지 18건 컨텍스트 미보유로 None 유지
+- [x] 18. [품질] tiered.rs RwLock unwrap 95건 → graceful 에러 처리 ✅ 2026-02-13
+  변경: tiered.rs (36건 RwLock unwrap()→expect("descriptive lock poisoned") 전환)
+- [x] 19. [빌드] vais-gpu 비선택 의존성 → feature flag 게이팅 ✅ 2026-02-13
+  변경: vais-gpu/Cargo.toml (+cuda/metal/opencl/webgpu features), lib.rs (cfg 게이팅), gpu_tests.rs (cfg 테스트)
+- [x] 20. [빌드] workspace 공통 deps 통일 ✅ 2026-02-13
+  변경: Cargo.toml (thiserror 1.0→2.0), vais-gpu/macro/bindgen Cargo.toml (workspace = true 전환)
 - [x] 21. [빌드] once_cell → std::sync::OnceLock 전환 ✅ 2026-02-13
   변경: vais-i18n/Cargo.toml (once_cell 제거), vais-i18n/src/lib.rs (OnceCell→OnceLock)
-진행률: 11/21 (52%) — Critical 8/9 완료 (#5 연기), Warning 3/12 완료
+진행률: 20/21 (95%) — Critical 8/9 완료 (#5 연기), Warning 12/12 완료
+
+### 2차 리뷰 발견사항 (2026-02-13)
+> 출처: /team-review (자동진행 완료 후)
+
+- [ ] 1. [보안] GPU host_code fallback 경고 메시지 노출 제한 (Warning) — 대상: crates/vais-gpu/src/lib.rs
+- [ ] 2. [성능] RwLock poisoning 시 에러 복구 전략 추가 (Warning) — 대상: crates/vais-jit/src/tiered.rs
+- [ ] 3. [아키텍처] function_gen.rs 미전환 call site 2건 완료 (Warning) — 대상: crates/vais-codegen/src/function_gen.rs
+- [ ] 4. [아키텍처] FunctionSig simple()/builtin() dead code 정리 (Warning) — 대상: crates/vais-types/src/types.rs
+- [ ] 5. [품질] contracts.rs 들여쓰기 일관성 확인 (Warning) — 대상: crates/vais-codegen/src/contracts.rs
+진행률: 0/5 (0%)
 
 ---
 

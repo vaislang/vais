@@ -71,11 +71,7 @@ impl CodeGenerator {
                     params,
                     ret: ret_type,
                     is_async: f.is_async,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: vais_types::EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
                 is_extern: false,
                 _extern_abi: None,
@@ -160,11 +156,7 @@ impl CodeGenerator {
                     params,
                     ret: ret_type,
                     is_async: f.is_async,
-                    is_vararg: false,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: vais_types::EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
                 is_extern: false,
                 _extern_abi: None,
@@ -311,16 +303,10 @@ impl CodeGenerator {
             FunctionInfo {
                 signature: FunctionSig {
                     name: func.name.node.to_string(),
-                    generics: vec![],
-                    generic_bounds: std::collections::HashMap::new(),
                     params,
                     ret: ret_type,
-                    is_async: false,
                     is_vararg: func.is_vararg,
-                    required_params: None,
-                    contracts: None,
-                    effect_annotation: vais_types::EffectAnnotation::Infer,
-                    inferred_effects: None,
+                    ..Default::default()
                 },
                 is_extern: true,
                 _extern_abi: Some(abi.to_string()),

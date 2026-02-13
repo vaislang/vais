@@ -103,14 +103,14 @@ impl FunctionProfile {
 
     /// Records a loop iteration.
     pub fn record_loop(&self, loop_id: usize) {
-        let mut counts = self.loop_counts.write().unwrap();
+        let mut counts = self.loop_counts.write().expect("loop_counts lock poisoned");
         *counts.entry(loop_id).or_insert(0) += 1;
         self.total_loop_iterations.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Records a branch outcome.
     pub fn record_branch(&self, branch_id: usize, taken: bool) {
-        let mut counts = self.branch_counts.write().unwrap();
+        let mut counts = self.branch_counts.write().expect("branch_counts lock poisoned");
         let entry = counts.entry(branch_id).or_insert((0, 0));
         if taken {
             entry.0 += 1;
@@ -122,7 +122,7 @@ impl FunctionProfile {
     /// Updates the hot path score based on execution profile.
     pub fn update_hot_path_score(&self) {
         let score = compute_hot_path_score(self);
-        let mut hot_path_score = self.hot_path_score.write().unwrap();
+        let mut hot_path_score = self.hot_path_score.write().expect("hot_path_score lock poisoned");
         *hot_path_score = score;
     }
 
@@ -139,7 +139,7 @@ impl FunctionProfile {
     /// Marks function as promoted at current execution count.
     pub fn mark_promoted(&self) {
         let count = self.execution_count.load(Ordering::Relaxed);
-        let mut last_promoted = self.last_promoted_at.write().unwrap();
+        let mut last_promoted = self.last_promoted_at.write().expect("last_promoted_at lock poisoned");
         *last_promoted = count;
     }
 }
@@ -240,7 +240,7 @@ impl Interpreter {
             if let vais_ast::Item::Function(func) = &item.node {
                 self.functions.insert(func.name.node.clone(), func.clone());
 
-                let mut profiles = self.profiles.write().unwrap();
+                let mut profiles = self.profiles.write().expect("profiles lock poisoned");
                 profiles
                     .entry(func.name.node.clone())
                     .or_insert_with(|| Arc::new(FunctionProfile::new()));
@@ -250,7 +250,7 @@ impl Interpreter {
 
     /// Gets the profile for a function.
     pub fn get_profile(&self, name: &str) -> Option<Arc<FunctionProfile>> {
-        let profiles = self.profiles.read().unwrap();
+        let profiles = self.profiles.read().expect("profiles lock poisoned");
         profiles.get(name).cloned()
     }
 
@@ -267,8 +267,8 @@ impl Interpreter {
         // Update hot path score before checking
         profile.update_hot_path_score();
 
-        let score = *profile.hot_path_score.read().unwrap();
-        let current_tier = *profile.current_tier.read().unwrap();
+        let score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
+        let current_tier = *profile.current_tier.read().expect("current_tier lock poisoned");
 
         // Use hot path score thresholds (same numeric values but now score-based)
         match current_tier {
@@ -297,7 +297,7 @@ impl Interpreter {
             .ok_or_else(|| JitError::FunctionNotFound(name.to_string()))?;
 
         let profile = {
-            let profiles = self.profiles.read().unwrap();
+            let profiles = self.profiles.read().expect("profiles lock poisoned");
             profiles.get(name).cloned()
         };
 
@@ -630,7 +630,7 @@ fn compute_hot_path_score(profile: &FunctionProfile) -> f64 {
 
     // Calculate branch bias score (max bias across all branches)
     let branch_bias_score = {
-        let branch_counts = profile.branch_counts.read().unwrap();
+        let branch_counts = profile.branch_counts.read().expect("branch_counts lock poisoned");
         branch_counts
             .values()
             .map(|(taken, not_taken)| {
@@ -739,7 +739,7 @@ impl TieredJit {
 
         // Check if already compiling
         {
-            let compiling = profile.compiling.read().unwrap();
+            let compiling = profile.compiling.read().expect("compiling lock poisoned");
             if *compiling {
                 return Ok(());
             }
@@ -747,7 +747,7 @@ impl TieredJit {
 
         // Mark as compiling
         {
-            let mut compiling = profile.compiling.write().unwrap();
+            let mut compiling = profile.compiling.write().expect("compiling lock poisoned");
             *compiling = true;
         }
 
@@ -792,14 +792,14 @@ impl TieredJit {
 
         // Update tier and mark as promoted
         {
-            let mut current_tier = profile.current_tier.write().unwrap();
+            let mut current_tier = profile.current_tier.write().expect("current_tier lock poisoned");
             *current_tier = tier;
             profile.mark_promoted();
         }
 
         // Clear compiling flag
         {
-            let mut compiling = profile.compiling.write().unwrap();
+            let mut compiling = profile.compiling.write().expect("compiling lock poisoned");
             *compiling = false;
         }
 
@@ -813,7 +813,7 @@ impl TieredJit {
             None => return Ok(()),
         };
 
-        let current_tier = *profile.current_tier.read().unwrap();
+        let current_tier = *profile.current_tier.read().expect("current_tier lock poisoned");
 
         // Determine downgrade target
         let new_tier = match current_tier {
@@ -827,7 +827,7 @@ impl TieredJit {
 
         // Update tier
         {
-            let mut tier = profile.current_tier.write().unwrap();
+            let mut tier = profile.current_tier.write().expect("current_tier lock poisoned");
             *tier = new_tier;
         }
 
@@ -846,13 +846,13 @@ impl TieredJit {
 
     /// Registers an OSR point for hot loop replacement.
     pub fn register_osr_point(&self, point: OsrPoint) {
-        let mut points = self.osr_points.write().unwrap();
+        let mut points = self.osr_points.write().expect("osr_points lock poisoned");
         points.push(point);
     }
 
     /// Checks if an OSR point should trigger tier promotion.
     pub fn check_osr(&self, func: &str, loop_id: usize, iteration: u64) -> Option<Tier> {
-        let points = self.osr_points.read().unwrap();
+        let points = self.osr_points.read().expect("osr_points lock poisoned");
 
         for point in points.iter() {
             if point.function == func
@@ -870,7 +870,7 @@ impl TieredJit {
     pub fn get_function_tier(&self, name: &str) -> Tier {
         self.interpreter
             .get_profile(name)
-            .map(|p| *p.current_tier.read().unwrap())
+            .map(|p| *p.current_tier.read().expect("current_tier lock poisoned"))
             .unwrap_or(Tier::Interpreter)
     }
 
@@ -881,15 +881,15 @@ impl TieredJit {
         profile.update_hot_path_score();
 
         let execution_count = profile.execution_count.load(Ordering::Relaxed);
-        let current_tier = *profile.current_tier.read().unwrap();
+        let current_tier = *profile.current_tier.read().expect("current_tier lock poisoned");
         let hot_loops = profile
             .loop_counts
             .read()
-            .unwrap()
+            .expect("loop_counts lock poisoned")
             .iter()
             .filter(|(_, count)| **count > 1000)
             .count();
-        let hot_path_score = *profile.hot_path_score.read().unwrap();
+        let hot_path_score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
         let deopt_count = profile.deopt_count.load(Ordering::Relaxed);
         let is_blacklisted = profile.is_blacklisted();
 
@@ -905,7 +905,7 @@ impl TieredJit {
 
     /// Gets all function statistics.
     pub fn get_all_stats(&self) -> HashMap<String, FunctionStats> {
-        let profiles = self.interpreter.profiles.read().unwrap();
+        let profiles = self.interpreter.profiles.read().expect("profiles lock poisoned");
 
         profiles
             .iter()
@@ -913,15 +913,15 @@ impl TieredJit {
                 profile.update_hot_path_score();
 
                 let execution_count = profile.execution_count.load(Ordering::Relaxed);
-                let current_tier = *profile.current_tier.read().unwrap();
+                let current_tier = *profile.current_tier.read().expect("current_tier lock poisoned");
                 let hot_loops = profile
                     .loop_counts
                     .read()
-                    .unwrap()
+                    .expect("loop_counts lock poisoned")
                     .iter()
                     .filter(|(_, count)| **count > 1000)
                     .count();
-                let hot_path_score = *profile.hot_path_score.read().unwrap();
+                let hot_path_score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
                 let deopt_count = profile.deopt_count.load(Ordering::Relaxed);
                 let is_blacklisted = profile.is_blacklisted();
 
@@ -1143,7 +1143,7 @@ mod tests {
 
         // Manually promote to baseline
         if let Some(profile) = interp.get_profile("hot") {
-            let mut tier = profile.current_tier.write().unwrap();
+            let mut tier = profile.current_tier.write().expect("current_tier lock poisoned");
             *tier = Tier::Baseline;
         }
 
@@ -1172,7 +1172,7 @@ mod tests {
         let profile = interp.get_profile("branch_test").unwrap();
 
         // Should have recorded branch outcomes
-        let branch_counts = profile.branch_counts.read().unwrap();
+        let branch_counts = profile.branch_counts.read().expect("branch_counts lock poisoned");
         assert!(!branch_counts.is_empty());
     }
 
@@ -1189,7 +1189,7 @@ mod tests {
         let profile = interp.get_profile("loop_test").unwrap();
 
         // Should have recorded loop iterations
-        let loop_counts = profile.loop_counts.read().unwrap();
+        let loop_counts = profile.loop_counts.read().expect("loop_counts lock poisoned");
         assert!(!loop_counts.is_empty());
     }
 
@@ -1228,7 +1228,7 @@ mod tests {
         let profile = interp.get_profile("loop_heavy").unwrap();
         profile.update_hot_path_score();
 
-        let score = *profile.hot_path_score.read().unwrap();
+        let score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
 
         // Score should be high due to many loop iterations
         assert!(
@@ -1248,7 +1248,7 @@ mod tests {
 
         // Get profile and manually promote to Baseline
         if let Some(profile) = jit.interpreter.get_profile("hot") {
-            let mut tier = profile.current_tier.write().unwrap();
+            let mut tier = profile.current_tier.write().expect("current_tier lock poisoned");
             *tier = Tier::Baseline;
         }
 
@@ -1279,7 +1279,7 @@ mod tests {
         // Manually promote and deopt 3 times
         for _ in 0..3 {
             {
-                let mut tier = profile.current_tier.write().unwrap();
+                let mut tier = profile.current_tier.write().expect("current_tier lock poisoned");
                 *tier = Tier::Baseline;
             }
             jit.deoptimize("unstable").unwrap();
@@ -1305,7 +1305,7 @@ mod tests {
 
         jit.register_osr_point(osr_point.clone());
 
-        let points = jit.osr_points.read().unwrap();
+        let points = jit.osr_points.read().expect("osr_points lock poisoned");
         assert_eq!(points.len(), 1);
         assert_eq!(points[0].function, "hot_loop");
         assert_eq!(points[0].loop_id, 12345);
@@ -1357,7 +1357,7 @@ mod tests {
         let profile = interp.get_profile("work").unwrap();
         profile.update_hot_path_score();
 
-        let score = *profile.hot_path_score.read().unwrap();
+        let score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
 
         // With 10 executions and ~20 loop iterations each, score should be high
         assert!(score > 50.0, "Score should exceed baseline threshold");
@@ -1421,7 +1421,7 @@ mod tests {
         let profile = interp.get_profile("biased").unwrap();
         profile.update_hot_path_score();
 
-        let score = *profile.hot_path_score.read().unwrap();
+        let score = *profile.hot_path_score.read().expect("hot_path_score lock poisoned");
 
         // Score should include branch bias component
         assert!(score > 0.0, "Score should be > 0 with branch bias");
@@ -1447,7 +1447,7 @@ mod tests {
         // Mark as promoted
         profile.mark_promoted();
 
-        let last_promoted = *profile.last_promoted_at.read().unwrap();
+        let last_promoted = *profile.last_promoted_at.read().expect("last_promoted_at lock poisoned");
         assert_eq!(last_promoted, count_before);
     }
 }
