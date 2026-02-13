@@ -28,10 +28,10 @@ mod message;
 pub use locale::Locale;
 pub use message::I18n;
 
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::sync::RwLock;
 
-static I18N: OnceCell<RwLock<I18n>> = OnceCell::new();
+static I18N: OnceLock<RwLock<I18n>> = OnceLock::new();
 
 /// Initialize the global i18n instance
 ///
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn test_chinese_locale() {
-        // Use I18n directly to avoid OnceCell race conditions
+        // Use I18n directly to avoid OnceLock race conditions
         let i18n = I18n::with_locale(Locale::Zh);
         let title = i18n.get_simple("type.E001.title");
         assert_eq!(title, "类型不匹配");

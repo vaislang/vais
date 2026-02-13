@@ -1098,6 +1098,72 @@ impl CodeGenerator {
         }
     }
 
+    /// Emit LLVM IR module header (ModuleID, source_filename, target triple/datalayout).
+    fn emit_module_header(&mut self, ir: &mut String) {
+        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
+        ir.push_str("source_filename = \"<vais>\"\n");
+        if !matches!(self.target, TargetTriple::Native) {
+            ir.push_str(&format!(
+                "target datalayout = \"{}\"\n",
+                self.target.data_layout()
+            ));
+            ir.push_str(&format!(
+                "target triple = \"{}\"\n",
+                self.target.triple_str()
+            ));
+        }
+        ir.push('\n');
+        if self.debug_info.is_enabled() {
+            self.debug_info.initialize();
+        }
+    }
+
+    /// Emit ABI version, string constants, and unwrap panic declaration.
+    fn emit_string_constants(&self, ir: &mut String, is_main_module: bool) {
+        if is_main_module {
+            let abi_version = crate::abi::ABI_VERSION;
+            let abi_version_len = abi_version.len() + 1;
+            ir.push_str(&format!(
+                "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
+                abi_version_len, abi_version
+            ));
+        }
+        for (name, value) in &self.string_constants {
+            let escaped = escape_llvm_string(value);
+            let len = value.len() + 1;
+            ir.push_str(&format!(
+                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
+                name, len, escaped
+            ));
+        }
+        if !self.string_constants.is_empty() {
+            ir.push('\n');
+        }
+        if self.needs_unwrap_panic {
+            ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
+            ir.push_str("declare void @abort()\n\n");
+        }
+    }
+
+    /// Emit body IR, lambda functions, and vtable globals.
+    fn emit_body_lambdas_vtables(&self, ir: &mut String, body_ir: &str) {
+        ir.push_str(body_ir);
+        for lambda_ir in &self.lambda_functions {
+            ir.push('\n');
+            ir.push_str(lambda_ir);
+        }
+        let vtable_ir = self.generate_vtable_globals();
+        if !vtable_ir.is_empty() {
+            ir.push_str("\n; VTable globals for trait objects\n");
+            ir.push_str(&vtable_ir);
+        }
+        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
+        if !drop_ir.is_empty() {
+            ir.push_str("\n; Drop functions for trait objects\n");
+            ir.push_str(&drop_ir);
+        }
+    }
+
     /// Generate LLVM IR for a subset of module items (per-module codegen).
     ///
     /// This method generates IR for only the items at the specified indices,
@@ -1141,25 +1207,7 @@ impl CodeGenerator {
         let mut ir = String::new();
         let index_set: std::collections::HashSet<usize> = valid_indices.iter().copied().collect();
 
-        // Header
-        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
-        ir.push_str("source_filename = \"<vais>\"\n");
-        if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!(
-                "target datalayout = \"{}\"\n",
-                self.target.data_layout()
-            ));
-            ir.push_str(&format!(
-                "target triple = \"{}\"\n",
-                self.target.triple_str()
-            ));
-        }
-        ir.push('\n');
-
-        // Initialize debug info if enabled
-        if self.debug_info.is_enabled() {
-            self.debug_info.initialize();
-        }
+        self.emit_module_header(&mut ir);
 
         // Snapshot builtin function keys (registered in constructor, before AST items)
         // These should NOT appear as cross-module extern declarations.
@@ -1334,51 +1382,8 @@ impl CodeGenerator {
             }
         }
 
-        // ABI version and globals only in main module
-        if is_main_module {
-            let abi_version = crate::abi::ABI_VERSION;
-            let abi_version_len = abi_version.len() + 1;
-            ir.push_str(&format!(
-                "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
-                abi_version_len, abi_version
-            ));
-        }
-
-        // String constants
-        for (name, value) in &self.string_constants {
-            let escaped = escape_llvm_string(value);
-            let len = value.len() + 1;
-            ir.push_str(&format!(
-                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
-                name, len, escaped
-            ));
-        }
-        if !self.string_constants.is_empty() {
-            ir.push('\n');
-        }
-
-        if self.needs_unwrap_panic {
-            ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            ir.push_str("declare void @abort()\n\n");
-        }
-
-        ir.push_str(&body_ir);
-
-        for lambda_ir in &self.lambda_functions {
-            ir.push('\n');
-            ir.push_str(lambda_ir);
-        }
-
-        let vtable_ir = self.generate_vtable_globals();
-        if !vtable_ir.is_empty() {
-            ir.push_str("\n; VTable globals for trait objects\n");
-            ir.push_str(&vtable_ir);
-        }
-        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
-        if !drop_ir.is_empty() {
-            ir.push_str("\n; Drop functions for trait objects\n");
-            ir.push_str(&drop_ir);
-        }
+        self.emit_string_constants(&mut ir, is_main_module);
+        self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime for main module
         if is_main_module && self.target.is_wasm() {
@@ -1824,28 +1829,7 @@ impl CodeGenerator {
     pub fn generate_module(&mut self, module: &Module) -> CodegenResult<String> {
         let mut ir = String::new();
 
-        // Header
-        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
-        ir.push_str("source_filename = \"<vais>\"\n");
-
-        // Target triple and data layout (for non-native targets)
-        if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!(
-                "target datalayout = \"{}\"\n",
-                self.target.data_layout()
-            ));
-            ir.push_str(&format!(
-                "target triple = \"{}\"\n",
-                self.target.triple_str()
-            ));
-        }
-        // Note: for Native target, omit these to let clang auto-detect
-        ir.push('\n');
-
-        // Initialize debug info if enabled
-        if self.debug_info.is_enabled() {
-            self.debug_info.initialize();
-        }
+        self.emit_module_header(&mut ir);
 
         // First pass: collect declarations
         for item in &module.items {
@@ -2006,52 +1990,8 @@ impl CodeGenerator {
             }
         }
 
-        // Add ABI version constant
-        let abi_version = crate::abi::ABI_VERSION;
-        let abi_version_len = abi_version.len() + 1; // +1 for null terminator
-        ir.push_str(&format!(
-            "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
-            abi_version_len, abi_version
-        ));
-
-        // Add string constants at the top of the module
-        for (name, value) in &self.string_constants {
-            let escaped = escape_llvm_string(value);
-            let len = value.len() + 1; // +1 for null terminator
-            ir.push_str(&format!(
-                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
-                name, len, escaped
-            ));
-        }
-        if !self.string_constants.is_empty() {
-            ir.push('\n');
-        }
-
-        // Add unwrap panic message and abort declaration if needed
-        if self.needs_unwrap_panic {
-            ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            ir.push_str("declare void @abort()\n\n");
-        }
-
-        ir.push_str(&body_ir);
-
-        // Add lambda functions at the end
-        for lambda_ir in &self.lambda_functions {
-            ir.push('\n');
-            ir.push_str(lambda_ir);
-        }
-
-        // Add vtable globals and drop functions for trait objects
-        let vtable_ir = self.generate_vtable_globals();
-        if !vtable_ir.is_empty() {
-            ir.push_str("\n; VTable globals for trait objects\n");
-            ir.push_str(&vtable_ir);
-        }
-        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
-        if !drop_ir.is_empty() {
-            ir.push_str("\n; Drop functions for trait objects\n");
-            ir.push_str(&drop_ir);
-        }
+        self.emit_string_constants(&mut ir, true);
+        self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime functions if targeting WebAssembly
         if self.target.is_wasm() {
@@ -2128,32 +2068,9 @@ impl CodeGenerator {
     ) -> CodegenResult<String> {
         let mut ir = String::new();
 
-        // Header
-        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
-        ir.push_str("source_filename = \"<vais>\"\n");
-
-        // Target triple and data layout (for non-native targets)
-        if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!(
-                "target datalayout = \"{}\"\n",
-                self.target.data_layout()
-            ));
-            ir.push_str(&format!(
-                "target triple = \"{}\"\n",
-                self.target.triple_str()
-            ));
-        }
-        ir.push('\n');
-
-        // Initialize debug info if enabled
-        if self.debug_info.is_enabled() {
-            self.debug_info.initialize();
-        }
+        self.emit_module_header(&mut ir);
 
         // First pass: collect declarations (including generic templates)
-        let mut generic_functions: HashMap<String, Function> = HashMap::new();
-        let mut generic_structs: HashMap<String, Struct> = HashMap::new();
-
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => {
@@ -2162,10 +2079,8 @@ impl CodeGenerator {
 
                     if !f.generics.is_empty() {
                         // Store generic function for later specialization
-                        let f_rc = std::rc::Rc::new(f.clone());
-                        generic_functions.insert(f.name.node.clone(), f.clone());
                         self.generic_function_templates
-                            .insert(f.name.node.clone(), std::rc::Rc::clone(&f_rc));
+                            .insert(f.name.node.clone(), std::rc::Rc::new(f.clone()));
                     } else {
                         self.register_function(f)?;
                     }
@@ -2173,11 +2088,8 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     if !s.generics.is_empty() {
                         // Store generic struct for later specialization
-                        let s_rc = std::rc::Rc::new(s.clone());
-                        generic_structs.insert(s.name.node.clone(), s.clone());
-                        // Also store in the generic_struct_defs for type inference
                         self.generic_struct_defs
-                            .insert(s.name.node.clone(), std::rc::Rc::clone(&s_rc));
+                            .insert(s.name.node.clone(), std::rc::Rc::new(s.clone()));
                     } else {
                         self.register_struct(s)?;
                         for method in &s.methods {
@@ -2226,7 +2138,7 @@ impl CodeGenerator {
         // Build generic function instantiation mapping and register specialized function signatures
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
-                if let Some(generic_fn) = generic_functions.get(&inst.base_name) {
+                if let Some(generic_fn) = self.generic_function_templates.get(&inst.base_name).cloned() {
                     // Build instantiation mapping: base_name -> [(type_args, mangled_name)]
                     self.generic_fn_instantiations
                         .entry(inst.base_name.clone())
@@ -2288,8 +2200,8 @@ impl CodeGenerator {
         // Generate specialized struct types from instantiations
         for inst in instantiations {
             if let vais_types::InstantiationKind::Struct = inst.kind {
-                if let Some(generic_struct) = generic_structs.get(&inst.base_name) {
-                    self.generate_specialized_struct_type(generic_struct, inst, &mut ir)?;
+                if let Some(generic_struct) = self.generic_struct_defs.get(&inst.base_name).cloned() {
+                    self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
                 }
             }
         }
@@ -2338,8 +2250,8 @@ impl CodeGenerator {
         // Generate specialized functions from instantiations
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
-                if let Some(generic_fn) = generic_functions.get(&inst.base_name) {
-                    body_ir.push_str(&self.generate_specialized_function(generic_fn, inst)?);
+                if let Some(generic_fn) = self.generic_function_templates.get(&inst.base_name).cloned() {
+                    body_ir.push_str(&self.generate_specialized_function(&generic_fn, inst)?);
                     body_ir.push('\n');
                 }
             }
@@ -2393,52 +2305,8 @@ impl CodeGenerator {
             }
         }
 
-        // Add ABI version constant
-        let abi_version = crate::abi::ABI_VERSION;
-        let abi_version_len = abi_version.len() + 1; // +1 for null terminator
-        ir.push_str(&format!(
-            "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
-            abi_version_len, abi_version
-        ));
-
-        // Add string constants
-        for (name, value) in &self.string_constants {
-            let escaped = escape_llvm_string(value);
-            let len = value.len() + 1;
-            ir.push_str(&format!(
-                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
-                name, len, escaped
-            ));
-        }
-        if !self.string_constants.is_empty() {
-            ir.push('\n');
-        }
-
-        // Add unwrap panic message and abort declaration if needed
-        if self.needs_unwrap_panic {
-            ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            ir.push_str("declare void @abort()\n\n");
-        }
-
-        ir.push_str(&body_ir);
-
-        // Add lambda functions
-        for lambda_ir in &self.lambda_functions {
-            ir.push('\n');
-            ir.push_str(lambda_ir);
-        }
-
-        // Add vtable globals for trait objects
-        let vtable_ir = self.generate_vtable_globals();
-        if !vtable_ir.is_empty() {
-            ir.push_str("\n; VTable globals for trait objects\n");
-            ir.push_str(&vtable_ir);
-        }
-        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
-        if !drop_ir.is_empty() {
-            ir.push_str("\n; Drop functions for trait objects\n");
-            ir.push_str(&drop_ir);
-        }
+        self.emit_string_constants(&mut ir, true);
+        self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime if targeting WebAssembly
         if self.target.is_wasm() {

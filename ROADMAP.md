@@ -1086,4 +1086,42 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 리뷰 발견사항 (2026-02-13)
+> 출처: /team-review 전체 코드베이스 성능/리팩토링 리뷰
+
+### Critical
+- [x] 1. [성능] format!("{:?}") 해싱 → ResolvedType 직접 Hash — exhaustiveness.rs ✅ 2026-02-13
+  변경: exhaustiveness.rs (hash_type→ty.hash(), hash_patterns→재귀 hash_pattern(), f64.to_bits())
+- [x] 2. [성능] type_to_llvm() 캐시 키 → HashMap<ResolvedType,String> (이미 완료) ✅ 2026-02-13
+- [x] 3. [성능] generic Function AST 이중 clone → Rc 공유 ✅ 2026-02-13
+  변경: lib.rs (generate_module_with_instantiations: 로컬 HashMap 제거, self.generic_function_templates/generic_struct_defs 직접 사용)
+- [x] 4. [아키텍처] generate_expr() 3,061줄 → 카테고리별 서브함수 분할 ✅ 2026-02-13
+  변경: generate_expr.rs (Call 963줄→generate_expr_call(), StructLit 124줄→generate_expr_struct_lit())
+- [ ] 5. [아키텍처] CodeGenerator 49필드 → sub-struct 그룹화 (연기 — 다중 세션 필요)
+- [x] 6. [아키텍처] generate_module* 3함수 공통 코드 헬퍼 추출 ✅ 2026-02-13
+  변경: lib.rs (+emit_module_header/emit_string_constants/emit_body_lambdas_vtables, 3함수 중복 ~90줄 제거)
+- [x] 7. [빌드] wasmtime 전이 deps → feature flag 게이팅 (이미 완료) ✅ 2026-02-13
+- [x] 8. [빌드] thiserror 1.x+2.x 이중 버전 → 단일 통일 (이미 완료) ✅ 2026-02-13
+- [x] 9. [빌드] tokio "full" → per-crate 최소 features (이미 완료) ✅ 2026-02-13
+
+### Warning
+- [ ] 10. [성능] 람다 locals HashMap clone → scope chain 전환
+- [ ] 11. [성능] push_str(&format!()) → write!() 전환
+- [ ] 12. [성능] String::new() → String::with_capacity()
+- [x] 13. [아키텍처] register_file_io_builtins() 보일러플레이트 축소 ✅ 2026-02-13
+  변경: builtins.rs (+register_vararg!/register_builtin! 매크로, IO 6함수 ~70줄 절감)
+- [ ] 14. [아키텍처] generate_method/function_with_span 중복 추출
+- [x] 15. [아키텍처] borrow_check.rs 인라인 테스트 → 별도 파일 분리 ✅ 2026-02-13
+  변경: borrow_check.rs (4,606→1,309줄, -71.6%), tests/borrow_check_tests.rs (49 tests 분리)
+- [ ] 16. [품질] FunctionSig Default/builder 패턴 도입
+- [ ] 17. [품질] TypeError span: None 57건 → 소스 위치 전달
+- [ ] 18. [품질] tiered.rs RwLock unwrap 95건 → graceful 에러 처리
+- [ ] 19. [빌드] vais-gpu 비선택 의존성 → feature flag 게이팅
+- [ ] 20. [빌드] workspace 공통 deps 통일
+- [x] 21. [빌드] once_cell → std::sync::OnceLock 전환 ✅ 2026-02-13
+  변경: vais-i18n/Cargo.toml (once_cell 제거), vais-i18n/src/lib.rs (OnceCell→OnceLock)
+진행률: 11/21 (52%) — Critical 8/9 완료 (#5 연기), Warning 3/12 완료
+
+---
+
 **메인테이너**: Steve

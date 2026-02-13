@@ -77,7 +77,7 @@ impl ExhaustivenessChecker {
     /// Compute hash for a type
     fn hash_type(ty: &ResolvedType) -> u64 {
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", ty).hash(&mut hasher);
+        ty.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -85,12 +85,67 @@ impl ExhaustivenessChecker {
     fn hash_patterns(arms: &[MatchArm]) -> u64 {
         let mut hasher = DefaultHasher::new();
         for arm in arms {
-            format!("{:?}", arm.pattern).hash(&mut hasher);
+            Self::hash_pattern(&arm.pattern.node, &mut hasher);
             if arm.guard.is_some() {
                 "guard".hash(&mut hasher);
             }
         }
         hasher.finish()
+    }
+
+    /// Hash a pattern without format!("{:?}") allocation overhead
+    fn hash_pattern(pattern: &Pattern, hasher: &mut DefaultHasher) {
+        std::mem::discriminant(pattern).hash(hasher);
+        match pattern {
+            Pattern::Wildcard => {}
+            Pattern::Ident(name) => name.hash(hasher),
+            Pattern::Literal(lit) => match lit {
+                Literal::Int(v) => v.hash(hasher),
+                Literal::Float(v) => v.to_bits().hash(hasher),
+                Literal::Bool(v) => v.hash(hasher),
+                Literal::String(v) => v.hash(hasher),
+            },
+            Pattern::Tuple(pats) => {
+                pats.len().hash(hasher);
+                for p in pats {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+            Pattern::Struct { name, fields } => {
+                name.node.hash(hasher);
+                for (fname, fpat) in fields {
+                    fname.node.hash(hasher);
+                    if let Some(p) = fpat {
+                        Self::hash_pattern(&p.node, hasher);
+                    }
+                }
+            }
+            Pattern::Variant { name, fields } => {
+                name.node.hash(hasher);
+                for p in fields {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+            Pattern::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                if let Some(s) = start {
+                    Self::hash_pattern(&s.node, hasher);
+                }
+                if let Some(e) = end {
+                    Self::hash_pattern(&e.node, hasher);
+                }
+                inclusive.hash(hasher);
+            }
+            Pattern::Or(pats) => {
+                pats.len().hash(hasher);
+                for p in pats {
+                    Self::hash_pattern(&p.node, hasher);
+                }
+            }
+        }
     }
 
     /// Register enum variants for exhaustiveness checking
