@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770975447917,
+  "lastUpdate": 1770980347321,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -20327,6 +20327,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1831610,
             "range": "± 17379",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "f7d04a65520ae8bc6f268591992207524b6fa54a",
+          "message": "perf: optimize codegen hot-path allocations and resolve review findings\n\nPhase 26: clone/format!/to_string reduction across vais-codegen crate.\n- Replace to_string() with String::from() for static type strings (types.rs, builtins.rs)\n- Remove 21 unnecessary clone() calls via move/take semantics (generate_expr, control_flow, expr_helpers_call, function_gen)\n- Add 13 #[inline] hints to high-frequency small functions\n- Reduce lambda_closure clone count 73% (HashSet<String> unification)\n- Reduce contracts.rs clone count 56% (move semantics, divisors Vec→HashSet O(n²)→O(n))\n- Consolidate 3-way name.clone() into single to_string() (expr_helpers_call)\n- Remove substitutions.clone() in function_gen (direct move + &self reference)\n\nCodegen 50K benchmark: 30.1ms (-2.6% improved), full pipeline noise-neutral.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-13T19:52:05+09:00",
+          "tree_id": "fc2559cd856d1f0f95ef54312e5e9a0d112c2703",
+          "url": "https://github.com/vaislang/vais/commit/f7d04a65520ae8bc6f268591992207524b6fa54a"
+        },
+        "date": 1770980346894,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2364,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5259,
+            "range": "± 55",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6013,
+            "range": "± 295",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11344,
+            "range": "± 143",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17837,
+            "range": "± 50",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34061,
+            "range": "± 162",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30244,
+            "range": "± 196",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67284,
+            "range": "± 355",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 301485,
+            "range": "± 1147",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 453494,
+            "range": "± 2216",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118604,
+            "range": "± 1154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 768807,
+            "range": "± 2043",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 168320,
+            "range": "± 675",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 196741,
+            "range": "± 851",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 205947,
+            "range": "± 1418",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 251075,
+            "range": "± 3680",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 536624,
+            "range": "± 1759",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 747901,
+            "range": "± 2069",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 416293,
+            "range": "± 2329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1181429,
+            "range": "± 8208",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 33685,
+            "range": "± 185",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 170984,
+            "range": "± 1224",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 330647,
+            "range": "± 2001",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1622127,
+            "range": "± 12856",
             "unit": "ns/iter"
           }
         ]
