@@ -1300,4 +1300,43 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## Phase 29: vaisc 컴파일 에러 해결 (62건)
+
+> **상태**: ✅ 완료 (2026-02-13)
+> **목표**: vaisc 바이너리의 pre-existing 컴파일 에러 62건 해결 — LtoMode/PgoMode/CoverageMode 미정의 타입 및 관련 에러
+> **영향도**: High — 컴파일러 바이너리 빌드 정상화, CI/릴리스 차단 해소
+> **근본 원인**: optimize/mod.rs에서 pgo, lto 서브모듈이 pub(crate) → 외부 crate(vaisc)에서 LtoMode/PgoMode/CoverageMode 접근 불가
+
+- [x] 1. optimize 모듈 가시성 수정 & 타입 re-export (Opus 직접) ✅ 2026-02-13
+  변경: optimize/mod.rs (pub(crate)→pub mod pgo/lto + pub use LtoMode/PgoMode/CoverageMode re-export)
+- [x] 2. 빌드 검증 & Clippy 확인 ✅ 2026-02-13
+  결과: cargo check 0 에러, clippy 0 경고, E2E 520 통과, 전체 vaisc 1,121 통과
+진행률: 2/2 (100%)
+
+---
+
+## Phase 30: 대형 파일 모듈 분할 (Round 2)
+
+> **상태**: 📋 예정
+> **목표**: 1500줄 이상 대형 파일 5개 모듈 분할 — borrow_check.rs(4.6K), codegen/lib.rs(3.5K), pkg.rs(2.6K), incremental.rs(2.5K), parser/lib.rs(2.4K)
+> **영향도**: Medium — 유지보수성 향상, 코드 탐색 용이
+
+---
+
+## Phase 31: 에러 메시지 & 진단 개선
+
+> **상태**: 📋 예정
+> **목표**: 컴파일러 에러 메시지 품질 향상 — 타입 제안(did you mean?), 미사용 변수 경고, 더 나은 스팬 표시
+> **영향도**: Medium — 사용자 경험(DX) 핵심
+
+---
+
+## Phase 32: 언어 기능 확장
+
+> **상태**: 📋 예정
+> **목표**: 클로저 개선(캡처 모드 명시), 패턴 매칭 강화(or-pattern, guard), 제네릭 개선(where 절)
+> **영향도**: Medium — 실사용 사례 확대, 표현력 향상
+
+---
+
 **메인테이너**: Steve
