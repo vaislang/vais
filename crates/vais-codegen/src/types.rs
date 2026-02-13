@@ -758,7 +758,7 @@ mod sizeof_alignof_tests {
     fn test_struct_sizeof_sums_fields() {
         let mut gen = CodeGenerator::new("test");
         // Struct with two i8 fields
-        gen.structs.insert(
+        gen.types.structs.insert(
             "Point2D".to_string(),
             StructInfo {
                 _name: "Point2D".to_string(),
@@ -781,7 +781,7 @@ mod sizeof_alignof_tests {
     fn test_struct_alignof_takes_max_field() {
         let mut gen = CodeGenerator::new("test");
         // Struct with i8 and i32 fields
-        gen.structs.insert(
+        gen.types.structs.insert(
             "MixedStruct".to_string(),
             StructInfo {
                 _name: "MixedStruct".to_string(),

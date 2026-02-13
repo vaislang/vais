@@ -134,7 +134,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str, _counter: &mut usize) -> GenResult {
-        let name = format!(".str.{}", self.strings.counter);
+        let name = self.make_string_name();
         self.strings.counter += 1;
         self.strings.constants.push((name.clone(), s.to_string()));
 
@@ -465,7 +465,7 @@ impl ExprVisitor for CodeGenerator {
             }
             vais_types::ComptimeValue::String(s) => {
                 // Create a global string constant
-                let name = format!(".str.{}", self.strings.counter);
+                let name = self.make_string_name();
                 self.strings.counter += 1;
                 self.strings.constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;
@@ -538,7 +538,7 @@ impl ExprVisitor for CodeGenerator {
         let old_var_name = format!("__old_{}", *counter);
         *counter += 1;
 
-        if let Some(snapshot_var) = self.old_snapshots.get(&old_var_name) {
+        if let Some(snapshot_var) = self.contracts.old_snapshots.get(&old_var_name) {
             let ty = self.infer_expr_type(inner);
             let llvm_ty = self.type_to_llvm(&ty);
             let result = self.next_temp(counter);

@@ -18,7 +18,7 @@ impl CodeGenerator {
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
-                let name = format!(".str.{}", self.strings.counter);
+                let name = self.make_string_name();
                 self.strings.counter += 1;
                 self.strings.constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;

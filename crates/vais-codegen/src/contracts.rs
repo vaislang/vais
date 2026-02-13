@@ -185,7 +185,7 @@ impl CodeGenerator {
     /// Get or create a contract string constant, returning an i8* GEP expression
     fn get_or_create_contract_string(&mut self, s: &str) -> String {
         // Check if we already have this string
-        if let Some(name) = self.strings.contract_constants.get(s) {
+        if let Some(name) = self.contracts.contract_constants.get(s) {
             return format!(
                 "getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
                 s.len() + 1,
@@ -195,10 +195,10 @@ impl CodeGenerator {
         }
 
         // Create a new string constant
-        let const_name = format!("@.str.contract.{}", self.strings.contract_counter);
-        self.strings.contract_counter += 1;
+        let const_name = format!("@.str.contract.{}", self.contracts.contract_counter);
+        self.contracts.contract_counter += 1;
 
-        self.strings.contract_constants
+        self.contracts.contract_constants
             .insert(s.to_string(), const_name.clone());
 
         format!(
@@ -212,7 +212,7 @@ impl CodeGenerator {
     /// Generate declarations for contract runtime functions
     pub(crate) fn generate_contract_declarations(&self) -> String {
         // Only generate if we have any contracts
-        if self.strings.contract_constants.is_empty() && self.release_mode {
+        if self.contracts.contract_constants.is_empty() && self.release_mode {
             return String::new();
         }
 
@@ -230,7 +230,7 @@ impl CodeGenerator {
     pub(crate) fn generate_contract_string_constants(&self) -> String {
         let mut ir = String::new();
 
-        for (s, name) in &self.strings.contract_constants {
+        for (s, name) in &self.contracts.contract_constants {
             let escaped = escape_string_for_llvm(s);
             writeln!(ir, "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", name, s.len() + 1, escaped).unwrap();
         }
@@ -883,7 +883,7 @@ impl CodeGenerator {
 
                 // Register the snapshot
                 let old_var_name = format!("__old_{}", *counter);
-                self.old_snapshots.insert(old_var_name, snapshot_name);
+                self.contracts.old_snapshots.insert(old_var_name, snapshot_name);
                 *counter += 1;
             }
 
@@ -994,7 +994,7 @@ impl CodeGenerator {
                     writeln!(ir, "  store i64 {}, i64* %{}", value, storage_name).unwrap();
 
                     // Store decreases info for recursive call checking
-                    self.current_decreases_info = Some(crate::DecreasesInfo {
+                    self.contracts.current_decreases_info = Some(crate::DecreasesInfo {
                         storage_name: storage_name.clone(),
                         expr: expr.clone(),
                         function_name: f.name.node.clone(),
@@ -1044,7 +1044,7 @@ impl CodeGenerator {
             return Ok(String::new());
         }
 
-        let decreases_info = match &self.current_decreases_info {
+        let decreases_info = match &self.contracts.current_decreases_info {
             Some(info) => info.clone(),
             None => return Ok(String::new()),
         };
@@ -1139,17 +1139,17 @@ impl CodeGenerator {
 
     /// Clear decreases info (called when leaving function scope)
     pub(crate) fn clear_decreases_info(&mut self) {
-        self.current_decreases_info = None;
+        self.contracts.current_decreases_info = None;
     }
 
     /// Check if current function has a decreases clause
     pub(crate) fn _has_decreases_clause(&self) -> bool {
-        self.current_decreases_info.is_some()
+        self.contracts.current_decreases_info.is_some()
     }
 
     /// Get the function name with decreases clause (if any)
     pub(crate) fn _get_decreases_function_name(&self) -> Option<String> {
-        self.current_decreases_info
+        self.contracts.current_decreases_info
             .as_ref()
             .map(|info| info.function_name.clone())
     }

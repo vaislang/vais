@@ -1820,7 +1820,7 @@ impl CodeGenerator {
                 *counter += 1;
 
                 // Check if we have a pre-snapshot for this expression
-                if let Some(snapshot_var) = self.old_snapshots.get(&old_var_name) {
+                if let Some(snapshot_var) = self.contracts.old_snapshots.get(&old_var_name) {
                     let ty = self.infer_expr_type(inner);
                     let llvm_ty = self.type_to_llvm(&ty);
                     let result = self.next_temp(counter);
@@ -1955,7 +1955,7 @@ impl CodeGenerator {
                 lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
 
                 // Store lambda function for later emission
-                self.lambdas.functions.push(lambda_ir);
+                self.lambdas.generated_ir.push(lambda_ir);
 
                 // Restore function context
                 self.fn_ctx.current_function = saved_function;

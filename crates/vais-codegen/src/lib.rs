@@ -813,8 +813,8 @@ pub(crate) struct FunctionContext {
 
 /// Lambda, closure, and async function state
 pub(crate) struct LambdaState {
-    /// Lambda functions generated during compilation
-    pub(crate) functions: Vec<String>,
+    /// Generated LLVM IR for lambda functions, emitted after the main body
+    pub(crate) generated_ir: Vec<String>,
     /// Closure information for each lambda variable (maps var_name -> closure_info)
     pub(crate) closures: HashMap<String, ClosureInfo>,
     /// Last generated lambda info (for Let statement to pick up)
@@ -835,10 +835,19 @@ pub(crate) struct StringPool {
     pub(crate) counter: usize,
     /// Module-specific prefix for string constants (avoids collisions in multi-module builds)
     pub(crate) prefix: Option<String>,
+}
+
+/// Contract verification state — pre/post conditions, old() snapshots, decreases
+pub(crate) struct ContractState {
     /// Contract string constants (separate from regular strings)
     pub(crate) contract_constants: HashMap<String, String>,
     /// Counter for contract string constant names
     pub(crate) contract_counter: usize,
+    /// Pre-state snapshots for old() expressions in ensures clauses
+    /// Maps snapshot variable name -> allocated storage name
+    pub(crate) old_snapshots: HashMap<String, String>,
+    /// Decreases expressions for current function (for termination proof)
+    pub(crate) current_decreases_info: Option<DecreasesInfo>,
 }
 
 /// LLVM IR Code Generator for Vais 0.0.1
@@ -884,18 +893,14 @@ pub struct CodeGenerator {
     gc_threshold: usize,
 
     // VTable generator for trait objects (dyn Trait)
+    // Uses trait definitions from `self.types.trait_defs` (TypeRegistry) for vtable layout
     vtable_generator: vtable::VtableGenerator,
 
     // Release mode flag (disables contract checks)
     release_mode: bool,
 
-    // Pre-state snapshots for old() expressions in ensures clauses
-    // Maps snapshot variable name -> allocated storage name
-    old_snapshots: HashMap<String, String>,
-
-    // Decreases expressions for current function (for termination proof)
-    // Maps function name -> (storage_var_name, decreases_expr_span)
-    current_decreases_info: Option<DecreasesInfo>,
+    // Contract verification state (old() snapshots, decreases, contract strings)
+    contracts: ContractState,
 
     // Type recursion depth tracking (prevents infinite recursion)
     type_recursion_depth: std::cell::Cell<usize>,
@@ -975,11 +980,9 @@ impl CodeGenerator {
                 constants: Vec::new(),
                 counter: 0,
                 prefix: None,
-                contract_constants: HashMap::new(),
-                contract_counter: 0,
             },
             lambdas: LambdaState {
-                functions: Vec::new(),
+                generated_ir: Vec::new(),
                 closures: HashMap::new(),
                 last_lambda_info: None,
                 async_state_counter: 0,
@@ -996,8 +999,12 @@ impl CodeGenerator {
             gc_threshold: 1048576, // 1 MB default
             vtable_generator: vtable::VtableGenerator::new(),
             release_mode: false,
-            old_snapshots: HashMap::new(),
-            current_decreases_info: None,
+            contracts: ContractState {
+                contract_constants: HashMap::new(),
+                contract_counter: 0,
+                old_snapshots: HashMap::new(),
+                current_decreases_info: None,
+            },
             type_recursion_depth: std::cell::Cell::new(0),
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
@@ -1159,7 +1166,7 @@ impl CodeGenerator {
     /// Emit body IR, lambda functions, and vtable globals.
     fn emit_body_lambdas_vtables(&self, ir: &mut String, body_ir: &str) {
         ir.push_str(body_ir);
-        for lambda_ir in &self.lambdas.functions {
+        for lambda_ir in &self.lambdas.generated_ir {
             ir.push('\n');
             ir.push_str(lambda_ir);
         }
@@ -1436,7 +1443,7 @@ impl CodeGenerator {
             }
         }
 
-        if !self.strings.contract_constants.is_empty() {
+        if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }
@@ -1469,7 +1476,7 @@ impl CodeGenerator {
     /// Check if a function call is recursive (calls the current function with decreases clause)
     fn is_recursive_call(&self, fn_name: &str) -> bool {
         // Check if we have a decreases clause for this function
-        if let Some(ref decreases_info) = self.current_decreases_info {
+        if let Some(ref decreases_info) = self.contracts.current_decreases_info {
             // A recursive call is when the called function matches the function with decreases
             decreases_info.function_name == fn_name
         } else {
@@ -2027,7 +2034,7 @@ impl CodeGenerator {
         }
 
         // Add contract runtime declarations if any contracts are present
-        if !self.strings.contract_constants.is_empty() {
+        if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }
@@ -2332,7 +2339,7 @@ impl CodeGenerator {
         }
 
         // Add contract runtime declarations if any contracts are present
-        if !self.strings.contract_constants.is_empty() {
+        if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
         }

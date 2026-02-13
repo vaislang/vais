@@ -885,7 +885,7 @@ impl CodeGenerator {
                     ));
                 } else {
                     // For print with non-literal, use printf with %s
-                    let fmt_name = format!(".str.{}", self.strings.counter);
+                    let fmt_name = self.make_string_name();
                     self.strings.counter += 1;
                     self.strings.constants
                         .push((fmt_name.clone(), "%s".to_string()));
@@ -964,7 +964,7 @@ impl CodeGenerator {
         }
 
         // Create global string constant for the C format string
-        let fmt_name = format!(".str.{}", self.strings.counter);
+        let fmt_name = self.make_string_name();
         self.strings.counter += 1;
         self.strings.constants
             .push((fmt_name.clone(), c_format.clone()));
@@ -1007,7 +1007,7 @@ impl CodeGenerator {
             self.strings.counter -= 1;
             // Create puts string (without trailing \n, since puts adds one)
             let puts_str = &c_format[..c_format.len() - 1];
-            let puts_name = format!(".str.{}", self.strings.counter);
+            let puts_name = self.make_string_name();
             self.strings.counter += 1;
             self.strings.constants
                 .push((puts_name.clone(), puts_str.to_string()));
@@ -1116,7 +1116,7 @@ impl CodeGenerator {
         }
 
         // Create global string constant for the C format string
-        let fmt_name = format!(".str.{}", self.strings.counter);
+        let fmt_name = self.make_string_name();
         self.strings.counter += 1;
         self.strings.constants
             .push((fmt_name.clone(), c_format.clone()));
@@ -2189,7 +2189,7 @@ impl CodeGenerator {
         lambda_ir.push_str(&body_ir);
         lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
 
-        self.lambdas.functions.push(lambda_ir);
+        self.lambdas.generated_ir.push(lambda_ir);
 
         self.fn_ctx.current_function = saved_function;
         self.fn_ctx.locals = saved_locals;

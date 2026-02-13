@@ -1174,11 +1174,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ## 리뷰 발견사항 (2026-02-13)
 > 출처: /team-review Phase 24
 
-- [ ] 1. [아키텍처] vtable_generator 필드에 trait_defs 교차 참조 코멘트 추가 (Warning) — 대상: lib.rs:887
-- [ ] 2. [아키텍처] make_string_name() 미사용 8건 마이그레이션 (Warning, pre-existing) — 대상: expr.rs, expr_helpers.rs, expr_visitor.rs, control_flow.rs
-- [ ] 3. [아키텍처] LambdaState.functions 이름 변경 검토 (Warning) — 대상: lib.rs:817
-- [ ] 4. [아키텍처] ContractState sub-struct 검토 — old_snapshots/decreases + contract strings (Warning) — 대상: lib.rs:893-898
-진행률: 0/4 (0%)
+모드: 자동진행
+- [x] 1. [아키텍처] vtable_generator 필드에 trait_defs 교차 참조 코멘트 추가 (Warning) ✅
+  변경: lib.rs:887 (vtable_generator 필드에 types.trait_defs 교차 참조 코멘트 추가)
+- [x] 2. [아키텍처] make_string_name() 미사용 7건 마이그레이션 (Warning, pre-existing) ✅
+  변경: expr.rs(1건), expr_visitor.rs(2건), expr_helpers.rs(4건) — format!(".str.{}") → self.make_string_name() 전환
+- [x] 3. [아키텍처] LambdaState.functions → generated_ir 이름 변경 ✅
+  변경: lib.rs, generate_expr.rs, expr_helpers.rs — LambdaState.functions → generated_ir 리네임 (4건)
+- [x] 4. [아키텍처] ContractState sub-struct 추출 ✅
+  변경: lib.rs (ContractState struct 정의), contracts.rs(12건), generate_expr.rs(1건), expr_visitor.rs(1건), types.rs 테스트 수정(2건) — old_snapshots/decreases/contract_constants를 ContractState로 통합
+진행률: 4/4 (100%)
 
 ---
 
