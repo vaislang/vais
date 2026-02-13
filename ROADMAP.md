@@ -145,6 +145,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 21** | CI 전체 Green | cargo fmt 78파일, Windows CI explicit `-p` flags (LLVM 미설치 crate 분리), ASan vais-codegen continue-on-error, vais-mir borrow checker 테스트 18개 `#[ignore]` (MirType::Str Copy→Struct 전환 필요), Windows path separator 수정, Codecov 토큰 설정 — **CI 13/13 green, 3-OS 전체 통과** |
 | **Phase 22** | MIR Borrow Checker 테스트 정상화 | ✅ 2026-02-12 — `#[ignore]` 18개→0개 (MirType::Str→Struct("TestNonCopy") 전환 + lower.rs Copy 반영), vais-mir 144 passed/0 ignored |
 | **Phase 23** | 선택적 Import 구문 | ✅ 2026-02-12 — `U mod.Item;`, `U mod.{A, B};` 파서/이름해석/포매터 구현, E2E 520 통과, 8개 신규 파서 테스트 |
+| **Phase 24** | CodeGenerator sub-struct 그룹화 | ✅ 2026-02-13 — 53필드→5 sub-struct(TypeRegistry/GenericState/FunctionContext/StringPool/LambdaState)+16 직접필드, E2E 520 통과 |
+| **Phase 25** | 대형 파일 모듈 분할 | 📋 예정 — optimize.rs(2,907줄)/generate_expr.rs(3,216줄)/expr_helpers.rs(2,650줄)/lib.rs(4,078줄) 카테고리별 서브모듈화 |
+| **Phase 26** | Hot-path 성능 최적화 | 📋 예정 — clone 392건/format! 1,265건 분석, Cow<str>/inline/정적 문자열 전환으로 5~15% 속도 개선 |
+| **Phase 27** | Python/Node 바인딩 테스트 | 📋 예정 — vais-python +20개, vais-node +20개 통합 테스트, CI 연동 |
+| **Phase 28** | 문서 보강 | 📋 예정 — Testing Guide/Error Handling/Compiler Internals/Package Manager 가이드 신규 |
 
 ---
 
@@ -1184,6 +1189,89 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. [아키텍처] ContractState sub-struct 추출 ✅
   변경: lib.rs (ContractState struct 정의), contracts.rs(12건), generate_expr.rs(1건), expr_visitor.rs(1건), types.rs 테스트 수정(2건) — old_snapshots/decreases/contract_constants를 ContractState로 통합
 진행률: 4/4 (100%)
+
+---
+
+## Phase 25: 대형 파일 모듈 분할 (2026-02-13)
+
+> **상태**: ✅ 완료 (2026-02-13)
+> **목표**: 2,500줄+ 대형 파일을 카테고리별 서브모듈로 분할하여 유지보수성 및 컴파일 시간 개선
+> **영향도**: High
+
+모드: 자동진행
+- [x] 1. optimize.rs 분할 — PGO/LTO/IR 최적화 패스별 서브모듈 ✅
+  변경: optimize.rs(2,907줄) → optimize/{mod,pgo,ir_passes,lto,inlining}.rs 디렉토리 모듈 전환
+- [x] 2. generate_expr.rs 분할 — 산술/비교/호출/리터럴/인덱싱 카테고리별 ✅
+  변경: generate_expr.rs(3,216줄) → generate_expr.rs(1,990줄) + generate_expr_{call,struct,loop}.rs 추출
+- [x] 3. expr_helpers.rs 분할 — 호출/문자열/캐스팅 헬퍼별 ✅
+  변경: expr_helpers.rs(2,650줄) → expr_helpers.rs(380줄) + expr_helpers_{call,control,data,misc}.rs 추출
+- [x] 4. lib.rs 정리 — 초기화/설정/유틸리티를 별도 모듈로 추출 ✅
+  변경: lib.rs(4,078줄→3,528줄) — TargetTriple→target.rs(424줄), diagnostics.rs(144줄) 추출
+- [x] 5. 검증 — Build OK, E2E 520/520, Clippy 0건 ✅
+진행률: 5/5 (100%)
+
+### 리뷰 발견사항 (2026-02-13)
+> 출처: /team-review Phase 25
+
+- [ ] 1. [성능] extract_function_name() 중복 제거 (Warning) — 대상: optimize/{ir_passes,lto,inlining}.rs
+- [ ] 2. [성능] 와일드카드 import → 명시적 import 전환 (Warning) — 대상: generate_expr_{call,loop,struct}.rs
+- [ ] 3. [성능] optimize/mod.rs re-export 패턴 정리 (Warning) — 대상: optimize/mod.rs
+진행률: 0/3 (0%)
+
+---
+
+## Phase 26: Hot-path 성능 최적화 (📋 예정)
+
+> **상태**: 📋 예정
+> **목표**: codegen hot-path의 불필요한 할당(clone/format!/to_string) 제거로 5~15% 컴파일 속도 개선
+> **영향도**: High
+
+### 작업 (Sonnet)
+
+- [ ] 1. Criterion 프로파일링 — top 10 clone/allocation 병목 식별 (Sonnet)
+- [ ] 2. 정적 format!("constant") → &str 전환 — zero-cost 정적 문자열 (Sonnet)
+- [ ] 3. Cow<str> 도입 — 조건부 소유 문자열 패턴 전환 (Sonnet)
+- [ ] 4. #[inline] 힌트 — 고빈도 소형 함수에 인라인 어노테이션 추가 (Sonnet)
+- [ ] 5. clone() 감소 2차 — 잔여 392건 중 hot-path 집중 제거 (Sonnet)
+- [ ] 6. 벤치마크 전후 비교 — 50K lines 컴파일 시간 측정 (Sonnet)
+
+---
+
+## Phase 27: Python/Node 바인딩 테스트 (📋 예정)
+
+> **상태**: 📋 예정
+> **목표**: vais-python, vais-node 바인딩 크레이트에 통합 테스트 추가 (각 20~30개)
+> **영향도**: Medium
+
+### 현황
+
+| 크레이트 | 기존 테스트 | 목표 |
+|----------|-----------|------|
+| vais-python | test_vais.py (262줄) | +20개 통합 테스트 |
+| vais-node | 0건 | +20개 통합 테스트 |
+
+### 작업 (Sonnet)
+
+- [ ] 1. vais-python 통합 테스트 — PyO3 컴파일, 라운드트립 변환, 에러 핸들링 (Sonnet)
+- [ ] 2. vais-node 통합 테스트 — NAPI 타입 변환, 비동기 연산, 메모리 관리 (Sonnet)
+- [ ] 3. CI 연동 — Python/Node 테스트를 CI 파이프라인에 추가 (Sonnet)
+- [ ] 4. 검증 — 전체 바인딩 테스트 통과 확인 (Sonnet)
+
+---
+
+## Phase 28: 문서 보강 (📋 예정)
+
+> **상태**: 📋 예정
+> **목표**: 개발자 온보딩 및 기여자 가이드 문서 보강 — Testing/Error Handling/Compiler Internals
+> **영향도**: Medium
+
+### 작업 (Sonnet)
+
+- [ ] 1. Testing Guide — docs-site/src/guides/testing.md (단위/통합/속성 기반 테스트 작성법) (Sonnet)
+- [ ] 2. Error Handling Best Practices — docs-site/src/guides/error-handling.md (Result 패턴, 커스텀 에러) (Sonnet)
+- [ ] 3. Compiler Internals — docs-site/src/compiler/internals.md (컴파일 파이프라인 상세, IR 설계) (Sonnet)
+- [ ] 4. Package Manager 통합 문서 — docs-site/src/tools/package-manager.md (init/install/publish 가이드) (Sonnet)
+- [ ] 5. SUMMARY.md 업데이트 — 신규 문서 목차 반영 (Sonnet)
 
 ---
 
