@@ -3,9 +3,11 @@
 
 import { WasmRunner } from './wasm-runner.js';
 
-const DEFAULT_API_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:8080'
-  : 'https://api.vaislang.dev';
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL || (
+  window.location.hostname === 'localhost'
+    ? 'http://localhost:8080'
+    : 'https://api.vaislang.dev'
+);
 
 // Compilation modes
 const MODE_SERVER = 'server';

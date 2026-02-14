@@ -311,7 +311,7 @@ F main() -> i64 {
 
     M result {
         Result.Ok(value) => logger.log(LogLevel.Info, "Division successful"),
-        Result.Err(msg) => logger.error("Division failed: {msg}")
+        Result.Err(msg) => logger.error("Division failed: ~{msg}")
     }
 
     0
@@ -459,7 +459,7 @@ F fetch_user_data(id: i64) -> Result<str> {
 F process_records(count: i64) -> Result<bool> {
     I count <= 0 {
         # 좋은 에러 메시지: 무엇이 잘못되었는지 알 수 있음
-        R Result.Err("Record count must be positive, got {count}")
+        R Result.Err("Record count must be positive, got ~{count}")
     }
     R Result.Ok(true)
 }

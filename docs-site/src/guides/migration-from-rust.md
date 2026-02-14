@@ -456,13 +456,13 @@ impl Add<Point> for Point {
 
 ```vais
 # Vais
-X Display for Point {
+X Point: Display {
     F display(&self) -> str {
         "(" + self.x.to_string() + ", " + self.y.to_string() + ")"
     }
 }
 
-X Add<Point> for Point {
+X Point: Add<Point> {
     T Output = Point;
 
     F add(self, rhs: Point) -> Point {

@@ -8,10 +8,10 @@ Use `#[wasm_import("module", "name")]` to import JavaScript functions into Vais:
 
 ```vais
 #[wasm_import("env", "console_log")]
-X F console_log(msg: str)
+N F console_log(msg: str)
 
 #[wasm_import("env", "get_time")]
-X F get_time() -> f64
+N F get_time() -> f64
 
 F main() -> i64 {
     console_log("Hello from Vais WASM!")

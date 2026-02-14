@@ -21,13 +21,14 @@ Version: 1.0.0
 15. [Module System](#module-system)
 16. [Async/Await](#asyncawait)
 17. [Iterators and Generators](#iterators-and-generators)
-18. [Memory Management](#memory-management)
-19. [Built-in Functions](#built-in-functions)
-20. [Constants](#constants)
-21. [Package Ecosystem](#package-ecosystem)
-22. [Best Practices](#best-practices)
-23. [Examples](#examples)
-24. [Grammar Summary](#grammar-summary)
+18. [Closures and Lambdas](#closures-and-lambdas)
+19. [Memory Management](#memory-management)
+20. [Built-in Functions](#built-in-functions)
+21. [Constants](#constants)
+22. [Package Ecosystem](#package-ecosystem)
+23. [Best Practices](#best-practices)
+24. [Examples](#examples)
+25. [Grammar Summary](#grammar-summary)
 
 ---
 
@@ -877,7 +878,7 @@ F describe(opt: Option) -> i64 {
 }
 ```
 
-### Match with Guards (future)
+### Match with Guards
 
 ```vais
 M value {
@@ -886,6 +887,72 @@ M value {
     _ => "zero"
 }
 ```
+
+### Pattern Alias
+
+Pattern aliases allow you to bind a name to a matched pattern using the `@` operator. This is useful when you need both the matched value and access to the whole pattern:
+
+```vais
+# Basic pattern alias with range
+F describe(n: i64) -> str {
+    M n {
+        x @ 1..10 => "small: {x}",
+        x @ 10..100 => "medium: {x}",
+        x @ 100..1000 => "large: {x}",
+        _ => "very large"
+    }
+}
+
+# Pattern alias with enum destructuring
+E Option<T> {
+    None,
+    Some(T)
+}
+
+F process(opt: Option<i64>) -> i64 {
+    M opt {
+        val @ Some(x) => {
+            # 'val' holds the entire Some variant
+            # 'x' holds the inner value
+            x * 2
+        },
+        None => 0
+    }
+}
+
+# Pattern alias with struct destructuring
+S Point {
+    x: i64,
+    y: i64
+}
+
+F classify_point(p: Point) -> str {
+    M p {
+        origin @ Point { x: 0, y: 0 } => "origin",
+        pt @ Point { x, y } if x == y => "diagonal point",
+        _ => "other point"
+    }
+}
+
+# Nested pattern aliases
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F handle_result(r: Result<i64, str>) -> str {
+    M r {
+        success @ Ok(value) if value > 0 => "positive success",
+        failure @ Err(msg) => "error: {msg}",
+        _ => "zero or negative"
+    }
+}
+```
+
+The pattern alias `x @ pattern` syntax binds `x` to the matched value while also matching against `pattern`. This is particularly useful when:
+- You need to refer to the matched value multiple times
+- You want to combine pattern matching with guards
+- You need both the whole value and destructured parts
 
 ### Destructuring
 
@@ -962,6 +1029,47 @@ F print_all<T: Printable>(items: [T]) -> i64 {
     0
 }
 ```
+
+### Where Clauses
+
+Where clauses provide an alternative syntax for specifying generic type constraints, especially useful when constraints are complex or numerous:
+
+```vais
+# Basic where clause
+F find_max<T>(list: Vec<T>) -> T where T: Ord {
+    result := mut list.get(0)
+    L i: 1..list.len() {
+        I list.get(i) > result {
+            result = list.get(i)
+        }
+    }
+    result
+}
+
+# Multiple bounds on a single type
+F serialize<T>(val: T) -> str where T: Display, T: Clone {
+    val.to_string()
+}
+
+# Multiple type parameters with bounds
+F compare_and_print<T, U>(a: T, b: U) -> i64
+    where T: Ord, U: Display
+{
+    puts(b.to_string())
+    I a > a { 1 } E { 0 }
+}
+
+# Where clauses with structs
+S Container<T> where T: Clone {
+    value: T
+}
+```
+
+Where clauses are especially useful when:
+- Type constraints are complex or lengthy
+- Multiple type parameters have constraints
+- Constraints reference associated types
+- You want to separate type parameters from their constraints for readability
 
 ---
 
@@ -1158,6 +1266,156 @@ result := numbers
     |> iter_take(5)
     |> iter_map(|x| x * 2)
 # Result: [4, 8, 12, 16, 20]
+```
+
+---
+
+## Closures and Lambdas
+
+### Basic Closures
+
+Closures (also called lambdas or anonymous functions) are inline function definitions that can capture variables from their surrounding scope:
+
+```vais
+# Basic closure syntax
+add_one := |x| x + 1
+
+# Closure with multiple parameters
+multiply := |x, y| x * y
+
+# Closure with block body
+complex := |n| {
+    result := n * 2
+    result + 10
+}
+
+# Using closures with iterator adapters
+numbers := [1, 2, 3, 4, 5]
+doubled := iter_map(numbers, |x| x * 2)
+```
+
+### Closure Capture Modes
+
+Closures can capture variables from their surrounding scope in different ways. Vais provides explicit control over how variables are captured:
+
+**By Value (Default):**
+
+By default, closures capture variables by copying their values:
+
+```vais
+F main() -> i64 {
+    x := 42
+
+    # Closure captures 'x' by value (copy)
+    add_x := |n| n + x
+
+    result := add_x(10)  # Returns 52
+    # Original 'x' is unchanged
+    0
+}
+```
+
+**Move Capture:**
+
+The `move` keyword forces the closure to take ownership of captured variables by moving them into the closure:
+
+```vais
+F create_consumer() -> i64 {
+    x := 42
+    data := allocate_data()
+
+    # Move 'x' and 'data' into the closure
+    consumer := move |n| {
+        # 'x' and 'data' are now owned by the closure
+        result := n + x
+        process(data)
+        result
+    }
+
+    # Error: 'x' and 'data' have been moved
+    # Cannot use them here anymore
+
+    consumer(10)
+}
+
+# Common use case: returning closures
+F make_adder(amount: i64) -> |i64| -> i64 {
+    # Must use 'move' to transfer ownership
+    move |x| x + amount
+}
+
+# Common use case: spawning async tasks
+F spawn_worker(task_id: i64) -> i64 {
+    data := load_task_data(task_id)
+
+    # Move 'data' into the spawned task
+    spawn move |()| {
+        # 'data' is owned by this task
+        process_task(data)
+        0
+    }
+
+    0
+}
+```
+
+### Capture Mode Summary
+
+| Capture Mode | Syntax | Behavior | Use Case |
+|--------------|--------|----------|----------|
+| **By Value** | `\|args\| body` | Copies captured values | Default, when closure doesn't outlive scope |
+| **Move** | `move \|args\| body` | Moves ownership into closure | Returning closures, spawning tasks, transferring ownership |
+
+**Note:** By-reference capture modes (`&` and `&mut`) are part of the type system but require advanced lifetime analysis. The current implementation supports by-value and move semantics.
+
+### Closure Examples
+
+**Using closures with higher-order functions:**
+
+```vais
+# Filter with closure
+F get_evens(numbers: [i64]) -> [i64] {
+    iter_filter(numbers, |x| x % 2 == 0)
+}
+
+# Map with closure
+F square_all(numbers: [i64]) -> [i64] {
+    iter_map(numbers, |x| x * x)
+}
+
+# Chaining closures
+F process_numbers(nums: [i64]) -> [i64] {
+    nums
+        |> iter_filter(|x| x > 0)
+        |> iter_map(|x| x * 2)
+        |> iter_take(10)
+}
+```
+
+**Closures capturing multiple variables:**
+
+```vais
+F calculate(base: i64, multiplier: i64) -> i64 {
+    # Closure captures both 'base' and 'multiplier'
+    compute := |x| (x + base) * multiplier
+
+    compute(5)
+}
+```
+
+**Move semantics with spawned tasks:**
+
+```vais
+F parallel_process(data: Vec<i64>) -> i64 {
+    L item: data {
+        # Each task gets its own copy via move
+        spawn move |()| {
+            process_item(item)
+            0
+        }
+    }
+    0
+}
 ```
 
 ---
@@ -1578,18 +1836,21 @@ F main() -> i64 {
 Program      ::= Item*
 Item         ::= Function | Struct | Enum | Trait | Impl | Use | Const
 
-Function     ::= 'F' Ident TypeParams? '(' Params? ')' '->' Type ('=' Expr | Block)
-               | 'A' 'F' Ident TypeParams? '(' Params? ')' '->' Type Block
+Function     ::= 'F' Ident TypeParams? '(' Params? ')' '->' Type WhereClause? ('=' Expr | Block)
+               | 'A' 'F' Ident TypeParams? '(' Params? ')' '->' Type WhereClause? Block
                | 'X' 'F' Ident '(' Params? ')' '->' Type
 
-Struct       ::= 'S' Ident TypeParams? '{' Fields '}'
+Struct       ::= 'S' Ident TypeParams? WhereClause? '{' Fields '}'
 Enum         ::= 'E' Ident TypeParams? '{' Variants '}'
                | '#[derive(Error)]' 'E' Ident '{' Variants '}'
 Trait        ::= 'W' Ident TypeParams? '{' TraitItems '}'
-Impl         ::= 'X' Ident TypeParams? (':' Trait)? '{' ImplItems '}'
+Impl         ::= 'X' Ident TypeParams? (':' Trait)? WhereClause? '{' ImplItems '}'
                # Note: Impl blocks work for both structs and enums
 Use          ::= 'U' Path
 Const        ::= 'C' Ident ':' Type '=' Expr
+
+WhereClause  ::= 'where' TypeBound (',' TypeBound)*
+TypeBound    ::= Ident ':' Trait (',' Trait)*
 
 Expr         ::= Literal
                | Ident
@@ -1622,6 +1883,16 @@ Type         ::= PrimitiveType
                | Ident TypeArgs?
                | '*' Type
                | '[' Type ']'
+
+Pattern      ::= Literal
+               | Ident
+               | '_'
+               | Ident '(' Patterns ')'
+               | Ident '@' Pattern     # Pattern alias
+               | Pattern 'if' Expr     # Pattern guard
+
+Closure      ::= '|' Params? '|' (Expr | Block)
+               | 'move' '|' Params? '|' (Expr | Block)
 ```
 
 ---

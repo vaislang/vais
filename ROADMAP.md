@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-12
+> **최종 업데이트**: 2026-02-14
 
 ---
 
@@ -59,7 +59,7 @@ crates/
 └── vaisc/             # CLI 컴파일러 & REPL ✅
 
 std/               # 표준 라이브러리 (.vais + C 런타임) ✅
-examples/          # 예제 코드 (181 파일) ✅
+examples/          # 예제 코드 (182 파일) ✅
 selfhost/          # Self-hosting 컴파일러 ✅
 benches/           # 벤치마크 스위트 (criterion) ✅
 playground/        # 웹 플레이그라운드 프론트엔드 ✅
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 520, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 538, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -152,6 +152,38 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 28** | 문서 보강 | 📋 예정 — Testing Guide/Error Handling/Compiler Internals/Package Manager 가이드 신규 |
 | **Phase 29~31** | vaisc 에러 해결 · 모듈 분할 R2 · 에러 진단 | vaisc 62건 re-export 수정, 5파일 모듈 분할, help() 100% + multi-error + secondary spans — **520 E2E** |
 | **Phase 32** | 언어 기능 확장 | ✅ 2026-02-14 — CaptureMode(move\|x\|), where 절(WherePredicate), 패턴 alias(x@pat), E2E +18 — **538 E2E** |
+
+---
+
+## 리뷰 발견사항 (2026-02-14)
+> 출처: /team-review 홈페이지+docs-site+playground 전체 품질 검증
+> 모드: 자동진행
+
+- [x] 1. [수치] README.md+ROADMAP.md+CLAUDE.md+faq.md E2E 520→538 업데이트 (Critical) ✅
+  변경: README.md:103, ROADMAP.md:80, CLAUDE.md:136, faq.md:33 (E2E 520→538)
+- [x] 2. [수치] README.md+CLAUDE.md+ROADMAP.md examples 181→182 업데이트 (Critical) ✅
+  변경: README.md:92, CLAUDE.md:64, ROADMAP.md:62 (examples 181→182)
+- [x] 3. [문법] docs-site trait impl 구문 오류 수정 (Critical) ✅
+  변경: guides/migration-from-rust.md:459,465 (`X Display for Point` → `X Point: Display`)
+- [x] 4. [문법] docs-site 문자열 보간 오류 수정 (Critical) ✅
+  변경: guide/error-handling.md:314,462 (`{msg}` → `~{msg}`)
+- [x] 5. [문법] docs-site extern 구문 오류 수정 (Critical) ✅
+  변경: advanced/wasm/js-interop.md:11,14 (`X F` → `N F`)
+- [x] 6. [Playground] 구식 키워드 제거+snippet 수정 (Critical) ✅
+  변경: vais-language.js (impl/trait 제거, X snippet 수정, // 주석 제거)
+- [x] 7. [일관성] README.md docs/→docs-site/ 수정 (Critical) ✅
+  변경: README.md:91 (`docs/` → `docs-site/`, 중복 제거)
+- [x] 8. [문서] Phase 32 기능 docs-site 문서화 (Warning) ✅
+  변경: docs/LANGUAGE_SPEC.md (+270줄: where절, pattern alias, capture mode 섹션)
+- [x] 9. [수치] README.md 에코시스템 패키지 5개→9개 반영 (Warning) ✅
+  변경: README.md:178,301 (9개 패키지 전체 나열)
+- [x] 10. [일관성] guide/ vs guides/ 중복 파일 정리 (Warning) ✅
+  변경: guide/performance.md 삭제 (SUMMARY.md 미참조 파일)
+- [x] 11. [Playground] API URL 하드코딩 개선 (Warning) ✅
+  변경: compiler.js:8 (`import.meta.env.VITE_API_URL` fallback 추가)
+- [x] 12. [일관성] ROADMAP 최종 업데이트 날짜 수정 (Info) ✅
+  변경: ROADMAP.md:6 (2026-02-12 → 2026-02-14)
+진행률: 12/12 (100%)
 
 ---
 
@@ -1402,6 +1434,25 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. [성능] Where 절 bounds 중복 제거 (Warning) ✅ 2026-02-14
   변경: checker_module.rs (merge_where_clause + register_function에서 extend→contains 체크 후 push 패턴)
 진행률: 4/4 (100%)
+
+---
+
+## Phase 33: 다국어 웹사이트 & 원클릭 설치 번들
+
+> **상태**: 🔄 진행 중 (2026-02-14)
+> **목표**: 홈페이지/docs-site 다국어(en/ko/ja/zh) 지원 + curl|sh 원클릭 설치 스크립트
+> **영향도**: High — 글로벌 사용자 접근성, 설치 편의성 대폭 향상
+
+모드: 대기 중
+- [ ] 1. 홈페이지 i18n 프레임워크 구축 (Sonnet)
+  대상: website/index.html, website/src/main.js, website/src/i18n.js(신규), website/locales/{en,ko,ja,zh}.json(신규)
+- [ ] 2. docs-site 다국어 빌드 — en/ko/ja/zh (Sonnet) [∥1]
+  대상: docs-site/book.toml, docs-site/src/{en,ja,zh}/(신규, 핵심 5페이지)
+- [ ] 3. 원클릭 설치 스크립트 번들 (Sonnet) [∥1]
+  대상: install.sh(신규), install.ps1(신규), website/index.html(설치섹션)
+- [ ] 4. CI/배포 통합 & 검증 (Sonnet) [blockedBy: 1,2,3]
+  대상: .github/workflows/website.yml
+진행률: 0/4 (0%)
 
 ---
 

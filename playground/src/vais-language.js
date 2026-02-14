@@ -13,7 +13,7 @@ export function registerVaisLanguage(monaco) {
       'B', 'W', 'X', 'P', 'D', 'N', 'G',
       'break', 'continue', 'return', 'true', 'false',
       'async', 'await', 'pub', 'mut', 'const', 'static',
-      'impl', 'trait', 'where', 'self', 'Self', 'super',
+      'where', 'self', 'Self', 'super',
       'extern', 'type'
     ],
 
@@ -88,8 +88,7 @@ export function registerVaisLanguage(monaco) {
       whitespace: [
         [/[ \t\r\n]+/, ''],
         [/#.*$/, 'comment'],
-        [/\/\*/, 'comment', '@comment'],
-        [/\/\/.*$/, 'comment']
+        [/\/\*/, 'comment', '@comment']
       ],
 
       comment: [
@@ -183,7 +182,7 @@ export function registerVaisLanguage(monaco) {
         { label: 'M', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'M ${1:expr} {\n    ${2:pattern} => ${3:result}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'B', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'B', documentation: 'break' },
         { label: 'W', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'W ${1:TraitName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'trait definition' },
-        { label: 'X', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'X ${1:StructName} {\n    ${2}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
+        { label: 'X', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'X ${1:StructName}: ${2:TraitName} {\n    ${3}\n}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'impl block' },
         { label: 'D', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'D ${1:expression}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'defer statement' },
         { label: 'U', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'U ${1:module}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'import module' },
         { label: 'P', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'P ${1}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: 'pub (public visibility)' },

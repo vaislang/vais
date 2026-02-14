@@ -88,11 +88,10 @@ std/               # Standard library (74 modules)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
-docs/              # Documentation
-examples/          # Example programs (181 files)
+docs-site/         # mdBook documentation
+examples/          # Example programs (182 files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
-docs-site/         # mdBook documentation
 ```
 
 ## Building
@@ -100,7 +99,7 @@ docs-site/         # mdBook documentation
 ```bash
 cargo build --release
 cargo test                                     # Run all 2,500+ tests
-cargo test -p vaisc --test e2e_tests           # Run 520 E2E tests
+cargo test -p vaisc --test e2e_tests           # Run 538 E2E tests
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -176,7 +175,7 @@ Coverage is measured automatically on every push and pull request to `main` and 
 - [x] Optimizer (constant folding, DCE, CSE, loop unrolling, LICM, alias analysis, vectorization)
 - [x] Formatter (`vaisc fmt`)
 - [x] Debugger (DWARF metadata, lldb/gdb support)
-- [x] Ecosystem packages (vais-crc32, vais-lz4, vais-aes, vais-json, vais-csv)
+- [x] Ecosystem packages (vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid)
 
 ## Performance
 
@@ -299,7 +298,7 @@ docker run -it vaislang/vais:latest
 | **Website** | https://vais.dev/ |
 | **Docker Hub** | `vaislang/vais` |
 | **Homebrew Tap** | `vaislang/tap` |
-| **Ecosystem Packages** | https://github.com/vaislang/vais/tree/main/std (vais-crc32, vais-lz4, vais-aes, vais-json, vais-csv) |
+| **Ecosystem Packages** | https://github.com/vaislang/vais/tree/main/packages (9 packages: vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid) |
 
 ## Community
 
