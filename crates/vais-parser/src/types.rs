@@ -550,6 +550,11 @@ impl Parser {
             self.advance();
             let inner = self.parse_base_type()?;
             Type::Affine(Box::new(inner))
+        } else if self.check(&Token::Impl) {
+            // Existential type: X Trait or X Trait + Trait2 (impl Trait)
+            self.advance();
+            let bounds = self.parse_trait_bounds()?;
+            Type::ImplTrait { bounds }
         } else if self.check(&Token::LBrace) {
             // Dependent type (refinement type): {x: T | predicate}
             self.advance();
@@ -700,12 +705,38 @@ impl Parser {
     /// Parse a const expression: `N`, `10`, `N + 1`, `A * B`, etc.
     /// Supports basic arithmetic operations for const generics.
     pub(crate) fn parse_const_expr(&mut self) -> ParseResult<ConstExpr> {
-        self.parse_const_additive()
+        self.parse_const_bitwise()
+    }
+
+    /// Parse bitwise const expressions: `A & B`, `A | B`, `A ^ B`
+    fn parse_const_bitwise(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_additive()?;
+
+        while self.check(&Token::Amp) || self.check(&Token::Pipe) || self.check(&Token::Caret) {
+            let op = if self.check(&Token::Amp) {
+                self.advance();
+                ConstBinOp::BitAnd
+            } else if self.check(&Token::Pipe) {
+                self.advance();
+                ConstBinOp::BitOr
+            } else {
+                self.advance();
+                ConstBinOp::BitXor
+            };
+            let right = self.parse_const_additive()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
     }
 
     /// Parse additive const expressions: `A + B` or `A - B`
     fn parse_const_additive(&mut self) -> ParseResult<ConstExpr> {
-        let mut left = self.parse_const_multiplicative()?;
+        let mut left = self.parse_const_shift()?;
 
         while self.check(&Token::Plus) || self.check(&Token::Minus) {
             let op = if self.check(&Token::Plus) {
@@ -714,6 +745,29 @@ impl Parser {
             } else {
                 self.advance();
                 ConstBinOp::Sub
+            };
+            let right = self.parse_const_shift()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Parse shift const expressions: `A << B` or `A >> B`
+    fn parse_const_shift(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_multiplicative()?;
+
+        while self.check(&Token::Shl) || self.check(&Token::Shr) {
+            let op = if self.check(&Token::Shl) {
+                self.advance();
+                ConstBinOp::Shl
+            } else {
+                self.advance();
+                ConstBinOp::Shr
             };
             let right = self.parse_const_multiplicative()?;
             left = ConstExpr::BinOp {
@@ -726,17 +780,20 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse multiplicative const expressions: `A * B` or `A / B`
+    /// Parse multiplicative const expressions: `A * B`, `A / B`, or `A % B`
     fn parse_const_multiplicative(&mut self) -> ParseResult<ConstExpr> {
         let mut left = self.parse_const_primary()?;
 
-        while self.check(&Token::Star) || self.check(&Token::Slash) {
+        while self.check(&Token::Star) || self.check(&Token::Slash) || self.check(&Token::Percent) {
             let op = if self.check(&Token::Star) {
                 self.advance();
                 ConstBinOp::Mul
-            } else {
+            } else if self.check(&Token::Slash) {
                 self.advance();
                 ConstBinOp::Div
+            } else {
+                self.advance();
+                ConstBinOp::Mod
             };
             let right = self.parse_const_primary()?;
             left = ConstExpr::BinOp {
@@ -749,9 +806,16 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse primary const expression: `N`, `10`, or `(expr)`
+    /// Parse primary const expression: `N`, `10`, `-N`, or `(expr)`
     fn parse_const_primary(&mut self) -> ParseResult<ConstExpr> {
         let span = self.current_span();
+
+        // Handle unary negation
+        if self.check(&Token::Minus) {
+            self.advance();
+            let inner = self.parse_const_primary()?;
+            return Ok(ConstExpr::Negate(Box::new(inner)));
+        }
 
         // Handle parenthesized expressions
         if self.check(&Token::LParen) {

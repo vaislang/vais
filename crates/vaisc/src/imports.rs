@@ -29,6 +29,7 @@ pub(crate) fn filter_imported_items(
                         Item::Enum(e) => Some(e.name.node.as_str()),
                         Item::Union(u) => Some(u.name.node.as_str()),
                         Item::TypeAlias(t) => Some(t.name.node.as_str()),
+                        Item::TraitAlias(ta) => Some(ta.name.node.as_str()),
                         Item::Trait(t) => Some(t.name.node.as_str()),
                         Item::Impl(_) => None, // Always include impls
                         Item::Const(c) => Some(c.name.node.as_str()),

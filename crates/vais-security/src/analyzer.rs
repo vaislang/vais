@@ -44,7 +44,7 @@ impl SecurityAnalyzer {
             Item::Struct(_) => {}
             Item::Enum(_) => {}
             Item::Union(_) => {}
-            Item::TypeAlias(_) => {}
+            Item::TypeAlias(_) | Item::TraitAlias(_) => {}
             Item::Use(_) => {}
             Item::Trait(_) => {}
             Item::Impl(impl_block) => {

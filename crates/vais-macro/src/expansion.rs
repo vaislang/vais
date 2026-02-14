@@ -149,6 +149,7 @@ impl<'a> AstExpander<'a> {
             Item::Trait(t) => Item::Trait(self.expand_trait(t)?),
             Item::Impl(i) => Item::Impl(self.expand_impl(i)?),
             Item::TypeAlias(a) => Item::TypeAlias(a),
+            Item::TraitAlias(ta) => Item::TraitAlias(ta),
             Item::Use(u) => Item::Use(u),
             Item::Macro(m) => Item::Macro(m),
             Item::ExternBlock(e) => Item::ExternBlock(e),

@@ -104,6 +104,10 @@ pub fn generate_module_subset(
             Item::Global(global_def) => {
                 self.register_global(global_def)?;
             }
+            Item::TraitAlias(ta) => {
+                let bounds: Vec<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
+                self.types.trait_aliases.insert(ta.name.node.clone(), bounds);
+            }
             Item::Use(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
         }
     }
@@ -324,8 +328,8 @@ pub fn generate_module(&mut self, module: &Module) -> CodegenResult<String> {
                 // Register trait for vtable generation
                 self.register_trait_from_ast(trait_def);
             }
-            Item::TypeAlias(_) => {
-                // Type aliases don't generate code
+            Item::TypeAlias(_) | Item::TraitAlias(_) => {
+                // Type/trait aliases don't generate code
             }
             Item::Macro(_) => {
                 // Macro definitions are expanded at compile time
@@ -430,6 +434,7 @@ pub fn generate_module(&mut self, module: &Module) -> CodegenResult<String> {
             | Item::Use(_)
             | Item::Trait(_)
             | Item::TypeAlias(_)
+            | Item::TraitAlias(_)
             | Item::Macro(_)
             | Item::ExternBlock(_) => {
                 // Already handled in first pass or no code generation needed
@@ -568,6 +573,10 @@ pub fn generate_module_with_instantiations(
             }
             Item::Global(global_def) => {
                 self.register_global(global_def)?;
+            }
+            Item::TraitAlias(ta) => {
+                let bounds: Vec<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
+                self.types.trait_aliases.insert(ta.name.node.clone(), bounds);
             }
             Item::Use(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
         }
@@ -729,6 +738,7 @@ pub fn generate_module_with_instantiations(
             | Item::Use(_)
             | Item::Trait(_)
             | Item::TypeAlias(_)
+            | Item::TraitAlias(_)
             | Item::Macro(_)
             | Item::ExternBlock(_)
             | Item::Const(_)

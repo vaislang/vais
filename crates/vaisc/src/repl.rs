@@ -587,6 +587,7 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
         Lifetime(name) => format!("'{}", name),
         Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
+        ImplTrait { bounds } => format!("impl {}", bounds.join(" + ")),
     }
 }
 

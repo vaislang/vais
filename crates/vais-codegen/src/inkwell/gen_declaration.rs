@@ -230,6 +230,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .bool_type()
                 .const_int(if *b { 1 } else { 0 }, false)
                 .into()),
+            Expr::Unary { op, expr } => {
+                use vais_ast::UnaryOp;
+                match op {
+                    UnaryOp::Neg => {
+                        let val = self.evaluate_const_expr(&expr.node)?;
+                        let int_val = val.into_int_value();
+                        Ok(int_val.const_neg().into())
+                    }
+                    _ => {
+                        Err(CodegenError::Unsupported(format!(
+                            "Const expr unary op: {:?}",
+                            op
+                        )))
+                    }
+                }
+            }
             Expr::Binary { left, op, right } => {
                 let lhs_val = self.evaluate_const_expr(&left.node)?;
                 let rhs_val = self.evaluate_const_expr(&right.node)?;
@@ -241,7 +257,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     BinOp::Add => lhs_int.const_add(rhs_int),
                     BinOp::Sub => lhs_int.const_sub(rhs_int),
                     BinOp::Mul => lhs_int.const_mul(rhs_int),
-                    // Division not currently supported in const context
+                    BinOp::BitAnd => lhs_int.const_and(rhs_int),
+                    BinOp::BitOr => lhs_int.const_or(rhs_int),
+                    BinOp::BitXor => lhs_int.const_xor(rhs_int),
+                    BinOp::Shl => lhs_int.const_shl(rhs_int),
+                    BinOp::Shr => lhs_int.const_ashr(rhs_int),
+                    // Division and modulo are not supported in const context (Inkwell 0.4 limitation)
+                    BinOp::Div | BinOp::Mod => {
+                        return Err(CodegenError::Unsupported(
+                            "Const expr division/modulo not supported in Inkwell const context".to_string()
+                        ))
+                    }
                     _ => {
                         return Err(CodegenError::Unsupported(format!(
                             "Const expr binary op: {:?}",

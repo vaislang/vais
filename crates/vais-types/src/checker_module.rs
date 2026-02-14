@@ -37,6 +37,7 @@ impl TypeChecker {
                 Item::Enum(e) => self.register_enum(e)?,
                 Item::Union(u) => self.register_union(u)?,
                 Item::TypeAlias(t) => self.register_type_alias(t)?,
+                Item::TraitAlias(ta) => self.register_trait_alias(ta)?,
                 Item::Use(_use_stmt) => {
                     // Use statements are handled at the compiler level (AST merging)
                     // by the time we reach type checking, all imports are already resolved
@@ -172,10 +173,15 @@ impl TypeChecker {
             generics
                 .iter()
                 .map(|g| {
-                    (
-                        g.name.node.clone(),
-                        g.bounds.iter().map(|b| &b.node).cloned().collect(),
-                    )
+                    let mut expanded_bounds = Vec::new();
+                    for b in &g.bounds {
+                        if let Some(alias_bounds) = self.trait_aliases.get(&b.node) {
+                            expanded_bounds.extend(alias_bounds.iter().cloned());
+                        } else {
+                            expanded_bounds.push(b.node.clone());
+                        }
+                    }
+                    (g.name.node.clone(), expanded_bounds)
                 })
                 .collect(),
         );
@@ -231,7 +237,14 @@ impl TypeChecker {
                 .entry(predicate.ty.node.clone())
                 .or_default();
             for b in &predicate.bounds {
-                if !bounds.contains(&b.node) {
+                // Expand trait aliases in where clause bounds
+                if let Some(alias_bounds) = self.trait_aliases.get(&b.node) {
+                    for ab in alias_bounds {
+                        if !bounds.contains(ab) {
+                            bounds.push(ab.clone());
+                        }
+                    }
+                } else if !bounds.contains(&b.node) {
                     bounds.push(b.node.clone());
                 }
             }
@@ -925,6 +938,16 @@ impl TypeChecker {
         let resolved = self.resolve_type(&t.ty.node);
         self.type_aliases.insert(name, resolved);
 
+        Ok(())
+    }
+
+    pub(crate) fn register_trait_alias(&mut self, ta: &vais_ast::TraitAlias) -> TypeResult<()> {
+        let name = ta.name.node.clone();
+        if self.trait_aliases.contains_key(&name) {
+            return Err(TypeError::Duplicate(name, None));
+        }
+        let bounds: Vec<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
+        self.trait_aliases.insert(name, bounds);
         Ok(())
     }
 

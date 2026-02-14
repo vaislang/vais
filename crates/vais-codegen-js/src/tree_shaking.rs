@@ -128,6 +128,12 @@ impl TreeShaker {
                 Self::collect_type_deps(&t.ty.node, &mut deps);
                 self.deps.insert(name, deps);
             }
+            Item::TraitAlias(ta) => {
+                let name = ta.name.node.clone();
+                let deps: HashSet<String> =
+                    ta.bounds.iter().map(|b| b.node.clone()).collect();
+                self.deps.insert(name, deps);
+            }
             Item::Const(c) => {
                 let name = c.name.node.clone();
                 let mut deps = HashSet::new();
@@ -292,6 +298,13 @@ impl TreeShaker {
             } => {
                 Self::collect_type_deps(&base.node, deps);
                 Self::collect_expr_deps(&predicate.node, deps);
+            }
+            Type::ImplTrait { bounds } => {
+                for b in bounds {
+                    if !Self::is_builtin_type(&b.node) {
+                        deps.insert(b.node.clone());
+                    }
+                }
             }
             Type::Infer | Type::Unit => {}
         }
@@ -670,6 +683,7 @@ impl TreeShaker {
             Item::Struct(s) => self.is_reachable(&s.name.node),
             Item::Enum(e) => self.is_reachable(&e.name.node),
             Item::TypeAlias(t) => self.is_reachable(&t.name.node),
+            Item::TraitAlias(ta) => self.is_reachable(&ta.name.node),
             Item::Const(c) => self.is_reachable(&c.name.node),
             Item::Global(g) => self.is_reachable(&g.name.node),
             Item::Trait(t) => self.is_reachable(&t.name.node),

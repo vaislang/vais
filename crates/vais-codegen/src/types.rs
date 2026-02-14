@@ -350,6 +350,11 @@ impl CodeGenerator {
                 // vtable_ptr: i8* pointing to the vtable for this trait
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
+            ResolvedType::ImplTrait { .. } => {
+                // impl Trait is monomorphized — should be resolved before codegen.
+                // Fallback to i64 if unresolved (same as opaque type).
+                String::from("i64")
+            }
             ResolvedType::FnPtr {
                 params,
                 ret,
@@ -564,6 +569,9 @@ impl CodeGenerator {
                     .iter()
                     .map(|g| self.ast_type_to_resolved_impl(&g.node))
                     .collect(),
+            },
+            Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
+                bounds: bounds.iter().map(|b| b.node.clone()).collect(),
             },
             _ => ResolvedType::Unknown,
         }

@@ -47,8 +47,15 @@ pub(crate) struct TraitImpl {
 }
 
 impl TypeChecker {
-    /// Check if a type implements a trait
+    /// Check if a type implements a trait (with trait alias expansion)
     pub(crate) fn type_implements_trait(&self, ty: &ResolvedType, trait_name: &str) -> bool {
+        // Expand trait aliases: if trait_name is an alias, check all aliased bounds
+        if let Some(bounds) = self.trait_aliases.get(trait_name) {
+            return bounds
+                .iter()
+                .all(|bound| self.type_implements_trait(ty, bound));
+        }
+
         // Check if there's an explicit impl
         if let ResolvedType::Named { name, .. } = ty {
             for impl_ in &self.trait_impls {
@@ -61,7 +68,19 @@ impl TypeChecker {
         // Generic types are assumed to implement their bounds
         if let ResolvedType::Generic(name) = ty {
             if let Some(bounds) = self.current_generic_bounds.get(name) {
-                return bounds.contains(&trait_name.to_string());
+                // Also expand trait aliases in bounds
+                if bounds.contains(&trait_name.to_string()) {
+                    return true;
+                }
+                // Check if any bound is a trait alias that expands to include trait_name
+                for bound in bounds {
+                    if let Some(alias_bounds) = self.trait_aliases.get(bound.as_str()) {
+                        if alias_bounds.contains(&trait_name.to_string()) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
             }
         }
 

@@ -101,6 +101,10 @@ pub fn compute_signature_hash(items: &[vais_ast::Spanned<vais_ast::Item>]) -> St
             vais_ast::Item::TypeAlias(ta) => {
                 let _ = write!(sig, "type:{}={:?};", ta.name.node, ta.ty.node);
             }
+            vais_ast::Item::TraitAlias(ta) => {
+                let bounds: Vec<&str> = ta.bounds.iter().map(|b| b.node.as_str()).collect();
+                let _ = write!(sig, "traitalias:{}={};", ta.name.node, bounds.join("+"));
+            }
             vais_ast::Item::Const(c) => {
                 let _ = write!(sig, "const:{}:{:?};", c.name.node, c.ty.node);
             }

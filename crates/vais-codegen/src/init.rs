@@ -33,6 +33,7 @@ impl CodeGenerator {
                 constants: HashMap::new(),
                 globals: HashMap::new(),
                 trait_defs: HashMap::new(),
+                trait_aliases: HashMap::new(),
                 trait_impl_methods: HashMap::new(),
                 resolved_function_sigs: HashMap::new(),
             },

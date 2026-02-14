@@ -394,6 +394,9 @@ impl JitCompiler {
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
             Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
+            Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
+                bounds: bounds.iter().map(|b| b.node.clone()).collect(),
+            },
         }
     }
 
@@ -402,6 +405,15 @@ impl JitCompiler {
         match expr {
             vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
             vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::Negate(inner) => {
+                let resolved = self.resolve_const_expr(inner);
+                if let Some(val) = resolved.try_evaluate() {
+                    if let Some(neg_val) = val.checked_neg() {
+                        return vais_types::ResolvedConst::Value(neg_val);
+                    }
+                }
+                vais_types::ResolvedConst::Negate(Box::new(resolved))
+            }
             vais_ast::ConstExpr::BinOp { op, left, right } => {
                 let resolved_left = self.resolve_const_expr(left);
                 let resolved_right = self.resolve_const_expr(right);
@@ -410,6 +422,12 @@ impl JitCompiler {
                     vais_ast::ConstBinOp::Sub => vais_types::ConstBinOp::Sub,
                     vais_ast::ConstBinOp::Mul => vais_types::ConstBinOp::Mul,
                     vais_ast::ConstBinOp::Div => vais_types::ConstBinOp::Div,
+                    vais_ast::ConstBinOp::Mod => vais_types::ConstBinOp::Mod,
+                    vais_ast::ConstBinOp::BitAnd => vais_types::ConstBinOp::BitAnd,
+                    vais_ast::ConstBinOp::BitOr => vais_types::ConstBinOp::BitOr,
+                    vais_ast::ConstBinOp::BitXor => vais_types::ConstBinOp::BitXor,
+                    vais_ast::ConstBinOp::Shl => vais_types::ConstBinOp::Shl,
+                    vais_ast::ConstBinOp::Shr => vais_types::ConstBinOp::Shr,
                 };
                 vais_types::ResolvedConst::BinOp {
                     op: resolved_op,

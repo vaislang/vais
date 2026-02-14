@@ -100,6 +100,8 @@ pub enum Item {
     Union(Union),
     /// Type alias: `T Name=Type`
     TypeAlias(TypeAlias),
+    /// Trait alias: `T Name = TraitA + TraitB`
+    TraitAlias(TraitAlias),
     /// Import statement: `U module` or `U module::{items}`
     Use(Use),
     /// Trait definition: `W Name { methods }` (W = "What" interface)
@@ -362,6 +364,15 @@ pub struct TypeAlias {
     pub name: Spanned<String>,
     pub generics: Vec<GenericParam>,
     pub ty: Spanned<Type>,
+    pub is_pub: bool,
+}
+
+/// Trait alias: `T Name = TraitA + TraitB`
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitAlias {
+    pub name: Spanned<String>,
+    pub generics: Vec<GenericParam>,
+    pub bounds: Vec<Spanned<String>>,
     pub is_pub: bool,
 }
 
@@ -664,6 +675,8 @@ pub enum ConstExpr {
         left: Box<ConstExpr>,
         right: Box<ConstExpr>,
     },
+    /// Unary negation: -N
+    Negate(Box<ConstExpr>),
 }
 
 impl std::fmt::Display for ConstExpr {
@@ -672,6 +685,7 @@ impl std::fmt::Display for ConstExpr {
             ConstExpr::Literal(n) => write!(f, "{}", n),
             ConstExpr::Param(name) => write!(f, "{}", name),
             ConstExpr::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+            ConstExpr::Negate(inner) => write!(f, "(-{})", inner),
         }
     }
 }
@@ -683,6 +697,12 @@ pub enum ConstBinOp {
     Sub,
     Mul,
     Div,
+    Mod,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 impl std::fmt::Display for ConstBinOp {
@@ -692,6 +712,12 @@ impl std::fmt::Display for ConstBinOp {
             ConstBinOp::Sub => write!(f, "-"),
             ConstBinOp::Mul => write!(f, "*"),
             ConstBinOp::Div => write!(f, "/"),
+            ConstBinOp::Mod => write!(f, "%"),
+            ConstBinOp::BitAnd => write!(f, "&"),
+            ConstBinOp::BitOr => write!(f, "|"),
+            ConstBinOp::BitXor => write!(f, "^"),
+            ConstBinOp::Shl => write!(f, "<<"),
+            ConstBinOp::Shr => write!(f, ">>"),
         }
     }
 }
@@ -775,6 +801,12 @@ pub enum Type {
     Linear(Box<Spanned<Type>>),
     /// Affine type: `affine T` - can be used at most once
     Affine(Box<Spanned<Type>>),
+    /// Existential type: `X Trait` or `X Trait + Trait2` in return position
+    /// Represents an opaque return type that implements the given trait bounds.
+    /// Resolved to concrete type during monomorphization.
+    ImplTrait {
+        bounds: Vec<Spanned<String>>,
+    },
     /// Dependent type (Refinement type): `{x: T | predicate}`
     /// A type `T` refined by a predicate that must hold for all values.
     /// Example: `{n: i64 | n > 0}` (positive integers)
@@ -1287,6 +1319,10 @@ impl std::fmt::Display for Type {
                 write!(f, "&'{} mut {}", lifetime, inner.node)
             }
             Type::Lazy(inner) => write!(f, "Lazy<{}>", inner.node),
+            Type::ImplTrait { bounds } => {
+                let names: Vec<&str> = bounds.iter().map(|b| b.node.as_str()).collect();
+                write!(f, "impl {}", names.join(" + "))
+            }
         }
     }
 }

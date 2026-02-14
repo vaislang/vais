@@ -87,6 +87,7 @@ impl Formatter {
             Item::Enum(e) => self.format_enum(e),
             Item::Union(u) => self.format_union(u),
             Item::TypeAlias(t) => self.format_type_alias(t),
+            Item::TraitAlias(ta) => self.format_trait_alias(ta),
             Item::Use(u) => self.format_use(u),
             Item::Trait(t) => self.format_trait(t),
             Item::Impl(i) => self.format_impl(i),
@@ -657,6 +658,32 @@ impl Formatter {
         self.output.push('\n');
     }
 
+    fn format_trait_alias(&mut self, ta: &TraitAlias) {
+        let indent = self.indent();
+        self.output.push_str(&indent);
+        if ta.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("T ");
+        self.output.push_str(&ta.name.node);
+        if !ta.generics.is_empty() {
+            self.output.push('<');
+            let mut first = true;
+            for g in &ta.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
+            self.output.push('>');
+        }
+        self.output.push_str(" = ");
+        let bounds: Vec<&str> = ta.bounds.iter().map(|b| b.node.as_str()).collect();
+        self.output.push_str(&bounds.join(" + "));
+        self.output.push('\n');
+    }
+
     /// Format a use statement
     fn format_use(&mut self, u: &Use) {
         let indent = self.indent();
@@ -951,6 +978,10 @@ impl Formatter {
             }
             Type::Lazy(inner) => {
                 format!("Lazy<{}>", self.format_type(&inner.node))
+            }
+            Type::ImplTrait { bounds } => {
+                let bs: Vec<&str> = bounds.iter().map(|b| b.node.as_str()).collect();
+                format!("X {}", bs.join(" + "))
             }
         }
     }

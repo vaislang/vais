@@ -153,10 +153,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 29~31** | vaisc 에러 해결 · 모듈 분할 R2 · 에러 진단 | vaisc 62건 re-export 수정, 5파일 모듈 분할, help() 100% + multi-error + secondary spans — **520 E2E** |
 | **Phase 32** | 언어 기능 확장 | ✅ 2026-02-14 — CaptureMode(move\|x\|), where 절(WherePredicate), 패턴 alias(x@pat), E2E +18 — **538 E2E** |
 | **Phase 33** | 다국어 웹사이트 & 원클릭 설치 | ✅ 2026-02-14 — i18n(en/ko/ja/zh), docs-site 다국어, install.sh/ps1, CI 통합 |
-| **Phase 34** | Codegen 버그 수정 | 📋 예정 — enum variant 매칭 + struct by-value ABI + enum 리턴 phi node |
-| **Phase 35** | 대형 파일 모듈 분할 R3 | 📋 예정 — lib.rs(3,352)/types.rs(2,029)/generate_expr.rs(2,003)/wasm_component.rs(1,815) |
-| **Phase 36** | 테스트 커버리지 확장 | 📋 예정 — 20개 미테스트 crate에 통합 테스트 추가, codecov 임계값 |
-| **Phase 37** | 고급 타입 시스템 기능 | 📋 예정 — trait alias, impl Trait 리턴, const evaluation 확장 |
+| **Phase 34** | Codegen 버그 수정 | ✅ 2026-02-14 — enum variant 매칭 + struct by-value ABI + match phi node, E2E +6 (538→544) |
+| **Phase 35** | 대형 파일 모듈 분할 R3 | ✅ 2026-02-14 — lib.rs(-52%), types.rs→8 서브모듈, wasm_component→10 서브모듈 |
+| **Phase 36** | 테스트 커버리지 확장 | ✅ 2026-02-14 — 12 crate 통합 테스트 추가, codecov 컴포넌트 재구성 |
+| **Phase 37** | 고급 타입 시스템 기능 | ✅ 2026-02-14 — trait alias, impl Trait 리턴, const eval 확장 (+6 ops), E2E +17 (544→561) |
 
 ---
 
@@ -1547,18 +1547,31 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 37: 고급 타입 시스템 기능
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-14, 모드: 자동진행)
 > **목표**: existential types, trait alias, const evaluation 등 고급 타입 기능 추가로 언어 완성도 향상
 > **영향도**: Medium — 표현력 확대, 고급 패턴 지원
 
-- [ ] 1. Trait alias 구현 (Opus)
-  대상: `T TraitAlias = TraitA + TraitB` 문법, AST/Parser/TC/Codegen 전체 파이프라인
-- [ ] 2. Existential types (impl Trait 리턴) 구현 (Opus)
-  대상: `F foo() -> impl Trait` 리턴 타입 위치 impl Trait, 단형화 기반 코드 생성
-- [ ] 3. Const evaluation 확장 (Sonnet)
-  대상: 컴파일 타임 상수 평가 범위 확대 (산술, 문자열, 배열 리터럴)
-- [ ] 4. 고급 타입 기능 E2E 테스트 & 문서 (Sonnet)
-  대상: 각 기능별 양성/음성 E2E 테스트, docs-site 가이드 추가
+- [x] 1. Trait alias 구현 (Opus) ✅ 2026-02-14
+  변경: vais-ast(TraitAlias struct+Item variant), vais-parser/item.rs(parse_type_or_trait_alias), vais-types(trait_aliases HashMap+expand), codegen/formatter/security/lsp 등 ~15파일
+- [x] 2. Existential types (impl Trait 리턴) 구현 (Opus) ✅ 2026-02-14
+  변경: vais-ast(Type::ImplTrait), vais-parser/types.rs(X Trait 파싱), vais-types(ResolvedType::ImplTrait+unify), codegen/jit/repl 등 ~12파일
+- [x] 3. Const evaluation 확장 (Sonnet) ✅ 2026-02-14
+  변경: ConstBinOp +6 variants(Mod/BitAnd/BitOr/BitXor/Shl/Shr), ConstExpr::Negate, parser const_bitwise/const_shift, codegen const fold
+- [x] 4. 고급 타입 기능 E2E 테스트 & 문서 (Sonnet) ✅ 2026-02-14
+  변경: e2e/phase37.rs(17 tests), docs-site/advanced-types.md(350줄), SUMMARY.md 링크 추가
+진행률: 4/4 (100%)
+
+---
+
+## 리뷰 발견사항 (2026-02-14)
+> 출처: /team-review Phase 37 (자동진행 완료 후)
+> 모드: 자동진행
+
+- [ ] 1. [정확성] 순환 trait alias 감지 추가 (Critical) — 대상: crates/vais-types/src/traits.rs:52
+- [ ] 2. [정확성] Shift 범위 검증 추가 (Critical) — 대상: crates/vais-types/src/types/resolved.rs:50
+- [ ] 3. [정확성] ImplTrait bounds 체크 (Critical) — 대상: crates/vais-types/src/inference.rs
+- [ ] 4. [아키텍처] ImplTrait 제한사항 문서화 (Warning) — 대상: docs-site/src/language/advanced-types.md
+진행률: 0/4 (0%)
 
 ---
 

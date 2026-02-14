@@ -843,6 +843,9 @@ impl LanguageServer for VaisBackend {
                         Item::TypeAlias(ta) => {
                             (&ta.name.node, SymbolKind::TYPE_PARAMETER, &ta.name.span)
                         }
+                        Item::TraitAlias(ta) => {
+                            (&ta.name.node, SymbolKind::INTERFACE, &ta.name.span)
+                        }
                         Item::Const(c) => (&c.name.node, SymbolKind::CONSTANT, &c.name.span),
                         Item::Global(g) => (&g.name.node, SymbolKind::VARIABLE, &g.name.span),
                         _ => continue,

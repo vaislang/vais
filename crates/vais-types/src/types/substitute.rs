@@ -216,6 +216,18 @@ pub fn substitute_const_values(
                 c.clone()
             }
         }
+        ResolvedConst::Negate(inner) => {
+            let new_inner = substitute_const_values(inner, const_subs);
+            if let Some(val) = new_inner.try_evaluate() {
+                if let Some(neg_val) = val.checked_neg() {
+                    ResolvedConst::Value(neg_val)
+                } else {
+                    ResolvedConst::Negate(Box::new(new_inner))
+                }
+            } else {
+                ResolvedConst::Negate(Box::new(new_inner))
+            }
+        }
         ResolvedConst::BinOp { op, left, right } => {
             let new_left = substitute_const_values(left, const_subs);
             let new_right = substitute_const_values(right, const_subs);
@@ -232,6 +244,18 @@ pub fn substitute_const_values(
                             l.checked_div(r)
                         }
                     }
+                    ConstBinOp::Mod => {
+                        if r == 0 {
+                            None
+                        } else {
+                            l.checked_rem(r)
+                        }
+                    }
+                    ConstBinOp::BitAnd => Some(l & r),
+                    ConstBinOp::BitOr => Some(l | r),
+                    ConstBinOp::BitXor => Some(l ^ r),
+                    ConstBinOp::Shl => Some(l.wrapping_shl(r as u32)),
+                    ConstBinOp::Shr => Some(l.wrapping_shr(r as u32)),
                 };
                 if let Some(val) = result {
                     return ResolvedConst::Value(val);

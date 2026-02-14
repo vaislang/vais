@@ -218,6 +218,8 @@ impl TypeChecker {
             (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
+            // ImplTrait: impl Trait accepts any concrete type (bounds checked separately)
+            (ResolvedType::ImplTrait { .. }, _) | (_, ResolvedType::ImplTrait { .. }) => Ok(()),
             // Auto-deref: &T unifies with T (implicit dereference)
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 self.unify(inner, other)

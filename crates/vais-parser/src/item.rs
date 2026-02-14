@@ -40,7 +40,7 @@ impl Parser {
             Item::Union(self.parse_union(is_pub)?)
         } else if self.check(&Token::TypeKeyword) {
             self.advance();
-            Item::TypeAlias(self.parse_type_alias(is_pub)?)
+            self.parse_type_or_trait_alias(is_pub)?
         } else if self.check(&Token::Use) {
             self.advance();
             Item::Use(self.parse_use()?)
@@ -426,20 +426,48 @@ impl Parser {
         })
     }
 
-    /// Parse type alias: `Name=Type`
-    fn parse_type_alias(&mut self, is_pub: bool) -> ParseResult<TypeAlias> {
+    /// Disambiguate `T Name = Type` (type alias) from `T Name = Trait + Trait` (trait alias).
+    /// After `=`, if we see `Ident +`, it's a trait alias.
+    fn parse_type_or_trait_alias(&mut self, is_pub: bool) -> ParseResult<Item> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
         self.expect(&Token::Eq)?;
-        let ty = self.parse_type()?;
 
-        Ok(TypeAlias {
-            name,
-            generics,
-            ty,
-            is_pub,
-        })
+        // Lookahead: save position, check if RHS is `Ident + ...` (trait alias pattern)
+        let saved_pos = self.pos;
+        let is_trait_alias = if let Some(tok) = self.peek() {
+            if matches!(tok.token, Token::Ident(_)) {
+                // Peek past the ident to check for `+`
+                self.advance(); // consume ident
+                let has_plus = self.check(&Token::Plus);
+                self.pos = saved_pos; // restore
+                has_plus
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if is_trait_alias {
+            let bounds = self.parse_trait_bounds()?;
+            Ok(Item::TraitAlias(TraitAlias {
+                name,
+                generics,
+                bounds,
+                is_pub,
+            }))
+        } else {
+            let ty = self.parse_type()?;
+            Ok(Item::TypeAlias(TypeAlias {
+                name,
+                generics,
+                ty,
+                is_pub,
+            }))
+        }
     }
+
 
     /// Parse use statement: `module` or `module/submodule` or `module::submodule`
     /// Also supports selective imports: `module.Item`, `module.{A, B, C}`

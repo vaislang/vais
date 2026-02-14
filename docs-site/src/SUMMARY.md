@@ -27,6 +27,7 @@
 - [언어 사양](./language/language-spec.md)
 - [제네릭](./language/generics.md)
 - [타입 추론](./language/type-inference.md)
+- [고급 타입 시스템](./language/advanced-types.md)
 - [Slice Types](./language/slices.md)
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)

@@ -92,6 +92,8 @@ impl TypeMapper {
                 let _ = inner; // Acknowledge the inner type
                 Ok(self.pointer_type)
             }
+            // impl Trait: monomorphized to concrete type at codegen, fallback to i64
+            ResolvedType::ImplTrait { .. } => Ok(types::I64),
         }
     }
 

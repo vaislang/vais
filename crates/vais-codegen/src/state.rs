@@ -26,6 +26,8 @@ pub(crate) struct TypeRegistry {
     pub(crate) globals: HashMap<String, GlobalInfo>,
     /// Trait definitions for vtable generation
     pub(crate) trait_defs: HashMap<String, vais_types::TraitDef>,
+    /// Trait aliases: name -> expanded trait bounds
+    pub(crate) trait_aliases: HashMap<String, Vec<String>>,
     /// Trait implementations: (impl_type, trait_name) -> method_impls
     pub(crate) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
     /// Resolved function signatures from type checker (for inferred parameter types)

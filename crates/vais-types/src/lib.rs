@@ -99,6 +99,7 @@ pub struct TypeChecker {
     pub(crate) unions: HashMap<String, UnionDef>,
     pub(crate) functions: HashMap<String, FunctionSig>,
     pub(crate) type_aliases: HashMap<String, ResolvedType>,
+    pub(crate) trait_aliases: HashMap<String, Vec<String>>,
     pub(crate) traits: HashMap<String, TraitDef>,
     pub(crate) trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
     pub(crate) constants: HashMap<String, ResolvedType>, // Constant name -> type
@@ -161,6 +162,7 @@ impl TypeChecker {
             unions: HashMap::new(),
             functions: HashMap::new(),
             type_aliases: HashMap::new(),
+            trait_aliases: HashMap::new(),
             traits: HashMap::new(),
             trait_impls: Vec::new(),
             constants: HashMap::new(),

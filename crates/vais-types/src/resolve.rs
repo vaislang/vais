@@ -193,6 +193,12 @@ impl TypeChecker {
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
             Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
+            Type::ImplTrait { bounds } => {
+                let resolved_bounds: Vec<String> = bounds.iter().map(|b| b.node.clone()).collect();
+                ResolvedType::ImplTrait {
+                    bounds: resolved_bounds,
+                }
+            }
         }
     }
 
@@ -310,6 +316,15 @@ impl TypeChecker {
         match expr {
             vais_ast::ConstExpr::Literal(n) => types::ResolvedConst::Value(*n),
             vais_ast::ConstExpr::Param(name) => types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::Negate(inner) => {
+                let resolved = self.resolve_const_expr(inner);
+                if let Some(val) = resolved.try_evaluate() {
+                    if let Some(neg_val) = val.checked_neg() {
+                        return types::ResolvedConst::Value(neg_val);
+                    }
+                }
+                types::ResolvedConst::Negate(Box::new(resolved))
+            }
             vais_ast::ConstExpr::BinOp { op, left, right } => {
                 let resolved_left = self.resolve_const_expr(left);
                 let resolved_right = self.resolve_const_expr(right);
@@ -318,6 +333,12 @@ impl TypeChecker {
                     vais_ast::ConstBinOp::Sub => types::ConstBinOp::Sub,
                     vais_ast::ConstBinOp::Mul => types::ConstBinOp::Mul,
                     vais_ast::ConstBinOp::Div => types::ConstBinOp::Div,
+                    vais_ast::ConstBinOp::Mod => types::ConstBinOp::Mod,
+                    vais_ast::ConstBinOp::BitAnd => types::ConstBinOp::BitAnd,
+                    vais_ast::ConstBinOp::BitOr => types::ConstBinOp::BitOr,
+                    vais_ast::ConstBinOp::BitXor => types::ConstBinOp::BitXor,
+                    vais_ast::ConstBinOp::Shl => types::ConstBinOp::Shl,
+                    vais_ast::ConstBinOp::Shr => types::ConstBinOp::Shr,
                 };
 
                 // Try to evaluate if both sides are concrete values
@@ -335,6 +356,18 @@ impl TypeChecker {
                                 None
                             }
                         }
+                        types::ConstBinOp::Mod => {
+                            if r != 0 {
+                                l.checked_rem(r)
+                            } else {
+                                None
+                            }
+                        }
+                        types::ConstBinOp::BitAnd => Some(l & r),
+                        types::ConstBinOp::BitOr => Some(l | r),
+                        types::ConstBinOp::BitXor => Some(l ^ r),
+                        types::ConstBinOp::Shl => Some(l.wrapping_shl(r as u32)),
+                        types::ConstBinOp::Shr => Some(l.wrapping_shr(r as u32)),
                     };
                     if let Some(value) = result {
                         return types::ResolvedConst::Value(value);

@@ -15,6 +15,8 @@ pub enum ResolvedConst {
         left: Box<ResolvedConst>,
         right: Box<ResolvedConst>,
     },
+    /// Unary negation
+    Negate(Box<ResolvedConst>),
 }
 
 impl ResolvedConst {
@@ -36,8 +38,20 @@ impl ResolvedConst {
                         }
                         l.checked_div(r)?
                     }
+                    ConstBinOp::Mod => {
+                        if r == 0 {
+                            return None;
+                        }
+                        l.checked_rem(r)?
+                    }
+                    ConstBinOp::BitAnd => l & r,
+                    ConstBinOp::BitOr => l | r,
+                    ConstBinOp::BitXor => l ^ r,
+                    ConstBinOp::Shl => l.wrapping_shl(r as u32),
+                    ConstBinOp::Shr => l.wrapping_shr(r as u32),
                 })
             }
+            ResolvedConst::Negate(inner) => inner.try_evaluate().and_then(|v| v.checked_neg()),
         }
     }
 }
@@ -48,6 +62,7 @@ impl std::fmt::Display for ResolvedConst {
             ResolvedConst::Value(n) => write!(f, "{}", n),
             ResolvedConst::Param(name) => write!(f, "{}", name),
             ResolvedConst::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+            ResolvedConst::Negate(inner) => write!(f, "(-{})", inner),
         }
     }
 }
@@ -59,6 +74,12 @@ pub enum ConstBinOp {
     Sub,
     Mul,
     Div,
+    Mod,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 impl std::fmt::Display for ConstBinOp {
@@ -68,6 +89,12 @@ impl std::fmt::Display for ConstBinOp {
             ConstBinOp::Sub => write!(f, "-"),
             ConstBinOp::Mul => write!(f, "*"),
             ConstBinOp::Div => write!(f, "/"),
+            ConstBinOp::Mod => write!(f, "%"),
+            ConstBinOp::BitAnd => write!(f, "&"),
+            ConstBinOp::BitOr => write!(f, "|"),
+            ConstBinOp::BitXor => write!(f, "^"),
+            ConstBinOp::Shl => write!(f, "<<"),
+            ConstBinOp::Shr => write!(f, ">>"),
         }
     }
 }
@@ -217,6 +244,11 @@ pub enum ResolvedType {
     /// Lazy type: `Lazy<T>` - Deferred evaluation thunk
     /// Contains a closure that computes T when forced, and caches the result.
     Lazy(Box<ResolvedType>),
+
+    /// Existential type: `impl Trait` (Vais: `X Trait`)
+    /// Represents an opaque return type implementing the given trait bounds.
+    /// During monomorphization, resolved to the concrete return type.
+    ImplTrait { bounds: Vec<String> },
 }
 
 impl ResolvedType {
@@ -444,6 +476,9 @@ impl std::fmt::Display for ResolvedType {
             }
             ResolvedType::Lifetime(name) => write!(f, "'{}", name),
             ResolvedType::Lazy(inner) => write!(f, "Lazy<{}>", inner),
+            ResolvedType::ImplTrait { bounds } => {
+                write!(f, "impl {}", bounds.join(" + "))
+            }
         }
     }
 }
