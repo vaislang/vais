@@ -1585,3 +1585,63 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 200);
 }
+// ==================== Pattern Alias Tests ====================
+
+#[test]
+fn exec_pattern_alias_tuple() {
+    let source = r#"
+F main() -> i64 {
+    x := (1, 2)
+    M x {
+        whole @ (a, b) => a + b
+    }
+}
+"#;
+    assert_exit_code(source, 3);
+}
+
+#[test]
+fn exec_pattern_alias_literal() {
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    M x {
+        n @ 42 => n,
+        _ => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_pattern_alias_wildcard() {
+    let source = r#"
+F main() -> i64 {
+    x := 99
+    M x {
+        n @ _ => n
+    }
+}
+"#;
+    assert_exit_code(source, 99);
+}
+
+#[test]
+fn exec_pattern_alias_variant() {
+    let source = r#"
+E Option<T> {
+    Some(T),
+    None
+}
+
+F main() -> i64 {
+    opt := Some(42)
+    M opt {
+        whole @ Some(val) => val,
+        _ => 0
+    }
+}
+"#;
+    assert_exit_code(source, 42);
+}

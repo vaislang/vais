@@ -1628,6 +1628,7 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Consume => 126,  // TOK_KW_CONSUME
         Token::Lazy => 127,     // TOK_KW_LAZY
         Token::Force => 128,    // TOK_KW_FORCE
+        Token::Where => 129,    // TOK_KW_WHERE
 
         // Type keywords (31-44)
         Token::I8 => 31,

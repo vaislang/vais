@@ -1732,7 +1732,8 @@ impl CodeGenerator {
             Expr::Lambda {
                 params,
                 body,
-                captures: _,
+                capture_mode,
+                ..
             } => {
                 // Generate a unique function name for this lambda
                 let lambda_name = format!("__lambda_{}", self.fn_ctx.label_counter);
@@ -1748,27 +1749,57 @@ impl CodeGenerator {
                 for cap_name in &capture_names {
                     if let Some(local) = self.fn_ctx.locals.get(cap_name) {
                         let ty = local.ty.clone();
-                        // Load captured value if it's a local variable
-                        if local.is_param() {
-                            // Parameters are already values, use directly
-                            captured_vars.push((
-                                cap_name.clone(),
-                                ty,
-                                format!("%{}", local.llvm_name),
-                            ));
-                        } else if local.is_ssa() {
-                            // SSA values are already the value itself, use directly
-                            // llvm_name for SSA includes % prefix (e.g., "%5") or is a literal (e.g., "10")
-                            captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
-                        } else {
-                            // Load from alloca
-                            let tmp = self.next_temp(counter);
-                            let llvm_ty = self.type_to_llvm(&ty);
-                            capture_ir.push_str(&format!(
-                                "  {} = load {}, {}* %{}\n",
-                                tmp, llvm_ty, llvm_ty, local.llvm_name
-                            ));
-                            captured_vars.push((cap_name.clone(), ty, tmp));
+
+                        // Apply capture mode strategy
+                        // Note: ByRef/ByMutRef would ideally pass pointers, but current IR backend
+                        // doesn't support mixed value/pointer parameter types for lambdas.
+                        // For now, we fall back to by-value for all modes (future: implement proper
+                        // reference capture with pointer parameters).
+                        match capture_mode {
+                            vais_ast::CaptureMode::ByRef | vais_ast::CaptureMode::ByMutRef => {
+                                // TODO: Implement proper reference capture by passing pointers
+                                // Currently falls back to by-value behavior
+                                if local.is_param() {
+                                    captured_vars.push((
+                                        cap_name.clone(),
+                                        ty,
+                                        format!("%{}", local.llvm_name),
+                                    ));
+                                } else if local.is_ssa() {
+                                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                                } else {
+                                    let tmp = self.next_temp(counter);
+                                    let llvm_ty = self.type_to_llvm(&ty);
+                                    capture_ir.push_str(&format!(
+                                        "  {} = load {}, {}* %{}\n",
+                                        tmp, llvm_ty, llvm_ty, local.llvm_name
+                                    ));
+                                    captured_vars.push((cap_name.clone(), ty, tmp));
+                                }
+                            }
+                            vais_ast::CaptureMode::ByValue | vais_ast::CaptureMode::Move => {
+                                // By-value or explicit move: load and pass the value
+                                if local.is_param() {
+                                    // Parameters are already values, use directly
+                                    captured_vars.push((
+                                        cap_name.clone(),
+                                        ty,
+                                        format!("%{}", local.llvm_name),
+                                    ));
+                                } else if local.is_ssa() {
+                                    // SSA values are already the value itself, use directly
+                                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                                } else {
+                                    // Load from alloca
+                                    let tmp = self.next_temp(counter);
+                                    let llvm_ty = self.type_to_llvm(&ty);
+                                    capture_ir.push_str(&format!(
+                                        "  {} = load {}, {}* %{}\n",
+                                        tmp, llvm_ty, llvm_ty, local.llvm_name
+                                    ));
+                                    captured_vars.push((cap_name.clone(), ty, tmp));
+                                }
+                            }
                         }
                     }
                 }

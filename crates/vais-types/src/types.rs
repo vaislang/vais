@@ -599,7 +599,6 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 Some(format!("the value does not satisfy the refinement predicate `{}`; ensure the value meets the constraint", predicate))
             }
-            _ => None,
         }
     }
 

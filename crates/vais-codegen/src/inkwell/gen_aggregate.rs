@@ -451,6 +451,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         params: &[ast::Param],
         body: &Expr,
         captures: &[String],
+        capture_mode: ast::CaptureMode,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Generate unique lambda function name
         let lambda_name = format!("__lambda_{}", self.lambda_counter);
@@ -474,12 +475,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Vec::new();
         for cap_name in &effective_captures {
             if let Some((ptr, var_type)) = self.locals.get(cap_name) {
-                // Load the captured value
-                let val = self
-                    .builder
-                    .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                captured_vars.push((cap_name.clone(), val, *var_type));
+                // Apply capture mode strategy
+                // Note: ByRef/ByMutRef would ideally pass pointers directly, but current Inkwell
+                // lambda implementation uses uniform value parameters for simplicity.
+                // For now, we fall back to by-value for all modes (future: implement proper
+                // reference capture with pointer parameters and updated lambda calling convention).
+                match capture_mode {
+                    ast::CaptureMode::ByRef | ast::CaptureMode::ByMutRef => {
+                        // TODO: Implement proper reference capture by passing pointers
+                        // Currently falls back to by-value behavior (load and pass)
+                        let val = self
+                            .builder
+                            .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        captured_vars.push((cap_name.clone(), val, *var_type));
+                    }
+                    ast::CaptureMode::ByValue | ast::CaptureMode::Move => {
+                        // By-value or explicit move: load and pass the value
+                        let val = self
+                            .builder
+                            .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        captured_vars.push((cap_name.clone(), val, *var_type));
+                    }
+                }
             }
         }
 

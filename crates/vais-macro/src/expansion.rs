@@ -180,6 +180,7 @@ impl<'a> AstExpander<'a> {
             is_pub: func.is_pub,
             is_async: func.is_async,
             attributes: func.attributes,
+            where_clause: func.where_clause,
         })
     }
 
@@ -211,6 +212,7 @@ impl<'a> AstExpander<'a> {
             methods: expanded_methods,
             associated_types: t.associated_types,
             is_pub: t.is_pub,
+            where_clause: t.where_clause,
         })
     }
 
@@ -400,10 +402,12 @@ impl<'a> AstExpander<'a> {
                 params,
                 body,
                 captures,
+                capture_mode,
             } => Expr::Lambda {
                 params,
                 body: Box::new(self.expand_expr(*body)?),
                 captures,
+                capture_mode,
             },
             Expr::Await(inner) => Expr::Await(Box::new(self.expand_expr(*inner)?)),
             Expr::Try(inner) => Expr::Try(Box::new(self.expand_expr(*inner)?)),

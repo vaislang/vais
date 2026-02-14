@@ -1740,6 +1740,9 @@ impl Formatter {
                     .collect();
                 ps.join(" | ")
             }
+            Pattern::Alias { name, pattern } => {
+                format!("{} @ {}", name, self.format_pattern(&pattern.node))
+            }
         }
     }
 }

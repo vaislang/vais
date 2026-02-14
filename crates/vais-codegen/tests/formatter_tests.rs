@@ -92,6 +92,7 @@ fn test_format_simple_function() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -116,6 +117,7 @@ fn test_format_function_with_no_params() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -147,6 +149,7 @@ fn test_format_function_with_generics() {
         is_pub: true,
         is_async: false,
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -181,6 +184,7 @@ fn test_format_function_with_bounded_generics() {
         is_pub: false,
         is_async: false,
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -205,6 +209,7 @@ fn test_format_async_function() {
         is_async: true,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -249,6 +254,7 @@ fn test_format_function_with_block_body() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -287,6 +293,7 @@ fn test_format_function_with_attributes() {
                 expr: None,
             },
         ],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -319,6 +326,7 @@ fn test_format_function_with_mut_params() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -356,6 +364,7 @@ fn test_format_simple_struct() {
         is_pub: true,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -385,6 +394,7 @@ fn test_format_generic_struct() {
         methods: vec![],
         is_pub: true,
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -423,6 +433,7 @@ fn test_format_struct_with_methods() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let s = Struct {
@@ -443,6 +454,7 @@ fn test_format_struct_with_methods() {
         is_pub: true,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -596,6 +608,7 @@ fn test_format_if_else() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -641,6 +654,7 @@ fn test_format_else_if_chain() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -680,6 +694,7 @@ fn test_format_loop() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -727,6 +742,7 @@ fn test_format_match_expression() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -767,6 +783,7 @@ fn test_format_match_with_guard() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -805,6 +822,7 @@ fn test_format_binary_expressions() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -837,6 +855,7 @@ fn test_format_unary_expressions() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -867,6 +886,7 @@ fn test_format_method_call() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -897,6 +917,7 @@ fn test_format_array_literal() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -931,6 +952,7 @@ fn test_format_tuple() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -963,6 +985,7 @@ fn test_format_struct_literal() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -1084,6 +1107,7 @@ fn test_custom_indent_size() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -1121,6 +1145,7 @@ fn test_use_tabs_indentation() {
         is_async: false,
         generics: vec![],
         attributes: vec![],
+            where_clause: vec![],
     };
 
     let module = Module {
@@ -1186,6 +1211,7 @@ fn test_format_multiple_items() {
                 is_async: false,
                 generics: vec![],
                 attributes: vec![],
+            where_clause: vec![],
             })),
         ],
     };

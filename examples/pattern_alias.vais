@@ -1,0 +1,80 @@
+# Pattern alias (@) syntax examples
+
+# Basic alias with tuple pattern
+F test_tuple_alias() -> i64 {
+    x := (1, 2, 3)
+    M x {
+        t @ (a, b, c) => {
+            # t is bound to the whole tuple (1, 2, 3)
+            # a, b, c are bound to individual elements
+            a + b + c  # Returns 6
+        }
+    }
+}
+
+# Alias with enum variant pattern
+E Option<T> {
+    Some(T),
+    None
+}
+
+F test_option_alias() -> i64 {
+    opt := Some(42)
+    M opt {
+        whole @ Some(val) => {
+            # whole is bound to Some(42)
+            # val is bound to 42
+            val
+        },
+        _ => 0
+    }
+}
+
+# Alias with literal pattern
+F test_literal_alias() -> i64 {
+    x := 30
+    M x {
+        n @ 30 => {
+            # n is bound to the matched value
+            n  # Returns 30
+        },
+        _ => 0
+    }
+}
+
+# Nested alias patterns
+F test_nested_alias() -> i64 {
+    x := (Some(5), Some(10))
+    M x {
+        both @ (first @ Some(a), second @ Some(b)) => {
+            # both is bound to the whole tuple
+            # first is bound to Some(5), second to Some(10)
+            # a is bound to 5, b to 10
+            a + b  # Returns 15
+        },
+        _ => 0
+    }
+}
+
+# Alias with wildcard (always matches)
+F test_wildcard_alias() -> i64 {
+    x := 20
+    M x {
+        n @ _ => {
+            # n is bound to the matched value
+            n  # Returns 20
+        }
+    }
+}
+
+# Main function to test all cases
+F main() -> i64 {
+    t := test_tuple_alias()
+    o := test_option_alias()
+    l := test_literal_alias()
+    n := test_nested_alias()
+    w := test_wildcard_alias()
+
+    # Sum all results: 6 + 42 + 30 + 15 + 20 = 113
+    t + o + l + n + w
+}

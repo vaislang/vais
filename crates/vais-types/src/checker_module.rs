@@ -208,6 +208,31 @@ impl TypeChecker {
         self.current_const_generics = prev_const_generics;
     }
 
+    /// Merge where clause bounds into current generic bounds.
+    ///
+    /// Where clause predicates provide additional trait bounds on generic parameters
+    /// that supplement the inline bounds in the generic parameter list.
+    ///
+    /// # Arguments
+    ///
+    /// * `where_clause` - The where clause predicates to merge
+    ///
+    /// # Example
+    ///
+    /// ```vais
+    /// F foo<T>(x: T) where T: Display + Clone { ... }
+    /// ```
+    ///
+    /// The where clause bounds (Display, Clone) are merged into the generic bounds for T.
+    pub(crate) fn merge_where_clause(&mut self, where_clause: &[WherePredicate]) {
+        for predicate in where_clause {
+            self.current_generic_bounds
+                .entry(predicate.ty.node.clone())
+                .or_default()
+                .extend(predicate.bounds.iter().map(|b| b.node.clone()));
+        }
+    }
+
     /// Extract contract specification from function attributes
     ///
     /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
@@ -285,7 +310,8 @@ impl TypeChecker {
         // Restore previous generics
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
-        let generic_bounds: HashMap<String, Vec<String>> = f
+        // Build generic bounds: merge inline bounds with where clause bounds
+        let mut generic_bounds: HashMap<String, Vec<String>> = f
             .generics
             .iter()
             .map(|g| {
@@ -295,6 +321,14 @@ impl TypeChecker {
                 )
             })
             .collect();
+
+        // Merge where clause bounds
+        for predicate in &f.where_clause {
+            generic_bounds
+                .entry(predicate.ty.node.clone())
+                .or_default()
+                .extend(predicate.bounds.iter().map(|b| b.node.clone()));
+        }
 
         // Count required parameters (those without default values)
         let has_defaults = f.params.iter().any(|p| p.default_value.is_some());
@@ -399,6 +433,9 @@ impl TypeChecker {
         // Set current generics for type resolution
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&s.generics);
 
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&s.where_clause);
+
         let mut fields = HashMap::new();
         let mut field_order = Vec::new();
         for field in &s.fields {
@@ -425,7 +462,8 @@ impl TypeChecker {
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
-            let method_bounds: HashMap<String, Vec<String>> = method
+            // Build method generic bounds: merge inline bounds with where clause bounds
+            let mut method_bounds: HashMap<String, Vec<String>> = method
                 .node
                 .generics
                 .iter()
@@ -436,6 +474,14 @@ impl TypeChecker {
                     )
                 })
                 .collect();
+
+            // Merge method where clause bounds
+            for predicate in &method.node.where_clause {
+                method_bounds
+                    .entry(predicate.ty.node.clone())
+                    .or_default()
+                    .extend(predicate.bounds.iter().map(|b| b.node.clone()));
+            }
 
             methods.insert(
                 method.node.name.node.clone(),
@@ -768,6 +814,9 @@ impl TypeChecker {
 
         // Set current generics for type resolution
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&t.generics);
+
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&t.where_clause);
 
         // Add "Self" as an implicit generic parameter for trait methods
         self.current_generics.push("Self".to_string());

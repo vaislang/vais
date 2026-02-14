@@ -14,6 +14,9 @@ impl TypeChecker {
         // Set current generic parameters
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
 
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&f.where_clause);
+
         // Add parameters to scope and validate object safety
         // Use types from the registered FunctionSig to share type variables
         // (important for Type::Infer parameters that become Var(id))
@@ -297,6 +300,9 @@ impl TypeChecker {
 
         // Set current generic parameters (including struct-level generics)
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
+
+        // Merge where clause bounds into current generic bounds
+        self.merge_where_clause(&method.where_clause);
 
         // Build the generics list for self type (struct-level generics as Generic types)
         let self_generics: Vec<ResolvedType> = struct_generics

@@ -573,6 +573,10 @@ impl TreeShaker {
                     Self::collect_pattern_deps(&pat.node, deps);
                 }
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, collect deps from inner pattern
+                Self::collect_pattern_deps(&pattern.node, deps);
+            }
         }
     }
 
@@ -732,6 +736,7 @@ mod tests {
                 is_pub,
                 is_async: false,
                 attributes: vec![],
+            where_clause: vec![],
             }),
             Span::new(0, 1),
         )
@@ -844,6 +849,7 @@ mod tests {
                         methods: vec![],
                         is_pub: false,
                         attributes: vec![],
+            where_clause: vec![],
                     }),
                     Span::new(0, 1),
                 ),
@@ -855,6 +861,7 @@ mod tests {
                         methods: vec![],
                         is_pub: false,
                         attributes: vec![],
+            where_clause: vec![],
                     }),
                     Span::new(0, 1),
                 ),

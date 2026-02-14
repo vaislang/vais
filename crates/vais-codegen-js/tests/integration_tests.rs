@@ -368,6 +368,7 @@ fn test_try_operator_codegen() {
                 is_pub: false,
                 is_async: false,
                 attributes: vec![],
+                where_clause: vec![],
             }),
             Span::new(0, 20),
         )],

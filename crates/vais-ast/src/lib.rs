@@ -146,6 +146,8 @@ pub struct Function {
     pub is_async: bool,
     /// Attributes like `#[cfg(test)]`, `#\[inline\]`, etc.
     pub attributes: Vec<Attribute>,
+    /// Where clause predicates (e.g., `where T: Display + Clone`)
+    pub where_clause: Vec<WherePredicate>,
 }
 
 /// Function body - either expression or block
@@ -301,6 +303,15 @@ impl GenericParam {
     }
 }
 
+/// Where clause predicate: `T: Display + Clone`
+#[derive(Debug, Clone, PartialEq)]
+pub struct WherePredicate {
+    /// The type being constrained (usually a generic parameter name)
+    pub ty: Spanned<String>,
+    /// Trait bounds on this type
+    pub bounds: Vec<Spanned<String>>,
+}
+
 /// Struct definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
@@ -310,6 +321,8 @@ pub struct Struct {
     pub methods: Vec<Spanned<Function>>,
     pub is_pub: bool,
     pub attributes: Vec<Attribute>,
+    /// Where clause predicates (e.g., `where T: Display + Clone`)
+    pub where_clause: Vec<WherePredicate>,
 }
 
 /// Struct field
@@ -393,6 +406,8 @@ pub struct Trait {
     pub associated_types: Vec<AssociatedType>, // Associated types (e.g., T Item)
     pub methods: Vec<TraitMethod>,
     pub is_pub: bool,
+    /// Where clause predicates (e.g., `where T: Display + Clone`)
+    pub where_clause: Vec<WherePredicate>,
 }
 
 /// Trait method signature (may have default impl)
@@ -957,6 +972,8 @@ pub enum Expr {
         body: Box<Spanned<Expr>>,
         /// Captured variables from enclosing scope (filled during type checking)
         captures: Vec<String>,
+        /// Capture mode for closure (by-value, move, by-ref, by-mut-ref)
+        capture_mode: CaptureMode,
     },
     /// Spawn: `spawn{expr}`
     Spawn(Box<Spanned<Expr>>),
@@ -1041,6 +1058,24 @@ pub enum Pattern {
     },
     /// Or pattern: `a | b`
     Or(Vec<Spanned<Pattern>>),
+    /// Pattern alias: `x @ Pattern` - binds the matched value to x while also matching against Pattern
+    Alias {
+        name: String,
+        pattern: Box<Spanned<Pattern>>,
+    },
+}
+
+/// Capture mode for closure variables
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CaptureMode {
+    /// Default: inferred by usage (by-value/move)
+    ByValue,
+    /// Explicit move: `move |x| ...`
+    Move,
+    /// By reference: `|&x| ...`
+    ByRef,
+    /// By mutable reference: `|&mut x| ...`
+    ByMutRef,
 }
 
 /// Literal values for patterns

@@ -98,7 +98,7 @@ impl ExprVisitor for CodeGenerator {
             Expr::Lambda {
                 params,
                 body,
-                captures: _,
+                ..
             } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),

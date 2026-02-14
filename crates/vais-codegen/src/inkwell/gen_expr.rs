@@ -90,7 +90,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 params,
                 body,
                 captures,
-            } => self.generate_lambda(params, &body.node, captures),
+                capture_mode,
+            } => self.generate_lambda(params, &body.node, captures, *capture_mode),
 
             // Try/Unwrap
             Expr::Try(inner) => self.generate_try(&inner.node),

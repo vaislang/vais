@@ -1,0 +1,7 @@
+# Basic pattern alias test
+F main() -> i64 {
+    x := (1, 2)
+    M x {
+        whole @ (a, b) => a + b  # whole is bound to (1,2), a=1, b=2
+    }
+}

@@ -24,6 +24,7 @@ mod tests {
             methods: vec![],
             is_pub: true,
             attributes: vec![],
+            where_clause: vec![],
         }
     }
 
@@ -46,6 +47,7 @@ mod tests {
             methods: vec![],
             is_pub: true,
             attributes: vec![],
+            where_clause: vec![],
         }
     }
 
@@ -90,6 +92,7 @@ mod tests {
             is_pub: true,
             is_async: false,
             attributes: vec![],
+            where_clause: vec![],
         }
     }
 
@@ -180,6 +183,7 @@ mod tests {
             is_pub: true,
             is_async: false,
             attributes: vec![],
+            where_clause: vec![],
         };
 
         codegen.register_function(&simple_fn).unwrap();

@@ -256,6 +256,9 @@ impl Parser {
             None
         };
 
+        // Parse where clause (between return type and body)
+        let where_clause = self.parse_where_clause()?;
+
         let body = if self.check(&Token::Eq) {
             self.advance();
             FunctionBody::Expr(Box::new(self.parse_expr()?))
@@ -285,6 +288,7 @@ impl Parser {
             is_pub,
             is_async,
             attributes,
+            where_clause,
         })
     }
 
@@ -292,6 +296,9 @@ impl Parser {
     fn parse_struct(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Struct> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
+
+        // Parse where clause
+        let where_clause = self.parse_where_clause()?;
 
         let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
@@ -328,6 +335,7 @@ impl Parser {
             methods,
             is_pub,
             attributes,
+            where_clause,
         })
     }
 
@@ -621,6 +629,9 @@ impl Parser {
             Vec::new()
         };
 
+        // Parse where clause
+        let where_clause = self.parse_where_clause()?;
+
         let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
 
@@ -646,6 +657,7 @@ impl Parser {
             associated_types,
             methods,
             is_pub,
+            where_clause,
         })
     }
 

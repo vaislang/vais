@@ -124,6 +124,8 @@ pub enum Token {
     Move,
     #[token("consume")]
     Consume,
+    #[token("where")]
+    Where,
 
     // === Lazy Evaluation ===
     #[token("lazy")]
@@ -469,6 +471,7 @@ impl fmt::Display for Token {
             Token::Affine => write!(f, "affine"),
             Token::Move => write!(f, "move"),
             Token::Consume => write!(f, "consume"),
+            Token::Where => write!(f, "where"),
             // Lifetime
             Token::Lifetime(name) => write!(f, "'{}", name),
             // Lazy evaluation

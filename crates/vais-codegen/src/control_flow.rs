@@ -672,6 +672,10 @@ impl CodeGenerator {
                     Ok((result, ir))
                 }
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, check the inner pattern
+                self.generate_pattern_check(pattern, match_val, counter)
+            }
         }
     }
 
@@ -848,6 +852,23 @@ impl CodeGenerator {
                         }
                     }
                 }
+
+                Ok(ir)
+            }
+            Pattern::Alias { name, pattern } => {
+                // Bind the whole value to name, then bind variables from inner pattern
+                let mut ir = String::new();
+
+                // First, bind the whole matched value to the alias name
+                let ty = ResolvedType::I64; // Default type for now
+                self.fn_ctx.locals.insert(
+                    name.clone(),
+                    LocalVar::ssa(ty.clone(), match_val.to_string()),
+                );
+
+                // Then bind variables from the inner pattern
+                let inner_ir = self.generate_pattern_bindings(pattern, match_val, counter)?;
+                ir.push_str(&inner_ir);
 
                 Ok(ir)
             }

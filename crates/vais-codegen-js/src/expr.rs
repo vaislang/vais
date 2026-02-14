@@ -637,6 +637,10 @@ impl JsCodeGenerator {
                     .collect();
                 Ok(format!("({})", parts?.join(" || ")))
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, check the inner pattern
+                self.generate_pattern_condition(&pattern.node, val_name)
+            }
         }
     }
 
@@ -677,6 +681,16 @@ impl JsCodeGenerator {
                         sanitize_js_ident(&fname.node),
                         sanitize_js_ident(&fname.node)
                     ));
+                }
+                Ok(bindings.join(" "))
+            }
+            Pattern::Alias { name, pattern } => {
+                // Bind the whole value to the alias name
+                let mut bindings = vec![format!("const {} = {val_name};", sanitize_js_ident(name))];
+                // Then bind variables from the inner pattern
+                let inner = self.generate_pattern_bindings(&pattern.node, val_name)?;
+                if !inner.is_empty() {
+                    bindings.push(inner);
                 }
                 Ok(bindings.join(" "))
             }

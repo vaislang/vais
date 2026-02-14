@@ -607,7 +607,7 @@ impl TypeChecker {
                     Expr::Lambda {
                         params,
                         body,
-                        captures: _,
+                        ..
                     } => self.check_lambda_with_expected(params, body, expected, &expr.span),
                     // Array literals can propagate element type
                     Expr::Array(elements) => {

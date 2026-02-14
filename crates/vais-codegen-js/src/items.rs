@@ -671,6 +671,7 @@ mod tests {
             is_pub: false,
             is_async: false,
             attributes: vec![],
+            where_clause: vec![],
         };
         let result = gen.generate_function(&func, false).unwrap();
         assert!(result.contains("/* <T> */"));
@@ -698,6 +699,7 @@ mod tests {
             methods: vec![],
             is_pub: true,
             attributes: vec![],
+            where_clause: vec![],
         };
         let result = gen.generate_struct(&s).unwrap();
         assert!(result.contains("/* <T> */"));
@@ -716,6 +718,7 @@ mod tests {
             methods: vec![],
             is_pub: false,
             attributes: vec![],
+            where_clause: vec![],
         };
         gen.generate_struct(&s).unwrap();
 
@@ -757,6 +760,7 @@ mod tests {
                     is_pub: false,
                     is_async: false,
                     attributes: vec![],
+                    where_clause: vec![],
                 },
                 Span::new(19, 53),
             )],

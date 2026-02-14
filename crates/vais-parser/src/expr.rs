@@ -153,6 +153,7 @@ impl Parser {
                         | Token::Match
                         | Token::Spawn
                         | Token::Pipe      // lambda
+                        | Token::Move      // move lambda
                         | Token::Minus     // unary minus
                         | Token::Bang      // unary not
                         | Token::Tilde     // bitwise not
@@ -786,6 +787,7 @@ impl Parser {
                             | Token::Match
                             | Token::Spawn
                             | Token::Pipe      // lambda
+                            | Token::Move      // move lambda
                             | Token::Minus     // unary minus
                             | Token::Bang      // unary not
                             | Token::Tilde     // bitwise not
@@ -1152,7 +1154,20 @@ impl Parser {
             }
             Token::Pipe => {
                 // Lambda expression: |params| body
-                return self.parse_lambda(start);
+                return self.parse_lambda(start, CaptureMode::ByValue);
+            }
+            Token::Move => {
+                // move lambda: move |params| body
+                if self.check(&Token::Pipe) {
+                    self.advance(); // consume |
+                    return self.parse_lambda(start, CaptureMode::Move);
+                }
+                // Otherwise, it's an error (move keyword outside lambda context)
+                return Err(ParseError::UnexpectedToken {
+                    found: Token::Move,
+                    span: self.current_span(),
+                    expected: "move keyword is only valid before lambda expressions (move |x| ...)".to_string(),
+                });
             }
             Token::Comptime => {
                 // Comptime expression: comptime { expr }
@@ -1387,7 +1402,8 @@ impl Parser {
     /// Parse lambda expression: |params| body
     /// Syntax: |x: i64, y: i64| x + y  (explicit types)
     ///         |x, y| x + y              (inferred types)
-    pub(crate) fn parse_lambda(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+    ///         move |x, y| x + y         (explicit move capture)
+    pub(crate) fn parse_lambda(&mut self, start: usize, capture_mode: CaptureMode) -> ParseResult<Spanned<Expr>> {
         // We've already consumed the opening |
         let mut params = Vec::new();
 
@@ -1426,6 +1442,7 @@ impl Parser {
                 params,
                 body: Box::new(body),
                 captures: vec![], // Filled during type checking
+                capture_mode,
             },
             Span::new(start, end),
         ))
@@ -1445,8 +1462,17 @@ impl Parser {
                 Token::Ident(s) => {
                     let name = s.clone();
                     self.advance();
+                    // Check for pattern alias: `x @ pattern`
+                    if self.check(&Token::At) {
+                        self.advance();
+                        let inner_pattern = self.parse_pattern()?;
+                        Pattern::Alias {
+                            name,
+                            pattern: Box::new(inner_pattern),
+                        }
+                    }
                     // Check for variant pattern: `Some(x)`
-                    if self.check(&Token::LParen) {
+                    else if self.check(&Token::LParen) {
                         self.advance();
                         let mut fields = Vec::new();
                         while !self.check(&Token::RParen) && !self.is_at_end() {

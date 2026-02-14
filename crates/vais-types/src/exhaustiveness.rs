@@ -145,6 +145,10 @@ impl ExhaustivenessChecker {
                     Self::hash_pattern(&p.node, hasher);
                 }
             }
+            Pattern::Alias { name, pattern } => {
+                name.hash(hasher);
+                Self::hash_pattern(&pattern.node, hasher);
+            }
         }
     }
 
@@ -343,6 +347,10 @@ impl ExhaustivenessChecker {
                 name: "".to_string(),
                 fields: patterns.iter().map(|p| self.pattern_to_space(p)).collect(),
             },
+            Pattern::Alias { pattern, .. } => {
+                // For exhaustiveness, alias behaves like its inner pattern
+                self.pattern_to_space(pattern)
+            }
         }
     }
 

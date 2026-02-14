@@ -236,6 +236,7 @@ impl Parser {
         let (ty, is_mut, ownership) = if self.check(&Token::ColonEq) {
             self.advance();
             // Check for ownership modifiers: `x := linear expr`, `x := affine expr`, `x := move expr`
+            // BUT: if `move` is followed by `|`, it's a move lambda, not an ownership modifier
             let ownership = if self.check(&Token::Linear) {
                 self.advance();
                 Ownership::Linear
@@ -243,8 +244,19 @@ impl Parser {
                 self.advance();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
-                self.advance();
-                Ownership::Move
+                // Peek ahead: if next token is |, this is a move lambda, not ownership
+                if let Some(next) = self.peek_next() {
+                    if next.token == Token::Pipe {
+                        // Don't consume move - let the expression parser handle it
+                        Ownership::Regular
+                    } else {
+                        self.advance();
+                        Ownership::Move
+                    }
+                } else {
+                    self.advance();
+                    Ownership::Move
+                }
             } else {
                 Ownership::Regular
             };
@@ -257,6 +269,7 @@ impl Parser {
         } else if self.check(&Token::Colon) {
             self.advance();
             // Check for ownership modifiers: `x: linear T = expr`, `x: affine T = expr`
+            // BUT: if `move` is followed by `|`, it's a move lambda, not an ownership modifier
             let ownership = if self.check(&Token::Linear) {
                 self.advance();
                 Ownership::Linear
@@ -264,8 +277,19 @@ impl Parser {
                 self.advance();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
-                self.advance();
-                Ownership::Move
+                // Peek ahead: if next token is |, this is a move lambda, not ownership
+                if let Some(next) = self.peek_next() {
+                    if next.token == Token::Pipe {
+                        // Don't consume move - let the expression parser handle it
+                        Ownership::Regular
+                    } else {
+                        self.advance();
+                        Ownership::Move
+                    }
+                } else {
+                    self.advance();
+                    Ownership::Move
+                }
             } else {
                 Ownership::Regular
             };

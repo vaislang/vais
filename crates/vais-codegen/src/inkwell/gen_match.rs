@@ -661,6 +661,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 Ok(result)
             }
+            Pattern::Alias { pattern, .. } => {
+                // For pattern alias, check the inner pattern
+                self.generate_pattern_check(pattern, match_val)
+            }
         }
     }
 
@@ -757,6 +761,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .insert(field_name.node.clone(), (alloca, var_type));
                     }
                 }
+                Ok(())
+            }
+            Pattern::Alias { name, pattern } => {
+                // Bind the whole value to the alias name
+                let var_type = match_val.get_type();
+                let alloca = self
+                    .builder
+                    .build_alloca(var_type, name)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(alloca, *match_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(name.clone(), (alloca, var_type));
+
+                // Then bind variables from the inner pattern
+                self.generate_pattern_bindings(pattern, match_val)?;
+
                 Ok(())
             }
         }

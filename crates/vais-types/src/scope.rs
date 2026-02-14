@@ -292,6 +292,13 @@ impl TypeChecker {
                 }
                 Ok(())
             }
+            Pattern::Alias { name, pattern } => {
+                // Bind the alias name to the whole matched value
+                self.define_var(name, expr_type.clone(), false);
+                // Then bind variables from the inner pattern
+                self.register_pattern_bindings(pattern, expr_type)?;
+                Ok(())
+            }
         }
     }
 }

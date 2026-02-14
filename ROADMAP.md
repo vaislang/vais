@@ -150,6 +150,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 26** | Hot-path 성능 최적화 | 📋 예정 — clone 392건/format! 1,265건 분석, Cow<str>/inline/정적 문자열 전환으로 5~15% 속도 개선 |
 | **Phase 27** | Python/Node 바인딩 테스트 | 📋 예정 — vais-python +20개, vais-node +20개 통합 테스트, CI 연동 |
 | **Phase 28** | 문서 보강 | 📋 예정 — Testing Guide/Error Handling/Compiler Internals/Package Manager 가이드 신규 |
+| **Phase 29~31** | vaisc 에러 해결 · 모듈 분할 R2 · 에러 진단 | vaisc 62건 re-export 수정, 5파일 모듈 분할, help() 100% + multi-error + secondary spans — **520 E2E** |
+| **Phase 32** | 언어 기능 확장 | ✅ 2026-02-14 — CaptureMode(move\|x\|), where 절(WherePredicate), 패턴 alias(x@pat), E2E +18 — **538 E2E** |
 
 ---
 
@@ -1369,9 +1371,33 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 32: 언어 기능 확장
 
-> **상태**: 📋 예정
-> **목표**: 클로저 개선(캡처 모드 명시), 패턴 매칭 강화(or-pattern, guard), 제네릭 개선(where 절)
+> **상태**: ✅ 완료 (2026-02-14)
+> **목표**: 클로저 캡처 모드 명시, 제네릭 where 절, 패턴 alias(@) 추가
 > **영향도**: Medium — 실사용 사례 확대, 표현력 향상
+> **참고**: or-pattern/guard는 이미 완전 구현됨 (Pattern::Or, MatchArm.guard)
+
+- [x] 1. Closure 캡처 모드 — AST+Parser+TC (Sonnet) ✅ 2026-02-14
+  변경: ast/lib.rs (CaptureMode enum), parser/expr.rs (move|x| 파싱), checker_expr.rs/free_vars.rs (캡처 모드 검증), stmt.rs/types.rs (move 키워드 충돌 해소)
+- [x] 2. Closure 캡처 모드 — Codegen (Sonnet) ✅ 2026-02-14
+  변경: generate_expr.rs/inkwell/gen_expr.rs/gen_aggregate.rs (capture_mode 분기, ByRef/ByMutRef 인프라 준비)
+- [x] 3. Where 절 — AST+Parser (Sonnet) ✅ 2026-02-14
+  변경: lexer (Token::Where), ast/lib.rs (WherePredicate, Function/Struct/Trait.where_clause), parser/types.rs (parse_where_clause), parser/item.rs (함수/구조체/트레이트 파싱)
+- [x] 4. Where 절 — TC 통합 (Sonnet) ✅ 2026-02-14
+  변경: checker_module.rs (merge_where_clause 헬퍼, register_function/struct/trait에서 where bounds 병합), checker_fn.rs (check_function/check_impl_method에서 where 활성화)
+- [x] 5. 패턴 alias (@) 구문 (Sonnet) ✅ 2026-02-14
+  변경: ast/lib.rs (Pattern::Alias), parser/expr.rs (@ 파싱), exhaustiveness.rs/scope.rs (Alias 투명 처리), control_flow.rs/gen_match.rs (바인딩+내부 패턴 codegen), formatter.rs/codegen-js (호환)
+- [x] 6. E2E 테스트 & 검증 (Sonnet) ✅ 2026-02-14
+  변경: e2e/phase32.rs (18개 신규 테스트: closure 5 + where 5 + alias 6 + combined 2), E2E 520→538
+진행률: 6/6 (100%)
+
+### 리뷰 발견사항 (2026-02-14)
+> 출처: /team-review Phase 32
+
+- [ ] 1. [정확성+아키텍처] Pattern::Alias 타입 i64 하드코딩 수정 (Critical) — 대상: codegen/control_flow.rs:863, inkwell/gen_match.rs:766
+- [ ] 2. [아키텍처] ByRef/ByMutRef 미구현 → 명시적 에러 처리 (Critical) — 대상: generate_expr.rs:1758, inkwell/gen_aggregate.rs:483
+- [ ] 3. [정확성] ByMutRef 가변성 검증 완성 또는 삭제 (Warning) — 대상: checker_expr.rs:1462
+- [ ] 4. [성능] Where 절 bounds 중복 제거 (Warning) — 대상: checker_module.rs:325
+진행률: 0/4 (0%)
 
 ---
 

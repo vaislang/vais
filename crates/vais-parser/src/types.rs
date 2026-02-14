@@ -226,6 +226,45 @@ impl Parser {
         Ok(bounds)
     }
 
+    /// Parse where clause: `where T: Display + Clone, U: Default`
+    pub(crate) fn parse_where_clause(&mut self) -> ParseResult<Vec<WherePredicate>> {
+        use vais_ast::WherePredicate;
+
+        if !self.check(&Token::Where) {
+            return Ok(Vec::new());
+        }
+        self.advance(); // consume 'where'
+
+        let mut predicates = Vec::new();
+
+        loop {
+            // Parse type name (generic parameter)
+            let ty = self.parse_ident()?;
+
+            // Expect ':'
+            self.expect(&Token::Colon)?;
+
+            // Parse trait bounds
+            let bounds = self.parse_trait_bounds()?;
+
+            predicates.push(WherePredicate { ty, bounds });
+
+            // Check for more predicates (separated by comma)
+            // Stop at `{` or `=` which indicate start of body
+            if self.check(&Token::Comma) {
+                self.advance();
+                // Check if next token starts a body (stop parsing where clause)
+                if self.check(&Token::LBrace) || self.check(&Token::Eq) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(predicates)
+    }
+
     /// Parse function parameters
     pub(crate) fn parse_params(&mut self) -> ParseResult<Vec<Param>> {
         let mut params = Vec::new();
@@ -239,8 +278,19 @@ impl Parser {
                 self.advance();
                 Ownership::Affine
             } else if self.check(&Token::Move) {
-                self.advance();
-                Ownership::Move
+                // Peek ahead: if next token is |, this is a move lambda, not ownership
+                if let Some(next) = self.peek_next() {
+                    if next.token == Token::Pipe {
+                        // Don't consume move - let the expression parser handle it
+                        Ownership::Regular
+                    } else {
+                        self.advance();
+                        Ownership::Move
+                    }
+                } else {
+                    self.advance();
+                    Ownership::Move
+                }
             } else {
                 Ownership::Regular
             };
