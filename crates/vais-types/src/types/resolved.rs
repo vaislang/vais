@@ -47,8 +47,18 @@ impl ResolvedConst {
                     ConstBinOp::BitAnd => l & r,
                     ConstBinOp::BitOr => l | r,
                     ConstBinOp::BitXor => l ^ r,
-                    ConstBinOp::Shl => l.wrapping_shl(r as u32),
-                    ConstBinOp::Shr => l.wrapping_shr(r as u32),
+                    ConstBinOp::Shl => {
+                        if r < 0 || r >= 64 {
+                            return None;
+                        }
+                        l.wrapping_shl(r as u32)
+                    }
+                    ConstBinOp::Shr => {
+                        if r < 0 || r >= 64 {
+                            return None;
+                        }
+                        l.wrapping_shr(r as u32)
+                    }
                 })
             }
             ResolvedConst::Negate(inner) => inner.try_evaluate().and_then(|v| v.checked_neg()),

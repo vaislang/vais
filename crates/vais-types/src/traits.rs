@@ -3,7 +3,7 @@
 //! This module contains trait-related definitions and implementation checking.
 
 use crate::{ResolvedType, TypeChecker, TypeError, TypeResult};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Trait method signature
 #[derive(Debug, Clone)]
@@ -49,11 +49,24 @@ pub(crate) struct TraitImpl {
 impl TypeChecker {
     /// Check if a type implements a trait (with trait alias expansion)
     pub(crate) fn type_implements_trait(&self, ty: &ResolvedType, trait_name: &str) -> bool {
-        // Expand trait aliases: if trait_name is an alias, check all aliased bounds
+        let mut visited = HashSet::new();
+        self.type_implements_trait_impl(ty, trait_name, &mut visited)
+    }
+
+    fn type_implements_trait_impl(
+        &self,
+        ty: &ResolvedType,
+        trait_name: &str,
+        visited: &mut HashSet<String>,
+    ) -> bool {
+        // Expand trait aliases with cycle detection
         if let Some(bounds) = self.trait_aliases.get(trait_name) {
+            if !visited.insert(trait_name.to_string()) {
+                return false; // Cycle detected — conservatively reject
+            }
             return bounds
                 .iter()
-                .all(|bound| self.type_implements_trait(ty, bound));
+                .all(|bound| self.type_implements_trait_impl(ty, bound, visited));
         }
 
         // Check if there's an explicit impl

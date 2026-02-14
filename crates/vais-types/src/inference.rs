@@ -218,7 +218,10 @@ impl TypeChecker {
             (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
-            // ImplTrait: impl Trait accepts any concrete type (bounds checked separately)
+            // ImplTrait: unification accepts any concrete type.
+            // Bound checking happens at the TypeChecker level (type_implements_trait),
+            // not in the inference engine, since TypeInference has no trait impl data.
+            // This is consistent with DynTrait handling above.
             (ResolvedType::ImplTrait { .. }, _) | (_, ResolvedType::ImplTrait { .. }) => Ok(()),
             // Auto-deref: &T unifies with T (implicit dereference)
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {

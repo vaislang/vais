@@ -1567,11 +1567,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > 출처: /team-review Phase 37 (자동진행 완료 후)
 > 모드: 자동진행
 
-- [ ] 1. [정확성] 순환 trait alias 감지 추가 (Critical) — 대상: crates/vais-types/src/traits.rs:52
-- [ ] 2. [정확성] Shift 범위 검증 추가 (Critical) — 대상: crates/vais-types/src/types/resolved.rs:50
-- [ ] 3. [정확성] ImplTrait bounds 체크 (Critical) — 대상: crates/vais-types/src/inference.rs
-- [ ] 4. [아키텍처] ImplTrait 제한사항 문서화 (Warning) — 대상: docs-site/src/language/advanced-types.md
-진행률: 0/4 (0%)
+- [x] 1. [정확성] 순환 trait alias 감지 추가 (Critical) ✅ 2026-02-14
+  변경: traits.rs(visited HashSet cycle detection), checker_module.rs(trait_alias_reaches() 등록 시 검증)
+- [x] 2. [정확성] Shift 범위 검증 추가 (Critical) ✅ 2026-02-14
+  변경: resolved.rs(Shl/Shr r>=64||r<0 → None)
+- [x] 3. [정확성] ImplTrait bounds 체크 (Critical) ✅ 2026-02-14
+  변경: inference.rs(설계 문서화 — DynTrait과 동일하게 TC레벨 검증, inference는 호환성만)
+- [x] 4. [아키텍처] ImplTrait 제한사항 문서화 (Warning) ✅ 2026-02-14
+  변경: advanced-types.md(현재 제한사항 섹션 추가 — monomorphization 미완성, 파라미터 위치 미지원)
+진행률: 4/4 (100%)
 
 ---
 

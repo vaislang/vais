@@ -1,6 +1,6 @@
 //! Module-level type checking: check_module, registration, and generics.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use vais_ast::*;
 
@@ -947,8 +947,40 @@ impl TypeChecker {
             return Err(TypeError::Duplicate(name, None));
         }
         let bounds: Vec<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
+        // Check for cyclic trait alias references
+        for bound in &bounds {
+            if self.trait_alias_reaches(&name, bound) {
+                return Err(TypeError::Duplicate(
+                    format!("cyclic trait alias: {} references {}", name, bound),
+                    None,
+                ));
+            }
+        }
         self.trait_aliases.insert(name, bounds);
         Ok(())
+    }
+
+    /// Check if expanding `target` eventually references `name` (cycle detection)
+    fn trait_alias_reaches(&self, name: &str, target: &str) -> bool {
+        if target == name {
+            return true;
+        }
+        let mut visited = HashSet::new();
+        let mut stack = vec![target.to_string()];
+        while let Some(current) = stack.pop() {
+            if !visited.insert(current.clone()) {
+                continue;
+            }
+            if let Some(bounds) = self.trait_aliases.get(&current) {
+                for b in bounds {
+                    if b == name {
+                        return true;
+                    }
+                    stack.push(b.clone());
+                }
+            }
+        }
+        false
     }
 
     /// Validate object safety for dyn Trait types
