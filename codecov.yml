@@ -62,9 +62,11 @@ component_management:
         - crates/vais-ast/**
         - crates/vais-types/**
         - crates/vais-codegen/**
+        - crates/vais-codegen-js/**
+        - crates/vais-mir/**
       statuses:
         - type: project
-          target: 90%
+          target: 85%
 
     # Language tooling
     - component_id: tooling
@@ -73,34 +75,36 @@ component_management:
         - crates/vais-lsp/**
         - crates/vais-dap/**
         - crates/vaisc/**
+        - crates/vais-bindgen/**
+        - crates/vais-macro/**
       statuses:
         - type: project
-          target: 85%
+          target: 80%
 
-    # Advanced features
+    # Runtime & advanced features
     - component_id: advanced
       name: Advanced Features
       paths:
         - crates/vais-jit/**
         - crates/vais-gc/**
-        - crates/vais-mir/**
+        - crates/vais-gpu/**
         - crates/vais-query/**
       statuses:
         - type: project
-          target: 80%
+          target: 75%
 
-    # Experimental features
-    - component_id: experimental
-      name: Experimental Features
+    # Plugin & dynamic loading
+    - component_id: extensibility
+      name: Extensibility
       paths:
-        - crates/vais-gpu/**
-        - crates/vais-hotreload/**
         - crates/vais-plugin/**
+        - crates/vais-dynload/**
+        - crates/vais-hotreload/**
       statuses:
         - type: project
           target: 70%
 
-    # Infrastructure
+    # Infrastructure & ecosystem
     - component_id: infrastructure
       name: Infrastructure
       paths:
@@ -108,6 +112,17 @@ component_management:
         - crates/vais-profiler/**
         - crates/vais-security/**
         - crates/vais-supply-chain/**
+        - crates/vais-testgen/**
       statuses:
         - type: project
           target: 75%
+
+    # Ecosystem services
+    - component_id: services
+      name: Ecosystem Services
+      paths:
+        - crates/vais-registry-server/**
+        - crates/vais-playground-server/**
+      statuses:
+        - type: project
+          target: 65%

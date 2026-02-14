@@ -443,3 +443,453 @@ depends = "my-lib"
         .iter()
         .any(|d| d.component == "my-app" && d.depends_on.contains(&"my-lib".to_string())));
 }
+
+// ============================================================================
+// SBOM Advanced Tests (3 tests)
+// ============================================================================
+
+#[test]
+fn test_sbom_empty_validation() {
+    let generator = SbomGenerator::default();
+    let components = vec![];
+    let dependencies = vec![];
+    let sbom = generator.generate_from_components(components, dependencies);
+
+    // Empty SBOM should validate successfully
+    assert!(sbom.validate().is_ok());
+    assert_eq!(sbom.components.len(), 0);
+    assert_eq!(sbom.dependencies.len(), 0);
+}
+
+#[test]
+fn test_sbom_multiple_components() {
+    let generator = SbomGenerator::default();
+
+    let component1 = SbomComponent {
+        name: "lib-a".to_string(),
+        version: "1.0.0".to_string(),
+        component_type: ComponentType::Library,
+        hashes: HashMap::new(),
+        license: Some("MIT".to_string()),
+        description: Some("Component A".to_string()),
+        publisher: Some("Publisher A".to_string()),
+    };
+
+    let component2 = SbomComponent {
+        name: "lib-b".to_string(),
+        version: "2.0.0".to_string(),
+        component_type: ComponentType::Framework,
+        hashes: HashMap::new(),
+        license: Some("Apache-2.0".to_string()),
+        description: Some("Component B".to_string()),
+        publisher: Some("Publisher B".to_string()),
+    };
+
+    let component3 = SbomComponent {
+        name: "lib-c".to_string(),
+        version: "3.0.0".to_string(),
+        component_type: ComponentType::Application,
+        hashes: HashMap::new(),
+        license: Some("GPL-3.0".to_string()),
+        description: Some("Component C".to_string()),
+        publisher: Some("Publisher C".to_string()),
+    };
+
+    let components = vec![component1, component2, component3];
+    let dependencies = vec![];
+    let sbom = generator.generate_from_components(components, dependencies);
+
+    assert_eq!(sbom.components.len(), 3);
+    assert!(sbom.validate().is_ok());
+
+    // Verify all components are present
+    assert!(sbom.components.iter().any(|c| c.name == "lib-a"));
+    assert!(sbom.components.iter().any(|c| c.name == "lib-b"));
+    assert!(sbom.components.iter().any(|c| c.name == "lib-c"));
+}
+
+#[test]
+fn test_sbom_dependencies_validation() {
+    use vais_supply_chain::sbom::Dependency;
+
+    let generator = SbomGenerator::default();
+
+    let component1 = SbomComponent {
+        name: "app".to_string(),
+        version: "1.0.0".to_string(),
+        component_type: ComponentType::Application,
+        hashes: HashMap::new(),
+        license: None,
+        description: None,
+        publisher: None,
+    };
+
+    let component2 = SbomComponent {
+        name: "lib-a".to_string(),
+        version: "1.0.0".to_string(),
+        component_type: ComponentType::Library,
+        hashes: HashMap::new(),
+        license: None,
+        description: None,
+        publisher: None,
+    };
+
+    let component3 = SbomComponent {
+        name: "lib-b".to_string(),
+        version: "1.0.0".to_string(),
+        component_type: ComponentType::Library,
+        hashes: HashMap::new(),
+        license: None,
+        description: None,
+        publisher: None,
+    };
+
+    let components = vec![component1, component2, component3];
+
+    // app depends on lib-a and lib-b
+    let dependencies = vec![Dependency {
+        component: "app".to_string(),
+        depends_on: vec!["lib-a".to_string(), "lib-b".to_string()],
+    }];
+
+    let sbom = generator.generate_from_components(components, dependencies);
+
+    // Should validate successfully
+    assert!(sbom.validate().is_ok());
+
+    // Verify dependency relationships
+    assert_eq!(sbom.dependencies.len(), 1);
+    assert_eq!(sbom.dependencies[0].component, "app");
+    assert_eq!(sbom.dependencies[0].depends_on.len(), 2);
+    assert!(sbom.dependencies[0].depends_on.contains(&"lib-a".to_string()));
+    assert!(sbom.dependencies[0].depends_on.contains(&"lib-b".to_string()));
+}
+
+// ============================================================================
+// Audit Advanced Tests (3 tests)
+// ============================================================================
+
+#[test]
+fn test_audit_multiple_vulnerabilities() {
+    use vais_supply_chain::audit::Vulnerability;
+
+    let mut auditor = DependencyAuditor::new();
+
+    // Add a package with multiple vulnerabilities
+    auditor.add_vulnerability(
+        "multi-vuln-pkg",
+        Vulnerability {
+            id: "CVE-2024-0001".to_string(),
+            severity: VulnerabilitySeverity::Low,
+            description: "Minor issue".to_string(),
+            affected_versions: vec!["1.0.0".to_string()],
+            fixed_in: Some("1.0.1".to_string()),
+            reference: None,
+        },
+    );
+
+    auditor.add_vulnerability(
+        "multi-vuln-pkg",
+        Vulnerability {
+            id: "CVE-2024-0002".to_string(),
+            severity: VulnerabilitySeverity::Medium,
+            description: "Medium issue".to_string(),
+            affected_versions: vec!["1.0.0".to_string()],
+            fixed_in: Some("1.0.2".to_string()),
+            reference: None,
+        },
+    );
+
+    auditor.add_vulnerability(
+        "multi-vuln-pkg",
+        Vulnerability {
+            id: "CVE-2024-0003".to_string(),
+            severity: VulnerabilitySeverity::High,
+            description: "High severity issue".to_string(),
+            affected_versions: vec!["1.0.0".to_string()],
+            fixed_in: Some("1.1.0".to_string()),
+            reference: None,
+        },
+    );
+
+    let manifest = DependencyManifest {
+        dependencies: vec![DependencyEntry {
+            name: "multi-vuln-pkg".to_string(),
+            version: "1.0.0".to_string(),
+        }],
+    };
+
+    let results = auditor.audit_dependencies(&manifest);
+    assert_eq!(results.len(), 1);
+
+    let result = &results[0];
+    assert_eq!(result.vulnerabilities.len(), 3);
+    assert_eq!(result.status, AuditStatus::Vulnerable);
+    assert_eq!(result.max_severity(), Some(VulnerabilitySeverity::High));
+
+    // Check counts by severity
+    assert_eq!(result.count_by_severity(VulnerabilitySeverity::Low), 1);
+    assert_eq!(result.count_by_severity(VulnerabilitySeverity::Medium), 1);
+    assert_eq!(result.count_by_severity(VulnerabilitySeverity::High), 1);
+    assert_eq!(result.count_by_severity(VulnerabilitySeverity::Critical), 0);
+}
+
+#[test]
+fn test_audit_severity_scores() {
+    // Verify severity score mappings
+    assert_eq!(VulnerabilitySeverity::Low.score(), 3);
+    assert_eq!(VulnerabilitySeverity::Medium.score(), 5);
+    assert_eq!(VulnerabilitySeverity::High.score(), 8);
+    assert_eq!(VulnerabilitySeverity::Critical.score(), 10);
+
+    // Verify ordering
+    let mut severities = vec![
+        VulnerabilitySeverity::Critical,
+        VulnerabilitySeverity::Low,
+        VulnerabilitySeverity::High,
+        VulnerabilitySeverity::Medium,
+    ];
+
+    severities.sort();
+
+    assert_eq!(severities[0], VulnerabilitySeverity::Low);
+    assert_eq!(severities[1], VulnerabilitySeverity::Medium);
+    assert_eq!(severities[2], VulnerabilitySeverity::High);
+    assert_eq!(severities[3], VulnerabilitySeverity::Critical);
+
+    // Verify scores increase with severity
+    assert!(VulnerabilitySeverity::Low.score() < VulnerabilitySeverity::Medium.score());
+    assert!(VulnerabilitySeverity::Medium.score() < VulnerabilitySeverity::High.score());
+    assert!(VulnerabilitySeverity::High.score() < VulnerabilitySeverity::Critical.score());
+}
+
+#[test]
+fn test_audit_all_statuses() {
+    let mut auditor = DependencyAuditor::new();
+
+    // Safe package (no vulnerabilities)
+    let safe_result = auditor.audit_dependency("safe-pkg", "1.0.0");
+    assert_eq!(safe_result.status, AuditStatus::Safe);
+    assert!(!safe_result.has_vulnerabilities());
+
+    // Warning status (Low/Medium severity only)
+    use vais_supply_chain::audit::Vulnerability;
+    auditor.add_vulnerability(
+        "warning-pkg",
+        Vulnerability {
+            id: "WARN-001".to_string(),
+            severity: VulnerabilitySeverity::Low,
+            description: "Low severity issue".to_string(),
+            affected_versions: vec!["1.0.0".to_string()],
+            fixed_in: Some("1.0.1".to_string()),
+            reference: None,
+        },
+    );
+
+    let warning_result = auditor.audit_dependency("warning-pkg", "1.0.0");
+    assert_eq!(warning_result.status, AuditStatus::Warning);
+    assert!(warning_result.has_vulnerabilities());
+
+    // Vulnerable status (High severity) - using existing package
+    let vulnerable_result = auditor.audit_dependency("insecure-deserialize", "1.0.0");
+    assert_eq!(vulnerable_result.status, AuditStatus::Vulnerable);
+    assert!(vulnerable_result.has_vulnerabilities());
+
+    // Vulnerable status (Critical severity) - using existing package
+    let critical_result = auditor.audit_dependency("old-crypto", "1.0.0");
+    assert_eq!(critical_result.status, AuditStatus::Vulnerable);
+    assert!(critical_result.has_vulnerabilities());
+}
+
+// ============================================================================
+// Signing Advanced Tests (2 tests)
+// ============================================================================
+
+#[test]
+fn test_signing_directory_modification_detection() {
+    let temp_dir = TempDir::new().unwrap();
+    let pkg_dir = temp_dir.path().join("package");
+    fs::create_dir(&pkg_dir).unwrap();
+
+    // Create multiple files in directory
+    let file1 = pkg_dir.join("file1.txt");
+    let file2 = pkg_dir.join("file2.txt");
+    fs::write(&file1, b"content 1").unwrap();
+    fs::write(&file2, b"content 2").unwrap();
+
+    let signer = PackageSigner::default();
+
+    // Sign the directory
+    let signature = signer
+        .sign_directory(&pkg_dir, "test-pkg".to_string(), "1.0.0".to_string())
+        .unwrap();
+
+    // Verify signature is valid
+    assert!(signer.verify_signature(&pkg_dir, &signature).unwrap());
+
+    // Modify one file
+    fs::write(&file1, b"modified content 1").unwrap();
+
+    // Verification should now fail
+    let verify_after_modification = signer.verify_signature(&pkg_dir, &signature).unwrap();
+    assert!(!verify_after_modification);
+
+    // Strict verification should return error
+    let strict_result = signer.verify_signature_strict(&pkg_dir, &signature);
+    assert!(strict_result.is_err());
+}
+
+#[test]
+fn test_signing_complete_metadata() {
+    let temp_dir = TempDir::new().unwrap();
+    let test_file = temp_dir.path().join("test.bin");
+    let test_content = b"binary content data";
+    fs::write(&test_file, test_content).unwrap();
+
+    // Create signer with full metadata
+    let signer = PackageSigner::new(
+        "John Doe".to_string(),
+        Some("john@example.com".to_string()),
+        Some("Example Corp".to_string()),
+    );
+
+    let signature = signer
+        .sign_package(&test_file, "example-pkg".to_string(), "2.3.4".to_string())
+        .unwrap();
+
+    // Verify all SignerInfo fields
+    assert_eq!(signature.signer.name, "John Doe");
+    assert_eq!(signature.signer.email, Some("john@example.com".to_string()));
+    assert_eq!(
+        signature.signer.organization,
+        Some("Example Corp".to_string())
+    );
+
+    // Verify all SignatureMetadata fields
+    assert_eq!(signature.metadata.package_name, "example-pkg");
+    assert_eq!(signature.metadata.package_version, "2.3.4");
+    assert_eq!(signature.metadata.file_size, test_content.len() as u64);
+    assert_eq!(signature.metadata.tool_version, "0.0.1");
+
+    // Verify other signature fields
+    assert_eq!(signature.algorithm, "SHA-256");
+    assert!(!signature.hash.is_empty());
+    assert_eq!(signature.hash.len(), 64); // SHA-256 hex string is 64 characters
+
+    // Verify signature timestamp is recent
+    let one_minute = chrono::Duration::minutes(1);
+    assert!(signature.is_recent(one_minute));
+}
+
+// ============================================================================
+// Edge Cases Tests (2 tests)
+// ============================================================================
+
+#[test]
+fn test_sbom_empty_manifest_parsing() {
+    let temp_dir = TempDir::new().unwrap();
+    let manifest_path = temp_dir.path().join("empty_manifest.txt");
+
+    // Create empty manifest with only comments and whitespace
+    let empty_manifest = r#"
+# This is a comment
+# Another comment
+
+    # Indented comment
+
+"#;
+
+    fs::write(&manifest_path, empty_manifest).unwrap();
+
+    let generator = SbomGenerator::default();
+    let sbom_result = generator.generate_from_manifest(&manifest_path);
+
+    assert!(sbom_result.is_ok());
+    let sbom = sbom_result.unwrap();
+
+    // Should produce empty SBOM
+    assert_eq!(sbom.components.len(), 0);
+    assert_eq!(sbom.dependencies.len(), 0);
+
+    // Empty SBOM should validate
+    assert!(sbom.validate().is_ok());
+}
+
+#[test]
+fn test_component_type_all_variants() {
+    // Test all ComponentType variants
+    let types = vec![
+        ComponentType::Library,
+        ComponentType::Application,
+        ComponentType::Framework,
+        ComponentType::Container,
+        ComponentType::OperatingSystem,
+        ComponentType::Device,
+        ComponentType::Firmware,
+        ComponentType::File,
+    ];
+
+    let generator = SbomGenerator::default();
+
+    // Create components with each type
+    let components: Vec<SbomComponent> = types
+        .iter()
+        .enumerate()
+        .map(|(i, component_type)| SbomComponent {
+            name: format!("component-{}", i),
+            version: "1.0.0".to_string(),
+            component_type: component_type.clone(),
+            hashes: HashMap::new(),
+            license: None,
+            description: None,
+            publisher: None,
+        })
+        .collect();
+
+    let sbom = generator.generate_from_components(components.clone(), vec![]);
+
+    assert_eq!(sbom.components.len(), 8);
+
+    // Verify each component type is present
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Library));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Application));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Framework));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Container));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::OperatingSystem));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Device));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::Firmware));
+    assert!(sbom
+        .components
+        .iter()
+        .any(|c| c.component_type == ComponentType::File));
+
+    // All types should be distinct
+    for (i, type1) in types.iter().enumerate() {
+        for (j, type2) in types.iter().enumerate() {
+            if i != j {
+                assert_ne!(type1, type2);
+            }
+        }
+    }
+}

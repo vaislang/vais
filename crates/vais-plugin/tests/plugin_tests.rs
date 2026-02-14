@@ -849,3 +849,300 @@ fn test_plugin_info_analysis() {
     assert_eq!(info.version, "0.1.0");
     assert!(info.description.contains("analysis"));
 }
+
+// ============================================================================
+// Advanced PluginConfig Tests
+// ============================================================================
+
+#[test]
+fn test_plugin_config_nested_toml() {
+    let toml = r#"
+[plugins.config]
+analyzer = { thresholds = { complexity = 10, depth = 5 }, rules = ["rule1", "rule2"] }
+"#;
+
+    let config = PluginsConfig::parse(toml).unwrap();
+    assert_eq!(config.plugins.config.len(), 1);
+
+    let analyzer_config = config.plugins.config.get("analyzer").unwrap();
+
+    // Verify nested table structure
+    assert!(analyzer_config.get("thresholds").is_some());
+    assert!(analyzer_config.get("rules").is_some());
+
+    // Verify array values
+    let rules = analyzer_config.get("rules").unwrap().as_array().unwrap();
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0].as_str(), Some("rule1"));
+    assert_eq!(rules[1].as_str(), Some("rule2"));
+
+    // Verify nested table values
+    let thresholds = analyzer_config.get("thresholds").unwrap().as_table().unwrap();
+    assert_eq!(thresholds.get("complexity").and_then(|v| v.as_integer()), Some(10));
+    assert_eq!(thresholds.get("depth").and_then(|v| v.as_integer()), Some(5));
+}
+
+#[test]
+fn test_plugin_config_missing_key_default_handling() {
+    let mut config = PluginConfig::new();
+    config
+        .values
+        .insert("max_warnings".to_string(), toml::Value::Integer(5));
+
+    // Test missing keys return None (caller can use unwrap_or for defaults)
+    assert_eq!(config.get_integer("max_warnings"), Some(5));
+    assert_eq!(config.get_integer("missing_key"), None);
+    assert_eq!(config.get_string("missing_key"), None);
+    assert_eq!(config.get_bool("missing_key"), None);
+
+    // Verify caller can provide defaults
+    let threshold = config.get_integer("threshold").unwrap_or(100);
+    assert_eq!(threshold, 100);
+
+    let enabled = config.get_bool("enabled").unwrap_or(true);
+    assert!(enabled);
+
+    let output = config.get_string("output").unwrap_or("default.txt");
+    assert_eq!(output, "default.txt");
+}
+
+// ============================================================================
+// Advanced ComplexityReport Tests
+// ============================================================================
+
+#[test]
+fn test_complexity_report_max_complexity_function() {
+    let mut report = ComplexityReport::new();
+
+    // Add multiple functions with different complexity
+    report.add_function("simple".to_string(), 2);
+    report.add_function("moderate".to_string(), 8);
+    report.add_function("complex".to_string(), 15);
+    report.add_function("very_complex".to_string(), 25);
+
+    // Verify max_complexity_function returns the highest
+    let (max_name, &max_complexity) = report.max_complexity_function().unwrap();
+    assert_eq!(max_name, "very_complex");
+    assert_eq!(max_complexity, 25);
+
+    // Verify overall complexity is sum of all
+    assert_eq!(report.overall_complexity, 2 + 8 + 15 + 25);
+}
+
+#[test]
+fn test_complexity_report_empty_suggestions() {
+    let mut report = ComplexityReport::new();
+
+    // Add functions but no suggestions
+    report.add_function("func1".to_string(), 3);
+    report.add_function("func2".to_string(), 4);
+
+    // Verify suggestions are empty
+    assert!(report.suggestions.is_empty());
+    assert_eq!(report.suggestions.len(), 0);
+
+    // Verify overall complexity is still calculated
+    assert_eq!(report.overall_complexity, 7);
+
+    // Add a suggestion and verify it's tracked
+    report.add_suggestion("Consider refactoring".to_string());
+    assert_eq!(report.suggestions.len(), 1);
+    assert_eq!(report.suggestions[0], "Consider refactoring");
+}
+
+// ============================================================================
+// Advanced DependencyGraph Tests
+// ============================================================================
+
+#[test]
+fn test_dependency_graph_has_cycles_with_cycle() {
+    let mut graph = DependencyGraph::new();
+
+    // Initially no cycles
+    assert!(!graph.has_cycles());
+    assert!(graph.cycles.is_empty());
+
+    // Add a circular dependency
+    graph.add_cycle(vec![
+        "module_a".to_string(),
+        "module_b".to_string(),
+        "module_c".to_string(),
+        "module_a".to_string(),
+    ]);
+
+    // Verify cycle is detected
+    assert!(graph.has_cycles());
+    assert_eq!(graph.cycles.len(), 1);
+    assert_eq!(graph.cycles[0].len(), 4);
+
+    // Add another cycle
+    graph.add_cycle(vec!["x".to_string(), "y".to_string(), "x".to_string()]);
+    assert_eq!(graph.cycles.len(), 2);
+}
+
+#[test]
+fn test_dependency_graph_has_cycles_without_cycle() {
+    let mut graph = DependencyGraph::new();
+
+    // Add dependencies but no cycles
+    graph.add_dependency(DependencyInfo {
+        name: "std::io".to_string(),
+        external: true,
+        span: None,
+    });
+    graph.add_dependency(DependencyInfo {
+        name: "std::fs".to_string(),
+        external: true,
+        span: None,
+    });
+    graph.add_dependency(DependencyInfo {
+        name: "local::util".to_string(),
+        external: false,
+        span: None,
+    });
+
+    graph.add_dependent("app::main".to_string());
+    graph.add_dependent("app::config".to_string());
+
+    // Verify no cycles detected
+    assert!(!graph.has_cycles());
+    assert!(graph.cycles.is_empty());
+
+    // Verify counts are correct
+    assert_eq!(graph.dependency_count(), 3);
+    assert_eq!(graph.external_dependency_count(), 2);
+    assert_eq!(graph.dependents.len(), 2);
+}
+
+// ============================================================================
+// PluginType Variant Tests
+// ============================================================================
+
+#[test]
+fn test_plugin_type_all_variants() {
+    use vais_plugin::PluginType;
+
+    // Verify all 6 plugin type variants exist and are distinct
+    let lint = PluginType::Lint;
+    let transform = PluginType::Transform;
+    let optimize = PluginType::Optimize;
+    let codegen = PluginType::Codegen;
+    let formatter = PluginType::Formatter;
+    let analysis = PluginType::Analysis;
+
+    // Verify equality
+    assert_eq!(lint, PluginType::Lint);
+    assert_eq!(transform, PluginType::Transform);
+    assert_eq!(optimize, PluginType::Optimize);
+    assert_eq!(codegen, PluginType::Codegen);
+    assert_eq!(formatter, PluginType::Formatter);
+    assert_eq!(analysis, PluginType::Analysis);
+
+    // Verify distinct types
+    assert_ne!(lint, transform);
+    assert_ne!(transform, optimize);
+    assert_ne!(optimize, codegen);
+    assert_ne!(codegen, formatter);
+    assert_ne!(formatter, analysis);
+    assert_ne!(analysis, lint);
+}
+
+#[test]
+fn test_opt_level_ordering_complete() {
+    // Verify complete ordering chain
+    assert!(OptLevel::O0 < OptLevel::O1);
+    assert!(OptLevel::O1 < OptLevel::O2);
+    assert!(OptLevel::O2 < OptLevel::O3);
+
+    // Verify transitive ordering
+    assert!(OptLevel::O0 < OptLevel::O2);
+    assert!(OptLevel::O0 < OptLevel::O3);
+    assert!(OptLevel::O1 < OptLevel::O3);
+
+    // Verify reflexive equality
+    assert!(OptLevel::O0 <= OptLevel::O0);
+    assert!(OptLevel::O1 <= OptLevel::O1);
+    assert!(OptLevel::O2 <= OptLevel::O2);
+    assert!(OptLevel::O3 <= OptLevel::O3);
+
+    // Verify greater-than
+    assert!(OptLevel::O3 > OptLevel::O2);
+    assert!(OptLevel::O2 > OptLevel::O1);
+    assert!(OptLevel::O1 > OptLevel::O0);
+
+    // Verify as integers
+    assert_eq!(OptLevel::O0 as i32, 0);
+    assert_eq!(OptLevel::O1 as i32, 1);
+    assert_eq!(OptLevel::O2 as i32, 2);
+    assert_eq!(OptLevel::O3 as i32, 3);
+}
+
+// ============================================================================
+// Registry Edge Cases
+// ============================================================================
+
+#[test]
+fn test_empty_registry_all_run_operations() {
+    let registry = PluginRegistry::new();
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
+
+    // run_lint returns empty
+    let diagnostics = registry.run_lint(&module);
+    assert!(diagnostics.is_empty());
+
+    // run_transform returns unchanged
+    let transformed = registry.run_transform(module.clone()).unwrap();
+    assert_eq!(transformed.items.len(), module.items.len());
+
+    // run_optimize returns unchanged (all opt levels)
+    let ir = "; empty IR";
+    assert_eq!(registry.run_optimize(ir, OptLevel::O0).unwrap(), ir);
+    assert_eq!(registry.run_optimize(ir, OptLevel::O1).unwrap(), ir);
+    assert_eq!(registry.run_optimize(ir, OptLevel::O2).unwrap(), ir);
+    assert_eq!(registry.run_optimize(ir, OptLevel::O3).unwrap(), ir);
+
+    // run_codegen returns empty
+    let temp_dir = std::env::temp_dir();
+    let files = registry.run_codegen(&module, &temp_dir).unwrap();
+    assert!(files.is_empty());
+
+    // run_format returns error (no formatters)
+    let config = FormatConfig::new();
+    let result = registry.run_format(&module, &config);
+    assert!(result.is_err());
+
+    // run_analysis_complexity returns empty report
+    let complexity = registry.run_analysis_complexity(&module);
+    assert_eq!(complexity.overall_complexity, 0);
+
+    // run_analysis_dependencies returns empty graph
+    let deps = registry.run_analysis_dependencies(&module);
+    assert_eq!(deps.dependency_count(), 0);
+}
+
+#[test]
+fn test_registry_counts_by_type_verification() {
+    let registry = PluginRegistry::new();
+
+    // Empty registry should have all zeros
+    let (lint, transform, optimize, codegen, formatter, analysis) = registry.counts_by_type();
+    assert_eq!(lint, 0);
+    assert_eq!(transform, 0);
+    assert_eq!(optimize, 0);
+    assert_eq!(codegen, 0);
+    assert_eq!(formatter, 0);
+    assert_eq!(analysis, 0);
+
+    // Verify tuple order matches documentation:
+    // (lint, transform, optimize, codegen, formatter, analysis)
+    let counts = registry.counts_by_type();
+    assert_eq!(counts.0, 0); // lint
+    assert_eq!(counts.1, 0); // transform
+    assert_eq!(counts.2, 0); // optimize
+    assert_eq!(counts.3, 0); // codegen
+    assert_eq!(counts.4, 0); // formatter
+    assert_eq!(counts.5, 0); // analysis
+}

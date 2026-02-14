@@ -73,7 +73,7 @@ fn test_span_equality() {
 #[test]
 fn test_span_clone() {
     let s1 = Span::new(100, 200);
-    let s2 = s1.clone();
+    let s2 = s1;
     assert_eq!(s1, s2);
 }
 
@@ -421,7 +421,7 @@ fn test_item_const() {
             3,
             6,
         ),
-        value: spanned(Expr::Float(3.14159), 7, 14),
+        value: spanned(Expr::Float(9.876), 7, 14),
         is_pub: true,
         attributes: vec![],
     };
@@ -1029,9 +1029,9 @@ fn test_expr_int_literal() {
 
 #[test]
 fn test_expr_float_literal() {
-    let expr = Expr::Float(3.14);
+    let expr = Expr::Float(1.23);
     match expr {
-        Expr::Float(f) => assert!((f - 3.14).abs() < f64::EPSILON),
+        Expr::Float(f) => assert!((f - 1.23).abs() < f64::EPSILON),
         _ => panic!("Expected Float expr"),
     }
 }
@@ -1219,4 +1219,442 @@ fn test_binop_precedence_equality() {
     assert_eq!(BinOp::Add.precedence(), BinOp::Sub.precedence());
     assert_eq!(BinOp::Mul.precedence(), BinOp::Div.precedence());
     assert_eq!(BinOp::Eq.precedence(), BinOp::Neq.precedence());
+}
+
+// ============================================================================
+// Lambda/Closure Tests
+// ============================================================================
+
+#[test]
+fn test_lambda_with_capture_mode_by_value() {
+    let lambda = Expr::Lambda {
+        params: vec![Param {
+            name: sp_string("x", 0, 1),
+            ty: spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                2,
+                5,
+            ),
+            is_mut: false,
+            is_vararg: false,
+            ownership: Ownership::Regular,
+            default_value: None,
+        }],
+        body: Box::new(spanned(Expr::Int(42), 6, 8)),
+        captures: vec!["y".to_string(), "z".to_string()],
+        capture_mode: CaptureMode::ByValue,
+    };
+
+    match lambda {
+        Expr::Lambda {
+            params,
+            captures,
+            capture_mode,
+            ..
+        } => {
+            assert_eq!(params.len(), 1);
+            assert_eq!(captures.len(), 2);
+            assert_eq!(captures[0], "y");
+            assert_eq!(captures[1], "z");
+            assert_eq!(capture_mode, CaptureMode::ByValue);
+        }
+        _ => panic!("Expected Lambda expr"),
+    }
+}
+
+#[test]
+fn test_lambda_with_capture_mode_move() {
+    let lambda = Expr::Lambda {
+        params: vec![],
+        body: Box::new(spanned(Expr::Ident("x".to_string()), 0, 1)),
+        captures: vec!["x".to_string()],
+        capture_mode: CaptureMode::Move,
+    };
+
+    match lambda {
+        Expr::Lambda { capture_mode, .. } => {
+            assert_eq!(capture_mode, CaptureMode::Move);
+        }
+        _ => panic!("Expected Lambda expr"),
+    }
+}
+
+// ============================================================================
+// Macro Tests
+// ============================================================================
+
+#[test]
+fn test_macro_def_creation() {
+    let macro_def = MacroDef {
+        name: sp_string("vec", 0, 3),
+        rules: vec![
+            MacroRule {
+                pattern: MacroPattern::Empty,
+                template: MacroTemplate::Empty,
+            },
+            MacroRule {
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                    name: "x".to_string(),
+                    kind: MetaVarKind::Expr,
+                }]),
+                template: MacroTemplate::Sequence(vec![MacroTemplateElement::MetaVar(
+                    "x".to_string(),
+                )]),
+            },
+        ],
+        is_pub: true,
+    };
+
+    assert_eq!(macro_def.name.node, "vec");
+    assert_eq!(macro_def.rules.len(), 2);
+    assert!(macro_def.is_pub);
+    match &macro_def.rules[0].pattern {
+        MacroPattern::Empty => {}
+        _ => panic!("Expected Empty pattern"),
+    }
+    match &macro_def.rules[1].pattern {
+        MacroPattern::Sequence(elems) => {
+            assert_eq!(elems.len(), 1);
+            match &elems[0] {
+                MacroPatternElement::MetaVar { name, kind } => {
+                    assert_eq!(name, "x");
+                    assert_eq!(*kind, MetaVarKind::Expr);
+                }
+                _ => panic!("Expected MetaVar pattern element"),
+            }
+        }
+        _ => panic!("Expected Sequence pattern"),
+    }
+}
+
+#[test]
+fn test_macro_invoke_expr() {
+    let macro_invoke = MacroInvoke {
+        name: sp_string("vec", 0, 3),
+        delimiter: Delimiter::Bracket,
+        tokens: vec![
+            MacroToken::Literal(MacroLiteral::Int(1)),
+            MacroToken::Punct(','),
+            MacroToken::Literal(MacroLiteral::Int(2)),
+        ],
+    };
+
+    let expr = Expr::MacroInvoke(macro_invoke);
+
+    match expr {
+        Expr::MacroInvoke(invoke) => {
+            assert_eq!(invoke.name.node, "vec");
+            assert_eq!(invoke.delimiter, Delimiter::Bracket);
+            assert_eq!(invoke.tokens.len(), 3);
+            match &invoke.tokens[0] {
+                MacroToken::Literal(MacroLiteral::Int(n)) => assert_eq!(*n, 1),
+                _ => panic!("Expected Int literal"),
+            }
+        }
+        _ => panic!("Expected MacroInvoke expr"),
+    }
+}
+
+// ============================================================================
+// Advanced Expr Tests
+// ============================================================================
+
+#[test]
+fn test_expr_spawn() {
+    let expr = Expr::Spawn(Box::new(spanned(
+        Expr::Call {
+            func: Box::new(spanned(Expr::Ident("task".to_string()), 0, 4)),
+            args: vec![],
+        },
+        0,
+        6,
+    )));
+
+    match expr {
+        Expr::Spawn(inner) => match inner.node {
+            Expr::Call { .. } => {}
+            _ => panic!("Expected Call inside Spawn"),
+        },
+        _ => panic!("Expected Spawn expr"),
+    }
+}
+
+#[test]
+fn test_expr_yield_and_await() {
+    let yield_expr = Expr::Yield(Box::new(spanned(Expr::Int(42), 0, 2)));
+    let await_expr = Expr::Await(Box::new(spanned(
+        Expr::Call {
+            func: Box::new(spanned(Expr::Ident("fetch".to_string()), 0, 5)),
+            args: vec![],
+        },
+        0,
+        7,
+    )));
+
+    match yield_expr {
+        Expr::Yield(inner) => match inner.node {
+            Expr::Int(n) => assert_eq!(n, 42),
+            _ => panic!("Expected Int in Yield"),
+        },
+        _ => panic!("Expected Yield expr"),
+    }
+
+    match await_expr {
+        Expr::Await(_) => {}
+        _ => panic!("Expected Await expr"),
+    }
+}
+
+#[test]
+fn test_expr_try_and_unwrap() {
+    let try_expr = Expr::Try(Box::new(spanned(
+        Expr::Call {
+            func: Box::new(spanned(Expr::Ident("parse".to_string()), 0, 5)),
+            args: vec![],
+        },
+        0,
+        7,
+    )));
+
+    let unwrap_expr = Expr::Unwrap(Box::new(spanned(Expr::Ident("opt".to_string()), 0, 3)));
+
+    match try_expr {
+        Expr::Try(inner) => match inner.node {
+            Expr::Call { .. } => {}
+            _ => panic!("Expected Call in Try"),
+        },
+        _ => panic!("Expected Try expr"),
+    }
+
+    match unwrap_expr {
+        Expr::Unwrap(inner) => match inner.node {
+            Expr::Ident(name) => assert_eq!(name, "opt"),
+            _ => panic!("Expected Ident in Unwrap"),
+        },
+        _ => panic!("Expected Unwrap expr"),
+    }
+}
+
+// ============================================================================
+// Advanced Type Tests
+// ============================================================================
+
+#[test]
+fn test_type_fnptr() {
+    let fnptr = Type::FnPtr {
+        params: vec![
+            spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                0,
+                3,
+            ),
+            spanned(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                4,
+                7,
+            ),
+        ],
+        ret: Box::new(spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            8,
+            11,
+        )),
+        is_vararg: false,
+    };
+
+    match fnptr {
+        Type::FnPtr {
+            params,
+            ret,
+            is_vararg,
+        } => {
+            assert_eq!(params.len(), 2);
+            assert!(!is_vararg);
+            match ret.node {
+                Type::Named { name, .. } => assert_eq!(name, "i64"),
+                _ => panic!("Expected Named return type"),
+            }
+        }
+        _ => panic!("Expected FnPtr type"),
+    }
+}
+
+#[test]
+fn test_type_dyntrait_and_associated() {
+    let dyn_trait = Type::DynTrait {
+        trait_name: "Display".to_string(),
+        generics: vec![],
+    };
+
+    let associated = Type::Associated {
+        base: Box::new(spanned(
+            Type::Named {
+                name: "T".to_string(),
+                generics: vec![],
+            },
+            0,
+            1,
+        )),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![spanned(
+            Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
+            2,
+            5,
+        )],
+    };
+
+    match dyn_trait {
+        Type::DynTrait {
+            trait_name,
+            generics,
+        } => {
+            assert_eq!(trait_name, "Display");
+            assert!(generics.is_empty());
+        }
+        _ => panic!("Expected DynTrait type"),
+    }
+
+    match associated {
+        Type::Associated {
+            trait_name,
+            assoc_name,
+            generics,
+            ..
+        } => {
+            assert_eq!(trait_name, Some("Iterator".to_string()));
+            assert_eq!(assoc_name, "Item");
+            assert_eq!(generics.len(), 1);
+        }
+        _ => panic!("Expected Associated type"),
+    }
+}
+
+// ============================================================================
+// Stmt Extension Tests
+// ============================================================================
+
+#[test]
+fn test_stmt_let_destructure() {
+    let stmt = Stmt::LetDestructure {
+        pattern: spanned(
+            Pattern::Tuple(vec![
+                spanned(Pattern::Ident("a".to_string()), 0, 1),
+                spanned(Pattern::Ident("b".to_string()), 2, 3),
+            ]),
+            0,
+            5,
+        ),
+        value: Box::new(spanned(
+            Expr::Tuple(vec![
+                spanned(Expr::Int(1), 6, 7),
+                spanned(Expr::Int(2), 8, 9),
+            ]),
+            6,
+            10,
+        )),
+        is_mut: false,
+    };
+
+    match stmt {
+        Stmt::LetDestructure {
+            pattern,
+            value: _,
+            is_mut,
+        } => {
+            assert!(!is_mut);
+            match pattern.node {
+                Pattern::Tuple(pats) => {
+                    assert_eq!(pats.len(), 2);
+                }
+                _ => panic!("Expected Tuple pattern"),
+            }
+        }
+        _ => panic!("Expected LetDestructure stmt"),
+    }
+}
+
+#[test]
+fn test_stmt_defer() {
+    let stmt = Stmt::Defer(Box::new(spanned(
+        Expr::Call {
+            func: Box::new(spanned(Expr::Ident("cleanup".to_string()), 0, 7)),
+            args: vec![],
+        },
+        0,
+        9,
+    )));
+
+    match stmt {
+        Stmt::Defer(expr) => match expr.node {
+            Expr::Call { func, .. } => match func.node {
+                Expr::Ident(name) => assert_eq!(name, "cleanup"),
+                _ => panic!("Expected Ident in Defer"),
+            },
+            _ => panic!("Expected Call in Defer"),
+        },
+        _ => panic!("Expected Defer stmt"),
+    }
+}
+
+// ============================================================================
+// WherePredicate Tests
+// ============================================================================
+
+#[test]
+fn test_where_predicate() {
+    let where_pred = WherePredicate {
+        ty: sp_string("T", 0, 1),
+        bounds: vec![sp_string("Display", 2, 9), sp_string("Clone", 10, 15)],
+    };
+
+    assert_eq!(where_pred.ty.node, "T");
+    assert_eq!(where_pred.bounds.len(), 2);
+    assert_eq!(where_pred.bounds[0].node, "Display");
+    assert_eq!(where_pred.bounds[1].node, "Clone");
+}
+
+#[test]
+fn test_function_with_where_clause() {
+    let func = Function {
+        name: sp_string("process", 0, 7),
+        generics: vec![GenericParam::new_type(sp_string("T", 8, 9), vec![])],
+        params: vec![],
+        ret_type: None,
+        body: FunctionBody::Block(vec![]),
+        is_pub: false,
+        is_async: false,
+        attributes: vec![],
+        where_clause: vec![
+            WherePredicate {
+                ty: sp_string("T", 10, 11),
+                bounds: vec![sp_string("Send", 12, 16), sp_string("Sync", 17, 21)],
+            },
+            WherePredicate {
+                ty: sp_string("T", 22, 23),
+                bounds: vec![sp_string("Display", 24, 31)],
+            },
+        ],
+    };
+
+    assert_eq!(func.where_clause.len(), 2);
+    assert_eq!(func.where_clause[0].ty.node, "T");
+    assert_eq!(func.where_clause[0].bounds.len(), 2);
+    assert_eq!(func.where_clause[0].bounds[0].node, "Send");
+    assert_eq!(func.where_clause[1].bounds[0].node, "Display");
 }

@@ -957,3 +957,327 @@ async fn test_full_session_lifecycle() {
         .await;
     assert_eq!(response["command"], "disconnect");
 }
+
+// ============================================================================
+// Unit Tests - Protocol Types
+// ============================================================================
+
+#[test]
+fn test_capabilities_default_values() {
+    use vais_dap::types::Capabilities;
+
+    let caps = Capabilities::vais_defaults();
+
+    // Verify core capabilities are enabled
+    assert_eq!(caps.supports_configuration_done_request, Some(true));
+    assert_eq!(caps.supports_function_breakpoints, Some(true));
+    assert_eq!(caps.supports_conditional_breakpoints, Some(true));
+    assert_eq!(caps.supports_hit_conditional_breakpoints, Some(true));
+    assert_eq!(caps.supports_evaluate_for_hovers, Some(true));
+    assert_eq!(caps.supports_set_variable, Some(true));
+    assert_eq!(caps.supports_terminate_request, Some(true));
+    assert_eq!(caps.supports_read_memory_request, Some(true));
+    assert_eq!(caps.supports_disassemble_request, Some(true));
+
+    // Verify exception breakpoint filter
+    assert!(caps.exception_breakpoint_filters.is_some());
+    let filters = caps.exception_breakpoint_filters.unwrap();
+    assert_eq!(filters.len(), 1);
+    assert_eq!(filters[0].filter, "panic");
+    assert_eq!(filters[0].label, "Panic");
+    assert_eq!(filters[0].default, Some(true));
+}
+
+#[test]
+fn test_message_type_variants() {
+    use vais_dap::types::MessageType;
+
+    // Create all variants
+    let request = MessageType::Request;
+    let response = MessageType::Response;
+    let event = MessageType::Event;
+
+    // Verify equality
+    assert_eq!(request, MessageType::Request);
+    assert_eq!(response, MessageType::Response);
+    assert_eq!(event, MessageType::Event);
+
+    // Verify inequality
+    assert_ne!(request, response);
+    assert_ne!(response, event);
+    assert_ne!(event, request);
+}
+
+#[test]
+fn test_protocol_message_serialization() {
+    use vais_dap::types::{MessageType, Request};
+
+    // Create a request
+    let request = Request {
+        base: vais_dap::types::ProtocolMessage {
+            seq: 1,
+            message_type: MessageType::Request,
+        },
+        command: "initialize".to_string(),
+        arguments: Some(json!({
+            "adapterId": "vais",
+            "linesStartAt1": true,
+        })),
+    };
+
+    // Serialize to JSON
+    let json_str = serde_json::to_string(&request).unwrap();
+    assert!(json_str.contains("\"seq\":1"));
+    assert!(json_str.contains("\"type\":\"request\""));
+    assert!(json_str.contains("\"command\":\"initialize\""));
+    assert!(json_str.contains("\"adapterId\":\"vais\""));
+
+    // Deserialize back
+    let deserialized: Request = serde_json::from_str(&json_str).unwrap();
+    assert_eq!(deserialized.base.seq, 1);
+    assert_eq!(deserialized.base.message_type, MessageType::Request);
+    assert_eq!(deserialized.command, "initialize");
+    assert!(deserialized.arguments.is_some());
+}
+
+// ============================================================================
+// Unit Tests - Breakpoint Logic
+// ============================================================================
+
+#[test]
+fn test_parse_hit_condition_all_formats() {
+    use vais_dap::breakpoint::{parse_hit_condition, HitConditionOp};
+
+    // Equal (implicit and explicit)
+    assert_eq!(parse_hit_condition("5"), Some(HitConditionOp::Equal(5)));
+    assert_eq!(parse_hit_condition("=5"), Some(HitConditionOp::Equal(5)));
+    assert_eq!(parse_hit_condition("= 10"), Some(HitConditionOp::Equal(10)));
+    assert_eq!(parse_hit_condition("  =  20  "), Some(HitConditionOp::Equal(20)));
+
+    // Greater or equal
+    assert_eq!(parse_hit_condition(">=3"), Some(HitConditionOp::GreaterEqual(3)));
+    assert_eq!(parse_hit_condition(">= 7"), Some(HitConditionOp::GreaterEqual(7)));
+    assert_eq!(parse_hit_condition("  >=  15  "), Some(HitConditionOp::GreaterEqual(15)));
+
+    // Greater
+    assert_eq!(parse_hit_condition(">5"), Some(HitConditionOp::Greater(5)));
+    assert_eq!(parse_hit_condition("> 8"), Some(HitConditionOp::Greater(8)));
+
+    // Multiple (modulo)
+    assert_eq!(parse_hit_condition("%10"), Some(HitConditionOp::Multiple(10)));
+    assert_eq!(parse_hit_condition("% 3"), Some(HitConditionOp::Multiple(3)));
+    assert_eq!(parse_hit_condition("  %  5  "), Some(HitConditionOp::Multiple(5)));
+
+    // Invalid
+    assert_eq!(parse_hit_condition("invalid"), None);
+    assert_eq!(parse_hit_condition("abc"), None);
+    assert_eq!(parse_hit_condition(""), None);
+}
+
+#[test]
+fn test_hit_condition_evaluate_comprehensive() {
+    use vais_dap::breakpoint::{evaluate_hit_condition, HitConditionOp};
+
+    // Equal - only matches exact count
+    let op = HitConditionOp::Equal(10);
+    assert!(!evaluate_hit_condition(&op, 9));
+    assert!(evaluate_hit_condition(&op, 10));
+    assert!(!evaluate_hit_condition(&op, 11));
+
+    // GreaterEqual - matches count >= threshold
+    let op = HitConditionOp::GreaterEqual(5);
+    assert!(!evaluate_hit_condition(&op, 4));
+    assert!(evaluate_hit_condition(&op, 5));
+    assert!(evaluate_hit_condition(&op, 6));
+    assert!(evaluate_hit_condition(&op, 100));
+
+    // Greater - matches count > threshold
+    let op = HitConditionOp::Greater(3);
+    assert!(!evaluate_hit_condition(&op, 2));
+    assert!(!evaluate_hit_condition(&op, 3));
+    assert!(evaluate_hit_condition(&op, 4));
+    assert!(evaluate_hit_condition(&op, 50));
+
+    // Multiple - matches every Nth hit
+    let op = HitConditionOp::Multiple(3);
+    assert!(!evaluate_hit_condition(&op, 1));
+    assert!(!evaluate_hit_condition(&op, 2));
+    assert!(evaluate_hit_condition(&op, 3));
+    assert!(!evaluate_hit_condition(&op, 4));
+    assert!(!evaluate_hit_condition(&op, 5));
+    assert!(evaluate_hit_condition(&op, 6));
+    assert!(evaluate_hit_condition(&op, 9));
+    assert!(!evaluate_hit_condition(&op, 10));
+
+    // Multiple with 0 should always return false (division by zero protection)
+    let op = HitConditionOp::Multiple(0);
+    assert!(!evaluate_hit_condition(&op, 0));
+    assert!(!evaluate_hit_condition(&op, 1));
+    assert!(!evaluate_hit_condition(&op, 100));
+}
+
+// ============================================================================
+// Unit Tests - Error Types
+// ============================================================================
+
+#[test]
+fn test_dap_error_variants_display() {
+    use vais_dap::DapError;
+
+    // Test all error variants display correctly
+    let errors = vec![
+        (DapError::Protocol("invalid message".to_string()), "Protocol error: invalid message"),
+        (DapError::InvalidRequest("bad format".to_string()), "Invalid request: bad format"),
+        (DapError::NotInitialized, "Session not initialized"),
+        (DapError::NoActiveSession, "No active debug session"),
+        (DapError::Debugger("LLDB failure".to_string()), "Debugger error: LLDB failure"),
+        (DapError::Breakpoint("invalid location".to_string()), "Breakpoint error: invalid location"),
+        (DapError::SourceMapping("no debug info".to_string()), "Source mapping error: no debug info"),
+        (DapError::ThreadNotFound(42), "Thread 42 not found"),
+        (DapError::FrameNotFound(7), "Frame 7 not found"),
+        (DapError::VariableNotFound(123), "Variable reference 123 not found"),
+        (DapError::ProcessNotRunning, "Process not running"),
+        (DapError::DwarfParsing("corrupt data".to_string()), "DWARF parsing error: corrupt data"),
+        (DapError::Unsupported("feature X".to_string()), "Unsupported operation: feature X"),
+        (DapError::Timeout("response".to_string()), "Timeout waiting for response"),
+    ];
+
+    for (error, expected_msg) in errors {
+        let msg = error.to_string();
+        assert_eq!(msg, expected_msg, "Error display mismatch for {:?}", error);
+    }
+}
+
+#[test]
+fn test_dap_result_usage() {
+    use vais_dap::{DapError, DapResult};
+
+    // Success case
+    let success: DapResult<i32> = Ok(42);
+    match success {
+        Ok(val) => assert_eq!(val, 42),
+        Err(_) => panic!("Expected Ok, got Err"),
+    }
+
+    // Error case
+    let error: DapResult<i32> = Err(DapError::NotInitialized);
+    match error {
+        Ok(_) => panic!("Expected Err, got Ok"),
+        Err(e) => assert_eq!(e.to_string(), "Session not initialized"),
+    }
+
+    // Using DapResult in a function
+    fn test_function(should_fail: bool) -> DapResult<String> {
+        if should_fail {
+            Err(DapError::NoActiveSession)
+        } else {
+            Ok("success".to_string())
+        }
+    }
+
+    assert!(test_function(false).is_ok());
+    assert!(test_function(true).is_err());
+}
+
+// ============================================================================
+// Unit Tests - Source Location
+// ============================================================================
+
+#[test]
+fn test_source_location_creation() {
+    use vais_dap::source_map::SourceLocation;
+
+    // Create a source location
+    let loc = SourceLocation {
+        file: "/path/to/file.vais".to_string(),
+        line: 42,
+        column: 10,
+    };
+
+    // Verify fields
+    assert_eq!(loc.file, "/path/to/file.vais");
+    assert_eq!(loc.line, 42);
+    assert_eq!(loc.column, 10);
+
+    // Clone and verify
+    let loc2 = loc.clone();
+    assert_eq!(loc2.file, loc.file);
+    assert_eq!(loc2.line, loc.line);
+    assert_eq!(loc2.column, loc.column);
+}
+
+#[test]
+fn test_source_map_empty_state() {
+    use vais_dap::source_map::SourceMap;
+
+    // Create an empty source map
+    let map = SourceMap::new();
+
+    // Verify empty state
+    assert!(!map.is_loaded(), "Empty map should not be loaded");
+
+    let (addr_count, loc_count) = map.stats();
+    assert_eq!(addr_count, 0, "Empty map should have 0 address mappings");
+    assert_eq!(loc_count, 0, "Empty map should have 0 location mappings");
+
+    // Verify lookups return None
+    assert!(map.get_source_for_address(0x1000).is_none());
+    assert!(map.get_line_column(0x1000).is_none());
+    assert!(map.get_location(0x1000).is_none());
+    assert!(map.get_addresses("/test/file.vais", 10).is_none());
+    assert!(map.find_nearest_line("/test/file.vais", 10).is_none());
+
+    // Verify source files list is empty
+    let files = map.get_source_files();
+    assert_eq!(files.len(), 0);
+}
+
+// ============================================================================
+// Unit Tests - Variables/Stack
+// ============================================================================
+
+#[test]
+fn test_scope_and_evaluate_context_variants() {
+    use vais_dap::types::{EvaluateContext, ScopePresentationHint};
+
+    // Test ScopePresentationHint variants
+    let scope_hints = vec![
+        ScopePresentationHint::Arguments,
+        ScopePresentationHint::Locals,
+        ScopePresentationHint::Registers,
+    ];
+
+    // Verify JSON serialization preserves variant names
+    for hint in scope_hints {
+        let json = serde_json::to_string(&hint).unwrap();
+        let deserialized: ScopePresentationHint = serde_json::from_str(&json).unwrap();
+
+        // Use debug format for comparison
+        let original = format!("{:?}", hint);
+        let restored = format!("{:?}", deserialized);
+        assert_eq!(original, restored);
+    }
+
+    // Test EvaluateContext variants
+    let contexts = vec![
+        EvaluateContext::Watch,
+        EvaluateContext::Repl,
+        EvaluateContext::Hover,
+        EvaluateContext::Clipboard,
+        EvaluateContext::Variables,
+    ];
+
+    // Verify JSON serialization uses camelCase
+    let json = serde_json::to_string(&EvaluateContext::Repl).unwrap();
+    assert_eq!(json, "\"repl\"");
+
+    // Verify all contexts can round-trip
+    for ctx in contexts {
+        let json = serde_json::to_string(&ctx).unwrap();
+        let deserialized: EvaluateContext = serde_json::from_str(&json).unwrap();
+
+        let original = format!("{:?}", ctx);
+        let restored = format!("{:?}", deserialized);
+        assert_eq!(original, restored);
+    }
+}

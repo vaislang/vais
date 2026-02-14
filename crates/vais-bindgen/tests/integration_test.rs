@@ -342,3 +342,244 @@ fn test_empty_input() {
     assert!(result.contains("Auto-generated"));
     assert!(result.contains("extern"));
 }
+
+// WASM/JS Bindgen tests (3개)
+#[test]
+fn test_wasm_js_bindgen_basic() {
+    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmExportInfo};
+
+    let mut gen = WasmJsBindgen::new("calculator");
+    gen.add_export(WasmExportInfo {
+        wasm_name: "add".to_string(),
+        js_name: "add".to_string(),
+        params: vec![
+            ("x".to_string(), "i32".to_string()),
+            ("y".to_string(), "i32".to_string()),
+        ],
+        return_type: Some("i32".to_string()),
+    });
+
+    let js = gen.generate_js();
+    assert!(js.contains("calculator"));
+    assert!(js.contains("createImports"));
+    assert!(js.contains("add: (x, y) => instance.exports.add(x, y)"));
+}
+
+#[test]
+fn test_wasm_js_bindgen_imports() {
+    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmImportInfo};
+
+    let mut gen = WasmJsBindgen::new("app");
+    gen.add_import(WasmImportInfo {
+        module: "env".to_string(),
+        name: "print_i32".to_string(),
+        vais_name: "print_i32".to_string(),
+        params: vec!["i32".to_string()],
+        return_type: None,
+    });
+    gen.add_import(WasmImportInfo {
+        module: "env".to_string(),
+        name: "read_input".to_string(),
+        vais_name: "read_input".to_string(),
+        params: vec![],
+        return_type: Some("i32".to_string()),
+    });
+
+    let js = gen.generate_js();
+    assert!(js.contains("\"env\""));
+    assert!(js.contains("print_i32"));
+    assert!(js.contains("read_input"));
+    assert!(js.contains("overrides[\"print_i32\"]"));
+}
+
+#[test]
+fn test_wasm_js_bindgen_typescript_dts() {
+    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmExportInfo};
+
+    let mut gen = WasmJsBindgen::new("math_lib");
+    gen.add_export(WasmExportInfo {
+        wasm_name: "sqrt".to_string(),
+        js_name: "sqrt".to_string(),
+        params: vec![("value".to_string(), "f64".to_string())],
+        return_type: Some("f64".to_string()),
+    });
+
+    let dts = gen.generate_dts();
+    assert!(dts.contains("Math_libModule"));
+    assert!(dts.contains("sqrt(value: number): number"));
+    assert!(dts.contains("createImports"));
+    assert!(dts.contains("Promise<Math_libModule>"));
+}
+
+// Error path tests (2개)
+#[test]
+fn test_invalid_c_syntax_error() {
+    let header = r#"
+        int broken function syntax(int x, y);
+        struct { incomplete
+    "#;
+
+    let mut bindgen = Bindgen::new();
+    let result = bindgen.parse_header(header);
+
+    // Should fail to parse invalid syntax
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_empty_struct_and_enum_handling() {
+    let header = r#"
+        struct EmptyStruct {};
+        enum EmptyEnum {};
+
+        void use_empty(struct EmptyStruct* s, enum EmptyEnum e);
+    "#;
+
+    let mut bindgen = Bindgen::new();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Empty structs and enums should still be handled
+    assert!(result.contains("fn use_empty"));
+}
+
+// Config advanced tests (2개)
+#[test]
+fn test_config_allowlist_and_blocklist_api() {
+    let header = r#"
+        int allowed_func(void);
+        int blocked_func(void);
+        int another_allowed(void);
+        void internal_func(void);
+    "#;
+
+    // Test that the config API accepts allowlist and blocklist
+    let mut config = BindgenConfig::default();
+    config.allowlist_type("allowed_func");
+    config.allowlist_type("another_allowed");
+    config.blocklist_type("blocked_func");
+
+    // Verify config methods work
+    assert!(config.is_type_allowed("allowed_func"));
+    assert!(config.is_type_allowed("another_allowed"));
+    assert!(!config.is_type_allowed("blocked_func"));
+
+    // Test that bindgen accepts the configured instance
+    let mut bindgen = Bindgen::with_config(config);
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should generate valid output
+    assert!(result.contains("extern"));
+}
+
+#[test]
+fn test_config_prefix_and_suffix_api() {
+    let header = r#"
+        int api_create(void);
+        void api_destroy(void);
+        int api_process(int x);
+    "#;
+
+    // Test that the config API accepts prefix and suffix
+    let mut config = BindgenConfig::default();
+    config.set_prefix("vais_");
+    config.set_suffix("_impl");
+
+    // Verify config stores the values
+    assert_eq!(config.prefix(), Some("vais_"));
+    assert_eq!(config.suffix(), Some("_impl"));
+
+    // Test that bindgen accepts the configured instance
+    let mut bindgen = Bindgen::with_config(config);
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should generate valid output with functions
+    assert!(result.contains("fn api_create"));
+    assert!(result.contains("fn api_destroy"));
+    assert!(result.contains("fn api_process"));
+}
+
+// C++ advanced tests (2개)
+#[test]
+fn test_cpp_nested_namespace() {
+    let header = r#"
+        namespace Outer {
+            namespace Inner {
+                namespace Deep {
+                    int compute(int x);
+                    class Calculator {
+                    public:
+                        int add(int a, int b);
+                    };
+                }
+            }
+        }
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should handle nested namespaces (parser recognizes them)
+    // Generated output may flatten namespace hierarchy
+    assert!(result.contains("compute") || result.contains("Deep"));
+    assert!(result.contains("Calculator"));
+}
+
+#[test]
+fn test_cpp_virtual_and_const_methods() {
+    let header = r#"
+        class Shape {
+        public:
+            virtual double area() const = 0;
+            virtual void draw() const;
+            int getId() const;
+            void setId(int id);
+        };
+
+        class Circle : public Shape {
+        public:
+            double area() const override;
+            void draw() const override;
+        };
+    "#;
+
+    let mut bindgen = Bindgen::new_cpp();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should handle virtual, const, and override keywords
+    assert!(result.contains("Shape"));
+    assert!(result.contains("Circle"));
+    assert!(result.contains("area"));
+    assert!(result.contains("draw"));
+    assert!(result.contains("getId"));
+}
+
+// Parser edge case test (1개)
+#[test]
+fn test_typedef_chain_and_arrays() {
+    let header = r#"
+        typedef int integer;
+        typedef integer* integer_ptr;
+        typedef integer_ptr integer_ptr_ptr;
+
+        typedef int int_array[10];
+        typedef float matrix[4][4];
+
+        integer_ptr_ptr get_numbers(void);
+        void process_matrix(matrix m);
+        void fill_array(int_array arr, int value);
+    "#;
+
+    let mut bindgen = Bindgen::new();
+    bindgen.parse_header(header).unwrap();
+    let result = bindgen.generate().unwrap();
+
+    // Should handle typedef chains and array types
+    assert!(result.contains("fn get_numbers"));
+    assert!(result.contains("fn process_matrix"));
+    assert!(result.contains("fn fill_array"));
+}

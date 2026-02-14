@@ -493,7 +493,7 @@ fn test_sql_injection() {
     // If not flagged as injection, it's because query() + string concat detection
     // depends on the AST structure. We should at least have the query call detected.
     assert!(
-        has_injection || findings.len() > 0,
+        has_injection || !findings.is_empty(),
         "Should detect security issues in SQL query construction, found {} findings",
         findings.len()
     );
@@ -824,5 +824,466 @@ fn test_comprehensive_security_report() {
             finding.location.start < finding.location.end,
             "Span should be valid"
         );
+    }
+}
+
+// ============================================================================
+// NEW INTEGRATION TESTS (10)
+// ============================================================================
+
+/// Test 21: Complex conditional with vulnerabilities nested deeply
+#[test]
+fn test_complex_conditional_injection() {
+    let source = r#"
+        F complex_flow(user: String, admin: bool) -> i64 {
+            I admin {
+                I user != "" {
+                    query_str := "SELECT * FROM admin WHERE name = '" + user + "'"
+                    result := execute(query_str)
+                    result
+                } E {
+                    0
+                }
+            } E {
+                I user == "guest" {
+                    0
+                } E {
+                    cmd := "ls " + user
+                    system(cmd)
+                }
+            }
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Should detect injection vulnerabilities in deeply nested conditionals
+    assert!(
+        has_category(&findings, FindingCategory::Injection),
+        "Should detect injection in complex conditionals"
+    );
+
+    // The analyzer detects execute() and system() calls
+    // With string concatenation, it should flag injection risks
+    let injection_count = count_category(&findings, FindingCategory::Injection);
+    assert!(
+        injection_count >= 1,
+        "Expected at least 1 injection finding, got {}",
+        injection_count
+    );
+
+    // Verify findings mention command or SQL operations
+    let descriptions = findings
+        .iter()
+        .filter(|f| f.category == FindingCategory::Injection)
+        .map(|f| f.description.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    assert!(
+        descriptions.contains("system") || descriptions.contains("execute"),
+        "Should detect dangerous function calls in nested conditions"
+    );
+}
+
+/// Test 22: Nested function calls with injection risk
+#[test]
+fn test_nested_call_injection() {
+    let source = r#"
+        F sanitize(input: String) -> String {
+            # Pretends to sanitize but doesn't
+            input
+        }
+
+        F build_command(action: String, target: String) -> String {
+            cmd := action + " " + target
+            cmd
+        }
+
+        F execute_action(user_action: String, user_target: String) -> i64 {
+            # Nested call: build_command returns concatenated string
+            # Then system() is called with it
+            final_cmd := build_command(user_action, user_target)
+            system(final_cmd)
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // The analyzer should detect system() call
+    assert!(
+        has_category(&findings, FindingCategory::Injection),
+        "Should detect injection in nested function calls"
+    );
+}
+
+/// Test 23: Loop with buffer overflow risk
+#[test]
+fn test_loop_buffer_overflow() {
+    let source = r#"
+        F fill_buffer(count: i64) -> i64 {
+            buffer := malloc(100)
+            i := 0
+
+            L i < count {
+                # Potential overflow if count > 100/8
+                offset := buffer + (i * 8)
+                store_i64(offset, i)
+                i = i + 1
+            }
+
+            free(buffer)
+            0
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Should detect malloc, pointer arithmetic, and store operations
+    assert!(
+        has_category(&findings, FindingCategory::BufferOverflow),
+        "Should detect buffer overflow risk in loop"
+    );
+    assert!(
+        has_category(&findings, FindingCategory::UnsafePointer),
+        "Should detect pointer arithmetic in loop"
+    );
+}
+
+/// Test 24: Safe pointer usage with static array (false positive avoidance)
+#[test]
+fn test_safe_static_array_indexing() {
+    let source = r#"
+        F safe_array_access() -> i64 {
+            # Static array with constant indices
+            arr := [10, 20, 30, 40, 50]
+
+            # These are all safe accesses with constants
+            a := arr[0]
+            b := arr[1]
+            c := arr[4]
+
+            a + b + c
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Current analyzer flags all indexing operations
+    // This documents the behavior (not a false positive in strict sense)
+    let buffer_overflow_count = count_category(&findings, FindingCategory::BufferOverflow);
+
+    // The analyzer conservatively flags indexing (expected behavior)
+    // This test documents that even safe constant indices are flagged
+    assert!(
+        buffer_overflow_count >= 3,
+        "Analyzer flags all array indexing (conservative approach)"
+    );
+}
+
+/// Test 25: Safe extern function usage (strlen)
+#[test]
+fn test_safe_extern_function() {
+    let source = r#"
+        N "C" {
+            # Safe read-only function
+            F strlen(s: *i8) -> i64
+
+            # Safe memory allocation
+            F calloc(num: i64, size: i64) -> *i8
+
+            # Safe comparison
+            F strcmp(s1: *i8, s2: *i8) -> i64
+        }
+
+        F use_safe_functions(s: *i8) -> i64 {
+            len := strlen(s)
+            buffer := calloc(10, 8)
+            len
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // strlen, calloc, strcmp should NOT be flagged
+    let descriptions = findings
+        .iter()
+        .map(|f| f.description.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    assert!(
+        !descriptions.contains("strlen"),
+        "strlen should not be flagged as unsafe"
+    );
+    assert!(
+        !descriptions.contains("calloc"),
+        "calloc should not be flagged as unsafe"
+    );
+    assert!(
+        !descriptions.contains("strcmp"),
+        "strcmp should not be flagged as unsafe"
+    );
+}
+
+/// Test 26: Severity filtering - Critical only
+#[test]
+fn test_severity_filter_critical() {
+    let source = r#"
+        F mixed_severity() -> i64 {
+            # Critical: buffer overflow
+            ptr := malloc(64)
+            store_i64(ptr, 100)
+
+            # Critical: injection
+            system("echo test")
+
+            # Medium: integer overflow
+            user_input := read()
+            size := user_input * 1000
+
+            # Low: unchecked error
+            unwrap(Some(42))
+
+            free(ptr)
+            0
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Filter to only Critical findings
+    let critical_findings: Vec<_> = findings
+        .iter()
+        .filter(|f| f.severity == Severity::Critical)
+        .collect();
+
+    assert!(
+        critical_findings.len() >= 3,
+        "Expected at least 3 critical findings, got {}",
+        critical_findings.len()
+    );
+
+    // Verify they are the right categories
+    assert!(critical_findings
+        .iter()
+        .any(|f| f.category == FindingCategory::BufferOverflow));
+    assert!(critical_findings
+        .iter()
+        .any(|f| f.category == FindingCategory::Injection));
+}
+
+/// Test 27: Severity distribution in report
+#[test]
+fn test_severity_distribution() {
+    let source = r#"
+        F comprehensive_issues() -> i64 {
+            # Critical: hardcoded API key
+            api_key := "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"
+
+            # Critical: buffer overflow
+            buffer := malloc(256)
+
+            # High: pointer arithmetic
+            offset := buffer + 100
+
+            # Medium: integer overflow on input
+            input := read()
+            computed := input * 999
+
+            # Low: unwrap
+            unwrap(Some(1))
+
+            free(buffer)
+            0
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Count by severity
+    let critical = count_severity(&findings, Severity::Critical);
+    let high = count_severity(&findings, Severity::High);
+    let medium = count_severity(&findings, Severity::Medium);
+    let low = count_severity(&findings, Severity::Low);
+
+    // Should have variety across severities
+    assert!(critical >= 2, "Expected critical findings");
+    assert!(high >= 1, "Expected high severity findings");
+    assert!(medium >= 1, "Expected medium severity findings");
+    assert!(low >= 1, "Expected low severity findings");
+
+    // Total should match
+    assert_eq!(
+        findings.len(),
+        critical + high + medium + low,
+        "Severity counts should sum to total findings"
+    );
+}
+
+/// Test 28: Empty module analysis (edge case)
+#[test]
+fn test_empty_module() {
+    let source = r#"
+        # Empty module with only comments
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Should return zero findings for empty module
+    assert_eq!(
+        findings.len(),
+        0,
+        "Empty module should have no security findings"
+    );
+}
+
+/// Test 29: Very long function with multiple vulnerability types
+#[test]
+fn test_long_function_multiple_issues() {
+    let source = r#"
+        F long_vulnerable_function(input1: String, input2: String, count: i64) -> i64 {
+            # Secret 1
+            password := "admin_password_12345"
+
+            # Allocation 1
+            buffer1 := malloc(256)
+            store_i64(buffer1, 100)
+
+            # Pointer arithmetic 1
+            ptr1 := buffer1 + 50
+
+            # Injection 1
+            cmd1 := "ls " + input1
+            system(cmd1)
+
+            # Secret 2
+            token := "pk_live_abcdefghijklmnopqrstuvwxyz"
+
+            # Allocation 2
+            buffer2 := malloc(512)
+
+            # Pointer arithmetic 2
+            ptr2 := buffer2 + 100
+            store_byte(ptr2, 255)
+
+            # Injection 2
+            query := "DELETE FROM users WHERE id = " + input2
+            db_query(query)
+
+            # Integer overflow
+            huge := count * 99999999
+
+            # Array indexing
+            arr := [1, 2, 3, 4, 5]
+            val := arr[count]
+
+            # Use after free
+            free(buffer1)
+            bad := load_i64(buffer1)
+
+            # Memory operation
+            memcpy(buffer2, ptr1, 128)
+
+            # Unwrap
+            unwrap(Some(42))
+
+            free(buffer2)
+            val
+        }
+    "#;
+
+    let findings = parse_and_analyze(source);
+
+    // Should detect many issues across all categories
+    assert!(
+        findings.len() >= 15,
+        "Long function should have many findings, got {}",
+        findings.len()
+    );
+
+    // Verify we have findings in at least 5 different categories
+    let mut category_set = vec![];
+    for finding in &findings {
+        if !category_set.contains(&finding.category) {
+            category_set.push(finding.category.clone());
+        }
+    }
+
+    assert!(
+        category_set.len() >= 5,
+        "Expected findings in at least 5 categories, got {}",
+        category_set.len()
+    );
+}
+
+/// Test 30: All FindingCategory variants coverage
+#[test]
+fn test_all_finding_categories() {
+    use vais_ast::Span;
+
+    let span = Span::new(0, 10);
+
+    // Create findings for all categories
+    let buffer_overflow =
+        vais_security::SecurityFinding::buffer_overflow("Buffer overflow test", span);
+    let unsafe_pointer = vais_security::SecurityFinding::unsafe_pointer("Unsafe pointer test", span);
+    let injection = vais_security::SecurityFinding::injection("Injection test", span);
+    let hardcoded_secret = vais_security::SecurityFinding::hardcoded_secret(
+        "Secret test",
+        span,
+        Severity::High,
+    );
+    let integer_overflow =
+        vais_security::SecurityFinding::integer_overflow("Integer overflow test", span);
+    let use_after_free =
+        vais_security::SecurityFinding::use_after_free("Use after free test", span);
+    let memory_leak = vais_security::SecurityFinding::memory_leak("Memory leak test", span);
+    let uninitialized_memory =
+        vais_security::SecurityFinding::uninitialized_memory("Uninitialized memory test", span);
+    let unchecked_error =
+        vais_security::SecurityFinding::unchecked_error("Unchecked error test", span);
+
+    // Verify all categories are correctly assigned
+    assert_eq!(buffer_overflow.category, FindingCategory::BufferOverflow);
+    assert_eq!(unsafe_pointer.category, FindingCategory::UnsafePointer);
+    assert_eq!(injection.category, FindingCategory::Injection);
+    assert_eq!(hardcoded_secret.category, FindingCategory::HardcodedSecret);
+    assert_eq!(integer_overflow.category, FindingCategory::IntegerOverflow);
+    assert_eq!(use_after_free.category, FindingCategory::UseAfterFree);
+    assert_eq!(memory_leak.category, FindingCategory::MemoryLeak);
+    assert_eq!(
+        uninitialized_memory.category,
+        FindingCategory::UninitializedMemory
+    );
+    assert_eq!(unchecked_error.category, FindingCategory::UncheckedError);
+
+    // Verify severity assignments
+    assert_eq!(buffer_overflow.severity, Severity::Critical);
+    assert_eq!(unsafe_pointer.severity, Severity::High);
+    assert_eq!(injection.severity, Severity::Critical);
+    assert_eq!(hardcoded_secret.severity, Severity::High);
+    assert_eq!(integer_overflow.severity, Severity::Medium);
+    assert_eq!(use_after_free.severity, Severity::Critical);
+    assert_eq!(memory_leak.severity, Severity::Medium);
+    assert_eq!(uninitialized_memory.severity, Severity::High);
+    assert_eq!(unchecked_error.severity, Severity::Low);
+
+    // Verify all have non-empty descriptions and recommendations
+    let all_findings = vec![
+        buffer_overflow,
+        unsafe_pointer,
+        injection,
+        hardcoded_secret,
+        integer_overflow,
+        use_after_free,
+        memory_leak,
+        uninitialized_memory,
+        unchecked_error,
+    ];
+
+    for finding in all_findings {
+        assert!(!finding.description.is_empty());
+        assert!(!finding.recommendation.is_empty());
     }
 }
