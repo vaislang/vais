@@ -358,11 +358,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // For the last arm's fallthrough block, add a default value and jump to merge
                 if is_last {
                     self.builder.position_at_end(next_block);
-                    let default_val = self.context.i64_type().const_int(0, false);
+                    // Use the type from previously collected arm results if available,
+                    // otherwise fall back to the current arm's body type.
+                    // This is safer than using body_val directly when the last arm terminates.
+                    let ref_type = if let Some((first_val, _)) = arm_results.first() {
+                        first_val.get_type()
+                    } else {
+                        body_val.get_type()
+                    };
+                    let default_val = ref_type.const_zero();
                     self.builder
                         .build_unconditional_branch(merge_block)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    arm_results.push((default_val.into(), next_block));
+                    arm_results.push((default_val, next_block));
                 }
 
                 current_block = next_block;

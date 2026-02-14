@@ -901,7 +901,33 @@ impl OwnershipChecker {
             }
 
             Expr::Field { expr: object, .. } => {
-                self.check_expr_ownership(object)?;
+                // Field access borrows the struct, it doesn't move it.
+                // Only check that the variable hasn't been moved/partially-moved yet.
+                if let Expr::Ident(name) = &object.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        match &info.state {
+                            OwnershipState::Moved { moved_at, .. } => {
+                                let err = TypeError::UseAfterMove {
+                                    var_name: name.to_string(),
+                                    moved_at: *moved_at,
+                                    use_at: Some(object.span),
+                                };
+                                return self.report_error(err);
+                            }
+                            OwnershipState::PartiallyMoved { moved_fields } => {
+                                let err = TypeError::UseAfterPartialMove {
+                                    var_name: name.to_string(),
+                                    moved_fields: moved_fields.iter().cloned().collect(),
+                                    use_at: Some(object.span),
+                                };
+                                return self.report_error(err);
+                            }
+                            _ => {}
+                        }
+                    }
+                } else {
+                    self.check_expr_ownership(object)?;
+                }
                 Ok(())
             }
 

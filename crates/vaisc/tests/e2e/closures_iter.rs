@@ -240,8 +240,6 @@ F main() -> i64 {
 }
 
 // ===== Stage 3: Error Type & Chaining Tests =====
-// Note: Tests use i64-only patterns (no enum variant construction in match arms)
-// due to text codegen limitation with enum values in phi nodes.
 
 #[test]
 fn e2e_result_is_ok_is_err() {
@@ -402,7 +400,6 @@ F main() -> i64 {
 #[test]
 fn e2e_error_result_with_custom_error() {
     // Test Result combined with custom error types using free functions
-    // Note: Avoids returning enum from functions (text codegen limitation)
     let source = r#"
 E Result { Ok(i64), Err(i64) }
 F is_ok(r: Result) -> i64 {

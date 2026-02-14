@@ -118,18 +118,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*existing);
         }
 
+        // Validate variant count fits in i8 tag
+        if e.variants.len() > 255 {
+            return Err(CodegenError::Unsupported(format!(
+                "Enum '{}' has {} variants (max 255 due to i8 tag)",
+                enum_name,
+                e.variants.len()
+            )));
+        }
+
         // Store variant tags
         for (i, variant) in e.variants.iter().enumerate() {
             self.enum_variants
                 .insert((enum_name.clone(), variant.name.node.clone()), i as i32);
         }
 
-        // Create enum as struct: { i32 tag, i64 data }
-        let enum_type = self
-            .context
-            .struct_type(&[self.context.i32_type().into()], false);
+        // Create enum as struct: { i8 tag, i64 data }
+        // Must match the layout used in gen_expr.rs for variant construction
+        let enum_type = self.context.struct_type(
+            &[
+                self.context.i8_type().into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        );
 
         self.generated_structs.insert(enum_name.clone(), enum_type);
+        self.type_mapper.register_struct(enum_name, enum_type);
 
         Ok(enum_type)
     }

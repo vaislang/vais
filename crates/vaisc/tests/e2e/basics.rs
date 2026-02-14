@@ -320,16 +320,16 @@ F main() -> i64 {
 
 // ==================== Enums ====================
 
-// NOTE: Enum variant matching for unit variants has a codegen issue where
-// all variants match the first arm. This is a known compiler limitation.
-// Test enum definition compiles and basic match on integers works instead.
 #[test]
 fn e2e_enum_definition_compiles() {
     let source = r#"
 E Color { Red, Green, Blue }
-F main() -> i64 = 42
+F main() -> i64 {
+    c := Green
+    M c { Red => 1, Green => 0, Blue => 2 }
+}
 "#;
-    assert_exit_code(source, 42);
+    assert_exit_code(source, 0);
 }
 
 // ==================== Puts / stdout ====================
@@ -519,15 +519,14 @@ F main() -> i64 = is_even(10)
     assert_exit_code(source, 1);
 }
 
-// NOTE: Passing structs by value to functions has a codegen limitation (ptr type mismatch).
-// This test verifies struct field access and arithmetic in main directly.
 #[test]
 fn e2e_struct_field_arithmetic() {
     let source = r#"
 S Rect { w: i64, h: i64 }
+F area(r: Rect) -> i64 { r.w * r.h }
 F main() -> i64 {
     r := Rect { w: 6, h: 7 }
-    r.w * r.h
+    area(r)
 }
 "#;
     assert_exit_code(source, 42);

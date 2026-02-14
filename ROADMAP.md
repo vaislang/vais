@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 538, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 544, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -146,12 +146,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 22** | MIR Borrow Checker 테스트 정상화 | ✅ 2026-02-12 — `#[ignore]` 18개→0개 (MirType::Str→Struct("TestNonCopy") 전환 + lower.rs Copy 반영), vais-mir 144 passed/0 ignored |
 | **Phase 23** | 선택적 Import 구문 | ✅ 2026-02-12 — `U mod.Item;`, `U mod.{A, B};` 파서/이름해석/포매터 구현, E2E 520 통과, 8개 신규 파서 테스트 |
 | **Phase 24** | CodeGenerator sub-struct 그룹화 | ✅ 2026-02-13 — 53필드→5 sub-struct(TypeRegistry/GenericState/FunctionContext/StringPool/LambdaState)+16 직접필드, E2E 520 통과 |
-| **Phase 25** | 대형 파일 모듈 분할 | 📋 예정 — optimize.rs(2,907줄)/generate_expr.rs(3,216줄)/expr_helpers.rs(2,650줄)/lib.rs(4,078줄) 카테고리별 서브모듈화 |
-| **Phase 26** | Hot-path 성능 최적화 | 📋 예정 — clone 392건/format! 1,265건 분석, Cow<str>/inline/정적 문자열 전환으로 5~15% 속도 개선 |
-| **Phase 27** | Python/Node 바인딩 테스트 | 📋 예정 — vais-python +20개, vais-node +20개 통합 테스트, CI 연동 |
-| **Phase 28** | 문서 보강 | 📋 예정 — Testing Guide/Error Handling/Compiler Internals/Package Manager 가이드 신규 |
+| **Phase 25** | 대형 파일 모듈 분할 | ✅ Phase 30에서 실행 — 5파일 카테고리별 서브모듈 분할 |
+| **Phase 26** | Hot-path 성능 최적화 | ✅ 2026-02-13 — clone 21건 제거, #[inline] 13개, HashSet 통일, codegen -2.6% |
+| **Phase 27** | Python/Node 바인딩 테스트 | ✅ 2026-02-14 — vais-python/vais-node 통합 테스트 + CI 연동 |
+| **Phase 28** | 문서 보강 | ✅ 2026-02-14 — Testing Guide, Error Handling, Compiler Internals, Package Manager 가이드 |
 | **Phase 29~31** | vaisc 에러 해결 · 모듈 분할 R2 · 에러 진단 | vaisc 62건 re-export 수정, 5파일 모듈 분할, help() 100% + multi-error + secondary spans — **520 E2E** |
 | **Phase 32** | 언어 기능 확장 | ✅ 2026-02-14 — CaptureMode(move\|x\|), where 절(WherePredicate), 패턴 alias(x@pat), E2E +18 — **538 E2E** |
+| **Phase 33** | 다국어 웹사이트 & 원클릭 설치 | ✅ 2026-02-14 — i18n(en/ko/ja/zh), docs-site 다국어, install.sh/ps1, CI 통합 |
+| **Phase 34** | Codegen 버그 수정 | 📋 예정 — enum variant 매칭 + struct by-value ABI + enum 리턴 phi node |
+| **Phase 35** | 대형 파일 모듈 분할 R3 | 📋 예정 — lib.rs(3,352)/types.rs(2,029)/generate_expr.rs(2,003)/wasm_component.rs(1,815) |
+| **Phase 36** | 테스트 커버리지 확장 | 📋 예정 — 20개 미테스트 crate에 통합 테스트 추가, codecov 임계값 |
+| **Phase 37** | 고급 타입 시스템 기능 | 📋 예정 — trait alias, impl Trait 리턴, const evaluation 확장 |
 
 ---
 
@@ -1473,6 +1478,86 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 7. [정확성] i18n.js 재귀 무한 루프 방지 — fallback 강화 (Warning) ✅
   변경: website/src/i18n.js (DEFAULT_LANGUAGE 실패 시 빈 객체 반환, 캐시와 결합하여 이중 방어)
 진행률: 7/7 (100%)
+
+---
+
+## Phase 34: Codegen 버그 수정 — Enum Variant 매칭 & Struct by-value ABI
+
+> **상태**: ✅ 완료 (2026-02-14)
+> **목표**: enum unit variant가 첫 arm으로만 매칭되는 codegen 버그 + struct by-value 파라미터 포인터 타입 불일치 ABI 버그 수정
+> **영향도**: Critical — 핵심 언어 기능(패턴 매칭, 구조체 전달) 정상화
+> **결과**: E2E 538→544 (+6), Clippy 0건
+
+- [x] 1. Enum unit variant 매칭 버그 분석 & 수정 (Opus) ✅ 2026-02-14
+  변경: inkwell/gen_declaration.rs (enum 타입 {i32}→{i8,i64} 통일 + type_mapper 등록)
+- [x] 2. Struct by-value 파라미터 ABI 수정 (Opus) ✅ 2026-02-14
+  변경: vais-types/ownership.rs (Expr::Field에서 struct 전체 move 방지 → borrow 처리)
+- [x] 3. Text codegen enum 리턴 제한 해제 (Opus) ✅ 2026-02-14
+  변경: inkwell/gen_match.rs (match fallthrough default 값을 arm body 타입에 맞춤)
+- [x] 4. 수정 검증 E2E 테스트 추가 & 기존 known issue 주석 제거 (Sonnet) ✅ 2026-02-14
+  변경: e2e/phase32.rs (+6 테스트), basics.rs (known issue 제거+테스트 강화), closures_iter.rs (주석 제거)
+
+## 리뷰 발견사항 (2026-02-14)
+> 출처: /team-review Phase 34
+
+- [x] 1. [보안] enum variant i8 tag overflow 방지 — 255 초과 시 컴파일 에러 (Warning) ✅
+  변경: inkwell/gen_declaration.rs (define_enum에 variants.len() > 255 검증 추가)
+- [x] 2. [정확성] ownership PartiallyMoved 상태 field 접근 검사 추가 (Warning) ✅
+  변경: vais-types/ownership.rs (Expr::Field에서 PartiallyMoved 매칭 추가)
+- [x] 3. [정확성] gen_match fallthrough default 타입을 arm_results에서 추론 (Warning) ✅
+  변경: inkwell/gen_match.rs (body_val 직접 사용 → arm_results.first() 우선 사용)
+진행률: 3/3 (100%)
+
+---
+
+## Phase 35: 대형 파일 모듈 분할 (Round 3)
+
+> **상태**: 📋 예정
+> **목표**: 3,000줄+ 대형 파일을 카테고리별 서브모듈로 분할하여 유지보수성 개선
+> **영향도**: High — 코드 탐색성, 리뷰 용이성 대폭 향상
+
+- [ ] 1. vais-codegen/lib.rs (3,352줄) 모듈 분할 (Sonnet)
+  대상: 초기화/설정, 타입 매핑, 모듈 생성, 유틸리티 카테고리별 서브모듈화
+- [ ] 2. vais-types/types.rs (2,029줄) 모듈 분할 (Sonnet)
+  대상: 타입 정의, 타입 검증, Display/Debug impl, 유틸리티 분리
+- [ ] 3. vais-codegen/generate_expr.rs (2,003줄) 모듈 분할 (Sonnet)
+  대상: 리터럴, 연산자, 호출, 접근자 카테고리별 서브모듈화
+- [ ] 4. vais-gpu/wasm_component.rs (1,815줄) 모듈 분할 (Sonnet)
+  대상: 컴포넌트 정의, 인터페이스, 직렬화, 유틸리티 분리
+
+---
+
+## Phase 36: 테스트 커버리지 확장
+
+> **상태**: 📋 예정
+> **목표**: 최소 테스트만 보유한 20개 crate에 통합 테스트 추가, 전체 안정성 강화
+> **영향도**: Medium — 회귀 방지, 리팩토링 안전망 확보
+
+- [ ] 1. 핵심 인프라 crate 테스트 (Sonnet)
+  대상: vais-ast, vais-bindgen, vais-dynload, vais-hotreload (각 +10개 통합 테스트)
+- [ ] 2. 개발자 도구 crate 테스트 (Sonnet)
+  대상: vais-dap, vais-i18n, vais-plugin, vais-security (각 +10개 통합 테스트)
+- [ ] 3. 에코시스템 crate 테스트 (Sonnet)
+  대상: vais-supply-chain, vais-testgen, vais-gc, vais-gpu (각 +10개 통합 테스트)
+- [ ] 4. 테스트 커버리지 리포트 갱신 & CI 커버리지 임계값 설정 (Opus)
+  대상: codecov 설정, crate별 최소 커버리지 기준 설정
+
+---
+
+## Phase 37: 고급 타입 시스템 기능
+
+> **상태**: 📋 예정
+> **목표**: existential types, trait alias, const evaluation 등 고급 타입 기능 추가로 언어 완성도 향상
+> **영향도**: Medium — 표현력 확대, 고급 패턴 지원
+
+- [ ] 1. Trait alias 구현 (Opus)
+  대상: `T TraitAlias = TraitA + TraitB` 문법, AST/Parser/TC/Codegen 전체 파이프라인
+- [ ] 2. Existential types (impl Trait 리턴) 구현 (Opus)
+  대상: `F foo() -> impl Trait` 리턴 타입 위치 impl Trait, 단형화 기반 코드 생성
+- [ ] 3. Const evaluation 확장 (Sonnet)
+  대상: 컴파일 타임 상수 평가 범위 확대 (산술, 문자열, 배열 리터럴)
+- [ ] 4. 고급 타입 기능 E2E 테스트 & 문서 (Sonnet)
+  대상: 각 기능별 양성/음성 E2E 테스트, docs-site 가이드 추가
 
 ---
 
