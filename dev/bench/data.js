@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771030214592,
+  "lastUpdate": 1771040630539,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -21335,6 +21335,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1848593,
             "range": "± 20081",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "18590ea3a762cd210f505a1a11d46b7070a59928",
+          "message": "docs: fix team-review findings — E2E counts, syntax errors, Phase 32 docs\n\nResolve 12 issues found by /team-review quality audit:\n- Update E2E test counts 520→538 across README/ROADMAP/CLAUDE.md/faq.md\n- Fix examples count 181→182 in README/CLAUDE.md/ROADMAP\n- Fix trait impl syntax (X Display for Point → X Point: Display)\n- Fix string interpolation ({msg} → ~{msg}) in error-handling guide\n- Fix extern syntax (X F → N F) in WASM js-interop docs\n- Remove outdated impl/trait keywords from playground language def\n- Fix README docs/ → docs-site/ directory reference\n- Add Phase 32 features to language spec (where, @pattern, move closure)\n- Update ecosystem packages list from 5 to 9 in README\n- Remove unreferenced duplicate guide/performance.md\n- Add env var support for playground API URL\n- Update ROADMAP last-updated date to 2026-02-14\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-14T12:37:04+09:00",
+          "tree_id": "a5da0d6794c56fa162fea78717a20640e28799bc",
+          "url": "https://github.com/vaislang/vais/commit/18590ea3a762cd210f505a1a11d46b7070a59928"
+        },
+        "date": 1771040630193,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2424,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5410,
+            "range": "± 98",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6069,
+            "range": "± 44",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 12748,
+            "range": "± 71",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18171,
+            "range": "± 153",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33950,
+            "range": "± 282",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30313,
+            "range": "± 206",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67315,
+            "range": "± 377",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 298890,
+            "range": "± 1132",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 452381,
+            "range": "± 3580",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118004,
+            "range": "± 1423",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 766482,
+            "range": "± 3600",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 169318,
+            "range": "± 662",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 197129,
+            "range": "± 836",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 207285,
+            "range": "± 816",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 252235,
+            "range": "± 1342",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 535608,
+            "range": "± 2136",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 747581,
+            "range": "± 2768",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 417080,
+            "range": "± 1827",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1175575,
+            "range": "± 8288",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39412,
+            "range": "± 358",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 198544,
+            "range": "± 1209",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 383057,
+            "range": "± 2916",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1853848,
+            "range": "± 17000",
             "unit": "ns/iter"
           }
         ]
