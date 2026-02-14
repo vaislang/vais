@@ -274,6 +274,22 @@ enum Commands {
         #[arg(long, value_name = "BYTES", default_value = "536870912")]
         cache_limit: u64,
 
+        /// Disable incremental compilation cache entirely
+        #[arg(long)]
+        no_cache: bool,
+
+        /// Pre-populate the cache by scanning all .vais files in the project
+        #[arg(long)]
+        warm_cache: bool,
+
+        /// Clear the incremental compilation cache
+        #[arg(long)]
+        clear_cache: bool,
+
+        /// Show incremental cache statistics and exit
+        #[arg(long)]
+        cache_stats: bool,
+
         /// Enable source-based code coverage instrumentation
         /// Generates an instrumented binary; run it to produce .profraw files
         /// Optional value: output directory for coverage data (default: ./coverage)
@@ -539,6 +555,10 @@ fn main() {
             inkwell: _build_inkwell,
             per_module,
             cache_limit,
+            no_cache,
+            warm_cache,
+            clear_cache,
+            cache_stats,
             coverage,
         }) => {
             // Resolve directory input to entry point file
@@ -623,6 +643,70 @@ fn main() {
                 std::env::set_var("VAIS_DEP_PATHS", combined);
             }
 
+            // Handle cache management CLI commands (exit early without building)
+            if clear_cache {
+                use incremental::get_cache_dir;
+                let cache_dir = get_cache_dir(&resolved_input);
+                // Resolve symlinks to prevent path traversal attacks
+                let cache_dir = cache_dir.canonicalize().unwrap_or(cache_dir);
+                if cache_dir.exists() {
+                    if let Err(e) = std::fs::remove_dir_all(&cache_dir) {
+                        Err(format!("cannot clear cache: {}", e))
+                    } else {
+                        println!("{} {}", "Cache cleared:".green().bold(), cache_dir.display());
+                        Ok(())
+                    }
+                } else {
+                    println!("No cache directory found at {}", cache_dir.display());
+                    Ok(())
+                }
+            } else if cache_stats {
+                use incremental::{get_cache_dir, IncrementalCache};
+                let cache_dir = get_cache_dir(&resolved_input);
+                match IncrementalCache::new(cache_dir.clone()) {
+                    Ok(cache) => {
+                        let stats = cache.stats();
+                        println!("{}", "Incremental Cache Statistics".cyan().bold());
+                        println!("  Cache dir:     {}", cache_dir.display());
+                        println!("  Files cached:  {}", stats.total_files);
+                        println!("  Dependencies:  {}", stats.total_dependencies);
+                        if stats.last_build > 0 {
+                            println!("  Last build:    {} (unix timestamp)", stats.last_build);
+                        } else {
+                            println!("  Last build:    (never)");
+                        }
+                        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                            let total_size: u64 = entries
+                                .filter_map(|e| e.ok())
+                                .filter_map(|e| e.metadata().ok())
+                                .map(|m| m.len())
+                                .sum();
+                            println!("  Cache size:    {} bytes ({:.1} MB)", total_size, total_size as f64 / 1_048_576.0);
+                        }
+                    }
+                    Err(e) => {
+                        println!("No cache available: {}", e);
+                    }
+                }
+                Ok(())
+            } else if warm_cache {
+                use incremental::{get_cache_dir, IncrementalCache};
+                let cache_dir = get_cache_dir(&resolved_input);
+                match IncrementalCache::new(cache_dir) {
+                    Ok(mut cache) => {
+                        let project_root = resolved_input.parent().unwrap_or(std::path::Path::new("."));
+                        match cache.warm_cache(project_root) {
+                            Ok(count) => {
+                                let _ = cache.persist();
+                                println!("{} {} file(s) pre-cached", "Cache warmed:".green().bold(), count);
+                                Ok(())
+                            }
+                            Err(e) => Err(format!("warm cache failed: {}", e)),
+                        }
+                    }
+                    Err(e) => Err(format!("cannot initialize cache: {}", e)),
+                }
+            } else
             // Check if JS target is specified
             if target
                 .as_deref()
@@ -698,7 +782,7 @@ fn main() {
                     cli.time,
                     &plugins,
                     target_triple,
-                    force_rebuild,
+                    force_rebuild || no_cache,
                     cli.gc,
                     cli.gc_threshold,
                     hot,

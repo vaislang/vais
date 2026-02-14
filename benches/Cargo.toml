@@ -78,6 +78,11 @@ name = "gpu_bench"
 path = "gpu_bench.rs"
 harness = false
 
+[[bench]]
+name = "incremental_bench"
+path = "incremental_bench.rs"
+harness = false
+
 [[example]]
 name = "gen_large_example"
 path = "fixtures/gen_large_example.rs"
@@ -95,3 +100,4 @@ rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"
+tempfile = "3.15"

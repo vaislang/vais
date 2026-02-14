@@ -148,10 +148,29 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 6. [아키텍처] set_generics TODO 코멘트 (Phase 39 후보) — checker_module.rs
 진행률: 6/6 (100%)
 
-### Phase 39: 성능 최적화 — Incremental 실전 & 병렬 Codegen 강화
-- Incremental compilation 실전 검증: 대규모 프로젝트에서 캐시 히트율 측정 및 개선
-- 병렬 codegen 추가 최적화: 모듈 간 의존성 분석 정밀화
-- 컴파일 속도 벤치마크 자동 회귀 감지 강화
+### Phase 39: 성능 최적화 — Incremental 실전 & 병렬 Codegen 강화 ✅
+모드: 자동진행
+- [x] 1. Incremental 실전 통합 — TC skip + IR캐시 + CLI 플래그 (Opus 직접) ✅ 2026-02-15
+  변경: main.rs (--no-cache/--warm-cache/--clear-cache/--cache-stats CLI 플래그), build.rs (detect_changes_with_stats + verbose 캐시 통계 출력)
+- [x] 2. 병렬 TC 파이프라인 통합 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: build.rs (rayon par_iter 병렬 TC — 독립 TypeChecker per thread + merge_type_defs_from)
+- [x] 3. 캐시 히트율 측정 E2E + 벤치마크 (Sonnet 위임) [∥2] ✅ 2026-02-15
+  변경: benches/incremental_bench.rs (12 Criterion 벤치마크: cold/warm/body/signature × 10K/50K)
+- [x] 4. 의존성 분석 정밀화 — Tarjan SCC + 모듈 시그니처 추적 (Sonnet 위임) [blockedBy: 1] ✅ 2026-02-15
+  변경: graph.rs (find_sccs + SCC-aware parallel_levels + is_in_cycle), detect.rs (주석/문자열 브레이스 무시 + has_signature_changed)
+- [x] 5. E2E 테스트 + ROADMAP 업데이트 (Sonnet 위임) [blockedBy: 1,2,3,4] ✅ 2026-02-15
+  변경: ROADMAP.md 체크박스 업데이트, E2E 검증
+진행률: 5/5 (100%)
+
+### 리뷰 발견사항 (2026-02-15)
+> 출처: /team-review Phase 39
+
+- [x] 1. [성능] 병렬 TC AST clone 제거 — Module 직접 생성 (Critical) — build.rs:1060
+- [x] 2. [성능] 병렬 TC 임계값 추가 MIN_MODULES >= 4 (Critical) — build.rs
+- [x] 3. [정확성] 다중 에러 수집 — all_errors Vec 통합 (Warning) — build.rs:1088
+- [x] 4. [보안] clear-cache canonicalize 경로 검증 (Warning) — main.rs:649
+- [x] 5. [정확성] unwrap → expect 전환 3건 (Warning) — graph.rs:297, build.rs:1040
+진행률: 5/5 (100%)
 
 ### Phase 40: 에코시스템 성장 — 패키지 확대 & 커뮤니티
 - 추가 공식 패키지 10개+ (HTTP client, CLI framework, testing framework, logging, config, etc.)

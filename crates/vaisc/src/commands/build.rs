@@ -773,8 +773,8 @@ pub(crate) fn cmd_build(
     // Check if we can skip compilation (only when not forcing rebuild)
     if !force_rebuild {
         if let Some(ref mut c) = cache {
-            match c.detect_changes(input) {
-                Ok(dirty_set) => {
+            match c.detect_changes_with_stats(input) {
+                Ok((dirty_set, incr_stats)) => {
                     if dirty_set.is_empty() {
                         if verbose {
                             println!(
@@ -782,10 +782,21 @@ pub(crate) fn cmd_build(
                                 "Skipping".cyan().bold(),
                                 input.display()
                             );
-                            let stats = c.stats();
                             println!(
-                                "  {} files cached, {} dependencies tracked",
-                                stats.total_files, stats.total_dependencies
+                                "  Cache hit rate: {:.1}% ({}/{} files)",
+                                incr_stats.hit_rate(),
+                                incr_stats.cache_hits,
+                                incr_stats.files_checked
+                            );
+                            if incr_stats.signature_hits > 0 {
+                                println!(
+                                    "  Signature hits: {} (dependents skipped)",
+                                    incr_stats.signature_hits
+                                );
+                            }
+                            println!(
+                                "  Cache check: {}ms",
+                                incr_stats.total_check_time_ms
                             );
                         }
                         // Still need to output the binary path if not emit_ir
@@ -821,6 +832,30 @@ pub(crate) fn cmd_build(
                             "Rebuilding".yellow().bold(),
                             dirty_set.count()
                         );
+                        println!(
+                            "  Cache: {}/{} hits ({:.1}%), {} misses, check {}ms",
+                            incr_stats.cache_hits,
+                            incr_stats.files_checked,
+                            incr_stats.hit_rate(),
+                            incr_stats.cache_misses,
+                            incr_stats.total_check_time_ms
+                        );
+                        // Show miss reasons for verbose debugging
+                        for (file, reasons) in &incr_stats.miss_reasons {
+                            let reason_strs: Vec<&str> = reasons.iter().map(|r| match r {
+                                incremental::CacheMissReason::NewFile => "new",
+                                incremental::CacheMissReason::ContentHashChanged => "content changed",
+                                incremental::CacheMissReason::SignatureChanged => "signature changed",
+                                incremental::CacheMissReason::DependencyChanged(_) => "dependency changed",
+                                incremental::CacheMissReason::OptionsChanged => "options changed",
+                                incremental::CacheMissReason::FileDeleted => "deleted",
+                                incremental::CacheMissReason::CacheCorrupted => "cache corrupted",
+                            }).collect();
+                            let file_name = file.file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("?");
+                            println!("    {} — {}", file_name, reason_strs.join(", "));
+                        }
                     }
                 }
                 Err(e) => {
@@ -995,7 +1030,97 @@ pub(crate) fn cmd_build(
         // Enable multi-error collection to report all type errors at once
         checker.multi_error_mode = true;
 
-        if let Err(e) = checker.check_module(&final_ast) {
+        // Parallel type checking if enabled and multi-module
+        // Note: TypeChecker contains Cell/RefCell (not Sync), so we can't share it via Arc.
+        // Instead, each thread creates its own TypeChecker and checks independent modules.
+        // Type definitions are merged after parallel execution.
+        // Parallel TC threshold: only worthwhile with enough modules to offset rayon overhead
+        const MIN_MODULES_FOR_PARALLEL_TC: usize = 4;
+
+        let tc_result = if use_parallel && final_ast.modules_map.as_ref().is_some_and(|m| m.len() >= MIN_MODULES_FOR_PARALLEL_TC) {
+            use rayon::prelude::*;
+
+            let modules_map = final_ast.modules_map.as_ref()
+                .expect("BUG: modules_map should be Some (checked above)");
+            let module_paths: Vec<PathBuf> = modules_map.keys().cloned().collect();
+
+            if verbose {
+                println!(
+                    "  {} Parallel type check ({} modules)",
+                    "⚡".cyan(),
+                    module_paths.len()
+                );
+            }
+
+            // Parallel type check each module independently
+            let results: Vec<_> = module_paths.par_iter().map(|module_path| {
+                let mut module_checker = TypeChecker::new();
+                configure_type_checker(&mut module_checker);
+                module_checker.multi_error_mode = true;
+
+                // Get items for this module
+                if let Some(item_indices) = modules_map.get(module_path) {
+                    // Construct module with only this module's items (avoid full AST clone)
+                    let module_items: Vec<_> = item_indices.iter()
+                        .filter_map(|&idx| final_ast.items.get(idx).cloned())
+                        .collect();
+                    let module_ast = vais_ast::Module {
+                        items: module_items,
+                        modules_map: None,
+                    };
+
+                    // Type check this module
+                    match module_checker.check_module(&module_ast) {
+                        Ok(_) => Ok(module_checker),
+                        Err(e) => Err((format!("{}", e), module_checker))
+                    }
+                } else {
+                    Ok(module_checker)
+                }
+            }).collect();
+
+            // Merge results from all modules
+            let mut final_checker = TypeChecker::new();
+            configure_type_checker(&mut final_checker);
+            final_checker.multi_error_mode = true;
+
+            let mut all_errors: Vec<String> = Vec::new();
+            for result in results {
+                match result {
+                    Ok(module_checker) => {
+                        // Merge type definitions from this module
+                        final_checker.merge_type_defs_from(module_checker);
+                    }
+                    Err((err_msg, module_checker)) => {
+                        all_errors.push(err_msg);
+                        // Still merge type definitions even if error occurred
+                        final_checker.merge_type_defs_from(module_checker);
+                    }
+                }
+            }
+
+            // Update checker with merged results
+            checker = final_checker;
+
+            // Return combined errors if any occurred
+            if !all_errors.is_empty() {
+                Err(vais_types::TypeError::InferFailed {
+                    kind: "module".to_string(),
+                    name: "parallel_tc".to_string(),
+                    context: all_errors.join("\n---\n"),
+                    span: None,
+                    suggestion: None,
+                })
+            } else {
+                Ok(())
+            }
+        } else {
+            // Sequential type checking
+            checker.check_module(&final_ast)
+        };
+
+        // Handle type checking result
+        if let Err(e) = tc_result {
             // If suggest_fixes is enabled, print suggested fixes
             if suggest_fixes {
                 print_suggested_fixes(&e, &main_source);

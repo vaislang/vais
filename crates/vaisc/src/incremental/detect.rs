@@ -374,6 +374,7 @@ impl DefinitionExtractor {
     }
 
     /// Find the end of a block (matching braces)
+    /// This version correctly handles comments and string literals
     fn find_block_end(&self, lines: &[&str], start: usize) -> Option<(usize, String)> {
         let mut brace_count = 0;
         let mut found_open = false;
@@ -383,7 +384,38 @@ impl DefinitionExtractor {
             body.push_str(line);
             body.push('\n');
 
+            // Parse line character by character, tracking strings and comments
+            let mut in_string = false;
+            let mut escaped = false;
+
             for ch in line.chars() {
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+
+                if in_string {
+                    if ch == '\\' {
+                        escaped = true;
+                    } else if ch == '"' {
+                        in_string = false;
+                    }
+                    continue;
+                }
+
+                // Check for comment start
+                if ch == '#' {
+                    // Rest of line is a comment
+                    break;
+                }
+
+                // Check for string start
+                if ch == '"' {
+                    in_string = true;
+                    continue;
+                }
+
+                // Count braces only outside strings and comments
                 if ch == '{' {
                     brace_count += 1;
                     found_open = true;
@@ -666,4 +698,175 @@ pub fn get_cache_dir(source_file: &Path) -> PathBuf {
     // Use parent directory of source file, or current directory
     let base = source_file.parent().unwrap_or(Path::new("."));
     base.join(".vais-cache")
+}
+
+/// Check if the signature (public interface) has changed between two AST item sets.
+/// Returns true if signatures differ, false if only bodies changed.
+/// This enables skipping dependent module recompilation when only function bodies change.
+pub fn has_signature_changed(
+    old_items: &[vais_ast::Spanned<vais_ast::Item>],
+    new_items: &[vais_ast::Spanned<vais_ast::Item>],
+) -> bool {
+    let old_hash = compute_signature_hash(old_items);
+    let new_hash = compute_signature_hash(new_items);
+    old_hash != new_hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vais_ast::{Expr, Function, FunctionBody, Item, Ownership, Param, Span, Spanned, Type};
+
+    fn make_span() -> Span {
+        Span { start: 0, end: 0 }
+    }
+
+    fn make_spanned<T>(node: T) -> Spanned<T> {
+        Spanned {
+            node,
+            span: make_span(),
+        }
+    }
+
+    fn make_type_i64() -> Type {
+        Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        }
+    }
+
+    fn make_type_f64() -> Type {
+        Type::Named {
+            name: "f64".to_string(),
+            generics: vec![],
+        }
+    }
+
+    #[test]
+    fn test_find_block_end_skips_comments() {
+        let extractor = DefinitionExtractor::new();
+        let lines = vec![
+            "F foo() {",
+            "    # { this is a comment",
+            "    x := 42",
+            "}",
+        ];
+
+        let result = extractor.find_block_end(&lines, 0);
+        assert!(result.is_some());
+        let (end_line, _body) = result.unwrap();
+        assert_eq!(end_line, 3);
+    }
+
+    #[test]
+    fn test_find_block_end_skips_strings() {
+        let extractor = DefinitionExtractor::new();
+        let lines = vec![
+            "F bar() {",
+            r#"    msg := "{ string }"#,
+            r#"    escaped := "say \"hello\""#,
+            "}",
+        ];
+
+        let result = extractor.find_block_end(&lines, 0);
+        assert!(result.is_some());
+        let (end_line, _body) = result.unwrap();
+        assert_eq!(end_line, 3);
+    }
+
+    #[test]
+    fn test_has_signature_changed_body_only() {
+        // Same signature, different body
+        let old_items = vec![make_spanned(Item::Function(Function {
+            name: make_spanned("add".to_string()),
+            generics: vec![],
+            params: vec![
+                Param {
+                    name: make_spanned("a".to_string()),
+                    ty: make_spanned(make_type_i64()),
+                    is_mut: false,
+                    is_vararg: false,
+                    ownership: Ownership::Regular,
+                    default_value: None,
+                },
+                Param {
+                    name: make_spanned("b".to_string()),
+                    ty: make_spanned(make_type_i64()),
+                    is_mut: false,
+                    is_vararg: false,
+                    ownership: Ownership::Regular,
+                    default_value: None,
+                },
+            ],
+            ret_type: Some(make_spanned(make_type_i64())),
+            body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))), // old body
+            is_pub: false,
+            is_async: false,
+            attributes: vec![],
+            where_clause: vec![],
+        }))];
+
+        let new_items = vec![make_spanned(Item::Function(Function {
+            name: make_spanned("add".to_string()),
+            generics: vec![],
+            params: vec![
+                Param {
+                    name: make_spanned("a".to_string()),
+                    ty: make_spanned(make_type_i64()),
+                    is_mut: false,
+                    is_vararg: false,
+                    ownership: Ownership::Regular,
+                    default_value: None,
+                },
+                Param {
+                    name: make_spanned("b".to_string()),
+                    ty: make_spanned(make_type_i64()),
+                    is_mut: false,
+                    is_vararg: false,
+                    ownership: Ownership::Regular,
+                    default_value: None,
+                },
+            ],
+            ret_type: Some(make_spanned(make_type_i64())),
+            body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(42)))), // new body
+            is_pub: false,
+            is_async: false,
+            attributes: vec![],
+            where_clause: vec![],
+        }))];
+
+        // Signature hasn't changed (body is ignored)
+        assert!(!has_signature_changed(&old_items, &new_items));
+    }
+
+    #[test]
+    fn test_has_signature_changed_sig_change() {
+        // Different return type
+        let old_items = vec![make_spanned(Item::Function(Function {
+            name: make_spanned("compute".to_string()),
+            generics: vec![],
+            params: vec![],
+            ret_type: Some(make_spanned(make_type_i64())),
+            body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))),
+            is_pub: false,
+            is_async: false,
+            attributes: vec![],
+            where_clause: vec![],
+        }))];
+
+        let new_items = vec![make_spanned(Item::Function(Function {
+            name: make_spanned("compute".to_string()),
+            generics: vec![],
+            params: vec![],
+            ret_type: Some(make_spanned(make_type_f64())), // Changed return type
+            body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))),
+            is_pub: false,
+            is_async: false,
+            attributes: vec![],
+            where_clause: vec![],
+        }))];
+
+        // Signature has changed
+        assert!(has_signature_changed(&old_items, &new_items));
+    }
 }
