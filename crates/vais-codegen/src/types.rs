@@ -518,7 +518,19 @@ impl CodeGenerator {
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        ResolvedType::Generic(name.clone())
+                        if generics.is_empty() {
+                            ResolvedType::Generic(name.clone())
+                        } else {
+                            // HKT application: F<A> — keep as Named so substitute_type
+                            // can replace the constructor name
+                            ResolvedType::Named {
+                                name: name.clone(),
+                                generics: generics
+                                    .iter()
+                                    .map(|g| self.ast_type_to_resolved_impl(&g.node))
+                                    .collect(),
+                            }
+                        }
                     } else {
                         ResolvedType::Named {
                             name: name.clone(),

@@ -548,6 +548,23 @@ impl Parser {
         self.tokens.get(self.pos + 1)
     }
 
+    /// Save the current parser position for backtracking
+    pub(crate) fn save_position(&self) -> usize {
+        self.pos
+    }
+
+    /// Restore the parser to a previously saved position
+    pub(crate) fn restore_position(&mut self, pos: usize) {
+        self.pos = pos;
+    }
+
+    /// Check if the current token is an identifier with the given name
+    pub(crate) fn check_ident(&self, name: &str) -> bool {
+        self.peek()
+            .map(|t| matches!(&t.token, Token::Ident(s) if s == name))
+            .unwrap_or(false)
+    }
+
     pub(crate) fn advance(&mut self) -> Option<SpannedToken> {
         if self.is_at_end() {
             None

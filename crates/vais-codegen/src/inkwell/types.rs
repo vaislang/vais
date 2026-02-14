@@ -206,7 +206,8 @@ impl<'ctx> TypeMapper<'ctx> {
             | ResolvedType::Lifetime(_)
             | ResolvedType::Associated { .. }
             | ResolvedType::Dependent { .. }
-            | ResolvedType::ImplTrait { .. } => self.context.i64_type().into(),
+            | ResolvedType::ImplTrait { .. }
+            | ResolvedType::HigherKinded { .. } => self.context.i64_type().into(),
         }
     }
 

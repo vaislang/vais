@@ -132,6 +132,7 @@ impl Parser {
     }
 
     /// Helper: parse a single type generic parameter
+    /// Also detects higher-kinded type parameters: `F<_>`, `F<_, _>`, `F<_>: Functor`
     fn parse_type_generic_param(&mut self) -> ParseResult<GenericParam> {
         // Check for variance annotation: +T (covariant), -T (contravariant)
         let variance = if self.check(&Token::Plus) {
@@ -145,6 +146,57 @@ impl Parser {
         };
 
         let name = self.parse_ident()?;
+
+        // Check for HKT pattern: Name<_> or Name<_, _>
+        if self.check(&Token::Lt) {
+            // Save position to backtrack if this isn't actually HKT
+            let saved_pos = self.save_position();
+
+            self.advance(); // consume '<'
+
+            // Check if first token inside is '_' (underscore identifier)
+            let mut arity = 0usize;
+            let mut is_hkt = false;
+
+            if self.check_ident("_") {
+                arity = 1;
+                self.advance(); // consume '_'
+
+                // Count additional underscore parameters: <_, _, _>
+                // Arity is capped at 32 to prevent excessive memory usage
+                const MAX_HKT_ARITY: usize = 32;
+                while self.check(&Token::Comma) && arity < MAX_HKT_ARITY {
+                    self.advance(); // consume ','
+                    if self.check_ident("_") {
+                        arity += 1;
+                        self.advance(); // consume '_'
+                    } else {
+                        // Not a valid HKT pattern — backtrack
+                        break;
+                    }
+                }
+
+                if self.check(&Token::Gt) {
+                    self.advance(); // consume '>'
+                    is_hkt = true;
+                }
+            }
+
+            if is_hkt {
+                // Parse optional bounds: F<_>: Functor
+                let bounds = if self.check(&Token::Colon) {
+                    self.advance();
+                    self.parse_trait_bounds()?
+                } else {
+                    Vec::new()
+                };
+                return Ok(GenericParam::new_higher_kinded(name, arity, bounds));
+            }
+
+            // Not HKT — restore position and fall through to normal parsing
+            self.restore_position(saved_pos);
+        }
+
         let bounds = if self.check(&Token::Colon) {
             self.advance();
             self.parse_trait_bounds()?

@@ -588,6 +588,10 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         Lifetime(name) => format!("'{}", name),
         Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
         ImplTrait { bounds } => format!("impl {}", bounds.join(" + ")),
+        HigherKinded { name, arity } => {
+            let holes = (0..*arity).map(|_| "_").collect::<Vec<_>>().join(", ");
+            format!("{}<{}>", name, holes)
+        }
     }
 }
 

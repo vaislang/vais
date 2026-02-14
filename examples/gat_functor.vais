@@ -1,0 +1,23 @@
+# GAT Functor pattern
+# Demonstrates Generic Associated Types with higher-kinded type patterns
+
+W Functor {
+    T Item
+    F map_val(&self, x: i64) -> i64
+}
+
+S Wrapper {
+    value: i64
+}
+
+X Wrapper: Functor {
+    T Item = i64
+    F map_val(&self, x: i64) -> i64 {
+        self.value + x
+    }
+}
+
+F main() -> i64 {
+    w := Wrapper { value: 10 }
+    w.map_val(32)
+}

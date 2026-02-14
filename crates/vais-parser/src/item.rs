@@ -34,7 +34,7 @@ impl Parser {
             Item::Struct(self.parse_struct(is_pub, attributes)?)
         } else if self.check(&Token::Enum) {
             self.advance();
-            Item::Enum(self.parse_enum(is_pub)?)
+            Item::Enum(self.parse_enum(is_pub, attributes)?)
         } else if self.check(&Token::Union) {
             self.advance();
             Item::Union(self.parse_union(is_pub)?)
@@ -340,7 +340,7 @@ impl Parser {
     }
 
     /// Parse enum: `Name{variants}`
-    fn parse_enum(&mut self, is_pub: bool) -> ParseResult<Enum> {
+    fn parse_enum(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Enum> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -362,6 +362,7 @@ impl Parser {
             generics,
             variants,
             is_pub,
+            attributes,
         })
     }
 

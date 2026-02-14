@@ -35,7 +35,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        ResolvedType::Generic(name.clone())
+                        if generics.is_empty() {
+                            ResolvedType::Generic(name.clone())
+                        } else {
+                            // HKT application: F<A> — keep as Named so substitute_type
+                            // can replace the constructor name
+                            let generic_types: Vec<ResolvedType> = generics
+                                .iter()
+                                .map(|g| self.ast_type_to_resolved(&g.node))
+                                .collect();
+                            ResolvedType::Named {
+                                name: name.clone(),
+                                generics: generic_types,
+                            }
+                        }
                     } else {
                         let generic_types: Vec<ResolvedType> = generics
                             .iter()

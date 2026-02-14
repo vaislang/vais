@@ -12,7 +12,7 @@ impl TypeChecker {
         self.push_scope();
 
         // Set current generic parameters
-        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&f.generics);
 
         // Merge where clause bounds into current generic bounds
         self.merge_where_clause(&f.where_clause);
@@ -213,7 +213,7 @@ impl TypeChecker {
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
         self.pop_scope();
 
         Ok(())
@@ -299,7 +299,7 @@ impl TypeChecker {
         all_generics.extend_from_slice(&method.generics);
 
         // Set current generic parameters (including struct-level generics)
-        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&all_generics);
 
         // Merge where clause bounds into current generic bounds
         self.merge_where_clause(&method.where_clause);
@@ -426,7 +426,7 @@ impl TypeChecker {
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
         self.pop_scope();
 
         Ok(())

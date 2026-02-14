@@ -62,7 +62,9 @@ impl CodeGenerator {
             let type_params: Vec<&String> = template
                 .generics
                 .iter()
-                .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                .filter(|g| {
+                    !matches!(g.kind, GenericParamKind::Lifetime { .. })
+                })
                 .map(|g| &g.name.node)
                 .collect();
 
@@ -153,6 +155,24 @@ impl CodeGenerator {
             ResolvedType::Optional(inner) => {
                 if let ResolvedType::Optional(arg_inner) = arg_type {
                     self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            // HKT type constructor parameter: infer F from F<A> = Vec<A> → F = Vec
+            ResolvedType::HigherKinded { name, .. } => {
+                if type_params.contains(&name) {
+                    // Extract the type constructor name from the concrete argument type
+                    if let ResolvedType::Named {
+                        name: concrete_name,
+                        ..
+                    } = arg_type
+                    {
+                        inferred.entry(name.clone()).or_insert_with(|| {
+                            ResolvedType::Named {
+                                name: concrete_name.clone(),
+                                generics: vec![],
+                            }
+                        });
+                    }
                 }
             }
             _ => {}

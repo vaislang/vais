@@ -94,6 +94,8 @@ impl TypeMapper {
             }
             // impl Trait: monomorphized to concrete type at codegen, fallback to i64
             ResolvedType::ImplTrait { .. } => Ok(types::I64),
+            // HKT: monomorphized to concrete type at codegen, fallback to i64
+            ResolvedType::HigherKinded { .. } => Ok(types::I64),
         }
     }
 

@@ -48,13 +48,13 @@ impl ResolvedConst {
                     ConstBinOp::BitOr => l | r,
                     ConstBinOp::BitXor => l ^ r,
                     ConstBinOp::Shl => {
-                        if r < 0 || r >= 64 {
+                        if !(0..64).contains(&r) {
                             return None;
                         }
                         l.wrapping_shl(r as u32)
                     }
                     ConstBinOp::Shr => {
-                        if r < 0 || r >= 64 {
+                        if !(0..64).contains(&r) {
                             return None;
                         }
                         l.wrapping_shr(r as u32)
@@ -259,6 +259,16 @@ pub enum ResolvedType {
     /// Represents an opaque return type implementing the given trait bounds.
     /// During monomorphization, resolved to the concrete return type.
     ImplTrait { bounds: Vec<String> },
+
+    /// Higher-kinded type parameter: a type constructor (e.g., F in F<_>)
+    /// Represents a type that takes type arguments to produce a concrete type.
+    /// Example: Vec is a type constructor of arity 1 (Vec<_>), HashMap has arity 2.
+    HigherKinded {
+        /// Name of the type constructor parameter
+        name: String,
+        /// Number of type arguments this constructor expects
+        arity: usize,
+    },
 }
 
 impl ResolvedType {
@@ -488,6 +498,16 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Lazy(inner) => write!(f, "Lazy<{}>", inner),
             ResolvedType::ImplTrait { bounds } => {
                 write!(f, "impl {}", bounds.join(" + "))
+            }
+            ResolvedType::HigherKinded { name, arity } => {
+                write!(f, "{}<", name)?;
+                for i in 0..*arity {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "_")?;
+                }
+                write!(f, ">")
             }
         }
     }

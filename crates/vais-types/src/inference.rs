@@ -223,6 +223,14 @@ impl TypeChecker {
             // not in the inference engine, since TypeInference has no trait impl data.
             // This is consistent with DynTrait handling above.
             (ResolvedType::ImplTrait { .. }, _) | (_, ResolvedType::ImplTrait { .. }) => Ok(()),
+            // HigherKinded: type constructor parameters unify with any type.
+            // At monomorphization time, F<_> gets replaced with a concrete type constructor.
+            // SAFETY: Trait bounds on HKT params are deferred to monomorphization.
+            // The TC validates bounds when concrete types are substituted, not during unification.
+            // This matches ImplTrait/DynTrait patterns above.
+            (ResolvedType::HigherKinded { .. }, _) | (_, ResolvedType::HigherKinded { .. }) => {
+                Ok(())
+            }
             // Auto-deref: &T unifies with T (implicit dereference)
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 self.unify(inner, other)
@@ -410,13 +418,56 @@ impl TypeChecker {
                 ret: Box::new(self.substitute_generics(ret, substitutions)),
                 effects: effects.clone(),
             },
-            ResolvedType::Named { name, generics } => ResolvedType::Named {
-                name: name.clone(),
-                generics: generics
-                    .iter()
-                    .map(|g| self.substitute_generics(g, substitutions))
-                    .collect(),
-            },
+            ResolvedType::Named { name, generics } => {
+                // Check if the name is an HKT parameter being substituted.
+                // NOTE: This HKT application logic is mirrored in types/substitute.rs::substitute_type().
+                // Any changes here must be synchronized with that function.
+                if let Some(subst) = substitutions.get(name) {
+                    if !generics.is_empty() {
+                        // HKT application: F<A> where F maps to Vec → Vec<A>
+                        if let ResolvedType::Named {
+                            name: concrete_name,
+                            ..
+                        }
+                        | ResolvedType::HigherKinded {
+                            name: concrete_name,
+                            ..
+                        } = subst
+                        {
+                            ResolvedType::Named {
+                                name: concrete_name.clone(),
+                                generics: generics
+                                    .iter()
+                                    .map(|g| self.substitute_generics(g, substitutions))
+                                    .collect(),
+                            }
+                        } else {
+                            // Fallback: substitute generics normally
+                            ResolvedType::Named {
+                                name: name.clone(),
+                                generics: generics
+                                    .iter()
+                                    .map(|g| self.substitute_generics(g, substitutions))
+                                    .collect(),
+                            }
+                        }
+                    } else {
+                        subst.clone()
+                    }
+                } else {
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: generics
+                            .iter()
+                            .map(|g| self.substitute_generics(g, substitutions))
+                            .collect(),
+                    }
+                }
+            }
+            ResolvedType::HigherKinded { name, .. } => substitutions
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
             _ => ty.clone(),
         };
 

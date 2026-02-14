@@ -94,6 +94,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         }
         ResolvedType::Var(id) => format!("v{}", id),
         ResolvedType::Vector { element, lanes } => format!("vec{}_{}", lanes, mangle_type(element)),
+        ResolvedType::HigherKinded { name, arity } => format!("hkt{}_{}", arity, name),
         _ => "unknown".to_string(),
     }
 }

@@ -68,8 +68,24 @@ impl TypeChecker {
                         lanes: 4,
                     },
                     _ => {
-                        // Check if it's a generic type parameter
-                        if self.current_generics.contains(name) {
+                        // Check if it's a higher-kinded type parameter
+                        if let Some(&arity) = self.current_hkt_generics.get(name) {
+                            if resolved_generics.is_empty() {
+                                // Bare reference to HKT param (e.g., just `F`)
+                                ResolvedType::HigherKinded {
+                                    name: name.clone(),
+                                    arity,
+                                }
+                            } else {
+                                // Application of HKT param (e.g., `F<A>`)
+                                // Becomes Named with the HKT param name and concrete args
+                                ResolvedType::Named {
+                                    name: name.clone(),
+                                    generics: resolved_generics,
+                                }
+                            }
+                        // Check if it's a regular generic type parameter
+                        } else if self.current_generics.contains(name) {
                             ResolvedType::Generic(name.clone())
                         } else if let Some(alias) = self.type_aliases.get(name) {
                             alias.clone()

@@ -1,0 +1,23 @@
+# GAT Iterator pattern
+# Demonstrates Generic Associated Types with iterator-like trait
+
+W Iterable {
+    T Item
+    F iter(&self) -> i64
+}
+
+S Numbers {
+    count: i64
+}
+
+X Numbers: Iterable {
+    T Item = i64
+    F iter(&self) -> i64 {
+        self.count
+    }
+}
+
+F main() -> i64 {
+    n := Numbers { count: 42 }
+    n.iter()
+}

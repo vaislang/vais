@@ -45,11 +45,46 @@ impl CodeGenerator {
             );
         }
 
+        // Register associated types from AST
+        let mut associated_types = HashMap::new();
+        for assoc in &t.associated_types {
+            // Extract GAT generic parameters
+            let generics = assoc.generics.iter().map(|g| g.name.node.clone()).collect();
+
+            // Build generic bounds for GAT parameters
+            let mut generic_bounds = HashMap::new();
+            for gen_param in &assoc.generics {
+                if !gen_param.bounds.is_empty() {
+                    generic_bounds.insert(
+                        gen_param.name.node.clone(),
+                        gen_param.bounds.iter().map(|b| b.node.clone()).collect(),
+                    );
+                }
+            }
+
+            // Extract trait bounds on the associated type itself
+            let bounds = assoc.bounds.iter().map(|b| b.node.clone()).collect();
+
+            // Convert default type if provided
+            let default = assoc.default.as_ref().map(|d| self.ast_type_to_resolved(&d.node));
+
+            associated_types.insert(
+                assoc.name.node.clone(),
+                vais_types::AssociatedTypeDef {
+                    name: assoc.name.node.clone(),
+                    generics,
+                    generic_bounds,
+                    bounds,
+                    default,
+                },
+            );
+        }
+
         let trait_def = vais_types::TraitDef {
             name: t.name.node.clone(),
             generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
             super_traits: t.super_traits.iter().map(|s| s.node.clone()).collect(),
-            associated_types: HashMap::new(), // Simplified for now
+            associated_types,
             methods,
         };
         self.register_trait(trait_def);
