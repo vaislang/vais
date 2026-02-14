@@ -482,13 +482,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // reference capture with pointer parameters and updated lambda calling convention).
                 match capture_mode {
                     ast::CaptureMode::ByRef | ast::CaptureMode::ByMutRef => {
-                        // TODO: Implement proper reference capture by passing pointers
-                        // Currently falls back to by-value behavior (load and pass)
-                        let val = self
-                            .builder
-                            .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
-                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                        captured_vars.push((cap_name.clone(), val, *var_type));
+                        return Err(CodegenError::Unsupported(
+                            "reference capture (|&x| or |&mut x|) is not yet supported; use by-value or move capture instead".to_string(),
+                        ));
                     }
                     ast::CaptureMode::ByValue | ast::CaptureMode::Move => {
                         // By-value or explicit move: load and pass the value

@@ -226,10 +226,15 @@ impl TypeChecker {
     /// The where clause bounds (Display, Clone) are merged into the generic bounds for T.
     pub(crate) fn merge_where_clause(&mut self, where_clause: &[WherePredicate]) {
         for predicate in where_clause {
-            self.current_generic_bounds
+            let bounds = self
+                .current_generic_bounds
                 .entry(predicate.ty.node.clone())
-                .or_default()
-                .extend(predicate.bounds.iter().map(|b| b.node.clone()));
+                .or_default();
+            for b in &predicate.bounds {
+                if !bounds.contains(&b.node) {
+                    bounds.push(b.node.clone());
+                }
+            }
         }
     }
 
@@ -322,12 +327,16 @@ impl TypeChecker {
             })
             .collect();
 
-        // Merge where clause bounds
+        // Merge where clause bounds (dedup to avoid duplicates from inline + where)
         for predicate in &f.where_clause {
-            generic_bounds
+            let bounds = generic_bounds
                 .entry(predicate.ty.node.clone())
-                .or_default()
-                .extend(predicate.bounds.iter().map(|b| b.node.clone()));
+                .or_default();
+            for b in &predicate.bounds {
+                if !bounds.contains(&b.node) {
+                    bounds.push(b.node.clone());
+                }
+            }
         }
 
         // Count required parameters (those without default values)

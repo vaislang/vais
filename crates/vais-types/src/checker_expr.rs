@@ -1454,23 +1454,17 @@ impl TypeChecker {
                     }
                 }
 
-                // Validate capture mode requirements
+                // Validate capture mode: ByRef/ByMutRef are not yet supported
                 match capture_mode {
-                    CaptureMode::ByMutRef => {
-                        // For by-mut-ref capture, verify all captured variables are mutable
-                        for var in &free_vars {
-                            if let Some((_, is_mut)) = self.lookup_var_with_mut(var) {
-                                if !is_mut {
-                                    // Note: We record this but don't error yet - actual borrow checking
-                                    // happens in MIR. Here we just validate mutability.
-                                    // In a full implementation, we'd track this for diagnostics.
-                                }
-                            }
-                        }
+                    CaptureMode::ByRef | CaptureMode::ByMutRef => {
+                        return Err(TypeError::Mismatch {
+                            expected: "by-value or move capture".to_string(),
+                            found: "reference capture (|&x| or |&mut x|) — not yet supported".to_string(),
+                            span: Some(expr.span),
+                        });
                     }
-                    CaptureMode::Move | CaptureMode::ByValue | CaptureMode::ByRef => {
-                        // These modes don't require additional validation at type-check time.
-                        // Move semantics and borrow checking are handled in MIR phase.
+                    CaptureMode::Move | CaptureMode::ByValue => {
+                        // These modes are validated during codegen/MIR.
                     }
                 }
 

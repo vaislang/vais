@@ -1393,11 +1393,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ### 리뷰 발견사항 (2026-02-14)
 > 출처: /team-review Phase 32
 
-- [ ] 1. [정확성+아키텍처] Pattern::Alias 타입 i64 하드코딩 수정 (Critical) — 대상: codegen/control_flow.rs:863, inkwell/gen_match.rs:766
-- [ ] 2. [아키텍처] ByRef/ByMutRef 미구현 → 명시적 에러 처리 (Critical) — 대상: generate_expr.rs:1758, inkwell/gen_aggregate.rs:483
-- [ ] 3. [정확성] ByMutRef 가변성 검증 완성 또는 삭제 (Warning) — 대상: checker_expr.rs:1462
-- [ ] 4. [성능] Where 절 bounds 중복 제거 (Warning) — 대상: checker_module.rs:325
-진행률: 0/4 (0%)
+- [x] 1. [정확성+아키텍처] Pattern::Alias 타입 i64 하드코딩 수정 (Critical) ✅ 2026-02-14
+  변경: control_flow.rs (generate_pattern_bindings_typed() 추가, match_type 파라미터로 실제 타입 전달, Ident/Alias 모두 수정)
+- [x] 2. [아키텍처] ByRef/ByMutRef 미구현 → 명시적 에러 처리 (Critical) ✅ 2026-02-14
+  변경: generate_expr.rs, inkwell/gen_aggregate.rs (silent fallback → CodegenError::Unsupported 반환), checker_expr.rs (TC에서도 Mismatch 에러)
+- [x] 3. [정확성] ByMutRef 가변성 검증 완성 또는 삭제 (Warning) ✅ 2026-02-14
+  변경: checker_expr.rs (빈 코드 블록 → TypeError::Mismatch 에러로 전환, ByRef/ByMutRef 미지원 명시)
+- [x] 4. [성능] Where 절 bounds 중복 제거 (Warning) ✅ 2026-02-14
+  변경: checker_module.rs (merge_where_clause + register_function에서 extend→contains 체크 후 push 패턴)
+진행률: 4/4 (100%)
 
 ---
 

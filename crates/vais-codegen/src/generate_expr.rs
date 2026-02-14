@@ -1757,25 +1757,9 @@ impl CodeGenerator {
                         // reference capture with pointer parameters).
                         match capture_mode {
                             vais_ast::CaptureMode::ByRef | vais_ast::CaptureMode::ByMutRef => {
-                                // TODO: Implement proper reference capture by passing pointers
-                                // Currently falls back to by-value behavior
-                                if local.is_param() {
-                                    captured_vars.push((
-                                        cap_name.clone(),
-                                        ty,
-                                        format!("%{}", local.llvm_name),
-                                    ));
-                                } else if local.is_ssa() {
-                                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
-                                } else {
-                                    let tmp = self.next_temp(counter);
-                                    let llvm_ty = self.type_to_llvm(&ty);
-                                    capture_ir.push_str(&format!(
-                                        "  {} = load {}, {}* %{}\n",
-                                        tmp, llvm_ty, llvm_ty, local.llvm_name
-                                    ));
-                                    captured_vars.push((cap_name.clone(), ty, tmp));
-                                }
+                                return Err(CodegenError::Unsupported(
+                                    "reference capture (|&x| or |&mut x|) is not yet supported; use by-value or move capture instead".to_string(),
+                                ));
                             }
                             vais_ast::CaptureMode::ByValue | vais_ast::CaptureMode::Move => {
                                 // By-value or explicit move: load and pass the value

@@ -317,7 +317,7 @@ impl CodeGenerator {
                     // Bind pattern variables for guard to use
                     writeln!(ir, "{}:", guard_bind).unwrap();
                     let bind_ir =
-                        self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
+                        self.generate_pattern_bindings_typed(&arm.pattern, &match_val, counter, &match_type)?;
                     ir.push_str(&bind_ir);
                     writeln!(ir, "  br label %{}", guard_check).unwrap();
 
@@ -340,7 +340,7 @@ impl CodeGenerator {
 
                     // Bind pattern variables if needed
                     let bind_ir =
-                        self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
+                        self.generate_pattern_bindings_typed(&arm.pattern, &match_val, counter, &match_type)?;
                     ir.push_str(&bind_ir);
                 }
 
@@ -736,6 +736,18 @@ impl CodeGenerator {
         match_val: &str,
         counter: &mut usize,
     ) -> CodegenResult<String> {
+        self.generate_pattern_bindings_typed(pattern, match_val, counter, &ResolvedType::I64)
+    }
+
+    /// Generate pattern bindings with explicit match type for correct type propagation.
+    /// Called from generate_match where the matched expression type is known.
+    pub(crate) fn generate_pattern_bindings_typed(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &str,
+        counter: &mut usize,
+        match_type: &ResolvedType,
+    ) -> CodegenResult<String> {
         match &pattern.node {
             Pattern::Ident(name) => {
                 // Check if this is a unit enum variant (like None)
@@ -746,7 +758,7 @@ impl CodeGenerator {
 
                 // Bind the matched value to the identifier
                 let ir = String::new();
-                let ty = ResolvedType::I64; // Default type for now
+                let ty = match_type.clone();
 
                 // Generate unique LLVM name for pattern binding
                 let _llvm_name = format!("{}.{}", name, counter);
@@ -859,15 +871,14 @@ impl CodeGenerator {
                 // Bind the whole value to name, then bind variables from inner pattern
                 let mut ir = String::new();
 
-                // First, bind the whole matched value to the alias name
-                let ty = ResolvedType::I64; // Default type for now
+                // First, bind the whole matched value to the alias name using the actual match type
                 self.fn_ctx.locals.insert(
                     name.clone(),
-                    LocalVar::ssa(ty.clone(), match_val.to_string()),
+                    LocalVar::ssa(match_type.clone(), match_val.to_string()),
                 );
 
                 // Then bind variables from the inner pattern
-                let inner_ir = self.generate_pattern_bindings(pattern, match_val, counter)?;
+                let inner_ir = self.generate_pattern_bindings_typed(pattern, match_val, counter, match_type)?;
                 ir.push_str(&inner_ir);
 
                 Ok(ir)
