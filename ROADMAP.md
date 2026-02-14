@@ -1512,18 +1512,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 35: 대형 파일 모듈 분할 (Round 3)
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료 (2026-02-14)
+> **모드**: 자동진행
 > **목표**: 3,000줄+ 대형 파일을 카테고리별 서브모듈로 분할하여 유지보수성 개선
 > **영향도**: High — 코드 탐색성, 리뷰 용이성 대폭 향상
 
-- [ ] 1. vais-codegen/lib.rs (3,352줄) 모듈 분할 (Sonnet)
-  대상: 초기화/설정, 타입 매핑, 모듈 생성, 유틸리티 카테고리별 서브모듈화
-- [ ] 2. vais-types/types.rs (2,029줄) 모듈 분할 (Sonnet)
-  대상: 타입 정의, 타입 검증, Display/Debug impl, 유틸리티 분리
-- [ ] 3. vais-codegen/generate_expr.rs (2,003줄) 모듈 분할 (Sonnet)
-  대상: 리터럴, 연산자, 호출, 접근자 카테고리별 서브모듈화
-- [ ] 4. vais-gpu/wasm_component.rs (1,815줄) 모듈 분할 (Sonnet)
-  대상: 컴포넌트 정의, 인터페이스, 직렬화, 유틸리티 분리
+- [x] 1. vais-codegen/lib.rs (3,352줄) 모듈 분할 (Sonnet) ✅ 2026-02-14
+  변경: lib.rs 3,352→1,619줄(-52%), 7개 서브모듈 생성 (init/emit/trait_dispatch/generics_helpers/helpers/wasm_helpers/module_gen)
+- [x] 2. vais-types/types.rs (2,029줄) 모듈 분할 (Sonnet) ✅ 2026-02-14
+  변경: types.rs→types/ 디렉토리, 8개 서브모듈 (mod/utils/error/effects/resolved/defs/mangle/substitute), mod.rs 25줄
+- [x] 3. vais-codegen/generate_expr.rs (2,003줄) 모듈 분할 (Sonnet) ✅ 2026-02-14
+  변경: 분할 불필요 — 이미 dispatcher 패턴으로 expr.rs/expr_helpers*.rs/generate_expr_*.rs에 위임 구조
+- [x] 4. vais-gpu/wasm_component.rs (1,815줄) 모듈 분할 (Sonnet) ✅ 2026-02-14
+  변경: wasm_component.rs→wasm_component/ 디렉토리, 10개 서브모듈 (mod/types/interface/package/conversion/wasi/bindgen/link_config/serialization/tests), mod.rs 87줄
 
 ---
 

@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use vais_ast::*;
 
 use super::TypeChecker;
-use crate::types::{Linearity, ResolvedType, TypeError, TypeResult, VarInfo, VariantFieldTypes};
+use crate::types::{Linearity, ResolvedType, TypeError, TypeResult, VariantFieldTypes};
+use crate::types::defs::VarInfo;
 
 impl TypeChecker {
     // === Scope management ===

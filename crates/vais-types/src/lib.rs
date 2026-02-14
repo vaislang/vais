@@ -40,7 +40,7 @@ pub use object_safety::{check_object_safety, ObjectSafetyViolation};
 pub use ownership::OwnershipChecker;
 use traits::TraitImpl;
 pub use traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
-use types::VarInfo;
+use types::defs::VarInfo;
 pub use types::{
     find_similar_name,
     // Did-you-mean support

@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use super::TypeChecker;
 use crate::traits::TraitMethodSig;
 use crate::types::{
-    self, Linearity, ResolvedType, TypeError, TypeResult, VarInfo, VariantFieldTypes,
+    find_similar_name, Linearity, ResolvedType, TypeError, TypeResult, VariantFieldTypes,
 };
+use crate::types::defs::VarInfo;
 
 impl TypeChecker {
     /// Look up "self" variable directly from scopes (no fallback)
@@ -152,7 +153,7 @@ impl TypeChecker {
                 generics: _,
             }) = inner_type
             {
-                if let Some(struct_def) = self.structs.get(struct_name).cloned() {
+                if let Some(struct_def) = self.structs.get(struct_name.as_str()).cloned() {
                     for (fname, ftype) in &struct_def.fields {
                         if fname == name {
                             return Ok(VarInfo {
@@ -179,7 +180,7 @@ impl TypeChecker {
             candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
         }
 
-        let suggestion = types::find_similar_name(name, candidates.into_iter());
+        let suggestion = find_similar_name(name, candidates.into_iter());
 
         Err(TypeError::UndefinedVar {
             name: name.to_string(),
