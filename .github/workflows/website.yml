@@ -8,6 +8,8 @@ on:
       - 'website/**'
       - 'docs-site/**'
       - 'playground/**'
+      - 'install.sh'
+      - 'install.ps1'
       - '.github/workflows/website.yml'
   workflow_dispatch:
 
@@ -47,10 +49,12 @@ jobs:
           npm ci
           npm run build
 
-      # Build docs (mdBook)
+      # Build docs (mdBook — multilingual)
       - name: Build docs
         working-directory: docs-site
-        run: mdbook build
+        run: |
+          chmod +x build.sh
+          bash build.sh
 
       # Build playground
       - name: Build playground
@@ -64,6 +68,8 @@ jobs:
         run: |
           cp -r docs-site/book website/dist/docs
           cp -r playground/dist website/dist/playground
+          cp install.sh website/dist/install.sh
+          cp install.ps1 website/dist/install.ps1
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

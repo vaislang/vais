@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "title": "Vais - AI-Optimized Systems Programming Language",
+    "description": "Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance."
+  },
+  "nav": {
+    "compare": "Compare",
+    "performance": "Performance",
+    "features": "Features",
+    "playground": "Playground",
+    "docs": "Docs",
+    "blog": "Blog"
+  },
+  "hero": {
+    "badge": "v1.0.0 — Production Ready",
+    "title": "Write <span class=\"gradient-text\">fewer tokens</span>,<br>get <span class=\"gradient-text\">native performance</span>",
+    "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.",
+    "tryBrowser": "Try in Browser",
+    "install": "brew install vais"
+  },
+  "compare": {
+    "title": "Token Efficiency Matters",
+    "subtitle": "AI models pay per token. Vais uses <strong>33% fewer tokens than Rust</strong> and <strong>40% fewer than C</strong> for equivalent programs — single-char keywords, expression bodies, and auto-return add up across codebases.",
+    "vais": "Vais",
+    "tokens": "tokens",
+    "barTitle": "Token Count — 4 Benchmark Programs",
+    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base). See <a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">benchmarks</a>."
+  },
+  "performance": {
+    "title": "Native Performance",
+    "subtitle": "Vais compiles to optimized LLVM IR — on par with C and Rust at runtime, with fast compilation.",
+    "runtimeTitle": "Runtime — Fibonacci(35)",
+    "compileTitle": "Compile Speed — Single File",
+    "compileNote": "Vais <code>--emit-ir</code> vs full compilation. 8.6x faster than C, 19x faster than Rust. Updated 2026-02-11."
+  },
+  "features": {
+    "title": "Why Vais?",
+    "subtitle": "Designed from the ground up for AI-assisted development without sacrificing performance.",
+    "singleChar": {
+      "title": "Single-Char Keywords",
+      "description": "<code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity."
+    },
+    "selfRecursion": {
+      "title": "Self-Recursion Operator",
+      "description": "The <code>@</code> operator calls the current function recursively. No need to repeat the function name — AI-friendly and concise."
+    },
+    "expression": {
+      "title": "Everything is an Expression",
+      "description": "If/else, match, and blocks all return values. No <code>return</code> keyword needed for the last expression. Functional and ergonomic."
+    },
+    "llvm": {
+      "title": "LLVM Native Speed",
+      "description": "Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO."
+    },
+    "inference": {
+      "title": "Type Inference",
+      "description": "Bidirectional type checking infers types automatically. Write <code>x := 42</code> instead of explicit type annotations everywhere."
+    },
+    "toolchain": {
+      "title": "Full Toolchain",
+      "description": "LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling."
+    },
+    "multiTarget": {
+      "title": "Multi-Target Output",
+      "description": "Compile to native binaries, WebAssembly, or JavaScript. Run Vais code in the browser with full WASM interop and JS codegen."
+    },
+    "incremental": {
+      "title": "Incremental Compilation",
+      "description": "Per-module caching with parallel codegen. Recompile only what changed — 30K-line projects rebuild in under 100ms."
+    },
+    "selfHosting": {
+      "title": "Self-Hosting Compiler",
+      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 520 E2E tests and 2,500+ total tests."
+    }
+  },
+  "playground": {
+    "title": "Try Vais Now",
+    "subtitle": "Write and run Vais code directly in your browser. No installation required.",
+    "launch": "Launch Interactive Playground",
+    "loadHere": "Load Playground Here",
+    "openTab": "Open in New Tab"
+  },
+  "install": {
+    "title": "Get Started in Seconds",
+    "oneClick": "One-Click Install",
+    "oneClickNote": "Detects your OS & arch automatically. macOS, Linux, WSL.",
+    "windows": "Windows (PowerShell)",
+    "macOS": "macOS / Linux (Homebrew)",
+    "cargo": "Cargo",
+    "docker": "Docker"
+  },
+  "footer": {
+    "tagline": "AI-Optimized Systems Language",
+    "learn": "Learn",
+    "documentation": "Documentation",
+    "quickStart": "Quick Start",
+    "community": "Community",
+    "github": "GitHub",
+    "discussions": "Discussions",
+    "issues": "Issues",
+    "more": "More",
+    "changelog": "Changelog",
+    "license": "MIT License",
+    "copyright": "&copy; 2026 Vais Contributors. Built with ❤ for AI."
+  },
+  "langSelector": {
+    "label": "Language"
+  }
+}

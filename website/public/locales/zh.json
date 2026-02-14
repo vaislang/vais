@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "title": "Vais - AI优化的系统编程语言",
+    "description": "Vais 是为 AI 代码生成设计的高效令牌系统编程语言，具有原生 LLVM 性能。"
+  },
+  "nav": {
+    "compare": "比较",
+    "performance": "性能",
+    "features": "特性",
+    "playground": "在线试用",
+    "docs": "文档",
+    "blog": "博客"
+  },
+  "hero": {
+    "badge": "v1.0.0 — 生产就绪",
+    "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
+    "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。单字符关键字、表达式导向语法和 LLVM 驱动的原生速度。",
+    "tryBrowser": "在浏览器中试用",
+    "install": "brew install vais"
+  },
+  "compare": {
+    "title": "令牌效率很重要",
+    "subtitle": "AI 模型按令牌收费。对于等效程序，Vais 使用的令牌比 <strong>Rust 少 33%</strong>，比 <strong>C 少 40%</strong> — 单字符关键字、表达式体和自动返回在整个代码库中累积。",
+    "vais": "Vais",
+    "tokens": "令牌",
+    "barTitle": "令牌数 — 4 个基准程序",
+    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。参见<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">基准测试</a>。"
+  },
+  "performance": {
+    "title": "原生性能",
+    "subtitle": "Vais 编译为优化的 LLVM IR — 运行时与 C 和 Rust 相当，并具有快速的编译速度。",
+    "runtimeTitle": "运行时间 — Fibonacci(35)",
+    "compileTitle": "编译速度 — 单个文件",
+    "compileNote": "Vais <code>--emit-ir</code> vs 完整编译。比 C 快 8.6 倍，比 Rust 快 19 倍。更新于 2026-02-11。"
+  },
+  "features": {
+    "title": "为什么选择 Vais？",
+    "subtitle": "从零开始为 AI 辅助开发设计，不牺牲性能。",
+    "singleChar": {
+      "title": "单字符关键字",
+      "description": "函数用 <code>F</code>，结构体用 <code>S</code>，if/else 用 <code>I</code>/<code>E</code>，循环用 <code>L</code>，模式匹配用 <code>M</code>。最少的令牌，最大的清晰度。"
+    },
+    "selfRecursion": {
+      "title": "自递归运算符",
+      "description": "<code>@</code> 运算符递归调用当前函数。无需重复函数名 — AI 友好且简洁。"
+    },
+    "expression": {
+      "title": "一切皆表达式",
+      "description": "If/else、match 和块都返回值。最后一个表达式不需要 <code>return</code> 关键字。函数式且符合人体工程学。"
+    },
+    "llvm": {
+      "title": "LLVM 原生速度",
+      "description": "通过 LLVM 编译为优化的原生代码。以高级人体工程学获得 C 级性能。支持 LTO 和 PGO。"
+    },
+    "inference": {
+      "title": "类型推断",
+      "description": "双向类型检查自动推断类型。在任何地方写 <code>x := 42</code> 而不是显式类型注解。"
+    },
+    "toolchain": {
+      "title": "完整的工具链",
+      "description": "LSP 服务器、格式化程序、调试器、REPL、包管理器以及适用于 VSCode 和 IntelliJ 的 IDE 插件。生产就绪的工具。"
+    },
+    "multiTarget": {
+      "title": "多目标输出",
+      "description": "编译为原生二进制文件、WebAssembly 或 JavaScript。通过完整的 WASM 互操作和 JS 代码生成在浏览器中运行 Vais 代码。"
+    },
+    "incremental": {
+      "title": "增量编译",
+      "description": "通过并行代码生成进行按模块缓存。仅重新编译更改的内容 — 30K 行项目在 100ms 内重建。"
+    },
+    "selfHosting": {
+      "title": "自托管编译器",
+      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 520 个 E2E 测试和总共 2,500 多个测试支持。"
+    }
+  },
+  "playground": {
+    "title": "立即试用 Vais",
+    "subtitle": "直接在浏览器中编写和运行 Vais 代码。无需安装。",
+    "launch": "启动交互式在线试用",
+    "loadHere": "在此处加载在线试用",
+    "openTab": "在新标签页中打开"
+  },
+  "install": {
+    "title": "数秒内开始",
+    "oneClick": "一键安装",
+    "oneClickNote": "自动检测操作系统和架构。支持 macOS、Linux、WSL。",
+    "windows": "Windows (PowerShell)",
+    "macOS": "macOS / Linux (Homebrew)",
+    "cargo": "Cargo",
+    "docker": "Docker"
+  },
+  "footer": {
+    "tagline": "AI 优化的系统语言",
+    "learn": "学习",
+    "documentation": "文档",
+    "quickStart": "快速入门",
+    "community": "社区",
+    "github": "GitHub",
+    "discussions": "讨论",
+    "issues": "问题",
+    "more": "更多",
+    "changelog": "更新日志",
+    "license": "MIT 许可证",
+    "copyright": "&copy; 2026 Vais 贡献者。用 ❤ 为 AI 打造。"
+  },
+  "langSelector": {
+    "label": "语言"
+  }
+}

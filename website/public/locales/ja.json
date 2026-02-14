@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "title": "Vais - AI最適化システムプログラミング言語",
+    "description": "VaisはネイティブLLVMパフォーマンスを備えた、AI コード生成のために設計されたトークン効率的なシステムプログラミング言語です。"
+  },
+  "nav": {
+    "compare": "比較",
+    "performance": "パフォーマンス",
+    "features": "特徴",
+    "playground": "プレイグラウンド",
+    "docs": "ドキュメント",
+    "blog": "ブログ"
+  },
+  "hero": {
+    "badge": "v1.0.0 — プロダクション対応",
+    "title": "<span class=\"gradient-text\">少ないトークン</span>で書き、<br><span class=\"gradient-text\">ネイティブパフォーマンス</span>を得る",
+    "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。単一文字キーワード、式指向構文、LLVMベースのネイティブ速度を提供します。",
+    "tryBrowser": "ブラウザで試す",
+    "install": "brew install vais"
+  },
+  "compare": {
+    "title": "トークン効率が重要",
+    "subtitle": "AIモデルはトークンごとに課金されます。Vaisは同等のプログラムで<strong>Rustより33%少ないトークン</strong>、<strong>Cより40%少ないトークン</strong>を使用します — 単一文字キーワード、式本体、自動returnがコードベース全体で積み重なります。",
+    "vais": "Vais",
+    "tokens": "トークン",
+    "barTitle": "トークン数 — 4つのベンチマークプログラム",
+    "barNote": "fibonacci + quicksort + http_types + linked_list (tiktoken cl100k_base)。<a href=\"https://github.com/vaislang/vais/blob/main/benches/COMPARISON.md\" style=\"color: var(--primary);\">ベンチマーク</a>を参照。"
+  },
+  "performance": {
+    "title": "ネイティブパフォーマンス",
+    "subtitle": "Vaisは最適化されたLLVM IRにコンパイルされます — 実行時にCおよびRustと同等で、高速なコンパイルを実現します。",
+    "runtimeTitle": "実行時間 — Fibonacci(35)",
+    "compileTitle": "コンパイル速度 — 単一ファイル",
+    "compileNote": "Vais <code>--emit-ir</code> vs 完全コンパイル。Cより8.6倍、Rustより19倍高速。2026-02-11更新。"
+  },
+  "features": {
+    "title": "なぜVaisなのか？",
+    "subtitle": "パフォーマンスを犠牲にすることなく、AI支援開発のためにゼロから設計されました。",
+    "singleChar": {
+      "title": "単一文字キーワード",
+      "description": "関数は<code>F</code>、構造体は<code>S</code>、if/elseは<code>I</code>/<code>E</code>、ループは<code>L</code>、パターンマッチは<code>M</code>。最小限のトークン、最大限の明確性。"
+    },
+    "selfRecursion": {
+      "title": "自己再帰演算子",
+      "description": "<code>@</code>演算子は現在の関数を再帰的に呼び出します。関数名を繰り返す必要はありません — AI フレンドリーで簡潔です。"
+    },
+    "expression": {
+      "title": "すべてが式",
+      "description": "If/else、match、ブロックがすべて値を返します。最後の式に<code>return</code>キーワードは不要です。関数型でエルゴノミック。"
+    },
+    "llvm": {
+      "title": "LLVMネイティブ速度",
+      "description": "LLVMを介して最適化されたネイティブコードにコンパイルされます。高レベルのエルゴノミクスでCレベルのパフォーマンスを実現。LTOとPGOをサポート。"
+    },
+    "inference": {
+      "title": "型推論",
+      "description": "双方向型チェックが型を自動的に推論します。すべての場所で明示的な型注釈の代わりに<code>x := 42</code>と書きます。"
+    },
+    "toolchain": {
+      "title": "完全なツールチェーン",
+      "description": "LSPサーバー、フォーマッター、デバッガー、REPL、パッケージマネージャー、VSCodeおよびIntelliJ用IDEプラグイン。プロダクション対応ツール。"
+    },
+    "multiTarget": {
+      "title": "マルチターゲット出力",
+      "description": "ネイティブバイナリ、WebAssembly、またはJavaScriptにコンパイルします。完全なWASM interopとJSコード生成でブラウザでVaisコードを実行。"
+    },
+    "incremental": {
+      "title": "インクリメンタルコンパイル",
+      "description": "並列コード生成によるモジュールごとのキャッシング。変更された部分のみを再コンパイル — 30K行のプロジェクトが100ms以内に再ビルドされます。"
+    },
+    "selfHosting": {
+      "title": "セルフホスティングコンパイラ",
+      "description": "Vaisは自分自身をコンパイルできます。セルフホスティングコンパイラは50,000行以上のVaisでブートストラップを達成し、520のE2Eテストと合計2,500以上のテストでサポートされています。"
+    }
+  },
+  "playground": {
+    "title": "今すぐVaisを試す",
+    "subtitle": "ブラウザで直接Vaisコードを書いて実行します。インストール不要。",
+    "launch": "インタラクティブプレイグラウンドを起動",
+    "loadHere": "ここにプレイグラウンドを読み込む",
+    "openTab": "新しいタブで開く"
+  },
+  "install": {
+    "title": "数秒で始める",
+    "oneClick": "ワンクリックインストール",
+    "oneClickNote": "OSとアーキテクチャを自動検出します。macOS、Linux、WSL対応。",
+    "windows": "Windows (PowerShell)",
+    "macOS": "macOS / Linux (Homebrew)",
+    "cargo": "Cargo",
+    "docker": "Docker"
+  },
+  "footer": {
+    "tagline": "AI最適化システム言語",
+    "learn": "学習",
+    "documentation": "ドキュメント",
+    "quickStart": "クイックスタート",
+    "community": "コミュニティ",
+    "github": "GitHub",
+    "discussions": "ディスカッション",
+    "issues": "イシュー",
+    "more": "その他",
+    "changelog": "変更履歴",
+    "license": "MITライセンス",
+    "copyright": "&copy; 2026 Vais 貢献者。AIのために❤で作られました。"
+  },
+  "langSelector": {
+    "label": "言語"
+  }
+}

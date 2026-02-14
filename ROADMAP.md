@@ -1439,20 +1439,40 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## Phase 33: 다국어 웹사이트 & 원클릭 설치 번들
 
-> **상태**: 🔄 진행 중 (2026-02-14)
+> **상태**: ✅ 완료 (2026-02-14)
 > **목표**: 홈페이지/docs-site 다국어(en/ko/ja/zh) 지원 + curl|sh 원클릭 설치 스크립트
 > **영향도**: High — 글로벌 사용자 접근성, 설치 편의성 대폭 향상
 
-모드: 대기 중
-- [ ] 1. 홈페이지 i18n 프레임워크 구축 (Sonnet)
-  대상: website/index.html, website/src/main.js, website/src/i18n.js(신규), website/locales/{en,ko,ja,zh}.json(신규)
-- [ ] 2. docs-site 다국어 빌드 — en/ko/ja/zh (Sonnet) [∥1]
-  대상: docs-site/book.toml, docs-site/src/{en,ja,zh}/(신규, 핵심 5페이지)
-- [ ] 3. 원클릭 설치 스크립트 번들 (Sonnet) [∥1]
-  대상: install.sh(신규), install.ps1(신규), website/index.html(설치섹션)
-- [ ] 4. CI/배포 통합 & 검증 (Sonnet) [blockedBy: 1,2,3]
-  대상: .github/workflows/website.yml
-진행률: 0/4 (0%)
+- [x] 1. 홈페이지 i18n 프레임워크 구축 (Sonnet) ✅ 2026-02-14
+  변경: website/src/i18n.js(신규 159줄), website/public/locales/{en,ko,ja,zh}.json(4파일), website/index.html(data-i18n 77개 속성+언어선택), website/src/main.js(i18n 초기화)
+- [x] 2. docs-site 다국어 빌드 — en/ko/ja/zh (Sonnet) ✅ 2026-02-14
+  변경: docs-site/src/{en,ja,zh}/ 각 6파일(SUMMARY+5페이지), docs-site/build.sh(다국어 빌드스크립트), docs-site/book.toml(코멘트 추가)
+- [x] 3. 원클릭 설치 스크립트 번들 (Opus 직접) ✅ 2026-02-14
+  변경: install.sh(신규 155줄, curl|sh), install.ps1(신규 118줄, irm|iex), website/index.html(설치섹션 5카드로 확장), website/src/styles.css(featured카드), locales 4파일(install키 추가)
+- [x] 4. CI/배포 통합 & 검증 (Opus 직접) ✅ 2026-02-14
+  변경: .github/workflows/website.yml(build.sh 다국어빌드, install.sh/ps1 복사, paths 트리거 추가)
+진행률: 4/4 (100%)
+
+---
+
+## 리뷰 발견사항 (2026-02-14)
+> 출처: /team-review Phase 33
+
+- [x] 1. [보안] i18n.js innerHTML XSS 취약점 — sanitizer 추가 (Critical) ✅
+  변경: website/src/i18n.js (sanitizeHTML() 화이트리스트 + innerHTML→sanitizeHTML() 전환)
+- [x] 2. [아키텍처] build.sh Bash 4+ declare -A 호환성 — Bash 3.2 호환 패치 (Critical) ✅
+  변경: docs-site/build.sh (declare -A → case 기반 lang_name()/lang_desc() 함수)
+- [x] 3. [성능] i18n.js 번역 JSON 캐싱 누락 — translationCache 추가 (Critical) ✅
+  변경: website/src/i18n.js (translationCache 객체 + loadTranslations()에 캐시 적중 로직)
+- [x] 4. [성능] i18n.js DOM 순회 3회 반복 — 단일 순회 통합 (Critical) ✅
+  변경: website/src/i18n.js (3x querySelectorAll → 1x 통합 셀렉터)
+- [x] 5. [보안] install.sh VAIS_VERSION 입력 미검증 — semver 검증 추가 (Warning) ✅
+  변경: install.sh (grep -qE semver 정규식 검증 추가)
+- [x] 6. [보안] install.sh INSTALL_DIR 절대경로 미검증 (Warning) ✅
+  변경: install.sh (case 문으로 절대경로 '/' 시작 검증)
+- [x] 7. [정확성] i18n.js 재귀 무한 루프 방지 — fallback 강화 (Warning) ✅
+  변경: website/src/i18n.js (DEFAULT_LANGUAGE 실패 시 빈 객체 반환, 캐시와 결합하여 이중 방어)
+진행률: 7/7 (100%)
 
 ---
 

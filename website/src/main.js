@@ -1,3 +1,23 @@
+// Import i18n module
+import { initI18n, changeLanguage, getCurrentLanguage } from './i18n.js';
+
+// Initialize i18n on page load
+initI18n().then((lang) => {
+  console.log(`Language initialized: ${lang}`);
+});
+
+// Language selector event handler
+document.addEventListener('DOMContentLoaded', () => {
+  const langSelector = document.getElementById('lang-selector');
+  if (langSelector) {
+    langSelector.addEventListener('change', (e) => {
+      changeLanguage(e.target.value);
+    });
+    // Set initial value
+    langSelector.value = getCurrentLanguage();
+  }
+});
+
 // Copy to clipboard
 document.querySelectorAll('.copy-btn').forEach((btn) => {
   btn.addEventListener('click', async () => {

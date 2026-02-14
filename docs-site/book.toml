@@ -1,3 +1,9 @@
+# Vais Documentation Configuration
+#
+# Multilingual documentation is built via build.sh script.
+# This file defines the default Korean (ko) configuration.
+# For other languages (en, ja, zh), build.sh generates temporary book.toml files.
+
 [book]
 title = "Vais Programming Language"
 description = "공식 Vais 프로그래밍 언어 문서"
