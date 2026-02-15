@@ -89,7 +89,7 @@ selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (182 files)
+examples/          # Example programs (192+ files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```
@@ -99,7 +99,7 @@ playground/        # Web playground frontend
 ```bash
 cargo build --release
 cargo test                                     # Run all 2,500+ tests
-cargo test -p vaisc --test e2e_tests           # Run 538 E2E tests
+cargo test -p vaisc --test e2e_tests           # Run 655 E2E tests
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 

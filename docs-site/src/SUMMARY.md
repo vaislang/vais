@@ -31,6 +31,8 @@
 - [Slice Types](./language/slices.md)
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
+- [클로저 & 람다](./language/closures.md)
+- [지연 평가 (Lazy/Force)](./language/lazy-evaluation.md)
 - [컴파일 타임 기능](./language/comptime-feature.md)
 
 # 표준 라이브러리

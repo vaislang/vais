@@ -166,8 +166,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 기능 | 현재 상태 | 계획 |
 |------|-----------|------|
-| Trait bounds 검증 | 수집만, 미검증 | Phase 40 |
-| Generic substitution 누락 | Map/Range/Associated 등 wildcard catch | Phase 40 |
+| ~~Trait bounds 검증~~ | ✅ verify_trait_bounds() 검증 구현 | Phase 40 완료 |
+| ~~Generic substitution 누락~~ | ✅ 13개 타입 재귀 substitute | Phase 40 완료 |
 | ~~Range 구조체 codegen~~ | ✅ `{ i64, i64, i1 }` 구조체 | Phase 41 완료 |
 | ~~i64 fallback (ImplTrait/DynTrait/HKT)~~ | ✅ 명시적 핸들러 + ICE 경고 | Phase 41 완료 |
 | ~~Lambda `ByRef`/`ByMutRef`~~ | ✅ 포인터 전달 (Parser+TC+Codegen) | Phase 42 완료 |
@@ -206,6 +206,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 43** | Async 런타임 | Spawn Future<T> 래핑, Await sched_yield(), Yield inner_type, type_inference 명시적 핸들러 — **637 E2E** |
 | **Phase 43 리뷰** | 리뷰 수정 | struct_size 타입별 계산, ICE 경고, Spawn 문서화, poll TODO, 음성 테스트 5개 — **650 E2E** |
 | **Phase 44** | Selfhost 교차검증 | Phase 40-43 예제 4개, cross-verify 13개, selfhost 지원 매트릭스 문서화 — **655 E2E** |
+| **Phase 45** | 안정화 & 문서 동기화 | 미완성 기능 테이블 전체 완료, README 수치 동기화, closures.md+lazy-evaluation.md 신규, Playground +3 예제 — **655 E2E** |
 
 ---
 
@@ -377,10 +378,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ### Phase 45: 안정화 & 문서 동기화
 > 목표: 문법 보완 완료 후 전체 문서/예제/playground 동기화
 모드: 자동진행
-- [ ] 1. 문법 스펙 기준선 업데이트 — Phase 40~43 결과 반영 (미완성 기능 테이블 정리)
-- [ ] 2. docs-site 업데이트 — Range/Lazy/Lambda/Async 문서 추가 또는 갱신
-- [ ] 3. Playground 예제 업데이트 — 새로 완성된 문법 예제 추가
-- [ ] 4. README 수치 업데이트 — E2E 테스트 수, 기능 목록 동기화
+진행률: 5/5 (100%)
+- [x] 1. ROADMAP 문법 스펙 기준선 업데이트 — Phase 40~43 미완성 기능 테이블 정리 (Sonnet 위임) ✅ 2026-02-15
+  변경: ROADMAP.md (Trait bounds + Generic substitution → 취소선+✅ Phase 40 완료 표시)
+- [x] 2. README 수치/기능 업데이트 — E2E 538→655, examples 182→192+ (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: README.md (L92 examples 수치, L102 E2E 수치)
+- [x] 3. docs-site 문서 추가/갱신 — Lambda/Closure, Lazy/Force 신규 + SUMMARY 목차 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: docs-site/src/language/closures.md (264줄 신규), lazy-evaluation.md (281줄 신규), SUMMARY.md (2항목 추가)
+- [x] 4. Playground 예제 추가 — Lambda/Range/Lazy 3개 예제 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: playground/src/examples.js (lambda-capture, range-loop, lazy-evaluation 3개 추가, 총 26개)
+- [x] 5. E2E 검증 + ROADMAP Phase 45 체크 (Opus 직접) [blockedBy: 1,2,3,4] ✅ 2026-02-15
+  변경: E2E 647 passed + 8 ignored = 655 total, Clippy 0건
 
 ---
 

@@ -531,6 +531,76 @@ F main() -> i64 {
     result := add(10, 20)
     0
 }`
+  },
+
+  'lambda-capture': {
+    name: 'Lambda Capture',
+    description: 'Closure capture modes: ByValue, Move, ByRef',
+    code: `# Lambda capture modes
+F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+
+F main() -> i64 {
+    # Basic lambda (ByValue capture)
+    multiplier := 3
+    triple := |x: i64| x * multiplier
+
+    result := apply(triple, 10)    # 30
+
+    # Move capture — ownership transfer
+    data := 100
+    consumer := move |x: i64| x + data
+
+    result2 := consumer(5)    # 105
+
+    0
+}`
+  },
+
+  'range-loop': {
+    name: 'Range Loops',
+    description: 'Iterate with exclusive and inclusive ranges',
+    code: `# Range loop examples
+F main() -> i64 {
+    # Exclusive range: 0, 1, 2, 3, 4
+    puts("Exclusive 0..5:")
+    L i:0..5 {
+        putchar(i + 48)
+        putchar(32)
+    }
+    putchar(10)
+
+    # Sum with range
+    total := mut 0
+    L i:1..11 {
+        total = total + i
+    }
+
+    # total = 55 (1+2+...+10)
+    total
+}`
+  },
+
+  'lazy-evaluation': {
+    name: 'Lazy Evaluation',
+    description: 'Deferred computation with lazy/force',
+    code: `# Lazy evaluation with caching
+F expensive(n: i64) -> i64 {
+    # Simulate heavy computation
+    n * n + n * 2 + 1
+}
+
+F main() -> i64 {
+    # Defer evaluation
+    val := lazy expensive(10)
+
+    # Force evaluates and caches result
+    result := force val      # 121
+
+    # Second force returns cached value
+    result2 := force val     # 121 (cached)
+
+    result
+}`
   }
 };
 
