@@ -89,7 +89,7 @@ selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (192+ files)
+examples/          # Example programs (189 files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```

@@ -208,6 +208,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 44** | Selfhost 교차검증 | Phase 40-43 예제 4개, cross-verify 13개, selfhost 지원 매트릭스 문서화 — **655 E2E** |
 | **Phase 45** | 안정화 & 문서 동기화 | 미완성 기능 테이블 전체 완료, README 수치 동기화, closures.md+lazy-evaluation.md 신규, Playground +3 예제 — **655 E2E** |
 | **Phase 46** | 컴파일러 견고성 강화 | ICE eprintln always-on, InternalError C007, parser let-else, inlining -38줄, .gitignore 정리 — **655 E2E** |
+| **Phase 47** | 리뷰 발견사항 수정 | 셸 인젝션 수정, tmp 파일 고유화, 캐시 fast-path, HashMap 최적화, unreachable→에러 12건, 문서 동기화 — **655 E2E** |
 
 ---
 
@@ -407,6 +408,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 6. E2E 테스트 + 빌드 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4,5] ✅ 2026-02-15
   변경: E2E 647 passed + 8 ignored = 655 total, Clippy 0건
 진행률: 6/6 (100%)
+
+### Phase 47: 리뷰 발견사항 수정 — 보안 + 성능 + 정확성 + 문서 동기화
+> 목표: /team-review 전체 프로젝트 점검에서 발견된 Warning 7건 수정
+> 출처: /team-review (2026-02-15)
+모드: 자동진행
+- [x] 1. 셸 인젝션 수정 — `sh -c` → `Command::new()` 직접 사용 (Sonnet 위임) ✅ 2026-02-15
+  변경: commands/advanced.rs (sh -c → split_whitespace + Command::new(program).args(args))
+- [x] 2. 예측 가능한 tmp 파일 수정 — 고유 경로 사용 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: repl.rs (vais_repl.ll → vais_repl_{pid}.ll, publish.rs는 이미 안전)
+- [x] 3. 캐시 키 할당 최적화 — 프리미티브 fast-path 추가 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: codegen/types.rs (16개 프리미티브 타입 fast-path, 캐시 우회), cache_tests.rs 3건 업데이트
+- [x] 4. `generic_substitutions` HashMap 최적화 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: checker_expr.rs (empty 체크 선행 → Option<HashMap> 패턴, 비제네릭 타입 할당 제거)
+- [x] 5. Parser 소스 문자열 — 분석 후 현행 유지 결정 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: parser/lib.rs (문서화 추가. 94+ 사용처 변경 비용 > 파일당 1회 할당 → 현행 유지 합리적)
+- [x] 6. `unreachable!()` 12곳 → 방어적 에러 전환 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: generate_expr.rs(5), expr_helpers.rs(5) → Err(CodegenError::Unsupported), builtins.rs(2) → ICE panic
+- [x] 7. README/CLAUDE.md/playground 수치 동기화 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: README.md(192→189), CLAUDE.md(182→189), playground/README.md("Tilde Mut"→"Mutable Variables")
+진행률: 7/7 (100%)
 
 ---
 

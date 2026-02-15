@@ -68,9 +68,14 @@ pub(crate) fn cmd_pgo(
         );
         let run_command = run_cmd.unwrap_or_else(|| instrumented_bin.display().to_string());
 
-        let status = Command::new("sh")
-            .arg("-c")
-            .arg(&run_command)
+        // Split command safely to avoid shell injection
+        let parts: Vec<&str> = run_command.split_whitespace().collect();
+        let (program, args) = parts
+            .split_first()
+            .ok_or_else(|| "empty run command".to_string())?;
+
+        let status = Command::new(program)
+            .args(args)
             .env(
                 "LLVM_PROFILE_FILE",
                 format!("{}/default-%p.profraw", profile_dir),

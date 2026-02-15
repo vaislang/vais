@@ -67,7 +67,7 @@ playground/
 12. **Functions** - Function definitions
 13. **String Interpolation** - String formatting with variables
 14. **Pipe Operator** - Function chaining with |>
-15. **Tilde Mut** - Mutable references with ~mut
+15. **Mutable Variables** - Mutable references with ~mut
 16. **Destructuring** - Pattern destructuring
 17. **Type Infer Params** - Parameter type inference
 18. **Minimal** - Simplest valid program

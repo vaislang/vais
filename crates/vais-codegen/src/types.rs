@@ -216,6 +216,28 @@ use crate::CodeGenerator;
 impl CodeGenerator {
     /// Convert a ResolvedType to LLVM IR type string with caching
     pub(crate) fn type_to_llvm(&self, ty: &ResolvedType) -> String {
+        // Fast path for common primitive types - no cache lookup or allocation needed
+        match ty {
+            ResolvedType::I8 => return String::from("i8"),
+            ResolvedType::I16 => return String::from("i16"),
+            ResolvedType::I32 => return String::from("i32"),
+            ResolvedType::I64 => return String::from("i64"),
+            ResolvedType::I128 => return String::from("i128"),
+            ResolvedType::U8 => return String::from("i8"),
+            ResolvedType::U16 => return String::from("i16"),
+            ResolvedType::U32 => return String::from("i32"),
+            ResolvedType::U64 => return String::from("i64"),
+            ResolvedType::U128 => return String::from("i128"),
+            ResolvedType::F32 => return String::from("float"),
+            ResolvedType::F64 => return String::from("double"),
+            ResolvedType::Bool => return String::from("i1"),
+            ResolvedType::Str => return String::from("i8*"),
+            ResolvedType::Unit => return String::from("void"),
+            ResolvedType::Never => return String::from("void"),
+            _ => {}
+        }
+
+        // Complex types: use cache
         // Create a key for caching - use the debug representation
         let cache_key = format!("{:?}", ty);
 

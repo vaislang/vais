@@ -61,7 +61,7 @@ crates/
 └── vais-node/         # Node.js bindings (NAPI)
 
 std/               # Standard library (74 .vais files)
-examples/          # Example programs (182 files)
+examples/          # Example programs (189 files)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend

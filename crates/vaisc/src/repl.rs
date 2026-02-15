@@ -635,8 +635,8 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
 
     // Write to temp file
     let temp_dir = std::env::temp_dir();
-    let ir_path = temp_dir.join("vais_repl.ll");
-    let bin_path = temp_dir.join("vais_repl");
+    let ir_path = temp_dir.join(format!("vais_repl_{}.ll", std::process::id()));
+    let bin_path = temp_dir.join(format!("vais_repl_{}", std::process::id()));
 
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write temp file: {}", e))?;
 

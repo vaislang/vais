@@ -9,7 +9,7 @@ mod tests {
     fn test_type_to_llvm_cache_basic_types() {
         let codegen = CodeGenerator::new("test");
 
-        // Test basic types are cached correctly
+        // Test basic types work correctly (they use fast path, no cache)
         let i32_1 = codegen.type_to_llvm(&ResolvedType::I32);
         let i32_2 = codegen.type_to_llvm(&ResolvedType::I32);
 
@@ -17,11 +17,11 @@ mod tests {
         assert_eq!(i32_2, "i32");
         assert_eq!(i32_1, i32_2);
 
-        // Check cache was populated
+        // Primitive types use fast path and don't populate cache
         let cache_size = codegen.type_to_llvm_cache.borrow().len();
-        assert!(
-            cache_size > 0,
-            "Cache should contain entries after type_to_llvm calls"
+        assert_eq!(
+            cache_size, 0,
+            "Primitive types should use fast path and not populate cache"
         );
     }
 
@@ -75,15 +75,11 @@ mod tests {
             );
         }
 
-        // Verify cache has entries
+        // All primitive types use fast path and don't populate cache
         let cache = codegen.type_to_llvm_cache.borrow();
         assert!(
-            !cache.is_empty(),
-            "Cache should be populated after type conversions"
-        );
-        assert!(
-            cache.len() >= 15,
-            "Cache should have at least 15 entries for all tested types"
+            cache.is_empty(),
+            "Primitive types should use fast path and not populate cache"
         );
     }
 
@@ -196,14 +192,18 @@ mod tests {
         let codegen2 = CodeGenerator::new("test2");
 
         // Each CodeGenerator should have its own cache
-        let _result1 = codegen1.type_to_llvm(&ResolvedType::I32);
-        let _result2 = codegen2.type_to_llvm(&ResolvedType::I64);
+        // Use complex types that actually populate the cache (not primitives)
+        let complex_type1 = ResolvedType::Pointer(Box::new(ResolvedType::I32));
+        let complex_type2 = ResolvedType::Array(Box::new(ResolvedType::I64));
+
+        let _result1 = codegen1.type_to_llvm(&complex_type1);
+        let _result2 = codegen2.type_to_llvm(&complex_type2);
 
         let cache1_size = codegen1.type_to_llvm_cache.borrow().len();
         let cache2_size = codegen2.type_to_llvm_cache.borrow().len();
 
-        // Both should have entries, but caches are independent
-        assert!(cache1_size > 0);
-        assert!(cache2_size > 0);
+        // Both should have entries, and caches are independent
+        assert!(cache1_size > 0, "codegen1 cache should have entries for complex type");
+        assert!(cache2_size > 0, "codegen2 cache should have entries for complex type");
     }
 }

@@ -117,7 +117,9 @@ pub struct Parser {
     allow_struct_literal: bool,
     /// Current recursion depth for nested expression parsing
     depth: usize,
-    /// Source code for newline detection (used to prevent cross-line postfix parsing)
+    /// Source code for newline detection (used to prevent cross-line postfix parsing).
+    /// Stored as String instead of &str to avoid lifetime parameters on Parser struct.
+    /// The one-time allocation is acceptable as parsing happens once per file.
     source: String,
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
@@ -140,6 +142,11 @@ impl Parser {
     }
 
     /// Creates a new parser with source code for newline detection.
+    ///
+    /// Note: This clones the source string to avoid adding a lifetime parameter to Parser,
+    /// which would require changes across ~94 usage sites. The allocation is acceptable
+    /// since it happens once per file parse (not in a hot loop), and the source is only
+    /// used for newline detection in postfix operator parsing.
     pub fn new_with_source(tokens: Vec<SpannedToken>, source: &str) -> Self {
         Self {
             tokens,
