@@ -183,28 +183,32 @@ pub(crate) struct LazyThunkInfo {
     pub inner_llvm_ty: String,
 }
 
-/// Information about an await point in an async function
+/// Information about an await point in an async function.
+/// Used to track suspension points in the async state machine.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct AsyncAwaitPoint {
     /// State index after this await
-    pub _state_index: usize,
+    pub state_index: usize,
     /// Variable to store the awaited result
-    pub _result_var: String,
+    pub result_var: String,
     /// LLVM type of the result
-    pub _result_type: String,
+    pub result_type: String,
 }
 
-/// Information about the current async function being compiled
+/// Information about the current async function being compiled.
+/// Tracks the state machine structure for async function code generation.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct AsyncFunctionInfo {
     /// Original function name
-    pub _name: String,
+    pub name: String,
     /// State struct name for this async function
-    pub _state_struct: String,
+    pub state_struct: String,
     /// Captured variables that need to be stored in state
-    pub _captured_vars: Vec<(String, ResolvedType)>,
+    pub captured_vars: Vec<(String, ResolvedType)>,
     /// Return type of the future
-    pub _ret_type: ResolvedType,
+    pub ret_type: ResolvedType,
 }
 
 use crate::CodeGenerator;

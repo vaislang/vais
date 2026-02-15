@@ -1519,16 +1519,20 @@ impl TypeChecker {
 
             Expr::Spawn(inner) => {
                 let inner_type = self.check_expr(inner)?;
-                // For now, spawn is synchronous and returns the inner value directly
-                // Future: Return Task<T> type for proper async handling
-                Ok(inner_type)
+                // Spawn creates a concurrent task. If the inner expression is already
+                // a Future<T> (e.g., from an async function call), return it as-is.
+                // If it's a non-Future value, wrap in Future<T> (immediately completed task).
+                match inner_type {
+                    ResolvedType::Future(_) => Ok(inner_type),
+                    other => Ok(ResolvedType::Future(Box::new(other))),
+                }
             }
 
             Expr::Yield(inner) => {
-                let _inner_type = self.check_expr(inner)?;
-                // Yield suspends the generator and returns the value to the caller.
-                // The yield expression itself evaluates to i64 (value sent back by caller, or 0).
-                Ok(ResolvedType::I64)
+                let inner_type = self.check_expr(inner)?;
+                // Yield suspends the generator and returns the yielded value to the caller.
+                // The yield expression evaluates to the type of the yielded value.
+                Ok(inner_type)
             }
 
             Expr::Lazy(inner) => {

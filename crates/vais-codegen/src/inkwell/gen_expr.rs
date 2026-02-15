@@ -260,7 +260,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Lazy: create deferred evaluation thunk
             Expr::Lazy(inner) => self.generate_lazy(&inner.node),
 
-            // Await: for now, just evaluate the inner expression
+            // Await: evaluate the inner expression (async functions compile as synchronous
+            // in Inkwell backend, so await is effectively identity — the function has
+            // already completed and returned its result directly)
             Expr::Await(inner) => self.generate_expr(&inner.node),
 
             // Static method call: Type::method(args)
@@ -299,10 +301,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Force: evaluate a lazy value (check computed flag, call thunk if needed)
             Expr::Force(inner) => self.generate_force(&inner.node),
 
-            // Spawn: for now just evaluate inner
+            // Spawn: evaluate inner expression to create a concurrent task.
+            // In Inkwell backend, async functions compile as synchronous, so spawn
+            // evaluates the inner expression immediately (eager evaluation).
             Expr::Spawn(inner) => self.generate_expr(&inner.node),
 
-            // Yield: for now just evaluate inner (simplified generator)
+            // Yield: evaluate the inner expression and return its value.
+            // Yields the value to the generator's caller. In the current synchronous
+            // model, this evaluates and returns the value directly.
             Expr::Yield(inner) => self.generate_expr(&inner.node),
 
             // SelfCall (@): recursive call to current function

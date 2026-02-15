@@ -974,10 +974,10 @@ impl CodeGenerator {
         self.lambdas.async_state_counter = 0;
         self.lambdas.async_await_points.clear();
         self.lambdas.current_async_function = Some(AsyncFunctionInfo {
-            _name: func_name.to_string(),
-            _state_struct: state_struct_name.to_string(),
-            _captured_vars: params.clone(),
-            _ret_type: ret_type.clone(),
+            name: func_name.to_string(),
+            state_struct: state_struct_name.to_string(),
+            captured_vars: params.clone(),
+            ret_type: ret_type.clone(),
         });
 
         let mut ir = String::new();
