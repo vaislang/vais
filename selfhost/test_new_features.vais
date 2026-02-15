@@ -1,5 +1,7 @@
 # Test file for new selfhost parser features
-# Tests: closures, attributes, and async/await
+# Tests: closures, attributes, async/await, and Phase 40-43 features
+
+# ============ Pre-existing tests ============
 
 # Test 1: Attribute parsing
 #[inline]
@@ -38,8 +40,73 @@ F test_await() -> i64 {
     result
 }
 
+# ============ Phase 40-43 feature tests ============
+
+# Test 5: Trait + impl (Phase 40 — trait bounds)
+W Summable {
+    F sum(&self) -> i64
+}
+
+S Pair { a: i64, b: i64 }
+
+X Pair: Summable {
+    F sum(&self) -> i64 {
+        self.a + self.b
+    }
+}
+
+F test_trait_bounds() -> i64 {
+    p := Pair { a: 20, b: 22 }
+    result := p.sum()
+    result - 42
+}
+
+# Test 6: Generic function (Phase 40 — generic substitution)
+F identity<T>(x: T) -> T {
+    x
+}
+
+F test_generics() -> i64 {
+    x := identity(42)
+    x - 42
+}
+
+# Test 7: Async function with chaining (Phase 43 — async/await)
+A F step1(x: i64) -> i64 {
+    x + 5
+}
+
+F test_async_chain() -> i64 {
+    result := step1(37).await
+    result - 42
+}
+
+# ============ Phase 40-43 feature support matrix ============
+# (Selfhost parser support status as of Phase 44)
+#
+# Feature                  | Lexer Token | Parser | Status
+# -------------------------|-------------|--------|--------
+# await (.await)           | ✅           | ✅      | Supported
+# async (A F)              | ✅           | ✅      | Supported
+# closures (|x| expr)      | ✅           | ✅      | Supported
+# move closures            | ✅           | ✅      | Supported
+# trait/impl (W/X)         | ✅           | ✅      | Supported
+# generics (<T>)           | ✅           | ✅      | Supported
+# range in patterns (N..M) | ✅           | ✅      | Supported
+# spawn                    | ✅           | ❌      | Token only, not parsed
+# yield                    | ❌           | ❌      | Missing
+# lazy                     | ✅           | ❌      | Token only, not parsed
+# force                    | ✅           | ❌      | Token only, not parsed
+# where clause             | ❌           | ❌      | Missing
+# |&x| ByRef capture       | ❌           | ❌      | Missing
+# |&mut x| ByMutRef        | ❌           | ❌      | Missing
+# for-in loop (L i:0..5)   | ❌           | ❌      | Only infinite/while loops
+
 F main() -> i64 {
     test_attributes()
     test_closures()
     test_await()
+    test_trait_bounds()
+    test_generics()
+    test_async_chain()
 }

@@ -248,6 +248,30 @@ fn cross_verify_opt_test() {
     cross_verify("opt_test.vais");
 }
 
+#[test]
+#[ignore]
+fn cross_verify_phase44_trait_bounds() {
+    cross_verify("phase44_trait_bounds.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_range_loop() {
+    cross_verify("phase44_range_loop.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_closure() {
+    cross_verify("phase44_closure.vais");
+}
+
+#[test]
+#[ignore]
+fn cross_verify_phase44_async() {
+    cross_verify("phase44_async_basic.vais");
+}
+
 /// Run all passing cross-verification tests in one go
 #[test]
 #[ignore]
@@ -262,6 +286,10 @@ fn cross_verify_all_passing() {
         "enum_test.vais",
         "tco_tail_call.vais",
         "opt_test.vais",
+        "phase44_trait_bounds.vais",
+        "phase44_range_loop.vais",
+        "phase44_closure.vais",
+        "phase44_async_basic.vais",
     ];
 
     if !prerequisites_met() {

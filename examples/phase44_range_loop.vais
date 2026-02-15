@@ -1,0 +1,28 @@
+# Phase 44 Cross-verify: Range struct & for loops (Phase 41)
+# Tests exclusive range, inclusive range, and nested loops
+
+F main() -> i64 {
+    # Exclusive range: 0..5 => 0+1+2+3+4 = 10
+    sum := mut 0
+    L i:0..5 {
+        sum = sum + i
+    }
+
+    # Inclusive range: 1..=4 => 1+2+3+4 = 10
+    sum2 := mut 0
+    L j:1..=4 {
+        sum2 = sum2 + j
+    }
+
+    # Nested loop
+    count := mut 0
+    L x:0..3 {
+        L y:0..3 {
+            count = count + 1
+        }
+    }
+
+    # sum(10) + sum2(10) + count(9) = 29
+    result := sum + sum2 + count
+    result - 29
+}
