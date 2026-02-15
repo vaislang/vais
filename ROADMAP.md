@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 614, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 650, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -343,14 +343,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: phase43.rs (23개 신규 테스트), main.rs (mod phase43 추가)
 진행률: 6/6 (100%)
 
+모드: 자동진행
 #### 리뷰 발견사항 (2026-02-15)
 > 출처: /team-review Phase 43
 
-- [ ] 1. [보안] struct_size 고정 계산 수정 (Warning, pre-existing) — 대상: function_gen.rs:1011
-- [ ] 2. [정확성] Await non-Future ICE 경고 추가 (Warning) — 대상: type_inference.rs:469
-- [ ] 3. [정확성] Spawn Future 의미론 문서화 (Warning) — 대상: checker_expr.rs:1520
-- [ ] 4. [성능] poll loop TODO 코멘트 (Info) — 대상: generate_expr.rs:1607
-- [ ] 5. [테스트] 엣지케이스 음성 테스트 추가 (Warning) — 대상: phase43.rs
+- [x] 1. [보안] struct_size 고정 계산 수정 (Warning, pre-existing) — 대상: function_gen.rs:1011 ✅ 2026-02-15
+  변경: function_gen.rs (하드코딩 8바이트→LLVM 타입별 실제 크기 계산 llvm_size() 클로저)
+- [x] 2. [정확성] Await non-Future ICE 경고 추가 (Warning) — 대상: type_inference.rs:469 ✅ 2026-02-15
+  변경: type_inference.rs (Await non-Future 시 eprintln ICE 경고 + passthrough)
+- [x] 3. [정확성] Spawn Future 의미론 문서화 (Warning) — 대상: checker_expr.rs:1520 ✅ 2026-02-15
+  변경: checker_expr.rs (Spawn 코멘트 확장: sync→Future<T> 래핑 의미론, 런타임 제한사항)
+- [x] 4. [성능] poll loop TODO 코멘트 (Info) — 대상: generate_expr.rs:1607 ✅ 2026-02-15
+  변경: generate_expr.rs (sched_yield busy-wait → event-driven wakeup TODO)
+- [x] 5. [테스트] 엣지케이스 음성 테스트 추가 (Warning) — 대상: phase43.rs ✅ 2026-02-15
+  변경: phase43.rs (5개 신규: await_on_non_future/bool/string, double_await, yield_outside_async)
+진행률: 5/5 (100%)
 
 ### Phase 44: Selfhost 교차검증
 > 목표: 문법 보완 결과를 셀프호스팅으로 검증

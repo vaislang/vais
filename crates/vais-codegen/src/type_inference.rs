@@ -471,7 +471,14 @@ impl CodeGenerator {
                 // Await unwraps Future<T> to T
                 match inner_ty {
                     ResolvedType::Future(t) => *t,
-                    other => other,
+                    other => {
+                        // ICE warning: await on non-Future type is likely a type checker bug
+                        eprintln!(
+                            "ICE warning: await on non-Future type `{}`, treating as passthrough",
+                            other
+                        );
+                        other
+                    }
                 }
             }
             Expr::Yield(inner) => self.infer_expr_type(inner),

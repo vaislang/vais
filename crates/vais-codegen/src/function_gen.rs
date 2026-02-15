@@ -1007,8 +1007,21 @@ impl CodeGenerator {
         ));
         ir.push_str("entry:\n");
 
-        // Calculate struct size (8 bytes per field: state + result + params)
-        let struct_size = 16 + params.len() * 8;
+        // Calculate struct size based on actual LLVM type sizes
+        let llvm_size = |llvm_ty: &str| -> usize {
+            match llvm_ty {
+                "i1" | "i8" => 1,
+                "i16" => 2,
+                "i32" | "float" => 4,
+                "i64" | "double" => 8,
+                "i128" => 16,
+                _ if llvm_ty.ends_with('*') => 8,
+                _ => 8, // Default to pointer-sized for structs/unknown
+            }
+        };
+        let struct_size = 8 /* state: i64 */
+            + llvm_size(&ret_llvm)
+            + params.iter().map(|(_, ty)| llvm_size(&self.type_to_llvm(ty))).sum::<usize>();
         ir.push_str(&format!(
             "  %state_ptr = call i64 @malloc(i64 {})\n",
             struct_size

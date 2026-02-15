@@ -1519,9 +1519,15 @@ impl TypeChecker {
 
             Expr::Spawn(inner) => {
                 let inner_type = self.check_expr(inner)?;
-                // Spawn creates a concurrent task. If the inner expression is already
-                // a Future<T> (e.g., from an async function call), return it as-is.
-                // If it's a non-Future value, wrap in Future<T> (immediately completed task).
+                // Spawn semantics:
+                // - `spawn async_fn()` where inner is Future<T>: returns Future<T> as-is
+                //   (the async function already produces a Future; spawn schedules it)
+                // - `spawn expr` where inner is non-Future T: wraps in Future<T>
+                //   (creates an immediately-completed task; useful for lifting sync values
+                //   into async context, e.g., `spawn 42` → Future<i64>)
+                // Note: Current runtime uses synchronous fallback (no green threads/coroutines).
+                // The Future<T> wrapper preserves type-level async semantics for future
+                // runtime upgrades (e.g., work-stealing scheduler, coroutine state machines).
                 match inner_type {
                     ResolvedType::Future(_) => Ok(inner_type),
                     other => Ok(ResolvedType::Future(Box::new(other))),

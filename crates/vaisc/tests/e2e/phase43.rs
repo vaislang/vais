@@ -407,3 +407,79 @@ F main() -> i64 {
 "#;
     assert_compiles(source);
 }
+
+// ==================== Edge-case Negative Tests ====================
+// These verify that the type checker correctly rejects invalid async usage.
+
+#[test]
+fn e2e_phase43_negative_await_on_non_future() {
+    // await on a plain i64 should fail — not a Future<T>
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    result := x.await
+    result
+}
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn e2e_phase43_negative_await_on_bool() {
+    // await on bool should fail
+    let source = r#"
+F main() -> i64 {
+    b := true
+    result := b.await
+    I result { R 0 } E { R 1 }
+}
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn e2e_phase43_negative_await_on_string() {
+    // await on str should fail
+    let source = r#"
+F main() -> i64 {
+    s := "hello"
+    result := s.await
+    0
+}
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn e2e_phase43_negative_double_await() {
+    // Double await: Future<T>.await gives T, then T.await should fail
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * 2
+}
+
+F main() -> i64 {
+    result := compute(21).await.await
+    result
+}
+"#;
+    assert_compile_error(source);
+}
+
+#[test]
+fn e2e_phase43_negative_yield_outside_async() {
+    // yield in a non-async function currently compiles (no TC restriction)
+    // but the type check should still work correctly
+    let source = r#"
+F producer() -> i64 {
+    yield 42
+}
+
+F main() -> i64 {
+    result := producer()
+    result - 42
+}
+"#;
+    // yield in sync function currently compiles (no TC restriction)
+    assert_compiles(source);
+}

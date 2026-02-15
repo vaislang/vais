@@ -1608,6 +1608,10 @@ impl CodeGenerator {
                 ));
 
                 // Pending: yield CPU cooperatively and retry
+                // TODO(async): Replace busy-wait poll loop with event-driven wakeup.
+                // Current implementation spins on sched_yield() which wastes CPU cycles.
+                // Future improvement: integrate with async runtime event loop to use
+                // epoll/kqueue-based wakeup notifications instead of polling.
                 ir.push_str(&format!("{}:\n", poll_pending));
                 ir.push_str("  call i32 @sched_yield()\n");
                 ir.push_str(&format!("  br label %{}\n\n", poll_start));
