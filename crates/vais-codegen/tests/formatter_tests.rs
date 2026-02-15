@@ -494,6 +494,7 @@ fn test_format_simple_enum() {
         ],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {
@@ -526,6 +527,7 @@ fn test_format_enum_with_tuple_variants() {
             },
         ],
         is_pub: true,
+        attributes: vec![],
     };
 
     let module = Module {
@@ -568,6 +570,7 @@ fn test_format_enum_with_struct_variants() {
         ],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {

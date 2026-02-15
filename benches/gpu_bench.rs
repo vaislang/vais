@@ -151,6 +151,7 @@ fn create_vais_gpu_module(kernel_name: &str) -> Module {
             args: vec![],
             expr: None,
         }],
+        where_clause: vec![],
     };
 
     Module {
@@ -470,6 +471,7 @@ fn bench_full_gpu_pipeline(c: &mut Criterion) {
                     args: vec![],
                     expr: None,
                 }],
+                where_clause: vec![],
             };
             items.push(Spanned::new(Item::Function(func), dummy_span));
         }

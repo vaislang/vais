@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::wasm_component::*;
+    use vais_types::ResolvedType;
 
     #[test]
     fn test_wit_type_display() {

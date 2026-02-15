@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-14
+> **최종 업데이트**: 2026-02-15
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 571, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 589, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -102,6 +102,82 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 🔒 언어 문법 스펙 기준선 (Phase 39 기준 — 동결)
+
+> **원칙**: 아래 문법이 현재 구현된 Vais 언어의 전체 범위입니다. 이후 Phase에서는 **기존 문법의 완성도를 높이는 것**에 집중하며, 새로운 키워드/문법을 추가하지 않습니다. 문법 변경이 필요한 경우 Phase 46 (Edition 시스템) 도입 이후에 별도 RFC로 진행합니다.
+
+### 키워드 (확정)
+
+| 분류 | 키워드 |
+|------|--------|
+| **단일 문자** | `F`(함수) `S`(구조체) `E`(열거형/else) `I`(if) `L`(루프) `M`(매치) `R`(리턴) `B`(break) `C`(continue/const) `T`(타입별칭) `U`(import) `P`(pub) `W`(trait) `X`(impl) `D`(defer) `O`(union) `N`(extern) `G`(global) `A`(async) `Y`(await) |
+| **다중 문자** | `mut` `self` `Self` `true` `false` `spawn` `await` `yield` `where` `dyn` `macro` `as` `const` `comptime` `lazy` `force` `linear` `affine` `move` `consume` `pure` `effect` `io` `unsafe` `weak` `clone` |
+
+### 연산자 (확정)
+
+| 분류 | 연산자 |
+|------|--------|
+| **산술** | `+` `-` `*` `/` `%` |
+| **비교** | `<` `<=` `>` `>=` `==` `!=` |
+| **비트** | `&` `\|` `^` `~` `<<` `>>` |
+| **논리** | `&&` `\|\|` `!` |
+| **대입** | `=` `:=` `+=` `-=` `*=` `/=` |
+| **특수** | `\|>` (파이프) `?` (삼항/try) `!` (unwrap) `@` (자재귀) `$` (매크로) `..` `..=` `...` (범위/가변인자) `->` `=>` (화살표) |
+
+### 선언 (확정)
+
+| 구문 | 상태 | 비고 |
+|------|------|------|
+| `F name(params) -> T { body }` | ✅ 완전 | 제네릭, where, async, default param |
+| `S Name { fields }` | ✅ 완전 | 제네릭, 메서드, where |
+| `E Name { Variants }` | ✅ 완전 | 유닛/튜플/구조체 variant |
+| `W Name { methods }` | ✅ 완전 | super traits, GAT, where |
+| `X Type: Trait { }` | ✅ 완전 | associated types |
+| `T Name = Type` | ✅ 완전 | 타입 별칭 + trait 별칭 |
+| `O Name { fields }` | ✅ 완전 | C-style 비태그 union |
+| `N "C" { F ... }` | ✅ 완전 | extern, WASM import |
+| `C NAME: T = expr` | ✅ 완전 | 상수 |
+| `G name := expr` | ✅ 완전 | 전역 변수 |
+| `macro name! { }` | ✅ 완전 | 선언적 매크로 |
+
+### 타입 시스템 (확정)
+
+| 타입 | 상태 | 비고 |
+|------|------|------|
+| `i8~i128`, `u8~u128`, `f32`, `f64`, `bool`, `str` | ✅ 완전 | |
+| `Vec<T>`, `HashMap<K,V>`, `Option<T>`, `Result<T,E>` | ✅ 완전 | |
+| `[T]`, `[T; N]`, `&[T]`, `&mut [T]` | ✅ 완전 | 배열/슬라이스 |
+| `(T1, T2)`, `fn(A)->B`, `*T`, `&T`, `&mut T` | ✅ 완전 | |
+| `'a`, `&'a T` | ✅ 완전 | 라이프타임 |
+| `dyn Trait`, `X Trait` (impl Trait) | ⚠️ TC 통과, codegen i64 fallback | Phase 41에서 수정 |
+| `linear T`, `affine T` | ✅ 완전 | |
+| Dependent types `{x: T \| pred}` | ⚠️ 파싱만, 검증 미구현 | |
+| SIMD `Vec4f32` 등 | ✅ 완전 | |
+
+### 패턴 매칭 (확정)
+
+`_`, 리터럴, 변수, 튜플, 구조체, enum variant, 범위, or(`\|`), guard(`I cond`), alias(`x @ pat`)
+
+### 어트리뷰트 (확정)
+
+`#[cfg(...)]`, `#[wasm_import(...)]`, `#[wasm_export(...)]`, `#[requires(...)]`, `#[ensures(...)]`, `#[invariant(...)]`
+
+### 미완성 기능 (Phase 40~45에서 보완 예정)
+
+| 기능 | 현재 상태 | 계획 |
+|------|-----------|------|
+| Trait bounds 검증 | 수집만, 미검증 | Phase 40 |
+| Generic substitution 누락 | Map/Range/Associated 등 wildcard catch | Phase 40 |
+| Range 구조체 codegen | start값만 반환 | Phase 41 |
+| i64 fallback (ImplTrait/DynTrait/HKT) | TC 통과, codegen i64 | Phase 41 |
+| Lambda `ByRef`/`ByMutRef` | Unsupported 에러 | Phase 42 |
+| `lazy`/`force` codegen | eager 평가 (지연 없음) | Phase 42 |
+| `spawn`/`await`/`yield` codegen | stub (blocking poll) | Phase 43 |
+| ~~`?` Try 연산자~~ | ~~✅ 이미 완전 구현~~ | ~~ROADMAP 오류~~ |
+| ~~`!` Unwrap 연산자~~ | ~~✅ 이미 완전 구현~~ | ~~ROADMAP 오류~~ |
+
+---
+
 ### 완료된 Phase 히스토리
 
 > 상세 체크리스트는 git log를 참조하세요.
@@ -123,10 +199,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 7~13** | 에코시스템 · 보안 · JIT | 9개 패키지, Registry UI, SIMD/SHA-256, AES-256 FIPS 197, JIT panic→Result — **504 E2E** |
 | **Phase 14~26** | 토큰 · 문서 · 성능 | 토큰 1,085→750 (-31%), auto-return, swap 빌트인, E2E 모듈 분할, CI green, clone 제거 — **520 E2E** |
 | **Phase 27~38** | 언어 확장 · 타입 시스템 | where 절, pattern alias, capture mode, trait alias, impl Trait, const eval 확장, HKT, GAT, derive 매크로 — **571 E2E** |
+| **Phase 39** | 성능 최적화 | Incremental TC/Codegen, Tarjan SCC, 캐시 히트율 벤치마크 — **571 E2E** |
+| **Phase 40** | 타입 시스템 건전성 | Trait bounds 검증, generic substitution 보완, HKT arity 체크, 14+4 E2E — **589 E2E** |
 
 ---
 
-## 📋 다음 로드맵 (Phase 39~)
+## 📋 다음 로드맵 (Phase 40~)
+
+> **방침**: 문법 보완 우선 (TC 건전성 → Codegen 완성 → Lambda/Lazy → Async → Selfhost 검증 → 안정화)
+> **진행 방식**: `workflow` 스킬로 Phase 40부터 순차 진행
 
 ### Phase 38: 언어 기능 확장 — Higher-Kinded Types & GAT 실전 활용 ✅
 모드: 개별선택 (1~3번 우선)
@@ -172,32 +253,73 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. [정확성] unwrap → expect 전환 3건 (Warning) — graph.rs:297, build.rs:1040
 진행률: 5/5 (100%)
 
-### Phase 40: 에코시스템 성장 — 패키지 확대 & 커뮤니티
-- 추가 공식 패키지 10개+ (HTTP client, CLI framework, testing framework, logging, config, etc.)
-- 커뮤니티 기여 가이드 (CONTRIBUTING.md, good first issues)
-- 튜토리얼 확대: 실전 프로젝트 가이드 (CLI 도구, REST API, WASM 앱)
+### Phase 40: 타입 시스템 건전성 — Trait Bounds 검증 & Generic Substitution 보완
+> 목표: TC가 잘못된 코드를 통과시키지 않도록 보장. 문법은 이미 파싱되지만 의미 검증이 누락된 항목 수정.
+모드: 자동진행
+- [x] 1. 빌드 복원 — Enum `attributes` 누락 수정 (codegen-js 3건, formatter_tests 3건, ast 1건), Function `where_clause` 누락 (gpu_bench 2건) (Sonnet 위임) ✅ 2026-02-15
+  변경: items.rs/formatter_tests.rs/integration_tests.rs (attributes: vec![]), gpu_bench.rs (where_clause: vec![])
+- [x] 2. Trait bounds 실제 검증 — `verify_trait_bounds()` 연결 + where clause 검증 + ImplTrait/DynTrait bounds 검사 (Opus 직접) [blockedBy: 1] ✅ 2026-02-15
+  변경: inference.rs (check_generic_function_call에 bounds 검증 추가), traits.rs (#[allow(dead_code)] 제거 + verify_trait_type_bounds 추가), checker_fn.rs (ImplTrait/DynTrait bounds 검사)
+- [x] 3. Generic substitution 누락 타입 추가 — `_ => ty.clone()` 탈출, 13개 타입 재귀 substitute (Sonnet 위임) [∥2, blockedBy: 1] ✅ 2026-02-15
+  변경: substitute.rs (Map/Range/FnPtr/DynTrait/ImplTrait/Associated/Lazy/Linear/Affine/Dependent/RefLifetime/RefMutLifetime/Lifetime explicit handler 추가)
+- [x] 4. HKT bounds 검증 — substitution 시점 arity + bound 체크 (Opus 직접) [blockedBy: 1,2] ✅ 2026-02-15
+  변경: defs.rs (FunctionSig hkt_params 필드), inference.rs (HKT arity 검증), checker_module.rs/builtins.rs/codegen builtins.rs (hkt_params 필드 추가)
+- [x] 5. E2E 테스트 — 양성 14개 + 음성 4개 bounds 검증 (Sonnet 위임) [blockedBy: 2,3,4] ✅ 2026-02-15
+  변경: e2e/phase40.rs (18 tests), e2e/main.rs (mod phase40)
+진행률: 5/5 (100%)
 
-### Phase 41: Codegen 고도화 — Monomorphization & ImplTrait 완성
-- Monomorphization 완성: ImplTrait 리턴 시 실제 타입별 코드 생성 (i64 fallback 제거)
-- Trait object vtable 최적화
-- Dead code elimination 강화
-- Codegen test pre-existing 14 에러 해결
+## 리뷰 발견사항 (2026-02-15)
+> 출처: /team-review Phase 40
 
-### Phase 42: Selfhost 강화 — 컴파일러 자체 확장
-- 더 많은 컴파일러 모듈 셀프호스팅 (parser, type checker 일부)
-- Selfhost 컴파일러로 std/ 컴파일 검증
-- Bootstrap chain 자동화 (vaisc → selfhost-vaisc → 재검증)
+- [ ] 1. [보안] substitute_type() 재귀 깊이 제한 추가 (Warning) — 대상: crates/vais-types/src/types/substitute.rs
+- [ ] 2. [성능] verify_trait_bounds 시그니처 변경 — Vec 할당 제거, 슬라이스 참조 전달 (Warning) — 대상: crates/vais-types/src/inference.rs:534
+- [ ] 3. [아키텍처] extract_hkt_params() 헬퍼 추출 — 4곳 중복 제거 (Warning) — 대상: crates/vais-types/src/checker_module.rs
+진행률: 0/3 (0%)
 
-### Phase 43: WASM/JS 타겟 강화 — Component Model & JS Interop
-- WASM Component Model 실전: 복합 타입 직렬화, 리소스 핸들
-- JS interop 개선: TypeScript 타입 자동 생성, Promise 브리징
-- wasm-opt 통합 (바이너리 크기 최적화)
+### Phase 41: Codegen 완성도 — Range 구조체 & i64 Fallback 제거
+> 목표: 모든 codegen 경로가 올바른 타입과 동작을 생성. stub이 아닌 실제 값을 반환.
+모드: 자동진행
+- [ ] 1. Range 구조체 codegen — `{ i64 start, i64 end, i1 inclusive }` 구조체 생성 (start만 반환하는 현재 동작 수정). Range를 변수에 담아 사용하는 패턴 지원
+- [ ] 2. i64 fallback 제거 — Generic/Var/Unknown/ImplTrait/DynTrait/HKT → TC에서 해결된 concrete 타입 사용 (codegen/types.rs, type_inference.rs)
+- [ ] 3. vtable null 방지 — 미구현 trait 메서드 호출 시 컴파일 에러 (런타임 segfault → 컴파일타임 에러)
+- [ ] 4. Slice open-end 지원 — `array[start..]` 문법 (배열 길이 활용한 sub-slice 생성)
+- [ ] 5. Text IR ↔ Inkwell 동작 일치 검증 — 두 백엔드의 codegen 결과 비교 테스트
+- [ ] 6. E2E 테스트 — Range 변수 저장/전달, i64 fallback 해소 검증, slice open-end 테스트
 
-### Phase 44: 언어 진화 인프라 — Edition & Migration 시스템
-- Edition 시스템 도입: `edition = "2026"` in vais.toml (breaking change 격리)
-- `vaisc migrate` 도구: 소스 코드 자동 변환 (AST 기반 리팩토링)
-- SemVer 기반 컴파일러 호환성 보장: 이전 edition 코드 무수정 컴파일
-- `vais update` 안전 업데이트: lockfile + registry 연동 완성
+### Phase 42: Lambda & Lazy 완성 — 클로저 캡처 & 지연 평가
+> 목표: Lambda ByRef/ByMutRef 캡처와 Lazy/Force 지연 평가 구현
+모드: 자동진행
+- [ ] 1. Lambda ByRef 캡처 — `|&x| expr` 구문의 codegen 구현. 캡처된 변수를 포인터로 전달, 클로저 ABI에 참조 슬롯 추가
+- [ ] 2. Lambda ByMutRef 캡처 — `|&mut x| expr` 구문의 codegen 구현. mutable 포인터 전달, borrow checker 연동
+- [ ] 3. Lazy 지연 평가 — `lazy { expr }` 가 thunk 함수 포인터 + 캐시 구조체 `{ i1 computed, T value, fn() thunk }` 생성. 첫 `force` 시 평가 후 value 캐싱
+- [ ] 4. Force 평가 — `force lazy_val` 이 computed 플래그 체크 후 thunk 호출 또는 캐시 반환
+- [ ] 5. E2E 테스트 — ByRef/ByMutRef 캡처 검증, lazy/force 지연 평가 + 캐싱 검증
+
+### Phase 43: Async 런타임 — Spawn/Await/Yield 실제 구현
+> 목표: stub으로 남은 async 기능을 실제 동작하도록 구현하거나 명시적 제한 결정
+모드: 자동진행
+- [ ] 1. Spawn codegen — 태스크 큐에 Future 등록, 태스크 핸들 반환 (현재: 포인터만 반환)
+- [ ] 2. Await codegen — poll 기반 비동기 대기 구현, executor 협력 (현재: blocking poll)
+- [ ] 3. Yield codegen — 제너레이터 상태 머신 변환, 중단점 저장/복원 (현재: 값만 반환)
+- [ ] 4. Executor 런타임 — 최소 이벤트 루프 (epoll/kqueue), 태스크 스케줄링
+- [ ] 5. unreachable! 감사 — async 경로의 실제 도달 가능한 unreachable! 처리
+- [ ] 6. E2E 테스트 — spawn/await 비동기 실행, yield 제너레이터 패턴 검증
+
+### Phase 44: Selfhost 교차검증
+> 목표: 문법 보완 결과를 셀프호스팅으로 검증
+모드: 자동진행
+- [ ] 1. Selfhost 컴파일러로 std/ 전체 컴파일 검증
+- [ ] 2. 더 많은 컴파일러 모듈 셀프호스팅 — parser, type checker 일부를 Vais로 포팅
+- [ ] 3. Bootstrap chain 자동화 — vaisc → selfhost-vaisc → 재검증 (SHA256 일치)
+- [ ] 4. 문법 보완 항목 (Phase 40~43) 이 selfhost에서도 정상 동작하는지 확인
+
+### Phase 45: 안정화 & 문서 동기화
+> 목표: 문법 보완 완료 후 전체 문서/예제/playground 동기화
+모드: 자동진행
+- [ ] 1. 문법 스펙 기준선 업데이트 — Phase 40~43 결과 반영 (미완성 기능 테이블 정리)
+- [ ] 2. docs-site 업데이트 — Range/Lazy/Lambda/Async 문서 추가 또는 갱신
+- [ ] 3. Playground 예제 업데이트 — 새로 완성된 문법 예제 추가
+- [ ] 4. README 수치 업데이트 — E2E 테스트 수, 기능 목록 동기화
 
 ---
 

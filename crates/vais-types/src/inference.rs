@@ -529,6 +529,50 @@ impl TypeChecker {
             self.add_instantiation(inst);
         }
 
+        // Verify trait bounds: each inferred concrete type must implement required traits
+        if all_concrete && !sig.generic_bounds.is_empty() {
+            let generic_args: Vec<(String, ResolvedType)> = sig
+                .generics
+                .iter()
+                .zip(inferred_type_args.iter())
+                .map(|(name, ty)| (name.clone(), ty.clone()))
+                .collect();
+            self.verify_trait_bounds(&generic_args, &sig.generic_bounds)?;
+        }
+
+        // Verify HKT arity: when an HKT param is substituted with a concrete type,
+        // check that the concrete type constructor has the expected arity
+        if all_concrete && !sig.hkt_params.is_empty() {
+            for (param_name, &expected_arity) in &sig.hkt_params {
+                if let Some(idx) = sig.generics.iter().position(|g| g == param_name) {
+                    if let Some(concrete_ty) = inferred_type_args.get(idx) {
+                        let actual_arity = match concrete_ty {
+                            ResolvedType::Named { generics, .. } => generics.len(),
+                            ResolvedType::HigherKinded { arity, .. } => *arity,
+                            _ => 0, // Non-generic types have arity 0
+                        };
+                        // Only check if concrete type is a Named type with generics
+                        // (arity 0 types like i64 can't be type constructors)
+                        if actual_arity != expected_arity
+                            && !matches!(concrete_ty, ResolvedType::Generic(_))
+                        {
+                            return Err(TypeError::Mismatch {
+                                expected: format!(
+                                    "type constructor with arity {} for HKT parameter '{}'",
+                                    expected_arity, param_name
+                                ),
+                                found: format!(
+                                    "type '{}' with arity {}",
+                                    concrete_ty, actual_arity
+                                ),
+                                span: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         // Substitute generics in the return type
         let return_type = self.substitute_generics(&sig.ret, &generic_substitutions);
         let resolved_return = self.apply_substitutions(&return_type);

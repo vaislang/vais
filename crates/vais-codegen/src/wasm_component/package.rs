@@ -114,7 +114,7 @@ impl WitPackage {
         output
     }
 
-    fn format_type_definition(&self, typedef: &WitTypeDefinition, indent: usize) -> String {
+    pub(crate) fn format_type_definition(&self, typedef: &WitTypeDefinition, indent: usize) -> String {
         let indent_str = "  ".repeat(indent);
         match typedef {
             WitTypeDefinition::Record(record) => {
@@ -302,7 +302,7 @@ impl WitPackage {
         output
     }
 
-    fn format_world(&self, world: &WitWorld) -> String {
+    pub(crate) fn format_world(&self, world: &WitWorld) -> String {
         let mut output = String::new();
 
         if let Some(docs) = &world.docs {

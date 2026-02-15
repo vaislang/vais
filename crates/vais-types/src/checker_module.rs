@@ -10,8 +10,8 @@ use crate::ownership;
 use crate::traits::TraitImpl;
 use crate::traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
 use crate::types::{
-    self, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult, UnionDef,
-    VariantFieldTypes,
+    self, EffectAnnotation, EnumDef, FunctionSig, ResolvedType, StructDef, TypeError, TypeResult,
+    UnionDef, VariantFieldTypes,
 };
 
 impl TypeChecker {
@@ -400,7 +400,21 @@ impl TypeChecker {
                 ret,
                 is_async: f.is_async,
                 required_params,
-                ..Default::default()
+                is_vararg: false,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+                hkt_params: f
+                    .generics
+                    .iter()
+                    .filter_map(|g| {
+                        if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind {
+                            Some((g.name.node.clone(), *arity))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
             },
         );
 
@@ -441,10 +455,17 @@ impl TypeChecker {
             name.clone(),
             FunctionSig {
                 name,
+                generics: vec![],
+                generic_bounds: HashMap::new(),
                 params,
                 ret,
+                is_async: false,
                 is_vararg: func.is_vararg,
-                ..Default::default()
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+                hkt_params: HashMap::new(),
             },
         );
 
@@ -544,7 +565,24 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
-                    ..Default::default()
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                    hkt_params: method
+                        .node
+                        .generics
+                        .iter()
+                        .filter_map(|g| {
+                            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind
+                            {
+                                Some((g.name.node.clone(), *arity))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
                 },
             );
         }
@@ -819,7 +857,24 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
-                    ..Default::default()
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                    hkt_params: method
+                        .node
+                        .generics
+                        .iter()
+                        .filter_map(|g| {
+                            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind
+                            {
+                                Some((g.name.node.clone(), *arity))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
                 },
             ));
         }

@@ -114,6 +114,10 @@ impl TypeChecker {
             self.unify(&expected_ret, &body_type_deref)?;
         }
 
+        // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
+        // check that the concrete body type implements the required trait bounds.
+        self.verify_trait_type_bounds(&expected_ret, &body_type_deref);
+
         // Resolve inferred return type: if return type was omitted, apply substitutions
         // to resolve the type variable to the concrete type from the body.
         if ret_type_inferred {

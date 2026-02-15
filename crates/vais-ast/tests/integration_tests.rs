@@ -270,6 +270,7 @@ fn test_item_enum() {
             },
         ],
         is_pub: true,
+        attributes: vec![],
     };
 
     let item = Item::Enum(e);

@@ -574,6 +574,7 @@ mod tests {
                 },
             ],
             is_pub: false,
+            attributes: vec![],
         };
         let result = gen.generate_enum(&e).unwrap();
         assert!(result.contains("const Color = Object.freeze"));
@@ -604,6 +605,7 @@ mod tests {
                 },
             ],
             is_pub: true,
+            attributes: vec![],
         };
         let result = gen.generate_enum(&e).unwrap();
         assert!(result.contains("Result.is_Ok = function"));
@@ -633,6 +635,7 @@ mod tests {
                 },
             ],
             is_pub: true,
+            attributes: vec![],
         };
         let result = gen.generate_enum(&e).unwrap();
         assert!(result.contains("Option.is_Some = function"));

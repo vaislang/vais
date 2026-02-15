@@ -50,6 +50,8 @@ pub struct FunctionSig {
     pub effect_annotation: EffectAnnotation,
     /// Inferred effects (populated during type checking)
     pub inferred_effects: Option<EffectSet>,
+    /// Higher-kinded type parameters: maps HKT param name to expected arity
+    pub hkt_params: HashMap<String, usize>,
 }
 
 impl Default for FunctionSig {
@@ -66,6 +68,7 @@ impl Default for FunctionSig {
             contracts: None,
             effect_annotation: EffectAnnotation::Infer,
             inferred_effects: None,
+            hkt_params: HashMap::new(),
         }
     }
 }

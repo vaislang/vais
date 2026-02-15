@@ -223,8 +223,193 @@ pub fn substitute_type(
             .get(name)
             .cloned()
             .unwrap_or_else(|| ty.clone()),
-        // Primitives and other types pass through unchanged
-        _ => ty.clone(),
+        ResolvedType::Map(k, v) => {
+            let new_k = substitute_type(k, substitutions);
+            let new_v = substitute_type(v, substitutions);
+            if k.as_ref() == &new_k && v.as_ref() == &new_v {
+                return ty.clone();
+            }
+            ResolvedType::Map(Box::new(new_k), Box::new(new_v))
+        }
+        ResolvedType::Range(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Range(Box::new(new_inner))
+        }
+        ResolvedType::FnPtr {
+            params,
+            ret,
+            is_vararg,
+            effects,
+        } => {
+            let mut changed = false;
+            let new_params: Vec<ResolvedType> = params
+                .iter()
+                .map(|p| {
+                    let subst = substitute_type(p, substitutions);
+                    if !changed && p != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
+                .collect();
+            let new_ret = substitute_type(ret, substitutions);
+            if !changed && ret.as_ref() != &new_ret {
+                changed = true;
+            }
+
+            if !changed {
+                return ty.clone();
+            }
+
+            ResolvedType::FnPtr {
+                params: new_params,
+                ret: Box::new(new_ret),
+                is_vararg: *is_vararg,
+                effects: effects.clone(),
+            }
+        }
+        ResolvedType::DynTrait {
+            trait_name,
+            generics,
+        } => {
+            let mut changed = false;
+            let new_generics: Vec<ResolvedType> = generics
+                .iter()
+                .map(|g| {
+                    let subst = substitute_type(g, substitutions);
+                    if !changed && g != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
+                .collect();
+
+            if !changed {
+                return ty.clone();
+            }
+
+            ResolvedType::DynTrait {
+                trait_name: trait_name.clone(),
+                generics: new_generics,
+            }
+        }
+        ResolvedType::ImplTrait { bounds: _ } => {
+            // Bounds are String trait names, no type substitution needed
+            ty.clone()
+        }
+        ResolvedType::Associated {
+            base,
+            trait_name,
+            assoc_name,
+            generics,
+        } => {
+            let new_base = substitute_type(base, substitutions);
+            let mut changed = base.as_ref() != &new_base;
+
+            let new_generics: Vec<ResolvedType> = generics
+                .iter()
+                .map(|g| {
+                    let subst = substitute_type(g, substitutions);
+                    if !changed && g != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
+                .collect();
+
+            if !changed {
+                return ty.clone();
+            }
+
+            ResolvedType::Associated {
+                base: Box::new(new_base),
+                trait_name: trait_name.clone(),
+                assoc_name: assoc_name.clone(),
+                generics: new_generics,
+            }
+        }
+        ResolvedType::Lazy(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Lazy(Box::new(new_inner))
+        }
+        ResolvedType::Linear(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Linear(Box::new(new_inner))
+        }
+        ResolvedType::Affine(inner) => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Affine(Box::new(new_inner))
+        }
+        ResolvedType::Dependent {
+            var_name,
+            base,
+            predicate,
+        } => {
+            let new_base = substitute_type(base, substitutions);
+            if base.as_ref() == &new_base {
+                return ty.clone();
+            }
+            ResolvedType::Dependent {
+                var_name: var_name.clone(),
+                base: Box::new(new_base),
+                predicate: predicate.clone(),
+            }
+        }
+        ResolvedType::RefLifetime { lifetime, inner } => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::RefLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(new_inner),
+            }
+        }
+        ResolvedType::RefMutLifetime { lifetime, inner } => {
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::RefMutLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(new_inner),
+            }
+        }
+        ResolvedType::Lifetime(_) => {
+            // Lifetime parameters are not substituted
+            ty.clone()
+        }
+        // Primitives pass through unchanged
+        ResolvedType::I8
+        | ResolvedType::I16
+        | ResolvedType::I32
+        | ResolvedType::I64
+        | ResolvedType::I128
+        | ResolvedType::U8
+        | ResolvedType::U16
+        | ResolvedType::U32
+        | ResolvedType::U64
+        | ResolvedType::U128
+        | ResolvedType::F32
+        | ResolvedType::F64
+        | ResolvedType::Bool
+        | ResolvedType::Str
+        | ResolvedType::Unit
+        | ResolvedType::Unknown
+        | ResolvedType::Never
+        | ResolvedType::Var(_) => ty.clone(),
     }
 }
 
