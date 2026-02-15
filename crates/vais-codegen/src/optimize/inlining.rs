@@ -41,19 +41,6 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
     // Parse all small functions that are candidates for inlining
     let mut inline_candidates = find_inline_candidates(ir);
 
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("DEBUG: Found {} inline candidates", inline_candidates.len());
-        for func in &inline_candidates {
-            eprintln!(
-                "DEBUG: Candidate: {} ({} body lines, side_effects={})",
-                func.name,
-                func.body.len(),
-                func.has_side_effects
-            );
-        }
-    }
-
     if inline_candidates.is_empty() {
         return ir.to_string();
     }
@@ -66,19 +53,6 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
         // Primary: higher call count first; Secondary: smaller body first
         count_b.cmp(&count_a).then(a.body.len().cmp(&b.body.len()))
     });
-
-    #[cfg(debug_assertions)]
-    {
-        for func in &inline_candidates {
-            let count = call_counts.get(&func.name).copied().unwrap_or(0);
-            eprintln!(
-                "DEBUG: Inline priority: {} (calls={}, body={})",
-                func.name,
-                count,
-                func.body.len()
-            );
-        }
-    }
 
     // Inline function calls
     let mut result = ir.to_string();
@@ -246,27 +220,16 @@ fn inline_function_calls(ir: &str, func: &InlinableFunction, counter: &mut u32) 
     let mut result = Vec::new();
     let call_pattern = format!("call {} {}(", func.return_type, func.name);
 
-    #[cfg(debug_assertions)]
-    eprintln!("DEBUG: Looking for call pattern: '{}'", call_pattern);
-
     for line in ir.lines() {
         let trimmed = line.trim();
 
         // Check if this line contains a call to the function
         if trimmed.contains(&call_pattern) {
-            #[cfg(debug_assertions)]
-            eprintln!("DEBUG: Found matching call: {}", trimmed);
-
             if let Some(inlined) = try_inline_call(trimmed, func, counter) {
-                #[cfg(debug_assertions)]
-                eprintln!("DEBUG: Inlined successfully!");
                 for inlined_line in inlined {
                     result.push(inlined_line);
                 }
                 continue;
-            } else {
-                #[cfg(debug_assertions)]
-                eprintln!("DEBUG: try_inline_call returned None");
             }
         }
 

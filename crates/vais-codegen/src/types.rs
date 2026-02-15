@@ -344,17 +344,16 @@ impl CodeGenerator {
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // ICE: generic should be resolved before codegen
-                    #[cfg(debug_assertions)]
+                    // ICE: generic should be resolved before codegen.
+                    // Return i64 fallback inline (not Err) to avoid propagation through
+                    // compound types like Pointer(Generic("T")) → "i64*" not just "i64".
                     eprintln!("ICE: unresolved generic parameter '{}' in codegen, using i64 fallback", param);
                     String::from("i64")
                 }
             }
             ResolvedType::ConstGeneric(param) => {
-                // Const generics should be resolved at monomorphization time
-                #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved const generic parameter '{}' in codegen", param);
-                let _ = param;
+                // ICE: const generic should be resolved at monomorphization time
+                eprintln!("ICE: unresolved const generic parameter '{}' in codegen, using i64 fallback", param);
                 String::from("i64")
             }
             ResolvedType::Vector { element, lanes } => {
@@ -369,9 +368,8 @@ impl CodeGenerator {
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
             ResolvedType::ImplTrait { .. } => {
-                // impl Trait should be monomorphized before codegen.
-                // ICE if still present — fallback to i64 until full monomorphization is implemented.
-                #[cfg(debug_assertions)]
+                // ICE: ImplTrait should be monomorphized before codegen.
+                // Return i64 fallback inline to preserve compound type structure.
                 eprintln!("ICE: unresolved ImplTrait in codegen, using i64 fallback");
                 String::from("i64")
             }
@@ -462,20 +460,18 @@ impl CodeGenerator {
                 String::from("void")
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                // ICE: these should be resolved by the type checker
-                #[cfg(debug_assertions)]
+                // ICE: should be resolved by the type checker.
+                // Return i64 fallback inline to preserve compound type structure.
                 eprintln!("ICE: unresolved type variable reached codegen, using i64 fallback");
                 String::from("i64")
             }
             ResolvedType::Associated { .. } => {
-                // ICE: associated types should be resolved during type checking
-                #[cfg(debug_assertions)]
+                // ICE: associated types should be resolved during type checking.
                 eprintln!("ICE: unresolved associated type in codegen, using i64 fallback");
                 String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
-                // ICE: HKT should be monomorphized before codegen
-                #[cfg(debug_assertions)]
+                // ICE: HKT should be monomorphized before codegen.
                 eprintln!("ICE: unresolved higher-kinded type in codegen, using i64 fallback");
                 String::from("i64")
             }

@@ -317,6 +317,7 @@ pub fn init_package(dir: &Path, name: Option<&str>) -> PackageResult<()> {
     }
 
     // Use directory name if no name provided
+    // safe: fallback to "my-package" if no name provided and dir has no file name
     let pkg_name = name
         .map(String::from)
         .or_else(|| dir.file_name().and_then(|n| n.to_str()).map(String::from))
@@ -492,6 +493,7 @@ fn resolve_deps_recursive(
         let dep_path = match dep {
             Dependency::Detailed(d) if d.path.is_some() => {
                 // Path dependency
+                // safe: checked with is_some() above
                 let path = d.path.as_ref().unwrap();
                 base_dir.join(path)
             }
@@ -748,6 +750,7 @@ pub fn resolve_workspace_members(workspace_root: &Path) -> PackageResult<Resolve
         let mut root_manifest = manifest.clone();
         resolve_workspace_deps(&mut root_manifest, workspace_config);
         // Only add if not already in members
+        // safe: fallback to original path if canonicalization fails
         let root_canonical = workspace_root
             .canonicalize()
             .unwrap_or_else(|_| workspace_root.to_path_buf());
@@ -845,6 +848,7 @@ pub fn resolve_inter_workspace_deps(workspace: &mut ResolvedWorkspace) {
 /// Compute relative path from `from_dir` to `to_dir`
 fn pathdiff_relative(from: &Path, to: &Path) -> String {
     // Use canonicalized paths for accuracy
+    // safe: fallback to original paths if canonicalization fails
     let from_abs = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
     let to_abs = to.canonicalize().unwrap_or_else(|_| to.to_path_buf());
 
@@ -1356,7 +1360,9 @@ json = { workspace = true }
         let json_dep = member.manifest.dependencies.get("json").unwrap();
         match json_dep {
             Dependency::Version(v) => assert_eq!(v, "2.0.0"),
-            _ => panic!("expected Version dependency, got {:?}", json_dep),
+            Dependency::Detailed(d) => {
+                panic!("expected Version dependency, got Detailed: {:?}", d)
+            }
         }
     }
 
@@ -1425,7 +1431,9 @@ lib-core = "0.1.0"
                     path
                 );
             }
-            _ => panic!("expected Detailed dependency with path"),
+            Dependency::Version(v) => {
+                panic!("expected Detailed dependency with path, got Version: {}", v)
+            }
         }
     }
 

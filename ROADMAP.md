@@ -207,6 +207,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 43 리뷰** | 리뷰 수정 | struct_size 타입별 계산, ICE 경고, Spawn 문서화, poll TODO, 음성 테스트 5개 — **650 E2E** |
 | **Phase 44** | Selfhost 교차검증 | Phase 40-43 예제 4개, cross-verify 13개, selfhost 지원 매트릭스 문서화 — **655 E2E** |
 | **Phase 45** | 안정화 & 문서 동기화 | 미완성 기능 테이블 전체 완료, README 수치 동기화, closures.md+lazy-evaluation.md 신규, Playground +3 예제 — **655 E2E** |
+| **Phase 46** | 컴파일러 견고성 강화 | ICE eprintln always-on, InternalError C007, parser let-else, inlining -38줄, .gitignore 정리 — **655 E2E** |
 
 ---
 
@@ -389,6 +390,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: playground/src/examples.js (lambda-capture, range-loop, lazy-evaluation 3개 추가, 총 26개)
 - [x] 5. E2E 검증 + ROADMAP Phase 45 체크 (Opus 직접) [blockedBy: 1,2,3,4] ✅ 2026-02-15
   변경: E2E 647 passed + 8 ignored = 655 total, Clippy 0건
+
+### Phase 46: 컴파일러 견고성 강화 — ICE 에러 전환 & 에러 복구 개선
+> 목표: ICE eprintln 경고를 에러로 전환, Parser/Package panic을 에러 복구로 개선, 디버그 출력 정리
+모드: 자동진행
+- [x] 1. ICE eprintln → CodegenError 전환 (13건) (Opus 직접) ✅ 2026-02-15
+  변경: error.rs (InternalError variant C007 추가), types.rs (6건 ICE #[cfg(debug_assertions)]→always-on eprintln), inkwell/types.rs (6건 동일), type_inference.rs (1건 메시지 표준화)
+- [x] 2. Parser FFI panic → ParseError 전환 (11건) (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: ffi.rs (12건 match panic→let-else 패턴, 디버그 정보 포함 에러 메시지)
+- [x] 3. package.rs 에러 복구 — 핵심 unwrap→Result 전환 (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: package.rs (안전성 주석 추가, 테스트 panic 메시지 개선 — 프로덕션 unwrap은 모두 safe 패턴 확인)
+- [x] 4. 디버그 출력 정리 — inlining eprintln 제거 (8건) (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: optimize/inlining.rs (7건 디버그 eprintln 제거, -38줄)
+- [x] 5. 미추적 파일 정리 — GAT 예제 바이너리 .gitignore (Sonnet 위임) [∥1] ✅ 2026-02-15
+  변경: .gitignore (gat_container/functor/iterator 바이너리 + packages/*/STATS.txt 패턴 추가)
+- [x] 6. E2E 테스트 + 빌드 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4,5] ✅ 2026-02-15
+  변경: E2E 647 passed + 8 ignored = 655 total, Clippy 0건
+진행률: 6/6 (100%)
 
 ---
 

@@ -181,14 +181,12 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                assert_eq!(block.abi, "C");
-                assert_eq!(block.functions.len(), 1);
-                assert_eq!(block.functions[0].name.node, "puts");
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(block.abi, "C");
+        assert_eq!(block.functions.len(), 1);
+        assert_eq!(block.functions[0].name.node, "puts");
     }
 
     #[test]
@@ -199,13 +197,11 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                assert!(block.functions[0].is_vararg);
-                assert_eq!(block.functions[0].params.len(), 1);
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        assert!(block.functions[0].is_vararg);
+        assert_eq!(block.functions[0].params.len(), 1);
     }
 
     #[test]
@@ -222,16 +218,14 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                assert_eq!(block.functions.len(), 3);
-                assert_eq!(block.functions[0].name.node, "malloc");
-                assert_eq!(block.functions[1].name.node, "free");
-                assert_eq!(block.functions[2].name.node, "printf");
-                assert!(block.functions[2].is_vararg);
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(block.functions.len(), 3);
+        assert_eq!(block.functions[0].name.node, "malloc");
+        assert_eq!(block.functions[1].name.node, "free");
+        assert_eq!(block.functions[2].name.node, "printf");
+        assert!(block.functions[2].is_vararg);
     }
 
     #[test]
@@ -247,17 +241,15 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                assert_eq!(block.functions.len(), 1);
-                let func = &block.functions[0];
-                assert_eq!(func.name.node, "alert");
-                assert_eq!(func.attributes.len(), 1);
-                assert_eq!(func.attributes[0].name, "wasm_import");
-                assert_eq!(func.attributes[0].args, vec!["env", "js_alert"]);
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(block.functions.len(), 1);
+        let func = &block.functions[0];
+        assert_eq!(func.name.node, "alert");
+        assert_eq!(func.attributes.len(), 1);
+        assert_eq!(func.attributes[0].name, "wasm_import");
+        assert_eq!(func.attributes[0].args, vec!["env", "js_alert"]);
     }
 
     #[test]
@@ -271,15 +263,13 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::Function(f) => {
-                assert_eq!(f.name.node, "add");
-                assert_eq!(f.attributes.len(), 1);
-                assert_eq!(f.attributes[0].name, "wasm_export");
-                assert_eq!(f.attributes[0].args, vec!["add"]);
-            }
-            _ => panic!("Expected function"),
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            panic!("Expected function, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(f.name.node, "add");
+        assert_eq!(f.attributes.len(), 1);
+        assert_eq!(f.attributes[0].name, "wasm_export");
+        assert_eq!(f.attributes[0].args, vec!["add"]);
     }
 
     #[test]
@@ -295,15 +285,13 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();
 
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                let func = &block.functions[0];
-                assert_eq!(func.attributes.len(), 1);
-                assert_eq!(func.attributes[0].name, "wasm_import");
-                assert!(func.attributes[0].args.is_empty());
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        let func = &block.functions[0];
+        assert_eq!(func.attributes.len(), 1);
+        assert_eq!(func.attributes[0].name, "wasm_import");
+        assert!(func.attributes[0].args.is_empty());
     }
 
     #[test]
@@ -318,16 +306,14 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                let func = &block.functions[0];
-                assert_eq!(func.name.node, "greet");
-                assert_eq!(func.attributes.len(), 1);
-                assert_eq!(func.attributes[0].name, "wasm_export");
-                assert_eq!(func.attributes[0].args, vec!["greet"]);
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        let func = &block.functions[0];
+        assert_eq!(func.name.node, "greet");
+        assert_eq!(func.attributes.len(), 1);
+        assert_eq!(func.attributes[0].name, "wasm_export");
+        assert_eq!(func.attributes[0].args, vec!["greet"]);
     }
 
     #[test]
@@ -347,24 +333,22 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();
 
-        match &module.items[0].node {
-            Item::ExternBlock(block) => {
-                assert_eq!(block.functions.len(), 3);
-                // First has wasm_import
-                assert_eq!(block.functions[0].attributes.len(), 1);
-                assert_eq!(block.functions[0].attributes[0].name, "wasm_import");
-                // Second has no attributes
-                assert!(block.functions[1].attributes.is_empty());
-                // Third has wasm_import
-                assert_eq!(block.functions[2].attributes.len(), 1);
-                assert_eq!(block.functions[2].attributes[0].name, "wasm_import");
-                assert_eq!(
-                    block.functions[2].attributes[0].args,
-                    vec!["env", "setTimeout"]
-                );
-            }
-            _ => panic!("Expected extern block"),
-        }
+        let Item::ExternBlock(block) = &module.items[0].node else {
+            panic!("Expected extern block, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(block.functions.len(), 3);
+        // First has wasm_import
+        assert_eq!(block.functions[0].attributes.len(), 1);
+        assert_eq!(block.functions[0].attributes[0].name, "wasm_import");
+        // Second has no attributes
+        assert!(block.functions[1].attributes.is_empty());
+        // Third has wasm_import
+        assert_eq!(block.functions[2].attributes.len(), 1);
+        assert_eq!(block.functions[2].attributes[0].name, "wasm_import");
+        assert_eq!(
+            block.functions[2].attributes[0].args,
+            vec!["env", "setTimeout"]
+        );
     }
 
     #[test]
@@ -375,21 +359,17 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::Function(f) => {
-                assert_eq!(f.params.len(), 1);
-                match &f.params[0].ty.node {
-                    Type::FnPtr {
-                        params, is_vararg, ..
-                    } => {
-                        assert_eq!(params.len(), 2);
-                        assert!(!(*is_vararg));
-                    }
-                    _ => panic!("Expected function pointer type"),
-                }
-            }
-            _ => panic!("Expected function"),
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            panic!("Expected function, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(f.params.len(), 1);
+        let Type::FnPtr {
+            params, is_vararg, ..
+        } = &f.params[0].ty.node else {
+            panic!("Expected function pointer type, got {:?}", &f.params[0].ty.node);
+        };
+        assert_eq!(params.len(), 2);
+        assert!(!(*is_vararg));
     }
 
     #[test]
@@ -400,17 +380,13 @@ mod tests {
         let module = parser.parse_module().unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].node {
-            Item::Struct(s) => {
-                assert_eq!(s.fields.len(), 1);
-                match &s.fields[0].ty.node {
-                    Type::FnPtr { is_vararg, .. } => {
-                        assert!(*is_vararg);
-                    }
-                    _ => panic!("Expected function pointer type"),
-                }
-            }
-            _ => panic!("Expected struct"),
-        }
+        let Item::Struct(s) = &module.items[0].node else {
+            panic!("Expected struct, got {:?}", &module.items[0].node);
+        };
+        assert_eq!(s.fields.len(), 1);
+        let Type::FnPtr { is_vararg, .. } = &s.fields[0].ty.node else {
+            panic!("Expected function pointer type, got {:?}", &s.fields[0].ty.node);
+        };
+        assert!(*is_vararg);
     }
 }

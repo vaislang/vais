@@ -472,9 +472,9 @@ impl CodeGenerator {
                 match inner_ty {
                     ResolvedType::Future(t) => *t,
                     other => {
-                        // ICE warning: await on non-Future type is likely a type checker bug
+                        // ICE: await on non-Future type is likely a type checker bug
                         eprintln!(
-                            "ICE warning: await on non-Future type `{}`, treating as passthrough",
+                            "ICE: await on non-Future type `{}` in codegen, treating as passthrough",
                             other
                         );
                         other

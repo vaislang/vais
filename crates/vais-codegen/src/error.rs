@@ -33,6 +33,11 @@ pub enum CodegenError {
     /// Recursion depth limit exceeded (infinite type recursion)
     #[error("Recursion depth limit exceeded: {0}")]
     RecursionLimitExceeded(String),
+
+    /// Internal compiler error: a type that should have been resolved before codegen
+    /// (e.g., generic, associated type, ImplTrait) was not resolved.
+    #[error("ICE: {0}")]
+    InternalError(String),
 }
 
 impl CodegenError {
@@ -45,6 +50,7 @@ impl CodegenError {
             CodegenError::LlvmError(_) => "C004",
             CodegenError::Unsupported(_) => "C005",
             CodegenError::RecursionLimitExceeded(_) => "C006",
+            CodegenError::InternalError(_) => "C007",
         }
     }
 
@@ -76,6 +82,9 @@ impl CodegenError {
                 Some("consider reducing nesting depth or refactoring recursive types".to_string())
             }
             CodegenError::LlvmError(_) => None,
+            CodegenError::InternalError(_) => {
+                Some("this is likely a compiler bug — please report it".to_string())
+            }
         }
     }
 }
