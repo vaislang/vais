@@ -8,7 +8,7 @@ authors = ["Steve"]
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["multipart", "macros"] }
+axum = { version = "0.8", features = ["multipart", "macros"] }
 tokio = { workspace = true }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["trace", "cors", "fs", "compression-gzip"] }
