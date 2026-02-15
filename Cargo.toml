@@ -84,7 +84,7 @@ miette = { version = "7.0", features = ["fancy"] }
 logos = "0.14"
 
 # LLVM (optional - requires LLVM 17 installed)
-inkwell = { version = "0.4", features = ["llvm17-0"] }
+inkwell = { version = "0.8", features = ["llvm17-0"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
