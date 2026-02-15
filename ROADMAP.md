@@ -271,10 +271,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ## 리뷰 발견사항 (2026-02-15)
 > 출처: /team-review Phase 40
 
-- [ ] 1. [보안] substitute_type() 재귀 깊이 제한 추가 (Warning) — 대상: crates/vais-types/src/types/substitute.rs
-- [ ] 2. [성능] verify_trait_bounds 시그니처 변경 — Vec 할당 제거, 슬라이스 참조 전달 (Warning) — 대상: crates/vais-types/src/inference.rs:534
-- [ ] 3. [아키텍처] extract_hkt_params() 헬퍼 추출 — 4곳 중복 제거 (Warning) — 대상: crates/vais-types/src/checker_module.rs
-진행률: 0/3 (0%)
+- [x] 1. [보안] substitute_type() 재귀 깊이 제한 추가 (Warning) ✅ 2026-02-15
+  변경: substitute.rs (substitute_type_impl + MAX_SUBSTITUTE_DEPTH=64, 모든 재귀 호출에 depth+1 전달)
+- [x] 2. [성능] verify_trait_bounds 시그니처 변경 — Vec 할당 제거 (Warning) ✅ 2026-02-15
+  변경: traits.rs (슬라이스 &[String]+&[ResolvedType] 파라미터), inference.rs (Vec 생성 제거, 직접 참조 전달 + HKT O(H×G)→O(G+H) HashMap 인덱싱)
+- [x] 3. [아키텍처] extract_hkt_params() 헬퍼 추출 — 4곳 중복 제거 (Warning) ✅ 2026-02-15
+  변경: checker_module.rs (pub(crate) fn extract_hkt_params() 추가, 3곳 인라인 패턴 → 헬퍼 호출)
+진행률: 3/3 (100%)
 
 ### Phase 41: Codegen 완성도 — Range 구조체 & i64 Fallback 제거
 > 목표: 모든 codegen 경로가 올바른 타입과 동작을 생성. stub이 아닌 실제 값을 반환.

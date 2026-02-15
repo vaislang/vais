@@ -4,11 +4,26 @@ use std::collections::HashMap;
 
 use super::resolved::{ConstBinOp, ResolvedConst, ResolvedType};
 
+/// Maximum recursion depth for type substitution to prevent stack overflow
+/// on circular or deeply nested type references.
+const MAX_SUBSTITUTE_DEPTH: usize = 64;
+
 /// Substitute generic type parameters with concrete types
 pub fn substitute_type(
     ty: &ResolvedType,
     substitutions: &HashMap<String, ResolvedType>,
 ) -> ResolvedType {
+    substitute_type_impl(ty, substitutions, 0)
+}
+
+fn substitute_type_impl(
+    ty: &ResolvedType,
+    substitutions: &HashMap<String, ResolvedType>,
+    depth: usize,
+) -> ResolvedType {
+    if depth > MAX_SUBSTITUTE_DEPTH {
+        return ty.clone();
+    }
     match ty {
         ResolvedType::Generic(name) => substitutions
             .get(name)
@@ -33,7 +48,7 @@ pub fn substitute_type(
                     };
                     let new_generics: Vec<ResolvedType> = generics
                         .iter()
-                        .map(|g| substitute_type(g, substitutions))
+                        .map(|g| substitute_type_impl(g, substitutions, depth + 1))
                         .collect();
                     return ResolvedType::Named {
                         name: concrete_name,
@@ -55,7 +70,7 @@ pub fn substitute_type(
             let new_generics: Vec<ResolvedType> = generics
                 .iter()
                 .map(|g| {
-                    let subst = substitute_type(g, substitutions);
+                    let subst = substitute_type_impl(g, substitutions, depth + 1);
                     if !changed && g != &subst {
                         changed = true;
                     }
@@ -74,64 +89,64 @@ pub fn substitute_type(
             }
         }
         ResolvedType::Array(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Array(Box::new(new_inner))
         }
         ResolvedType::Pointer(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Pointer(Box::new(new_inner))
         }
         ResolvedType::Ref(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Ref(Box::new(new_inner))
         }
         ResolvedType::RefMut(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::RefMut(Box::new(new_inner))
         }
         ResolvedType::Slice(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Slice(Box::new(new_inner))
         }
         ResolvedType::SliceMut(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::SliceMut(Box::new(new_inner))
         }
         ResolvedType::Optional(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Optional(Box::new(new_inner))
         }
         ResolvedType::Result(ok, err) => {
-            let new_ok = substitute_type(ok, substitutions);
-            let new_err = substitute_type(err, substitutions);
+            let new_ok = substitute_type_impl(ok, substitutions, depth + 1);
+            let new_err = substitute_type_impl(err, substitutions, depth + 1);
             if ok.as_ref() == &new_ok && err.as_ref() == &new_err {
                 return ty.clone();
             }
             ResolvedType::Result(Box::new(new_ok), Box::new(new_err))
         }
         ResolvedType::Future(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
@@ -142,7 +157,7 @@ pub fn substitute_type(
             let new_types: Vec<ResolvedType> = types
                 .iter()
                 .map(|t| {
-                    let subst = substitute_type(t, substitutions);
+                    let subst = substitute_type_impl(t, substitutions, depth + 1);
                     if !changed && t != &subst {
                         changed = true;
                     }
@@ -164,14 +179,14 @@ pub fn substitute_type(
             let new_params: Vec<ResolvedType> = params
                 .iter()
                 .map(|p| {
-                    let subst = substitute_type(p, substitutions);
+                    let subst = substitute_type_impl(p, substitutions, depth + 1);
                     if !changed && p != &subst {
                         changed = true;
                     }
                     subst
                 })
                 .collect();
-            let new_ret = substitute_type(ret, substitutions);
+            let new_ret = substitute_type_impl(ret, substitutions, depth + 1);
             if !changed && ret.as_ref() != &new_ret {
                 changed = true;
             }
@@ -187,7 +202,7 @@ pub fn substitute_type(
             }
         }
         ResolvedType::Vector { element, lanes } => {
-            let new_element = substitute_type(element, substitutions);
+            let new_element = substitute_type_impl(element, substitutions, depth + 1);
             if element.as_ref() == &new_element {
                 return ty.clone();
             }
@@ -204,7 +219,7 @@ pub fn substitute_type(
                 .unwrap_or_else(|| ty.clone())
         }
         ResolvedType::ConstArray { element, size } => {
-            let new_element = substitute_type(element, substitutions);
+            let new_element = substitute_type_impl(element, substitutions, depth + 1);
             // Substitute const parameter names in size expression
             let new_size = substitute_const(size, substitutions);
 
@@ -224,15 +239,15 @@ pub fn substitute_type(
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         ResolvedType::Map(k, v) => {
-            let new_k = substitute_type(k, substitutions);
-            let new_v = substitute_type(v, substitutions);
+            let new_k = substitute_type_impl(k, substitutions, depth + 1);
+            let new_v = substitute_type_impl(v, substitutions, depth + 1);
             if k.as_ref() == &new_k && v.as_ref() == &new_v {
                 return ty.clone();
             }
             ResolvedType::Map(Box::new(new_k), Box::new(new_v))
         }
         ResolvedType::Range(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
@@ -248,14 +263,14 @@ pub fn substitute_type(
             let new_params: Vec<ResolvedType> = params
                 .iter()
                 .map(|p| {
-                    let subst = substitute_type(p, substitutions);
+                    let subst = substitute_type_impl(p, substitutions, depth + 1);
                     if !changed && p != &subst {
                         changed = true;
                     }
                     subst
                 })
                 .collect();
-            let new_ret = substitute_type(ret, substitutions);
+            let new_ret = substitute_type_impl(ret, substitutions, depth + 1);
             if !changed && ret.as_ref() != &new_ret {
                 changed = true;
             }
@@ -279,7 +294,7 @@ pub fn substitute_type(
             let new_generics: Vec<ResolvedType> = generics
                 .iter()
                 .map(|g| {
-                    let subst = substitute_type(g, substitutions);
+                    let subst = substitute_type_impl(g, substitutions, depth + 1);
                     if !changed && g != &subst {
                         changed = true;
                     }
@@ -306,13 +321,13 @@ pub fn substitute_type(
             assoc_name,
             generics,
         } => {
-            let new_base = substitute_type(base, substitutions);
+            let new_base = substitute_type_impl(base, substitutions, depth + 1);
             let mut changed = base.as_ref() != &new_base;
 
             let new_generics: Vec<ResolvedType> = generics
                 .iter()
                 .map(|g| {
-                    let subst = substitute_type(g, substitutions);
+                    let subst = substitute_type_impl(g, substitutions, depth + 1);
                     if !changed && g != &subst {
                         changed = true;
                     }
@@ -332,21 +347,21 @@ pub fn substitute_type(
             }
         }
         ResolvedType::Lazy(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Lazy(Box::new(new_inner))
         }
         ResolvedType::Linear(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
             ResolvedType::Linear(Box::new(new_inner))
         }
         ResolvedType::Affine(inner) => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
@@ -357,7 +372,7 @@ pub fn substitute_type(
             base,
             predicate,
         } => {
-            let new_base = substitute_type(base, substitutions);
+            let new_base = substitute_type_impl(base, substitutions, depth + 1);
             if base.as_ref() == &new_base {
                 return ty.clone();
             }
@@ -368,7 +383,7 @@ pub fn substitute_type(
             }
         }
         ResolvedType::RefLifetime { lifetime, inner } => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }
@@ -378,7 +393,7 @@ pub fn substitute_type(
             }
         }
         ResolvedType::RefMutLifetime { lifetime, inner } => {
-            let new_inner = substitute_type(inner, substitutions);
+            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {
                 return ty.clone();
             }

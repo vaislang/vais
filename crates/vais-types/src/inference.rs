@@ -531,28 +531,28 @@ impl TypeChecker {
 
         // Verify trait bounds: each inferred concrete type must implement required traits
         if all_concrete && !sig.generic_bounds.is_empty() {
-            let generic_args: Vec<(String, ResolvedType)> = sig
-                .generics
-                .iter()
-                .zip(inferred_type_args.iter())
-                .map(|(name, ty)| (name.clone(), ty.clone()))
-                .collect();
-            self.verify_trait_bounds(&generic_args, &sig.generic_bounds)?;
+            self.verify_trait_bounds(&sig.generics, &inferred_type_args, &sig.generic_bounds)?;
         }
 
         // Verify HKT arity: when an HKT param is substituted with a concrete type,
-        // check that the concrete type constructor has the expected arity
+        // check that the concrete type constructor has the expected arity.
+        // Uses O(G + H) index lookup instead of O(H × G) position scan.
         if all_concrete && !sig.hkt_params.is_empty() {
+            let generic_index: HashMap<&str, usize> = sig
+                .generics
+                .iter()
+                .enumerate()
+                .map(|(i, name)| (name.as_str(), i))
+                .collect();
+
             for (param_name, &expected_arity) in &sig.hkt_params {
-                if let Some(idx) = sig.generics.iter().position(|g| g == param_name) {
+                if let Some(&idx) = generic_index.get(param_name.as_str()) {
                     if let Some(concrete_ty) = inferred_type_args.get(idx) {
                         let actual_arity = match concrete_ty {
                             ResolvedType::Named { generics, .. } => generics.len(),
                             ResolvedType::HigherKinded { arity, .. } => *arity,
                             _ => 0, // Non-generic types have arity 0
                         };
-                        // Only check if concrete type is a Named type with generics
-                        // (arity 0 types like i64 can't be type constructors)
                         if actual_arity != expected_arity
                             && !matches!(concrete_ty, ResolvedType::Generic(_))
                         {

@@ -174,10 +174,11 @@ impl TypeChecker {
     /// Called from check_generic_function_call() after inferring concrete type arguments.
     pub(crate) fn verify_trait_bounds(
         &self,
-        generic_args: &[(String, ResolvedType)],
+        generic_names: &[String],
+        concrete_types: &[ResolvedType],
         bounds: &HashMap<String, Vec<String>>,
     ) -> TypeResult<()> {
-        for (generic_name, concrete_type) in generic_args {
+        for (generic_name, concrete_type) in generic_names.iter().zip(concrete_types) {
             if let Some(required_traits) = bounds.get(generic_name) {
                 for trait_name in required_traits {
                     if !self.type_implements_trait(concrete_type, trait_name) {

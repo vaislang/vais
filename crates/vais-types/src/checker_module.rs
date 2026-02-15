@@ -14,6 +14,20 @@ use crate::types::{
     UnionDef, VariantFieldTypes,
 };
 
+/// Extract HKT parameter names and arities from AST generic parameters.
+pub(crate) fn extract_hkt_params(generics: &[vais_ast::GenericParam]) -> HashMap<String, usize> {
+    generics
+        .iter()
+        .filter_map(|g| {
+            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind {
+                Some((g.name.node.clone(), *arity))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 impl TypeChecker {
     /// Type checks a complete module.
     ///
@@ -404,17 +418,7 @@ impl TypeChecker {
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
-                hkt_params: f
-                    .generics
-                    .iter()
-                    .filter_map(|g| {
-                        if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind {
-                            Some((g.name.node.clone(), *arity))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
+                hkt_params: extract_hkt_params(&f.generics),
             },
         );
 
@@ -570,19 +574,7 @@ impl TypeChecker {
                     contracts: None,
                     effect_annotation: EffectAnnotation::Infer,
                     inferred_effects: None,
-                    hkt_params: method
-                        .node
-                        .generics
-                        .iter()
-                        .filter_map(|g| {
-                            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind
-                            {
-                                Some((g.name.node.clone(), *arity))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
+                    hkt_params: extract_hkt_params(&method.node.generics),
                 },
             );
         }
@@ -862,19 +854,7 @@ impl TypeChecker {
                     contracts: None,
                     effect_annotation: EffectAnnotation::Infer,
                     inferred_effects: None,
-                    hkt_params: method
-                        .node
-                        .generics
-                        .iter()
-                        .filter_map(|g| {
-                            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind
-                            {
-                                Some((g.name.node.clone(), *arity))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
+                    hkt_params: extract_hkt_params(&method.node.generics),
                 },
             ));
         }
