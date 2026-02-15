@@ -177,6 +177,10 @@ impl CodeGenerator {
                 if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
                     self.lambdas.closures.insert(name.node.clone(), closure_info);
                 }
+                // If this was a lazy expression, register the thunk info
+                if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
+                    self.lambdas.lazy_bindings.insert(name.node.clone(), lazy_info);
+                }
 
                 Ok(("void".to_string(), ir))
             }

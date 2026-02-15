@@ -1454,17 +1454,25 @@ impl TypeChecker {
                     }
                 }
 
-                // Validate capture mode: ByRef/ByMutRef are not yet supported
+                // Validate capture mode
                 match capture_mode {
-                    CaptureMode::ByRef | CaptureMode::ByMutRef => {
-                        return Err(TypeError::Mismatch {
-                            expected: "by-value or move capture".to_string(),
-                            found: "reference capture (|&x| or |&mut x|) — not yet supported".to_string(),
-                            span: Some(expr.span),
-                        });
+                    CaptureMode::ByMutRef => {
+                        // ByMutRef: all captured variables must be declared as mutable
+                        for var in &free_vars {
+                            if let Some((_ty, is_mut)) = self.lookup_var_with_mut(var) {
+                                if !is_mut {
+                                    return Err(TypeError::Mismatch {
+                                        expected: "mutable variable for &mut capture".to_string(),
+                                        found: format!("immutable variable '{}'", var),
+                                        span: Some(expr.span),
+                                    });
+                                }
+                            }
+                        }
                     }
-                    CaptureMode::Move | CaptureMode::ByValue => {
-                        // These modes are validated during codegen/MIR.
+                    CaptureMode::ByRef | CaptureMode::Move | CaptureMode::ByValue => {
+                        // ByRef: captures by immutable reference (codegen handles pointer passing)
+                        // Move/ByValue: validated during codegen/MIR.
                     }
                 }
 
@@ -1473,7 +1481,13 @@ impl TypeChecker {
                 // Define captured variables in lambda scope
                 for var in &free_vars {
                     if let Some((ty, is_mut)) = self.lookup_var_with_mut(var) {
-                        self.define_var(var, ty, is_mut);
+                        // ByRef captures are immutable inside the lambda —
+                        // the captured variable cannot be written through an immutable reference
+                        let effective_mut = match capture_mode {
+                            CaptureMode::ByRef => false,
+                            _ => is_mut,
+                        };
+                        self.define_var(var, ty, effective_mut);
                     }
                 }
 

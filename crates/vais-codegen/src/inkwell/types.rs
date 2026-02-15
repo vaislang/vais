@@ -109,14 +109,17 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Generic(_name) => {
-                // Generic types should ideally be substituted before codegen.
-                // Fallback to i64 which is the most common concrete type in Vais.
+            ResolvedType::Generic(name) => {
+                // ICE: generic should be substituted before codegen
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback", name);
+                let _ = name;
                 self.context.i64_type().into()
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                // Should be resolved before codegen
-                eprintln!("ICE: unresolved type variable reached codegen");
+                // ICE: should be resolved before codegen
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved type variable reached Inkwell codegen");
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
@@ -159,10 +162,11 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Range(_) => {
-                // Range is { start: i64, end: i64 }
+                // Range is { start: i64, end: i64, inclusive: i1 }
                 let i64_type = self.context.i64_type();
+                let bool_type = self.context.bool_type();
                 self.context
-                    .struct_type(&[i64_type.into(), i64_type.into()], false)
+                    .struct_type(&[i64_type.into(), i64_type.into(), bool_type.into()], false)
                     .into()
             }
             ResolvedType::Future(inner) => {
@@ -195,19 +199,60 @@ impl<'ctx> TypeMapper<'ctx> {
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => {
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
-            // Fallback for remaining types
-            ResolvedType::ConstGeneric(_)
-            | ResolvedType::Lifetime(_)
-            | ResolvedType::Associated { .. }
-            | ResolvedType::Dependent { .. }
-            | ResolvedType::ImplTrait { .. }
-            | ResolvedType::HigherKinded { .. } => self.context.i64_type().into(),
+            ResolvedType::Lazy(inner) => {
+                // Lazy<T> = { i1 computed, T value, ptr thunk_fn }
+                let inner_ty = self.map_type(inner);
+                self.context
+                    .struct_type(
+                        &[
+                            self.context.bool_type().into(), // computed flag
+                            inner_ty,                        // cached value
+                            self.context
+                                .i8_type()
+                                .ptr_type(inkwell::AddressSpace::default())
+                                .into(), // thunk function pointer
+                        ],
+                        false,
+                    )
+                    .into()
+            }
+            ResolvedType::ConstGeneric(name) => {
+                // ICE: const generic should be resolved during monomorphization
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved const generic '{}' in Inkwell codegen", name);
+                let _ = name;
+                self.context.i64_type().into()
+            }
+            ResolvedType::Lifetime(_) => {
+                // Lifetimes are erased at runtime — no representation
+                self.context.i64_type().into()
+            }
+            ResolvedType::Associated { .. } => {
+                // ICE: associated type should be resolved during type checking
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved associated type in Inkwell codegen");
+                self.context.i64_type().into()
+            }
+            ResolvedType::Dependent { base, .. } => {
+                // Dependent types are transparent at runtime — use base type
+                self.map_type(base)
+            }
+            ResolvedType::ImplTrait { .. } => {
+                // ICE: ImplTrait should be monomorphized before codegen
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved ImplTrait in Inkwell codegen");
+                self.context.i64_type().into()
+            }
+            ResolvedType::HigherKinded { .. } => {
+                // ICE: HKT should be monomorphized before codegen
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved HKT in Inkwell codegen");
+                self.context.i64_type().into()
+            }
         }
     }
 

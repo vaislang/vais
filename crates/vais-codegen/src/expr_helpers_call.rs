@@ -221,8 +221,15 @@ impl CodeGenerator {
 
             let mut all_args = Vec::new();
             if let Some(ref info) = closure_info {
-                for (_, capture_val) in &info.captures {
-                    all_args.push(format!("i64 {}", capture_val));
+                if info.is_ref_capture {
+                    // Reference capture: pass pointers
+                    for (_, capture_val) in &info.captures {
+                        all_args.push(format!("i64* {}", capture_val));
+                    }
+                } else {
+                    for (_, capture_val) in &info.captures {
+                        all_args.push(format!("i64 {}", capture_val));
+                    }
                 }
             }
             all_args.extend(arg_vals.iter().cloned());

@@ -105,17 +105,18 @@ done:
     }
 
     /// Generate a vtable for a type implementing a trait
+    /// Returns an error if any required method (without default implementation) is missing
     pub fn generate_vtable(
         &mut self,
         impl_type: &str,
         trait_def: &TraitDef,
         method_impls: &HashMap<String, String>, // method_name -> mangled_function_name
-    ) -> VtableInfo {
+    ) -> Result<VtableInfo, String> {
         let key = (impl_type.to_string(), trait_def.name.clone());
 
         // Return cached vtable if exists
         if let Some(info) = self.vtables.get(&key) {
-            return info.clone();
+            return Ok(info.clone());
         }
 
         // Generate drop function for this type
@@ -125,12 +126,20 @@ done:
 
         // Collect methods in declaration order
         let mut methods = Vec::new();
-        for method_name in trait_def.methods.keys() {
+        for (method_name, method_sig) in &trait_def.methods {
             if let Some(impl_name) = method_impls.get(method_name) {
                 methods.push((method_name.clone(), impl_name.clone()));
+            } else if method_sig.has_default {
+                // Method has default implementation, use the default
+                // Generate default method name: Trait_methodname_default
+                let default_name = format!("{}_{}_default", trait_def.name, method_name);
+                methods.push((method_name.clone(), default_name));
             } else {
-                // Method not implemented - use null (will panic at runtime)
-                methods.push((method_name.clone(), "null".to_string()));
+                // Required method not implemented - compile-time error
+                return Err(format!(
+                    "Trait `{}` method `{}` not implemented for type `{}`",
+                    trait_def.name, method_name, impl_type
+                ));
             }
         }
 
@@ -144,7 +153,7 @@ done:
         self.vtables.insert(key, info.clone());
         self.vtable_counter += 1;
 
-        info
+        Ok(info)
     }
 
     /// Get LLVM IR type for a vtable struct
@@ -440,7 +449,7 @@ mod tests {
         impls.insert("speak".to_string(), "Dog_speak".to_string());
         impls.insert("move_to".to_string(), "Dog_move_to".to_string());
 
-        let vtable = gen.generate_vtable("Dog", &trait_def, &impls);
+        let vtable = gen.generate_vtable("Dog", &trait_def, &impls).expect("vtable generation failed");
 
         assert_eq!(vtable.trait_name, "Animal");
         assert_eq!(vtable.impl_type, "Dog");
@@ -463,12 +472,17 @@ mod tests {
     #[test]
     fn test_vtable_caching() {
         let mut gen = VtableGenerator::new();
-        let trait_def = create_test_trait();
+        let mut trait_def = create_test_trait();
+
+        // Add default implementations to avoid errors
+        for method_sig in trait_def.methods.values_mut() {
+            method_sig.has_default = true;
+        }
 
         let impls = HashMap::new();
 
-        let vtable1 = gen.generate_vtable("Cat", &trait_def, &impls);
-        let vtable2 = gen.generate_vtable("Cat", &trait_def, &impls);
+        let vtable1 = gen.generate_vtable("Cat", &trait_def, &impls).expect("vtable generation failed");
+        let vtable2 = gen.generate_vtable("Cat", &trait_def, &impls).expect("vtable generation failed");
 
         // Should return same vtable (cached)
         assert_eq!(vtable1.global_name, vtable2.global_name);
@@ -505,7 +519,7 @@ mod tests {
         impls.insert("speak".to_string(), "Dog_speak".to_string());
         impls.insert("move_to".to_string(), "Dog_move_to".to_string());
 
-        let vtable = gen.generate_vtable("Dog", &trait_def, &impls);
+        let vtable = gen.generate_vtable("Dog", &trait_def, &impls).expect("vtable generation failed");
 
         // Verify drop function was generated
         assert!(gen.has_drop_function("Dog"));
@@ -528,5 +542,45 @@ mod tests {
             VtableGenerator::get_drop_function_name("Vec_i64"),
             "__drop_Vec_i64"
         );
+    }
+
+    #[test]
+    fn test_missing_required_method_error() {
+        let mut gen = VtableGenerator::new();
+        let trait_def = create_test_trait();
+
+        // Only implement one of the two required methods
+        let mut impls = HashMap::new();
+        impls.insert("speak".to_string(), "Cat_speak".to_string());
+        // "move_to" is missing
+
+        let result = gen.generate_vtable("Cat", &trait_def, &impls);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Trait `Animal` method `move_to` not implemented for type `Cat`"));
+    }
+
+    #[test]
+    fn test_default_method_implementation() {
+        let mut gen = VtableGenerator::new();
+        let mut trait_def = create_test_trait();
+
+        // Mark "move_to" as having a default implementation
+        trait_def.methods.get_mut("move_to").unwrap().has_default = true;
+
+        // Only implement "speak", let "move_to" use default
+        let mut impls = HashMap::new();
+        impls.insert("speak".to_string(), "Cat_speak".to_string());
+
+        let result = gen.generate_vtable("Cat", &trait_def, &impls);
+
+        assert!(result.is_ok());
+        let vtable = result.unwrap();
+        assert_eq!(vtable.methods.len(), 2);
+
+        // Verify that the default implementation is used for move_to
+        let move_to_impl = vtable.methods.iter().find(|(name, _)| name == "move_to").unwrap();
+        assert_eq!(move_to_impl.1, "Animal_move_to_default");
     }
 }

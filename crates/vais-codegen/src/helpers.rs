@@ -184,6 +184,10 @@ impl CodeGenerator {
         let (arr_val, arr_ir) = self.generate_expr(array_expr, counter)?;
         let mut ir = arr_ir;
 
+        // Determine if the source is a Slice/SliceMut (fat pointer)
+        let arr_type = self.infer_expr_type(array_expr);
+        let is_slice_source = matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_));
+
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {
             let (val, start_ir) = self.generate_expr(start_expr, counter)?;
@@ -194,8 +198,6 @@ impl CodeGenerator {
         };
 
         // Get end index
-        // For simplicity, we require end to be specified for now
-        // A proper implementation would need array length tracking
         let end_val = if let Some(end_expr) = end {
             let (val, end_ir) = self.generate_expr(end_expr, counter)?;
             ir.push_str(&end_ir);
@@ -209,9 +211,39 @@ impl CodeGenerator {
                 val
             }
         } else {
-            return Err(CodegenError::Unsupported(
-                "Slice without end index requires array length".to_string(),
+            // Open-end slice: arr[start..]
+            if is_slice_source {
+                // Extract length from fat pointer (second field)
+                let length = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+                    length, arr_val
+                ));
+                length
+            } else {
+                // Array/Pointer source doesn't have length information
+                return Err(CodegenError::Unsupported(
+                    "Open-end slicing requires a slice source; array length is unknown".to_string(),
+                ));
+            }
+        };
+
+        // If source is a slice, extract the data pointer
+        let src_arr_ptr = if is_slice_source {
+            let data_ptr = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                data_ptr, arr_val
             ));
+            let typed_ptr = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = bitcast i8* {} to i64*\n",
+                typed_ptr, data_ptr
+            ));
+            typed_ptr
+        } else {
+            // For arrays/pointers, use directly
+            arr_val.clone()
         };
 
         // Calculate slice length: end - start
@@ -281,7 +313,7 @@ impl CodeGenerator {
         let src_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = getelementptr i64, i64* {}, i64 {}\n",
-            src_ptr, arr_val, src_idx
+            src_ptr, src_arr_ptr, src_idx
         ));
 
         // Load source element

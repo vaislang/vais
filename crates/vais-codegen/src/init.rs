@@ -68,6 +68,8 @@ impl CodeGenerator {
                 async_state_counter: 0,
                 async_await_points: Vec::new(),
                 current_async_function: None,
+                last_lazy_info: None,
+                lazy_bindings: HashMap::new(),
             },
             module_name: module_name.to_string(),
             target,

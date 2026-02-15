@@ -137,13 +137,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         &mut self,
         start: Option<&Spanned<Expr>>,
         end: Option<&Spanned<Expr>>,
-        _inclusive: bool,
+        inclusive: bool,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Range is represented as a struct { start: i64, end: i64 }
+        // Range is represented as a struct { start: i64, end: i64, inclusive: i1 }
         let range_type = self.context.struct_type(
             &[
                 self.context.i64_type().into(),
                 self.context.i64_type().into(),
+                self.context.bool_type().into(),
             ],
             false,
         );
@@ -163,6 +164,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .into()
         };
 
+        let incl_val = self
+            .context
+            .bool_type()
+            .const_int(u64::from(inclusive), false);
+
         let mut range_val = range_type.get_undef();
         range_val = self
             .builder
@@ -172,6 +178,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         range_val = self
             .builder
             .build_insert_value(range_val, end_val, 1, "range_end")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        range_val = self
+            .builder
+            .build_insert_value(range_val, incl_val, 2, "range_inclusive")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .into_struct_value();
 

@@ -184,6 +184,7 @@ impl CodeGenerator {
                     .iter()
                     .map(|(name, _, val)| (name.clone(), val.clone()))
                     .collect(),
+                is_ref_capture: false,
             });
             Ok((fn_ptr_tmp, capture_ir))
         }

@@ -448,8 +448,17 @@ impl CodeGenerator {
                 // Cast returns the target type
                 self.ast_type_to_resolved(&ty.node)
             }
+            Expr::Range { start, .. } => {
+                // Range returns Range<T> where T is the type of start (or i64 default)
+                let elem_type = if let Some(s) = start {
+                    self.infer_expr_type(s)
+                } else {
+                    ResolvedType::I64
+                };
+                ResolvedType::Range(Box::new(elem_type))
+            }
             Expr::Unit => ResolvedType::Unit,
-            _ => ResolvedType::I64, // Default fallback
+            _ => ResolvedType::I64, // Default fallback for remaining expressions
         }
     }
 

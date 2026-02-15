@@ -184,7 +184,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .ok_or_else(|| CodegenError::LlvmError("No current function for slice".to_string()))?;
 
         let arr_val = self.generate_expr(arr)?;
-        let arr_ptr = arr_val.into_pointer_value();
+
+        // Determine if the source is a Slice/SliceMut (fat pointer struct with 2 fields)
+        let is_slice_source = if let BasicValueEnum::StructValue(sv) = arr_val {
+            let struct_type = sv.get_type();
+            struct_type.count_fields() == 2
+        } else {
+            false
+        };
+
+        let arr_ptr = if is_slice_source {
+            // Extract data pointer from fat pointer (field 0)
+            let data_ptr = self
+                .builder
+                .build_extract_value(arr_val.into_struct_value(), 0, "slice_data")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_pointer_value();
+            // Bitcast i8* to i64*
+            self.builder
+                .build_pointer_cast(
+                    data_ptr,
+                    self.context.i64_type().ptr_type(AddressSpace::default()),
+                    "slice_ptr_typed",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            arr_val.into_pointer_value()
+        };
 
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {
@@ -204,9 +230,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 val
             }
         } else {
-            return Err(CodegenError::Unsupported(
-                "Slice without end index requires array length".to_string(),
-            ));
+            // Open-end slice: arr[start..]
+            if is_slice_source {
+                // Extract length from fat pointer (field 1)
+                self.builder
+                    .build_extract_value(arr_val.into_struct_value(), 1, "slice_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value()
+            } else {
+                // Array/Pointer source doesn't have length information
+                return Err(CodegenError::Unsupported(
+                    "Open-end slicing requires a slice source; array length is unknown".to_string(),
+                ));
+            }
         };
 
         // Calculate slice length: end - start
@@ -471,29 +507,32 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             captures.to_vec()
         };
 
+        let is_ref_capture = matches!(
+            capture_mode,
+            ast::CaptureMode::ByRef | ast::CaptureMode::ByMutRef
+        );
+
         let mut captured_vars: Vec<(String, BasicValueEnum<'ctx>, BasicTypeEnum<'ctx>)> =
             Vec::new();
         for cap_name in &effective_captures {
             if let Some((ptr, var_type)) = self.locals.get(cap_name) {
-                // Apply capture mode strategy
-                // Note: ByRef/ByMutRef would ideally pass pointers directly, but current Inkwell
-                // lambda implementation uses uniform value parameters for simplicity.
-                // For now, we fall back to by-value for all modes (future: implement proper
-                // reference capture with pointer parameters and updated lambda calling convention).
-                match capture_mode {
-                    ast::CaptureMode::ByRef | ast::CaptureMode::ByMutRef => {
-                        return Err(CodegenError::Unsupported(
-                            "reference capture (|&x| or |&mut x|) is not yet supported; use by-value or move capture instead".to_string(),
-                        ));
-                    }
-                    ast::CaptureMode::ByValue | ast::CaptureMode::Move => {
-                        // By-value or explicit move: load and pass the value
-                        let val = self
-                            .builder
-                            .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
-                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                        captured_vars.push((cap_name.clone(), val, *var_type));
-                    }
+                if is_ref_capture {
+                    // ByRef/ByMutRef: pass the alloca pointer directly
+                    // The pointer value itself is the captured value
+                    captured_vars.push((
+                        cap_name.clone(),
+                        (*ptr).into(),
+                        (*var_type)
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .into(),
+                    ));
+                } else {
+                    // By-value or explicit move: load and pass the value
+                    let val = self
+                        .builder
+                        .build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    captured_vars.push((cap_name.clone(), val, *var_type));
                 }
             }
         }
@@ -535,14 +574,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut param_idx = 0u32;
         for (cap_name, _, cap_type) in &captured_vars {
             let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
-            let alloca = self
-                .builder
-                .build_alloca(*cap_type, &format!("__cap_{}", cap_name))
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder
-                .build_store(alloca, param_val)
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.locals.insert(cap_name.clone(), (alloca, *cap_type));
+            if is_ref_capture {
+                // ByRef/ByMutRef: parameter is already a pointer to the outer alloca.
+                // Use it directly — build_load will read from the outer variable.
+                let ptr_val = param_val.into_pointer_value();
+                // Get the original value type from saved locals
+                let val_type = saved_locals
+                    .get(cap_name)
+                    .map(|(_, t)| *t)
+                    .unwrap_or_else(|| self.context.i64_type().into());
+                self.locals.insert(cap_name.clone(), (ptr_val, val_type));
+            } else {
+                let alloca = self
+                    .builder
+                    .build_alloca(*cap_type, &format!("__cap_{}", cap_name))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_store(alloca, param_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(cap_name.clone(), (alloca, *cap_type));
+            }
             param_idx += 1;
         }
 

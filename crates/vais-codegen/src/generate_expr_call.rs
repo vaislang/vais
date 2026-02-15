@@ -536,42 +536,48 @@ impl CodeGenerator {
 
                     if let Some(concrete_name) = concrete_type_name {
                         // Generate vtable for this concrete type + trait
-                        let vtable_info =
+                        let vtable_result =
                             self.get_or_generate_vtable(&concrete_name, &trait_name);
 
-                        if let Some(vtable) = vtable_info {
-                            // Load the actual struct pointer if we have a pointer-to-pointer
-                            // (Ref expressions return the address of the storage, not the struct)
-                            let struct_ptr = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = load %{}*, %{}** {}\n",
-                                struct_ptr, concrete_name, concrete_name, val
-                            ));
-                            // Cast data pointer to i8*
-                            let data_ptr = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = bitcast %{}* {} to i8*\n",
-                                data_ptr, concrete_name, struct_ptr
-                            ));
+                        match vtable_result {
+                            Ok(vtable) => {
+                                // Load the actual struct pointer if we have a pointer-to-pointer
+                                // (Ref expressions return the address of the storage, not the struct)
+                                let struct_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = load %{}*, %{}** {}\n",
+                                    struct_ptr, concrete_name, concrete_name, val
+                                ));
+                                // Cast data pointer to i8*
+                                let data_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = bitcast %{}* {} to i8*\n",
+                                    data_ptr, concrete_name, struct_ptr
+                                ));
 
-                            // Create fat pointer { i8*, i8* }
-                            let trait_obj_1 = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = insertvalue {{ i8*, i8* }} undef, i8* {}, 0\n",
-                                trait_obj_1, data_ptr
-                            ));
-                            let vtable_cast = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = bitcast {{ i8*, i64, i64, i64(i8*)* }}* {} to i8*\n",
-                                vtable_cast, vtable.global_name
-                            ));
-                            let trait_obj_2 = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = insertvalue {{ i8*, i8* }} {}, i8* {}, 1\n",
-                                trait_obj_2, trait_obj_1, vtable_cast
-                            ));
+                                // Create fat pointer { i8*, i8* }
+                                let trait_obj_1 = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = insertvalue {{ i8*, i8* }} undef, i8* {}, 0\n",
+                                    trait_obj_1, data_ptr
+                                ));
+                                let vtable_cast = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = bitcast {{ i8*, i64, i64, i64(i8*)* }}* {} to i8*\n",
+                                    vtable_cast, vtable.global_name
+                                ));
+                                let trait_obj_2 = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = insertvalue {{ i8*, i8* }} {}, i8* {}, 1\n",
+                                    trait_obj_2, trait_obj_1, vtable_cast
+                                ));
 
-                            val = trait_obj_2;
+                                val = trait_obj_2;
+                            }
+                            Err(e) => {
+                                // Propagate the error - missing required trait method
+                                return Err(e);
+                            }
                         }
                     }
                 }

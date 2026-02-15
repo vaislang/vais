@@ -168,6 +168,14 @@ pub fn assert_stdout_contains(source: &str, expected: &str) {
     }
 }
 
+/// Assert that source compiles to IR successfully (doesn't require clang/execution)
+pub fn assert_compiles(source: &str) {
+    match compile_to_ir(source) {
+        Ok(_) => {}
+        Err(e) => panic!("Expected compilation to succeed, but got error: {}", e),
+    }
+}
+
 /// Assert that source fails to compile (expected compilation error)
 pub fn assert_compile_error(source: &str) {
     assert!(

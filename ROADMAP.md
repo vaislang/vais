@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 589, 통합 354+) |
+| 전체 테스트 | 2,500+ (E2E 614, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -149,7 +149,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | `[T]`, `[T; N]`, `&[T]`, `&mut [T]` | ✅ 완전 | 배열/슬라이스 |
 | `(T1, T2)`, `fn(A)->B`, `*T`, `&T`, `&mut T` | ✅ 완전 | |
 | `'a`, `&'a T` | ✅ 완전 | 라이프타임 |
-| `dyn Trait`, `X Trait` (impl Trait) | ⚠️ TC 통과, codegen i64 fallback | Phase 41에서 수정 |
+| `dyn Trait`, `X Trait` (impl Trait) | ✅ TC 통과, codegen ICE 경고 | Phase 41에서 수정 |
 | `linear T`, `affine T` | ✅ 완전 | |
 | Dependent types `{x: T \| pred}` | ⚠️ 파싱만, 검증 미구현 | |
 | SIMD `Vec4f32` 등 | ✅ 완전 | |
@@ -168,10 +168,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|-----------|------|
 | Trait bounds 검증 | 수집만, 미검증 | Phase 40 |
 | Generic substitution 누락 | Map/Range/Associated 등 wildcard catch | Phase 40 |
-| Range 구조체 codegen | start값만 반환 | Phase 41 |
-| i64 fallback (ImplTrait/DynTrait/HKT) | TC 통과, codegen i64 | Phase 41 |
-| Lambda `ByRef`/`ByMutRef` | Unsupported 에러 | Phase 42 |
-| `lazy`/`force` codegen | eager 평가 (지연 없음) | Phase 42 |
+| ~~Range 구조체 codegen~~ | ✅ `{ i64, i64, i1 }` 구조체 | Phase 41 완료 |
+| ~~i64 fallback (ImplTrait/DynTrait/HKT)~~ | ✅ 명시적 핸들러 + ICE 경고 | Phase 41 완료 |
+| ~~Lambda `ByRef`/`ByMutRef`~~ | ✅ 포인터 전달 (Parser+TC+Codegen) | Phase 42 완료 |
+| ~~`lazy`/`force` codegen~~ | ✅ thunk 함수 + computed 체크 + 캐싱 | Phase 42 완료 |
 | `spawn`/`await`/`yield` codegen | stub (blocking poll) | Phase 43 |
 | ~~`?` Try 연산자~~ | ~~✅ 이미 완전 구현~~ | ~~ROADMAP 오류~~ |
 | ~~`!` Unwrap 연산자~~ | ~~✅ 이미 완전 구현~~ | ~~ROADMAP 오류~~ |
@@ -201,6 +201,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 27~38** | 언어 확장 · 타입 시스템 | where 절, pattern alias, capture mode, trait alias, impl Trait, const eval 확장, HKT, GAT, derive 매크로 — **571 E2E** |
 | **Phase 39** | 성능 최적화 | Incremental TC/Codegen, Tarjan SCC, 캐시 히트율 벤치마크 — **571 E2E** |
 | **Phase 40** | 타입 시스템 건전성 | Trait bounds 검증, generic substitution 보완, HKT arity 체크, 14+4 E2E — **589 E2E** |
+| **Phase 41** | Codegen 완성도 | Range `{i64,i64,i1}`, i64 fallback 제거, vtable null 방지, Slice open-end — **596 E2E** |
+| **Phase 42** | Lambda & Lazy 완성 | ByRef/ByMutRef 캡처 포인터 전달, lazy thunk 지연 평가, force computed 체크 — **614 E2E** |
 
 ---
 
@@ -279,24 +281,48 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: checker_module.rs (pub(crate) fn extract_hkt_params() 추가, 3곳 인라인 패턴 → 헬퍼 호출)
 진행률: 3/3 (100%)
 
-### Phase 41: Codegen 완성도 — Range 구조체 & i64 Fallback 제거
+### Phase 41: Codegen 완성도 — Range 구조체 & i64 Fallback 제거 ✅ 2026-02-15
 > 목표: 모든 codegen 경로가 올바른 타입과 동작을 생성. stub이 아닌 실제 값을 반환.
-모드: 자동진행
-- [ ] 1. Range 구조체 codegen — `{ i64 start, i64 end, i1 inclusive }` 구조체 생성 (start만 반환하는 현재 동작 수정). Range를 변수에 담아 사용하는 패턴 지원
-- [ ] 2. i64 fallback 제거 — Generic/Var/Unknown/ImplTrait/DynTrait/HKT → TC에서 해결된 concrete 타입 사용 (codegen/types.rs, type_inference.rs)
-- [ ] 3. vtable null 방지 — 미구현 trait 메서드 호출 시 컴파일 에러 (런타임 segfault → 컴파일타임 에러)
-- [ ] 4. Slice open-end 지원 — `array[start..]` 문법 (배열 길이 활용한 sub-slice 생성)
-- [ ] 5. Text IR ↔ Inkwell 동작 일치 검증 — 두 백엔드의 codegen 결과 비교 테스트
-- [ ] 6. E2E 테스트 — Range 변수 저장/전달, i64 fallback 해소 검증, slice open-end 테스트
+- [x] 1. Range 구조체 codegen — Text IR `{ i64, i64, i1 }` struct 생성 + inclusive 필드 ✅
+  변경: types.rs (Range→`{ i64, i64, i1 }`), generate_expr.rs (insertvalue 3단 체인), inkwell/gen_advanced.rs (bool_type 추가), inkwell/types.rs (Range struct 3필드)
+- [x] 2. i64 fallback 제거 — Generic/ImplTrait 등 ICE 경고 + 명시적 타입 핸들러 ✅
+  변경: types.rs (Fn/Optional/Result/Future/Never 등 개별 핸들러, catch-all 제거), inkwell/types.rs (ConstGeneric/Lifetime/Associated 등 개별 핸들러), type_inference.rs (Range 타입 추론)
+- [x] 3. vtable null 방지 — 미구현 trait 메서드 컴파일타임 에러 ✅
+  변경: vtable.rs (generate_vtable→Result, null→Err, default→fallback), trait_dispatch.rs (Result 전파, clippy fix), generate_expr_call.rs (match vtable_result)
+- [x] 4. Slice open-end 지원 — fat pointer slice `arr[start..]` + array 에러 메시지 ✅
+  변경: helpers.rs (is_slice_source 감지, extractvalue len, src_arr_ptr 분리), inkwell/gen_aggregate.rs (fat pointer 감지, extractvalue+pointer_cast)
+- [x] 5. Text IR ↔ Inkwell 동작 일치 검증 — IR 검증 3개 + 기능 테스트 12개 ✅
+- [x] 6. E2E 596개 통과 (+15 Phase 41), Clippy 0건 ✅
+  변경: e2e/phase41.rs (15 tests), e2e/helpers.rs (assert_compiles 추가), e2e/main.rs (mod phase41)
+진행률: 6/6 (100%)
 
-### Phase 42: Lambda & Lazy 완성 — 클로저 캡처 & 지연 평가
+### Phase 42: Lambda & Lazy 완성 — 클로저 캡처 & 지연 평가 ✅ 2026-02-15
 > 목표: Lambda ByRef/ByMutRef 캡처와 Lazy/Force 지연 평가 구현
 모드: 자동진행
-- [ ] 1. Lambda ByRef 캡처 — `|&x| expr` 구문의 codegen 구현. 캡처된 변수를 포인터로 전달, 클로저 ABI에 참조 슬롯 추가
-- [ ] 2. Lambda ByMutRef 캡처 — `|&mut x| expr` 구문의 codegen 구현. mutable 포인터 전달, borrow checker 연동
-- [ ] 3. Lazy 지연 평가 — `lazy { expr }` 가 thunk 함수 포인터 + 캐시 구조체 `{ i1 computed, T value, fn() thunk }` 생성. 첫 `force` 시 평가 후 value 캐싱
-- [ ] 4. Force 평가 — `force lazy_val` 이 computed 플래그 체크 후 thunk 호출 또는 캐시 반환
-- [ ] 5. E2E 테스트 — ByRef/ByMutRef 캡처 검증, lazy/force 지연 평가 + 캐싱 검증
+- [x] 1. Lambda ByRef 캡처 — Parser `|&x|` 문법 + TC 허용 + Codegen 포인터 전달 (Opus 직접) ✅ 2026-02-15
+  변경: parser/expr.rs (`|&x|` → ByRef 감지), checker_expr.rs (ByRef 허용), generate_expr.rs (alloca ptr 전달), inkwell/gen_aggregate.rs (ptr param)
+- [x] 2. Lambda ByMutRef 캡처 — `|&mut x|` mutable 포인터 전달 + 쓰기 지원 (Opus 직접) [blockedBy: 1] ✅ 2026-02-15
+  변경: parser/expr.rs (`|&mut x|` → ByMutRef 감지), checker_expr.rs (mut 변수 검증), codegen 동일 경로 (ByRef와 통합)
+- [x] 3. Lazy 지연 평가 — thunk 함수 생성 + 캡처 환경 + `{ i1, T, ptr }` struct (Opus 직접) [∥1] ✅ 2026-02-15
+  변경: expr_visitor.rs (thunk 함수 생성, computed=false), types.rs (LazyThunkInfo), state.rs/init.rs (lazy_bindings), inkwell/gen_expr.rs (generate_lazy), inkwell/types.rs (Lazy→struct)
+- [x] 4. Force 평가 — computed 체크 + thunk 호출 + 캐싱 (Opus 직접) [blockedBy: 3] ✅ 2026-02-15
+  변경: expr_visitor.rs (br i1 computed → cached/compute/merge phi), inkwell/gen_expr.rs (generate_force, extractvalue)
+- [x] 5. E2E 테스트 + ROADMAP 업데이트 (Sonnet 위임) [blockedBy: 1,2,3,4] ✅ 2026-02-15
+  변경: e2e/phase42.rs (18 tests: ByRef 3, ByMutRef 2, Lazy/Force 11, Combined 2), e2e/main.rs (mod phase42)
+진행률: 5/5 (100%)
+
+### 리뷰 발견사항 (2026-02-15)
+> 출처: /team-review Phase 42
+
+- [x] 1. [정확성] Inkwell `generate_force` 완전 구현 — conditional branch + thunk call + cache (Critical) ✅ 2026-02-15
+  변경: inkwell/gen_expr.rs (generate_force: computed flag→branch→thunk call→phi merge, lazy_bindings lookup)
+- [x] 2. [정확성] `visit_lazy` param_names 의도 문서화 — 빈 HashSet이 올바름 (lazy는 자체 파라미터 없음) ✅ 2026-02-15
+  변경: expr_visitor.rs (visit_lazy param_names 코멘트 명확화 — false positive 확인)
+- [x] 3. [정확성] force fallback 타입 하드코딩 → LazyThunkInfo에 캡처 타입 저장 (Warning) ✅ 2026-02-15
+  변경: types.rs (LazyThunkInfo captures: Vec<(String,String)>→Vec<(String,String,String)>), expr_visitor.rs (visit_lazy/visit_force 캡처 타입 전달)
+- [x] 4. [정확성] ByRef lambda 내부 캡처 변수 쓰기 방지 (Warning) ✅ 2026-02-15
+  변경: checker_expr.rs (CaptureMode::ByRef → effective_mut=false, 캡처 변수 immutable 강제)
+진행률: 4/4 (100%)
 
 ### Phase 43: Async 런타임 — Spawn/Await/Yield 실제 구현
 > 목표: stub으로 남은 async 기능을 실제 동작하도록 구현하거나 명시적 제한 결정

@@ -1504,13 +1504,49 @@ impl CodeGenerator {
                 arms,
             } => self.generate_match(match_expr, arms, counter),
 
-            // Range expression (for now just return start value)
-            Expr::Range { start, .. } => {
-                if let Some(start_expr) = start {
-                    self.generate_expr(start_expr, counter)
+            // Range expression: produce { i64 start, i64 end, i1 inclusive } struct
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                let mut ir = String::new();
+
+                let (start_val, start_ir) = if let Some(s) = start {
+                    self.generate_expr(s, counter)?
                 } else {
-                    Ok(("0".to_string(), String::new()))
-                }
+                    ("0".to_string(), String::new())
+                };
+                ir.push_str(&start_ir);
+
+                let (end_val, end_ir) = if let Some(e) = end {
+                    self.generate_expr(e, counter)?
+                } else {
+                    (format!("{}", i64::MAX), String::new())
+                };
+                ir.push_str(&end_ir);
+
+                let incl_val = if *inclusive { "1" } else { "0" };
+
+                // Build struct via insertvalue chain
+                let range_type = "{ i64, i64, i1 }";
+                let t1 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} undef, i64 {}, 0\n",
+                    t1, range_type, start_val
+                ));
+                let t2 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} {}, i64 {}, 1\n",
+                    t2, range_type, t1, end_val
+                ));
+                let t3 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} {}, i1 {}, 2\n",
+                    t3, range_type, t2, incl_val
+                ));
+
+                Ok((t3, ir))
             }
 
             // Await expression: poll the future until Ready
@@ -1746,43 +1782,63 @@ impl CodeGenerator {
                 let mut captured_vars: Vec<(String, ResolvedType, String)> = Vec::new();
                 let mut capture_ir = String::new();
 
+                let is_ref_capture = matches!(
+                    capture_mode,
+                    vais_ast::CaptureMode::ByRef | vais_ast::CaptureMode::ByMutRef
+                );
+
                 for cap_name in &capture_names {
                     if let Some(local) = self.fn_ctx.locals.get(cap_name) {
                         let ty = local.ty.clone();
 
-                        // Apply capture mode strategy
-                        // Note: ByRef/ByMutRef would ideally pass pointers, but current IR backend
-                        // doesn't support mixed value/pointer parameter types for lambdas.
-                        // For now, we fall back to by-value for all modes (future: implement proper
-                        // reference capture with pointer parameters).
-                        match capture_mode {
-                            vais_ast::CaptureMode::ByRef | vais_ast::CaptureMode::ByMutRef => {
-                                return Err(CodegenError::Unsupported(
-                                    "reference capture (|&x| or |&mut x|) is not yet supported; use by-value or move capture instead".to_string(),
+                        if is_ref_capture {
+                            // ByRef/ByMutRef: pass pointer to the captured variable
+                            if local.is_param() || local.is_ssa() {
+                                // Params and SSA values don't have an alloca address.
+                                // Spill to alloca so we can take a pointer.
+                                let llvm_ty = self.type_to_llvm(&ty);
+                                let spill_name = format!("__refcap_{}", cap_name);
+                                let spill_ptr = format!("%{}", spill_name);
+                                capture_ir.push_str(&format!(
+                                    "  {} = alloca {}\n",
+                                    spill_ptr, llvm_ty
+                                ));
+                                let val = if local.is_param() {
+                                    format!("%{}", local.llvm_name)
+                                } else {
+                                    local.llvm_name.clone()
+                                };
+                                capture_ir.push_str(&format!(
+                                    "  store {} {}, {}* {}\n",
+                                    llvm_ty, val, llvm_ty, spill_ptr
+                                ));
+                                captured_vars.push((cap_name.clone(), ty, spill_ptr));
+                            } else {
+                                // Alloca: pass the pointer directly
+                                captured_vars.push((
+                                    cap_name.clone(),
+                                    ty,
+                                    format!("%{}", local.llvm_name),
                                 ));
                             }
-                            vais_ast::CaptureMode::ByValue | vais_ast::CaptureMode::Move => {
-                                // By-value or explicit move: load and pass the value
-                                if local.is_param() {
-                                    // Parameters are already values, use directly
-                                    captured_vars.push((
-                                        cap_name.clone(),
-                                        ty,
-                                        format!("%{}", local.llvm_name),
-                                    ));
-                                } else if local.is_ssa() {
-                                    // SSA values are already the value itself, use directly
-                                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
-                                } else {
-                                    // Load from alloca
-                                    let tmp = self.next_temp(counter);
-                                    let llvm_ty = self.type_to_llvm(&ty);
-                                    capture_ir.push_str(&format!(
-                                        "  {} = load {}, {}* %{}\n",
-                                        tmp, llvm_ty, llvm_ty, local.llvm_name
-                                    ));
-                                    captured_vars.push((cap_name.clone(), ty, tmp));
-                                }
+                        } else {
+                            // ByValue/Move: load and pass the value
+                            if local.is_param() {
+                                captured_vars.push((
+                                    cap_name.clone(),
+                                    ty,
+                                    format!("%{}", local.llvm_name),
+                                ));
+                            } else if local.is_ssa() {
+                                captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                            } else {
+                                let tmp = self.next_temp(counter);
+                                let llvm_ty = self.type_to_llvm(&ty);
+                                capture_ir.push_str(&format!(
+                                    "  {} = load {}, {}* %{}\n",
+                                    tmp, llvm_ty, llvm_ty, local.llvm_name
+                                ));
+                                captured_vars.push((cap_name.clone(), ty, tmp));
                             }
                         }
                     }
@@ -1795,8 +1851,14 @@ impl CodeGenerator {
                 // First add captured variables as parameters (they come first)
                 for (cap_name, cap_ty, _) in &captured_vars {
                     let llvm_ty = self.type_to_llvm(cap_ty);
-                    param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
-                    param_types.push(llvm_ty);
+                    if is_ref_capture {
+                        // Reference capture: parameter is a pointer
+                        param_strs.push(format!("{}* %__cap_{}", llvm_ty, cap_name));
+                        param_types.push(format!("{}*", llvm_ty));
+                    } else {
+                        param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
+                        param_types.push(llvm_ty);
+                    }
                 }
 
                 // Then add original lambda parameters
@@ -1818,10 +1880,19 @@ impl CodeGenerator {
 
                 // Register captured variables as locals (using capture parameter names)
                 for (cap_name, cap_ty, _) in &captured_vars {
-                    self.fn_ctx.locals.insert(
-                        cap_name.clone(),
-                        LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
-                    );
+                    if is_ref_capture {
+                        // ByRef/ByMutRef: parameter is a pointer, register as alloca
+                        // so that reads generate load instructions from the pointer
+                        self.fn_ctx.locals.insert(
+                            cap_name.clone(),
+                            LocalVar::alloca(cap_ty.clone(), format!("__cap_{}", cap_name)),
+                        );
+                    } else {
+                        self.fn_ctx.locals.insert(
+                            cap_name.clone(),
+                            LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
+                        );
+                    }
                 }
 
                 // Register original parameters as locals
@@ -1875,6 +1946,7 @@ impl CodeGenerator {
                             .iter()
                             .map(|(name, _, val)| (name.clone(), val.clone()))
                             .collect(),
+                        is_ref_capture,
                     });
                     Ok((fn_ptr_tmp, capture_ir))
                 }

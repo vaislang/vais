@@ -1154,6 +1154,23 @@ impl Parser {
             }
             Token::Pipe => {
                 // Lambda expression: |params| body
+                // Check for reference capture: |&mut x| or |&x|
+                if self.check(&Token::Amp) {
+                    let saved = self.pos;
+                    self.advance(); // consume &
+                    if self.check(&Token::Mut) {
+                        self.advance(); // consume mut
+                        // |&mut x, ...| body → ByMutRef capture
+                        return self.parse_lambda(start, CaptureMode::ByMutRef);
+                    }
+                    if self.peek().map(|t| matches!(t.token, Token::Ident(_))).unwrap_or(false) {
+                        // |&x, ...| body → ByRef capture
+                        // & already consumed, parse_lambda sees x| ...
+                        return self.parse_lambda(start, CaptureMode::ByRef);
+                    }
+                    // Not a capture pattern, restore
+                    self.pos = saved;
+                }
                 return self.parse_lambda(start, CaptureMode::ByValue);
             }
             Token::Move => {

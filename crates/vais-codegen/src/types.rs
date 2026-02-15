@@ -167,6 +167,20 @@ pub(crate) struct ClosureInfo {
     pub func_name: String,
     /// Captured variable names and their loaded values (var_name, llvm_value)
     pub captures: Vec<(String, String)>,
+    /// Whether captures are passed by reference (pointer) vs by value
+    pub is_ref_capture: bool,
+}
+
+/// Information about a lazy thunk (deferred evaluation)
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct LazyThunkInfo {
+    /// The generated LLVM thunk function name
+    pub thunk_name: String,
+    /// Captured variable names, LLVM types, and loaded values (var_name, llvm_type, llvm_value)
+    pub captures: Vec<(String, String, String)>,
+    /// LLVM type of the inner (computed) value
+    pub inner_llvm_ty: String,
 }
 
 /// Information about an await point in an async function
@@ -284,9 +298,8 @@ impl CodeGenerator {
                 }
             }
             ResolvedType::Range(_inner) => {
-                // Range is represented as a struct with start and end fields
-                // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
-                String::from("%Range")
+                // Range is represented as a struct: { i64 start, i64 end, i1 inclusive }
+                String::from("{ i64, i64, i1 }")
             }
             ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
@@ -327,15 +340,16 @@ impl CodeGenerator {
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // Fallback to i64 for unresolved generics
+                    // ICE: generic should be resolved before codegen
+                    #[cfg(debug_assertions)]
+                    eprintln!("ICE: unresolved generic parameter '{}' in codegen, using i64 fallback", param);
                     String::from("i64")
                 }
             }
             ResolvedType::ConstGeneric(param) => {
                 // Const generics should be resolved at monomorphization time
-                // If we reach here, it's an error, but fall back to i64
                 #[cfg(debug_assertions)]
-                eprintln!("Warning: Unresolved const generic parameter: {}", param);
+                eprintln!("ICE: unresolved const generic parameter '{}' in codegen", param);
                 let _ = param;
                 String::from("i64")
             }
@@ -351,8 +365,10 @@ impl CodeGenerator {
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
             ResolvedType::ImplTrait { .. } => {
-                // impl Trait is monomorphized — should be resolved before codegen.
-                // Fallback to i64 if unresolved (same as opaque type).
+                // impl Trait should be monomorphized before codegen.
+                // ICE if still present — fallback to i64 until full monomorphization is implemented.
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved ImplTrait in codegen, using i64 fallback");
                 String::from("i64")
             }
             ResolvedType::FnPtr {
@@ -402,7 +418,6 @@ impl CodeGenerator {
                 // - computed: i1 (has been evaluated)
                 // - value: T (cached value)
                 // - thunk: closure pointer (function to compute value)
-                // For simplicity, we use a pointer to struct
                 format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Tuple(elems) => {
@@ -416,7 +431,50 @@ impl CodeGenerator {
                 // Slice is a fat pointer: { i8* data, i64 length }
                 String::from("{ i8*, i64 }")
             }
-            _ => String::from("i64"), // Default fallback
+            ResolvedType::Fn { params, ret, .. } => {
+                // Function type as pointer (same as FnPtr at runtime)
+                let param_types: Result<Vec<String>, _> =
+                    params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
+                let param_types = param_types?;
+                let ret_type = self.type_to_llvm_impl(ret)?;
+                format!("{}({})*", ret_type, param_types.join(", "))
+            }
+            ResolvedType::Optional(inner) => {
+                // Option<T> is { i8 tag, T value }
+                let inner_ty = self.type_to_llvm_impl(inner)?;
+                format!("{{ i8, {} }}", inner_ty)
+            }
+            ResolvedType::Result(ok, _err) => {
+                // Result<T, E> is { i8 tag, T value } (use ok type for payload)
+                let ok_ty = self.type_to_llvm_impl(ok)?;
+                format!("{{ i8, {} }}", ok_ty)
+            }
+            ResolvedType::Future(_) => {
+                // Future is an opaque pointer to async state machine
+                String::from("i8*")
+            }
+            ResolvedType::Never => {
+                // Never type — functions that return ! use void
+                String::from("void")
+            }
+            ResolvedType::Var(_) | ResolvedType::Unknown => {
+                // ICE: these should be resolved by the type checker
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved type variable reached codegen, using i64 fallback");
+                String::from("i64")
+            }
+            ResolvedType::Associated { .. } => {
+                // ICE: associated types should be resolved during type checking
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved associated type in codegen, using i64 fallback");
+                String::from("i64")
+            }
+            ResolvedType::HigherKinded { .. } => {
+                // ICE: HKT should be monomorphized before codegen
+                #[cfg(debug_assertions)]
+                eprintln!("ICE: unresolved higher-kinded type in codegen, using i64 fallback");
+                String::from("i64")
+            }
         })
     }
 

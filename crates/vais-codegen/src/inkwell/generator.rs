@@ -110,6 +110,12 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Temporary storage for the last generated lambda (used by Stmt::Let to track bindings)
     pub(super) _last_lambda_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
 
+    /// Temporary storage for the last generated lazy thunk
+    pub(super) _last_lazy_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
+
+    /// Lazy binding info: variable name -> (thunk function name, captured values)
+    pub(super) lazy_bindings: HashMap<String, (String, Vec<(String, BasicValueEnum<'ctx>)>)>,
+
     /// Constants: name -> value (evaluated at compile time)
     pub(super) constants: HashMap<String, BasicValueEnum<'ctx>>,
 
@@ -180,6 +186,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             struct_generic_params: HashMap::new(),
             lambda_bindings: HashMap::new(),
             _last_lambda_info: None,
+            _last_lazy_info: None,
+            lazy_bindings: HashMap::new(),
             constants: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),

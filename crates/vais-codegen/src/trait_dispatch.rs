@@ -108,18 +108,20 @@ impl CodeGenerator {
         &mut self,
         impl_type: &str,
         trait_name: &str,
-    ) -> Option<vtable::VtableInfo> {
-        let trait_def = self.types.trait_defs.get(trait_name)?.clone();
+    ) -> CodegenResult<vtable::VtableInfo> {
+        let trait_def = self.types.trait_defs.get(trait_name).ok_or_else(|| {
+            CodegenError::TypeError(format!("Unknown trait: {}", trait_name))
+        })?;
+        let trait_def = trait_def.clone();
         let method_impls = self
             .types.trait_impl_methods
             .get(&(impl_type.to_string(), trait_name.to_string()))
             .cloned()
             .unwrap_or_default();
 
-        Some(
-            self.vtable_generator
-                .generate_vtable(impl_type, &trait_def, &method_impls),
-        )
+        self.vtable_generator
+            .generate_vtable(impl_type, &trait_def, &method_impls)
+            .map_err(CodegenError::TypeError)
     }
 
     /// Generate all vtable globals for the module
@@ -153,14 +155,7 @@ impl CodeGenerator {
         trait_name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let vtable_info = self
-            .get_or_generate_vtable(impl_type, trait_name)
-            .ok_or_else(|| {
-                CodegenError::Unsupported(format!(
-                    "No vtable for {} implementing {}",
-                    impl_type, trait_name
-                ))
-            })?;
+        let vtable_info = self.get_or_generate_vtable(impl_type, trait_name)?;
 
         Ok(self.vtable_generator.create_trait_object(
             concrete_value,

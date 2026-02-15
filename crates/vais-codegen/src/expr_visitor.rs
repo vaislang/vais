@@ -572,48 +572,143 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_lazy(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Lazy evaluation: Create a thunk struct { i1 computed, T value, i8* thunk_fn }
-        // For simplicity, we evaluate the expression immediately but wrap it in a Lazy struct.
-        // A full implementation would create a closure and defer evaluation.
+        // Lazy evaluation: Create a thunk function that captures free variables
+        // and returns { i1 computed=false, T zeroinit, i8* thunk_fn_ptr }
+        // The thunk is called on first `force`, which caches the result.
 
-        let (inner_val, inner_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = inner_ir;
-
-        // Infer the inner type to get the correct LLVM type
         let inner_type = self.infer_expr_type(inner);
         let inner_llvm_ty = self.type_to_llvm(&inner_type);
         let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
+
+        // Generate a thunk function that computes the lazy value
+        let thunk_name = format!("__lazy_thunk_{}", self.fn_ctx.label_counter);
+        self.fn_ctx.label_counter += 1;
+
+        // Find free variables in the lazy expression (for capture)
+        // param_names is empty because lazy has no parameters of its own —
+        // all identifiers from the outer scope (including function params) are free variables
+        // that need to be captured by the thunk function.
+        let param_names = std::collections::HashSet::new();
+        let mut free_vars = Vec::new();
+        self.collect_free_vars_in_expr(&inner.node, &param_names, &mut free_vars);
+        let mut seen = std::collections::HashSet::new();
+        free_vars.retain(|v| seen.insert(v.clone()));
+
+        // Collect captured variable info
+        let mut captured_vars: Vec<(String, crate::ResolvedType, String)> = Vec::new();
+        let mut capture_ir = String::new();
+
+        for cap_name in &free_vars {
+            if let Some(local) = self.fn_ctx.locals.get(cap_name) {
+                let ty = local.ty.clone();
+                let llvm_ty = self.type_to_llvm(&ty);
+                if local.is_param() {
+                    captured_vars.push((
+                        cap_name.clone(),
+                        ty,
+                        format!("%{}", local.llvm_name),
+                    ));
+                } else if local.is_ssa() {
+                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                } else {
+                    let tmp = self.next_temp(counter);
+                    capture_ir.push_str(&format!(
+                        "  {} = load {}, {}* %{}\n",
+                        tmp, llvm_ty, llvm_ty, local.llvm_name
+                    ));
+                    captured_vars.push((cap_name.clone(), ty, tmp));
+                }
+            }
+        }
+
+        // Build thunk parameter list (captured vars only — thunk takes no explicit args)
+        let mut thunk_param_strs = Vec::new();
+        let mut thunk_param_types = Vec::new();
+        for (cap_name, cap_ty, _) in &captured_vars {
+            let llvm_ty = self.type_to_llvm(cap_ty);
+            thunk_param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
+            thunk_param_types.push(llvm_ty);
+        }
+
+        // Save and set up thunk context
+        let saved_function = self.fn_ctx.current_function.take();
+        let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
+
+        self.fn_ctx.current_function = Some(thunk_name.clone());
+
+        // Register captured variables as locals in thunk
+        for (cap_name, cap_ty, _) in &captured_vars {
+            self.fn_ctx.locals.insert(
+                cap_name.clone(),
+                crate::types::LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
+            );
+        }
+
+        // Generate thunk body
+        let mut thunk_counter = 0;
+        let (body_val, body_ir) = self.generate_expr(inner, &mut thunk_counter)?;
+
+        // Build thunk function IR (returns the inner type)
+        let ret_ty = &inner_llvm_ty;
+        let mut thunk_ir = format!(
+            "define {} @{}({}) {{\nentry:\n",
+            ret_ty,
+            thunk_name,
+            thunk_param_strs.join(", ")
+        );
+        thunk_ir.push_str(&body_ir);
+        thunk_ir.push_str(&format!("  ret {} {}\n}}\n", ret_ty, body_val));
+
+        self.lambdas.generated_ir.push(thunk_ir);
+
+        // Restore context
+        self.fn_ctx.current_function = saved_function;
+        self.fn_ctx.locals = saved_locals;
+
+        // Build the lazy struct: { i1 false, T zeroinitializer, i8* thunk_ptr }
+        let mut ir = capture_ir;
 
         // Allocate the lazy struct
         let lazy_ptr = self.next_temp(counter);
         ir.push_str(&format!("  {} = alloca {}\n", lazy_ptr, lazy_ty));
 
-        // Store computed = true (eager evaluation for now)
+        // Store computed = false
         let computed_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
             computed_ptr, lazy_ty, lazy_ty, lazy_ptr
         ));
-        ir.push_str(&format!("  store i1 1, i1* {}\n", computed_ptr));
+        ir.push_str(&format!("  store i1 0, i1* {}\n", computed_ptr));
 
-        // Store the computed value
+        // Store zero-initialized value (will be filled on first force)
         let value_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
             value_ptr, lazy_ty, lazy_ty, lazy_ptr
         ));
         ir.push_str(&format!(
-            "  store {} {}, {}* {}\n",
-            inner_llvm_ty, inner_val, inner_llvm_ty, value_ptr
+            "  store {} 0, {}* {}\n",
+            inner_llvm_ty, inner_llvm_ty, value_ptr
         ));
 
-        // Store thunk pointer as null (not needed for eager evaluation)
-        let thunk_ptr = self.next_temp(counter);
+        // Store thunk function pointer (cast to i8*)
+        let thunk_fn_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = bitcast {} ({})* @{} to i8*\n",
+            thunk_fn_ptr,
+            ret_ty,
+            thunk_param_types.join(", "),
+            thunk_name
+        ));
+        let thunk_slot = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = getelementptr {}, {}* {}, i32 0, i32 2\n",
-            thunk_ptr, lazy_ty, lazy_ty, lazy_ptr
+            thunk_slot, lazy_ty, lazy_ty, lazy_ptr
         ));
-        ir.push_str(&format!("  store i8* null, i8** {}\n", thunk_ptr));
+        ir.push_str(&format!(
+            "  store i8* {}, i8** {}\n",
+            thunk_fn_ptr, thunk_slot
+        ));
 
         // Load and return the lazy struct
         let result = self.next_temp(counter);
@@ -622,74 +717,177 @@ impl ExprVisitor for CodeGenerator {
             result, lazy_ty, lazy_ty, lazy_ptr
         ));
 
+        // Store lazy thunk info for force to use at call sites
+        self.lambdas.last_lazy_info = Some(crate::types::LazyThunkInfo {
+            thunk_name: thunk_name.clone(),
+            captures: captured_vars
+                .iter()
+                .map(|(name, ty, val)| (name.clone(), self.type_to_llvm(ty), val.clone()))
+                .collect(),
+            inner_llvm_ty: inner_llvm_ty.clone(),
+        });
+
         Ok((result, ir))
     }
 
     fn visit_force(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        // Force evaluation: Extract value from Lazy struct
-        // If computed flag is true, return cached value
-        // Otherwise, call thunk and cache result (not implemented for eager mode)
+        // Force evaluation: Check computed flag, call thunk if needed, cache result
 
-        // Infer the lazy type to extract the inner type
         let lazy_type = self.infer_expr_type(inner);
         let inner_type = match &lazy_type {
             ResolvedType::Lazy(inner) => inner.as_ref().clone(),
-            other => other.clone(), // If not lazy, just return the value
+            other => other.clone(),
         };
 
-        // If the inner expression is not a Lazy type, just return the value directly
+        // If not a Lazy type, just return the value directly
         if !matches!(lazy_type, ResolvedType::Lazy(_)) {
             return self.visit_expr(inner, counter);
         }
 
         let inner_llvm_ty = self.type_to_llvm(&inner_type);
+        let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
 
-        // For lazy values, we need to handle the case where the expression is a variable
-        // The variable holds a Lazy struct, and we need to extract the value field
+        // Look up lazy thunk info if the inner is an identifier
+        let lazy_info = if let Expr::Ident(name) = &inner.node {
+            self.lambdas.lazy_bindings.get(name.as_str()).cloned()
+        } else {
+            None
+        };
 
-        // Check if the inner expression is an identifier (variable reference)
-        if let Expr::Ident(name) = &inner.node {
+        // If we have thunk info, generate proper conditional evaluation
+        if let (Expr::Ident(name), Some(info)) = (&inner.node, &lazy_info) {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
-                let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
                 let mut ir = String::new();
 
-                if local.is_ssa() {
-                    // For SSA variables, the value is already the struct itself
-                    // Use extractvalue to get the value field (index 1)
-                    let result = self.next_temp(counter);
+                // The lazy value must be in an alloca so we can update computed/value fields
+                // If SSA, we need to spill it first
+                let lazy_alloca = if local.is_ssa() {
+                    let alloca = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = alloca {}\n", alloca, lazy_ty));
                     ir.push_str(&format!(
-                        "  {} = extractvalue {} {}, 1\n",
-                        result, lazy_ty, local.llvm_name
+                        "  store {} {}, {}* {}\n",
+                        lazy_ty, local.llvm_name, lazy_ty, alloca
                     ));
-                    return Ok((result, ir));
+                    alloca
                 } else {
-                    // For alloca variables, get pointer to value field (index 1)
-                    let value_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* %{}, i32 0, i32 1\n",
-                        value_ptr, lazy_ty, lazy_ty, local.llvm_name
-                    ));
+                    format!("%{}", local.llvm_name)
+                };
 
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
-                        result, inner_llvm_ty, inner_llvm_ty, value_ptr
-                    ));
+                // Load computed flag
+                let computed_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
+                    computed_ptr, lazy_ty, lazy_ty, lazy_alloca
+                ));
+                let computed = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load i1, i1* {}\n",
+                    computed, computed_ptr
+                ));
 
-                    return Ok((result, ir));
+                // Branch on computed flag
+                let label_id = self.fn_ctx.label_counter;
+                self.fn_ctx.label_counter += 3;
+                let cached_label = format!("lazy.cached.{}", label_id);
+                let compute_label = format!("lazy.compute.{}", label_id + 1);
+                let merge_label = format!("lazy.merge.{}", label_id + 2);
+
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n",
+                    computed, cached_label, compute_label
+                ));
+
+                // Cached path: load value from struct
+                ir.push_str(&format!("{}:\n", cached_label));
+                let cached_val_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
+                    cached_val_ptr, lazy_ty, lazy_ty, lazy_alloca
+                ));
+                let cached_val = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    cached_val, inner_llvm_ty, inner_llvm_ty, cached_val_ptr
+                ));
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Compute path: call thunk, store result, set computed=true
+                ir.push_str(&format!("{}:\n", compute_label));
+
+                // Build thunk call args (captured values)
+                let mut thunk_args = Vec::new();
+                for (cap_name, cap_llvm_ty_stored, cap_val) in &info.captures {
+                    // Re-load captured value from current scope (it may have changed)
+                    if let Some(cap_local) = self.fn_ctx.locals.get(cap_name.as_str()) {
+                        let cap_llvm_ty = self.type_to_llvm(&cap_local.ty);
+                        if cap_local.is_param() {
+                            thunk_args.push(format!("{} %{}", cap_llvm_ty, cap_local.llvm_name));
+                        } else if cap_local.is_ssa() {
+                            thunk_args.push(format!("{} {}", cap_llvm_ty, cap_local.llvm_name));
+                        } else {
+                            let tmp = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* %{}\n",
+                                tmp, cap_llvm_ty, cap_llvm_ty, cap_local.llvm_name
+                            ));
+                            thunk_args.push(format!("{} {}", cap_llvm_ty, tmp));
+                        }
+                    } else {
+                        // Fallback: use the captured value and stored type from thunk creation time
+                        thunk_args.push(format!("{} {}", cap_llvm_ty_stored, cap_val));
+                    }
                 }
+
+                let computed_val = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = call {} @{}({})\n",
+                    computed_val,
+                    inner_llvm_ty,
+                    info.thunk_name,
+                    thunk_args.join(", ")
+                ));
+
+                // Store computed value into lazy struct
+                let store_val_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
+                    store_val_ptr, lazy_ty, lazy_ty, lazy_alloca
+                ));
+                ir.push_str(&format!(
+                    "  store {} {}, {}* {}\n",
+                    inner_llvm_ty, computed_val, inner_llvm_ty, store_val_ptr
+                ));
+
+                // Set computed = true
+                ir.push_str(&format!("  store i1 1, i1* {}\n", computed_ptr));
+
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Merge: phi node
+                ir.push_str(&format!("{}:\n", merge_label));
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = phi {} [{}, %{}], [{}, %{}]\n",
+                    result,
+                    inner_llvm_ty,
+                    cached_val,
+                    cached_label,
+                    computed_val,
+                    compute_label
+                ));
+
+                return Ok((result, ir));
             }
         }
 
-        // For other expressions that produce lazy values, use extractvalue
+        // Fallback: for non-identifier or no thunk info, use simple extractvalue
         let (lazy_val, lazy_ir) = self.visit_expr(inner, counter)?;
         let mut ir = lazy_ir;
 
-        // Use extractvalue to get the value field (index 1) from the struct
         let result = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = extractvalue {{ i1, {}, i8* }} {}, 1\n",
-            result, inner_llvm_ty, lazy_val
+            "  {} = extractvalue {} {}, 1\n",
+            result, lazy_ty, lazy_val
         ));
 
         Ok((result, ir))

@@ -41,9 +41,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Track struct type from the value expression before generating
                 let struct_type_name = self.infer_value_struct_type(&value.node);
                 let is_lambda = matches!(&value.node, Expr::Lambda { .. });
+                let is_lazy = matches!(&value.node, Expr::Lazy(_));
 
-                // Clear last lambda info before generating
+                // Clear last lambda/lazy info before generating
                 self._last_lambda_info = None;
+                self._last_lazy_info = None;
                 let val = self.generate_expr(&value.node)?;
 
                 // If this was a lambda binding, record the lambda info
@@ -51,6 +53,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     if let Some((lambda_fn_name, captures)) = self._last_lambda_info.take() {
                         self.lambda_bindings
                             .insert(name.node.clone(), (lambda_fn_name, captures));
+                    }
+                }
+                // If this was a lazy binding, record the lazy thunk info
+                if is_lazy {
+                    if let Some((thunk_name, captures)) = self._last_lazy_info.take() {
+                        self.lazy_bindings
+                            .insert(name.node.clone(), (thunk_name, captures));
                     }
                 }
                 let var_type = if let Some(t) = ty.as_ref() {
