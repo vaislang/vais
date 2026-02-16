@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771152700249,
+  "lastUpdate": 1771209216350,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -22511,6 +22511,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1830192,
             "range": "± 11916",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "ca08aedb52db9fb5798c04fc15a7e6511098a259",
+          "message": "fix: restore CI green — cargo fmt, mdbook build.sh, playground.yml version alignment (Phase 49)\n\n- Apply rustfmt to 98 files that failed CI format check\n- Fix docs-site/build.sh: replace unsupported --config-file flag with book.toml swap+restore pattern (mdbook v0.4.40 compat)\n- Update playground.yml upload-pages-artifact v3 → v4 for consistency with website.yml\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-16T11:25:47+09:00",
+          "tree_id": "b78036c129bd88d8668a0997366704c426fe2cf0",
+          "url": "https://github.com/vaislang/vais/commit/ca08aedb52db9fb5798c04fc15a7e6511098a259"
+        },
+        "date": 1771209216012,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2442,
+            "range": "± 66",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5403,
+            "range": "± 144",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6179,
+            "range": "± 387",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11321,
+            "range": "± 187",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18110,
+            "range": "± 363",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34214,
+            "range": "± 731",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31014,
+            "range": "± 670",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67384,
+            "range": "± 1033",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303805,
+            "range": "± 1188",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 457250,
+            "range": "± 2268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 114578,
+            "range": "± 683",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 778111,
+            "range": "± 5278",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 169802,
+            "range": "± 659",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 197786,
+            "range": "± 2112",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 205639,
+            "range": "± 1173",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 249446,
+            "range": "± 3592",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 538296,
+            "range": "± 5739",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 752182,
+            "range": "± 2899",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 412116,
+            "range": "± 5952",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1183566,
+            "range": "± 18233",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39248,
+            "range": "± 322",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 196380,
+            "range": "± 1548",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 377093,
+            "range": "± 2973",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1842890,
+            "range": "± 36890",
             "unit": "ns/iter"
           }
         ]
