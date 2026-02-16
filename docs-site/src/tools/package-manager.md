@@ -436,6 +436,66 @@ F main() {
 }
 ```
 
+## 추가 명령어
+
+### 패키지 검색
+
+```bash
+# 레지스트리에서 패키지 검색
+vais search json
+
+# 카테고리로 필터링
+vais search --category crypto
+```
+
+### 보안 감사
+
+```bash
+# 의존성 보안 취약점 검사
+vais audit
+
+# 자세한 보고서 출력
+vais audit --verbose
+```
+
+### 캐시 관리
+
+```bash
+# 캐시 상태 확인
+vais cache info
+
+# 캐시 정리
+vais cache clean
+
+# 특정 패키지 캐시 제거
+vais cache remove vais-json
+```
+
+### 의존성 트리
+
+```bash
+# 전체 의존성 트리 표시
+vais tree
+
+# 특정 패키지의 의존성 추적
+vais tree --package vais-json
+
+# 중복 의존성 표시
+vais tree --duplicates
+```
+
+### 벤더링
+
+```bash
+# 모든 의존성을 vendor/ 디렉토리에 복사
+vais vendor
+
+# 오프라인 빌드를 위한 벤더링
+vais vendor --sync
+```
+
+벤더링은 오프라인 환경이나 빌드 재현성이 중요한 경우에 유용합니다. `vendor/` 디렉토리를 버전 관리에 포함하면 네트워크 없이도 빌드가 가능합니다.
+
 ## 트러블슈팅
 
 ### 의존성 해결 실패

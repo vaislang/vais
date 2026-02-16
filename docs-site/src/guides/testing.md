@@ -121,7 +121,7 @@ U std/vec
 U std/string
 
 F test_vec_operations() {
-    v := Vec::new<i64>()
+    v := Vec::new()
     v.push(10)
     v.push(20)
     v.push(30)
@@ -279,13 +279,11 @@ U std/vec
 U std/time
 
 F benchmark_bubble_sort(size: i64) -> i64 {
-    v := Vec::with_capacity<i64>(size)
+    v := Vec::with_capacity(size)
 
     # 무작위 데이터 생성
-    i := 0
-    L i < size {
+    L i:0..size {
         v.push(size - i)
-        i = i + 1
     }
 
     start := time::now_micros()
@@ -297,16 +295,12 @@ F benchmark_bubble_sort(size: i64) -> i64 {
 
 F bubble_sort(arr: &mut Vec<i64>) {
     n := arr.len()
-    i := 0
-    L i < n {
-        j := 0
-        L j < n - i - 1 {
+    L i:0..n {
+        L j:0..(n - i - 1) {
             I arr.get(j) > arr.get(j + 1) {
                 swap(arr, j, j + 1)
             }
-            j = j + 1
         }
-        i = i + 1
     }
 }
 

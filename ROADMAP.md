@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-15
+> **최종 업데이트**: 2026-02-16
 
 ---
 
@@ -209,6 +209,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 45** | 안정화 & 문서 동기화 | 미완성 기능 테이블 전체 완료, README 수치 동기화, closures.md+lazy-evaluation.md 신규, Playground +3 예제 — **655 E2E** |
 | **Phase 46** | 컴파일러 견고성 강화 | ICE eprintln always-on, InternalError C007, parser let-else, inlining -38줄, .gitignore 정리 — **655 E2E** |
 | **Phase 47** | 리뷰 발견사항 수정 | 셸 인젝션 수정, tmp 파일 고유화, 캐시 fast-path, HashMap 최적화, unreachable→에러 12건, 문서 동기화 — **655 E2E** |
+| **Phase 47 리뷰** | 리뷰 수정 | shlex 파싱, 캐시 통합, i18n C007, TOCTOU 수정, Option<HashMap> 롤백, ICE debug-only — **655 E2E** |
+| **Phase 49** | CI 수정 | cargo fmt, mdbook build.sh, playground.yml v4, CI green 복원 — **655 E2E** |
+| **Phase 50** | 한국어 Docs 보완 | 문자열 보간 ~{}, mut 축약 제거, cookbook 메서드 호출 40건, loop 문법, 키워드/연산자/where/union/SIMD/HKT 문서 — **655 E2E** |
 
 ---
 
@@ -461,6 +464,59 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3] ✅ 2026-02-16
   변경: cargo fmt --check 통과, cargo check 통과, cargo clippy 0건
 진행률: 4/4 (100%)
+
+### Phase 50: 한국어 Docs 보완 — 실제 컴파일러 기능 기준 동기화
+> 목표: docs-site 한국어 문서와 실제 컴파일러 구현 간 불일치 20건 수정
+> 분석 결과: Critical 5건, High 5건, Medium 5건, Low 5건
+모드: 자동진행
+
+#### Critical (컴파일 에러 유발)
+- [x] 1. language-spec.md 문자열 보간 문법 수정 — `{expr}` → `~{expr}` 전체 교체 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (8건 `{expr}` → `~{expr}` 교체)
+- [x] 2. language-spec.md mutable 변수 `~` 축약 오류 수정 — `~ w := 30` 제거, `:= mut` 표준화 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (`mut` shorthand `~` 제거, `:= mut` 표준화, Best Practices 8번 제거)
+- [x] 3. cookbook.md Vec/HashMap 자유함수→메서드 호출 수정 — `vec_push(v,10)` → `v.push(10)` 등 ~40건 ✅ 2026-02-16
+  변경: cookbook.md (vec_new→Vec::new, vec_push→.push, vec_get→.get, hashmap_new→HashMap::new 등 ~40건)
+- [x] 4. cookbook.md C-style for 루프 → Vais 루프 문법 수정 ✅ 2026-02-16
+  변경: cookbook.md (6건 `L i := 0; i < n; i := i + 1` → `L i:0..n`, `L i in 0..10` → `L i:0..10`)
+- [x] 5. testing.md Vec 생성자 문법 수정 — `Vec::new<i64>()` → `Vec::new()` ✅ 2026-02-16
+  변경: testing.md (Vec::new<i64>()→Vec::new(), Vec::with_capacity<i64>→Vec::with_capacity, C-style loop→range loop)
+
+#### High (오해/혼란 유발)
+- [x] 6. closures.md ByRef/ByMutRef "미구현" 경고 제거 ✅ 2026-02-16
+  변경: closures.md (3곳 "완전히 구현되지 않았습니다" → "Phase 42에서 완전히 구현되었습니다")
+- [x] 7. language-spec.md 키워드 테이블 보완 — D/N/G/O/Y 추가 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (D/N/G/O/Y 5개 키워드 추가, C 이중 의미 설명)
+- [x] 8. language-spec.md `C` 키워드 이중 의미 설명 + 연산자 우선순위 테이블 추가 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (C "Continue/Const" 설명 + 13단계 연산자 우선순위 테이블 추가)
+- [x] 9. error-handling.md Result 타입 파라미터 확인 — `Result<T, E>` 이미 올바름 ✅ 2026-02-16
+  변경: 변경 불필요 (LANGUAGE_SPEC.md에 이미 `Result<T, E>` 올바르게 기재)
+- [x] 10. language-spec.md auto-return 규칙 명시 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (Auto-Return 섹션 추가 — 3개 예제: 기본, if/else, early return)
+
+#### Medium (미문서화 기능)
+- [x] 11. pattern alias 문서 추가 — `x @ pattern` 문법 + 예제 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (Pattern Alias 섹션 추가 — range/enum/struct/nested 4개 예제)
+- [x] 12. generics.md where 절 문서 추가 ✅ 2026-02-16
+  변경: LANGUAGE_SPEC.md (Where Clauses 섹션 추가), generic_tutorial.md (where 절 예제 확장)
+- [x] 13. union 타입 (`O`) 문서 추가 ✅ 2026-02-16
+  변경: advanced-types.md (Union 타입 섹션 추가 — 기본 문법/사용 사례/주의사항)
+- [x] 14. SIMD 벡터 타입 + HKT/Variance 문서 추가 ✅ 2026-02-16
+  변경: advanced-types.md (SIMD 벡터 타입 + HKT + Variance 3개 섹션 추가)
+
+#### Low (수치/미흡)
+- [x] 15. testing.md/README.md E2E 테스트 수 확인 — 655 E2E 올바름 ✅ 2026-02-16
+  변경: 변경 불필요 (README.md에 이미 655 E2E 올바르게 기재)
+- [x] 16. cookbook.md 미존재 stdlib 함수 정리 ✅ 2026-02-16
+  변경: cookbook.md (Task 3에서 자유함수→메서드 호출로 일괄 전환 완료)
+- [x] 17. stdlib 가이드 신규 메서드 추가 ✅ 2026-02-16
+  변경: stdlib.md (Vec<T> 9개 + HashMap<K,V> 5개 추가 메서드 테이블 추가)
+- [x] 18. package-manager.md 추가 명령어 문서화 ✅ 2026-02-16
+  변경: package-manager.md (search/audit/cache/tree/vendor 5개 명령어 섹션 추가)
+- [x] 19. ROADMAP.md 최종 업데이트 날짜 + 수치 동기화 (Opus 직접) ✅ 2026-02-16
+  변경: ROADMAP.md (Phase 50 체크박스 전체 [x], 날짜 동기화)
+- [x] 20. E2E 검증 + Git 커밋 (Opus 직접) [blockedBy: 19] ✅ 2026-02-16
+진행률: 20/20 (100%)
 
 ---
 

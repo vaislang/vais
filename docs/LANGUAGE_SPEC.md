@@ -96,8 +96,8 @@ Examples: `x`, `my_var`, `Counter`, `_private`
 **String Interpolation:**
 ```vais
 name := "Vais"
-println("Hello, {name}!")           # Variable interpolation
-println("Result: {2 + 3}")         # Expression interpolation
+println("Hello, ~{name}!")           # Variable interpolation
+println("Result: ~{2 + 3}")         # Expression interpolation
 println("Escaped: {{not interp}}") # Escaped braces
 ```
 
@@ -129,13 +129,18 @@ Vais uses single-letter keywords for maximum token efficiency:
 | `A` | Async | Async function marker |
 | `R` | Return | Early return from function |
 | `B` | Break | Break from loop |
-| `C` | Continue | Continue to next loop iteration |
+| `C` | Continue/Const | Continue to next loop iteration, or Const for constants |
+| `D` | Defer | Deferred execution |
+| `N` | Extern | Foreign function declaration |
+| `G` | Global | Global variable declaration |
+| `O` | Union | C-style untagged union |
+| `Y` | Yield/Await | Yield value (shorthand for await) |
 
-Note: Constants are defined with the `C` keyword followed by identifier, type, and value (see [Constants](#constants)).
+Note: The `C` keyword has dual meaning - `C` for continue in loops, and `C` for constants (see [Constants](#constants)). Context determines usage.
 
 ### Multi-letter Keywords
 
-- `mut` - Mutable variable/reference (also available as `~` shorthand)
+- `mut` - Mutable variable/reference
 - `self` - Instance reference
 - `Self` - Type reference in impl
 - `true`, `false` - Boolean literals
@@ -149,7 +154,6 @@ Note: Constants are defined with the `C` keyword followed by identifier, type, a
 
 | Shorthand | Replaces | Example |
 |-----------|----------|---------|
-| `~` | `mut` | `x := ~ 0` (mutable variable) |
 | `Y` | `await` | `result.Y` (postfix await) |
 
 ---
@@ -254,11 +258,32 @@ Pair<A, B>  # Multiple type parameters
 | `..` | Range (exclusive) / Spread | `0..10`, `[..arr]` |
 | `..=` | Range (inclusive) | `0..=10` |
 | `\|>` | Pipe operator | `x \|> f \|> g` (equivalent to `g(f(x))`) |
-| `~` | Mutable shorthand | `x := ~ 0` (same as `x := mut 0`) |
 
 **Note on `?` operator:** The `?` operator has two uses:
 - **Ternary conditional**: `condition ? true_val : false_val`
 - **Try operator**: `result?` - propagates errors to caller (see [Error Handling](#error-handling))
+
+### Operator Precedence
+
+Operators are listed from highest to lowest precedence:
+
+| Precedence | Operators | Description |
+|------------|-----------|-------------|
+| 1 (highest) | `.`, `[]`, `()` | Member access, Index, Call |
+| 2 | `-`, `!`, `~`, `@` | Unary operators |
+| 3 | `*`, `/`, `%` | Multiplication, Division, Modulo |
+| 4 | `+`, `-` | Addition, Subtraction |
+| 5 | `<<`, `>>` | Bit shifts |
+| 6 | `&` | Bitwise AND |
+| 7 | `^` | Bitwise XOR |
+| 8 | `\|` | Bitwise OR |
+| 9 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison |
+| 10 | `&&` | Logical AND |
+| 11 | `\|\|` | Logical OR |
+| 12 | `?:`, `\|>` | Ternary conditional, Pipe |
+| 13 (lowest) | `=`, `:=`, `+=`, `-=`, `*=`, `/=` | Assignment |
+
+**Note:** Bitwise `&` has higher precedence than comparison operators like `==`. Use parentheses to clarify: `(a == b) & (c == d)`.
 
 ---
 
@@ -358,12 +383,12 @@ F main() -> i64 = 5 |> double |> add_one  # 11
 
 ### String Interpolation
 
-Embed expressions inside string literals with `{expr}`:
+Embed expressions inside string literals with `~{expr}`:
 
 ```vais
 name := "World"
-println("Hello, {name}!")          # Variable
-println("Sum: {2 + 3}")           # Expression
+println("Hello, ~{name}!")          # Variable
+println("Sum: ~{2 + 3}")           # Expression
 println("Escaped: {{braces}}")    # Literal braces with {{ }}
 ```
 
@@ -388,6 +413,34 @@ Blocks are expressions that return the value of their last expression:
 }
 ```
 
+### Auto-Return
+
+Functions in Vais automatically return the value of their last expression. No explicit `R` (return) is needed unless early return is required:
+
+```vais
+F add(a: i64, b: i64) -> i64 {
+    a + b    # Automatically returned
+}
+
+F max(a: i64, b: i64) -> i64 {
+    I a > b {
+        a    # Each branch returns its last expression
+    } E {
+        b
+    }
+}
+
+# Explicit R is only needed for early return
+F safe_divide(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R 0    # Early return
+    }
+    a / b      # Auto-returned
+}
+```
+
+This applies to all block expressions including `I`/`E`, `M`, and `L`.
+
 ---
 
 ## Statements
@@ -402,10 +455,7 @@ x := 10
 y: i64 = 20
 
 # Mutable
-mut z := 30
-
-# Mutable with ~ shorthand
-~ w := 30    # equivalent to: mut w := 30
+z := mut 30
 ```
 
 ### If-Else Expression
@@ -896,9 +946,9 @@ Pattern aliases allow you to bind a name to a matched pattern using the `@` oper
 # Basic pattern alias with range
 F describe(n: i64) -> str {
     M n {
-        x @ 1..10 => "small: {x}",
-        x @ 10..100 => "medium: {x}",
-        x @ 100..1000 => "large: {x}",
+        x @ 1..10 => "small: ~{x}",
+        x @ 10..100 => "medium: ~{x}",
+        x @ 100..1000 => "large: ~{x}",
         _ => "very large"
     }
 }
@@ -943,7 +993,7 @@ E Result<T, E> {
 F handle_result(r: Result<i64, str>) -> str {
     M r {
         success @ Ok(value) if value > 0 => "positive success",
-        failure @ Err(msg) => "error: {msg}",
+        failure @ Err(msg) => "error: ~{msg}",
         _ => "zero or negative"
     }
 }
@@ -1660,15 +1710,14 @@ vaisc pkg doc
 5. **Leverage generics** to reduce code duplication
 6. **Import only needed modules** to keep token count low
 7. **Use match exhaustiveness** to catch all cases
-8. **Use `~` instead of `mut`** for maximum token efficiency
-9. **Use `|>` pipe operator** for readable function chaining
-10. **Use string interpolation** `println("x={x}")` instead of manual concatenation
-11. **Omit parameter types** when they can be inferred from call sites
-12. **Use `?` operator** for error propagation instead of manual match/return
-13. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations
-14. **Prefer `derive(Error)`** for custom error types to reduce boilerplate
-15. **Use enum impl blocks** to add behavior to enums
-16. **Structure projects** with `vaisc new` and `Vais.toml` for better organization
+8. **Use `|>` pipe operator** for readable function chaining
+9. **Use string interpolation** `println("x=~{x}")` instead of manual concatenation
+10. **Omit parameter types** when they can be inferred from call sites
+11. **Use `?` operator** for error propagation instead of manual match/return
+12. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations
+13. **Prefer `derive(Error)`** for custom error types to reduce boilerplate
+14. **Use enum impl blocks** to add behavior to enums
+15. **Structure projects** with `vaisc new` and `Vais.toml` for better organization
 
 ---
 

@@ -7,6 +7,9 @@ Vais는 현대적인 타입 시스템을 제공하며, 고급 기능들을 통�
 1. [Trait Alias (트레이트 별칭)](#trait-alias-트레이트-별칭)
 2. [Existential Types (impl Trait)](#existential-types-impl-trait)
 3. [Const Evaluation (상수 평가)](#const-evaluation-상수-평가)
+4. [Union 타입 (O)](#union-타입-o)
+5. [SIMD 벡터 타입](#simd-벡터-타입)
+6. [Higher-Kinded Types (HKT)](#higher-kinded-types-hkt)
 
 ---
 
@@ -419,6 +422,106 @@ Const evaluation은 다음과 같은 경우에 유용합니다:
 
 ---
 
+## Union 타입 (O)
+
+Union 타입은 C-style 비태그 union입니다. 여러 타입의 값을 같은 메모리 공간에 저장할 수 있으며, `O` 키워드로 정의합니다.
+
+### 기본 문법
+
+```vais
+O IntOrFloat {
+    i: i64,
+    f: f64
+}
+
+F main() -> i64 {
+    u := IntOrFloat { i: 42 }
+
+    # union 필드 접근 (unsafe — 올바른 필드를 읽어야 함)
+    val := u.i    # 42
+
+    0
+}
+```
+
+### 사용 사례
+
+Union은 다음과 같은 경우에 유용합니다:
+
+1. **FFI 호환성**: C 라이브러리와의 인터페이스에서 C union 매핑
+2. **메모리 최적화**: 여러 타입 중 하나만 사용할 때 메모리 절약
+3. **비트 레벨 조작**: 같은 메모리를 다른 타입으로 해석
+
+### 주의사항
+
+- Union은 타입 안전하지 않습니다. 잘못된 필드를 읽으면 정의되지 않은 동작이 발생합니다.
+- 태그가 없으므로 현재 어떤 필드가 활성인지 추적해야 합니다.
+- 대부분의 경우 `E` (enum)을 사용하는 것이 안전합니다.
+
+---
+
+## SIMD 벡터 타입
+
+Vais는 SIMD(Single Instruction, Multiple Data) 벡터 타입을 내장 지원합니다.
+
+### 지원 타입
+
+| 타입 | 설명 | 크기 |
+|------|------|------|
+| `Vec4f32` | 4×f32 벡터 | 128-bit (SSE) |
+| `Vec2f64` | 2×f64 벡터 | 128-bit (SSE2) |
+| `Vec8f32` | 8×f32 벡터 | 256-bit (AVX) |
+| `Vec4f64` | 4×f64 벡터 | 256-bit (AVX) |
+
+### 기본 사용
+
+```vais
+F main() -> i64 {
+    # SIMD 벡터 연산은 C 런타임 함수를 통해 수행됩니다
+    # SSE2/NEON/스칼라 폴백이 자동 선택됩니다
+    0
+}
+```
+
+### 플랫폼 지원
+
+- **x86_64**: SSE2 기본, AVX/AVX2 가능
+- **aarch64**: NEON 기본
+- **기타**: 스칼라 폴백 (자동)
+
+---
+
+## Higher-Kinded Types (HKT)
+
+Vais는 Higher-Kinded Types를 지원하여 타입 생성자를 추상화할 수 있습니다.
+
+### 기본 개념
+
+HKT를 통해 `Vec`, `Option`, `Result` 같은 타입 생성자 자체를 제네릭 파라미터로 전달할 수 있습니다:
+
+```vais
+# Container는 타입 생성자 (kind: * -> *)
+W Functor<Container> {
+    F map<A, B>(self: Container<A>, f: |A| -> B) -> Container<B>
+}
+```
+
+### Variance (공변성/반변성)
+
+Vais의 제네릭 타입은 다음 variance 규칙을 따릅니다:
+
+- **Covariant (공변)**: `Vec<T>` — T가 서브타입이면 Vec<T>도 서브타입
+- **Invariant (불변)**: `&mut T` — T의 서브타입 관계가 보존되지 않음
+- **Contravariant (반변)**: 함수 파라미터 위치
+
+### 현재 제한사항
+
+- HKT는 Phase 38에서 도입되었으며, 타입 체커와 코드 생성을 지원합니다
+- Arity 상한은 32 (MAX_HKT_ARITY)
+- Monomorphization 기반 코드 생성
+
+---
+
 ## 요약
 
 ### Trait Alias
@@ -435,6 +538,21 @@ Const evaluation은 다음과 같은 경우에 유용합니다:
 - **지원 연산**: 산술, 비트, 모듈로, 시프트
 - **사용처**: 배열 크기, 컴파일 타임 상수
 - **장점**: 컴파일 타임 최적화, 타입 안전성
+
+### Union 타입
+- **문법**: `O Name { field: Type, ... }`
+- **사용처**: FFI 호환성, 메모리 최적화, 비트 레벨 조작
+- **주의**: 타입 안전하지 않음, 태그 없음 (enum 사용 권장)
+
+### SIMD 벡터 타입
+- **지원 타입**: `Vec4f32`, `Vec2f64`, `Vec8f32`, `Vec4f64`
+- **플랫폼**: SSE2, AVX, NEON, 스칼라 폴백
+- **사용처**: 고성능 벡터 연산
+
+### Higher-Kinded Types
+- **개념**: 타입 생성자를 파라미터로 추상화
+- **Variance**: Covariant, Invariant, Contravariant
+- **상한**: Arity 32 (MAX_HKT_ARITY)
 
 ---
 

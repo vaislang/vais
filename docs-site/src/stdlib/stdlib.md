@@ -54,6 +54,32 @@ F main() {
 | `collections` | 컬렉션 트레이트 및 공통 인터페이스 | | [API](../api/collections.md) |
 | `iter` | 반복자 트레이트 및 어댑터 | | API |
 
+### 주요 컬렉션 메서드
+
+#### Vec<T> 추가 메서드
+
+| 메서드 | 시그니처 | 설명 |
+|--------|----------|------|
+| `get_opt` | `get_opt(index: i64) -> Option<T>` | 인덱스의 값을 Option으로 반환 (범위 밖이면 None) |
+| `fold` | `fold(init: U, f: \|U, T\| -> U) -> U` | 누적 연산 |
+| `any` | `any(pred: \|T\| -> bool) -> bool` | 하나라도 조건 만족하면 true |
+| `all` | `all(pred: \|T\| -> bool) -> bool` | 모두 조건 만족하면 true |
+| `find` | `find(pred: \|T\| -> bool) -> Option<T>` | 조건을 만족하는 첫 번째 요소 |
+| `filter` | `filter(pred: \|T\| -> bool) -> Vec<T>` | 조건 만족 요소만 수집 |
+| `map` | `map(f: \|T\| -> U) -> Vec<U>` | 각 요소에 함수 적용 |
+| `contains` | `contains(val: T) -> bool` | 값 존재 여부 |
+| `swap` | `swap(i: i64, j: i64)` | 두 인덱스의 값 교환 |
+
+#### HashMap<K, V> 추가 메서드
+
+| 메서드 | 시그니처 | 설명 |
+|--------|----------|------|
+| `get_opt` | `get_opt(key: K) -> Option<V>` | 키의 값을 Option으로 반환 |
+| `keys` | `keys() -> Vec<K>` | 모든 키 반환 |
+| `values` | `values() -> Vec<V>` | 모든 값 반환 |
+| `remove` | `remove(key: K) -> Option<V>` | 키-값 쌍 제거 |
+| `clear` | `clear()` | 모든 항목 제거 |
+
 ### I/O & Filesystem
 
 파일 시스템 및 입출력 작업을 위한 모듈.

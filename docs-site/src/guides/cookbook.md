@@ -109,13 +109,13 @@ F main() {
 U std/collections
 
 F main() {
-  v := vec_new<i64>()
-  vec_push(v, 10)
-  vec_push(v, 20)
-  vec_push(v, 30)
+  v := Vec::new<i64>()
+  v.push(10)
+  v.push(20)
+  v.push(30)
 
-  I vec_len(v) > 0 {
-    first := vec_get(v, 0)
+  I v.len() > 0 {
+    first := v.get(0)
     print(i64_to_str(first))  # "10"
   }
 }
@@ -127,11 +127,11 @@ F main() {
 U std/collections
 
 F main() {
-  map := hashmap_new<str, i64>()
-  hashmap_insert(map, "apple", 5)
-  hashmap_insert(map, "banana", 10)
+  map := HashMap::new<str, i64>()
+  map.insert("apple", 5)
+  map.insert("banana", 10)
 
-  M hashmap_get(map, "apple") {
+  M map.get("apple") {
     Some(val) => print(i64_to_str(val)),  # "5"
     None => print("Not found")
   }
@@ -144,16 +144,16 @@ F main() {
 U std/collections
 
 F main() {
-  v := vec_new<i64>()
-  vec_push(v, 30)
-  vec_push(v, 10)
-  vec_push(v, 20)
+  v := Vec::new<i64>()
+  v.push(30)
+  v.push(10)
+  v.push(20)
 
-  vec_sort(v)
+  v.sort()
 
   # 정렬 결과: [10, 20, 30]
-  L i := 0; i < vec_len(v); i := i + 1 {
-    print(i64_to_str(vec_get(v, i)))
+  L i:0..v.len() {
+    print(i64_to_str(v.get(i)))
   }
 }
 ```
@@ -172,14 +172,14 @@ F double(x: i64) -> i64 {
 }
 
 F main() {
-  v := vec_new<i64>()
-  vec_push(v, 1)
-  vec_push(v, 2)
-  vec_push(v, 3)
-  vec_push(v, 4)
+  v := Vec::new<i64>()
+  v.push(1)
+  v.push(2)
+  v.push(3)
+  v.push(4)
 
-  evens := vec_filter(v, is_even)
-  doubled := vec_map(evens, double)
+  evens := v.filter(is_even)
+  doubled := evens.map(double)
 
   # 결과: [4, 8]
 }
@@ -226,8 +226,8 @@ F main() {
   entries := dir_read(".")
   M entries {
     Ok(files) => {
-      L i := 0; i < vec_len(files); i := i + 1 {
-        print(vec_get(files, i))
+      L i:0..files.len() {
+        print(files.get(i))
       }
     },
     Err(e) => print("Error reading directory")
@@ -244,13 +244,13 @@ F main() {
   csv := "name,age,city\nAlice,30,NYC\nBob,25,LA"
   lines := str_split(csv, "\n")
 
-  L i := 1; i < vec_len(lines); i := i + 1 {
-    line := vec_get(lines, i)
+  L i:1..lines.len() {
+    line := lines.get(i)
     fields := str_split(line, ",")
-    I vec_len(fields) >= 3 {
-      name := vec_get(fields, 0)
-      age := vec_get(fields, 1)
-      city := vec_get(fields, 2)
+    I fields.len() >= 3 {
+      name := fields.get(0)
+      age := fields.get(1)
+      city := fields.get(2)
       print("Name: " + name + ", Age: " + age + ", City: " + city)
     }
   }
@@ -593,7 +593,7 @@ F main() {
   counter := mutex_new(0)
 
   t1 := thread_spawn(|| {
-    L i := 0; i < 1000; i := i + 1 {
+    L i:0..1000 {
       mutex_lock(counter)
       val := mutex_get(counter)
       mutex_set(counter, val + 1)
@@ -614,7 +614,7 @@ F main() {
 U std/channel
 
 F sender(ch: Channel<i64>) {
-  L i := 0; i < 10; i := i + 1 {
+  L i:0..10 {
     channel_send(ch, i)
   }
   channel_close(ch)
@@ -693,7 +693,7 @@ F main() {
 
 ```vais
 F main() {
-  L i in 0..10 {
+  L i:0..10 {
     print(i64_to_str(i))
   }
   # 0부터 9까지 출력
