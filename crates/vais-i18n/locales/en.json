@@ -172,6 +172,11 @@
       "title": "Recursion limit exceeded",
       "message": "recursion depth limit exceeded: {detail}",
       "help": "consider reducing nesting depth or refactoring recursive types"
+    },
+    "C007": {
+      "title": "Internal compiler error",
+      "message": "internal compiler error: {detail}",
+      "help": "this is likely a compiler bug — please report it at https://github.com/vaislang/vais/issues"
     }
   },
 

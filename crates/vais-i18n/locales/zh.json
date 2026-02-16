@@ -172,6 +172,11 @@
       "title": "递归深度超限",
       "message": "递归深度限制已超过：{detail}",
       "help": "请减少嵌套深度或重构递归类型"
+    },
+    "C007": {
+      "title": "内部编译器错误",
+      "message": "内部编译器错误：{detail}",
+      "help": "这可能是编译器的bug —— 请在 https://github.com/vaislang/vais/issues 报告"
     }
   },
 

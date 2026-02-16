@@ -429,6 +429,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: README.md(192→189), CLAUDE.md(182→189), playground/README.md("Tilde Mut"→"Mutable Variables")
 진행률: 7/7 (100%)
 
+### 리뷰 발견사항 (2026-02-16)
+> 출처: /team-review Phase 46-47
+모드: 자동진행
+
+- [x] 1. [보안+정확성] advanced.rs split_whitespace → shlex 파싱 (Critical) — 대상: crates/vaisc/src/commands/advanced.rs:72 ✅ 2026-02-16
+  변경: advanced.rs (parse_command() 헬퍼 — 메타문자 거부 + 인용부호 인식 분할 + 18개 유닛 테스트)
+- [x] 2. [성능] types.rs primitive fast-path 제거 → 통합 캐시 (Critical) — 대상: crates/vais-codegen/src/types.rs:221 ✅ 2026-02-16
+  변경: types.rs (16-variant fast-path 제거, 모든 타입 통합 캐시 경로), cache_tests.rs (3개 테스트 캐시 동작 반영)
+- [x] 3. [아키텍처] i18n C007 에러 코드 4개 locale 추가 (Critical) — 대상: crates/vais-i18n/locales/*.json ✅ 2026-02-16
+  변경: en.json/ko.json/ja.json/zh.json (C007 "Internal compiler error" 항목 추가)
+- [x] 4. [보안] repl.rs TOCTOU → AtomicU32 카운터 + PID (Warning) — 대상: crates/vaisc/src/repl.rs:638 ✅ 2026-02-16
+  변경: repl.rs (static REPL_COUNTER: AtomicU32, vais_repl_{pid}_{counter}.ll 고유 경로)
+- [x] 5. [아키텍처] checker_expr.rs Option<HashMap> 롤백 (Warning) — 대상: crates/vais-types/src/checker_expr.rs:590 ✅ 2026-02-16
+  변경: checker_expr.rs (Option<HashMap> → HashMap + is_empty() 원본 패턴 복원)
+- [x] 6. [정확성] error.rs C007 유닛 테스트 추가 (Warning) — 대상: crates/vais-codegen/src/error.rs:53 ✅ 2026-02-16
+  변경: error.rs (#[cfg(test)] 모듈 — test_internal_error_code, test_internal_error_help, test_all_error_codes_unique)
+- [x] 7. [보안] ICE 메시지 내부 타입명 debug-only 전환 (Warning) — 대상: crates/vais-codegen/src/inkwell/types.rs:114 ✅ 2026-02-16
+  변경: inkwell/types.rs + types.rs (Generic/ConstGeneric ICE eprintln → #[cfg(debug_assertions)] 분기)
+진행률: 7/7 (100%)
+
 ---
 
 ## ⏳ 장기 관찰 항목

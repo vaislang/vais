@@ -91,3 +91,38 @@ impl CodegenError {
 
 /// Result type for code generation operations
 pub type CodegenResult<T> = Result<T, CodegenError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_internal_error_code() {
+        let err = CodegenError::InternalError("test ICE".to_string());
+        assert_eq!(err.error_code(), "C007");
+    }
+
+    #[test]
+    fn test_internal_error_help() {
+        let err = CodegenError::InternalError("test ICE".to_string());
+        let help = err.help();
+        assert!(help.is_some());
+        assert!(help.unwrap().contains("compiler bug"));
+    }
+
+    #[test]
+    fn test_all_error_codes_unique() {
+        let errors = vec![
+            CodegenError::UndefinedVar("x".into()),
+            CodegenError::UndefinedFunction("f".into()),
+            CodegenError::TypeError("t".into()),
+            CodegenError::LlvmError("l".into()),
+            CodegenError::Unsupported("u".into()),
+            CodegenError::RecursionLimitExceeded("r".into()),
+            CodegenError::InternalError("i".into()),
+        ];
+        let codes: Vec<String> = errors.iter().map(|e| e.error_code().to_string()).collect();
+        let unique: std::collections::HashSet<String> = codes.iter().cloned().collect();
+        assert_eq!(codes.len(), unique.len(), "All error codes must be unique");
+    }
+}

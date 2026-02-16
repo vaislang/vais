@@ -111,7 +111,11 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Generic(name) => {
                 // ICE: generic should be substituted before codegen
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback", name);
+                #[cfg(not(debug_assertions))]
+                eprintln!("ICE: unresolved generic in Inkwell codegen, using i64 fallback");
+                let _ = name;
                 self.context.i64_type().into()
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
@@ -219,7 +223,11 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::ConstGeneric(name) => {
                 // ICE: const generic should be resolved during monomorphization
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback", name);
+                #[cfg(not(debug_assertions))]
+                eprintln!("ICE: unresolved const generic in Inkwell codegen, using i64 fallback");
+                let _ = name;
                 self.context.i64_type().into()
             }
             ResolvedType::Lifetime(_) => {

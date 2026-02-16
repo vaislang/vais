@@ -15,6 +15,8 @@ use rustyline::{Context, Editor, Helper};
 use std::fs;
 #[cfg(not(feature = "jit"))]
 use std::process::Command;
+#[cfg(not(feature = "jit"))]
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(not(feature = "jit"))]
 use vais_codegen::CodeGenerator;
@@ -25,6 +27,10 @@ use vais_types::TypeChecker;
 use std::collections::HashMap;
 #[cfg(feature = "jit")]
 use vais_jit::JitCompiler;
+
+/// Atomic counter for generating unique temporary file names (TOCTOU mitigation)
+#[cfg(not(feature = "jit"))]
+static REPL_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// REPL helper with completion, validation, and highlighting
 struct ReplHelper {
@@ -633,10 +639,11 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
         .generate_module(&ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
 
-    // Write to temp file
+    // Write to temp file (atomic counter + PID for uniqueness, TOCTOU mitigation)
+    let counter = REPL_COUNTER.fetch_add(1, Ordering::Relaxed);
     let temp_dir = std::env::temp_dir();
-    let ir_path = temp_dir.join(format!("vais_repl_{}.ll", std::process::id()));
-    let bin_path = temp_dir.join(format!("vais_repl_{}", std::process::id()));
+    let ir_path = temp_dir.join(format!("vais_repl_{}_{}.ll", std::process::id(), counter));
+    let bin_path = temp_dir.join(format!("vais_repl_{}_{}", std::process::id(), counter));
 
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write temp file: {}", e))?;
 

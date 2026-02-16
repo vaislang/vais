@@ -8,6 +8,53 @@ use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_plugin::PluginRegistry;
 
+/// Parse a command string respecting quoted arguments.
+/// Rejects shell metacharacters for safety.
+fn parse_command(cmd: &str) -> Result<Vec<String>, String> {
+    // Reject shell metacharacters
+    for ch in cmd.chars() {
+        if matches!(ch, ';' | '|' | '&' | '$' | '`' | '>' | '<') {
+            return Err(format!("command contains unsafe character '{}'", ch));
+        }
+    }
+
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    for ch in cmd.chars() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if !current.is_empty() {
+                    args.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if in_single_quote || in_double_quote {
+        return Err("unterminated quote in command".to_string());
+    }
+
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    if args.is_empty() {
+        return Err("empty run command".to_string());
+    }
+
+    Ok(args)
+}
+
 pub(crate) fn cmd_pgo(
     input: &PathBuf,
     output: Option<PathBuf>,
@@ -68,14 +115,11 @@ pub(crate) fn cmd_pgo(
         );
         let run_command = run_cmd.unwrap_or_else(|| instrumented_bin.display().to_string());
 
-        // Split command safely to avoid shell injection
-        let parts: Vec<&str> = run_command.split_whitespace().collect();
-        let (program, args) = parts
-            .split_first()
-            .ok_or_else(|| "empty run command".to_string())?;
+        // Parse command safely respecting quotes and rejecting shell metacharacters
+        let parts = parse_command(&run_command)?;
 
-        let status = Command::new(program)
-            .args(args)
+        let status = Command::new(&parts[0])
+            .args(&parts[1..])
             .env(
                 "LLVM_PROFILE_FILE",
                 format!("{}/default-%p.profraw", profile_dir),
@@ -367,5 +411,129 @@ pub(crate) fn cmd_watch(
                 return Err("Watcher channel closed".to_string());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_command_simple() {
+        let result = parse_command("./program arg1 arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_double_quotes() {
+        let result = parse_command(r#"./program "arg with spaces" arg2"#).unwrap();
+        assert_eq!(result, vec!["./program", "arg with spaces", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_single_quotes() {
+        let result = parse_command("./program 'arg with spaces' arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg with spaces", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_mixed_quotes() {
+        let result = parse_command(r#"./program "double quoted" 'single quoted' normal"#).unwrap();
+        assert_eq!(result, vec!["./program", "double quoted", "single quoted", "normal"]);
+    }
+
+    #[test]
+    fn test_parse_command_nested_quotes() {
+        let result = parse_command(r#"./program "it's ok" 'he said "hi"'"#).unwrap();
+        assert_eq!(result, vec!["./program", "it's ok", r#"he said "hi""#]);
+    }
+
+    #[test]
+    fn test_parse_command_empty() {
+        let result = parse_command("");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "empty run command");
+    }
+
+    #[test]
+    fn test_parse_command_whitespace_only() {
+        let result = parse_command("   ");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "empty run command");
+    }
+
+    #[test]
+    fn test_parse_command_unterminated_double_quote() {
+        let result = parse_command(r#"./program "unterminated"#);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "unterminated quote in command");
+    }
+
+    #[test]
+    fn test_parse_command_unterminated_single_quote() {
+        let result = parse_command("./program 'unterminated");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "unterminated quote in command");
+    }
+
+    #[test]
+    fn test_parse_command_reject_semicolon() {
+        let result = parse_command("./program; rm -rf /");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character ';'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_pipe() {
+        let result = parse_command("./program | cat");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '|'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_ampersand() {
+        let result = parse_command("./program && echo hi");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '&'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_dollar() {
+        let result = parse_command("./program $(whoami)");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '$'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_backtick() {
+        let result = parse_command("./program `ls`");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '`'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_redirect_out() {
+        let result = parse_command("./program > output.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '>'"));
+    }
+
+    #[test]
+    fn test_parse_command_reject_redirect_in() {
+        let result = parse_command("./program < input.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe character '<'"));
+    }
+
+    #[test]
+    fn test_parse_command_tabs() {
+        let result = parse_command("./program\targ1\t\targ2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
+    }
+
+    #[test]
+    fn test_parse_command_multiple_spaces() {
+        let result = parse_command("./program    arg1     arg2").unwrap();
+        assert_eq!(result, vec!["./program", "arg1", "arg2"]);
     }
 }

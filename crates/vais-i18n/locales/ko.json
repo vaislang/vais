@@ -172,6 +172,11 @@
       "title": "재귀 깊이 초과",
       "message": "재귀 깊이 제한 초과: {detail}",
       "help": "중첩 깊이를 줄이거나 재귀 타입을 리팩토링하세요"
+    },
+    "C007": {
+      "title": "내부 컴파일러 오류",
+      "message": "내부 컴파일러 오류: {detail}",
+      "help": "컴파일러 버그일 가능성이 높습니다 — https://github.com/vaislang/vais/issues 에 보고해주세요"
     }
   },
 

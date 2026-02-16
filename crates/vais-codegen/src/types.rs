@@ -216,28 +216,7 @@ use crate::CodeGenerator;
 impl CodeGenerator {
     /// Convert a ResolvedType to LLVM IR type string with caching
     pub(crate) fn type_to_llvm(&self, ty: &ResolvedType) -> String {
-        // Fast path for common primitive types - no cache lookup or allocation needed
-        match ty {
-            ResolvedType::I8 => return String::from("i8"),
-            ResolvedType::I16 => return String::from("i16"),
-            ResolvedType::I32 => return String::from("i32"),
-            ResolvedType::I64 => return String::from("i64"),
-            ResolvedType::I128 => return String::from("i128"),
-            ResolvedType::U8 => return String::from("i8"),
-            ResolvedType::U16 => return String::from("i16"),
-            ResolvedType::U32 => return String::from("i32"),
-            ResolvedType::U64 => return String::from("i64"),
-            ResolvedType::U128 => return String::from("i128"),
-            ResolvedType::F32 => return String::from("float"),
-            ResolvedType::F64 => return String::from("double"),
-            ResolvedType::Bool => return String::from("i1"),
-            ResolvedType::Str => return String::from("i8*"),
-            ResolvedType::Unit => return String::from("void"),
-            ResolvedType::Never => return String::from("void"),
-            _ => {}
-        }
-
-        // Complex types: use cache
+        // All types use cache - primitive types cached on first call
         // Create a key for caching - use the debug representation
         let cache_key = format!("{:?}", ty);
 
@@ -369,13 +348,21 @@ impl CodeGenerator {
                     // ICE: generic should be resolved before codegen.
                     // Return i64 fallback inline (not Err) to avoid propagation through
                     // compound types like Pointer(Generic("T")) → "i64*" not just "i64".
+                    #[cfg(debug_assertions)]
                     eprintln!("ICE: unresolved generic parameter '{}' in codegen, using i64 fallback", param);
+                    #[cfg(not(debug_assertions))]
+                    eprintln!("ICE: unresolved generic parameter in codegen, using i64 fallback");
+                    let _ = param;
                     String::from("i64")
                 }
             }
             ResolvedType::ConstGeneric(param) => {
                 // ICE: const generic should be resolved at monomorphization time
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved const generic parameter '{}' in codegen, using i64 fallback", param);
+                #[cfg(not(debug_assertions))]
+                eprintln!("ICE: unresolved const generic parameter in codegen, using i64 fallback");
+                let _ = param;
                 String::from("i64")
             }
             ResolvedType::Vector { element, lanes } => {

@@ -587,36 +587,29 @@ impl TypeChecker {
                         }
 
                         // Build substitution map from type's generic params to receiver's concrete types
-                        // Skip HashMap creation if no generics present for performance
-                        let generic_substitutions: Option<std::collections::HashMap<String, ResolvedType>> =
-                            if found_generics.is_empty() {
-                                None
-                            } else {
-                                Some(
-                                    found_generics
-                                        .iter()
-                                        .zip(receiver_generics.iter())
-                                        .map(|(param, arg)| (param.clone(), arg.clone()))
-                                        .collect(),
-                                )
-                            };
+                        let generic_substitutions: std::collections::HashMap<String, ResolvedType> =
+                            found_generics
+                                .iter()
+                                .zip(receiver_generics.iter())
+                                .map(|(param, arg)| (param.clone(), arg.clone()))
+                                .collect();
 
                         // Check arguments with substituted parameter types
                         for (param_type, arg) in param_types.iter().zip(args) {
                             let arg_type = self.check_expr(arg)?;
-                            let expected_type = if let Some(ref subs) = generic_substitutions {
-                                self.substitute_generics(param_type, subs)
-                            } else {
+                            let expected_type = if generic_substitutions.is_empty() {
                                 param_type.clone()
+                            } else {
+                                self.substitute_generics(param_type, &generic_substitutions)
                             };
                             self.unify(&expected_type, &arg_type)?;
                         }
 
                         // Substitute generics in return type
-                        let ret_type_raw = if let Some(ref subs) = generic_substitutions {
-                            self.substitute_generics(&method_sig.ret, subs)
-                        } else {
+                        let ret_type_raw = if generic_substitutions.is_empty() {
                             method_sig.ret.clone()
+                        } else {
+                            self.substitute_generics(&method_sig.ret, &generic_substitutions)
                         };
 
                         // For async methods, wrap the return type in Future
