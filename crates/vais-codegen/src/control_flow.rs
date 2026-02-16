@@ -60,7 +60,12 @@ impl CodeGenerator {
                 let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
                 ir.push_str(&conv_ir);
 
-                writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_bool, then_label, else_label).unwrap();
+                writeln!(
+                    ir,
+                    "  br i1 {}, label %{}, label %{}",
+                    cond_bool, then_label, else_label
+                )
+                .unwrap();
 
                 // Then branch
                 writeln!(ir, "{}:", then_label).unwrap();
@@ -72,7 +77,12 @@ impl CodeGenerator {
                 // For struct results, load the value before branch if it's a pointer
                 let then_val_for_phi = if is_struct_result && !then_terminated {
                     let loaded = self.next_temp(counter);
-                    writeln!(ir, "  {} = load {}, {}* {}", loaded, llvm_type, llvm_type, then_val).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded, llvm_type, llvm_type, then_val
+                    )
+                    .unwrap();
                     loaded
                 } else {
                     then_val // move: not used after
@@ -107,7 +117,12 @@ impl CodeGenerator {
                     && nested_last_block.is_empty()
                 {
                     let loaded = self.next_temp(counter);
-                    writeln!(ir, "  {} = load {}, {}* {}", loaded, llvm_type, llvm_type, else_val).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded, llvm_type, llvm_type, else_val
+                    )
+                    .unwrap();
                     loaded
                 } else {
                     else_val // move: not used after
@@ -151,11 +166,31 @@ impl CodeGenerator {
                     // Void type: value is not used, just use 0
                     writeln!(ir, "  {} = add i64 0, 0", result).unwrap();
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
-                    writeln!(ir, "  {} = phi {} [ {}, %{} ], [ {}, %{} ]", result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
+                        result,
+                        llvm_type,
+                        then_val_for_phi,
+                        then_from_label,
+                        else_val_for_phi,
+                        else_from_label
+                    )
+                    .unwrap();
                 } else if !then_from_label.is_empty() {
-                    writeln!(ir, "  {} = phi {} [ {}, %{} ]", result, llvm_type, then_val_for_phi, then_from_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = phi {} [ {}, %{} ]",
+                        result, llvm_type, then_val_for_phi, then_from_label
+                    )
+                    .unwrap();
                 } else if !else_from_label.is_empty() {
-                    writeln!(ir, "  {} = phi {} [ {}, %{} ]", result, llvm_type, else_val_for_phi, else_from_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = phi {} [ {}, %{} ]",
+                        result, llvm_type, else_val_for_phi, else_from_label
+                    )
+                    .unwrap();
                 } else {
                     // Unreachable merge block — add terminator
                     ir.push_str("  unreachable\n");
@@ -189,7 +224,12 @@ impl CodeGenerator {
             let llvm_type = self.type_to_llvm(&match_type);
             let stack_ptr = self.next_temp(counter);
             writeln!(ir, "  {} = alloca {}", stack_ptr, llvm_type).unwrap();
-            writeln!(ir, "  store {} {}, {}* {}", llvm_type, match_val_raw, llvm_type, stack_ptr).unwrap();
+            writeln!(
+                ir,
+                "  store {} {}, {}* {}",
+                llvm_type, match_val_raw, llvm_type, stack_ptr
+            )
+            .unwrap();
             stack_ptr
         } else {
             match_val_raw
@@ -249,7 +289,12 @@ impl CodeGenerator {
 
                         let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
                         ir.push_str(&guard_ir);
-                        writeln!(ir, "  br i1 {}, label %{}, label %{}", guard_val, guard_pass, guard_fail).unwrap();
+                        writeln!(
+                            ir,
+                            "  br i1 {}, label %{}, label %{}",
+                            guard_val, guard_pass, guard_fail
+                        )
+                        .unwrap();
 
                         // Guard passed - execute body
                         writeln!(ir, "{}:", guard_pass).unwrap();
@@ -312,12 +357,21 @@ impl CodeGenerator {
                     let guard_check = self.next_label("match.guard.check");
 
                     // First check pattern
-                    writeln!(ir, "  br i1 {}, label %{}, label %{}", check_val, guard_bind, next_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  br i1 {}, label %{}, label %{}",
+                        check_val, guard_bind, next_label
+                    )
+                    .unwrap();
 
                     // Bind pattern variables for guard to use
                     writeln!(ir, "{}:", guard_bind).unwrap();
-                    let bind_ir =
-                        self.generate_pattern_bindings_typed(&arm.pattern, &match_val, counter, &match_type)?;
+                    let bind_ir = self.generate_pattern_bindings_typed(
+                        &arm.pattern,
+                        &match_val,
+                        counter,
+                        &match_type,
+                    )?;
                     ir.push_str(&bind_ir);
                     writeln!(ir, "  br label %{}", guard_check).unwrap();
 
@@ -328,19 +382,33 @@ impl CodeGenerator {
                     // Guard value is i64 (0 or 1), convert to i1 for branch
                     let guard_bool = self.next_temp(counter);
                     writeln!(ir, "  {} = icmp ne i64 {}, 0", guard_bool, guard_val).unwrap();
-                    writeln!(ir, "  br i1 {}, label %{}, label %{}", guard_bool, arm_body_label, next_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  br i1 {}, label %{}, label %{}",
+                        guard_bool, arm_body_label, next_label
+                    )
+                    .unwrap();
 
                     // Generate arm body (bindings already done)
                     writeln!(ir, "{}:", arm_body_label).unwrap();
                 } else {
-                    writeln!(ir, "  br i1 {}, label %{}, label %{}", check_val, arm_body_label, next_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  br i1 {}, label %{}, label %{}",
+                        check_val, arm_body_label, next_label
+                    )
+                    .unwrap();
 
                     // Generate arm body
                     writeln!(ir, "{}:", arm_body_label).unwrap();
 
                     // Bind pattern variables if needed
-                    let bind_ir =
-                        self.generate_pattern_bindings_typed(&arm.pattern, &match_val, counter, &match_type)?;
+                    let bind_ir = self.generate_pattern_bindings_typed(
+                        &arm.pattern,
+                        &match_val,
+                        counter,
+                        &match_type,
+                    )?;
                     ir.push_str(&bind_ir);
                 }
 
@@ -408,14 +476,26 @@ impl CodeGenerator {
                 .iter()
                 .map(|(val, label)| format!("[ {}, %{} ]", val, label))
                 .collect();
-            writeln!(ir, "  {} = phi {} {}", phi_result, phi_type, phi_args.join(", ")).unwrap();
+            writeln!(
+                ir,
+                "  {} = phi {} {}",
+                phi_result,
+                phi_type,
+                phi_args.join(", ")
+            )
+            .unwrap();
 
             // For Named types (enum/struct), the phi gives us a pointer.
             // Load the value so it can be used directly (e.g., as a return value).
             if is_named_type {
                 let llvm_ty = self.type_to_llvm(&arm_body_type);
                 let loaded = self.next_temp(counter);
-                writeln!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, phi_result).unwrap();
+                writeln!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded, llvm_ty, llvm_ty, phi_result
+                )
+                .unwrap();
                 Ok((loaded, ir))
             } else {
                 Ok((phi_result, ir))
@@ -449,7 +529,12 @@ impl CodeGenerator {
 
                     // Get the tag from the enum value (first field at index 0)
                     let tag_ptr = self.next_temp(counter);
-                    writeln!(ir, "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0", tag_ptr, enum_name, enum_name, match_val).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                        tag_ptr, enum_name, enum_name, match_val
+                    )
+                    .unwrap();
 
                     let tag_val = self.next_temp(counter);
                     writeln!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr).unwrap();
@@ -459,7 +544,12 @@ impl CodeGenerator {
 
                     // Compare tag
                     let result = self.next_temp(counter);
-                    writeln!(ir, "  {} = icmp eq i32 {}, {}", result, tag_val, expected_tag).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = icmp eq i32 {}, {}",
+                        result, tag_val, expected_tag
+                    )
+                    .unwrap();
 
                     Ok((result, ir))
                 } else {
@@ -496,12 +586,22 @@ impl CodeGenerator {
                     // Get pointer to the constant string
                     let str_ptr = self.next_temp(counter);
                     let str_len = s.len() + 1;
-                    writeln!(ir, "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i32 0, i32 0", str_ptr, str_len, str_len, const_name).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i32 0, i32 0",
+                        str_ptr, str_len, str_len, const_name
+                    )
+                    .unwrap();
 
                     // Call strcmp: int strcmp(const char* s1, const char* s2)
                     // Returns 0 if strings are equal
                     let cmp_result = self.next_temp(counter);
-                    writeln!(ir, "  {} = call i32 @strcmp(i8* {}, i8* {})", cmp_result, match_val, str_ptr).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = call i32 @strcmp(i8* {}, i8* {})",
+                        cmp_result, match_val, str_ptr
+                    )
+                    .unwrap();
 
                     // Check if strcmp returned 0 (equal)
                     let result = self.next_temp(counter);
@@ -578,7 +678,15 @@ impl CodeGenerator {
                 for (i, pat) in patterns.iter().enumerate() {
                     // Extract tuple element
                     let elem = self.next_temp(counter);
-                    writeln!(ir, "  {} = extractvalue {{ {} }} {}, {}", elem, vec!["i64"; patterns.len()].join(", "), match_val, i).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = extractvalue {{ {} }} {}, {}",
+                        elem,
+                        vec!["i64"; patterns.len()].join(", "),
+                        match_val,
+                        i
+                    )
+                    .unwrap();
 
                     let (check, check_ir) = self.generate_pattern_check(pat, &elem, counter)?;
                     ir.push_str(&check_ir);
@@ -612,7 +720,12 @@ impl CodeGenerator {
 
                 // Get the tag from the enum value (first field at index 0)
                 let tag_ptr = self.next_temp(counter);
-                writeln!(ir, "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0", tag_ptr, enum_name, enum_name, match_val).unwrap();
+                writeln!(
+                    ir,
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                    tag_ptr, enum_name, enum_name, match_val
+                )
+                .unwrap();
 
                 let tag_val = self.next_temp(counter);
                 writeln!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr).unwrap();
@@ -622,7 +735,12 @@ impl CodeGenerator {
 
                 // Compare tag
                 let result = self.next_temp(counter);
-                writeln!(ir, "  {} = icmp eq i32 {}, {}", result, tag_val, expected_tag).unwrap();
+                writeln!(
+                    ir,
+                    "  {} = icmp eq i32 {}, {}",
+                    result, tag_val, expected_tag
+                )
+                .unwrap();
 
                 Ok((result, ir))
             }
@@ -643,12 +761,22 @@ impl CodeGenerator {
                             if let Some(pat) = field_pat {
                                 // Extract field value and check pattern
                                 let field_ptr = self.next_temp(counter);
-                                writeln!(ir, "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}", field_ptr, struct_name, struct_name, match_val, field_idx).unwrap();
+                                writeln!(
+                                    ir,
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                                    field_ptr, struct_name, struct_name, match_val, field_idx
+                                )
+                                .unwrap();
 
                                 let field_val = self.next_temp(counter);
                                 let field_ty = &struct_info.fields[field_idx].1;
                                 let llvm_ty = self.type_to_llvm(field_ty);
-                                writeln!(ir, "  {} = load {}, {}* {}", field_val, llvm_ty, llvm_ty, field_ptr).unwrap();
+                                writeln!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    field_val, llvm_ty, llvm_ty, field_ptr
+                                )
+                                .unwrap();
 
                                 let (check, check_ir) =
                                     self.generate_pattern_check(pat, &field_val, counter)?;
@@ -779,7 +907,15 @@ impl CodeGenerator {
                 for (i, pat) in patterns.iter().enumerate() {
                     // Extract tuple element
                     let elem = self.next_temp(counter);
-                    writeln!(ir, "  {} = extractvalue {{ {} }} {}, {}", elem, vec!["i64"; patterns.len()].join(", "), match_val, i).unwrap();
+                    writeln!(
+                        ir,
+                        "  {} = extractvalue {{ {} }} {}, {}",
+                        elem,
+                        vec!["i64"; patterns.len()].join(", "),
+                        match_val,
+                        i
+                    )
+                    .unwrap();
 
                     let bind_ir = self.generate_pattern_bindings(pat, &elem, counter)?;
                     ir.push_str(&bind_ir);
@@ -807,7 +943,12 @@ impl CodeGenerator {
                         // Access payload field: first get to the payload (index 1),
                         // then get the specific field within the payload
                         let payload_ptr = self.next_temp(counter);
-                        writeln!(ir, "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}", payload_ptr, enum_name, enum_name, match_val, i).unwrap();
+                        writeln!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
+                            payload_ptr, enum_name, enum_name, match_val, i
+                        )
+                        .unwrap();
                         let field_val = self.next_temp(counter);
                         writeln!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr).unwrap();
                         let bind_ir =
@@ -817,7 +958,12 @@ impl CodeGenerator {
                         // It's a value - use extractvalue
                         // Extract from payload sub-struct: index 1 for payload, then i for field
                         let payload_val = self.next_temp(counter);
-                        writeln!(ir, "  {} = extractvalue %{} {}, 1, {}", payload_val, enum_name, match_val, i).unwrap();
+                        writeln!(
+                            ir,
+                            "  {} = extractvalue %{} {}, 1, {}",
+                            payload_val, enum_name, match_val, i
+                        )
+                        .unwrap();
                         let bind_ir =
                             self.generate_pattern_bindings(field_pat, &payload_val, counter)?;
                         ir.push_str(&bind_ir);
@@ -841,12 +987,22 @@ impl CodeGenerator {
                         {
                             // Extract field value
                             let field_ptr = self.next_temp(counter);
-                            writeln!(ir, "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}", field_ptr, struct_name, struct_name, match_val, field_idx).unwrap();
+                            writeln!(
+                                ir,
+                                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                                field_ptr, struct_name, struct_name, match_val, field_idx
+                            )
+                            .unwrap();
 
                             let field_val = self.next_temp(counter);
                             let field_ty = &struct_info.fields[field_idx].1;
                             let llvm_ty = self.type_to_llvm(field_ty);
-                            writeln!(ir, "  {} = load {}, {}* {}", field_val, llvm_ty, llvm_ty, field_ptr).unwrap();
+                            writeln!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                field_val, llvm_ty, llvm_ty, field_ptr
+                            )
+                            .unwrap();
 
                             if let Some(pat) = field_pat {
                                 // Bind to pattern
@@ -878,7 +1034,8 @@ impl CodeGenerator {
                 );
 
                 // Then bind variables from the inner pattern
-                let inner_ir = self.generate_pattern_bindings_typed(pattern, match_val, counter, match_type)?;
+                let inner_ir =
+                    self.generate_pattern_bindings_typed(pattern, match_val, counter, match_type)?;
                 ir.push_str(&inner_ir);
 
                 Ok(ir)

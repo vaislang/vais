@@ -437,10 +437,9 @@ fn test_gc_stats_initial_state() {
 #[test]
 fn test_generational_gc_ffi_functions() {
     use vais_gc::{
-        vais_gen_gc_add_root, vais_gen_gc_alloc, vais_gen_gc_collect_minor,
-        vais_gen_gc_init, vais_gen_gc_major_collections, vais_gen_gc_minor_collections,
-        vais_gen_gc_old_objects, vais_gen_gc_remove_root, vais_gen_gc_total_promoted,
-        vais_gen_gc_young_objects,
+        vais_gen_gc_add_root, vais_gen_gc_alloc, vais_gen_gc_collect_minor, vais_gen_gc_init,
+        vais_gen_gc_major_collections, vais_gen_gc_minor_collections, vais_gen_gc_old_objects,
+        vais_gen_gc_remove_root, vais_gen_gc_total_promoted, vais_gen_gc_young_objects,
     };
 
     // Initialize generational GC

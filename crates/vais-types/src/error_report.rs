@@ -245,7 +245,8 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.to_string(),
             self.help().as_deref(),
-        &[])
+            &[],
+        )
     }
 
     /// Format the error with source context using localized messages
@@ -263,7 +264,8 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.localized_message(),
             self.localized_help().as_deref(),
-        &[])
+            &[],
+        )
     }
 }
 

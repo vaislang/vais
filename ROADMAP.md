@@ -449,6 +449,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: inkwell/types.rs + types.rs (Generic/ConstGeneric ICE eprintln → #[cfg(debug_assertions)] 분기)
 진행률: 7/7 (100%)
 
+### Phase 49: CI 수정 — Format Check & Deploy Website & Playground 일관성
+> 목표: CI 전체 green 복원 — cargo fmt, mdbook build.sh, playground.yml 버전 일관성
+모드: 자동진행
+- [x] 1. cargo fmt 포맷 수정 — 전체 workspace rustfmt 적용 (Sonnet 위임) ✅ 2026-02-16
+  변경: cargo fmt --all 실행 (error_message_tests.rs, integration_tests.rs 등 포맷 일괄 적용)
+- [x] 2. mdbook build.sh --config-file 수정 — v0.4.40 호환 (Sonnet 위임) [∥1] ✅ 2026-02-16
+  변경: build.sh (--config-file → book.toml 임시 교체+복원 패턴, 실패 시 복원 보장)
+- [x] 3. playground.yml upload-pages-artifact v3→v4 (Sonnet 위임) [∥1] ✅ 2026-02-16
+  변경: playground.yml (upload-pages-artifact@v3 → @v4)
+- [x] 4. 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3] ✅ 2026-02-16
+  변경: cargo fmt --check 통과, cargo check 통과, cargo clippy 0건
+진행률: 4/4 (100%)
+
 ---
 
 ## ⏳ 장기 관찰 항목

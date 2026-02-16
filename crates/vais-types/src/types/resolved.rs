@@ -258,7 +258,9 @@ pub enum ResolvedType {
     /// Existential type: `impl Trait` (Vais: `X Trait`)
     /// Represents an opaque return type implementing the given trait bounds.
     /// During monomorphization, resolved to the concrete return type.
-    ImplTrait { bounds: Vec<String> },
+    ImplTrait {
+        bounds: Vec<String>,
+    },
 
     /// Higher-kinded type parameter: a type constructor (e.g., F in F<_>)
     /// Represents a type that takes type arguments to produce a concrete type.

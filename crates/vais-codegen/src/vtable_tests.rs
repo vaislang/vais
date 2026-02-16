@@ -65,7 +65,9 @@ mod tests {
         impls.insert("draw".to_string(), "Circle_draw".to_string());
         impls.insert("area".to_string(), "Circle_area".to_string());
 
-        let vtable = gen.generate_vtable("Circle", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("Circle", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         assert_eq!(vtable.trait_name, "Drawable");
         assert_eq!(vtable.impl_type, "Circle");
@@ -91,7 +93,9 @@ mod tests {
         // Missing required method should result in compile-time error
         assert!(result.is_err());
         let err_msg = result.unwrap_err();
-        assert!(err_msg.contains("Trait `Drawable` method `area` not implemented for type `Square`"));
+        assert!(
+            err_msg.contains("Trait `Drawable` method `area` not implemented for type `Square`")
+        );
     }
 
     #[test]
@@ -106,8 +110,12 @@ mod tests {
 
         let impls = HashMap::new();
 
-        let vtable1 = gen.generate_vtable("Triangle", &trait_def, &impls).expect("vtable generation failed");
-        let vtable2 = gen.generate_vtable("Triangle", &trait_def, &impls).expect("vtable generation failed");
+        let vtable1 = gen
+            .generate_vtable("Triangle", &trait_def, &impls)
+            .expect("vtable generation failed");
+        let vtable2 = gen
+            .generate_vtable("Triangle", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         assert_eq!(vtable1.global_name, vtable2.global_name);
         assert_eq!(gen.get_vtables().count(), 1);
@@ -134,7 +142,9 @@ mod tests {
         impls.insert("draw".to_string(), "Rectangle_draw".to_string());
         impls.insert("area".to_string(), "Rectangle_area".to_string());
 
-        let vtable = gen.generate_vtable("Rectangle", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("Rectangle", &trait_def, &impls)
+            .expect("vtable generation failed");
         let global_ir = gen.generate_vtable_global(&vtable, &trait_def, 16, 8);
 
         assert!(global_ir.contains("@vtable_Rectangle_Drawable"));
@@ -284,8 +294,12 @@ mod tests {
         ]);
         let impls2 = HashMap::from([("describe".to_string(), "Widget_describe".to_string())]);
 
-        let vtable1 = gen.generate_vtable("Widget", &trait1, &impls1).expect("vtable1 generation failed");
-        let vtable2 = gen.generate_vtable("Widget", &trait2, &impls2).expect("vtable2 generation failed");
+        let vtable1 = gen
+            .generate_vtable("Widget", &trait1, &impls1)
+            .expect("vtable1 generation failed");
+        let vtable2 = gen
+            .generate_vtable("Widget", &trait2, &impls2)
+            .expect("vtable2 generation failed");
 
         // Should generate two different vtables
         assert_ne!(vtable1.global_name, vtable2.global_name);
@@ -351,7 +365,9 @@ mod tests {
         impls.insert("fetch".to_string(), "HttpService_fetch".to_string());
         impls.insert("name".to_string(), "HttpService_name".to_string());
 
-        let vtable = gen.generate_vtable("HttpService", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("HttpService", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         assert_eq!(vtable.trait_name, "Service");
         assert_eq!(vtable.impl_type, "HttpService");
@@ -389,7 +405,9 @@ mod tests {
         impls.insert("fetch".to_string(), "HttpService_fetch".to_string());
         impls.insert("name".to_string(), "HttpService_name".to_string());
 
-        let vtable = gen.generate_vtable("HttpService", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("HttpService", &trait_def, &impls)
+            .expect("vtable generation failed");
         let global_ir = gen.generate_vtable_global(&vtable, &trait_def, 8, 8);
 
         assert!(global_ir.contains("@vtable_HttpService_Service"));
@@ -429,7 +447,9 @@ mod tests {
         impls.insert("fetch".to_string(), "MyService_fetch".to_string());
         impls.insert("name".to_string(), "MyService_name".to_string());
 
-        let vtable = gen.generate_vtable("MyService", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("MyService", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         // Both methods should be present
         assert_eq!(vtable.methods.len(), 2);
@@ -473,7 +493,9 @@ mod tests {
         };
 
         let impls = HashMap::new();
-        let vtable = gen.generate_vtable("AnyType", &empty_trait, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("AnyType", &empty_trait, &impls)
+            .expect("vtable generation failed");
 
         assert_eq!(vtable.methods.len(), 0);
     }

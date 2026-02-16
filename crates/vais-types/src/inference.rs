@@ -241,7 +241,7 @@ impl TypeChecker {
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),
-                span: None,  // No span available in unify()
+                span: None, // No span available in unify()
             }),
         }
     }
@@ -489,7 +489,7 @@ impl TypeChecker {
             return Err(TypeError::ArgCount {
                 expected: sig.params.len(),
                 got: args.len(),
-                span: None,  // No span available in generic call helper
+                span: None, // No span available in generic call helper
             });
         }
 
@@ -704,11 +704,9 @@ impl TypeChecker {
                 // But some expressions can benefit from the expected type
                 match &expr.node {
                     // Lambda expressions can use expected type to infer parameter types
-                    Expr::Lambda {
-                        params,
-                        body,
-                        ..
-                    } => self.check_lambda_with_expected(params, body, expected, &expr.span),
+                    Expr::Lambda { params, body, .. } => {
+                        self.check_lambda_with_expected(params, body, expected, &expr.span)
+                    }
                     // Array literals can propagate element type
                     Expr::Array(elements) => {
                         self.check_array_with_expected(elements, expected, &expr.span)
@@ -871,7 +869,7 @@ impl TypeChecker {
             return Err(TypeError::ArgCount {
                 expected: sig.params.len(),
                 got: args.len(),
-                span: None,  // No span available in bidirectional helper
+                span: None, // No span available in bidirectional helper
             });
         }
 

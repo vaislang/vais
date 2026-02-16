@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::types::{FunctionMetadata, ModuleSignatureHash, TypeMetadata};
 use super::cache::IncrementalCache;
+use super::types::{FunctionMetadata, ModuleSignatureHash, TypeMetadata};
 
 /// Compute SHA256 hash of a file
 pub fn compute_file_hash(path: &Path) -> Result<String, String> {
@@ -745,12 +745,7 @@ mod tests {
     #[test]
     fn test_find_block_end_skips_comments() {
         let extractor = DefinitionExtractor::new();
-        let lines = vec![
-            "F foo() {",
-            "    # { this is a comment",
-            "    x := 42",
-            "}",
-        ];
+        let lines = vec!["F foo() {", "    # { this is a comment", "    x := 42", "}"];
 
         let result = extractor.find_block_end(&lines, 0);
         assert!(result.is_some());

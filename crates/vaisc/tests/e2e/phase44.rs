@@ -132,10 +132,6 @@ fn e2e_phase44_selfhost_feature_matrix() {
     ];
     for name in &examples {
         let path = project_root.join(format!("examples/{}.vais", name));
-        assert!(
-            path.exists(),
-            "Example file not found: {}",
-            path.display()
-        );
+        assert!(path.exists(), "Example file not found: {}", path.display());
     }
 }

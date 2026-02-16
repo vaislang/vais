@@ -114,7 +114,11 @@ impl WitPackage {
         output
     }
 
-    pub(crate) fn format_type_definition(&self, typedef: &WitTypeDefinition, indent: usize) -> String {
+    pub(crate) fn format_type_definition(
+        &self,
+        typedef: &WitTypeDefinition,
+        indent: usize,
+    ) -> String {
         let indent_str = "  ".repeat(indent);
         match typedef {
             WitTypeDefinition::Record(record) => {

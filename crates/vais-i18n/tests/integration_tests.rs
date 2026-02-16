@@ -314,10 +314,7 @@ fn test_nonexistent_key_returns_key_itself() {
 // 5. Message Key Validation - Verify common error keys exist in all locales
 #[test]
 fn test_common_error_keys_exist_in_all_locales() {
-    let common_keys = vec![
-        "type.E001.title",
-        "type.E001.message",
-    ];
+    let common_keys = vec!["type.E001.title", "type.E001.message"];
 
     for locale in Locale::all() {
         let i18n = I18n::with_locale(*locale);
@@ -416,7 +413,10 @@ fn test_locale_persistence_across_calls() {
     assert_eq!(msg2, "타입 불일치");
 
     // Third call with variables
-    let msg3 = i18n.get("type.E001.message", &[("expected", "i64"), ("found", "Str")]);
+    let msg3 = i18n.get(
+        "type.E001.message",
+        &[("expected", "i64"), ("found", "Str")],
+    );
     assert!(msg3.contains("i64"));
     assert!(msg3.contains("Str"));
 

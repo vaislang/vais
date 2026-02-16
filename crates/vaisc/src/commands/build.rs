@@ -794,10 +794,7 @@ pub(crate) fn cmd_build(
                                     incr_stats.signature_hits
                                 );
                             }
-                            println!(
-                                "  Cache check: {}ms",
-                                incr_stats.total_check_time_ms
-                            );
+                            println!("  Cache check: {}ms", incr_stats.total_check_time_ms);
                         }
                         // Still need to output the binary path if not emit_ir
                         if !emit_ir {
@@ -842,18 +839,30 @@ pub(crate) fn cmd_build(
                         );
                         // Show miss reasons for verbose debugging
                         for (file, reasons) in &incr_stats.miss_reasons {
-                            let reason_strs: Vec<&str> = reasons.iter().map(|r| match r {
-                                incremental::CacheMissReason::NewFile => "new",
-                                incremental::CacheMissReason::ContentHashChanged => "content changed",
-                                incremental::CacheMissReason::SignatureChanged => "signature changed",
-                                incremental::CacheMissReason::DependencyChanged(_) => "dependency changed",
-                                incremental::CacheMissReason::OptionsChanged => "options changed",
-                                incremental::CacheMissReason::FileDeleted => "deleted",
-                                incremental::CacheMissReason::CacheCorrupted => "cache corrupted",
-                            }).collect();
-                            let file_name = file.file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("?");
+                            let reason_strs: Vec<&str> = reasons
+                                .iter()
+                                .map(|r| match r {
+                                    incremental::CacheMissReason::NewFile => "new",
+                                    incremental::CacheMissReason::ContentHashChanged => {
+                                        "content changed"
+                                    }
+                                    incremental::CacheMissReason::SignatureChanged => {
+                                        "signature changed"
+                                    }
+                                    incremental::CacheMissReason::DependencyChanged(_) => {
+                                        "dependency changed"
+                                    }
+                                    incremental::CacheMissReason::OptionsChanged => {
+                                        "options changed"
+                                    }
+                                    incremental::CacheMissReason::FileDeleted => "deleted",
+                                    incremental::CacheMissReason::CacheCorrupted => {
+                                        "cache corrupted"
+                                    }
+                                })
+                                .collect();
+                            let file_name =
+                                file.file_name().and_then(|n| n.to_str()).unwrap_or("?");
                             println!("    {} — {}", file_name, reason_strs.join(", "));
                         }
                     }
@@ -1037,10 +1046,17 @@ pub(crate) fn cmd_build(
         // Parallel TC threshold: only worthwhile with enough modules to offset rayon overhead
         const MIN_MODULES_FOR_PARALLEL_TC: usize = 4;
 
-        let tc_result = if use_parallel && final_ast.modules_map.as_ref().is_some_and(|m| m.len() >= MIN_MODULES_FOR_PARALLEL_TC) {
+        let tc_result = if use_parallel
+            && final_ast
+                .modules_map
+                .as_ref()
+                .is_some_and(|m| m.len() >= MIN_MODULES_FOR_PARALLEL_TC)
+        {
             use rayon::prelude::*;
 
-            let modules_map = final_ast.modules_map.as_ref()
+            let modules_map = final_ast
+                .modules_map
+                .as_ref()
                 .expect("BUG: modules_map should be Some (checked above)");
             let module_paths: Vec<PathBuf> = modules_map.keys().cloned().collect();
 
@@ -1053,31 +1069,35 @@ pub(crate) fn cmd_build(
             }
 
             // Parallel type check each module independently
-            let results: Vec<_> = module_paths.par_iter().map(|module_path| {
-                let mut module_checker = TypeChecker::new();
-                configure_type_checker(&mut module_checker);
-                module_checker.multi_error_mode = true;
+            let results: Vec<_> = module_paths
+                .par_iter()
+                .map(|module_path| {
+                    let mut module_checker = TypeChecker::new();
+                    configure_type_checker(&mut module_checker);
+                    module_checker.multi_error_mode = true;
 
-                // Get items for this module
-                if let Some(item_indices) = modules_map.get(module_path) {
-                    // Construct module with only this module's items (avoid full AST clone)
-                    let module_items: Vec<_> = item_indices.iter()
-                        .filter_map(|&idx| final_ast.items.get(idx).cloned())
-                        .collect();
-                    let module_ast = vais_ast::Module {
-                        items: module_items,
-                        modules_map: None,
-                    };
+                    // Get items for this module
+                    if let Some(item_indices) = modules_map.get(module_path) {
+                        // Construct module with only this module's items (avoid full AST clone)
+                        let module_items: Vec<_> = item_indices
+                            .iter()
+                            .filter_map(|&idx| final_ast.items.get(idx).cloned())
+                            .collect();
+                        let module_ast = vais_ast::Module {
+                            items: module_items,
+                            modules_map: None,
+                        };
 
-                    // Type check this module
-                    match module_checker.check_module(&module_ast) {
-                        Ok(_) => Ok(module_checker),
-                        Err(e) => Err((format!("{}", e), module_checker))
+                        // Type check this module
+                        match module_checker.check_module(&module_ast) {
+                            Ok(_) => Ok(module_checker),
+                            Err(e) => Err((format!("{}", e), module_checker)),
+                        }
+                    } else {
+                        Ok(module_checker)
                     }
-                } else {
-                    Ok(module_checker)
-                }
-            }).collect();
+                })
+                .collect();
 
             // Merge results from all modules
             let mut final_checker = TypeChecker::new();
@@ -1138,11 +1158,7 @@ pub(crate) fn cmd_build(
             }
             let total_errors = 1 + checker.get_collected_errors().len();
             if total_errors > 1 {
-                eprintln!(
-                    "{}: {} errors found",
-                    "error".red().bold(),
-                    total_errors
-                );
+                eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
             }
             // Format error with source context
             return Err(error_formatter::format_type_error(&e, &main_source, input));

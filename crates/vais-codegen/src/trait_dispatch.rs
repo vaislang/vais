@@ -5,7 +5,9 @@ use super::*;
 impl CodeGenerator {
     /// Register a trait definition for vtable generation
     pub fn register_trait(&mut self, trait_def: vais_types::TraitDef) {
-        self.types.trait_defs.insert(trait_def.name.clone(), trait_def);
+        self.types
+            .trait_defs
+            .insert(trait_def.name.clone(), trait_def);
     }
 
     /// Register a trait from AST definition (converts AST Trait to TraitDef)
@@ -66,7 +68,10 @@ impl CodeGenerator {
             let bounds = assoc.bounds.iter().map(|b| b.node.clone()).collect();
 
             // Convert default type if provided
-            let default = assoc.default.as_ref().map(|d| self.ast_type_to_resolved(&d.node));
+            let default = assoc
+                .default
+                .as_ref()
+                .map(|d| self.ast_type_to_resolved(&d.node));
 
             associated_types.insert(
                 assoc.name.node.clone(),
@@ -109,12 +114,15 @@ impl CodeGenerator {
         impl_type: &str,
         trait_name: &str,
     ) -> CodegenResult<vtable::VtableInfo> {
-        let trait_def = self.types.trait_defs.get(trait_name).ok_or_else(|| {
-            CodegenError::TypeError(format!("Unknown trait: {}", trait_name))
-        })?;
+        let trait_def = self
+            .types
+            .trait_defs
+            .get(trait_name)
+            .ok_or_else(|| CodegenError::TypeError(format!("Unknown trait: {}", trait_name)))?;
         let trait_def = trait_def.clone();
         let method_impls = self
-            .types.trait_impl_methods
+            .types
+            .trait_impl_methods
             .get(&(impl_type.to_string(), trait_name.to_string()))
             .cloned()
             .unwrap_or_default();
@@ -174,10 +182,10 @@ impl CodeGenerator {
         args: &[String],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let trait_def = self
-            .types.trait_defs
-            .get(trait_name)
-            .ok_or_else(|| CodegenError::Unsupported(format!("Unknown trait: {}", trait_name)))?;
+        let trait_def =
+            self.types.trait_defs.get(trait_name).ok_or_else(|| {
+                CodegenError::Unsupported(format!("Unknown trait: {}", trait_name))
+            })?;
 
         // Find method index in trait
         let method_names: Vec<&String> = trait_def.methods.keys().collect();

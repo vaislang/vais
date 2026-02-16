@@ -1,7 +1,7 @@
 //! Lifetime validation and public API entry points.
 
-use super::*;
 use super::checker::BorrowChecker;
+use super::*;
 
 /// Check a MIR body for borrow errors.
 pub fn check_body(body: &Body) -> Vec<BorrowError> {

@@ -1227,13 +1227,11 @@ fn test_all_finding_categories() {
     // Create findings for all categories
     let buffer_overflow =
         vais_security::SecurityFinding::buffer_overflow("Buffer overflow test", span);
-    let unsafe_pointer = vais_security::SecurityFinding::unsafe_pointer("Unsafe pointer test", span);
+    let unsafe_pointer =
+        vais_security::SecurityFinding::unsafe_pointer("Unsafe pointer test", span);
     let injection = vais_security::SecurityFinding::injection("Injection test", span);
-    let hardcoded_secret = vais_security::SecurityFinding::hardcoded_secret(
-        "Secret test",
-        span,
-        Severity::High,
-    );
+    let hardcoded_secret =
+        vais_security::SecurityFinding::hardcoded_secret("Secret test", span, Severity::High);
     let integer_overflow =
         vais_security::SecurityFinding::integer_overflow("Integer overflow test", span);
     let use_after_free =

@@ -174,7 +174,7 @@ fn test_module_with_items() {
         is_pub: false,
         is_async: false,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     let module = Module {
@@ -199,7 +199,7 @@ fn test_item_function() {
         is_pub: true,
         is_async: false,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     let item = Item::Function(func.clone());
@@ -233,7 +233,7 @@ fn test_item_struct() {
         methods: vec![],
         is_pub: true,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     let item = Item::Struct(s);
@@ -520,7 +520,7 @@ fn test_function_simple() {
         is_pub: false,
         is_async: false,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     assert_eq!(func.name.node, "add");
@@ -541,7 +541,7 @@ fn test_function_with_generics() {
         is_pub: true,
         is_async: false,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     assert_eq!(func.generics.len(), 1);
@@ -559,7 +559,7 @@ fn test_function_async() {
         is_pub: true,
         is_async: true,
         attributes: vec![],
-            where_clause: vec![],
+        where_clause: vec![],
     };
 
     assert!(func.is_async);

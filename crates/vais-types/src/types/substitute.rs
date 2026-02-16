@@ -38,12 +38,8 @@ fn substitute_type_impl(
                 if !generics.is_empty() {
                     // F<A> where F→Vec, A→i64 becomes Vec<i64>
                     let concrete_name = match subst {
-                        ResolvedType::Named {
-                            name: concrete, ..
-                        }
-                        | ResolvedType::HigherKinded {
-                            name: concrete, ..
-                        } => concrete.clone(),
+                        ResolvedType::Named { name: concrete, .. }
+                        | ResolvedType::HigherKinded { name: concrete, .. } => concrete.clone(),
                         _ => name.clone(),
                     };
                     let new_generics: Vec<ResolvedType> = generics

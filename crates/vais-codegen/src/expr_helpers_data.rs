@@ -372,5 +372,4 @@ impl CodeGenerator {
             "field access requires known struct or union type".to_string(),
         ))
     }
-
 }

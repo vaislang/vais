@@ -76,8 +76,14 @@ impl CodeGenerator {
                 BinOp::And => "and",
                 BinOp::Or => "or",
                 _ => {
-                    eprintln!("[ICE] unexpected BinOp variant in logical operation: {:?}", op);
-                    return Err(CodegenError::Unsupported(format!("unexpected logical operator {:?}", op)));
+                    eprintln!(
+                        "[ICE] unexpected BinOp variant in logical operation: {:?}",
+                        op
+                    );
+                    return Err(CodegenError::Unsupported(format!(
+                        "unexpected logical operator {:?}",
+                        op
+                    )));
                 }
             };
 
@@ -110,8 +116,14 @@ impl CodeGenerator {
                     BinOp::Eq => "fcmp oeq",
                     BinOp::Neq => "fcmp one",
                     _ => {
-                        eprintln!("[ICE] unexpected BinOp variant in float comparison: {:?}", op);
-                        return Err(CodegenError::Unsupported(format!("unexpected float comparison operator {:?}", op)));
+                        eprintln!(
+                            "[ICE] unexpected BinOp variant in float comparison: {:?}",
+                            op
+                        );
+                        return Err(CodegenError::Unsupported(format!(
+                            "unexpected float comparison operator {:?}",
+                            op
+                        )));
                     }
                 };
                 ir.push_str(&format!(
@@ -127,8 +139,14 @@ impl CodeGenerator {
                     BinOp::Eq => "icmp eq",
                     BinOp::Neq => "icmp ne",
                     _ => {
-                        eprintln!("[ICE] unexpected BinOp variant in integer comparison: {:?}", op);
-                        return Err(CodegenError::Unsupported(format!("unexpected integer comparison operator {:?}", op)));
+                        eprintln!(
+                            "[ICE] unexpected BinOp variant in integer comparison: {:?}",
+                            op
+                        );
+                        return Err(CodegenError::Unsupported(format!(
+                            "unexpected integer comparison operator {:?}",
+                            op
+                        )));
                     }
                 };
                 ir.push_str(&format!(
@@ -165,8 +183,14 @@ impl CodeGenerator {
                     BinOp::Div => "fdiv",
                     BinOp::Mod => "frem",
                     _ => {
-                        eprintln!("[ICE] unexpected BinOp variant in float arithmetic: {:?}", op);
-                        return Err(CodegenError::Unsupported(format!("unexpected float arithmetic operator {:?}", op)));
+                        eprintln!(
+                            "[ICE] unexpected BinOp variant in float arithmetic: {:?}",
+                            op
+                        );
+                        return Err(CodegenError::Unsupported(format!(
+                            "unexpected float arithmetic operator {:?}",
+                            op
+                        )));
                     }
                 };
                 ir.push_str(&format!(
@@ -186,8 +210,14 @@ impl CodeGenerator {
                     BinOp::Shl => "shl",
                     BinOp::Shr => "ashr",
                     _ => {
-                        eprintln!("[ICE] unexpected BinOp variant in integer arithmetic: {:?}", op);
-                        return Err(CodegenError::Unsupported(format!("unexpected integer arithmetic operator {:?}", op)));
+                        eprintln!(
+                            "[ICE] unexpected BinOp variant in integer arithmetic: {:?}",
+                            op
+                        );
+                        return Err(CodegenError::Unsupported(format!(
+                            "unexpected integer arithmetic operator {:?}",
+                            op
+                        )));
                     }
                 };
                 ir.push_str(&format!(
@@ -386,5 +416,4 @@ impl CodeGenerator {
 
         Ok((result, ir))
     }
-
 }

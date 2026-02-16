@@ -91,7 +91,8 @@ impl CodeGenerator {
             || if let Expr::Call { func, .. } = &value.node {
                 if let Expr::Ident(fn_name) = &func.node {
                     let resolved = self.resolve_struct_name(fn_name);
-                    self.types.structs.contains_key(&resolved) && !self.types.functions.contains_key(fn_name)
+                    self.types.structs.contains_key(&resolved)
+                        && !self.types.functions.contains_key(fn_name)
                 } else {
                     false
                 }
@@ -159,17 +160,20 @@ impl CodeGenerator {
         if use_ssa {
             // SSA style: directly alias the value, no alloca needed
             // This significantly reduces stack usage
-            self.fn_ctx.locals.insert(
-                name.node.clone(),
-                LocalVar::ssa(resolved_ty.clone(), val),
-            );
+            self.fn_ctx
+                .locals
+                .insert(name.node.clone(), LocalVar::ssa(resolved_ty.clone(), val));
             // If this was a lambda with captures, register the closure info
             if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
-                self.lambdas.closures.insert(name.node.clone(), closure_info);
+                self.lambdas
+                    .closures
+                    .insert(name.node.clone(), closure_info);
             }
             // If this was a lazy expression, register the thunk info
             if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
-                self.lambdas.lazy_bindings.insert(name.node.clone(), lazy_info);
+                self.lambdas
+                    .lazy_bindings
+                    .insert(name.node.clone(), lazy_info);
             }
             // Return just the expression IR, no alloca/store needed
             Ok(("void".to_string(), val_ir))
@@ -212,18 +216,21 @@ impl CodeGenerator {
 
             // If this was a lambda with captures, register the closure info
             if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
-                self.lambdas.closures.insert(name.node.clone(), closure_info);
+                self.lambdas
+                    .closures
+                    .insert(name.node.clone(), closure_info);
             }
             // If this was a lazy expression, register the thunk info
             if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
-                self.lambdas.lazy_bindings.insert(name.node.clone(), lazy_info);
+                self.lambdas
+                    .lazy_bindings
+                    .insert(name.node.clone(), lazy_info);
             }
 
             // Insert local var AFTER generating IR to avoid borrow conflicts
-            self.fn_ctx.locals.insert(
-                name.node.clone(),
-                LocalVar::alloca(resolved_ty, llvm_name),
-            );
+            self.fn_ctx
+                .locals
+                .insert(name.node.clone(), LocalVar::alloca(resolved_ty, llvm_name));
 
             Ok(("void".to_string(), ir))
         }
@@ -287,7 +294,8 @@ impl CodeGenerator {
 
             // Get return type from current function context
             let ret_type = self
-                .fn_ctx.current_return_type
+                .fn_ctx
+                .current_return_type
                 .as_ref()
                 .cloned()
                 .unwrap_or(ResolvedType::I64);

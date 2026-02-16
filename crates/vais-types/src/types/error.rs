@@ -258,7 +258,6 @@ impl TypeError {
         }
     }
 
-
     /// Get secondary spans with labels for multi-location errors
     pub fn secondary_spans(&self) -> Vec<(Span, String)> {
         match self {
@@ -269,7 +268,11 @@ impl TypeError {
                     vec![]
                 }
             }
-            TypeError::BorrowConflict { existing_borrow_at, existing_is_mut, .. } => {
+            TypeError::BorrowConflict {
+                existing_borrow_at,
+                existing_is_mut,
+                ..
+            } => {
                 if let Some(span) = existing_borrow_at {
                     let label = if *existing_is_mut {
                         "first mutable borrow occurs here"
@@ -288,7 +291,9 @@ impl TypeError {
                     vec![]
                 }
             }
-            TypeError::DanglingReference { source_defined_at, .. } => {
+            TypeError::DanglingReference {
+                source_defined_at, ..
+            } => {
                 if let Some(span) = source_defined_at {
                     vec![(*span, "source variable defined here".to_string())]
                 } else {

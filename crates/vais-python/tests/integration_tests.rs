@@ -22,10 +22,7 @@ fn test_tokenize_simple_function() {
     assert!(!tokens.is_empty(), "Should produce tokens");
 
     // Verify we have key tokens
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     assert!(
         token_types.iter().any(|t| t.contains("Function")),
@@ -57,10 +54,7 @@ fn test_tokenize_various_token_types() {
     "#;
 
     let tokens = tokenize(source).expect("Should tokenize successfully");
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     assert!(
         token_types.iter().any(|t| t.contains("Struct")),
@@ -84,10 +78,7 @@ fn test_tokenize_string_and_comment() {
     "#;
 
     let tokens = tokenize(source).expect("Should tokenize successfully");
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     assert!(
         token_types.iter().any(|t| t.contains("String")),
@@ -216,18 +207,17 @@ fn test_full_compile_pipeline() {
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     // Generate code
     let mut codegen = CodeGenerator::new("test_module");
-    let ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     assert!(!ir.is_empty(), "Should produce non-empty IR");
-    assert!(ir.contains("define"), "IR should contain function definition");
+    assert!(
+        ir.contains("define"),
+        "IR should contain function definition"
+    );
     assert!(ir.contains("main"), "IR should contain main function");
 }
 
@@ -237,14 +227,10 @@ fn test_compilation_optimization_levels() {
     let ast = parse(source).expect("Should parse");
 
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     let mut codegen = CodeGenerator::new("test_opt");
-    let raw_ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let raw_ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     // Test different optimization levels
     for (level, opt) in [
@@ -268,15 +254,11 @@ fn test_compilation_custom_module_name() {
     let ast = parse(source).expect("Should parse");
 
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     let custom_name = "my_custom_module";
     let mut codegen = CodeGenerator::new(custom_name);
-    let ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     assert!(
         ir.contains(custom_name),
@@ -322,15 +304,11 @@ fn test_roundtrip_full_pipeline() {
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     // Generate IR
     let mut codegen = CodeGenerator::new("factorial_module");
-    let ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     assert!(!ir.is_empty(), "Should produce IR");
 }
@@ -344,14 +322,10 @@ fn test_ir_contains_expected_functions() {
 
     let ast = parse(source).expect("Should parse");
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     let mut codegen = CodeGenerator::new("test");
-    let ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     assert!(ir.contains("helper"), "IR should contain helper function");
     assert!(ir.contains("main"), "IR should contain main function");
@@ -368,19 +342,12 @@ fn test_ir_module_structure() {
 
     let ast = parse(source).expect("Should parse");
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     let mut codegen = CodeGenerator::new("point_module");
-    let ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let ir = codegen.generate_module(&ast).expect("Should generate IR");
 
-    assert!(
-        ir.contains("Point"),
-        "IR should reference Point struct"
-    );
+    assert!(ir.contains("Point"), "IR should reference Point struct");
     assert!(
         ir.contains("create_point"),
         "IR should contain function name"
@@ -451,9 +418,7 @@ fn test_target_triple_parsing() {
     let ast = parse(source).expect("Should parse");
 
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     // Test native target
     let mut codegen_native = CodeGenerator::new_with_target("test", TargetTriple::Native);
@@ -527,14 +492,10 @@ fn test_optimization_preserves_semantics() {
 
     let ast = parse(source).expect("Should parse");
     let mut checker = TypeChecker::new();
-    checker
-        .check_module(&ast)
-        .expect("Should type check");
+    checker.check_module(&ast).expect("Should type check");
 
     let mut codegen = CodeGenerator::new("opt_test");
-    let raw_ir = codegen
-        .generate_module(&ast)
-        .expect("Should generate IR");
+    let raw_ir = codegen.generate_module(&ast).expect("Should generate IR");
 
     // All optimization levels should produce valid IR
     let o0 = optimize_ir(&raw_ir, OptLevel::O0);

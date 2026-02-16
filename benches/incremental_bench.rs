@@ -126,11 +126,7 @@ fn setup_project(target_lines: usize) -> (TempDir, Vec<PathBuf>) {
 }
 
 /// Simulate incremental compilation with cache
-fn compile_with_cache(
-    files: &[PathBuf],
-    cache: &mut SimulatedCache,
-    stats: &mut IncrementalStats,
-) {
+fn compile_with_cache(files: &[PathBuf], cache: &mut SimulatedCache, stats: &mut IncrementalStats) {
     for file_path in files {
         let content = fs::read_to_string(file_path).expect("Failed to read file");
         stats.files_checked += 1;
@@ -222,7 +218,11 @@ fn bench_no_change_rebuild(c: &mut Criterion) {
                     compile_with_cache(&files, &mut cache, &mut stats);
 
                     // Sanity check: no-change rebuild should have 100% cache hits
-                    assert!(stats.hit_rate() >= 99.0, "Expected ~100% hit rate, got {:.2}%", stats.hit_rate());
+                    assert!(
+                        stats.hit_rate() >= 99.0,
+                        "Expected ~100% hit rate, got {:.2}%",
+                        stats.hit_rate()
+                    );
                 })
             },
         );
@@ -304,7 +304,7 @@ fn bench_signature_change_rebuild(c: &mut Criterion) {
         // Change first function signature: F mod0_arithmetic_0(x: i64, y: i64) -> add parameter z
         let modified_content = original_content.replace(
             "F mod0_arithmetic_0(x: i64, y: i64) -> i64",
-            "F mod0_arithmetic_0(x: i64, y: i64, z: i64) -> i64"
+            "F mod0_arithmetic_0(x: i64, y: i64, z: i64) -> i64",
         );
         fs::write(file_path, &modified_content).expect("Failed to write modified content");
 

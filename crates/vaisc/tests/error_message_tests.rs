@@ -6,8 +6,8 @@
 
 use vais_lexer::tokenize;
 use vais_parser::parse;
-use vais_types::TypeError;
 use vais_types::TypeChecker;
+use vais_types::TypeError;
 
 /// Type-check source code, returning the error string if type checking fails
 fn type_check_error(source: &str) -> String {
@@ -329,10 +329,7 @@ fn error_undefined_function_suggests_similar() {
 fn help_not_callable_has_message() {
     // Calling a non-function value
     let help = type_check_help("F main() -> i64 { x := 5\n x() }");
-    assert!(
-        help.is_some(),
-        "NotCallable should provide help message"
-    );
+    assert!(help.is_some(), "NotCallable should provide help message");
     let text = help.unwrap();
     assert!(
         text.contains("not callable") || text.contains("functions"),
@@ -345,10 +342,7 @@ fn help_not_callable_has_message() {
 fn help_arg_count_has_message() {
     // Wrong number of arguments
     let help = type_check_help("F add(a: i64, b: i64) -> i64 = a + b\nF main() -> i64 = add(1)");
-    assert!(
-        help.is_some(),
-        "ArgCount should provide help message"
-    );
+    assert!(help.is_some(), "ArgCount should provide help message");
     let text = help.unwrap();
     assert!(
         text.contains("2") && text.contains("1"),
@@ -362,10 +356,7 @@ fn help_duplicate_has_message() {
     // Test directly: Duplicate definition error has help
     let err = TypeError::Duplicate("foo".to_string(), None);
     let help = err.help();
-    assert!(
-        help.is_some(),
-        "Duplicate should provide help message"
-    );
+    assert!(help.is_some(), "Duplicate should provide help message");
     let text = help.unwrap();
     assert!(
         text.contains("already defined") || text.contains("renaming"),
@@ -420,7 +411,11 @@ fn secondary_spans_borrow_conflict() {
         new_is_mut: false,
     };
     let spans = err.secondary_spans();
-    assert_eq!(spans.len(), 1, "BorrowConflict should have 1 secondary span");
+    assert_eq!(
+        spans.len(),
+        1,
+        "BorrowConflict should have 1 secondary span"
+    );
     assert!(
         spans[0].1.contains("mutable borrow"),
         "Should mention mutable borrow: got '{}'",
@@ -436,10 +431,7 @@ fn secondary_spans_empty_for_simple_errors() {
         span: None,
     };
     let spans = err.secondary_spans();
-    assert!(
-        spans.is_empty(),
-        "Mismatch should have no secondary spans"
-    );
+    assert!(spans.is_empty(), "Mismatch should have no secondary spans");
 }
 
 // ==================== Phase 31: Multi-Error Collection Tests ====================
@@ -496,12 +488,32 @@ fn error_code_format_is_exxxx() {
 fn error_help_coverage_all_variants() {
     // Test that all manually constructable error variants have help()
     let variants: Vec<TypeError> = vec![
-        TypeError::Mismatch { expected: "i64".into(), found: "bool".into(), span: None },
-        TypeError::UndefinedVar { name: "x".into(), span: None, suggestion: Some("y".into()) },
-        TypeError::UndefinedType { name: "Foo".into(), span: None, suggestion: None },
-        TypeError::UndefinedFunction { name: "foo".into(), span: None, suggestion: None },
+        TypeError::Mismatch {
+            expected: "i64".into(),
+            found: "bool".into(),
+            span: None,
+        },
+        TypeError::UndefinedVar {
+            name: "x".into(),
+            span: None,
+            suggestion: Some("y".into()),
+        },
+        TypeError::UndefinedType {
+            name: "Foo".into(),
+            span: None,
+            suggestion: None,
+        },
+        TypeError::UndefinedFunction {
+            name: "foo".into(),
+            span: None,
+            suggestion: None,
+        },
         TypeError::NotCallable("i64".into(), None),
-        TypeError::ArgCount { expected: 2, got: 1, span: None },
+        TypeError::ArgCount {
+            expected: 2,
+            got: 1,
+            span: None,
+        },
         TypeError::CannotInfer,
         TypeError::Duplicate("foo".into(), None),
         TypeError::ImmutableAssign("x".into(), None),

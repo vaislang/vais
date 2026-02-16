@@ -120,13 +120,28 @@ line-numbers = false
 runnable = false
 EOF
 
-        # Build with temporary config
-        mdbook build --config-file "${TEMP_CONFIG}"
+        # Backup original book.toml and use temp config
+        if [ -f "book.toml" ]; then
+            mv book.toml book.toml.backup
+        fi
+        mv "${TEMP_CONFIG}" book.toml
 
-        # Clean up temporary config
-        rm -f "${TEMP_CONFIG}"
+        # Build with temporary config (restored on success or failure)
+        if mdbook build; then
+            echo -e "${GREEN}✓ ${DISPLAY_NAME} documentation built successfully!${NC}"
+        else
+            echo -e "${RED}✗ Failed to build ${DISPLAY_NAME} documentation${NC}"
+            # Restore original config and exit
+            if [ -f "book.toml.backup" ]; then
+                mv book.toml.backup book.toml
+            fi
+            exit 1
+        fi
 
-        echo -e "${GREEN}✓ ${DISPLAY_NAME} documentation built successfully!${NC}"
+        # Restore original config
+        if [ -f "book.toml.backup" ]; then
+            mv book.toml.backup book.toml
+        fi
     fi
 done
 

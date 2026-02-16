@@ -186,8 +186,8 @@ fn test_dylib_loader_nonexistent_file_error() {
 
 #[test]
 fn test_dylib_loader_initial_state() {
-    use vais_hotreload::DylibLoader;
     use std::fs::File;
+    use vais_hotreload::DylibLoader;
 
     let temp_dir = TempDir::new().unwrap();
     let dummy_lib = temp_dir.path().join("libdummy.dylib");

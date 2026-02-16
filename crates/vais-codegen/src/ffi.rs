@@ -388,7 +388,8 @@ impl CodeGenerator {
 
         // Look up function signature
         let func_info = self
-            .types.functions
+            .types
+            .functions
             .get(func_name)
             .ok_or_else(|| CodegenError::UndefinedFunction(func_name.to_string()))?;
 

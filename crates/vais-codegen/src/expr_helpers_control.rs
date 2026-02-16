@@ -249,5 +249,4 @@ impl CodeGenerator {
 
         Ok(("0".to_string(), ir))
     }
-
 }

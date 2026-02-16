@@ -1147,10 +1147,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generate lazy expression: creates a thunk function and returns { i1, T, ptr } struct
-    pub(super) fn generate_lazy(
-        &mut self,
-        inner: &Expr,
-    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_lazy(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // For Inkwell, we generate the thunk function and build the lazy struct.
         // The thunk captures free variables from the current scope.
 
@@ -1159,19 +1156,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Find captured variables
         let used_idents = Self::collect_idents(inner);
-        let captured_vars: Vec<(String, BasicValueEnum<'ctx>, inkwell::types::BasicTypeEnum<'ctx>)> =
-            used_idents
-                .iter()
-                .filter_map(|name| {
-                    self.locals.get(name).map(|(ptr, var_type)| {
-                        let val = self
-                            .builder
-                            .build_load(*var_type, *ptr, &format!("lazy_cap_{}", name))
-                            .unwrap_or_else(|_| self.context.i64_type().const_int(0, false).into());
-                        (name.clone(), val, *var_type)
-                    })
+        let captured_vars: Vec<(
+            String,
+            BasicValueEnum<'ctx>,
+            inkwell::types::BasicTypeEnum<'ctx>,
+        )> = used_idents
+            .iter()
+            .filter_map(|name| {
+                self.locals.get(name).map(|(ptr, var_type)| {
+                    let val = self
+                        .builder
+                        .build_load(*var_type, *ptr, &format!("lazy_cap_{}", name))
+                        .unwrap_or_else(|_| self.context.i64_type().const_int(0, false).into());
+                    (name.clone(), val, *var_type)
                 })
-                .collect();
+            })
+            .collect();
 
         // Build thunk parameter types (captured vars only)
         let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = captured_vars
@@ -1282,10 +1282,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generate force expression: check computed flag, call thunk if needed, cache result
-    pub(super) fn generate_force(
-        &mut self,
-        inner: &Expr,
-    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+    pub(super) fn generate_force(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Look up lazy binding info if the inner is an identifier
         let lazy_info = if let Expr::Ident(name) = inner {
             self.lazy_bindings.get(name).cloned()
@@ -1372,10 +1369,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 CodegenError::LlvmError(format!("Thunk function '{}' not found", thunk_name))
             })?;
 
-            let call_args: Vec<inkwell::values::BasicMetadataValueEnum> = captured_vals
-                .iter()
-                .map(|(_, val)| (*val).into())
-                .collect();
+            let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+                captured_vals.iter().map(|(_, val)| (*val).into()).collect();
 
             let computed_val = self
                 .builder
@@ -1409,10 +1404,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .builder
                 .build_phi(inner_type, "force_result")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            phi.add_incoming(&[
-                (&cached_val, cached_bb),
-                (&computed_val, compute_bb),
-            ]);
+            phi.add_incoming(&[(&cached_val, cached_bb), (&computed_val, compute_bb)]);
 
             return Ok(phi.as_basic_value());
         }

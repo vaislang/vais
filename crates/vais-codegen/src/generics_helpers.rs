@@ -62,9 +62,7 @@ impl CodeGenerator {
             let type_params: Vec<&String> = template
                 .generics
                 .iter()
-                .filter(|g| {
-                    !matches!(g.kind, GenericParamKind::Lifetime { .. })
-                })
+                .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
                 .map(|g| &g.name.node)
                 .collect();
 
@@ -166,12 +164,12 @@ impl CodeGenerator {
                         ..
                     } = arg_type
                     {
-                        inferred.entry(name.clone()).or_insert_with(|| {
-                            ResolvedType::Named {
+                        inferred
+                            .entry(name.clone())
+                            .or_insert_with(|| ResolvedType::Named {
                                 name: concrete_name.clone(),
                                 generics: vec![],
-                            }
-                        });
+                            });
                     }
                 }
             }

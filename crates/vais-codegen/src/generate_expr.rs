@@ -243,8 +243,14 @@ impl CodeGenerator {
                         BinOp::And => "and",
                         BinOp::Or => "or",
                         _ => {
-                            eprintln!("[ICE] unexpected BinOp variant in logical operation: {:?}", op);
-                            return Err(CodegenError::Unsupported(format!("unexpected logical operator {:?}", op)));
+                            eprintln!(
+                                "[ICE] unexpected BinOp variant in logical operation: {:?}",
+                                op
+                            );
+                            return Err(CodegenError::Unsupported(format!(
+                                "unexpected logical operator {:?}",
+                                op
+                            )));
                         }
                     };
 
@@ -277,8 +283,14 @@ impl CodeGenerator {
                             BinOp::Eq => "fcmp oeq",
                             BinOp::Neq => "fcmp one",
                             _ => {
-                                eprintln!("[ICE] unexpected BinOp variant in float comparison: {:?}", op);
-                                return Err(CodegenError::Unsupported(format!("unexpected float comparison operator {:?}", op)));
+                                eprintln!(
+                                    "[ICE] unexpected BinOp variant in float comparison: {:?}",
+                                    op
+                                );
+                                return Err(CodegenError::Unsupported(format!(
+                                    "unexpected float comparison operator {:?}",
+                                    op
+                                )));
                             }
                         };
                         ir.push_str(&format!(
@@ -294,8 +306,14 @@ impl CodeGenerator {
                             BinOp::Eq => "icmp eq",
                             BinOp::Neq => "icmp ne",
                             _ => {
-                                eprintln!("[ICE] unexpected BinOp variant in integer comparison: {:?}", op);
-                                return Err(CodegenError::Unsupported(format!("unexpected integer comparison operator {:?}", op)));
+                                eprintln!(
+                                    "[ICE] unexpected BinOp variant in integer comparison: {:?}",
+                                    op
+                                );
+                                return Err(CodegenError::Unsupported(format!(
+                                    "unexpected integer comparison operator {:?}",
+                                    op
+                                )));
                             }
                         };
                         ir.push_str(&format!(
@@ -330,8 +348,14 @@ impl CodeGenerator {
                             BinOp::Div => "fdiv",
                             BinOp::Mod => "frem",
                             _ => {
-                                eprintln!("[ICE] unexpected BinOp variant in float arithmetic: {:?}", op);
-                                return Err(CodegenError::Unsupported(format!("unexpected float arithmetic operator {:?}", op)));
+                                eprintln!(
+                                    "[ICE] unexpected BinOp variant in float arithmetic: {:?}",
+                                    op
+                                );
+                                return Err(CodegenError::Unsupported(format!(
+                                    "unexpected float arithmetic operator {:?}",
+                                    op
+                                )));
                             }
                         };
 
@@ -353,8 +377,14 @@ impl CodeGenerator {
                             BinOp::Shl => "shl",
                             BinOp::Shr => "ashr",
                             _ => {
-                                eprintln!("[ICE] unexpected BinOp variant in integer arithmetic: {:?}", op);
-                                return Err(CodegenError::Unsupported(format!("unexpected integer arithmetic operator {:?}", op)));
+                                eprintln!(
+                                    "[ICE] unexpected BinOp variant in integer arithmetic: {:?}",
+                                    op
+                                );
+                                return Err(CodegenError::Unsupported(format!(
+                                    "unexpected integer arithmetic operator {:?}",
+                                    op
+                                )));
                             }
                         };
 
@@ -432,9 +462,7 @@ impl CodeGenerator {
                 Ok((result, ir))
             }
 
-            Expr::Call { func, args } => {
-                self.generate_expr_call(func, args, expr.span, counter)
-            }
+            Expr::Call { func, args } => self.generate_expr_call(func, args, expr.span, counter),
 
             // If/Else expression with basic blocks
             Expr::If { cond, then, else_ } => {
@@ -484,7 +512,7 @@ impl CodeGenerator {
                 };
 
                 let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
-                // Only emit branch to merge if block is not terminated
+                                                                                        // Only emit branch to merge if block is not terminated
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
                     then_actual_block
@@ -818,7 +846,9 @@ impl CodeGenerator {
                             } = &local.ty
                             {
                                 // First check struct
-                                if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
+                                if let Some(struct_info) =
+                                    self.types.structs.get(type_name).cloned()
+                                {
                                     if let Some(field_idx) = struct_info
                                         .fields
                                         .iter()
@@ -839,7 +869,8 @@ impl CodeGenerator {
                                     }
                                 }
                                 // Then check union
-                                else if let Some(union_info) = self.types.unions.get(type_name).cloned()
+                                else if let Some(union_info) =
+                                    self.types.unions.get(type_name).cloned()
                                 {
                                     if let Some((_, field_ty)) =
                                         union_info.fields.iter().find(|(n, _)| n == &field.node)
@@ -1379,7 +1410,8 @@ impl CodeGenerator {
 
                 // Determine return type from function registry
                 let ret_type = self
-                    .types.functions
+                    .types
+                    .functions
                     .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
@@ -1420,7 +1452,8 @@ impl CodeGenerator {
 
                 // Get return type from method signature
                 let ret_type = self
-                    .types.functions
+                    .types
+                    .functions
                     .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
@@ -1816,10 +1849,8 @@ impl CodeGenerator {
                                 let llvm_ty = self.type_to_llvm(&ty);
                                 let spill_name = format!("__refcap_{}", cap_name);
                                 let spill_ptr = format!("%{}", spill_name);
-                                capture_ir.push_str(&format!(
-                                    "  {} = alloca {}\n",
-                                    spill_ptr, llvm_ty
-                                ));
+                                capture_ir
+                                    .push_str(&format!("  {} = alloca {}\n", spill_ptr, llvm_ty));
                                 let val = if local.is_param() {
                                     format!("%{}", local.llvm_name)
                                 } else {

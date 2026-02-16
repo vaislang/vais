@@ -90,60 +90,56 @@ macro_rules! register_helper {
 
 /// Macro for registering variadic functions (is_vararg = true, required_params = param count)
 macro_rules! register_vararg {
-    ($gen:expr, $name:expr, $params:expr, $ret:expr, extern) => {
-        {
-            let p: Vec<(String, ResolvedType)> = $params;
-            let req = p.len();
-            $gen.types.functions.insert(
-                String::from($name),
-                FunctionInfo {
-                    signature: FunctionSig {
-                        name: String::from($name),
-                        generics: vec![],
-                        generic_bounds: HashMap::new(),
-                        params: convert_params(p),
-                        ret: $ret,
-                        is_async: false,
-                        is_vararg: true,
-                        required_params: Some(req),
-                        contracts: None,
-                        effect_annotation: EffectAnnotation::Infer,
-                        inferred_effects: None,
-                        hkt_params: HashMap::new(),
-                    },
-                    is_extern: true,
-                    _extern_abi: Some(String::from("C")),
+    ($gen:expr, $name:expr, $params:expr, $ret:expr, extern) => {{
+        let p: Vec<(String, ResolvedType)> = $params;
+        let req = p.len();
+        $gen.types.functions.insert(
+            String::from($name),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: String::from($name),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(p),
+                    ret: $ret,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(req),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                    hkt_params: HashMap::new(),
                 },
-            );
-        }
-    };
-    ($gen:expr, $name:expr, $params:expr, $ret:expr) => {
-        {
-            let p: Vec<(String, ResolvedType)> = $params;
-            let req = p.len();
-            $gen.types.functions.insert(
-                String::from($name),
-                FunctionInfo {
-                    signature: FunctionSig {
-                        name: String::from($name),
-                        generics: vec![],
-                        generic_bounds: HashMap::new(),
-                        params: convert_params(p),
-                        ret: $ret,
-                        is_async: false,
-                        is_vararg: true,
-                        required_params: Some(req),
-                        contracts: None,
-                        effect_annotation: EffectAnnotation::Infer,
-                        inferred_effects: None,
-                        hkt_params: HashMap::new(),
-                    },
-                    is_extern: false,
-                    _extern_abi: None,
+                is_extern: true,
+                _extern_abi: Some(String::from("C")),
+            },
+        );
+    }};
+    ($gen:expr, $name:expr, $params:expr, $ret:expr) => {{
+        let p: Vec<(String, ResolvedType)> = $params;
+        let req = p.len();
+        $gen.types.functions.insert(
+            String::from($name),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: String::from($name),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(p),
+                    ret: $ret,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(req),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                    hkt_params: HashMap::new(),
                 },
-            );
-        }
-    };
+                is_extern: false,
+                _extern_abi: None,
+            },
+        );
+    }};
 }
 
 /// Macro for registering non-extern builtin functions (params already include mutability)
@@ -189,37 +185,65 @@ impl CodeGenerator {
 
     fn register_io_functions(&mut self) {
         // printf for printing (variadic, extern C)
-        register_vararg!(self, "printf",
+        register_vararg!(
+            self,
+            "printf",
             vec![("format".to_string(), ResolvedType::Str)],
-            ResolvedType::I32, extern);
+            ResolvedType::I32,
+            extern
+        );
 
         // putchar for single character output
-        register_extern!(self, "putchar",
-            vec![("c".to_string(), ResolvedType::I32)], ResolvedType::I32);
+        register_extern!(
+            self,
+            "putchar",
+            vec![("c".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
 
         // puts for simple string output
-        register_extern!(self, "puts",
-            vec![("s".to_string(), ResolvedType::Str)], ResolvedType::I32);
+        register_extern!(
+            self,
+            "puts",
+            vec![("s".to_string(), ResolvedType::Str)],
+            ResolvedType::I32
+        );
 
         // puts_ptr: print string from pointer (maps to C puts)
         register_extern!(self, "puts_ptr" => "puts",
             vec![("s".to_string(), ResolvedType::Str)], ResolvedType::I32);
 
         // print: format string output (no newline, vararg)
-        register_vararg!(self, "print",
-            vec![("format".to_string(), ResolvedType::Str)], ResolvedType::Unit);
+        register_vararg!(
+            self,
+            "print",
+            vec![("format".to_string(), ResolvedType::Str)],
+            ResolvedType::Unit
+        );
 
         // println: format string output (with newline, vararg)
-        register_vararg!(self, "println",
-            vec![("format".to_string(), ResolvedType::Str)], ResolvedType::Unit);
+        register_vararg!(
+            self,
+            "println",
+            vec![("format".to_string(), ResolvedType::Str)],
+            ResolvedType::Unit
+        );
 
         // format: format string, returns allocated string (vararg)
-        register_vararg!(self, "format",
-            vec![("format".to_string(), ResolvedType::Str)], ResolvedType::Str);
+        register_vararg!(
+            self,
+            "format",
+            vec![("format".to_string(), ResolvedType::Str)],
+            ResolvedType::Str
+        );
 
         // exit: (i32) -> void (noreturn)
-        register_extern!(self, "exit",
-            vec![("code".to_string(), ResolvedType::I32)], ResolvedType::Unit);
+        register_extern!(
+            self,
+            "exit",
+            vec![("code".to_string(), ResolvedType::I32)],
+            ResolvedType::Unit
+        );
     }
 
     fn register_memory_functions(&mut self) {
@@ -379,12 +403,20 @@ impl CodeGenerator {
         );
 
         // str_to_ptr: convert str (i8*) to i64 — IR is special-cased in generate_expr
-        register_builtin!(self, "str_to_ptr",
-            vec![("s".to_string(), ResolvedType::Str, false)], ResolvedType::I64);
+        register_builtin!(
+            self,
+            "str_to_ptr",
+            vec![("s".to_string(), ResolvedType::Str, false)],
+            ResolvedType::I64
+        );
 
         // ptr_to_str: convert i64 to str (i8*) — IR is special-cased in generate_expr
-        register_builtin!(self, "ptr_to_str",
-            vec![("ptr".to_string(), ResolvedType::I64, false)], ResolvedType::Str);
+        register_builtin!(
+            self,
+            "ptr_to_str",
+            vec![("ptr".to_string(), ResolvedType::I64, false)],
+            ResolvedType::Str
+        );
     }
 
     fn register_file_functions(&mut self) {

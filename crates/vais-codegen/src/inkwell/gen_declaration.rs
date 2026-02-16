@@ -238,12 +238,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         let int_val = val.into_int_value();
                         Ok(int_val.const_neg().into())
                     }
-                    _ => {
-                        Err(CodegenError::Unsupported(format!(
-                            "Const expr unary op: {:?}",
-                            op
-                        )))
-                    }
+                    _ => Err(CodegenError::Unsupported(format!(
+                        "Const expr unary op: {:?}",
+                        op
+                    ))),
                 }
             }
             Expr::Binary { left, op, right } => {
@@ -265,7 +263,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Division and modulo are not supported in const context (Inkwell 0.4 limitation)
                     BinOp::Div | BinOp::Mod => {
                         return Err(CodegenError::Unsupported(
-                            "Const expr division/modulo not supported in Inkwell const context".to_string()
+                            "Const expr division/modulo not supported in Inkwell const context"
+                                .to_string(),
                         ))
                     }
                     _ => {

@@ -186,7 +186,8 @@ impl CodeGenerator {
 
         // Determine if the source is a Slice/SliceMut (fat pointer)
         let arr_type = self.infer_expr_type(array_expr);
-        let is_slice_source = matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_));
+        let is_slice_source =
+            matches!(arr_type, ResolvedType::Slice(_) | ResolvedType::SliceMut(_));
 
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {

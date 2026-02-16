@@ -561,8 +561,12 @@ fn test_sbom_dependencies_validation() {
     assert_eq!(sbom.dependencies.len(), 1);
     assert_eq!(sbom.dependencies[0].component, "app");
     assert_eq!(sbom.dependencies[0].depends_on.len(), 2);
-    assert!(sbom.dependencies[0].depends_on.contains(&"lib-a".to_string()));
-    assert!(sbom.dependencies[0].depends_on.contains(&"lib-b".to_string()));
+    assert!(sbom.dependencies[0]
+        .depends_on
+        .contains(&"lib-a".to_string()));
+    assert!(sbom.dependencies[0]
+        .depends_on
+        .contains(&"lib-b".to_string()));
 }
 
 // ============================================================================

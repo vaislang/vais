@@ -16,7 +16,7 @@ impl JsCodeGenerator {
             Item::Const(c) => self.generate_const(c),
             Item::Global(g) => self.generate_global(g),
             Item::TypeAlias(_) | Item::TraitAlias(_) => Ok(String::new()), // No runtime representation
-            Item::Use(u) => self.generate_use(u),    // Generate ESM import
+            Item::Use(u) => self.generate_use(u),                          // Generate ESM import
             Item::ExternBlock(ext) => self.generate_extern_block(ext),
             Item::Macro(_) => Ok(String::new()), // Macros are expanded during parsing
             Item::Union(u) => self.generate_union(u),

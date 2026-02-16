@@ -12,25 +12,25 @@ pub(crate) const CACHE_VERSION: u32 = 1;
 /// Compiler version for cache invalidation
 pub(crate) const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-mod types;
-mod graph;
 mod cache;
 mod detect;
+mod graph;
 mod stats;
+mod types;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export all public items
-pub use types::{
-    CacheState, CompilationOptions, DirtySet, FileMetadata, FunctionMetadata,
-    ModuleSignatureHash, TypeMetadata,
-};
-pub use graph::DependencyGraph;
 pub use cache::IncrementalCache;
 pub use detect::{
     can_skip_type_checking, compute_content_hash, compute_file_hash, compute_signature_hash,
-    detect_function_changes, DefinitionExtractor, FunctionChangeSet, get_cache_dir,
-    get_ir_cached_object_path, has_ir_cached_object, ImportTracker, update_tc_cache,
+    detect_function_changes, get_cache_dir, get_ir_cached_object_path, has_ir_cached_object,
+    update_tc_cache, DefinitionExtractor, FunctionChangeSet, ImportTracker,
 };
+pub use graph::DependencyGraph;
 pub use stats::{CacheMissReason, CacheStats, IncrementalStats};
+pub use types::{
+    CacheState, CompilationOptions, DirtySet, FileMetadata, FunctionMetadata, ModuleSignatureHash,
+    TypeMetadata,
+};

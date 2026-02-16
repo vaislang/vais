@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::detect::{compute_file_hash, DefinitionExtractor, detect_function_changes, FunctionChangeSet};
+use super::detect::{
+    compute_file_hash, detect_function_changes, DefinitionExtractor, FunctionChangeSet,
+};
 use super::stats::{CacheMissReason, CacheStats, IncrementalStats};
 use super::types::{CacheState, CompilationOptions, DirtySet, FileMetadata};
 
@@ -33,7 +35,8 @@ impl IncrementalCache {
             match serde_json::from_str::<CacheState>(&content) {
                 Ok(state) => {
                     // Validate cache version and compiler version
-                    if state.version != super::CACHE_VERSION || state.compiler_version != super::COMPILER_VERSION
+                    if state.version != super::CACHE_VERSION
+                        || state.compiler_version != super::COMPILER_VERSION
                     {
                         CacheState::default()
                     } else {

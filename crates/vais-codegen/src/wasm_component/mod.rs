@@ -56,7 +56,6 @@
 //! - WIT IDL spec: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
 //! - wasm-bindgen: https://rustwasm.github.io/wasm-bindgen/
 
-
 mod bindgen;
 mod conversion;
 mod interface;
@@ -77,11 +76,10 @@ pub use link_config::ComponentLinkConfig;
 pub use package::WitPackage;
 pub use serialization::WasmSerializer;
 pub use types::{
-    WitEnum, WitEnumCase, WitField, WitFlags, WitFunction, WitParam, WitRecord, WitResult,
-    WitType, WitTypeDefinition, WitVariant, WitVariantCase,
+    WitEnum, WitEnumCase, WitField, WitFlags, WitFunction, WitParam, WitRecord, WitResult, WitType,
+    WitTypeDefinition, WitVariant, WitVariantCase,
 };
 pub use wasi::WasiManifest;
-
 
 #[cfg(test)]
 mod tests;

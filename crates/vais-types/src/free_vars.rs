@@ -125,7 +125,12 @@ impl TypeChecker {
                 self.collect_free_vars(&target.node, bound, free);
                 self.collect_free_vars(&value.node, bound, free);
             }
-            Expr::Lambda { params, body, capture_mode: _, .. } => {
+            Expr::Lambda {
+                params,
+                body,
+                capture_mode: _,
+                ..
+            } => {
                 let mut inner_bound = bound.clone();
                 for p in params {
                     inner_bound.insert(p.name.node.clone());

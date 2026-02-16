@@ -325,8 +325,9 @@ fn default_value_for_field(f: &Field) -> Expr {
                 "bool" => Expr::Bool(false),
                 "str" => Expr::String(String::new()),
                 "f32" | "f64" => Expr::Float(0.0),
-                "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64"
-                | "u128" => Expr::Int(0),
+                "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" => {
+                    Expr::Int(0)
+                }
                 _ => Expr::Int(0),
             }
         }

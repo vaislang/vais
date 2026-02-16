@@ -12,13 +12,14 @@
 //! - Two-phase borrows
 //! - Control flow analysis
 
+use std::collections::HashMap;
 use vais_mir::{
-    borrow_check::{cfg_predecessors, cfg_successors, check_body, check_module, BorrowError, Location},
+    borrow_check::{
+        cfg_predecessors, cfg_successors, check_body, check_module, BorrowError, Location,
+    },
     BasicBlock, BasicBlockId, BinOp, Body, Constant, Local, LocalDecl, MirModule, MirType, Operand,
     Place, Rvalue, Statement, Terminator,
 };
-use std::collections::HashMap;
-
 
 /// Helper to create a simple body for testing.
 fn make_test_body(ty: MirType, statements: Vec<Statement>, terminator: Terminator) -> Body {
@@ -1842,10 +1843,7 @@ fn test_cfg_loop_borrow_conflict() {
             // bb2: loop body - create &mut borrow, then loop back
             BasicBlock {
                 statements: vec![
-                    Statement::Assign(
-                        Place::local(Local(3)),
-                        Rvalue::Ref(Place::local(Local(2))),
-                    ),
+                    Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
                     Statement::Assign(
                         Place::local(Local(1)),
                         Rvalue::BinaryOp(
@@ -2241,15 +2239,9 @@ fn test_nll_borrow_still_active() {
                         Place::local(Local(2)),
                         Rvalue::Use(Operand::Constant(Constant::Str("test".to_string()))),
                     ),
-                    Statement::Assign(
-                        Place::local(Local(3)),
-                        Rvalue::Ref(Place::local(Local(2))),
-                    ),
+                    Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
                     // Try second mutable borrow → conflict (r1 still active because used in bb1)
-                    Statement::Assign(
-                        Place::local(Local(4)),
-                        Rvalue::Ref(Place::local(Local(2))),
-                    ),
+                    Statement::Assign(Place::local(Local(4)), Rvalue::Ref(Place::local(Local(2)))),
                 ],
                 terminator: Some(Terminator::SwitchInt {
                     discriminant: Operand::Copy(Place::local(Local(1))),
@@ -2454,10 +2446,7 @@ fn test_nll_conditional_borrow_expire() {
             // bb1: create borrow, use it, then goto merge
             BasicBlock {
                 statements: vec![
-                    Statement::Assign(
-                        Place::local(Local(3)),
-                        Rvalue::Ref(Place::local(Local(2))),
-                    ),
+                    Statement::Assign(Place::local(Local(3)), Rvalue::Ref(Place::local(Local(2)))),
                     // Use r1 here (last use in this block)
                     Statement::Nop,
                 ],
@@ -2537,10 +2526,7 @@ fn test_nll_loop_borrow_lifetime() {
             BasicBlock {
                 statements: vec![
                     // Create borrow
-                    Statement::Assign(
-                        Place::local(Local(2)),
-                        Rvalue::Ref(Place::local(Local(1))),
-                    ),
+                    Statement::Assign(Place::local(Local(2)), Rvalue::Ref(Place::local(Local(1)))),
                     // Use borrow (last use in this block)
                     Statement::Assign(
                         Place::local(Local(3)),

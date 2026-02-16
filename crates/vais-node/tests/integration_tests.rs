@@ -23,10 +23,7 @@ fn test_tokenize_simple_function() {
     assert!(!tokens.is_empty(), "Should produce tokens");
 
     // Verify we have key tokens: Function, Ident(main), Arrow, i64, Int(42)
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     assert!(
         token_types.iter().any(|t| t.contains("Function")),
@@ -59,10 +56,7 @@ fn test_tokenize_various_token_types() {
 
     let tokens = vais_tokenize(source).expect("Tokenization should succeed");
 
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     // Verify presence of struct, enum, function keywords
     assert!(
@@ -85,10 +79,7 @@ fn test_tokenize_identifiers_and_literals() {
 
     let tokens = vais_tokenize(source).expect("Tokenization should succeed");
 
-    let token_types: Vec<String> = tokens
-        .iter()
-        .map(|st| format!("{:?}", st.token))
-        .collect();
+    let token_types: Vec<String> = tokens.iter().map(|st| format!("{:?}", st.token)).collect();
 
     // Verify identifiers and literals
     assert!(
@@ -233,7 +224,10 @@ fn test_type_check_function_with_return_type() {
 
     let result = checker.check_module(&ast);
 
-    assert!(result.is_ok(), "Type checking should succeed for valid function");
+    assert!(
+        result.is_ok(),
+        "Type checking should succeed for valid function"
+    );
 }
 
 // ============================================================================
@@ -264,7 +258,10 @@ fn test_full_compilation_pipeline() {
         .expect("Code generation should succeed");
 
     // Verify IR contains expected elements
-    assert!(ir.contains("define"), "IR should contain function definition");
+    assert!(
+        ir.contains("define"),
+        "IR should contain function definition"
+    );
     assert!(ir.contains("main"), "IR should contain main function");
 }
 
@@ -280,7 +277,9 @@ fn test_compilation_with_optimization_levels() {
 
     let ast = vais_parse(source).expect("Parsing should succeed");
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast).expect("Type checking should succeed");
+    checker
+        .check_module(&ast)
+        .expect("Type checking should succeed");
 
     // Test different optimization levels
     for opt_level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3] {
@@ -309,11 +308,15 @@ fn test_compilation_with_custom_module_name() {
 
     let ast = vais_parse(source).expect("Parsing should succeed");
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast).expect("Type checking should succeed");
+    checker
+        .check_module(&ast)
+        .expect("Type checking should succeed");
 
     let module_name = "custom_module";
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
-    let ir = codegen.generate_module(&ast).expect("Code generation should succeed");
+    let ir = codegen
+        .generate_module(&ast)
+        .expect("Code generation should succeed");
 
     // Note: The module name appears in the IR in LLVM format
     assert!(
@@ -353,10 +356,7 @@ fn test_parse_error_message() {
     let err = result.unwrap_err();
     let err_string = format!("{:?}", err);
 
-    assert!(
-        !err_string.is_empty(),
-        "Error message should not be empty"
-    );
+    assert!(!err_string.is_empty(), "Error message should not be empty");
 }
 
 #[test]
@@ -394,7 +394,9 @@ fn test_codegen_error_handling() {
 
     let ast = vais_parse(source).expect("Parsing should succeed");
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast).expect("Type checking should succeed");
+    checker
+        .check_module(&ast)
+        .expect("Type checking should succeed");
 
     let mut codegen = CodeGenerator::new_with_target("test", TargetTriple::Native);
     let result = codegen.generate_module(&ast);
@@ -410,9 +412,9 @@ fn test_codegen_error_handling() {
 fn test_multi_error_accumulation() {
     // Test that parsing can handle and report multiple issues
     let sources = vec![
-        "F main() -> i64 {",           // Unexpected EOF
-        "F main() -> i64 { true }",    // Type mismatch
-        "F test() -> i64 { x }",       // Undefined variable
+        "F main() -> i64 {",        // Unexpected EOF
+        "F main() -> i64 { true }", // Type mismatch
+        "F test() -> i64 { x }",    // Undefined variable
     ];
 
     for source in sources {
@@ -498,12 +500,19 @@ fn test_end_to_end_with_variables() {
     // Full pipeline
     let ast = vais_parse(source).expect("Parse should succeed");
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast).expect("Type check should succeed");
+    checker
+        .check_module(&ast)
+        .expect("Type check should succeed");
 
     let mut codegen = CodeGenerator::new_with_target("test", TargetTriple::Native);
-    let ir = codegen.generate_module(&ast).expect("Codegen should succeed");
+    let ir = codegen
+        .generate_module(&ast)
+        .expect("Codegen should succeed");
 
     // Verify IR is valid
     assert!(ir.contains("define"), "Should contain function definition");
-    assert!(ir.contains("calculate"), "Should contain calculate function");
+    assert!(
+        ir.contains("calculate"),
+        "Should contain calculate function"
+    );
 }

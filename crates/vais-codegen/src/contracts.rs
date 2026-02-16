@@ -89,7 +89,12 @@ impl CodeGenerator {
         *counter += 1;
 
         writeln!(ir, "  %{} = alloca {}", return_var_name, return_llvm).unwrap();
-        writeln!(ir, "  store {} {}, {}* %{}", return_llvm, return_value, return_llvm, return_var_name).unwrap();
+        writeln!(
+            ir,
+            "  store {} {}, {}* %{}",
+            return_llvm, return_value, return_llvm, return_var_name
+        )
+        .unwrap();
 
         // Register 'return' in locals for expression generation
         // Use alloca since we stored the return value at return_var_name
@@ -152,7 +157,12 @@ impl CodeGenerator {
         writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
         // Branch based on condition
-        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+        writeln!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cond_i1, ok_label, fail_label
+        )
+        .unwrap();
 
         // Failure block
         writeln!(ir, "{}:", fail_label).unwrap();
@@ -163,7 +173,12 @@ impl CodeGenerator {
         // Create string constants for error message
         let condition_str =
             self.get_or_create_contract_string(&format!("{} condition #{}", kind, idx));
-        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
+        let file_name = self
+            .fn_ctx
+            .current_file
+            .as_deref()
+            .unwrap_or("unknown")
+            .to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -171,7 +186,12 @@ impl CodeGenerator {
         let line = self.debug_info.offset_to_line(expr.span.start) as i64;
 
         // Call __contract_fail
-        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})", kind_value, condition_str, file_str, line, func_str).unwrap();
+        writeln!(
+            ir,
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})",
+            kind_value, condition_str, file_str, line, func_str
+        )
+        .unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
@@ -203,7 +223,8 @@ impl CodeGenerator {
             const_name
         );
 
-        self.contracts.contract_constants
+        self.contracts
+            .contract_constants
             .insert(s.to_string(), const_name);
 
         gep_expr
@@ -232,7 +253,14 @@ impl CodeGenerator {
 
         for (s, name) in &self.contracts.contract_constants {
             let escaped = escape_string_for_llvm(s);
-            writeln!(ir, "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", name, s.len() + 1, escaped).unwrap();
+            writeln!(
+                ir,
+                "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
+                name,
+                s.len() + 1,
+                escaped
+            )
+            .unwrap();
         }
 
         ir
@@ -363,18 +391,33 @@ impl CodeGenerator {
 
         writeln!(ir, "  {} = icmp ne i8* {}, null", cond_i1, param_ptr).unwrap();
 
-        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+        writeln!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cond_i1, ok_label, fail_label
+        )
+        .unwrap();
 
         // Failure block
         writeln!(ir, "{}:", fail_label).unwrap();
 
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str = self.get_or_create_contract_string(&format!("{} != null", param_name));
-        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
+        let file_name = self
+            .fn_ctx
+            .current_file
+            .as_deref()
+            .unwrap_or("unknown")
+            .to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
-        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})", kind_value, condition_str, file_str, func_str).unwrap();
+        writeln!(
+            ir,
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})",
+            kind_value, condition_str, file_str, func_str
+        )
+        .unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
@@ -561,7 +604,12 @@ impl CodeGenerator {
         *counter += 1;
         writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, param_ref).unwrap();
 
-        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+        writeln!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cond_i1, ok_label, fail_label
+        )
+        .unwrap();
 
         // Failure block
         writeln!(ir, "{}:", fail_label).unwrap();
@@ -569,11 +617,21 @@ impl CodeGenerator {
         let kind_value = 1; // CONTRACT_REQUIRES
         let condition_str =
             self.get_or_create_contract_string(&format!("{} != 0 (division by zero)", param_name));
-        let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
+        let file_name = self
+            .fn_ctx
+            .current_file
+            .as_deref()
+            .unwrap_or("unknown")
+            .to_string();
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
-        writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})", kind_value, condition_str, file_str, func_str).unwrap();
+        writeln!(
+            ir,
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})",
+            kind_value, condition_str, file_str, func_str
+        )
+        .unwrap();
         ir.push_str("  unreachable\n");
 
         // Success block
@@ -649,7 +707,12 @@ impl CodeGenerator {
         writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
         // Branch based on condition
-        writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+        writeln!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cond_i1, ok_label, fail_label
+        )
+        .unwrap();
 
         // Failure block
         writeln!(ir, "{}:", fail_label).unwrap();
@@ -711,7 +774,12 @@ impl CodeGenerator {
             let fail_label = format!("assume_fail_{}", *counter);
             *counter += 1;
 
-            writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+            writeln!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                cond_i1, ok_label, fail_label
+            )
+            .unwrap();
 
             // Failure block
             writeln!(ir, "{}:", fail_label).unwrap();
@@ -798,7 +866,12 @@ impl CodeGenerator {
             *counter += 1;
             writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
 
-            writeln!(ir, "  br i1 {}, label %{}, label %{}", cond_i1, ok_label, fail_label).unwrap();
+            writeln!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                cond_i1, ok_label, fail_label
+            )
+            .unwrap();
 
             // Failure block
             writeln!(ir, "{}:", fail_label).unwrap();
@@ -806,13 +879,28 @@ impl CodeGenerator {
             let kind_value = 3; // CONTRACT_INVARIANT
             let condition_str = self
                 .get_or_create_contract_string(&format!("invariant #{} of {}", idx, struct_name));
-            let file_name = self.fn_ctx.current_file.as_deref().unwrap_or("unknown").to_string();
-            let func_name = self.fn_ctx.current_function.as_deref().unwrap_or("unknown").to_string();
+            let file_name = self
+                .fn_ctx
+                .current_file
+                .as_deref()
+                .unwrap_or("unknown")
+                .to_string();
+            let func_name = self
+                .fn_ctx
+                .current_function
+                .as_deref()
+                .unwrap_or("unknown")
+                .to_string();
             let file_str = self.get_or_create_contract_string(&file_name);
             let func_str = self.get_or_create_contract_string(&func_name);
             let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
 
-            writeln!(ir, "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})", kind_value, condition_str, file_str, line, func_str).unwrap();
+            writeln!(
+                ir,
+                "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})",
+                kind_value, condition_str, file_str, line, func_str
+            )
+            .unwrap();
             ir.push_str("  unreachable\n");
 
             // Success block
@@ -869,11 +957,18 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(&ty);
 
                 writeln!(ir, "  %{} = alloca {}", snapshot_name, llvm_ty).unwrap();
-                writeln!(ir, "  store {} {}, {}* %{}", llvm_ty, value, llvm_ty, snapshot_name).unwrap();
+                writeln!(
+                    ir,
+                    "  store {} {}, {}* %{}",
+                    llvm_ty, value, llvm_ty, snapshot_name
+                )
+                .unwrap();
 
                 // Register the snapshot
                 let old_var_name = format!("__old_{}", *counter);
-                self.contracts.old_snapshots.insert(old_var_name, snapshot_name);
+                self.contracts
+                    .old_snapshots
+                    .insert(old_var_name, snapshot_name);
                 *counter += 1;
             }
 
@@ -998,7 +1093,12 @@ impl CodeGenerator {
                     let cmp_result = format!("%decreases_cmp_{}", *counter);
                     *counter += 1;
                     writeln!(ir, "  {} = icmp sge i64 {}, 0", cmp_result, value).unwrap();
-                    writeln!(ir, "  br i1 {}, label %{}, label %{}", cmp_result, ok_label, fail_label).unwrap();
+                    writeln!(
+                        ir,
+                        "  br i1 {}, label %{}, label %{}",
+                        cmp_result, ok_label, fail_label
+                    )
+                    .unwrap();
 
                     // Failure block
                     writeln!(ir, "{}:", fail_label).unwrap();
@@ -1106,7 +1206,12 @@ impl CodeGenerator {
 
         // Load the original decreases value
         let old_value = self.next_temp(counter);
-        writeln!(ir, "  {} = load i64, i64* %{}", old_value, decreases_info.storage_name).unwrap();
+        writeln!(
+            ir,
+            "  {} = load i64, i64* %{}",
+            old_value, decreases_info.storage_name
+        )
+        .unwrap();
 
         // Check that new_value < old_value (strictly decreasing)
         let ok_label = format!("decreases_check_ok_{}", *counter);
@@ -1115,8 +1220,18 @@ impl CodeGenerator {
 
         let cmp_result = format!("%decreases_strict_cmp_{}", *counter);
         *counter += 1;
-        writeln!(ir, "  {} = icmp slt i64 {}, {}", cmp_result, new_value, old_value).unwrap();
-        writeln!(ir, "  br i1 {}, label %{}, label %{}", cmp_result, ok_label, fail_label).unwrap();
+        writeln!(
+            ir,
+            "  {} = icmp slt i64 {}, {}",
+            cmp_result, new_value, old_value
+        )
+        .unwrap();
+        writeln!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            cmp_result, ok_label, fail_label
+        )
+        .unwrap();
 
         // Failure block
         writeln!(ir, "{}:", fail_label).unwrap();
@@ -1147,7 +1262,8 @@ impl CodeGenerator {
 
     /// Get the function name with decreases clause (if any)
     pub(crate) fn _get_decreases_function_name(&self) -> Option<&str> {
-        self.contracts.current_decreases_info
+        self.contracts
+            .current_decreases_info
             .as_ref()
             .map(|info| info.function_name.as_str())
     }

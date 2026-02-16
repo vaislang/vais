@@ -45,7 +45,8 @@ impl CodeGenerator {
             // Handle print_i64/print_f64 builtins
             if name == "print_i64" && args.len() == 1 {
                 let has_user_fn = self
-                    .types.functions
+                    .types
+                    .functions
                     .get("print_i64")
                     .map(|f| !f.is_extern)
                     .unwrap_or(false);
@@ -55,7 +56,8 @@ impl CodeGenerator {
             }
             if name == "print_f64" && args.len() == 1 {
                 let has_user_fn = self
-                    .types.functions
+                    .types
+                    .functions
                     .get("print_f64")
                     .map(|f| !f.is_extern)
                     .unwrap_or(false);
@@ -95,7 +97,14 @@ impl CodeGenerator {
                 (name.to_string(), is_indirect)
             }
         } else if let Expr::SelfCall = &func.node {
-            (self.fn_ctx.current_function.as_deref().unwrap_or("").to_string(), false) // avoid clone unwrap_or_default
+            (
+                self.fn_ctx
+                    .current_function
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_string(),
+                false,
+            ) // avoid clone unwrap_or_default
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -336,13 +345,15 @@ impl CodeGenerator {
             self.generate_puts_ptr_call(arg_vals, counter, span, ir)
         } else if ret_ty == "void" {
             let is_vararg = self
-                .types.functions
+                .types
+                .functions
                 .get(fn_name)
                 .map(|f| f.signature.is_vararg)
                 .unwrap_or(false);
             if is_vararg {
                 let param_types: Vec<String> = self
-                    .types.functions
+                    .types
+                    .functions
                     .get(fn_name)
                     .map(|f| {
                         f.signature
@@ -371,14 +382,16 @@ impl CodeGenerator {
             Ok(("void".to_string(), std::mem::take(ir)))
         } else {
             let is_vararg = self
-                .types.functions
+                .types
+                .functions
                 .get(fn_name)
                 .map(|f| f.signature.is_vararg)
                 .unwrap_or(false);
             let tmp = self.next_temp(counter);
             if is_vararg {
                 let param_types: Vec<String> = self
-                    .types.functions
+                    .types
+                    .functions
                     .get(fn_name)
                     .map(|f| {
                         f.signature
@@ -638,7 +651,8 @@ impl CodeGenerator {
                     // For print with non-literal, use printf with %s
                     let fmt_name = self.make_string_name();
                     self.strings.counter += 1;
-                    self.strings.constants
+                    self.strings
+                        .constants
                         .push((fmt_name.clone(), "%s".to_string()));
                     let fmt_len = 3; // "%s" + null
                     let fmt_ptr = format!(
@@ -717,7 +731,8 @@ impl CodeGenerator {
         // Create global string constant for the C format string
         let fmt_name = self.make_string_name();
         self.strings.counter += 1;
-        self.strings.constants
+        self.strings
+            .constants
             .push((fmt_name.clone(), c_format.clone()));
         let fmt_len = c_format.len() + 1; // +1 for null terminator
         let fmt_ptr = format!(
@@ -760,7 +775,8 @@ impl CodeGenerator {
             let puts_str = &c_format[..c_format.len() - 1];
             let puts_name = self.make_string_name();
             self.strings.counter += 1;
-            self.strings.constants
+            self.strings
+                .constants
                 .push((puts_name.clone(), puts_str.to_string()));
             let puts_len = puts_str.len() + 1;
             let puts_ptr = format!(
@@ -869,7 +885,8 @@ impl CodeGenerator {
         // Create global string constant for the C format string
         let fmt_name = self.make_string_name();
         self.strings.counter += 1;
-        self.strings.constants
+        self.strings
+            .constants
             .push((fmt_name.clone(), c_format.clone()));
         let fmt_len = c_format.len() + 1;
         let fmt_ptr = format!(
@@ -1050,7 +1067,8 @@ impl CodeGenerator {
         }
 
         let ret_type = self
-            .types.functions
+            .types
+            .functions
             .get(&full_method_name)
             .map(|info| self.type_to_llvm(&info.signature.ret))
             .unwrap_or_else(|| "i64".to_string());
@@ -1078,7 +1096,8 @@ impl CodeGenerator {
         let fmt_str = "%ld";
         let fmt_name = self.make_string_name();
         self.strings.counter += 1;
-        self.strings.constants
+        self.strings
+            .constants
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
@@ -1107,7 +1126,8 @@ impl CodeGenerator {
         let fmt_str = "%f";
         let fmt_name = self.make_string_name();
         self.strings.counter += 1;
-        self.strings.constants
+        self.strings
+            .constants
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);

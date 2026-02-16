@@ -1,7 +1,7 @@
 //! BorrowChecker implementation - the main dataflow analysis engine.
 
+use super::cfg::{cfg_predecessors, cfg_successors, compute_liveness};
 use super::*;
-use super::cfg::{compute_liveness, cfg_predecessors, cfg_successors};
 
 /// The main borrow checker structure.
 pub struct BorrowChecker<'a> {

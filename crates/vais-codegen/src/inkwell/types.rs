@@ -112,7 +112,10 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::Generic(name) => {
                 // ICE: generic should be substituted before codegen
                 #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback", name);
+                eprintln!(
+                    "ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
+                    name
+                );
                 #[cfg(not(debug_assertions))]
                 eprintln!("ICE: unresolved generic in Inkwell codegen, using i64 fallback");
                 let _ = name;
@@ -120,7 +123,9 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 // ICE: should be resolved before codegen
-                eprintln!("ICE: unresolved type variable reached Inkwell codegen, using i64 fallback");
+                eprintln!(
+                    "ICE: unresolved type variable reached Inkwell codegen, using i64 fallback"
+                );
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
@@ -224,7 +229,10 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::ConstGeneric(name) => {
                 // ICE: const generic should be resolved during monomorphization
                 #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback", name);
+                eprintln!(
+                    "ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
+                    name
+                );
                 #[cfg(not(debug_assertions))]
                 eprintln!("ICE: unresolved const generic in Inkwell codegen, using i64 fallback");
                 let _ = name;

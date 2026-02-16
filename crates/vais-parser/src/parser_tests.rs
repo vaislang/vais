@@ -896,8 +896,7 @@ F sum(n:Nested)->i64=M n{
 #[test]
 fn test_pattern_guard_with_multiple_conditions() {
     // Test guard with multiple && || conditions
-    let source =
-        "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
+    let source = "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
     let module = parse(source).unwrap();
 
     let Item::Function(f) = &module.items[0].node else {
@@ -1234,9 +1233,7 @@ F test_block()->i64{
     for stmt in stmts {
         match &stmt.node {
             Stmt::Error { .. } => has_error_stmt = true,
-            Stmt::Let { name, .. } if name.node == "x" || name.node == "z" => {
-                has_valid_let = true
-            }
+            Stmt::Let { name, .. } if name.node == "x" || name.node == "z" => has_valid_let = true,
             _ => {}
         }
     }

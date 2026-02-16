@@ -877,9 +877,19 @@ analyzer = { thresholds = { complexity = 10, depth = 5 }, rules = ["rule1", "rul
     assert_eq!(rules[1].as_str(), Some("rule2"));
 
     // Verify nested table values
-    let thresholds = analyzer_config.get("thresholds").unwrap().as_table().unwrap();
-    assert_eq!(thresholds.get("complexity").and_then(|v| v.as_integer()), Some(10));
-    assert_eq!(thresholds.get("depth").and_then(|v| v.as_integer()), Some(5));
+    let thresholds = analyzer_config
+        .get("thresholds")
+        .unwrap()
+        .as_table()
+        .unwrap();
+    assert_eq!(
+        thresholds.get("complexity").and_then(|v| v.as_integer()),
+        Some(10)
+    );
+    assert_eq!(
+        thresholds.get("depth").and_then(|v| v.as_integer()),
+        Some(5)
+    );
 }
 
 #[test]

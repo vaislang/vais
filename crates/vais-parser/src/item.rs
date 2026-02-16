@@ -469,7 +469,6 @@ impl Parser {
         }
     }
 
-
     /// Parse use statement: `module` or `module/submodule` or `module::submodule`
     /// Also supports selective imports: `module.Item`, `module.{A, B, C}`
     /// Optional semicolon terminator: `module;` or `module.Item;`

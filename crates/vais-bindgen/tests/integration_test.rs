@@ -346,7 +346,7 @@ fn test_empty_input() {
 // WASM/JS Bindgen tests (3개)
 #[test]
 fn test_wasm_js_bindgen_basic() {
-    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmExportInfo};
+    use vais_bindgen::wasm_js::{WasmExportInfo, WasmJsBindgen};
 
     let mut gen = WasmJsBindgen::new("calculator");
     gen.add_export(WasmExportInfo {
@@ -367,7 +367,7 @@ fn test_wasm_js_bindgen_basic() {
 
 #[test]
 fn test_wasm_js_bindgen_imports() {
-    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmImportInfo};
+    use vais_bindgen::wasm_js::{WasmImportInfo, WasmJsBindgen};
 
     let mut gen = WasmJsBindgen::new("app");
     gen.add_import(WasmImportInfo {
@@ -394,7 +394,7 @@ fn test_wasm_js_bindgen_imports() {
 
 #[test]
 fn test_wasm_js_bindgen_typescript_dts() {
-    use vais_bindgen::wasm_js::{WasmJsBindgen, WasmExportInfo};
+    use vais_bindgen::wasm_js::{WasmExportInfo, WasmJsBindgen};
 
     let mut gen = WasmJsBindgen::new("math_lib");
     gen.add_export(WasmExportInfo {

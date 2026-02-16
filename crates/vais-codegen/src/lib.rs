@@ -59,9 +59,9 @@ mod state;
 mod stmt;
 mod stmt_visitor;
 mod string_ops;
-mod target;
 #[cfg(test)]
 mod struct_param_tests;
+mod target;
 mod trait_dispatch;
 mod type_inference;
 mod types;
@@ -69,8 +69,8 @@ pub mod visitor;
 pub mod vtable;
 #[cfg(test)]
 mod vtable_tests;
-mod wasm_helpers;
 pub mod wasm_component;
+mod wasm_helpers;
 
 // Inkwell-based code generator (optional)
 #[cfg(feature = "inkwell-codegen")]
@@ -126,10 +126,10 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
     result
 }
 
-pub use target::TargetTriple;
-pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
 #[cfg(test)]
 use diagnostics::{edit_distance, suggest_type_conversion as _suggest_type_conversion};
+pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
+pub use target::TargetTriple;
 // Re-export type structs from types module
 pub(crate) use types::*;
 

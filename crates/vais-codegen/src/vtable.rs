@@ -73,7 +73,9 @@ impl VtableGenerator {
         let mut ir = String::new();
 
         for drop_fn in &self.drop_functions {
-            write!(ir, r#"
+            write!(
+                ir,
+                r#"
 define void @{}(i8* %ptr) {{
 entry:
   %is_null = icmp eq i8* %ptr, null
@@ -87,7 +89,10 @@ do_free:
 done:
   ret void
 }}
-"#, drop_fn).unwrap();
+"#,
+                drop_fn
+            )
+            .unwrap();
         }
 
         ir
@@ -286,8 +291,18 @@ done:
         let cast_ptr = format!("%trait_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = bitcast i8* {} to {}*", cast_ptr, alloc_name, concrete_type).unwrap();
-        writeln!(ir, "  store {} {}, {}* {}", concrete_type, concrete_value, concrete_type, cast_ptr).unwrap();
+        writeln!(
+            ir,
+            "  {} = bitcast i8* {} to {}*",
+            cast_ptr, alloc_name, concrete_type
+        )
+        .unwrap();
+        writeln!(
+            ir,
+            "  store {} {}, {}* {}",
+            concrete_type, concrete_value, concrete_type, cast_ptr
+        )
+        .unwrap();
 
         // Build the trait object struct
         let trait_obj_tmp1 = format!("%trait_obj_{}", *temp_counter);
@@ -299,11 +314,26 @@ done:
         let vtable_cast = format!("%vtable_cast_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = bitcast %vtable_type* {} to i8*", vtable_cast, vtable_info.global_name).unwrap(); // Placeholder type
+        writeln!(
+            ir,
+            "  {} = bitcast %vtable_type* {} to i8*",
+            vtable_cast, vtable_info.global_name
+        )
+        .unwrap(); // Placeholder type
 
         // Create the trait object { data_ptr, vtable_ptr }
-        writeln!(ir, "  {} = insertvalue {} undef, i8* {}, 0", trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name).unwrap();
-        writeln!(ir, "  {} = insertvalue {} {}, i8* {}, 1", trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast).unwrap();
+        writeln!(
+            ir,
+            "  {} = insertvalue {} undef, i8* {}, 0",
+            trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name
+        )
+        .unwrap();
+        writeln!(
+            ir,
+            "  {} = insertvalue {} {}, i8* {}, 1",
+            trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast
+        )
+        .unwrap();
 
         (ir, trait_obj_tmp2)
     }
@@ -325,20 +355,35 @@ done:
         let data_ptr = format!("%dyn_data_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = extractvalue {} {}, 0", data_ptr, TRAIT_OBJECT_TYPE, trait_object).unwrap();
+        writeln!(
+            ir,
+            "  {} = extractvalue {} {}, 0",
+            data_ptr, TRAIT_OBJECT_TYPE, trait_object
+        )
+        .unwrap();
 
         // Extract vtable pointer from trait object
         let vtable_ptr = format!("%dyn_vtable_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = extractvalue {} {}, 1", vtable_ptr, TRAIT_OBJECT_TYPE, trait_object).unwrap();
+        writeln!(
+            ir,
+            "  {} = extractvalue {} {}, 1",
+            vtable_ptr, TRAIT_OBJECT_TYPE, trait_object
+        )
+        .unwrap();
 
         // Cast vtable pointer to the correct vtable type
         let vtable_type = Self::vtable_struct_type(trait_def);
         let vtable_cast = format!("%vtable_typed_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = bitcast i8* {} to {}*", vtable_cast, vtable_ptr, vtable_type).unwrap();
+        writeln!(
+            ir,
+            "  {} = bitcast i8* {} to {}*",
+            vtable_cast, vtable_ptr, vtable_type
+        )
+        .unwrap();
 
         // Get the method function pointer from vtable
         // Method index is offset by 3 (drop, size, align)
@@ -346,7 +391,12 @@ done:
         let fn_ptr_ptr = format!("%fn_ptr_ptr_{}", *temp_counter);
         *temp_counter += 1;
 
-        writeln!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 {}", fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot).unwrap();
+        writeln!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+            fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot
+        )
+        .unwrap();
 
         // Load the function pointer
         let fn_ptr = format!("%fn_ptr_{}", *temp_counter);
@@ -360,7 +410,12 @@ done:
             format!("{}(i8*, {})*", ret_type, extra_arg_types)
         };
 
-        writeln!(ir, "  {} = load {}, {}* {}", fn_ptr, fn_type, fn_type, fn_ptr_ptr).unwrap();
+        writeln!(
+            ir,
+            "  {} = load {}, {}* {}",
+            fn_ptr, fn_type, fn_type, fn_ptr_ptr
+        )
+        .unwrap();
 
         // Build argument list: data_ptr followed by method arguments
         let mut call_args = vec![format!("i8* {}", data_ptr)];
@@ -370,13 +425,28 @@ done:
 
         // Generate the indirect call
         let result = if ret_type == "void" {
-            writeln!(ir, "  call {} {}({})", ret_type, fn_ptr, call_args.join(", ")).unwrap();
+            writeln!(
+                ir,
+                "  call {} {}({})",
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
+            )
+            .unwrap();
             "".to_string()
         } else {
             let result_name = format!("%dyn_result_{}", *temp_counter);
             *temp_counter += 1;
 
-            writeln!(ir, "  {} = call {} {}({})", result_name, ret_type, fn_ptr, call_args.join(", ")).unwrap();
+            writeln!(
+                ir,
+                "  {} = call {} {}({})",
+                result_name,
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
+            )
+            .unwrap();
             result_name
         };
 
@@ -449,7 +519,9 @@ mod tests {
         impls.insert("speak".to_string(), "Dog_speak".to_string());
         impls.insert("move_to".to_string(), "Dog_move_to".to_string());
 
-        let vtable = gen.generate_vtable("Dog", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("Dog", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         assert_eq!(vtable.trait_name, "Animal");
         assert_eq!(vtable.impl_type, "Dog");
@@ -481,8 +553,12 @@ mod tests {
 
         let impls = HashMap::new();
 
-        let vtable1 = gen.generate_vtable("Cat", &trait_def, &impls).expect("vtable generation failed");
-        let vtable2 = gen.generate_vtable("Cat", &trait_def, &impls).expect("vtable generation failed");
+        let vtable1 = gen
+            .generate_vtable("Cat", &trait_def, &impls)
+            .expect("vtable generation failed");
+        let vtable2 = gen
+            .generate_vtable("Cat", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         // Should return same vtable (cached)
         assert_eq!(vtable1.global_name, vtable2.global_name);
@@ -519,7 +595,9 @@ mod tests {
         impls.insert("speak".to_string(), "Dog_speak".to_string());
         impls.insert("move_to".to_string(), "Dog_move_to".to_string());
 
-        let vtable = gen.generate_vtable("Dog", &trait_def, &impls).expect("vtable generation failed");
+        let vtable = gen
+            .generate_vtable("Dog", &trait_def, &impls)
+            .expect("vtable generation failed");
 
         // Verify drop function was generated
         assert!(gen.has_drop_function("Dog"));
@@ -580,7 +658,11 @@ mod tests {
         assert_eq!(vtable.methods.len(), 2);
 
         // Verify that the default implementation is used for move_to
-        let move_to_impl = vtable.methods.iter().find(|(name, _)| name == "move_to").unwrap();
+        let move_to_impl = vtable
+            .methods
+            .iter()
+            .find(|(name, _)| name == "move_to")
+            .unwrap();
         assert_eq!(move_to_impl.1, "Animal_move_to_default");
     }
 }

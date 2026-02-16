@@ -4,10 +4,10 @@ use std::collections::HashMap;
 
 use super::TypeChecker;
 use crate::traits::TraitMethodSig;
+use crate::types::defs::VarInfo;
 use crate::types::{
     find_similar_name, Linearity, ResolvedType, TypeError, TypeResult, VariantFieldTypes,
 };
-use crate::types::defs::VarInfo;
 
 impl TypeChecker {
     /// Look up "self" variable directly from scopes (no fallback)

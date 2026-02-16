@@ -308,10 +308,7 @@ impl GenericParam {
         Self {
             name,
             bounds: vec![],
-            kind: GenericParamKind::HigherKinded {
-                arity,
-                bounds,
-            },
+            kind: GenericParamKind::HigherKinded { arity, bounds },
             variance: Variance::Invariant,
         }
     }
@@ -837,9 +834,7 @@ pub enum Type {
     /// Existential type: `X Trait` or `X Trait + Trait2` in return position
     /// Represents an opaque return type that implements the given trait bounds.
     /// Resolved to concrete type during monomorphization.
-    ImplTrait {
-        bounds: Vec<Spanned<String>>,
-    },
+    ImplTrait { bounds: Vec<Spanned<String>> },
     /// Dependent type (Refinement type): `{x: T | predicate}`
     /// A type `T` refined by a predicate that must hold for all values.
     /// Example: `{n: i64 | n > 0}` (positive integers)

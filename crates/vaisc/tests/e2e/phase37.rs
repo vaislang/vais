@@ -262,7 +262,7 @@ F main() -> i64 {
     R x + y + z + w
 }
 "#;
-    assert_exit_code(source, 23);  // 5 + 5 + 8 + 5 = 23
+    assert_exit_code(source, 23); // 5 + 5 + 8 + 5 = 23
 }
 
 #[test]

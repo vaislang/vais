@@ -50,7 +50,11 @@ pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
 ///
 /// Returns up to `max_suggestions` candidates sorted by edit distance.
 /// Only includes candidates within a reasonable edit distance threshold.
-pub(crate) fn suggest_similar(name: &str, candidates: &[&str], max_suggestions: usize) -> Vec<String> {
+pub(crate) fn suggest_similar(
+    name: &str,
+    candidates: &[&str],
+    max_suggestions: usize,
+) -> Vec<String> {
     // Calculate max distance based on name length
     // Short names (1-3 chars): max 1 edit, medium (4-7): max 2, long: max 3
     let max_distance = if name.len() <= 3 {

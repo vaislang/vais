@@ -25,7 +25,7 @@ impl ComptimeValue {
             _ => Err(TypeError::Mismatch {
                 expected: "i64".to_string(),
                 found: format!("{:?}", self),
-                span: None,  // Comptime values have no source location
+                span: None, // Comptime values have no source location
             }),
         }
     }
@@ -37,7 +37,7 @@ impl ComptimeValue {
             _ => Err(TypeError::Mismatch {
                 expected: "f64".to_string(),
                 found: format!("{:?}", self),
-                span: None,  // Comptime values have no source location
+                span: None, // Comptime values have no source location
             }),
         }
     }
@@ -48,7 +48,7 @@ impl ComptimeValue {
             _ => Err(TypeError::Mismatch {
                 expected: "bool".to_string(),
                 found: format!("{:?}", self),
-                span: None,  // Comptime values have no source location
+                span: None, // Comptime values have no source location
             }),
         }
     }
@@ -59,7 +59,7 @@ impl ComptimeValue {
             _ => Err(TypeError::Mismatch {
                 expected: "string".to_string(),
                 found: format!("{:?}", self),
-                span: None,  // Comptime values have no source location
+                span: None, // Comptime values have no source location
             }),
         }
     }
@@ -70,7 +70,7 @@ impl ComptimeValue {
             _ => Err(TypeError::Mismatch {
                 expected: "array".to_string(),
                 found: format!("{:?}", self),
-                span: None,  // Comptime values have no source location
+                span: None, // Comptime values have no source location
             }),
         }
     }

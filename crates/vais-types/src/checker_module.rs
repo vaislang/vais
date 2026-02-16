@@ -233,10 +233,14 @@ impl TypeChecker {
                 }
             })
             .collect();
-        let prev_hkt_generics =
-            std::mem::replace(&mut self.current_hkt_generics, new_hkt_generics);
+        let prev_hkt_generics = std::mem::replace(&mut self.current_hkt_generics, new_hkt_generics);
 
-        (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics)
+        (
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        )
     }
 
     /// Restore previous generics
@@ -340,7 +344,8 @@ impl TypeChecker {
         let name = f.name.node.clone();
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&f.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&f.generics);
 
         let params: Vec<_> = f
             .params
@@ -365,7 +370,12 @@ impl TypeChecker {
             });
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         // Build generic bounds: merge inline bounds with where clause bounds
         let mut generic_bounds: HashMap<String, Vec<String>> = f
@@ -381,9 +391,7 @@ impl TypeChecker {
 
         // Merge where clause bounds (dedup to avoid duplicates from inline + where)
         for predicate in &f.where_clause {
-            let bounds = generic_bounds
-                .entry(predicate.ty.node.clone())
-                .or_default();
+            let bounds = generic_bounds.entry(predicate.ty.node.clone()).or_default();
             for b in &predicate.bounds {
                 if !bounds.contains(&b.node) {
                     bounds.push(b.node.clone());
@@ -503,7 +511,8 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&s.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&s.generics);
 
         // Merge where clause bounds into current generic bounds
         self.merge_where_clause(&s.where_clause);
@@ -580,7 +589,12 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         self.structs.insert(
             name.clone(),
@@ -610,7 +624,8 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&e.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&e.generics);
 
         let mut variants = HashMap::new();
         for variant in &e.variants {
@@ -635,7 +650,12 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         // Register enum variants for exhaustiveness checking
         let variant_names: Vec<String> = e.variants.iter().map(|v| &v.name.node).cloned().collect();
@@ -663,7 +683,8 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&u.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&u.generics);
 
         let mut fields = HashMap::new();
         for field in &u.fields {
@@ -671,7 +692,12 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         self.unions.insert(
             name.clone(),
@@ -731,7 +757,8 @@ impl TypeChecker {
         all_generics.extend_from_slice(&impl_block.generics);
 
         // Set current generics for proper type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&all_generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&all_generics);
 
         // If implementing a trait, validate the impl
         if let Some(trait_name) = &impl_block.trait_name {
@@ -871,7 +898,12 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         Ok(())
     }
@@ -895,7 +927,8 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) = self.set_generics(&t.generics);
+        let (prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics) =
+            self.set_generics(&t.generics);
 
         // Merge where clause bounds into current generic bounds
         self.merge_where_clause(&t.where_clause);
@@ -972,7 +1005,12 @@ impl TypeChecker {
         // Remove "Self" from generics before restoring
         self.current_generics.pop();
 
-        self.restore_generics(prev_generics, prev_bounds, prev_const_generics, prev_hkt_generics);
+        self.restore_generics(
+            prev_generics,
+            prev_bounds,
+            prev_const_generics,
+            prev_hkt_generics,
+        );
 
         self.traits.insert(
             name.clone(),

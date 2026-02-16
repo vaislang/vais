@@ -130,8 +130,7 @@ impl TreeShaker {
             }
             Item::TraitAlias(ta) => {
                 let name = ta.name.node.clone();
-                let deps: HashSet<String> =
-                    ta.bounds.iter().map(|b| b.node.clone()).collect();
+                let deps: HashSet<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
                 self.deps.insert(name, deps);
             }
             Item::Const(c) => {
@@ -750,7 +749,7 @@ mod tests {
                 is_pub,
                 is_async: false,
                 attributes: vec![],
-            where_clause: vec![],
+                where_clause: vec![],
             }),
             Span::new(0, 1),
         )
@@ -863,7 +862,7 @@ mod tests {
                         methods: vec![],
                         is_pub: false,
                         attributes: vec![],
-            where_clause: vec![],
+                        where_clause: vec![],
                     }),
                     Span::new(0, 1),
                 ),
@@ -875,7 +874,7 @@ mod tests {
                         methods: vec![],
                         is_pub: false,
                         attributes: vec![],
-            where_clause: vec![],
+                        where_clause: vec![],
                     }),
                     Span::new(0, 1),
                 ),

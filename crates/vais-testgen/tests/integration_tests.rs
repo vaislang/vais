@@ -441,16 +441,8 @@ fn test_with_seed_reproducibility() {
     let generator1 = TestGenerator::new().with_seed(seed).with_num_cases(10);
     let generator2 = TestGenerator::new().with_seed(seed).with_num_cases(10);
 
-    let suite1 = generator1.generate(
-        "calculate",
-        &[TypeHint::I64, TypeHint::F64],
-        &TypeHint::I64,
-    );
-    let suite2 = generator2.generate(
-        "calculate",
-        &[TypeHint::I64, TypeHint::F64],
-        &TypeHint::I64,
-    );
+    let suite1 = generator1.generate("calculate", &[TypeHint::I64, TypeHint::F64], &TypeHint::I64);
+    let suite2 = generator2.generate("calculate", &[TypeHint::I64, TypeHint::F64], &TypeHint::I64);
 
     // Same seed should produce identical test suites
     assert_eq!(suite1.test_cases.len(), suite2.test_cases.len());
@@ -560,8 +552,7 @@ fn test_shrinker_tuple_shrink_depth() {
 #[test]
 fn test_test_suite_to_vais_source_content() {
     let generator = TestGenerator::new().with_num_cases(1);
-    let test_suite =
-        generator.generate("factorial", &[TypeHint::I64], &TypeHint::I64);
+    let test_suite = generator.generate("factorial", &[TypeHint::I64], &TypeHint::I64);
 
     let source = test_suite.to_vais_source();
 
@@ -659,7 +650,8 @@ fn test_edge_cases_empty_suite_and_long_function_name() {
     assert!(all_non_random);
 
     // Test with very long function name
-    let long_name = "very_long_function_name_that_exceeds_typical_length_boundaries_for_identifiers";
+    let long_name =
+        "very_long_function_name_that_exceeds_typical_length_boundaries_for_identifiers";
     let generator2 = TestGenerator::new().with_num_cases(1);
     let test_suite2 = generator2.generate(long_name, &[TypeHint::I64], &TypeHint::I64);
 
@@ -670,5 +662,8 @@ fn test_edge_cases_empty_suite_and_long_function_name() {
     assert!(source.contains(long_name));
 
     // Test case names should also include the long name
-    assert!(test_suite2.test_cases.iter().any(|c| c.name.contains(long_name)));
+    assert!(test_suite2
+        .test_cases
+        .iter()
+        .any(|c| c.name.contains(long_name)));
 }

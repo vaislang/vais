@@ -3,9 +3,7 @@
 use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
-use crate::{
-    format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult,
-};
+use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 
 impl CodeGenerator {
     /// Handle struct and union literal expressions

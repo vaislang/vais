@@ -791,9 +791,7 @@ fn test_resource_limits_individual_settings() {
     assert!(memory.track_usage);
 
     // Test TimeLimit builder methods
-    let time = TimeLimit::seconds(30)
-        .with_fuel(5_000_000)
-        .without_fuel();
+    let time = TimeLimit::seconds(30).with_fuel(5_000_000).without_fuel();
     assert_eq!(time.max_duration_ms, 30_000);
     assert!(time.fuel_limit.is_none());
 
@@ -888,10 +886,7 @@ windows = { enabled = false }
         manifest.plugin.min_vais_version,
         Some(">=1.0.0".to_string())
     );
-    assert_eq!(
-        manifest.plugin.max_vais_version,
-        Some("<3.0.0".to_string())
-    );
+    assert_eq!(manifest.plugin.max_vais_version, Some("<3.0.0".to_string()));
 
     // Verify dependencies
     assert_eq!(manifest.dependencies.len(), 2);

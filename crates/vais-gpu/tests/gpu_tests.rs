@@ -418,7 +418,12 @@ mod metal_tests {
 }
 
 // End-to-end GPU codegen tests (parse .vais source → generate GPU code)
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_gpu_codegen {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -504,7 +509,9 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(
             host.contains("cudaMalloc") || host.contains("cuda") || host.len() > 0,
             "Host code should contain CUDA runtime calls"
@@ -516,7 +523,9 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let _code = gen.generate(&module).expect("Metal codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(
             host.contains("MTL") || host.contains("Metal") || host.len() > 0,
             "Host code should contain Metal runtime calls"
@@ -524,7 +533,12 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
     }
 
     #[test]
-    #[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+    #[cfg(any(
+        feature = "cuda",
+        feature = "opencl",
+        feature = "webgpu",
+        feature = "metal"
+    ))]
     fn test_e2e_scalar_kernel_all_backends() {
         let module = parse(SCALAR_KERNEL).expect("parse failed");
         let mut targets = vec![];
@@ -773,7 +787,12 @@ mod simd_tests {
 
 // E2E GPU runtime integration tests
 // These verify the full pipeline: .vais source → GPU codegen → host code with runtime API calls
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_gpu_runtime {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -825,7 +844,9 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
 
         // Host code should reference CUDA runtime API functions
         assert!(
@@ -995,7 +1016,9 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
         let _code = gen.generate(&module).expect("OpenCL codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
 
         // Host code should reference OpenCL API
         assert!(
@@ -1086,7 +1109,12 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
 // Unified Memory, Stream/Async, Multi-GPU, Profiling
 // ============================================================================
 
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_unified_memory {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1154,7 +1182,12 @@ F unified_add(data: *f64, n: i64) {
     }
 }
 
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_stream_async {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1189,7 +1222,9 @@ F stream_process(input: *f64, output: *f64, n: i64) {
         let module = parse(STREAM_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         // Host code should be generated (stream management is in runtime, not codegen)
         assert!(host.len() > 0, "Host code should be non-empty");
     }
@@ -1227,7 +1262,12 @@ F stream_process(input: *f64, output: *f64, n: i64) {
     }
 }
 
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_multi_gpu {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1296,7 +1336,12 @@ F gpu_work_b(data: *f64, n: i64) {
     }
 }
 
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod e2e_profiling {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
@@ -1328,7 +1373,9 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
         let module = parse(PROFILED_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(
             host.len() > 0,
             "Host code should be generated for profiling"
@@ -1410,7 +1457,9 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(METAL_VECTOR_ADD).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let _code = gen.generate(&module).expect("Metal codegen failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
 
         // Host code should reference Metal API
         assert!(
@@ -1500,7 +1549,12 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
 // Tests for kernel code generation, type conversion, metadata, edge cases
 // ============================================================================
 
-#[cfg(any(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+#[cfg(any(
+    feature = "cuda",
+    feature = "opencl",
+    feature = "webgpu",
+    feature = "metal"
+))]
 mod kernel_generation_tests {
     use vais_ast::*;
     use vais_gpu::{GpuCodeGenerator, GpuKernel, GpuTarget, GpuType};
@@ -1691,7 +1745,9 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("CUDA kernel generation failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(host.len() > 0, "CUDA host code should not be empty");
     }
 
@@ -1702,7 +1758,9 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("OpenCL kernel generation failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(host.len() > 0, "OpenCL host code should not be empty");
     }
 
@@ -1713,7 +1771,9 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("WebGPU kernel generation failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(host.len() > 0, "WebGPU host code should not be empty");
     }
 
@@ -1724,7 +1784,9 @@ mod kernel_generation_tests {
         let _ = gen
             .generate(&module)
             .expect("Metal kernel generation failed");
-        let host = gen.generate_host_code().expect("Host code generation failed");
+        let host = gen
+            .generate_host_code()
+            .expect("Host code generation failed");
         assert!(host.len() > 0, "Metal host code should not be empty");
     }
 
@@ -1951,19 +2013,37 @@ mod kernel_generation_tests {
         use vais_gpu::simd::{SimdIntrinsics, SimdTarget};
 
         // FMA (fused multiply-add) across all targets
-        assert_eq!(SimdIntrinsics::fma(SimdTarget::Avx512, "f32"), "_mm512_fmadd_ps");
-        assert_eq!(SimdIntrinsics::fma(SimdTarget::Avx2, "f32"), "_mm256_fmadd_ps");
+        assert_eq!(
+            SimdIntrinsics::fma(SimdTarget::Avx512, "f32"),
+            "_mm512_fmadd_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::fma(SimdTarget::Avx2, "f32"),
+            "_mm256_fmadd_ps"
+        );
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Sse4, "f32"), "_mm_fmadd_ps");
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Neon, "f32"), "vfmaq_f32");
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Sve, "f64"), "svmla_f64_x");
 
         // Reduce (horizontal sum) across targets
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Avx512, "i32"), "_mm512_reduce_add_epi32");
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Neon, "f32"), "vaddvq_f32");
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Sve, "i32"), "svaddv_s32");
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Avx512, "i32"),
+            "_mm512_reduce_add_epi32"
+        );
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Neon, "f32"),
+            "vaddvq_f32"
+        );
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Sve, "i32"),
+            "svaddv_s32"
+        );
 
         // Unknown intrinsic fallback
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Avx2, "f32"), "unknown_reduce_add");
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Avx2, "f32"),
+            "unknown_reduce_add"
+        );
     }
 
     // Task 2: GpuType Conversion (2 tests)
@@ -1974,12 +2054,30 @@ mod kernel_generation_tests {
         use vais_types::ResolvedType;
 
         // Basic primitives
-        assert_eq!(GpuType::from_resolved(&ResolvedType::I32).unwrap(), GpuType::I32);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::I64).unwrap(), GpuType::I64);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::F32).unwrap(), GpuType::F32);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::F64).unwrap(), GpuType::F64);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::Bool).unwrap(), GpuType::Bool);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::Unit).unwrap(), GpuType::Void);
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::I32).unwrap(),
+            GpuType::I32
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::I64).unwrap(),
+            GpuType::I64
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::F32).unwrap(),
+            GpuType::F32
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::F64).unwrap(),
+            GpuType::F64
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::Bool).unwrap(),
+            GpuType::Bool
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::Unit).unwrap(),
+            GpuType::Void
+        );
 
         // Pointer
         let ptr_type = ResolvedType::Pointer(Box::new(ResolvedType::I32));
@@ -2004,9 +2102,8 @@ mod kernel_generation_tests {
         use vais_types::{ResolvedConst, ResolvedType};
 
         // Nested pointer: **f32
-        let double_ptr = ResolvedType::Pointer(Box::new(ResolvedType::Pointer(Box::new(
-            ResolvedType::F32,
-        ))));
+        let double_ptr =
+            ResolvedType::Pointer(Box::new(ResolvedType::Pointer(Box::new(ResolvedType::F32))));
         let result = GpuType::from_resolved(&double_ptr).unwrap();
         assert_eq!(
             result,
@@ -2037,7 +2134,10 @@ mod kernel_generation_tests {
         assert_eq!(format!("{}", err1), "Unsupported type for GPU: Vec<String>");
 
         let err2 = GpuError::UnsupportedOperation("recursion".to_string());
-        assert_eq!(format!("{}", err2), "Unsupported operation for GPU: recursion");
+        assert_eq!(
+            format!("{}", err2),
+            "Unsupported operation for GPU: recursion"
+        );
 
         let err3 = GpuError::KernelError("invalid block size".to_string());
         assert_eq!(format!("{}", err3), "GPU kernel error: invalid block size");
@@ -2070,7 +2170,12 @@ mod kernel_generation_tests {
     // Task 4: Cross-Backend (2 tests)
 
     #[test]
-    #[cfg(all(feature = "cuda", feature = "opencl", feature = "webgpu", feature = "metal"))]
+    #[cfg(all(
+        feature = "cuda",
+        feature = "opencl",
+        feature = "webgpu",
+        feature = "metal"
+    ))]
     fn test_cross_backend_same_kernel_keywords() {
         use vais_ast::{Function, FunctionBody, Item, Module, Span, Spanned};
         use vais_gpu::{GpuCodeGenerator, GpuTarget};

@@ -349,7 +349,10 @@ impl CodeGenerator {
                     // Return i64 fallback inline (not Err) to avoid propagation through
                     // compound types like Pointer(Generic("T")) → "i64*" not just "i64".
                     #[cfg(debug_assertions)]
-                    eprintln!("ICE: unresolved generic parameter '{}' in codegen, using i64 fallback", param);
+                    eprintln!(
+                        "ICE: unresolved generic parameter '{}' in codegen, using i64 fallback",
+                        param
+                    );
                     #[cfg(not(debug_assertions))]
                     eprintln!("ICE: unresolved generic parameter in codegen, using i64 fallback");
                     let _ = param;
@@ -359,7 +362,10 @@ impl CodeGenerator {
             ResolvedType::ConstGeneric(param) => {
                 // ICE: const generic should be resolved at monomorphization time
                 #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved const generic parameter '{}' in codegen, using i64 fallback", param);
+                eprintln!(
+                    "ICE: unresolved const generic parameter '{}' in codegen, using i64 fallback",
+                    param
+                );
                 #[cfg(not(debug_assertions))]
                 eprintln!("ICE: unresolved const generic parameter in codegen, using i64 fallback");
                 let _ = param;

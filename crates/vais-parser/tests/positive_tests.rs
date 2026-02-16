@@ -1366,25 +1366,21 @@ fn test_parse_lambda_default_capture() {
 
     assert_eq!(module.items.len(), 1);
     match &module.items[0].node {
-        Item::Function(f) => {
-            match &f.body {
-                FunctionBody::Block(stmts) => {
-                    assert_eq!(stmts.len(), 1);
-                    match &stmts[0].node {
-                        Stmt::Let { value, .. } => {
-                            match &value.node {
-                                Expr::Lambda { capture_mode, .. } => {
-                                    assert_eq!(*capture_mode, CaptureMode::ByValue);
-                                }
-                                _ => panic!("Expected Lambda"),
-                            }
+        Item::Function(f) => match &f.body {
+            FunctionBody::Block(stmts) => {
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].node {
+                    Stmt::Let { value, .. } => match &value.node {
+                        Expr::Lambda { capture_mode, .. } => {
+                            assert_eq!(*capture_mode, CaptureMode::ByValue);
                         }
-                        _ => panic!("Expected Let statement"),
-                    }
+                        _ => panic!("Expected Lambda"),
+                    },
+                    _ => panic!("Expected Let statement"),
                 }
-                _ => panic!("Expected Block"),
             }
-        }
+            _ => panic!("Expected Block"),
+        },
         _ => panic!("Expected Function"),
     }
 }
@@ -1398,25 +1394,21 @@ fn test_parse_lambda_move_capture() {
 
     assert_eq!(module.items.len(), 1);
     match &module.items[0].node {
-        Item::Function(f) => {
-            match &f.body {
-                FunctionBody::Block(stmts) => {
-                    assert_eq!(stmts.len(), 1);
-                    match &stmts[0].node {
-                        Stmt::Let { value, .. } => {
-                            match &value.node {
-                                Expr::Lambda { capture_mode, .. } => {
-                                    assert_eq!(*capture_mode, CaptureMode::Move);
-                                }
-                                _ => panic!("Expected Lambda"),
-                            }
+        Item::Function(f) => match &f.body {
+            FunctionBody::Block(stmts) => {
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].node {
+                    Stmt::Let { value, .. } => match &value.node {
+                        Expr::Lambda { capture_mode, .. } => {
+                            assert_eq!(*capture_mode, CaptureMode::Move);
                         }
-                        _ => panic!("Expected Let statement"),
-                    }
+                        _ => panic!("Expected Lambda"),
+                    },
+                    _ => panic!("Expected Let statement"),
                 }
-                _ => panic!("Expected Block"),
             }
-        }
+            _ => panic!("Expected Block"),
+        },
         _ => panic!("Expected Function"),
     }
 }
@@ -1441,16 +1433,18 @@ fn test_parse_lambda_move_with_captures() {
                     assert_eq!(stmts.len(), 2);
                     // Check second statement (lambda)
                     match &stmts[1].node {
-                        Stmt::Let { value, .. } => {
-                            match &value.node {
-                                Expr::Lambda { capture_mode, params, .. } => {
-                                    assert_eq!(*capture_mode, CaptureMode::Move);
-                                    assert_eq!(params.len(), 1);
-                                    assert_eq!(params[0].name.node, "y");
-                                }
-                                _ => panic!("Expected Lambda"),
+                        Stmt::Let { value, .. } => match &value.node {
+                            Expr::Lambda {
+                                capture_mode,
+                                params,
+                                ..
+                            } => {
+                                assert_eq!(*capture_mode, CaptureMode::Move);
+                                assert_eq!(params.len(), 1);
+                                assert_eq!(params[0].name.node, "y");
                             }
-                        }
+                            _ => panic!("Expected Lambda"),
+                        },
                         _ => panic!("Expected Let statement"),
                     }
                 }

@@ -333,8 +333,8 @@ pub(crate) fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         PkgCommands::Remove { name } => install::cmd_pkg_remove(&cwd, &name),
 
         PkgCommands::Clean => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let target_dir = pkg_dir.join("target");
             let cache_dir = pkg_dir.join(".vais-cache");
@@ -422,36 +422,36 @@ pub(crate) fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         }
 
         PkgCommands::Vendor => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = package::load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             util::cmd_pkg_vendor(&pkg_dir, &manifest, verbose)
         }
 
         PkgCommands::Package { list } => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = package::load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             util::cmd_pkg_package(&pkg_dir, &manifest, list, verbose)
         }
 
         PkgCommands::Metadata { format } => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = package::load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             util::cmd_pkg_metadata(&manifest, &format)
         }
 
         PkgCommands::Owner { add, remove, list } => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
             let manifest = package::load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
             util::cmd_pkg_owner(&pkg_dir, &manifest, add, remove, list)
         }
 
         PkgCommands::Verify => {
-            let pkg_dir =
-                package::find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir = package::find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
             util::cmd_pkg_verify(&pkg_dir, verbose)
         }
     }

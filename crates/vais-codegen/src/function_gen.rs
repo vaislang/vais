@@ -19,7 +19,8 @@ impl CodeGenerator {
             self.ast_type_to_resolved(&t.node)
         } else {
             // Use registered return type from type checker (supports return type inference)
-            self.types.functions
+            self.types
+                .functions
                 .get(lookup_key)
                 .map(|info| &info.signature.ret)
                 .cloned() // explicit single clone at end
@@ -44,10 +45,15 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> CodegenResult<()> {
         // Skip if already generated
-        if self.generics.generated_structs.contains_key(&inst.mangled_name) {
+        if self
+            .generics
+            .generated_structs
+            .contains_key(&inst.mangled_name)
+        {
             return Ok(());
         }
-        self.generics.generated_structs
+        self.generics
+            .generated_structs
             .insert(inst.mangled_name.to_string(), true); // explicit to_string instead of clone
 
         // Create substitution map from generic params to concrete types
@@ -92,12 +98,14 @@ impl CodeGenerator {
             _repr_c: false,
             _invariants: Vec::new(),
         };
-        self.types.structs
+        self.types
+            .structs
             .insert(inst.mangled_name.to_string(), struct_info);
 
         // Register a name mapping from base name to mangled name
         // so struct literals and field accesses in generic impl methods can resolve it
-        self.generics.struct_aliases
+        self.generics
+            .struct_aliases
             .insert(inst.base_name.to_string(), inst.mangled_name.to_string());
 
         // Restore old substitutions
@@ -113,10 +121,15 @@ impl CodeGenerator {
         inst: &vais_types::GenericInstantiation,
     ) -> CodegenResult<String> {
         // Skip if already generated
-        if self.generics.generated_functions.contains_key(&inst.mangled_name) {
+        if self
+            .generics
+            .generated_functions
+            .contains_key(&inst.mangled_name)
+        {
             return Ok(String::new());
         }
-        self.generics.generated_functions
+        self.generics
+            .generated_functions
             .insert(inst.mangled_name.clone(), true);
 
         // Create substitution map from generic params to concrete types
@@ -160,7 +173,8 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&t.node);
             vais_types::substitute_type(&ty, &self.generics.substitutions)
         } else {
-            self.types.functions
+            self.types
+                .functions
                 .get(&generic_fn.name.node)
                 .map(|info| &info.signature.ret)
                 .cloned() // explicit single clone at end
@@ -757,7 +771,8 @@ impl CodeGenerator {
 
         // Get registered function signature for resolved param types (supports Type::Infer)
         let registered_param_types: Vec<_> = self
-            .types.functions
+            .types
+            .functions
             .get(&f.name.node)
             .map(|info| {
                 info.signature
@@ -1090,7 +1105,8 @@ impl CodeGenerator {
                 name, name
             ));
 
-            self.fn_ctx.locals
+            self.fn_ctx
+                .locals
                 .insert(name.clone(), LocalVar::param(ty.clone(), name.clone()));
         }
 

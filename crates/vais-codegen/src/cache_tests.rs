@@ -77,10 +77,7 @@ mod tests {
 
         // All primitive types should be cached
         let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(
-            !cache.is_empty(),
-            "Primitive types should be cached"
-        );
+        assert!(!cache.is_empty(), "Primitive types should be cached");
     }
 
     #[test]

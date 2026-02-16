@@ -2198,7 +2198,10 @@ F main() -> i64 {
         result.err()
     );
     let ir = result.unwrap();
-    assert!(ir.contains("@Wrapper_map_val"), "Should generate map_val method");
+    assert!(
+        ir.contains("@Wrapper_map_val"),
+        "Should generate map_val method"
+    );
 }
 
 #[test]
@@ -2292,7 +2295,10 @@ F main() -> i64 {
         result.err()
     );
     let ir = result.unwrap();
-    assert!(ir.contains("@Factory_produce"), "Should generate static dispatch");
+    assert!(
+        ir.contains("@Factory_produce"),
+        "Should generate static dispatch"
+    );
 }
 
 #[test]

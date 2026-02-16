@@ -12,16 +12,16 @@ use crate::*;
 use std::collections::HashMap;
 use std::fmt;
 
-mod checker;
 mod cfg;
+mod checker;
 mod lifetime;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export public API
-pub use checker::BorrowChecker;
 pub use cfg::{cfg_predecessors, cfg_successors};
+pub use checker::BorrowChecker;
 pub use lifetime::{check_body, check_module};
 
 /// A location in the MIR body (basic block + statement index).

@@ -284,7 +284,8 @@ impl CodeGenerator {
                     Ok((val.clone(), ir))
                 } else {
                     // Collect all available symbols for suggestions
-                    let candidates: Vec<&str> = self.fn_ctx.locals.keys().map(|s| s.as_str()).collect();
+                    let candidates: Vec<&str> =
+                        self.fn_ctx.locals.keys().map(|s| s.as_str()).collect();
 
                     let suggestions = crate::suggest_similar(name, &candidates, 3);
                     let suggestion_text = crate::format_did_you_mean(&suggestions);

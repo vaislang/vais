@@ -1052,21 +1052,42 @@ fn test_parse_hit_condition_all_formats() {
     assert_eq!(parse_hit_condition("5"), Some(HitConditionOp::Equal(5)));
     assert_eq!(parse_hit_condition("=5"), Some(HitConditionOp::Equal(5)));
     assert_eq!(parse_hit_condition("= 10"), Some(HitConditionOp::Equal(10)));
-    assert_eq!(parse_hit_condition("  =  20  "), Some(HitConditionOp::Equal(20)));
+    assert_eq!(
+        parse_hit_condition("  =  20  "),
+        Some(HitConditionOp::Equal(20))
+    );
 
     // Greater or equal
-    assert_eq!(parse_hit_condition(">=3"), Some(HitConditionOp::GreaterEqual(3)));
-    assert_eq!(parse_hit_condition(">= 7"), Some(HitConditionOp::GreaterEqual(7)));
-    assert_eq!(parse_hit_condition("  >=  15  "), Some(HitConditionOp::GreaterEqual(15)));
+    assert_eq!(
+        parse_hit_condition(">=3"),
+        Some(HitConditionOp::GreaterEqual(3))
+    );
+    assert_eq!(
+        parse_hit_condition(">= 7"),
+        Some(HitConditionOp::GreaterEqual(7))
+    );
+    assert_eq!(
+        parse_hit_condition("  >=  15  "),
+        Some(HitConditionOp::GreaterEqual(15))
+    );
 
     // Greater
     assert_eq!(parse_hit_condition(">5"), Some(HitConditionOp::Greater(5)));
     assert_eq!(parse_hit_condition("> 8"), Some(HitConditionOp::Greater(8)));
 
     // Multiple (modulo)
-    assert_eq!(parse_hit_condition("%10"), Some(HitConditionOp::Multiple(10)));
-    assert_eq!(parse_hit_condition("% 3"), Some(HitConditionOp::Multiple(3)));
-    assert_eq!(parse_hit_condition("  %  5  "), Some(HitConditionOp::Multiple(5)));
+    assert_eq!(
+        parse_hit_condition("%10"),
+        Some(HitConditionOp::Multiple(10))
+    );
+    assert_eq!(
+        parse_hit_condition("% 3"),
+        Some(HitConditionOp::Multiple(3))
+    );
+    assert_eq!(
+        parse_hit_condition("  %  5  "),
+        Some(HitConditionOp::Multiple(5))
+    );
 
     // Invalid
     assert_eq!(parse_hit_condition("invalid"), None);
@@ -1126,20 +1147,47 @@ fn test_dap_error_variants_display() {
 
     // Test all error variants display correctly
     let errors = vec![
-        (DapError::Protocol("invalid message".to_string()), "Protocol error: invalid message"),
-        (DapError::InvalidRequest("bad format".to_string()), "Invalid request: bad format"),
+        (
+            DapError::Protocol("invalid message".to_string()),
+            "Protocol error: invalid message",
+        ),
+        (
+            DapError::InvalidRequest("bad format".to_string()),
+            "Invalid request: bad format",
+        ),
         (DapError::NotInitialized, "Session not initialized"),
         (DapError::NoActiveSession, "No active debug session"),
-        (DapError::Debugger("LLDB failure".to_string()), "Debugger error: LLDB failure"),
-        (DapError::Breakpoint("invalid location".to_string()), "Breakpoint error: invalid location"),
-        (DapError::SourceMapping("no debug info".to_string()), "Source mapping error: no debug info"),
+        (
+            DapError::Debugger("LLDB failure".to_string()),
+            "Debugger error: LLDB failure",
+        ),
+        (
+            DapError::Breakpoint("invalid location".to_string()),
+            "Breakpoint error: invalid location",
+        ),
+        (
+            DapError::SourceMapping("no debug info".to_string()),
+            "Source mapping error: no debug info",
+        ),
         (DapError::ThreadNotFound(42), "Thread 42 not found"),
         (DapError::FrameNotFound(7), "Frame 7 not found"),
-        (DapError::VariableNotFound(123), "Variable reference 123 not found"),
+        (
+            DapError::VariableNotFound(123),
+            "Variable reference 123 not found",
+        ),
         (DapError::ProcessNotRunning, "Process not running"),
-        (DapError::DwarfParsing("corrupt data".to_string()), "DWARF parsing error: corrupt data"),
-        (DapError::Unsupported("feature X".to_string()), "Unsupported operation: feature X"),
-        (DapError::Timeout("response".to_string()), "Timeout waiting for response"),
+        (
+            DapError::DwarfParsing("corrupt data".to_string()),
+            "DWARF parsing error: corrupt data",
+        ),
+        (
+            DapError::Unsupported("feature X".to_string()),
+            "Unsupported operation: feature X",
+        ),
+        (
+            DapError::Timeout("response".to_string()),
+            "Timeout waiting for response",
+        ),
     ];
 
     for (error, expected_msg) in errors {

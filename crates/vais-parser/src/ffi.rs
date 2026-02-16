@@ -365,8 +365,12 @@ mod tests {
         assert_eq!(f.params.len(), 1);
         let Type::FnPtr {
             params, is_vararg, ..
-        } = &f.params[0].ty.node else {
-            panic!("Expected function pointer type, got {:?}", &f.params[0].ty.node);
+        } = &f.params[0].ty.node
+        else {
+            panic!(
+                "Expected function pointer type, got {:?}",
+                &f.params[0].ty.node
+            );
         };
         assert_eq!(params.len(), 2);
         assert!(!(*is_vararg));
@@ -385,7 +389,10 @@ mod tests {
         };
         assert_eq!(s.fields.len(), 1);
         let Type::FnPtr { is_vararg, .. } = &s.fields[0].ty.node else {
-            panic!("Expected function pointer type, got {:?}", &s.fields[0].ty.node);
+            panic!(
+                "Expected function pointer type, got {:?}",
+                &s.fields[0].ty.node
+            );
         };
         assert!(*is_vararg);
     }

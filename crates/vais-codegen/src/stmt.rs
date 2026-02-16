@@ -175,11 +175,15 @@ impl CodeGenerator {
 
                 // If this was a lambda with captures, register the closure info
                 if let Some(closure_info) = self.lambdas.last_lambda_info.take() {
-                    self.lambdas.closures.insert(name.node.clone(), closure_info);
+                    self.lambdas
+                        .closures
+                        .insert(name.node.clone(), closure_info);
                 }
                 // If this was a lazy expression, register the thunk info
                 if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
-                    self.lambdas.lazy_bindings.insert(name.node.clone(), lazy_info);
+                    self.lambdas
+                        .lazy_bindings
+                        .insert(name.node.clone(), lazy_info);
                 }
 
                 Ok(("void".to_string(), ir))
@@ -196,19 +200,21 @@ impl CodeGenerator {
                     let (val, mut ir) = self.generate_expr(expr, counter)?;
 
                     // Get the return type of the current function
-                    let (ret_type, ret_resolved) = if let Some(fn_name) = &self.fn_ctx.current_function {
-                        self.types.functions
-                            .get(fn_name)
-                            .map(|info| {
-                                (
-                                    self.type_to_llvm(&info.signature.ret),
-                                    info.signature.ret.clone(),
-                                )
-                            })
-                            .unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
-                    } else {
-                        ("i64".to_string(), ResolvedType::I64)
-                    };
+                    let (ret_type, ret_resolved) =
+                        if let Some(fn_name) = &self.fn_ctx.current_function {
+                            self.types
+                                .functions
+                                .get(fn_name)
+                                .map(|info| {
+                                    (
+                                        self.type_to_llvm(&info.signature.ret),
+                                        info.signature.ret.clone(),
+                                    )
+                                })
+                                .unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
+                        } else {
+                            ("i64".to_string(), ResolvedType::I64)
+                        };
 
                     // For struct-typed local variables, we get a pointer from generate_expr
                     // but we need to return by value, so dereference the pointer

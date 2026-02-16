@@ -21,8 +21,7 @@ pub(super) fn cmd_pkg_check(
         return cmd_pkg_check_workspace(cwd, verbose);
     }
 
-    let pkg_dir =
-        find_manifest(cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+    let pkg_dir = find_manifest(cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
     let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 

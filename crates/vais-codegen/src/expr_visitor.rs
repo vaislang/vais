@@ -95,11 +95,7 @@ impl ExprVisitor for CodeGenerator {
             Expr::Await(inner) => self.visit_await(inner, counter),
             Expr::Spawn(inner) => self.visit_spawn(inner, counter),
             Expr::Yield(inner) => self.visit_expr(inner, counter),
-            Expr::Lambda {
-                params,
-                body,
-                ..
-            } => self.visit_lambda(params, body, counter),
+            Expr::Lambda { params, body, .. } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
@@ -603,11 +599,7 @@ impl ExprVisitor for CodeGenerator {
                 let ty = local.ty.clone();
                 let llvm_ty = self.type_to_llvm(&ty);
                 if local.is_param() {
-                    captured_vars.push((
-                        cap_name.clone(),
-                        ty,
-                        format!("%{}", local.llvm_name),
-                    ));
+                    captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
                 } else if local.is_ssa() {
                     captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
                 } else {
@@ -780,10 +772,7 @@ impl ExprVisitor for CodeGenerator {
                     computed_ptr, lazy_ty, lazy_ty, lazy_alloca
                 ));
                 let computed = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load i1, i1* {}\n",
-                    computed, computed_ptr
-                ));
+                ir.push_str(&format!("  {} = load i1, i1* {}\n", computed, computed_ptr));
 
                 // Branch on computed flag
                 let label_id = self.fn_ctx.label_counter;
@@ -868,12 +857,7 @@ impl ExprVisitor for CodeGenerator {
                 let result = self.next_temp(counter);
                 ir.push_str(&format!(
                     "  {} = phi {} [{}, %{}], [{}, %{}]\n",
-                    result,
-                    inner_llvm_ty,
-                    cached_val,
-                    cached_label,
-                    computed_val,
-                    compute_label
+                    result, inner_llvm_ty, cached_val, cached_label, computed_val, compute_label
                 ));
 
                 return Ok((result, ir));

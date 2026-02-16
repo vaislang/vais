@@ -520,5 +520,4 @@ impl CodeGenerator {
 
         Ok((lanes, elem))
     }
-
 }

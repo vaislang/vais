@@ -653,7 +653,11 @@ fn main() {
                     if let Err(e) = std::fs::remove_dir_all(&cache_dir) {
                         Err(format!("cannot clear cache: {}", e))
                     } else {
-                        println!("{} {}", "Cache cleared:".green().bold(), cache_dir.display());
+                        println!(
+                            "{} {}",
+                            "Cache cleared:".green().bold(),
+                            cache_dir.display()
+                        );
                         Ok(())
                     }
                 } else {
@@ -681,7 +685,11 @@ fn main() {
                                 .filter_map(|e| e.metadata().ok())
                                 .map(|m| m.len())
                                 .sum();
-                            println!("  Cache size:    {} bytes ({:.1} MB)", total_size, total_size as f64 / 1_048_576.0);
+                            println!(
+                                "  Cache size:    {} bytes ({:.1} MB)",
+                                total_size,
+                                total_size as f64 / 1_048_576.0
+                            );
                         }
                     }
                     Err(e) => {
@@ -694,11 +702,16 @@ fn main() {
                 let cache_dir = get_cache_dir(&resolved_input);
                 match IncrementalCache::new(cache_dir) {
                     Ok(mut cache) => {
-                        let project_root = resolved_input.parent().unwrap_or(std::path::Path::new("."));
+                        let project_root =
+                            resolved_input.parent().unwrap_or(std::path::Path::new("."));
                         match cache.warm_cache(project_root) {
                             Ok(count) => {
                                 let _ = cache.persist();
-                                println!("{} {} file(s) pre-cached", "Cache warmed:".green().bold(), count);
+                                println!(
+                                    "{} {} file(s) pre-cached",
+                                    "Cache warmed:".green().bold(),
+                                    count
+                                );
                                 Ok(())
                             }
                             Err(e) => Err(format!("warm cache failed: {}", e)),

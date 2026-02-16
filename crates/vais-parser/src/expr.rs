@@ -1160,10 +1160,14 @@ impl Parser {
                     self.advance(); // consume &
                     if self.check(&Token::Mut) {
                         self.advance(); // consume mut
-                        // |&mut x, ...| body → ByMutRef capture
+                                        // |&mut x, ...| body → ByMutRef capture
                         return self.parse_lambda(start, CaptureMode::ByMutRef);
                     }
-                    if self.peek().map(|t| matches!(t.token, Token::Ident(_))).unwrap_or(false) {
+                    if self
+                        .peek()
+                        .map(|t| matches!(t.token, Token::Ident(_)))
+                        .unwrap_or(false)
+                    {
                         // |&x, ...| body → ByRef capture
                         // & already consumed, parse_lambda sees x| ...
                         return self.parse_lambda(start, CaptureMode::ByRef);
@@ -1183,7 +1187,8 @@ impl Parser {
                 return Err(ParseError::UnexpectedToken {
                     found: Token::Move,
                     span: self.current_span(),
-                    expected: "move keyword is only valid before lambda expressions (move |x| ...)".to_string(),
+                    expected: "move keyword is only valid before lambda expressions (move |x| ...)"
+                        .to_string(),
                 });
             }
             Token::Comptime => {
@@ -1420,7 +1425,11 @@ impl Parser {
     /// Syntax: |x: i64, y: i64| x + y  (explicit types)
     ///         |x, y| x + y              (inferred types)
     ///         move |x, y| x + y         (explicit move capture)
-    pub(crate) fn parse_lambda(&mut self, start: usize, capture_mode: CaptureMode) -> ParseResult<Spanned<Expr>> {
+    pub(crate) fn parse_lambda(
+        &mut self,
+        start: usize,
+        capture_mode: CaptureMode,
+    ) -> ParseResult<Spanned<Expr>> {
         // We've already consumed the opening |
         let mut params = Vec::new();
 

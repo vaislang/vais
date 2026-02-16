@@ -75,9 +75,8 @@ pub(super) fn cmd_pkg_build(
     }
 
     // Find manifest
-    let pkg_dir = find_manifest(cwd).ok_or_else(|| {
-        "could not find vais.toml in current directory or parents".to_string()
-    })?;
+    let pkg_dir = find_manifest(cwd)
+        .ok_or_else(|| "could not find vais.toml in current directory or parents".to_string())?;
 
     let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 

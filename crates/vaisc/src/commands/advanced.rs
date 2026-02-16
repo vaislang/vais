@@ -439,7 +439,10 @@ mod tests {
     #[test]
     fn test_parse_command_mixed_quotes() {
         let result = parse_command(r#"./program "double quoted" 'single quoted' normal"#).unwrap();
-        assert_eq!(result, vec!["./program", "double quoted", "single quoted", "normal"]);
+        assert_eq!(
+            result,
+            vec!["./program", "double quoted", "single quoted", "normal"]
+        );
     }
 
     #[test]

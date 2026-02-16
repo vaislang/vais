@@ -4,23 +4,22 @@
 //! These are applied before passing the IR to clang for final optimization.
 
 // Re-export submodules
-pub mod pgo;
+pub(crate) mod inlining;
 pub(crate) mod ir_passes;
 pub mod lto;
-pub(crate) mod inlining;
+pub mod pgo;
 
 // Re-export for parallel.rs wildcard import (use crate::optimize::*)
-pub(crate) use ir_passes::{
-    constant_folding, dead_store_elimination, branch_optimization,
-    conditional_branch_simplification, strength_reduction,
-    common_subexpression_elimination, dead_code_elimination,
-    loop_invariant_motion,
-};
 pub(crate) use inlining::aggressive_inline;
+pub(crate) use ir_passes::{
+    branch_optimization, common_subexpression_elimination, conditional_branch_simplification,
+    constant_folding, dead_code_elimination, dead_store_elimination, loop_invariant_motion,
+    strength_reduction,
+};
 
 // Re-export key types for external crate access (vaisc uses optimize::LtoMode etc.)
 pub use lto::LtoMode;
-pub use pgo::{PgoMode, CoverageMode};
+pub use pgo::{CoverageMode, PgoMode};
 
 /// Optimization level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

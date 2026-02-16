@@ -1230,14 +1230,14 @@ impl TypeChecker {
                 self.functions.insert(
                     $name.to_string(),
                     FunctionSig {
-                name: $name.to_string(),
-                params: vec![
+                        name: $name.to_string(),
+                        params: vec![
                             ("a".to_string(), $vec_ty.clone(), false),
                             ("b".to_string(), $vec_ty.clone(), false),
                         ],
-                ret: $vec_ty.clone(),
-                ..Default::default()
-            },
+                        ret: $vec_ty.clone(),
+                        ..Default::default()
+                    },
                 );
             };
         }
@@ -1623,14 +1623,14 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                name: name.to_string(),
-                params: vec![
+                    name: name.to_string(),
+                    params: vec![
                         ("a".to_string(), ResolvedType::F64, false),
                         ("b".to_string(), ResolvedType::F64, false),
                     ],
-                ret: ResolvedType::F64,
-                ..Default::default()
-            },
+                    ret: ResolvedType::F64,
+                    ..Default::default()
+                },
             );
         }
 
@@ -1640,11 +1640,11 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                name: name.to_string(),
-                params: vec![("x".to_string(), ResolvedType::I64, false)],
-                ret: ResolvedType::I64,
-                ..Default::default()
-            },
+                    name: name.to_string(),
+                    params: vec![("x".to_string(), ResolvedType::I64, false)],
+                    ret: ResolvedType::I64,
+                    ..Default::default()
+                },
             );
         }
 
@@ -1653,14 +1653,14 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                name: name.to_string(),
-                params: vec![
+                    name: name.to_string(),
+                    params: vec![
                         ("a".to_string(), ResolvedType::I64, false),
                         ("b".to_string(), ResolvedType::I64, false),
                     ],
-                ret: ResolvedType::I64,
-                ..Default::default()
-            },
+                    ret: ResolvedType::I64,
+                    ..Default::default()
+                },
             );
         }
 
@@ -1672,15 +1672,15 @@ impl TypeChecker {
             self.functions.insert(
                 name.to_string(),
                 FunctionSig {
-                name: name.to_string(),
-                params: vec![
+                    name: name.to_string(),
+                    params: vec![
                         ("x".to_string(), ty.clone(), false),
                         ("min".to_string(), ty.clone(), false),
                         ("max".to_string(), ty.clone(), false),
                     ],
-                ret: ty,
-                ..Default::default()
-            },
+                    ret: ty,
+                    ..Default::default()
+                },
             );
         }
     }
@@ -1732,4 +1732,3 @@ impl TypeChecker {
         }
     }
 }
-

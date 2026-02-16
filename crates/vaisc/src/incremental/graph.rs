@@ -294,7 +294,9 @@ impl DependencyGraph {
         if state.low_link.get(file) == state.index.get(file) {
             let mut scc = Vec::new();
             loop {
-                let node = state.stack.pop()
+                let node = state
+                    .stack
+                    .pop()
                     .expect("BUG: Tarjan stack underflow - algorithm invariant violated");
                 state.on_stack.remove(&node);
                 scc.push(node.clone());
@@ -445,10 +447,16 @@ mod tests {
         // C should be at level 1
         // D should be at level 2
 
-        assert!(levels.len() >= 2, "Expected at least 2 levels, got {}", levels.len());
+        assert!(
+            levels.len() >= 2,
+            "Expected at least 2 levels, got {}",
+            levels.len()
+        );
 
         // Find which level contains A and B
-        let ab_level = levels.iter().position(|level| level.contains(&a) && level.contains(&b));
+        let ab_level = levels
+            .iter()
+            .position(|level| level.contains(&a) && level.contains(&b));
         assert!(ab_level.is_some(), "A and B should be in the same level");
 
         // Find which level contains C
@@ -460,14 +468,20 @@ mod tests {
         assert!(d_level.is_some(), "D should be in a level");
 
         // C should be after the AB SCC
-        assert!(c_level.unwrap() > ab_level.unwrap(),
-                "C (level {}) should be after A/B (level {})",
-                c_level.unwrap(), ab_level.unwrap());
+        assert!(
+            c_level.unwrap() > ab_level.unwrap(),
+            "C (level {}) should be after A/B (level {})",
+            c_level.unwrap(),
+            ab_level.unwrap()
+        );
 
         // D should be after C
-        assert!(d_level.unwrap() > c_level.unwrap(),
-                "D (level {}) should be after C (level {})",
-                d_level.unwrap(), c_level.unwrap());
+        assert!(
+            d_level.unwrap() > c_level.unwrap(),
+            "D (level {}) should be after C (level {})",
+            d_level.unwrap(),
+            c_level.unwrap()
+        );
     }
 
     #[test]

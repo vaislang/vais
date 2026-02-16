@@ -67,7 +67,14 @@ impl FormattableError for TypeError {
         let message = self.localized_message();
         let help = self.localized_help();
 
-        reporter.format_error(self.error_code(), &title, span, &message, help.as_deref(), &self.secondary_spans())
+        reporter.format_error(
+            self.error_code(),
+            &title,
+            span,
+            &message,
+            help.as_deref(),
+            &self.secondary_spans(),
+        )
     }
 
     fn error_code(&self) -> &str {
