@@ -67,7 +67,7 @@ pub(crate) fn cmd_pgo(
     let bin_name = input
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("a.out");
+        .ok_or_else(|| format!("invalid input file stem: {}", input.display()))?;
     let output_path = output.unwrap_or_else(|| PathBuf::from(bin_name));
     let profdata_path = format!("{}/default.profdata", profile_dir);
 
@@ -228,7 +228,10 @@ pub(crate) fn cmd_watch(
     use std::time::Duration;
 
     // Determine watch directory (parent of input file or current directory)
-    let watch_dir = input.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let watch_dir = input
+        .parent()
+        .ok_or_else(|| format!("cannot determine parent directory of {}", input.display()))?
+        .to_path_buf();
 
     println!(
         "{} {} (directory: {})",
@@ -239,7 +242,10 @@ pub(crate) fn cmd_watch(
 
     // Collect all .vais files to watch (for import tracking)
     let mut watched_files: HashSet<PathBuf> = HashSet::new();
-    watched_files.insert(input.canonicalize().unwrap_or_else(|_| input.clone()));
+    let canonical_input = input
+        .canonicalize()
+        .map_err(|e| format!("failed to canonicalize input path {}: {}", input.display(), e))?;
+    watched_files.insert(canonical_input);
 
     // Scan for import statements and add imported files
     if let Ok(content) = std::fs::read_to_string(input) {

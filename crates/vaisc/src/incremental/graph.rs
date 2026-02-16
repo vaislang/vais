@@ -101,7 +101,8 @@ impl DependencyGraph {
 
             // Find all files with in-degree 0 (no unprocessed dependencies)
             for file in &all_files {
-                if !visited.contains(file) && in_degree.get(file).copied().unwrap_or(0) == 0 {
+                let degree = in_degree.get(file).copied().unwrap_or(0);
+                if !visited.contains(file) && degree == 0 {
                     current_level.push(file.clone());
                 }
             }
@@ -194,7 +195,8 @@ impl DependencyGraph {
 
             // Find all SCCs with in-degree 0
             for (scc_id, scc) in sccs.iter().enumerate() {
-                if !visited.contains(&scc_id) && *scc_in_degree.get(&scc_id).unwrap() == 0 {
+                let degree = scc_in_degree.get(&scc_id).copied().unwrap_or(0);
+                if !visited.contains(&scc_id) && degree == 0 {
                     current_level.extend(scc.clone());
                 }
             }
@@ -293,16 +295,16 @@ impl DependencyGraph {
         // If this is a root node, pop the SCC
         if state.low_link.get(file) == state.index.get(file) {
             let mut scc = Vec::new();
-            loop {
-                let node = state
-                    .stack
-                    .pop()
-                    .expect("BUG: Tarjan stack underflow - algorithm invariant violated");
+            while let Some(node) = state.stack.pop() {
                 state.on_stack.remove(&node);
                 scc.push(node.clone());
                 if node == *file {
                     break;
                 }
+            }
+            if scc.is_empty() {
+                // This should never happen if algorithm is correct, but be defensive
+                eprintln!("Warning: Tarjan SCC algorithm produced empty component for {:?}", file);
             }
             state.sccs.push(scc);
         }

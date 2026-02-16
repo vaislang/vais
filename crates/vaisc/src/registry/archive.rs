@@ -127,14 +127,25 @@ pub fn unpack_package(archive_path: &Path, output_dir: &Path) -> RegistryResult<
         let target = output_dir.join(&path);
 
         // Security: ensure target is within output directory
-        let canonical_output = output_dir
-            .canonicalize()
-            .unwrap_or_else(|_| output_dir.to_path_buf());
-        if let Ok(canonical_target) = target.canonicalize() {
-            if !canonical_target.starts_with(&canonical_output) {
-                return Err(RegistryError::InvalidArchive {
-                    message: format!("path escapes output directory: {}", path.display()),
-                });
+        // For security, we must verify the target path is within output_dir
+        // We check before extraction (target may not exist yet)
+        if let Ok(canonical_output) = output_dir.canonicalize() {
+            // Check if target path (once resolved) would be within output_dir
+            let mut check_path = target.clone();
+            while !check_path.exists() {
+                if let Some(parent) = check_path.parent() {
+                    check_path = parent.to_path_buf();
+                } else {
+                    break;
+                }
+            }
+
+            if let Ok(canonical_check) = check_path.canonicalize() {
+                if !canonical_check.starts_with(&canonical_output) {
+                    return Err(RegistryError::InvalidArchive {
+                        message: format!("path escapes output directory: {}", path.display()),
+                    });
+                }
             }
         }
 

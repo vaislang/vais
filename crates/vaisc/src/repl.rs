@@ -360,11 +360,11 @@ fn handle_command(
             }
         }
         _ if input.starts_with(":type ") => {
-            let expr = input.strip_prefix(":type ").unwrap().trim();
+            let expr = input.strip_prefix(":type ").expect(":type prefix guaranteed by match guard").trim();
             handle_type_command(expr, definitions);
         }
         _ if input.starts_with(":disasm ") => {
-            let expr = input.strip_prefix(":disasm ").unwrap().trim();
+            let expr = input.strip_prefix(":disasm ").expect(":disasm prefix guaranteed by match guard").trim();
             handle_disasm_command(expr, definitions);
         }
         _ => {
@@ -760,11 +760,11 @@ fn handle_command_jit(
             handle_jit_stats_command(state, definitions);
         }
         _ if input.starts_with(":tier ") => {
-            let func_name = input.strip_prefix(":tier ").unwrap().trim();
+            let func_name = input.strip_prefix(":tier ").expect(":tier prefix guaranteed by match guard").trim();
             handle_tier_command(func_name, definitions);
         }
         _ if input.starts_with(":type ") => {
-            let expr = input.strip_prefix(":type ").unwrap().trim();
+            let expr = input.strip_prefix(":type ").expect(":type prefix guaranteed by match guard").trim();
             handle_type_command(expr, definitions);
         }
         _ => {

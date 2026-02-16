@@ -493,8 +493,7 @@ fn resolve_deps_recursive(
         let dep_path = match dep {
             Dependency::Detailed(d) if d.path.is_some() => {
                 // Path dependency
-                // safe: checked with is_some() above
-                let path = d.path.as_ref().unwrap();
+                let path = d.path.as_ref().expect("path is Some - checked in match guard");
                 base_dir.join(path)
             }
             Dependency::Version(v) => {
