@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/playground/' : './',
+  base: '/',
   server: {
     port: 3000,
     open: true
