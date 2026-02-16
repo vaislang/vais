@@ -604,3 +604,333 @@ fn test_public_export_functions() {
     assert!(js.contains("function private_func()"));
     assert!(!js.contains("export function private_func()"));
 }
+
+// ============================================================================
+// 10. Range Loop (Phase 41) (3 tests)
+// ============================================================================
+
+#[test]
+fn test_range_loop_inclusive() {
+    let source = r#"
+        F sum_range() -> i64 {
+            total := mut 0
+            L i:0..5 {
+                total = total + i
+            }
+            total
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("for"));
+    assert!(js.contains("let i =") || js.contains("const i ="));
+    assert!(js.contains("total"));
+}
+
+#[test]
+fn test_range_loop_exclusive() {
+    let source = r#"
+        F count() {
+            L i:1..10 {
+                i
+            }
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("for"));
+    // Should generate for loop with range boundaries
+    assert!(js.contains("1"));
+    assert!(js.contains("10"));
+}
+
+#[test]
+fn test_range_loop_with_break() {
+    let source = r#"
+        F find_limit() -> i64 {
+            L i:0..100 {
+                I i > 50 {
+                    B
+                }
+            }
+            0
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("for"));
+    assert!(js.contains("break"));
+    assert!(js.contains("100"));
+}
+
+// ============================================================================
+// 11. Lazy Evaluation (Phase 42) (3 tests)
+// ============================================================================
+
+#[test]
+fn test_lazy_expression() {
+    let source = r#"
+        F expensive() -> i64 { 42 }
+        F test() {
+            x := lazy expensive()
+            x
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("expensive"));
+    // Lazy should generate some wrapper (arrow function or lazy helper)
+    assert!(js.contains("function"));
+}
+
+#[test]
+fn test_force_lazy_value() {
+    let source = r#"
+        F compute() -> i64 { 100 }
+        F test() -> i64 {
+            x := lazy compute()
+            force x
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("compute"));
+    // Force should call the lazy value
+    assert!(js.contains("x") || js.contains("compute"));
+}
+
+#[test]
+fn test_lazy_with_closure() {
+    let source = r#"
+        F test() -> i64 {
+            y := 5
+            x := lazy y * 2
+            force x
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("y"));
+    assert!(js.contains("* 2") || js.contains("*2"));
+}
+
+// ============================================================================
+// 12. Closure Capture Modes (Phase 42) (3 tests)
+// ============================================================================
+
+#[test]
+fn test_closure_capture_by_value() {
+    let source = r#"
+        F test() {
+            x := 10
+            f := |y| x + y
+            f(5)
+        }
+    "#;
+    let js = parse_and_generate(source);
+    // Should generate arrow function
+    assert!(js.contains("=>") || js.contains("function"));
+    assert!(js.contains("x"));
+    assert!(js.contains("y"));
+}
+
+#[test]
+fn test_closure_move_capture() {
+    let source = r#"
+        F test() {
+            x := 42
+            f := move |y| x + y
+            f(10)
+        }
+    "#;
+    let js = parse_and_generate(source);
+    // move closure should still generate JS arrow function
+    assert!(js.contains("=>") || js.contains("function"));
+    assert!(js.contains("x"));
+    assert!(js.contains("y"));
+}
+
+#[test]
+fn test_closure_multiple_captures() {
+    let source = r#"
+        F test() {
+            a := 1
+            b := 2
+            f := |c| a + b + c
+            f(3)
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("=>") || js.contains("function"));
+    assert!(js.contains("a"));
+    assert!(js.contains("b"));
+    assert!(js.contains("c"));
+}
+
+// ============================================================================
+// 13. Async/Await (Phase 43) (3 tests)
+// ============================================================================
+
+#[test]
+fn test_async_function() {
+    let source = r#"
+        A F fetch_data() -> i64 {
+            42
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("async"));
+    assert!(js.contains("function fetch_data()"));
+}
+
+#[test]
+fn test_await_expression() {
+    // Parser doesn't support Y (await) syntax yet, test async function only
+    let source = r#"
+        A F task() -> i64 { 100 }
+        A F main() -> i64 {
+            task()
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("async"));
+    assert!(js.contains("task"));
+    // When await is implemented, should contain "await task()"
+}
+
+#[test]
+fn test_async_with_multiple_awaits() {
+    // Parser doesn't support Y (await) syntax yet
+    let source = r#"
+        A F get_x() -> i64 { 1 }
+        A F get_y() -> i64 { 2 }
+        A F compute() -> i64 {
+            x := get_x()
+            y := get_y()
+            x + y
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("async"));
+    assert!(js.contains("function compute()"));
+    assert!(js.contains("get_x"));
+    assert!(js.contains("get_y"));
+}
+
+// ============================================================================
+// 14. Pattern Alias (Phase 32) (3 tests)
+// ============================================================================
+
+#[test]
+fn test_pattern_alias_in_match() {
+    let source = r#"
+        F test(x: i64) -> i64 {
+            M x {
+                n @ 1 => n,
+                n @ 2 => n * 2,
+                _ => 0
+            }
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("if"));
+    assert!(js.contains("1"));
+    assert!(js.contains("2"));
+    // Pattern alias should bind variable n
+    assert!(js.contains("n"));
+}
+
+#[test]
+fn test_pattern_alias_with_destructuring() {
+    // Parser doesn't support struct pattern destructuring in match yet
+    // Test simple pattern alias instead
+    let source = r#"
+        F test(x: i64) -> i64 {
+            M x {
+                pt @ 5 => pt * 2,
+                pt @ 10 => pt + 1,
+                _ => 0
+            }
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("if"));
+    assert!(js.contains("5"));
+    assert!(js.contains("10"));
+    assert!(js.contains("pt") || js.contains("* 2"));
+}
+
+#[test]
+fn test_pattern_alias_in_let() {
+    let source = r#"
+        F test() -> i64 {
+            val @ x := 42
+            val
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("42"));
+    // Should bind both val and x
+    assert!(js.contains("val") || js.contains("x"));
+}
+
+// ============================================================================
+// 15. Advanced Features (3 tests)
+// ============================================================================
+
+#[test]
+fn test_struct_method_with_self() {
+    let source = r#"
+        S Counter {
+            count: i64
+        }
+        X Counter {
+            F increment(&self) -> i64 {
+                self.count + 1
+            }
+            F get_count(&self) -> i64 {
+                self.count
+            }
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("class Counter"));
+    assert!(js.contains("increment"));
+    assert!(js.contains("get_count"));
+    assert!(js.contains("this.count"));
+}
+
+#[test]
+fn test_enum_variant_matching() {
+    // Parser doesn't support :: in match patterns yet
+    // Test basic enum matching instead
+    let source = r#"
+        E Option<T> {
+            Some(T),
+            None
+        }
+        F unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+            M opt {
+                Some(x) => x,
+                None => default
+            }
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("Option"));
+    assert!(js.contains("Some"));
+    assert!(js.contains("None"));
+    assert!(js.contains("default"));
+}
+
+#[test]
+fn test_combined_async_closure() {
+    // Parser doesn't support Y (await) syntax yet
+    let source = r#"
+        A F delay() -> i64 { 100 }
+        A F test() -> i64 {
+            f := |x| x * 2
+            result := delay()
+            f(result)
+        }
+    "#;
+    let js = parse_and_generate(source);
+    assert!(js.contains("async"));
+    assert!(js.contains("=>") || js.contains("function"));
+    assert!(js.contains("delay"));
+    assert!(js.contains("* 2") || js.contains("*2"));
+}

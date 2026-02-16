@@ -231,6 +231,11 @@ fn assert_no_crash(source: &str) {
     }
 }
 
+/// Assert that source compiles successfully (IR generation only)
+fn assert_compiles(source: &str) {
+    compile_to_ir(source).expect("Should compile successfully");
+}
+
 // ==================== Stage 0: Basic Execution Tests ====================
 
 #[test]
@@ -1644,4 +1649,512 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 42);
+}
+
+// ==================== Extended Tests: Phase 41-44 Features ====================
+
+// --- Range Loop Tests (Phase 41) ---
+
+#[test]
+fn exec_range_loop_basic() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..5 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 0 + 1 + 2 + 3 + 4 = 10
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn exec_range_loop_inclusive() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:0..=5 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 0 + 1 + 2 + 3 + 4 + 5 = 15
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn exec_range_loop_product() {
+    let source = r#"
+F main() -> i64 {
+    prod := mut 1
+    L i:1..5 {
+        prod = prod * i
+    }
+    prod
+}
+"#;
+    // 1 * 2 * 3 * 4 = 24
+    assert_exit_code(source, 24);
+}
+
+#[test]
+fn exec_range_loop_start_nonzero() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:10..15 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 10 + 11 + 12 + 13 + 14 = 60
+    assert_exit_code(source, 60);
+}
+
+// --- Lazy Evaluation Tests (Phase 42) ---
+
+#[test]
+fn exec_lazy_basic() {
+    let source = r#"
+F main() -> i64 {
+    x := lazy 42
+    y := force x
+    y
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_lazy_computation() {
+    let source = r#"
+F compute(x: i64) -> i64 = x * 2 + 1
+
+F main() -> i64 {
+    x := lazy compute(20)
+    y := force x
+    y
+}
+"#;
+    // 20 * 2 + 1 = 41
+    assert_exit_code(source, 41);
+}
+
+#[test]
+fn exec_lazy_multiple_force() {
+    let source = r#"
+F main() -> i64 {
+    x := lazy 10
+    a := force x
+    b := force x
+    a + b
+}
+"#;
+    // 10 + 10 = 20
+    assert_exit_code(source, 20);
+}
+
+// --- Closure Capture Modes (Phase 42) ---
+
+#[test]
+fn exec_closure_move_capture() {
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    f := move |y| x + y
+    f(8)
+}
+"#;
+    // 42 + 8 = 50
+    assert_exit_code(source, 50);
+}
+
+#[test]
+fn exec_closure_capture_multiple() {
+    let source = r#"
+F main() -> i64 {
+    a := 10
+    b := 20
+    f := |x| a + b + x
+    f(12)
+}
+"#;
+    // 10 + 20 + 12 = 42
+    assert_exit_code(source, 42);
+}
+
+// --- Struct Method Calls ---
+
+#[test]
+fn exec_struct_method_self() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+
+X Point {
+    F sum(&self) -> i64 = self.x + self.y
+}
+
+F main() -> i64 {
+    p := Point { x: 10, y: 32 }
+    p.sum()
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_struct_method_mutate() {
+    let source = r#"
+S Counter { val: i64 }
+
+X Counter {
+    F new() -> Counter = Counter { val: 0 }
+
+    F increment(&self, amt: i64) -> Counter =
+        Counter { val: self.val + amt }
+
+    F get(&self) -> i64 = self.val
+}
+
+F main() -> i64 {
+    c := Counter::new()
+    c = c.increment(10)
+    c = c.increment(32)
+    c.get()
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_struct_method_chained() {
+    let source = r#"
+S Val { n: i64 }
+
+X Val {
+    F add(&self, x: i64) -> Val = Val { n: self.n + x }
+    F mul(&self, x: i64) -> Val = Val { n: self.n * x }
+    F get(&self) -> i64 = self.n
+}
+
+F main() -> i64 {
+    v := Val { n: 2 }
+    v = v.add(3)
+    v = v.mul(7)
+    v = v.add(7)
+    v.get()
+}
+"#;
+    // (2 + 3) * 7 + 7 = 35 + 7 = 42
+    assert_exit_code(source, 42);
+}
+
+// --- Enum Variant Matching (Phase 34) ---
+
+#[test]
+fn exec_enum_variant_match_simple() {
+    let source = r#"
+E Status { Ok, Err }
+
+F check(s: Status) -> i64 {
+    M s {
+        Ok => 1,
+        Err => 0
+    }
+}
+
+F main() -> i64 = check(Ok)
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn exec_enum_variant_with_data() {
+    let source = r#"
+E Value { Int(i64), None }
+
+F extract(v: Value) -> i64 {
+    M v {
+        Int(n) => n,
+        None => 0
+    }
+}
+
+F main() -> i64 = extract(Int(42))
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_enum_multiple_variants() {
+    let source = r#"
+E Color { Red, Green, Blue }
+
+F color_code(c: Color) -> i64 {
+    M c {
+        Red => 1,
+        Green => 2,
+        Blue => 3
+    }
+}
+
+F main() -> i64 = color_code(Green)
+"#;
+    assert_exit_code(source, 2);
+}
+
+// --- Slice Operations (Phase 6) ---
+
+#[test]
+fn exec_slice_type_compiles() {
+    let source = r#"
+F get_slice(arr: &[i64]) -> i64 = 42
+
+F main() -> i64 = get_slice(&[1, 2, 3])
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn exec_slice_len_method() {
+    let source = r#"
+F slice_len(s: &[i64]) -> i64 = s.len()
+
+F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
+"#;
+    assert_compiles(source);
+}
+
+// --- Where Clause Tests (Phase 32) ---
+
+#[test]
+fn exec_where_clause_simple() {
+    let source = r#"
+W Display {
+    F show(&self) -> i64
+}
+
+F print_value<T>(val: T) -> i64
+where T: Display {
+    val.show()
+}
+
+S MyInt { n: i64 }
+
+X MyInt: Display {
+    F show(&self) -> i64 = self.n
+}
+
+F main() -> i64 = print_value(MyInt { n: 42 })
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn exec_where_clause_multiple_bounds() {
+    let source = r#"
+W Trait1 { F method1(&self) -> i64 }
+W Trait2 { F method2(&self) -> i64 }
+
+F use_both<T>(x: T) -> i64
+where T: Trait1, T: Trait2 {
+    x.method1() + x.method2()
+}
+
+F main() -> i64 = 0
+"#;
+    assert_compiles(source);
+}
+
+// --- Trait Alias Tests (Phase 37) ---
+
+#[test]
+fn exec_trait_alias_compiles() {
+    let source = r#"
+W Display { F show(&self) -> i64 }
+W Debug { F debug(&self) -> i64 }
+
+T Printable = Display + Debug
+
+F main() -> i64 = 0
+"#;
+    assert_compiles(source);
+}
+
+// --- Async/Await Tests (Phase 43) ---
+
+#[test]
+fn exec_async_basic_compiles() {
+    let source = r#"
+A F async_task() -> i64 = 42
+
+F main() -> i64 = 0
+"#;
+    assert_compiles(source);
+}
+
+#[test]
+fn exec_spawn_compiles() {
+    let source = r#"
+F task() -> i64 = 42
+
+F main() -> i64 {
+    spawn task()
+    0
+}
+"#;
+    assert_compiles(source);
+}
+
+// --- Advanced Pattern Matching ---
+
+#[test]
+fn exec_pattern_match_nested_enum() {
+    let source = r#"
+E Inner { Val(i64), Empty }
+E Outer { Some(Inner), None }
+
+F extract(o: Outer) -> i64 {
+    M o {
+        Some(Val(n)) => n,
+        Some(Empty) => 0,
+        None => 0
+    }
+}
+
+F main() -> i64 = extract(Some(Val(42)))
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_pattern_match_or_pattern() {
+    let source = r#"
+F classify(x: i64) -> i64 {
+    M x {
+        1 | 2 | 3 => 10,
+        4 | 5 => 20,
+        _ => 0
+    }
+}
+
+F main() -> i64 = classify(2) + classify(5)
+"#;
+    // 10 + 20 = 30
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn exec_pattern_match_guard() {
+    let source = r#"
+F classify(x: i64) -> i64 {
+    M x {
+        n if n > 100 => 3,
+        n if n > 10 => 2,
+        n if n > 0 => 1,
+        _ => 0
+    }
+}
+
+F main() -> i64 = classify(50)
+"#;
+    assert_exit_code(source, 2);
+}
+
+// --- Generic Functions with Constraints ---
+
+#[test]
+fn exec_generic_swap() {
+    let source = r#"
+F swap<T>(a: T, b: T) -> T = b
+
+F main() -> i64 = swap(10, 42)
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn exec_generic_pair_first() {
+    let source = r#"
+S Pair<T> { first: T, second: T }
+
+F get_first<T>(p: Pair<T>) -> T = p.first
+
+F main() -> i64 = get_first(Pair { first: 42, second: 100 })
+"#;
+    assert_exit_code(source, 42);
+}
+
+// --- Complex Control Flow ---
+
+#[test]
+fn exec_nested_loops() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 5 { B }
+        j := mut 0
+        L {
+            I j >= 3 { B }
+            sum = sum + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    sum
+}
+"#;
+    // 5 * 3 = 15
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn exec_loop_with_continue() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 10 { B }
+        i = i + 1
+        I i % 2 == 0 { C }
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // Sum of odd numbers 1,3,5,7,9 = 25
+    assert_exit_code(source, 25);
+}
+
+// --- Recursion with Different Patterns ---
+
+#[test]
+fn exec_mutual_recursion() {
+    let source = r#"
+F is_even(n: i64) -> i64 = n == 0 ? 1 : is_odd(n - 1)
+F is_odd(n: i64) -> i64 = n == 0 ? 0 : is_even(n - 1)
+
+F main() -> i64 = is_even(42)
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn exec_tail_recursion_sum() {
+    let source = r#"
+F sum_helper(n: i64, acc: i64) -> i64 = n == 0 ? acc : @(n - 1, acc + n)
+
+F sum(n: i64) -> i64 = sum_helper(n, 0)
+
+F main() -> i64 = sum(9)
+"#;
+    // sum(9) = 45
+    assert_exit_code(source, 45);
 }

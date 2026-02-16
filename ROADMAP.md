@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,500+ (E2E 655, 통합 354+) |
+| 전체 테스트 | 3,100+ (E2E 655, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -195,9 +195,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 46** | 컴파일러 견고성 | ICE eprintln→always-on, InternalError C007, parser let-else | 655 |
 | **Phase 47** | 리뷰 수정 | 셸 인젝션, tmp 파일, 캐시 최적화, unreachable→에러 12건 | 655 |
 | **Phase 49** | CI 수정 | cargo fmt, mdbook build.sh, playground.yml v4 | 655 |
-| **Phase 50** | 한국어 Docs 보완 | 문자열 보간 ~{}, cookbook 메서드 호출 40건, 키워드/연산자/where/union 문서 | 655 |
+| **Phase 50** | 한국어 Docs 보완 | 문자열 보간 ~{}, cookbook 메서드 호출 40건, 키워드/연산자 문서 | 655 |
 | **Phase 51** | Docs 번역 Sync | quick-start 한국어 보강, SUMMARY 22건 링크, EN/JA/ZH SUMMARY 확장 (14→215줄), 번역본 12파일 확장 (+6,317줄) | 655 |
 | **Phase 52** | 리뷰 수정 | quick-start loop 문법 수정, EN/JA/ZH SUMMARY 링크 20건×3, Iterator Type Inference, Docker 섹션 동기화 | 655 |
+| **Phase 53** | 테스트 & 코드 품질 | execution_tests +31, builtins 모듈 분할, SavedGenericState, JS codegen +18 | 655 |
 
 ---
 
@@ -223,6 +224,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 3. EN/JA/ZH 번역 구조 불일치 수정 — Iterator Type Inference 링크, Docker 섹션 (Sonnet+Opus) ✅
   변경: en/ja/zh SUMMARY.md (Iterator Type Inference 링크 추가), ja/zh installation.md (Docker 섹션 추가)
 진행률: 3/3 (100%)
+
+## 현재 작업 — Phase 53: 테스트 커버리지 & 코드 품질 개선 (2026-02-16)
+모드: 자동진행
+- [x] 1. Execution Test 확장 — 미커버 예제 31개 추가 (Sonnet 위임) ✅
+  변경: vaisc/tests/execution_tests.rs (99→130 테스트, +31개: range loop, lazy, closure, struct method, enum match, slice, where, trait alias, async, pattern match, generics, recursion)
+- [x] 2. checker_module SavedGenericState struct 리팩토링 (Sonnet 위임) ✅
+  변경: vais-types/src/checker_module.rs, checker_fn.rs (4-tuple→SavedGenericState struct, 8개 호출처 업데이트, -54줄)
+- [x] 3. vais-types builtins.rs 모듈 분할 (1,734줄→서브모듈) (Sonnet 위임) ✅
+  변경: vais-types/src/builtins.rs→builtins/ (12개 서브모듈: core/print/memory/stdlib/file_io/simd/gc/system/io/math/enum_builtins)
+- [x] 4. JS Codegen 테스트 확장 — Phase 42-44 기능 커버 (Sonnet 위임) ✅
+  변경: vais-codegen-js/tests/integration_tests.rs (33→51 테스트, +18개: range loop, lazy, closure, async, pattern alias, struct methods)
+- [x] 5. ROADMAP/README 수치 동기화 + Phase 히스토리 정리 (Sonnet 위임) ✅
+  변경: ROADMAP.md (테스트 2,500+→3,100+, Phase 45-52 히스토리 확인), README.md (테스트 수치 동기화)
+진행률: 5/5 (100%)
 
 ---
 
