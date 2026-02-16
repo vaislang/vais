@@ -11,10 +11,12 @@ use crate::types::{Linearity, ResolvedType, TypeError, TypeResult, VariantFieldT
 impl TypeChecker {
     // === Scope management ===
 
+    #[inline]
     pub(crate) fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
 
+    #[inline]
     pub(crate) fn pop_scope(&mut self) {
         self.scopes.pop();
     }
@@ -43,6 +45,7 @@ impl TypeChecker {
         }
     }
 
+    #[inline]
     pub(crate) fn define_var(&mut self, name: &str, ty: ResolvedType, is_mut: bool) {
         self.define_var_with_linearity(name, ty, is_mut, Linearity::Unrestricted, None);
     }
@@ -70,6 +73,7 @@ impl TypeChecker {
     }
 
     /// Mark a variable as used (for linear type tracking)
+    #[inline]
     pub(crate) fn mark_var_used(&mut self, name: &str) {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(var_info) = scope.get_mut(name) {

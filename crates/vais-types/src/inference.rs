@@ -52,6 +52,7 @@ impl CheckMode {
 
 impl TypeChecker {
     /// Unify two types
+    #[inline]
     pub(crate) fn unify(
         &mut self,
         expected: &ResolvedType,
@@ -262,6 +263,7 @@ impl TypeChecker {
     }
 
     /// Apply substitutions to a type
+    #[inline]
     pub(crate) fn apply_substitutions(&self, ty: &ResolvedType) -> ResolvedType {
         // Fast path: no substitutions means no transformation needed
         if self.substitutions.is_empty() {
@@ -320,6 +322,7 @@ impl TypeChecker {
     }
 
     /// Create a fresh type variable
+    #[inline]
     pub(crate) fn fresh_type_var(&self) -> ResolvedType {
         let id = self.next_type_var.get();
         self.next_type_var.set(id + 1);

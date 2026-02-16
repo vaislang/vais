@@ -5,6 +5,7 @@ use crate::TypeChecker;
 use crate::types::{ResolvedType, TypeError, TypeResult};
 
 impl TypeChecker {
+    #[inline]
     pub(crate) fn check_async_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Await(inner) => {

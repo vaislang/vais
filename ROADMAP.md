@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 3,100+ (E2E 655, 통합 354+) |
+| 전체 테스트 | 3,300+ (E2E 655, Execution 130, 통합 354+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -200,6 +200,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 52** | 리뷰 수정 | quick-start loop 문법 수정, EN/JA/ZH SUMMARY 링크 20건×3, Iterator Type Inference, Docker 섹션 동기화 | 655 |
 | **Phase 53** | 테스트 & 코드 품질 | execution_tests +31, builtins 모듈 분할, SavedGenericState, JS codegen +18 | 655 |
 | **Phase 54** | 코드 품질 & 모듈 분할 R4 | 대형 파일 5개 분할 (26개 서브모듈), unwrap 6건 fix, async TODO 정리 | 655 |
+| **Phase 55** | 테스트 수정 & TC 성능 | execution_tests 7건 수정 (slice/where/enum/pattern), TC 50K -5% (#[inline] 11파일) | 655 |
 
 ---
 
@@ -263,6 +264,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: generate_expr.rs:1659 — sched_yield() cooperative yielding은 현재 아키텍처에서 올바른 접근, event-driven 전환은 별도 RFC 분리
 - [x] 5. ROADMAP 수치 동기화 ✅
 진행률: 5/5 (100%)
+
+## 현재 작업 — Phase 55: 테스트 수정 & TC 성능 회귀 수정 (2026-02-16)
+모드: 자동진행
+- [x] 1. execution_tests 실패 7건 수정 — enum/pattern/slice/where TC+Parser 버그 (Sonnet 위임) ✅
+  변경: execution_tests.rs (3 테스트 소스 Vais 문법 수정), references.rs (&[array]→Slice), lookup.rs (Generic bounds method lookup). 리뷰 반영: resolve.rs dead code 제거 (Type::Ref(Array)→Slice — parser가 &[T]를 직접 Type::Slice로 파싱)
+- [x] 2. TC 50K +6.5% 성능 회귀 조사 및 수정 — #[inline] 5파일 hot-path 함수 (Sonnet 위임) [∥1] ✅
+  변경: scope.rs + inference.rs + resolve.rs + literals.rs + references.rs (#[inline] 추가), 리뷰 반영: 대형함수 6개 #[inline] 제거 (collections/special/control_flow/calls 3개)
+- [x] 3. ROADMAP/README 수치 동기화 ✅
+진행률: 3/3 (100%)
 
 ---
 

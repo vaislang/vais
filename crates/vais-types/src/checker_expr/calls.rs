@@ -7,6 +7,7 @@ use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResu
 
 impl TypeChecker {
     /// Check SelfCall expression (@)
+    #[inline]
     pub(crate) fn check_self_call(&mut self, expr_span: Span) -> TypeResult<ResolvedType> {
         // @ can mean two things:
         // 1. In an impl method context, @ represents self (same as self variable)

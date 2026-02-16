@@ -24,6 +24,7 @@ impl TypeChecker {
         })
     }
 
+    #[inline]
     pub(crate) fn lookup_var(&self, name: &str) -> Option<ResolvedType> {
         self.lookup_var_info(name).ok().map(|v| v.ty)
     }
@@ -32,6 +33,7 @@ impl TypeChecker {
         self.lookup_var_info(name).ok().map(|v| (v.ty, v.is_mut))
     }
 
+    #[inline]
     pub(crate) fn lookup_var_or_err(&self, name: &str) -> TypeResult<ResolvedType> {
         self.lookup_var_info(name).map(|v| v.ty)
     }
@@ -212,6 +214,29 @@ impl TypeChecker {
                 return trait_def.methods.get(method_name).cloned();
             }
             return None;
+        }
+
+        // Handle generic types with bounds from where clauses
+        if let ResolvedType::Generic(type_param) = receiver_type {
+            if let Some(bounds) = self.current_generic_bounds.get(type_param) {
+                for bound_trait in bounds {
+                    if let Some(trait_def) = self.traits.get(bound_trait) {
+                        if let Some(method_sig) = trait_def.methods.get(method_name) {
+                            return Some(method_sig.clone());
+                        }
+                    }
+                    // Also check trait aliases
+                    if let Some(alias_bounds) = self.trait_aliases.get(bound_trait.as_str()) {
+                        for alias_trait in alias_bounds {
+                            if let Some(trait_def) = self.traits.get(alias_trait) {
+                                if let Some(method_sig) = trait_def.methods.get(method_name) {
+                                    return Some(method_sig.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Get the type name from the receiver type

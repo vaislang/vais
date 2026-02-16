@@ -7,6 +7,7 @@ use crate::types::{self, ResolvedType, TypeError, TypeResult};
 
 impl TypeChecker {
     /// Resolve AST type to internal type
+    #[inline]
     pub(crate) fn resolve_type(&self, ty: &Type) -> ResolvedType {
         match ty {
             Type::Named { name, generics } => {
@@ -124,7 +125,9 @@ impl TypeChecker {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
-            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
+            Type::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.resolve_type(&inner.node)))
+            }
             Type::SliceMut(inner) => {
                 ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node)))
             }

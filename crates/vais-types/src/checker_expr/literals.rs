@@ -6,6 +6,7 @@ use crate::types::{ResolvedType, TypeResult};
 
 impl TypeChecker {
     /// Check literal expressions and identifiers
+    #[inline]
     pub(crate) fn check_literal_or_ident(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Int(_) => Some(Ok(ResolvedType::I64)),
