@@ -152,10 +152,9 @@ impl WasmSandbox {
         // Create engine configuration
         let mut engine_config = Config::new();
 
-        // Enable fuel consumption for execution limits
-        if config.limits.time.fuel_limit.is_some() {
-            engine_config.consume_fuel(true);
-        }
+        // Always enable fuel consumption with a default limit for safety
+        // Even if fuel_limit is None, we enforce a default to prevent infinite execution
+        engine_config.consume_fuel(true);
 
         // Enable epoch interruption for timeouts
         if config.limits.time.use_epoch_interruption {
@@ -265,12 +264,12 @@ impl WasmSandbox {
 
         let mut store = Store::new(&self.engine, state);
 
-        // Set fuel limit if configured
-        if let Some(fuel) = self.config.limits.time.fuel_limit {
-            store.set_fuel(fuel).map_err(|e| {
-                DynloadError::WasmInstantiationError(format!("Failed to set fuel: {}", e))
-            })?;
-        }
+        // Always set fuel limit for safety - use default if not configured
+        // Default: 1 billion instructions (sufficient for most legitimate use cases)
+        let fuel_limit = self.config.limits.time.fuel_limit.unwrap_or(1_000_000_000);
+        store.set_fuel(fuel_limit).map_err(|e| {
+            DynloadError::WasmInstantiationError(format!("Failed to set fuel: {}", e))
+        })?;
 
         // Set epoch deadline if configured
         if self.config.limits.time.use_epoch_interruption {

@@ -1,6 +1,6 @@
 //! Binary operation generation.
 
-use inkwell::values::{BasicValueEnum, IntValue};
+use inkwell::values::{BasicValueEnum, IntValue, FunctionValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use vais_ast::BinOp;
@@ -9,12 +9,58 @@ use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Get or declare the abort() function for runtime errors
+    fn get_or_declare_abort(&mut self) -> FunctionValue<'ctx> {
+        // Check if abort is already declared
+        if let Some(abort_fn) = self.module.get_function("abort") {
+            return abort_fn;
+        }
+
+        // Declare abort: void abort(void)
+        let void_type = self.context.void_type();
+        let fn_type = void_type.fn_type(&[], false);
+        self.module.add_function("abort", fn_type, None)
+    }
+
     pub(crate) fn generate_int_binary(
         &mut self,
         op: BinOp,
         lhs: IntValue<'ctx>,
         rhs: IntValue<'ctx>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Add division by zero guard for Div and Mod operations
+        if matches!(op, BinOp::Div | BinOp::Mod) {
+            let zero = rhs.get_type().const_zero();
+            let is_zero = self
+                .builder
+                .build_int_compare(IntPredicate::EQ, rhs, zero, "div_zero_check")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            let current_fn = self.current_function.ok_or_else(|| {
+                CodegenError::Unsupported("Division outside function context".to_string())
+            })?;
+
+            let div_zero_bb = self.context.append_basic_block(current_fn, "div_zero");
+            let div_ok_bb = self.context.append_basic_block(current_fn, "div_ok");
+
+            self.builder
+                .build_conditional_branch(is_zero, div_zero_bb, div_ok_bb)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            // Division by zero block: call abort() and unreachable
+            self.builder.position_at_end(div_zero_bb);
+            let abort_fn = self.get_or_declare_abort();
+            self.builder
+                .build_call(abort_fn, &[], "")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_unreachable()
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            // Continue with division in the safe block
+            self.builder.position_at_end(div_ok_bb);
+        }
+
         let result = match op {
             BinOp::Add => self.builder.build_int_add(lhs, rhs, "add"),
             BinOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub"),

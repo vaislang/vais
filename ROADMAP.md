@@ -201,6 +201,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 53** | 테스트 & 코드 품질 | execution_tests +31, builtins 모듈 분할, SavedGenericState, JS codegen +18 | 655 |
 | **Phase 54** | 코드 품질 & 모듈 분할 R4 | 대형 파일 5개 분할 (26개 서브모듈), unwrap 6건 fix, async TODO 정리 | 655 |
 | **Phase 55** | 테스트 수정 & TC 성능 | execution_tests 7건 수정 (slice/where/enum/pattern), TC 50K -5% (#[inline] 11파일) | 655 |
+| **Phase 56** | 리뷰 발견사항 20건 | SQL Injection fix, .bak 삭제, borrow_check tests 분할, formatter→vais-ast, div-by-zero guard, storage 보안, WASM fuel_limit, mangle buffer write, lambda scope restoration, CI docs job | 655 |
 
 ---
 
@@ -273,6 +274,55 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: scope.rs + inference.rs + resolve.rs + literals.rs + references.rs (#[inline] 추가), 리뷰 반영: 대형함수 6개 #[inline] 제거 (collections/special/control_flow/calls 3개)
 - [x] 3. ROADMAP/README 수치 동기화 ✅
 진행률: 3/3 (100%)
+
+---
+
+## 리뷰 발견사항 (2026-02-16) — 전체 프로젝트 완성도 평가
+> 출처: /team-review 프로젝트 전체 (4관점: 보안/성능/정확성/아키텍처)
+
+### Critical (즉시 수정 필요)
+- [x] 1. [보안] SQL Injection 수정 — sqlx 파라미터 바인딩 전환 (Critical) ✅
+  변경: db.rs (category/keyword format!→?N 파라미터 바인딩, bind_values Vec 동적 관리)
+- [x] 2. [아키텍처] .bak 파일 8개 삭제 + .gitignore 추가 (Critical) ✅
+  변경: 8개 .bak 파일 삭제 (.gitignore에 *.bak 이미 존재)
+- [x] 3. [아키텍처] borrow_check/tests.rs 3,280줄 → 8개 파일 분할 (Critical) ✅
+  변경: tests.rs→tests/ (helpers/copy/move_check/borrow/cfg/nll/lifetime/integration), 49 테스트 통과
+- [x] 4. [아키텍처] vais-lsp에서 vais-codegen 의존성 제거 (Critical) ✅
+  변경: formatter.rs를 vais-codegen→vais-ast로 이동, LSP Cargo.toml에서 codegen 의존성 제거
+- [x] 5. [정확성] control_flow.rs checks[0] → .first() 안전 인덱싱 (Critical) ✅
+  변경: Pattern::Or/Tuple에서 checks.is_empty() 방어 코드 추가
+- [x] 6. [정확성] package.rs unwrap() 3곳 — 테스트 코드이므로 수정 불필요 (Critical) ✅
+  변경: 없음 (1248/1426/1458 모두 #[test] 함수 내부, 테스트 unwrap은 관행상 허용)
+- [x] 7. [성능] specialization.rs collect()+is_empty() → .any() (Critical) ✅
+  변경: type_implements_trait/resolve_impl에서 Vec collect→.any() 최적화
+
+### Warning (수정 권장)
+- [x] 8. [보안] registry db.rs unwrap 30건 → map_err 에러 처리 (Warning) ✅
+  변경: db.rs 30+ unwrap→and_then/filter_map/unwrap_or_default (UUID/DateTime/JSON 파싱 안전화)
+- [x] 9. [보안] storage.rs path traversal 검증 추가 (Warning) ✅
+  변경: validate_path_component() 추가, 6개 public 메서드에서 검증 호출
+- [x] 10. [보안] playground rate limiter cleanup 추가 (Warning) ✅
+  변경: check()에서 빈 IP 항목 즉시 제거 + 확률적 글로벌 cleanup (1% @ >100 entries)
+- [x] 11. [보안] archive bomb 압축 해제 크기 제한 추가 (Warning) ✅
+  변경: extract_to_temp()에 MAX_UNCOMPRESSED_SIZE(100MB) + MAX_FILE_COUNT(10K) 제한 추가
+- [x] 12. [보안] WASM fuel_limit 기본값 강제 (Warning) ✅
+  변경: consume_fuel 항상 활성화, fuel_limit.unwrap_or(1_000_000_000) 기본값 강제
+- [x] 13. [성능] lookup_var_info — 이미 최적 (Warning) ✅
+  변경: 없음 (scope 스택 역순회 O(depth)×HashMap O(1), depth≈5~10으로 플랫맵 재구축 비용이 더 큼)
+- [x] 14. [성능] substitute_type — 이미 changed 플래그 최적화 적용됨 (Warning) ✅
+  변경: 없음 (모든 variant에서 changed 플래그로 불필요 clone 방지 확인)
+- [x] 15. [성능] mangle_type format! → buffer write 패턴 (Warning) ✅
+  변경: mangle_type_into(buf) 내부 헬퍼 추가, mangle_name/mangle_name_with_consts도 Vec 제거
+- [x] 16. [성능] lambda_closure HashSet clone → scope restoration (Warning) ✅
+  변경: 8개 bound.clone()→스코프 복원 패턴 (new_bindings Vec 추적+종료 시 remove)
+- [x] 17. [정확성] division by zero guard 추가 (Warning) ✅
+  변경: Text IR+Inkwell 양쪽에서 sdiv/srem 전 icmp eq→br→abort()/unreachable 가드 삽입
+- [x] 18. [아키텍처] CI에 cargo doc --no-deps 체크 추가 (Warning) ✅
+  변경: ci.yml에 docs job 추가 (RUSTDOCFLAGS="-D warnings", workspace --exclude python/node)
+### 중장기 개선 (별도 RFC)
+- [x] 19. [파서] 스택 오버플로 5건 — 별도 RFC로 분리 ✅
+- [x] 20. [언어] HKT/GAT 파서 8건 — 별도 RFC로 분리 ✅
+진행률: 20/20 (100%)
 
 ---
 

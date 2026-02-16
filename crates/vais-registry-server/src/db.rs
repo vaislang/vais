@@ -235,18 +235,24 @@ pub async fn get_user_by_username(pool: &DbPool, username: &str) -> ServerResult
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| User {
-        id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-        username: r.get("username"),
-        password_hash: r.get("password_hash"),
-        email: r.get("email"),
-        is_admin: r.get::<i32, _>("is_admin") != 0,
-        created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-            .unwrap()
-            .with_timezone(&Utc),
-        updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-            .unwrap()
-            .with_timezone(&Utc),
+    Ok(row.and_then(|r| {
+        let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+        let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+            .ok()?
+            .with_timezone(&Utc);
+        let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+            .ok()?
+            .with_timezone(&Utc);
+
+        Some(User {
+            id,
+            username: r.get("username"),
+            password_hash: r.get("password_hash"),
+            email: r.get("email"),
+            is_admin: r.get::<i32, _>("is_admin") != 0,
+            created_at,
+            updated_at,
+        })
     }))
 }
 
@@ -261,18 +267,24 @@ pub async fn get_user_by_id(pool: &DbPool, id: Uuid) -> ServerResult<Option<User
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| User {
-        id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-        username: r.get("username"),
-        password_hash: r.get("password_hash"),
-        email: r.get("email"),
-        is_admin: r.get::<i32, _>("is_admin") != 0,
-        created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-            .unwrap()
-            .with_timezone(&Utc),
-        updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-            .unwrap()
-            .with_timezone(&Utc),
+    Ok(row.and_then(|r| {
+        let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+        let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+            .ok()?
+            .with_timezone(&Utc);
+        let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+            .ok()?
+            .with_timezone(&Utc);
+
+        Some(User {
+            id,
+            username: r.get("username"),
+            password_hash: r.get("password_hash"),
+            email: r.get("email"),
+            is_admin: r.get::<i32, _>("is_admin") != 0,
+            created_at,
+            updated_at,
+        })
     }))
 }
 
@@ -311,13 +323,18 @@ pub async fn get_token_by_hash(pool: &DbPool, hash: &str) -> ServerResult<Option
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| {
+    Ok(row.and_then(|r| {
         let scopes: Vec<String> =
             serde_json::from_str(r.get::<&str, _>("scopes")).unwrap_or_default();
+        let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+        let user_id = Uuid::parse_str(r.get::<&str, _>("user_id")).ok()?;
+        let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+            .ok()?
+            .with_timezone(&Utc);
 
-        ApiToken {
-            id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-            user_id: Uuid::parse_str(r.get::<&str, _>("user_id")).unwrap(),
+        Some(ApiToken {
+            id,
+            user_id,
             name: r.get("name"),
             token_hash: r.get("token_hash"),
             scopes,
@@ -329,10 +346,8 @@ pub async fn get_token_by_hash(pool: &DbPool, hash: &str) -> ServerResult<Option
                 .get::<Option<&str>, _>("last_used_at")
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                 .map(|t| t.with_timezone(&Utc)),
-            created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-                .unwrap()
-                .with_timezone(&Utc),
-        }
+            created_at,
+        })
     }))
 }
 
@@ -360,15 +375,20 @@ pub async fn get_user_tokens(pool: &DbPool, user_id: Uuid) -> ServerResult<Vec<A
 
     Ok(rows
         .into_iter()
-        .map(|r| {
+        .filter_map(|r| {
             let scopes: Vec<String> =
                 serde_json::from_str(r.get::<&str, _>("scopes")).unwrap_or_default();
+            let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+            let user_id = Uuid::parse_str(r.get::<&str, _>("user_id")).ok()?;
+            let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+                .ok()?
+                .with_timezone(&Utc);
 
-            ApiToken {
-                id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-                user_id: Uuid::parse_str(r.get::<&str, _>("user_id")).unwrap(),
+            Some(ApiToken {
+                id,
+                user_id,
                 name: r.get("name"),
-                token_hash: "".to_string(), // Don't expose hash
+                token_hash: String::from(""), // Don't expose hash
                 scopes,
                 expires_at: r
                     .get::<Option<&str>, _>("expires_at")
@@ -378,10 +398,8 @@ pub async fn get_user_tokens(pool: &DbPool, user_id: Uuid) -> ServerResult<Vec<A
                     .get::<Option<&str>, _>("last_used_at")
                     .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                     .map(|t| t.with_timezone(&Utc)),
-                created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-                    .unwrap()
-                    .with_timezone(&Utc),
-            }
+                created_at,
+            })
         })
         .collect())
 }
@@ -453,24 +471,31 @@ pub async fn get_package_by_name(pool: &DbPool, name: &str) -> ServerResult<Opti
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| Package {
-        id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-        name: r.get("name"),
-        description: r.get("description"),
-        homepage: r.get("homepage"),
-        repository: r.get("repository"),
-        documentation: r.get("documentation"),
-        license: r.get("license"),
-        keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
-        categories: serde_json::from_str(r.get::<&str, _>("categories")).unwrap_or_default(),
-        owner_id: Uuid::parse_str(r.get::<&str, _>("owner_id")).unwrap(),
-        created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-            .unwrap()
-            .with_timezone(&Utc),
-        updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-            .unwrap()
-            .with_timezone(&Utc),
-        downloads: r.get("downloads"),
+    Ok(row.and_then(|r| {
+        let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+        let owner_id = Uuid::parse_str(r.get::<&str, _>("owner_id")).ok()?;
+        let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+            .ok()?
+            .with_timezone(&Utc);
+        let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+            .ok()?
+            .with_timezone(&Utc);
+
+        Some(Package {
+            id,
+            name: r.get("name"),
+            description: r.get("description"),
+            homepage: r.get("homepage"),
+            repository: r.get("repository"),
+            documentation: r.get("documentation"),
+            license: r.get("license"),
+            keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
+            categories: serde_json::from_str(r.get::<&str, _>("categories")).unwrap_or_default(),
+            owner_id,
+            created_at,
+            updated_at,
+            downloads: r.get("downloads"),
+        })
     }))
 }
 
@@ -570,19 +595,26 @@ pub async fn get_version(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| PackageVersion {
-        id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-        package_id: Uuid::parse_str(r.get::<&str, _>("package_id")).unwrap(),
-        version: r.get("version"),
-        checksum: r.get("checksum"),
-        size: r.get("size"),
-        yanked: r.get::<i32, _>("yanked") != 0,
-        readme: r.get("readme"),
-        published_by: Uuid::parse_str(r.get::<&str, _>("published_by")).unwrap(),
-        created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-            .unwrap()
-            .with_timezone(&Utc),
-        downloads: r.get("downloads"),
+    Ok(row.and_then(|r| {
+        let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+        let package_id = Uuid::parse_str(r.get::<&str, _>("package_id")).ok()?;
+        let published_by = Uuid::parse_str(r.get::<&str, _>("published_by")).ok()?;
+        let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+            .ok()?
+            .with_timezone(&Utc);
+
+        Some(PackageVersion {
+            id,
+            package_id,
+            version: r.get("version"),
+            checksum: r.get("checksum"),
+            size: r.get("size"),
+            yanked: r.get::<i32, _>("yanked") != 0,
+            readme: r.get("readme"),
+            published_by,
+            created_at,
+            downloads: r.get("downloads"),
+        })
     }))
 }
 
@@ -603,19 +635,26 @@ pub async fn get_all_versions(
 
     Ok(rows
         .into_iter()
-        .map(|r| PackageVersion {
-            id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-            package_id: Uuid::parse_str(r.get::<&str, _>("package_id")).unwrap(),
-            version: r.get("version"),
-            checksum: r.get("checksum"),
-            size: r.get("size"),
-            yanked: r.get::<i32, _>("yanked") != 0,
-            readme: r.get("readme"),
-            published_by: Uuid::parse_str(r.get::<&str, _>("published_by")).unwrap(),
-            created_at: DateTime::parse_from_rfc3339(r.get("created_at"))
-                .unwrap()
-                .with_timezone(&Utc),
-            downloads: r.get("downloads"),
+        .filter_map(|r| {
+            let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+            let package_id = Uuid::parse_str(r.get::<&str, _>("package_id")).ok()?;
+            let published_by = Uuid::parse_str(r.get::<&str, _>("published_by")).ok()?;
+            let created_at = DateTime::parse_from_rfc3339(r.get("created_at"))
+                .ok()?
+                .with_timezone(&Utc);
+
+            Some(PackageVersion {
+                id,
+                package_id,
+                version: r.get("version"),
+                checksum: r.get("checksum"),
+                size: r.get("size"),
+                yanked: r.get::<i32, _>("yanked") != 0,
+                readme: r.get("readme"),
+                published_by,
+                created_at,
+                downloads: r.get("downloads"),
+            })
         })
         .collect())
 }
@@ -703,23 +742,25 @@ pub async fn get_dependencies(pool: &DbPool, version_id: Uuid) -> ServerResult<V
 
     Ok(rows
         .into_iter()
-        .map(|r| {
+        .filter_map(|r| {
             let kind = match r.get::<&str, _>("kind") {
                 "dev" => DependencyKind::Dev,
                 "build" => DependencyKind::Build,
                 _ => DependencyKind::Normal,
             };
+            let id = Uuid::parse_str(r.get::<&str, _>("id")).ok()?;
+            let version_id = Uuid::parse_str(r.get::<&str, _>("version_id")).ok()?;
 
-            Dependency {
-                id: Uuid::parse_str(r.get::<&str, _>("id")).unwrap(),
-                version_id: Uuid::parse_str(r.get::<&str, _>("version_id")).unwrap(),
+            Some(Dependency {
+                id,
+                version_id,
                 name: r.get("name"),
                 version_req: r.get("version_req"),
                 features: serde_json::from_str(r.get::<&str, _>("features")).unwrap_or_default(),
                 optional: r.get::<i32, _>("optional") != 0,
                 target: r.get("target"),
                 kind,
-            }
+            })
         })
         .collect())
 }
@@ -747,27 +788,33 @@ pub async fn search_packages_advanced(
 ) -> ServerResult<(Vec<PackageSearchEntry>, usize)> {
     let search_pattern = format!("%{}%", query.to_lowercase());
 
-    // Build WHERE clause dynamically
+    // Build WHERE clause dynamically with parameter binding
     let mut where_clauses = vec![
         "(LOWER(p.name) LIKE ?1 OR LOWER(p.description) LIKE ?1 OR LOWER(p.keywords) LIKE ?1)"
             .to_string(),
     ];
 
+    // Track bind parameters (search_pattern is ?1, limit/offset will be last two)
+    let mut bind_values: Vec<String> = vec![search_pattern.clone()];
+    let mut next_bind_index = 2;
+
     if let Some(cat) = category {
-        where_clauses.push(format!(
-            "LOWER(p.categories) LIKE '%{}%'",
-            cat.to_lowercase().replace('\'', "''")
-        ));
+        where_clauses.push(format!("LOWER(p.categories) LIKE ?{}", next_bind_index));
+        bind_values.push(format!("%{}%", cat.to_lowercase()));
+        next_bind_index += 1;
     }
 
     if let Some(kw) = keyword {
-        where_clauses.push(format!(
-            "LOWER(p.keywords) LIKE '%{}%'",
-            kw.to_lowercase().replace('\'', "''")
-        ));
+        where_clauses.push(format!("LOWER(p.keywords) LIKE ?{}", next_bind_index));
+        bind_values.push(format!("%{}%", kw.to_lowercase()));
+        next_bind_index += 1;
     }
 
     let where_sql = where_clauses.join(" AND ");
+
+    // limit and offset will use the next two indices
+    let limit_index = next_bind_index;
+    let offset_index = next_bind_index + 1;
 
     // Sort order
     let order_sql = match sort {
@@ -782,10 +829,11 @@ pub async fn search_packages_advanced(
         "SELECT COUNT(*) as count FROM packages p WHERE {}",
         where_sql
     );
-    let count_row = sqlx::query(&count_sql)
-        .bind(&search_pattern)
-        .fetch_one(pool)
-        .await?;
+    let mut count_query = sqlx::query(&count_sql);
+    for val in &bind_values {
+        count_query = count_query.bind(val);
+    }
+    let count_row = count_query.fetch_one(pool).await?;
 
     let total: i64 = count_row.get("count");
 
@@ -797,12 +845,15 @@ pub async fn search_packages_advanced(
         FROM packages p
         WHERE {}
         ORDER BY {}
-        LIMIT ?2 OFFSET ?3"#,
-        where_sql, order_sql
+        LIMIT ?{} OFFSET ?{}"#,
+        where_sql, order_sql, limit_index, offset_index
     );
 
-    let rows = sqlx::query(&query_sql)
-        .bind(&search_pattern)
+    let mut search_query = sqlx::query(&query_sql);
+    for val in &bind_values {
+        search_query = search_query.bind(val);
+    }
+    let rows = search_query
         .bind(limit as i64)
         .bind(offset as i64)
         .fetch_all(pool)
@@ -812,6 +863,10 @@ pub async fn search_packages_advanced(
         .into_iter()
         .filter_map(|r| {
             let latest: Option<String> = r.get("latest_version");
+            let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+                .ok()?
+                .with_timezone(&Utc);
+
             latest.map(|v| PackageSearchEntry {
                 name: r.get("name"),
                 description: r.get("description"),
@@ -820,9 +875,7 @@ pub async fn search_packages_advanced(
                 keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
                 categories: serde_json::from_str(r.get::<&str, _>("categories"))
                     .unwrap_or_default(),
-                updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-                    .unwrap()
-                    .with_timezone(&Utc),
+                updated_at,
             })
         })
         .collect();
@@ -911,6 +964,10 @@ pub async fn get_recent_packages(
         .into_iter()
         .filter_map(|r| {
             let latest: Option<String> = r.get("latest_version");
+            let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+                .ok()?
+                .with_timezone(&Utc);
+
             latest.map(|v| PackageSearchEntry {
                 name: r.get("name"),
                 description: r.get("description"),
@@ -919,9 +976,7 @@ pub async fn get_recent_packages(
                 keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
                 categories: serde_json::from_str(r.get::<&str, _>("categories"))
                     .unwrap_or_default(),
-                updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-                    .unwrap()
-                    .with_timezone(&Utc),
+                updated_at,
             })
         })
         .collect();
@@ -952,6 +1007,10 @@ pub async fn get_popular_packages(
         .into_iter()
         .filter_map(|r| {
             let latest: Option<String> = r.get("latest_version");
+            let updated_at = DateTime::parse_from_rfc3339(r.get("updated_at"))
+                .ok()?
+                .with_timezone(&Utc);
+
             latest.map(|v| PackageSearchEntry {
                 name: r.get("name"),
                 description: r.get("description"),
@@ -960,9 +1019,7 @@ pub async fn get_popular_packages(
                 keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
                 categories: serde_json::from_str(r.get::<&str, _>("categories"))
                     .unwrap_or_default(),
-                updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
-                    .unwrap()
-                    .with_timezone(&Utc),
+                updated_at,
             })
         })
         .collect();
@@ -986,7 +1043,10 @@ pub async fn get_full_index(pool: &DbPool) -> ServerResult<Vec<IndexEntry>> {
 
     for pkg_row in packages {
         let pkg_id: String = pkg_row.get("id");
-        let pkg_uuid = Uuid::parse_str(&pkg_id).unwrap();
+        let pkg_uuid = match Uuid::parse_str(&pkg_id) {
+            Ok(uuid) => uuid,
+            Err(_) => continue, // Skip invalid UUID entries
+        };
 
         let versions = get_all_versions(pool, pkg_uuid).await?;
         let owners = get_package_owners(pool, pkg_uuid).await?;

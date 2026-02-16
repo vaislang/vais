@@ -10,6 +10,11 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use tar::{Archive, Builder};
 
+/// Maximum uncompressed archive size (100MB)
+const MAX_UNCOMPRESSED_SIZE: u64 = 100 * 1024 * 1024;
+/// Maximum number of files in an archive
+const MAX_FILE_COUNT: usize = 10_000;
+
 /// Package storage manager
 pub struct PackageStorage {
     root: PathBuf,
@@ -20,6 +25,14 @@ impl PackageStorage {
     pub fn new(root: PathBuf) -> ServerResult<Self> {
         fs::create_dir_all(&root)?;
         Ok(Self { root })
+    }
+
+    /// Validate a path component for safety (no path traversal)
+    fn validate_path_component(s: &str) -> ServerResult<()> {
+        if s.contains("..") || s.contains('/') || s.contains('\\') || s.contains('\0') {
+            return Err(ServerError::Archive("Invalid path component".to_string()));
+        }
+        Ok(())
     }
 
     /// Get the path to a package directory
@@ -34,6 +47,10 @@ impl PackageStorage {
 
     /// Store a package archive
     pub fn store_archive(&self, name: &str, version: &str, data: &[u8]) -> ServerResult<String> {
+        // Validate path components to prevent path traversal
+        Self::validate_path_component(name)?;
+        Self::validate_path_component(version)?;
+
         let pkg_dir = self.package_dir(name);
         fs::create_dir_all(&pkg_dir)?;
 
@@ -51,6 +68,10 @@ impl PackageStorage {
 
     /// Read a package archive
     pub fn read_archive(&self, name: &str, version: &str) -> ServerResult<Vec<u8>> {
+        // Validate path components to prevent path traversal
+        Self::validate_path_component(name)?;
+        Self::validate_path_component(version)?;
+
         let archive_path = self.archive_path(name, version);
 
         if !archive_path.exists() {
@@ -69,11 +90,21 @@ impl PackageStorage {
 
     /// Check if a version archive exists
     pub fn archive_exists(&self, name: &str, version: &str) -> bool {
+        // Validate path components (if invalid, return false)
+        if Self::validate_path_component(name).is_err()
+            || Self::validate_path_component(version).is_err()
+        {
+            return false;
+        }
         self.archive_path(name, version).exists()
     }
 
     /// Delete a version archive
     pub fn delete_archive(&self, name: &str, version: &str) -> ServerResult<bool> {
+        // Validate path components to prevent path traversal
+        Self::validate_path_component(name)?;
+        Self::validate_path_component(version)?;
+
         let archive_path = self.archive_path(name, version);
 
         if archive_path.exists() {
@@ -86,6 +117,10 @@ impl PackageStorage {
 
     /// Get the size of an archive
     pub fn archive_size(&self, name: &str, version: &str) -> ServerResult<u64> {
+        // Validate path components to prevent path traversal
+        Self::validate_path_component(name)?;
+        Self::validate_path_component(version)?;
+
         let archive_path = self.archive_path(name, version);
 
         if !archive_path.exists() {
@@ -101,6 +136,7 @@ impl PackageStorage {
 
     /// Verify archive checksum
     pub fn verify_checksum(&self, name: &str, version: &str, expected: &str) -> ServerResult<bool> {
+        // Path validation is done in read_archive
         let data = self.read_archive(name, version)?;
         let actual = sha256_hex(&data);
         Ok(actual == expected)
@@ -108,6 +144,9 @@ impl PackageStorage {
 
     /// List all versions of a package
     pub fn list_versions(&self, name: &str) -> ServerResult<Vec<String>> {
+        // Validate path component to prevent path traversal
+        Self::validate_path_component(name)?;
+
         let pkg_dir = self.package_dir(name);
 
         if !pkg_dir.exists() {
@@ -153,7 +192,10 @@ impl PackageStorage {
         let decoder = GzDecoder::new(data);
         let mut archive = Archive::new(decoder);
 
-        // Security: check for path traversal
+        let mut total_size = 0u64;
+        let mut file_count = 0usize;
+
+        // Security: check for path traversal and archive bombs
         for entry in archive.entries()? {
             let entry = entry?;
             let path = entry.path()?;
@@ -171,6 +213,24 @@ impl PackageStorage {
                         "Archive contains path traversal".to_string(),
                     ));
                 }
+            }
+
+            // Archive bomb protection: check file count
+            file_count += 1;
+            if file_count > MAX_FILE_COUNT {
+                return Err(ServerError::Archive(format!(
+                    "Archive contains too many files (max: {})",
+                    MAX_FILE_COUNT
+                )));
+            }
+
+            // Archive bomb protection: check total uncompressed size
+            total_size += entry.size();
+            if total_size > MAX_UNCOMPRESSED_SIZE {
+                return Err(ServerError::Archive(format!(
+                    "Archive too large (max: {} bytes)",
+                    MAX_UNCOMPRESSED_SIZE
+                )));
             }
         }
 

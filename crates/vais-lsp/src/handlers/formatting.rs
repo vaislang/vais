@@ -3,7 +3,7 @@
 use ropey::Rope;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
-use vais_codegen::formatter::{FormatConfig, Formatter};
+use vais_ast::formatter::{FormatConfig, Formatter};
 use vais_parser::parse;
 
 use crate::backend::VaisBackend;

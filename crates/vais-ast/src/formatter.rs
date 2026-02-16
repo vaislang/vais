@@ -2,7 +2,7 @@
 //!
 //! Pretty-prints VAIS AST to formatted source code.
 
-use vais_ast::*;
+use crate::*;
 
 /// Formatter configuration
 #[derive(Clone)]
@@ -1250,10 +1250,10 @@ impl Formatter {
                 let mut result = String::from("\"");
                 for part in parts {
                     match part {
-                        vais_ast::StringInterpPart::Lit(s) => {
+                        StringInterpPart::Lit(s) => {
                             result.push_str(&s.replace('\\', "\\\\").replace('"', "\\\""));
                         }
-                        vais_ast::StringInterpPart::Expr(e) => {
+                        StringInterpPart::Expr(e) => {
                             result.push('{');
                             result.push_str(&self.format_expr(&e.node));
                             result.push('}');

@@ -121,7 +121,7 @@ pub(crate) fn cmd_check(
 }
 
 pub(crate) fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
-    use vais_codegen::formatter::{FormatConfig, Formatter};
+    use vais_ast::formatter::{FormatConfig, Formatter};
 
     // Handle directory or single file
     let files: Vec<PathBuf> = if input.is_dir() {

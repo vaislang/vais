@@ -584,9 +584,9 @@ impl ExprVisitor for CodeGenerator {
         // param_names is empty because lazy has no parameters of its own —
         // all identifiers from the outer scope (including function params) are free variables
         // that need to be captured by the thunk function.
-        let param_names = std::collections::HashSet::new();
+        let mut param_names = std::collections::HashSet::new();
         let mut free_vars = Vec::new();
-        self.collect_free_vars_in_expr(&inner.node, &param_names, &mut free_vars);
+        self.collect_free_vars_in_expr(&inner.node, &mut param_names, &mut free_vars);
         let mut seen = std::collections::HashSet::new();
         free_vars.retain(|v| seen.insert(v.clone()));
 

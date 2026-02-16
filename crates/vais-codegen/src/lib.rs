@@ -39,7 +39,6 @@ mod expr_helpers_data;
 mod expr_helpers_misc;
 mod expr_visitor;
 mod ffi;
-pub mod formatter;
 mod function_gen;
 mod generate_expr;
 mod generate_expr_call;

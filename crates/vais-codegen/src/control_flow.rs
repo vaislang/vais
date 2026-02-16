@@ -661,6 +661,10 @@ impl CodeGenerator {
                 }
 
                 // OR all checks together
+                // Or-patterns should always have at least one pattern, but defend against empty
+                if checks.is_empty() {
+                    return Ok(("1".to_string(), ir));
+                }
                 let mut result = checks[0].clone();
                 for check in checks.iter().skip(1) {
                     let tmp = self.next_temp(counter);
@@ -694,17 +698,17 @@ impl CodeGenerator {
                 }
 
                 // AND all checks together
+                // Empty tuple pattern (unit) matches unconditionally
                 if checks.is_empty() {
-                    Ok(("1".to_string(), ir))
-                } else {
-                    let mut result = checks[0].clone();
-                    for check in checks.iter().skip(1) {
-                        let tmp = self.next_temp(counter);
-                        writeln!(ir, "  {} = and i1 {}, {}", tmp, result, check).unwrap();
-                        result = tmp;
-                    }
-                    Ok((result, ir))
+                    return Ok(("1".to_string(), ir));
                 }
+                let mut result = checks[0].clone();
+                for check in checks.iter().skip(1) {
+                    let tmp = self.next_temp(counter);
+                    writeln!(ir, "  {} = and i1 {}, {}", tmp, result, check).unwrap();
+                    result = tmp;
+                }
+                Ok((result, ir))
             }
             Pattern::Variant { name, fields: _ } => {
                 // Enum variant pattern: check the tag matches

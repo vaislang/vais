@@ -389,6 +389,27 @@ impl CodeGenerator {
                         };
 
                         let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+
+                        // Add division by zero check for sdiv and srem
+                        if matches!(op, BinOp::Div | BinOp::Mod) {
+                            let zero_check = self.next_temp(counter);
+                            let div_ok_label = self.next_label("div_ok");
+                            let div_zero_label = self.next_label("div_zero");
+
+                            ir.push_str(&format!(
+                                "  {} = icmp eq i64 {}, 0{}\n",
+                                zero_check, right_val, dbg_info
+                            ));
+                            ir.push_str(&format!(
+                                "  br i1 {}, label %{}, label %{}\n",
+                                zero_check, div_zero_label, div_ok_label
+                            ));
+                            ir.push_str(&format!("{}:\n", div_zero_label));
+                            ir.push_str("  call void @abort()\n");
+                            ir.push_str("  unreachable\n");
+                            ir.push_str(&format!("{}:\n", div_ok_label));
+                        }
+
                         ir.push_str(&format!(
                             "  {} = {} i64 {}, {}{}\n",
                             tmp, op_str, left_val, right_val, dbg_info
@@ -919,6 +940,26 @@ impl CodeGenerator {
                     BinOp::Shr => "ashr",
                     _ => return Err(CodegenError::Unsupported(format!("compound {:?}", op))),
                 };
+
+                // Add division by zero check for sdiv and srem
+                if matches!(op, BinOp::Div | BinOp::Mod) {
+                    let zero_check = self.next_temp(counter);
+                    let div_ok_label = self.next_label("div_ok");
+                    let div_zero_label = self.next_label("div_zero");
+
+                    ir.push_str(&format!(
+                        "  {} = icmp eq i64 {}, 0\n",
+                        zero_check, rhs_val
+                    ));
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        zero_check, div_zero_label, div_ok_label
+                    ));
+                    ir.push_str(&format!("{}:\n", div_zero_label));
+                    ir.push_str("  call void @abort()\n");
+                    ir.push_str("  unreachable\n");
+                    ir.push_str(&format!("{}:\n", div_ok_label));
+                }
 
                 let result = self.next_temp(counter);
                 ir.push_str(&format!(

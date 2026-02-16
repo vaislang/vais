@@ -7,12 +7,16 @@ pub fn mangle_name(base: &str, type_args: &[ResolvedType]) -> String {
     if type_args.is_empty() {
         base.to_string()
     } else {
-        let args_str = type_args
-            .iter()
-            .map(mangle_type)
-            .collect::<Vec<_>>()
-            .join("_");
-        format!("{}${}", base, args_str)
+        let mut buf = String::new();
+        buf.push_str(base);
+        buf.push('$');
+        for (i, ty) in type_args.iter().enumerate() {
+            if i > 0 {
+                buf.push('_');
+            }
+            mangle_type_into(ty, &mut buf);
+        }
+        buf
     }
 }
 
@@ -22,79 +26,157 @@ pub fn mangle_name_with_consts(
     type_args: &[ResolvedType],
     const_args: &[(String, i64)],
 ) -> String {
-    let mut parts = Vec::new();
-    for ty in type_args {
-        parts.push(mangle_type(ty));
-    }
-    for (_, val) in const_args {
-        parts.push(format!("c{}", val));
-    }
-    if parts.is_empty() {
+    if type_args.is_empty() && const_args.is_empty() {
         base.to_string()
     } else {
-        format!("{}${}", base, parts.join("_"))
+        let mut buf = String::new();
+        buf.push_str(base);
+        buf.push('$');
+        let mut first = true;
+        for ty in type_args {
+            if !first {
+                buf.push('_');
+            }
+            first = false;
+            mangle_type_into(ty, &mut buf);
+        }
+        for (_, val) in const_args {
+            if !first {
+                buf.push('_');
+            }
+            first = false;
+            buf.push('c');
+            buf.push_str(&val.to_string());
+        }
+        buf
     }
 }
 
 /// Mangle a single type for use in mangled names
 pub fn mangle_type(ty: &ResolvedType) -> String {
+    let mut buf = String::new();
+    mangle_type_into(ty, &mut buf);
+    buf
+}
+
+/// Internal helper: mangle a type into a provided buffer
+fn mangle_type_into(ty: &ResolvedType, buf: &mut String) {
     match ty {
-        ResolvedType::I8 => "i8".to_string(),
-        ResolvedType::I16 => "i16".to_string(),
-        ResolvedType::I32 => "i32".to_string(),
-        ResolvedType::I64 => "i64".to_string(),
-        ResolvedType::I128 => "i128".to_string(),
-        ResolvedType::U8 => "u8".to_string(),
-        ResolvedType::U16 => "u16".to_string(),
-        ResolvedType::U32 => "u32".to_string(),
-        ResolvedType::U64 => "u64".to_string(),
-        ResolvedType::U128 => "u128".to_string(),
-        ResolvedType::F32 => "f32".to_string(),
-        ResolvedType::F64 => "f64".to_string(),
-        ResolvedType::Bool => "bool".to_string(),
-        ResolvedType::Str => "str".to_string(),
-        ResolvedType::Unit => "unit".to_string(),
+        ResolvedType::I8 => buf.push_str("i8"),
+        ResolvedType::I16 => buf.push_str("i16"),
+        ResolvedType::I32 => buf.push_str("i32"),
+        ResolvedType::I64 => buf.push_str("i64"),
+        ResolvedType::I128 => buf.push_str("i128"),
+        ResolvedType::U8 => buf.push_str("u8"),
+        ResolvedType::U16 => buf.push_str("u16"),
+        ResolvedType::U32 => buf.push_str("u32"),
+        ResolvedType::U64 => buf.push_str("u64"),
+        ResolvedType::U128 => buf.push_str("u128"),
+        ResolvedType::F32 => buf.push_str("f32"),
+        ResolvedType::F64 => buf.push_str("f64"),
+        ResolvedType::Bool => buf.push_str("bool"),
+        ResolvedType::Str => buf.push_str("str"),
+        ResolvedType::Unit => buf.push_str("unit"),
         ResolvedType::Named { name, generics } => {
-            if generics.is_empty() {
-                name.clone()
-            } else {
-                let args = generics
-                    .iter()
-                    .map(mangle_type)
-                    .collect::<Vec<_>>()
-                    .join("_");
-                format!("{}_{}", name, args)
+            buf.push_str(name);
+            if !generics.is_empty() {
+                buf.push('_');
+                for (i, ty) in generics.iter().enumerate() {
+                    if i > 0 {
+                        buf.push('_');
+                    }
+                    mangle_type_into(ty, buf);
+                }
             }
         }
-        ResolvedType::Array(inner) => format!("arr_{}", mangle_type(inner)),
-        ResolvedType::Pointer(inner) => format!("ptr_{}", mangle_type(inner)),
-        ResolvedType::Ref(inner) => format!("ref_{}", mangle_type(inner)),
-        ResolvedType::RefMut(inner) => format!("refmut_{}", mangle_type(inner)),
-        ResolvedType::Slice(inner) => format!("slice_{}", mangle_type(inner)),
-        ResolvedType::SliceMut(inner) => format!("slicemut_{}", mangle_type(inner)),
-        ResolvedType::Optional(inner) => format!("opt_{}", mangle_type(inner)),
-        ResolvedType::Result(ok, err) => format!("res_{}_{}", mangle_type(ok), mangle_type(err)),
-        ResolvedType::Future(inner) => format!("fut_{}", mangle_type(inner)),
+        ResolvedType::Array(inner) => {
+            buf.push_str("arr_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::Pointer(inner) => {
+            buf.push_str("ptr_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::Ref(inner) => {
+            buf.push_str("ref_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::RefMut(inner) => {
+            buf.push_str("refmut_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::Slice(inner) => {
+            buf.push_str("slice_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::SliceMut(inner) => {
+            buf.push_str("slicemut_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::Optional(inner) => {
+            buf.push_str("opt_");
+            mangle_type_into(inner, buf);
+        }
+        ResolvedType::Result(ok, err) => {
+            buf.push_str("res_");
+            mangle_type_into(ok, buf);
+            buf.push('_');
+            mangle_type_into(err, buf);
+        }
+        ResolvedType::Future(inner) => {
+            buf.push_str("fut_");
+            mangle_type_into(inner, buf);
+        }
         ResolvedType::Tuple(types) => {
-            let args = types.iter().map(mangle_type).collect::<Vec<_>>().join("_");
-            format!("tup_{}", args)
+            buf.push_str("tup_");
+            for (i, ty) in types.iter().enumerate() {
+                if i > 0 {
+                    buf.push('_');
+                }
+                mangle_type_into(ty, buf);
+            }
         }
         ResolvedType::Fn { params, ret, .. } => {
-            let params_str = params.iter().map(mangle_type).collect::<Vec<_>>().join("_");
-            format!("fn_{}_{}", params_str, mangle_type(ret))
+            buf.push_str("fn_");
+            for (i, param) in params.iter().enumerate() {
+                if i > 0 {
+                    buf.push('_');
+                }
+                mangle_type_into(param, buf);
+            }
+            buf.push('_');
+            mangle_type_into(ret, buf);
         }
-        ResolvedType::Generic(name) => name.clone(),
-        ResolvedType::ConstGeneric(name) => format!("cg_{}", name),
+        ResolvedType::Generic(name) => buf.push_str(name),
+        ResolvedType::ConstGeneric(name) => {
+            buf.push_str("cg_");
+            buf.push_str(name);
+        }
         ResolvedType::ConstArray { element, size } => {
-            let size_str = match size.try_evaluate() {
-                Some(n) => format!("{}", n),
-                None => "dyn".to_string(),
-            };
-            format!("arr{}_{}", size_str, mangle_type(element))
+            buf.push_str("arr");
+            match size.try_evaluate() {
+                Some(n) => buf.push_str(&n.to_string()),
+                None => buf.push_str("dyn"),
+            }
+            buf.push('_');
+            mangle_type_into(element, buf);
         }
-        ResolvedType::Var(id) => format!("v{}", id),
-        ResolvedType::Vector { element, lanes } => format!("vec{}_{}", lanes, mangle_type(element)),
-        ResolvedType::HigherKinded { name, arity } => format!("hkt{}_{}", arity, name),
-        _ => "unknown".to_string(),
+        ResolvedType::Var(id) => {
+            buf.push('v');
+            buf.push_str(&id.to_string());
+        }
+        ResolvedType::Vector { element, lanes } => {
+            buf.push_str("vec");
+            buf.push_str(&lanes.to_string());
+            buf.push('_');
+            mangle_type_into(element, buf);
+        }
+        ResolvedType::HigherKinded { name, arity } => {
+            buf.push_str("hkt");
+            buf.push_str(&arity.to_string());
+            buf.push('_');
+            buf.push_str(name);
+        }
+        _ => buf.push_str("unknown"),
     }
 }

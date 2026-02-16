@@ -15,9 +15,9 @@ impl CodeGenerator {
         params: &[Param],
         body: &Spanned<Expr>,
     ) -> Vec<String> {
-        let param_names: HashSet<String> = params.iter().map(|p| p.name.node.clone()).collect();
+        let mut param_names: HashSet<String> = params.iter().map(|p| p.name.node.clone()).collect();
         let mut free_vars = Vec::new();
-        self.collect_free_vars_in_expr(&body.node, &param_names, &mut free_vars);
+        self.collect_free_vars_in_expr(&body.node, &mut param_names, &mut free_vars);
         // Deduplicate while preserving order
         let mut seen = HashSet::new();
         free_vars.retain(|v| seen.insert(v.clone()));
@@ -27,7 +27,7 @@ impl CodeGenerator {
     pub(crate) fn collect_free_vars_in_expr(
         &self,
         expr: &Expr,
-        bound: &HashSet<String>,
+        bound: &mut HashSet<String>,
         free: &mut Vec<String>,
     ) {
         match expr {
@@ -52,18 +52,38 @@ impl CodeGenerator {
             }
             Expr::If { cond, then, else_ } => {
                 self.collect_free_vars_in_expr(&cond.node, bound, free);
-                let mut local_bound = bound.clone();
+                // Track bindings added in then branch
+                let mut new_bindings = Vec::new();
                 for stmt in then {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before then branch
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
                 if let Some(else_br) = else_ {
                     self.collect_free_vars_in_if_else(else_br, bound, free);
                 }
             }
             Expr::Block(stmts) => {
-                let mut local_bound = bound.clone();
+                // Track bindings added in block
+                let mut new_bindings = Vec::new();
                 for stmt in stmts {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before block
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
             }
             Expr::MethodCall { receiver, args, .. } => {
@@ -105,11 +125,12 @@ impl CodeGenerator {
                 self.collect_free_vars_in_expr(&value.node, bound, free);
             }
             Expr::Lambda { params, body, .. } => {
+                // Lambda creates a nested scope - need separate bound set
                 let mut inner_bound = bound.clone();
                 for p in params {
                     inner_bound.insert(p.name.node.clone());
                 }
-                self.collect_free_vars_in_expr(&body.node, &inner_bound, free);
+                self.collect_free_vars_in_expr(&body.node, &mut inner_bound, free);
             }
             Expr::Ref(inner)
             | Expr::Deref(inner)
@@ -149,30 +170,59 @@ impl CodeGenerator {
                 if let Some(it) = iter {
                     self.collect_free_vars_in_expr(&it.node, bound, free);
                 }
-                let mut local_bound = bound.clone();
+                // Track bindings added in loop
+                let mut new_bindings = Vec::new();
                 if let Some(pat) = pattern {
-                    self.collect_pattern_bindings(&pat.node, &mut local_bound);
+                    self.collect_pattern_bindings_with_tracking(&pat.node, bound, &mut new_bindings);
                 }
                 for stmt in body {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before loop
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
             }
             Expr::While { condition, body } => {
                 self.collect_free_vars_in_expr(&condition.node, bound, free);
-                let mut local_bound = bound.clone();
+                // Track bindings added in while body
+                let mut new_bindings = Vec::new();
                 for stmt in body {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before while
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
             }
             Expr::Match { expr, arms } => {
                 self.collect_free_vars_in_expr(&expr.node, bound, free);
                 for arm in arms {
-                    let mut arm_bound = bound.clone();
-                    self.collect_pattern_bindings(&arm.pattern.node, &mut arm_bound);
+                    // Track bindings added in this arm
+                    let mut new_bindings = Vec::new();
+                    self.collect_pattern_bindings_with_tracking(
+                        &arm.pattern.node,
+                        bound,
+                        &mut new_bindings,
+                    );
                     if let Some(guard) = &arm.guard {
-                        self.collect_free_vars_in_expr(&guard.node, &arm_bound, free);
+                        self.collect_free_vars_in_expr(&guard.node, bound, free);
                     }
-                    self.collect_free_vars_in_expr(&arm.body.node, &arm_bound, free);
+                    self.collect_free_vars_in_expr(&arm.body.node, bound, free);
+                    // Restore bound to state before arm
+                    for name in &new_bindings {
+                        bound.remove(name);
+                    }
                 }
             }
             Expr::Range { start, end, .. } => {
@@ -188,16 +238,20 @@ impl CodeGenerator {
         }
     }
 
-    pub(crate) fn collect_free_vars_in_stmt(
+    /// Collect free variables in a statement, tracking new bindings for scope restoration
+    fn collect_free_vars_in_stmt_with_tracking(
         &self,
         stmt: &Stmt,
         bound: &mut HashSet<String>,
         free: &mut Vec<String>,
+        new_bindings: &mut Vec<String>,
     ) {
         match stmt {
             Stmt::Let { name, value, .. } => {
                 self.collect_free_vars_in_expr(&value.node, bound, free);
-                bound.insert(name.node.clone());
+                let name_str = name.node.clone();
+                bound.insert(name_str.clone());
+                new_bindings.push(name_str);
             }
             Stmt::Expr(e) => {
                 self.collect_free_vars_in_expr(&e.node, bound, free);
@@ -215,57 +269,87 @@ impl CodeGenerator {
     pub(crate) fn collect_free_vars_in_if_else(
         &self,
         if_else: &IfElse,
-        bound: &HashSet<String>,
+        bound: &mut HashSet<String>,
         free: &mut Vec<String>,
     ) {
         match if_else {
             IfElse::ElseIf(cond, then_stmts, else_) => {
                 self.collect_free_vars_in_expr(&cond.node, bound, free);
-                let mut local_bound = bound.clone();
+                // Track bindings added in elseif branch
+                let mut new_bindings = Vec::new();
                 for stmt in then_stmts {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before elseif
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
                 if let Some(else_br) = else_ {
                     self.collect_free_vars_in_if_else(else_br, bound, free);
                 }
             }
             IfElse::Else(stmts) => {
-                let mut local_bound = bound.clone();
+                // Track bindings added in else branch
+                let mut new_bindings = Vec::new();
                 for stmt in stmts {
-                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                    self.collect_free_vars_in_stmt_with_tracking(
+                        &stmt.node,
+                        bound,
+                        free,
+                        &mut new_bindings,
+                    );
+                }
+                // Restore bound to state before else
+                for name in &new_bindings {
+                    bound.remove(name);
                 }
             }
         }
     }
 
-    pub(crate) fn collect_pattern_bindings(&self, pattern: &Pattern, bound: &mut HashSet<String>) {
+    /// Collect pattern bindings, tracking new bindings for scope restoration
+    fn collect_pattern_bindings_with_tracking(
+        &self,
+        pattern: &Pattern,
+        bound: &mut HashSet<String>,
+        new_bindings: &mut Vec<String>,
+    ) {
         match pattern {
             Pattern::Ident(name) => {
-                bound.insert(name.to_string());
+                let name_str = name.to_string();
+                bound.insert(name_str.clone());
+                new_bindings.push(name_str);
             }
             Pattern::Tuple(patterns) => {
                 for p in patterns {
-                    self.collect_pattern_bindings(&p.node, bound);
+                    self.collect_pattern_bindings_with_tracking(&p.node, bound, new_bindings);
                 }
             }
             Pattern::Struct { fields, .. } => {
                 for (name, pat) in fields {
                     if let Some(p) = pat {
-                        self.collect_pattern_bindings(&p.node, bound);
+                        self.collect_pattern_bindings_with_tracking(&p.node, bound, new_bindings);
                     } else {
                         // Field shorthand: {x} binds x
-                        bound.insert(name.node.to_string());
+                        let name_str = name.node.to_string();
+                        bound.insert(name_str.clone());
+                        new_bindings.push(name_str);
                     }
                 }
             }
             Pattern::Variant { fields, .. } => {
                 for p in fields {
-                    self.collect_pattern_bindings(&p.node, bound);
+                    self.collect_pattern_bindings_with_tracking(&p.node, bound, new_bindings);
                 }
             }
             Pattern::Or(patterns) => {
                 for p in patterns {
-                    self.collect_pattern_bindings(&p.node, bound);
+                    self.collect_pattern_bindings_with_tracking(&p.node, bound, new_bindings);
                 }
             }
             _ => {}

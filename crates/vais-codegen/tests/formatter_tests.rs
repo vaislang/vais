@@ -7,8 +7,8 @@
 //! - Expression formatting (nested expressions, operators)
 //! - Indentation configuration
 
+use vais_ast::formatter::{FormatConfig, Formatter};
 use vais_ast::*;
-use vais_codegen::formatter::{FormatConfig, Formatter};
 
 // ============================================================================
 // Helper Functions for Creating AST Nodes
