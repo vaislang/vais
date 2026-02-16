@@ -110,7 +110,7 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -177,7 +177,7 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -244,7 +244,7 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=$llvmPrefix" >> $env:GITHUB_ENV
 
       - name: Cache cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -296,7 +296,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Cache cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -372,7 +372,7 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
       - name: Cache cargo dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
