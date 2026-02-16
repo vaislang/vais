@@ -16,9 +16,13 @@ use crate::types::{
 
 /// Saved state of generic type parameters, for restoring after processing.
 pub(crate) struct SavedGenericState {
+    /// Generic type parameter names (e.g., ["T", "U"])
     pub generics: Vec<String>,
+    /// Trait bounds per generic (e.g., {"T": ["Clone", "Debug"]})
     pub bounds: HashMap<String, Vec<String>>,
+    /// Const generic values (e.g., {"N": ResolvedType::I64})
     pub const_generics: HashMap<String, ResolvedType>,
+    /// Higher-kinded type generics with their arity (e.g., {"F": 1} for F<_>)
     pub hkt_generics: HashMap<String, usize>,
 }
 

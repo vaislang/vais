@@ -3,7 +3,7 @@
 use super::*;
 
 impl TypeChecker {
-    pub(crate) fn register_simd_builtins(&mut self) {
+    pub(super) fn register_simd_builtins(&mut self) {
         // Helper to create vector types
         let vec2f32 = ResolvedType::Vector {
             element: Box::new(ResolvedType::F32),

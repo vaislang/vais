@@ -105,20 +105,6 @@ fn project_root() -> PathBuf {
 
 // ==================== Enhanced Assertion Helpers ====================
 
-/// Assert that source compiles, runs, and returns exit code 0
-fn assert_run_success(source: &str) {
-    match compile_and_run(source) {
-        Ok(result) => {
-            assert_eq!(
-                result.exit_code, 0,
-                "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-                result.exit_code, result.stdout, result.stderr
-            );
-        }
-        Err(e) => panic!("Compilation/execution failed: {}", e),
-    }
-}
-
 /// Assert that source compiles, runs, and returns the expected exit code
 fn assert_exit_code(source: &str, expected: i32) {
     match compile_and_run(source) {
