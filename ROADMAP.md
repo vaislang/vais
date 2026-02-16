@@ -199,6 +199,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 51** | Docs 번역 Sync | quick-start 한국어 보강, SUMMARY 22건 링크, EN/JA/ZH SUMMARY 확장 (14→215줄), 번역본 12파일 확장 (+6,317줄) | 655 |
 | **Phase 52** | 리뷰 수정 | quick-start loop 문법 수정, EN/JA/ZH SUMMARY 링크 20건×3, Iterator Type Inference, Docker 섹션 동기화 | 655 |
 | **Phase 53** | 테스트 & 코드 품질 | execution_tests +31, builtins 모듈 분할, SavedGenericState, JS codegen +18 | 655 |
+| **Phase 54** | 코드 품질 & 모듈 분할 R4 | 대형 파일 5개 분할 (26개 서브모듈), unwrap 6건 fix, async TODO 정리 | 655 |
 
 ---
 
@@ -246,6 +247,22 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 2. [테스트] execution_tests.rs assert_run_success dead code 삭제 (Warning) ✅
 - [x] 3. [아키텍처] SavedGenericState 필드 주석 추가 (Warning) ✅
 진행률: 3/3 (100%)
+
+## 현재 작업 — Phase 54: 코드 품질 & 모듈 분할 Round 4 (2026-02-16)
+모드: 자동진행
+- [x] 1. 대형 파일 모듈 분할 — vais-types (Sonnet 위임) ✅
+  변경: checker_expr.rs (1,673줄) → checker_expr/ 9개 서브모듈 (mod/stmts/literals/control_flow/calls/collections/references/async_effects/special)
+  변경: ownership.rs (1,498줄) → ownership/ 9개 서브모듈 (types/core/var_tracking/copy_check/move_track/borrow_track/ast_check/helpers/tests)
+- [x] 2. 대형 파일 모듈 분할 — vais-codegen (Sonnet 위임) [∥1] ✅
+  변경: inkwell/gen_expr.rs (1,419줄) → gen_expr/ 8개 서브모듈 (literal/var/binary/unary/call/lambda/misc)
+  변경: contracts.rs (1,270줄) → contracts/ 8개 서브모듈 (requires/ensures/auto_checks/assert_assume/invariants/decreases/helpers)
+  변경: optimize/ir_passes.rs (1,266줄) → ir_passes/ 9개 서브모듈 (constant_folding/dead_code/tail_call/cse/strength_reduction/branch_opt/loop_opt/helpers)
+- [x] 3. vaisc unwrap 안전화 — 295건 감사 & 6건 critical fix (Sonnet 위임) [∥1] ✅
+  변경: commands/advanced.rs (PGO/watch 경로 검증), registry/cache.rs (홈 디렉토리 fallback), registry/archive.rs (보안 검증 강화), incremental/graph.rs (Tarjan SCC 방어적 처리)
+- [x] 4. Async TODO 코멘트 개선 (Opus 직접) ✅
+  변경: generate_expr.rs:1659 — sched_yield() cooperative yielding은 현재 아키텍처에서 올바른 접근, event-driven 전환은 별도 RFC 분리
+- [x] 5. ROADMAP 수치 동기화 ✅
+진행률: 5/5 (100%)
 
 ---
 

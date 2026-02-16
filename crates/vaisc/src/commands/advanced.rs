@@ -3,7 +3,7 @@
 use crate::commands::build::cmd_build;
 use colored::Colorize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_plugin::PluginRegistry;
