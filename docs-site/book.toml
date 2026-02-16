@@ -23,6 +23,8 @@ preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/vaislang/vais"
 edit-url-template = "https://github.com/vaislang/vais/edit/main/{path}"
 site-url = "/docs/"
+additional-css = ["theme/lang-selector.css"]
+additional-js = ["theme/lang-selector.js"]
 
 [output.html.search]
 enable = true

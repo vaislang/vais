@@ -96,6 +96,8 @@ preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/vaislang/vais"
 edit-url-template = "https://github.com/vaislang/vais/edit/main/{path}"
 site-url = "/docs/${lang}/"
+additional-css = ["theme/lang-selector.css"]
+additional-js = ["theme/lang-selector.js"]
 
 [output.html.search]
 enable = true
@@ -149,137 +151,19 @@ done
 echo ""
 echo -e "${BLUE}Creating language selector index...${NC}"
 
-cat > book/index.html <<'EOF'
+cat > book/index.html <<'INDEXEOF'
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vais Programming Language Documentation</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: #fff;
-        }
-        .container {
-            max-width: 800px;
-            padding: 3rem;
-            text-align: center;
-        }
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            font-weight: 700;
-        }
-        .subtitle {
-            font-size: 1.2rem;
-            margin-bottom: 3rem;
-            opacity: 0.9;
-        }
-        .languages {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
-        .language-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            padding: 2rem 1.5rem;
-            text-decoration: none;
-            color: #fff;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .language-card:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        .language-flag {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-        }
-        .language-name {
-            font-size: 1.3rem;
-            font-weight: 600;
-        }
-        .language-native {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-        footer {
-            margin-top: 3rem;
-            opacity: 0.7;
-            font-size: 0.9rem;
-        }
-        footer a {
-            color: #fff;
-            text-decoration: none;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        footer a:hover {
-            border-bottom-color: #fff;
-        }
-    </style>
+    <meta http-equiv="refresh" content="0;url=./introduction.html">
+    <title>Vais Documentation</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Vais</h1>
-        <p class="subtitle">AI-Optimized Systems Programming Language</p>
-
-        <div class="languages">
-            <a href="./introduction.html" class="language-card">
-                <div class="language-flag">🇰🇷</div>
-                <div class="language-name">한국어</div>
-                <div class="language-native">Korean</div>
-            </a>
-
-            <a href="./en/index.html" class="language-card">
-                <div class="language-flag">🇬🇧</div>
-                <div class="language-name">English</div>
-                <div class="language-native">English</div>
-            </a>
-
-            <a href="./ja/index.html" class="language-card">
-                <div class="language-flag">🇯🇵</div>
-                <div class="language-name">日本語</div>
-                <div class="language-native">Japanese</div>
-            </a>
-
-            <a href="./zh/index.html" class="language-card">
-                <div class="language-flag">🇨🇳</div>
-                <div class="language-name">中文</div>
-                <div class="language-native">Chinese</div>
-            </a>
-        </div>
-
-        <footer>
-            <p>
-                <a href="https://github.com/vaislang/vais" target="_blank">GitHub</a> •
-                <a href="https://github.com/vaislang/vais/issues" target="_blank">Issues</a> •
-                MIT License
-            </p>
-        </footer>
-    </div>
+    <p>Redirecting to <a href="./introduction.html">한국어 문서</a>...</p>
 </body>
 </html>
-EOF
+INDEXEOF
 
 echo -e "${GREEN}✓ Language selector created!${NC}"
 
