@@ -8,6 +8,7 @@
 - [빠른 시작](./getting-started/quick-start.md)
 - [튜토리얼](./getting-started/tutorial.md)
 - [Getting Started (상세)](./guide/getting-started.md)
+- [에디터 지원](./getting-started/editors.md)
 
 # 가이드
 
@@ -27,6 +28,7 @@
 - [언어 사양](./language/language-spec.md)
 - [제네릭](./language/generics.md)
 - [타입 추론](./language/type-inference.md)
+- [이터레이터 타입 추론](./language/iterator-type-inference.md)
 - [고급 타입 시스템](./language/advanced-types.md)
 - [Slice Types](./language/slices.md)
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
@@ -57,6 +59,9 @@
 - [GPU 코드 생성](./compiler/gpu-codegen.md)
 - [JavaScript 코드 생성](./compiler/js-codegen.md)
 - [컴파일러 내부 구조](./compiler/internals.md)
+- [Inkwell 통합](./compiler/inkwell-integration.md)
+- [단형화 설계](./compiler/monomorphization-design.md)
+- [벤치마크 설계](./compiler/benchmark-design.md)
 
 # 개발자 도구
 
@@ -83,16 +88,24 @@
 - [Bindgen](./advanced/bindgen/README.md)
   - [C++ 지원](./advanced/bindgen/cpp-support.md)
   - [C++ 빠른 시작](./advanced/bindgen/cpp-quickstart.md)
+  - [디자인](./advanced/bindgen/design.md)
 - [WASM 컴포넌트](./advanced/wasm/README.md)
   - [Getting Started](./advanced/wasm/getting-started.md)
   - [컴포넌트 모델](./advanced/wasm/component-model.md)
   - [JS 인터롭](./advanced/wasm/js-interop.md)
   - [WASI](./advanced/wasm/wasi.md)
 - [Async 런타임](./advanced/async-runtime.md)
+- [국제화 (i18n)](./advanced/i18n-design.md)
+- [IPv6 구현](./advanced/ipv6-implementation.md)
+- [패키지 매니저](./advanced/package-manager-design.md)
+- [플러그인 시스템](./advanced/plugin-system-design.md)
+- [Range 타입 구현](./advanced/range-type-implementation.md)
+- [셀프 호스팅](./advanced/self-hosting-design.md)
 
 # 보안
 
 - [임포트 경로 보안](./security/import-path-security.md)
+- [보안 강화](./security/security-enhancement.md)
 
 ---
 
@@ -206,6 +219,15 @@
 - [팀 온보딩 가이드](./onboarding.md)
 - [기여 가이드](./contributing/contributing.md)
 - [구현 요약](./contributing/implementation-summaries.md)
+  - [전체 구현 요약](./contributing/summaries/implementation-summary.md)
+  - [비동기 타입 체킹](./contributing/summaries/async-type-checking.md)
+  - [Bindgen 구현](./contributing/summaries/bindgen-implementation.md)
+  - [C++ Bindgen 구현](./contributing/summaries/cpp-bindgen-implementation.md)
+  - [FFI 구현](./contributing/summaries/ffi-implementation.md)
+  - [GC 구현](./contributing/summaries/gc-implementation.md)
+  - [핫 리로드 구현](./contributing/summaries/hot-reload-implementation.md)
+  - [플레이그라운드 구현](./contributing/summaries/playground-implementation.md)
+  - [WASM 컴포넌트 구현](./contributing/summaries/wasm-component-implementation.md)
 - [리팩토링 요약](./contributing/refactoring-summary.md)
 - [로드맵](./contributing/roadmap.md)
 - [Production Readiness Checklist](./production-checklist.md)
