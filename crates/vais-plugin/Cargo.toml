@@ -9,7 +9,7 @@ license = "MIT"
 [dependencies]
 vais-ast = { path = "../vais-ast" }
 libloading = "0.9"
-toml = "0.9"
+toml = "1.0"
 serde = { workspace = true }
 
 [dev-dependencies]
