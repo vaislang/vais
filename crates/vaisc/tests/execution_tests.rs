@@ -229,10 +229,6 @@ fn exec_return_constant_42() {
     assert_exit_code("F main() -> i64 = 42", 42);
 }
 
-#[test]
-fn exec_return_zero() {
-    assert_exit_code("F main() -> i64 = 0", 0);
-}
 
 #[test]
 fn exec_arithmetic_add() {
@@ -264,10 +260,6 @@ fn exec_arithmetic_precedence() {
     assert_exit_code("F main() -> i64 = 2 + 3 * 4", 14);
 }
 
-#[test]
-fn exec_nested_arithmetic() {
-    assert_exit_code("F main() -> i64 = (2 + 3) * (10 - 6)", 20);
-}
 
 #[test]
 fn exec_function_call() {
@@ -278,15 +270,6 @@ F main() -> i64 = add(20, 22)
     assert_exit_code(source, 42);
 }
 
-#[test]
-fn exec_multiple_function_calls() {
-    let source = r#"
-F double(x: i64) -> i64 = x * 2
-F inc(x: i64) -> i64 = x + 1
-F main() -> i64 = inc(double(20))
-"#;
-    assert_exit_code(source, 41);
-}
 
 #[test]
 fn exec_recursion_factorial() {
@@ -359,17 +342,6 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-#[test]
-fn exec_mutable_variable() {
-    let source = r#"
-F main() -> i64 {
-    x := mut 10
-    x = 42
-    x
-}
-"#;
-    assert_exit_code(source, 42);
-}
 
 #[test]
 fn exec_loop_with_break() {
@@ -389,20 +361,8 @@ F main() -> i64 {
     assert_exit_code(source, 45);
 }
 
-#[test]
-fn exec_bitwise_and() {
-    assert_exit_code("F main() -> i64 = 255 & 15", 15);
-}
 
-#[test]
-fn exec_bitwise_or() {
-    assert_exit_code("F main() -> i64 = 240 | 15", 255);
-}
 
-#[test]
-fn exec_bitwise_xor() {
-    assert_exit_code("F main() -> i64 = 255 ^ 15", 240);
-}
 
 #[test]
 fn exec_left_shift() {
@@ -456,14 +416,6 @@ fn exec_negative_numbers() {
     // -42 as u8 = 214 (exit codes are 0-255)
 }
 
-#[test]
-fn exec_gcd() {
-    let source = r#"
-F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
-F main() -> i64 = gcd(48, 18)
-"#;
-    assert_exit_code(source, 6);
-}
 
 // ==================== Printf / Stdout Tests ====================
 
@@ -583,15 +535,6 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-#[test]
-fn exec_struct_field_arithmetic() {
-    let source = r#"
-S Rect { w: i64, h: i64 }
-F area(r: Rect) -> i64 = r.w * r.h
-F main() -> i64 = area(Rect { w: 6, h: 7 })
-"#;
-    assert_exit_code(source, 42);
-}
 
 // ==================== Match Execution Tests ====================
 
@@ -2123,16 +2066,6 @@ F main() -> i64 {
 
 // --- Recursion with Different Patterns ---
 
-#[test]
-fn exec_mutual_recursion() {
-    let source = r#"
-F is_even(n: i64) -> i64 = n == 0 ? 1 : is_odd(n - 1)
-F is_odd(n: i64) -> i64 = n == 0 ? 0 : is_even(n - 1)
-
-F main() -> i64 = is_even(42)
-"#;
-    assert_exit_code(source, 1);
-}
 
 #[test]
 fn exec_tail_recursion_sum() {

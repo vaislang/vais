@@ -166,178 +166,31 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📜 Phase 히스토리
 
-> 상세 체크리스트는 git log를 참조하세요.
+> 상세 체크리스트는 git log를 참조하세요. Phase 번호는 누적 연번입니다.
 
-| Phase | 이름 | 주요 성과 | E2E |
-|-------|------|----------|-----|
-| **1~4** | 핵심 컴파일러 ~ 향후 개선 | Lexer/Parser/TC/Codegen, Generics, Traits, Closures, Async/Await, 표준 라이브러리, LSP/REPL/Debugger, Formatter | — |
-| **5~6** | 품질 개선 | 테스트 46→402개, CI/CD, i18n, 플러그인 | — |
-| **7~9** | 아키텍처 · 생산성 · 언어 완성도 | Wasm/inkwell/JIT/Python/Node, `?`/`defer`/패키지매니저/Playground/GC/GPU, Bidirectional TC/Macro/LTO/PGO | — |
-| **10~12** | Self-hosting ~ 프로덕션 안정화 | 부트스트래핑 17,397줄, Effect/Dependent/Linear Types, MIR 도입, Query-based 아키텍처 | — |
-| **13~28** | 품질 보증 ~ 크로스플랫폼 | E2E 128→165, monomorphization, Homebrew/Docker, GPU 런타임, SSA/Enum/f64 codegen 수정 | — |
-| **29~37** | 토큰 절감 · Stdlib · 프로덕션 완성 | inkwell 기본+TCO, HTTP/SQLite/PG, Borrow Checker strict, **50K lines 63ms**, CI green | — |
-| **38~40** | 셀프호스팅 100% | **부트스트랩 달성** (SHA256 일치), MIR Borrow Checker, Stdlib 276 assertions | — |
-| **41~52** | 언어 진화 · Stdlib 확충 | 에러복구/클로저/이터레이터, Incremental TC, cfg 조건부 컴파일, 패키지매니저 완성 | 392 |
-| **53~58** | 테스트 · WASM · Async | --coverage, WASM codegen (wasm32), WASI, Async 이벤트 루프/Future | 435 |
-| **59~64** | JS Codegen · 타입 추론 · 패키지 | vais-codegen-js (ESM), InferFailed E032, execution_tests 95개, SemVer/workspace | 467 |
-| **65~68** | CI · 코드 품질 · 메모리 모델 | Windows CI, 릴리스 워크플로우, builtins 분할, MIR Borrow Checker E100~E105 | 475 |
-| **Phase 1~6** | Lifetime · 성능 · Selfhost · Codegen · Slice | CFG/NLL, 병렬 TC/CG (4.14x), selfhost 21/21 clang 100%, Slice fat pointer | 498 |
-| **Phase 7~13** | 에코시스템 · 보안 · JIT | 9개 패키지, Registry UI, SIMD/SHA-256, AES-256 FIPS 197, JIT panic→Result | 504 |
-| **Phase 14~26** | 토큰 · 문서 · 성능 | 토큰 1,085→750 (-31%), auto-return, swap 빌트인, E2E 모듈 분할, clone 제거 | 520 |
-| **Phase 27~38** | 언어 확장 · 타입 시스템 | where 절, pattern alias, capture mode, trait alias, impl Trait, const eval 확장, HKT, GAT, derive 매크로 | 571 |
-| **Phase 39** | 성능 최적화 | Incremental TC/Codegen, Tarjan SCC, 캐시 히트율 벤치마크 | 571 |
-| **Phase 40** | 타입 시스템 건전성 | Trait bounds 검증, generic substitution 보완, HKT arity 체크 | 589 |
-| **Phase 41** | Codegen 완성도 | Range `{i64,i64,i1}`, i64 fallback 제거, vtable null 방지, Slice open-end | 596 |
-| **Phase 42** | Lambda & Lazy 완성 | ByRef/ByMutRef 캡처 포인터 전달, lazy thunk 지연 평가, force computed 체크 | 614 |
-| **Phase 43** | Async 런타임 | Spawn Future<T> 래핑, Await sched_yield(), Yield inner_type | 650 |
-| **Phase 44** | Selfhost 교차검증 | Phase 40-43 예제 4개, cross-verify 13개, selfhost 지원 매트릭스 | 655 |
-| **Phase 45** | 안정화 & 문서 동기화 | 미완성 기능 테이블 전체 완료, closures.md+lazy-evaluation.md 신규 | 655 |
-| **Phase 46** | 컴파일러 견고성 | ICE eprintln→always-on, InternalError C007, parser let-else | 655 |
-| **Phase 47** | 리뷰 수정 | 셸 인젝션, tmp 파일, 캐시 최적화, unreachable→에러 12건 | 655 |
-| **Phase 49** | CI 수정 | cargo fmt, mdbook build.sh, playground.yml v4 | 655 |
-| **Phase 50** | 한국어 Docs 보완 | 문자열 보간 ~{}, cookbook 메서드 호출 40건, 키워드/연산자 문서 | 655 |
-| **Phase 51** | Docs 번역 Sync | quick-start 한국어 보강, SUMMARY 22건 링크, EN/JA/ZH SUMMARY 확장 (14→215줄), 번역본 12파일 확장 (+6,317줄) | 655 |
-| **Phase 52** | 리뷰 수정 | quick-start loop 문법 수정, EN/JA/ZH SUMMARY 링크 20건×3, Iterator Type Inference, Docker 섹션 동기화 | 655 |
-| **Phase 53** | 테스트 & 코드 품질 | execution_tests +31, builtins 모듈 분할, SavedGenericState, JS codegen +18 | 655 |
-| **Phase 54** | 코드 품질 & 모듈 분할 R4 | 대형 파일 5개 분할 (26개 서브모듈), unwrap 6건 fix, async TODO 정리 | 655 |
-| **Phase 55** | 테스트 수정 & TC 성능 | execution_tests 7건 수정 (slice/where/enum/pattern), TC 50K -5% (#[inline] 11파일) | 655 |
-| **Phase 56** | 리뷰 발견사항 20건 | SQL Injection fix, .bak 삭제, borrow_check tests 분할, formatter→vais-ast, div-by-zero guard, storage 보안, WASM fuel_limit, mangle buffer write, lambda scope restoration, CI docs job | 655 |
-| **Phase 57** | 코드 품질 & 모듈 분할 R5 | Clippy 6건 fix, compile.rs→5 모듈, build.rs→5 모듈, package.rs→7 모듈, Token::Where 누락 수정 | 655 |
-
----
-
-## 현재 작업 — Phase 51: 홈페이지 & Docs 한국어 보완 + 번역 Sync (2026-02-16)
-모드: 자동진행
-- [x] 1. quick-start.md 한국어 보강 (42→107줄 수준) (Sonnet 위임) ✅
-- [x] 2. SUMMARY.md 누락 파일 22건 링크 추가 (Sonnet 위임) ✅
-- [x] 3. 번역본 SUMMARY.md 확장 EN/JA/ZH — 14→215줄 (Sonnet 위임) ✅
-- [x] 4. 번역본 콘텐츠 sync — EN/JA/ZH 각 4파일 확장 (Sonnet 위임) ✅
-  EN: 1,026→2,719줄(+165%), JA: 1,026→2,796줄(+172%), ZH: 855→2,567줄(+200%)
-- [x] 5. 검증: mdbook build 4개 언어 모두 통과 ✅
-진행률: 5/5 (100%)
-
-### 리뷰 발견사항 (2026-02-16) — Phase 52로 이관
-> 출처: /team-review Phase 51 → Phase 52에서 수정 진행
-
-## 현재 작업 — Phase 52: 리뷰 수정 — Docs 문법 오류 & SUMMARY 링크 동기화 (2026-02-16)
-모드: 자동진행
-- [x] 1. quick-start.md C-style loop 문법 오류 수정 → `L i:0..5` (Sonnet 위임) ✅
-  변경: quick-start.md (line 82: `L i := 0; i < 5; i += 1` → `L i:0..5`)
-- [x] 2. EN/JA/ZH SUMMARY.md 누락 링크 20건 추가 — Compiler/Advanced/Contributing/Security (Sonnet 위임) ✅
-  변경: en/ja/zh SUMMARY.md (Compiler +3, Bindgen/design +1, Advanced +6, Security +1, Contributing/summaries +9 = 20건 × 3파일)
-- [x] 3. EN/JA/ZH 번역 구조 불일치 수정 — Iterator Type Inference 링크, Docker 섹션 (Sonnet+Opus) ✅
-  변경: en/ja/zh SUMMARY.md (Iterator Type Inference 링크 추가), ja/zh installation.md (Docker 섹션 추가)
-진행률: 3/3 (100%)
-
-## 현재 작업 — Phase 53: 테스트 커버리지 & 코드 품질 개선 (2026-02-16)
-모드: 자동진행
-- [x] 1. Execution Test 확장 — 미커버 예제 31개 추가 (Sonnet 위임) ✅
-  변경: vaisc/tests/execution_tests.rs (99→130 테스트, +31개: range loop, lazy, closure, struct method, enum match, slice, where, trait alias, async, pattern match, generics, recursion)
-- [x] 2. checker_module SavedGenericState struct 리팩토링 (Sonnet 위임) ✅
-  변경: vais-types/src/checker_module.rs, checker_fn.rs (4-tuple→SavedGenericState struct, 8개 호출처 업데이트, -54줄)
-- [x] 3. vais-types builtins.rs 모듈 분할 (1,734줄→서브모듈) (Sonnet 위임) ✅
-  변경: vais-types/src/builtins.rs→builtins/ (12개 서브모듈: core/print/memory/stdlib/file_io/simd/gc/system/io/math/enum_builtins)
-- [x] 4. JS Codegen 테스트 확장 — Phase 42-44 기능 커버 (Sonnet 위임) ✅
-  변경: vais-codegen-js/tests/integration_tests.rs (33→51 테스트, +18개: range loop, lazy, closure, async, pattern alias, struct methods)
-- [x] 5. ROADMAP/README 수치 동기화 + Phase 히스토리 정리 (Sonnet 위임) ✅
-  변경: ROADMAP.md (테스트 2,500+→3,100+, Phase 45-52 히스토리 확인), README.md (테스트 수치 동기화)
-진행률: 5/5 (100%)
-
-### 리뷰 발견사항 (2026-02-16) — Phase 54로 이관
-> 출처: /team-review Phase 53 → 교차 검증 완료
-
-- [x] 1. [아키텍처] simd.rs:6 pub(crate) → pub(super) 가시성 통일 (Critical) ✅
-- [x] 2. [테스트] execution_tests.rs assert_run_success dead code 삭제 (Warning) ✅
-- [x] 3. [아키텍처] SavedGenericState 필드 주석 추가 (Warning) ✅
-진행률: 3/3 (100%)
-
-## 현재 작업 — Phase 54: 코드 품질 & 모듈 분할 Round 4 (2026-02-16)
-모드: 자동진행
-- [x] 1. 대형 파일 모듈 분할 — vais-types (Sonnet 위임) ✅
-  변경: checker_expr.rs (1,673줄) → checker_expr/ 9개 서브모듈 (mod/stmts/literals/control_flow/calls/collections/references/async_effects/special)
-  변경: ownership.rs (1,498줄) → ownership/ 9개 서브모듈 (types/core/var_tracking/copy_check/move_track/borrow_track/ast_check/helpers/tests)
-- [x] 2. 대형 파일 모듈 분할 — vais-codegen (Sonnet 위임) [∥1] ✅
-  변경: inkwell/gen_expr.rs (1,419줄) → gen_expr/ 8개 서브모듈 (literal/var/binary/unary/call/lambda/misc)
-  변경: contracts.rs (1,270줄) → contracts/ 8개 서브모듈 (requires/ensures/auto_checks/assert_assume/invariants/decreases/helpers)
-  변경: optimize/ir_passes.rs (1,266줄) → ir_passes/ 9개 서브모듈 (constant_folding/dead_code/tail_call/cse/strength_reduction/branch_opt/loop_opt/helpers)
-- [x] 3. vaisc unwrap 안전화 — 295건 감사 & 6건 critical fix (Sonnet 위임) [∥1] ✅
-  변경: commands/advanced.rs (PGO/watch 경로 검증), registry/cache.rs (홈 디렉토리 fallback), registry/archive.rs (보안 검증 강화), incremental/graph.rs (Tarjan SCC 방어적 처리)
-- [x] 4. Async TODO 코멘트 개선 (Opus 직접) ✅
-  변경: generate_expr.rs:1659 — sched_yield() cooperative yielding은 현재 아키텍처에서 올바른 접근, event-driven 전환은 별도 RFC 분리
-- [x] 5. ROADMAP 수치 동기화 ✅
-진행률: 5/5 (100%)
-
-## 현재 작업 — Phase 55: 테스트 수정 & TC 성능 회귀 수정 (2026-02-16)
-모드: 자동진행
-- [x] 1. execution_tests 실패 7건 수정 — enum/pattern/slice/where TC+Parser 버그 (Sonnet 위임) ✅
-  변경: execution_tests.rs (3 테스트 소스 Vais 문법 수정), references.rs (&[array]→Slice), lookup.rs (Generic bounds method lookup). 리뷰 반영: resolve.rs dead code 제거 (Type::Ref(Array)→Slice — parser가 &[T]를 직접 Type::Slice로 파싱)
-- [x] 2. TC 50K +6.5% 성능 회귀 조사 및 수정 — #[inline] 5파일 hot-path 함수 (Sonnet 위임) [∥1] ✅
-  변경: scope.rs + inference.rs + resolve.rs + literals.rs + references.rs (#[inline] 추가), 리뷰 반영: 대형함수 6개 #[inline] 제거 (collections/special/control_flow/calls 3개)
-- [x] 3. ROADMAP/README 수치 동기화 ✅
-진행률: 3/3 (100%)
-
----
-
-## 리뷰 발견사항 (2026-02-16) — 전체 프로젝트 완성도 평가
-> 출처: /team-review 프로젝트 전체 (4관점: 보안/성능/정확성/아키텍처)
-
-### Critical (즉시 수정 필요)
-- [x] 1. [보안] SQL Injection 수정 — sqlx 파라미터 바인딩 전환 (Critical) ✅
-  변경: db.rs (category/keyword format!→?N 파라미터 바인딩, bind_values Vec 동적 관리)
-- [x] 2. [아키텍처] .bak 파일 8개 삭제 + .gitignore 추가 (Critical) ✅
-  변경: 8개 .bak 파일 삭제 (.gitignore에 *.bak 이미 존재)
-- [x] 3. [아키텍처] borrow_check/tests.rs 3,280줄 → 8개 파일 분할 (Critical) ✅
-  변경: tests.rs→tests/ (helpers/copy/move_check/borrow/cfg/nll/lifetime/integration), 49 테스트 통과
-- [x] 4. [아키텍처] vais-lsp에서 vais-codegen 의존성 제거 (Critical) ✅
-  변경: formatter.rs를 vais-codegen→vais-ast로 이동, LSP Cargo.toml에서 codegen 의존성 제거
-- [x] 5. [정확성] control_flow.rs checks[0] → .first() 안전 인덱싱 (Critical) ✅
-  변경: Pattern::Or/Tuple에서 checks.is_empty() 방어 코드 추가
-- [x] 6. [정확성] package.rs unwrap() 3곳 — 테스트 코드이므로 수정 불필요 (Critical) ✅
-  변경: 없음 (1248/1426/1458 모두 #[test] 함수 내부, 테스트 unwrap은 관행상 허용)
-- [x] 7. [성능] specialization.rs collect()+is_empty() → .any() (Critical) ✅
-  변경: type_implements_trait/resolve_impl에서 Vec collect→.any() 최적화
-
-### Warning (수정 권장)
-- [x] 8. [보안] registry db.rs unwrap 30건 → map_err 에러 처리 (Warning) ✅
-  변경: db.rs 30+ unwrap→and_then/filter_map/unwrap_or_default (UUID/DateTime/JSON 파싱 안전화)
-- [x] 9. [보안] storage.rs path traversal 검증 추가 (Warning) ✅
-  변경: validate_path_component() 추가, 6개 public 메서드에서 검증 호출
-- [x] 10. [보안] playground rate limiter cleanup 추가 (Warning) ✅
-  변경: check()에서 빈 IP 항목 즉시 제거 + 확률적 글로벌 cleanup (1% @ >100 entries)
-- [x] 11. [보안] archive bomb 압축 해제 크기 제한 추가 (Warning) ✅
-  변경: extract_to_temp()에 MAX_UNCOMPRESSED_SIZE(100MB) + MAX_FILE_COUNT(10K) 제한 추가
-- [x] 12. [보안] WASM fuel_limit 기본값 강제 (Warning) ✅
-  변경: consume_fuel 항상 활성화, fuel_limit.unwrap_or(1_000_000_000) 기본값 강제
-- [x] 13. [성능] lookup_var_info — 이미 최적 (Warning) ✅
-  변경: 없음 (scope 스택 역순회 O(depth)×HashMap O(1), depth≈5~10으로 플랫맵 재구축 비용이 더 큼)
-- [x] 14. [성능] substitute_type — 이미 changed 플래그 최적화 적용됨 (Warning) ✅
-  변경: 없음 (모든 variant에서 changed 플래그로 불필요 clone 방지 확인)
-- [x] 15. [성능] mangle_type format! → buffer write 패턴 (Warning) ✅
-  변경: mangle_type_into(buf) 내부 헬퍼 추가, mangle_name/mangle_name_with_consts도 Vec 제거
-- [x] 16. [성능] lambda_closure HashSet clone → scope restoration (Warning) ✅
-  변경: 8개 bound.clone()→스코프 복원 패턴 (new_bindings Vec 추적+종료 시 remove)
-- [x] 17. [정확성] division by zero guard 추가 (Warning) ✅
-  변경: Text IR+Inkwell 양쪽에서 sdiv/srem 전 icmp eq→br→abort()/unreachable 가드 삽입
-- [x] 18. [아키텍처] CI에 cargo doc --no-deps 체크 추가 (Warning) ✅
-  변경: ci.yml에 docs job 추가 (RUSTDOCFLAGS="-D warnings", workspace --exclude python/node)
-### 중장기 개선 (별도 RFC)
-- [x] 19. [파서] 스택 오버플로 5건 — 별도 RFC로 분리 ✅
-- [x] 20. [언어] HKT/GAT 파서 8건 — 별도 RFC로 분리 ✅
-진행률: 20/20 (100%)
-
-## 현재 작업 — Phase 57: 코드 품질 마무리 & 대형 파일 모듈 분할 R5 (2026-02-17)
-모드: 자동진행
-- [x] 1. Clippy 경고 6건 수정 — needless_return (Sonnet 위임) ✅ 2026-02-17
-  변경: checker_expr/control_flow.rs(3건), collections.rs(3건) — tail expression에서 불필요 return 제거
-- [x] 2. compile.rs 1,775줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
-  변경: compile.rs→compile/ (mod.rs+per_module+parallel+pipeline+native+wasm, 5 서브모듈)
-- [x] 3. build.rs 1,688줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
-  변경: build.rs→build/ (mod.rs+utils+backend+gpu+core, 5 서브모듈)
-- [x] 4. package.rs 1,532줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
-  변경: package.rs→package/ (mod.rs+types+features+workspace+manifest+resolution+tests, 7 서브모듈)
-- [x] 5. ROADMAP/README 수치 동기화 (Sonnet 위임) ✅ 2026-02-17
-  변경: README.md 테스트 수치 3,300+→4,000+, Token::Where 누락 수정 (vais-node/vais-python)
-진행률: 5/5 (100%)
+| # | 이름 | 주요 성과 | E2E |
+|---|------|----------|-----|
+| 1 | 핵심 컴파일러 | Lexer/Parser/TC/Codegen, Generics, Traits, Closures, Async/Await, Stdlib, LSP/REPL/Debugger, Formatter | — |
+| 2 | 품질 개선 | 테스트 46→402개, CI/CD, i18n, 플러그인 | — |
+| 3 | 아키텍처 · 언어 완성도 | Wasm/inkwell/JIT/Python/Node, `?`/`defer`/패키지매니저/Playground/GC/GPU, Bidirectional TC/Macro/LTO/PGO | — |
+| 4 | Self-hosting · 프로덕션 | 부트스트래핑 17K줄, Effect/Dependent/Linear Types, MIR, Query-based 아키텍처 | — |
+| 5 | 품질 보증 · 크로스플랫폼 | E2E 128→165, monomorphization, Homebrew/Docker, GPU, SSA/Enum/f64 codegen 수정 | — |
+| 6 | 토큰 절감 · Stdlib · CI | inkwell 기본+TCO, HTTP/SQLite/PG, Borrow Checker strict, **50K lines 63ms** | — |
+| 7 | 셀프호스팅 100% | **부트스트랩 달성** (SHA256 일치), MIR Borrow Checker, Stdlib 276 assertions | — |
+| 8 | 언어 진화 · Stdlib 확충 | 에러복구/클로저/이터레이터, Incremental TC, cfg 조건부 컴파일, 패키지매니저 완성 | 392 |
+| 9 | 테스트 · WASM · Async | --coverage, WASM codegen (wasm32), WASI, Async 이벤트 루프/Future | 435 |
+| 10 | JS Codegen · 타입 추론 | vais-codegen-js (ESM), InferFailed E032, execution_tests 95개, SemVer/workspace | 467 |
+| 11 | CI · 코드 품질 · 메모리 모델 | Windows CI, 릴리스 워크플로우, builtins 분할, MIR Borrow Checker E100~E105 | 475 |
+| 12 | Lifetime · 성능 · Codegen · Slice | CFG/NLL, 병렬 TC/CG (4.14x), selfhost 21/21 clang 100%, Slice fat pointer | 498 |
+| 13 | 에코시스템 · 보안 · JIT | 9개 패키지, Registry UI, SIMD/SHA-256, AES-256 FIPS 197, JIT panic→Result | 504 |
+| 14 | 토큰 · 문서 · 성능 최적화 | 토큰 1,085→750 (-31%), auto-return, swap 빌트인, clone 제거 | 520 |
+| 15 | 언어 확장 · 타입 시스템 | where 절, pattern alias, capture mode, trait alias, impl Trait, const eval, HKT, GAT, derive 매크로 | 571 |
+| 16 | 성능 · 타입 건전성 | Incremental TC/Codegen, Tarjan SCC, Trait bounds 검증, HKT arity 체크 | 589 |
+| 17 | Codegen · Lambda · Async | Range `{i64,i64,i1}`, i64 fallback 제거, ByRef/ByMutRef 캡처, lazy thunk, Spawn/Await | 650 |
+| 18 | Selfhost · 안정화 · 견고성 | cross-verify 13개, 미완성 기능 완료, ICE→InternalError, parser let-else | 655 |
+| 19 | 리뷰 · Docs · 코드 품질 | 셸 인젝션/보안 20건 수정, 한국어 Docs, EN/JA/ZH 번역 Sync, 모듈 분할 R4/R5 | 655 |
+| 20 | Codegen 버그 수정 | div-by-zero guard, @abort 선언 복구, current_block 추적 수정, E2E +44 복구 | 647 |
+| 21 | 정리: ROADMAP 통합 & E2E 중복 제거 | Phase 히스토리 연번화 (366→209줄), execution_tests 중복 10개 제거 | 637 |
 
 ---
 
