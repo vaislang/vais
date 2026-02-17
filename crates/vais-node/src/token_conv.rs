@@ -125,6 +125,8 @@ pub fn token_to_string(token: &Token) -> String {
         // Lazy evaluation keywords
         Token::Lazy => "Lazy",
         Token::Force => "Force",
+        // Where clause
+        Token::Where => "Where",
         // Lifetime tokens
         Token::Lifetime(lt) => return format!("Lifetime({})", lt),
     }

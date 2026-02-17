@@ -432,10 +432,10 @@ impl TypeChecker {
                         }
                     }
 
-                    return Some(Ok(ResolvedType::Named {
+                    Some(Ok(ResolvedType::Named {
                         name: name.node.clone(),
                         generics: inferred_generics,
-                    }));
+                    }))
                 // Then check for union (uses same syntax: `UnionName { field: value }`)
                 } else if let Some(union_def) = self.unions.get(&name.node).cloned() {
                     // Create fresh type variables for generic parameters
@@ -489,10 +489,10 @@ impl TypeChecker {
                         })
                         .collect();
 
-                    return Some(Ok(ResolvedType::Named {
+                    Some(Ok(ResolvedType::Named {
                         name: name.node.clone(),
                         generics: inferred_generics,
-                    }));
+                    }))
                 } else {
                     // Get all type names for suggestion
                     let mut type_candidates: Vec<&str> = Vec::new();
@@ -503,11 +503,11 @@ impl TypeChecker {
 
                     let suggestion =
                         types::find_similar_name(&name.node, type_candidates.into_iter());
-                    return Some(Err(TypeError::UndefinedType {
+                    Some(Err(TypeError::UndefinedType {
                         name: name.node.clone(),
                         span: Some(name.span),
                         suggestion,
-                    }));
+                    }))
                 }
             }
 

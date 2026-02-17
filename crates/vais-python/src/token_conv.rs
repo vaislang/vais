@@ -78,6 +78,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::String(_) => "String",
         Token::Ident(_) => "Ident",
         Token::Lifetime(_) => "Lifetime",
+        Token::Where => "Where",
         Token::Plus => "Plus",
         Token::Minus => "Minus",
         Token::Star => "Star",

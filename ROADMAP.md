@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-16
+> **최종 업데이트**: 2026-02-17
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 3,300+ (E2E 655, Execution 130, 통합 354+) |
+| 전체 테스트 | 4,000+ (통합 2,624, 단위 1,379) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -202,6 +202,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 54** | 코드 품질 & 모듈 분할 R4 | 대형 파일 5개 분할 (26개 서브모듈), unwrap 6건 fix, async TODO 정리 | 655 |
 | **Phase 55** | 테스트 수정 & TC 성능 | execution_tests 7건 수정 (slice/where/enum/pattern), TC 50K -5% (#[inline] 11파일) | 655 |
 | **Phase 56** | 리뷰 발견사항 20건 | SQL Injection fix, .bak 삭제, borrow_check tests 분할, formatter→vais-ast, div-by-zero guard, storage 보안, WASM fuel_limit, mangle buffer write, lambda scope restoration, CI docs job | 655 |
+| **Phase 57** | 코드 품질 & 모듈 분할 R5 | Clippy 6건 fix, compile.rs→5 모듈, build.rs→5 모듈, package.rs→7 모듈, Token::Where 누락 수정 | 655 |
 
 ---
 
@@ -323,6 +324,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 19. [파서] 스택 오버플로 5건 — 별도 RFC로 분리 ✅
 - [x] 20. [언어] HKT/GAT 파서 8건 — 별도 RFC로 분리 ✅
 진행률: 20/20 (100%)
+
+## 현재 작업 — Phase 57: 코드 품질 마무리 & 대형 파일 모듈 분할 R5 (2026-02-17)
+모드: 자동진행
+- [x] 1. Clippy 경고 6건 수정 — needless_return (Sonnet 위임) ✅ 2026-02-17
+  변경: checker_expr/control_flow.rs(3건), collections.rs(3건) — tail expression에서 불필요 return 제거
+- [x] 2. compile.rs 1,775줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
+  변경: compile.rs→compile/ (mod.rs+per_module+parallel+pipeline+native+wasm, 5 서브모듈)
+- [x] 3. build.rs 1,688줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
+  변경: build.rs→build/ (mod.rs+utils+backend+gpu+core, 5 서브모듈)
+- [x] 4. package.rs 1,532줄 모듈 분할 (Sonnet 위임) ✅ 2026-02-17
+  변경: package.rs→package/ (mod.rs+types+features+workspace+manifest+resolution+tests, 7 서브모듈)
+- [x] 5. ROADMAP/README 수치 동기화 (Sonnet 위임) ✅ 2026-02-17
+  변경: README.md 테스트 수치 3,300+→4,000+, Token::Where 누락 수정 (vais-node/vais-python)
+진행률: 5/5 (100%)
 
 ---
 

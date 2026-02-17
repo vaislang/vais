@@ -89,12 +89,12 @@ impl TypeChecker {
                     };
                     // If branch types don't unify, treat if-else as statement (Unit type)
                     if self.unify(&then_type, &else_type).is_ok() {
-                        return Some(Ok(then_type));
+                        Some(Ok(then_type))
                     } else {
-                        return Some(Ok(ResolvedType::Unit));
+                        Some(Ok(ResolvedType::Unit))
                     }
                 } else {
-                    return Some(Ok(ResolvedType::Unit));
+                    Some(Ok(ResolvedType::Unit))
                 }
             }
 
