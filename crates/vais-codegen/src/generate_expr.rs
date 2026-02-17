@@ -408,6 +408,8 @@ impl CodeGenerator {
                             ir.push_str("  call void @abort()\n");
                             ir.push_str("  unreachable\n");
                             ir.push_str(&format!("{}:\n", div_ok_label));
+                            self.fn_ctx.current_block = div_ok_label;
+                            self.needs_unwrap_panic = true;
                         }
 
                         ir.push_str(&format!(
@@ -959,6 +961,8 @@ impl CodeGenerator {
                     ir.push_str("  call void @abort()\n");
                     ir.push_str("  unreachable\n");
                     ir.push_str(&format!("{}:\n", div_ok_label));
+                    self.fn_ctx.current_block = div_ok_label;
+                    self.needs_unwrap_panic = true;
                 }
 
                 let result = self.next_temp(counter);

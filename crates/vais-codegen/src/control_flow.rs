@@ -298,18 +298,20 @@ impl CodeGenerator {
 
                         // Guard passed - execute body
                         writeln!(ir, "{}:", guard_pass).unwrap();
+                        self.fn_ctx.current_block = guard_pass.clone();
                         let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                         ir.push_str(&body_ir);
-                        arm_values.push((body_val, guard_pass.clone()));
+                        arm_values.push((body_val, self.fn_ctx.current_block.clone()));
                         writeln!(ir, "  br label %{}", merge_label).unwrap();
 
                         // Guard failed - go to default
                         writeln!(ir, "{}:", guard_fail).unwrap();
                         writeln!(ir, "  br label %{}", default_label).unwrap();
                     } else {
+                        self.fn_ctx.current_block.clone_from(label);
                         let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                         ir.push_str(&body_ir);
-                        arm_values.push((body_val, label.clone()));
+                        arm_values.push((body_val, self.fn_ctx.current_block.clone()));
                         writeln!(ir, "  br label %{}", merge_label).unwrap();
                     }
 
@@ -391,6 +393,7 @@ impl CodeGenerator {
 
                     // Generate arm body (bindings already done)
                     writeln!(ir, "{}:", arm_body_label).unwrap();
+                    self.fn_ctx.current_block.clone_from(&arm_body_label);
                 } else {
                     writeln!(
                         ir,
@@ -401,6 +404,7 @@ impl CodeGenerator {
 
                     // Generate arm body
                     writeln!(ir, "{}:", arm_body_label).unwrap();
+                    self.fn_ctx.current_block.clone_from(&arm_body_label);
 
                     // Bind pattern variables if needed
                     let bind_ir = self.generate_pattern_bindings_typed(
@@ -414,7 +418,10 @@ impl CodeGenerator {
 
                 let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
-                arm_values.push((body_val, arm_body_label.clone()));
+                // Use actual current block (may differ from arm_body_label if body
+                // inserted intermediate labels, e.g., division-by-zero guard)
+                let actual_block = self.fn_ctx.current_block.clone();
+                arm_values.push((body_val, actual_block));
                 writeln!(ir, "  br label %{}", merge_label).unwrap();
 
                 current_label = next_label;
