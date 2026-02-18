@@ -157,7 +157,7 @@ impl Linearity {
 /// Variable info (internal to type checker).
 /// Reserved for linear/affine type tracking.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Fields used by check_linear_vars_at_scope_exit (linear type enforcement, reserved)
 pub(crate) struct VarInfo {
     pub(crate) ty: ResolvedType,
     pub(crate) is_mut: bool,

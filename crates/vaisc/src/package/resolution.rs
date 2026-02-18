@@ -4,16 +4,6 @@ use super::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Resolve only path dependencies for a package (legacy behavior).
-/// Superseded by SemVer resolver; kept for backward compatibility.
-#[allow(dead_code)]
-pub fn resolve_dependencies(
-    manifest: &PackageManifest,
-    base_dir: &Path,
-) -> PackageResult<Vec<ResolvedDependency>> {
-    resolve_all_dependencies(manifest, base_dir, None)
-}
-
 /// Resolve all dependencies (path + registry) for a package.
 ///
 /// When `cache_root` is provided, registry dependencies (version-only or detailed

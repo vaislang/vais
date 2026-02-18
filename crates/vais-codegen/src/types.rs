@@ -173,7 +173,7 @@ pub(crate) struct ClosureInfo {
 
 /// Information about a lazy thunk (deferred evaluation)
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Fields reserved for lazy evaluation codegen
 pub(crate) struct LazyThunkInfo {
     /// The generated LLVM thunk function name
     pub thunk_name: String,
@@ -186,7 +186,7 @@ pub(crate) struct LazyThunkInfo {
 /// Information about an await point in an async function.
 /// Used to track suspension points in the async state machine.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Fields reserved for async state machine codegen
 pub(crate) struct AsyncAwaitPoint {
     /// State index after this await
     pub state_index: usize,
@@ -199,7 +199,7 @@ pub(crate) struct AsyncAwaitPoint {
 /// Information about the current async function being compiled.
 /// Tracks the state machine structure for async function code generation.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Fields reserved for async function codegen
 pub(crate) struct AsyncFunctionInfo {
     /// Original function name
     pub name: String,

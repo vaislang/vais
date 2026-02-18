@@ -584,12 +584,12 @@ impl TypeChecker {
                     .or_else(|| Self::contains_unresolved_type(err))
             }
             ResolvedType::Tuple(elems) => {
-                elems.iter().find_map(|e| Self::contains_unresolved_type(e))
+                elems.iter().find_map(Self::contains_unresolved_type)
             }
             ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 params
                     .iter()
-                    .find_map(|p| Self::contains_unresolved_type(p))
+                    .find_map(Self::contains_unresolved_type)
                     .or_else(|| Self::contains_unresolved_type(ret))
             }
             ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => {
@@ -598,14 +598,14 @@ impl TypeChecker {
             ResolvedType::Dependent { base, .. } => Self::contains_unresolved_type(base),
             ResolvedType::Vector { element, .. } => Self::contains_unresolved_type(element),
             ResolvedType::Named { generics, .. } => {
-                generics.iter().find_map(|g| Self::contains_unresolved_type(g))
+                generics.iter().find_map(Self::contains_unresolved_type)
             }
             ResolvedType::DynTrait { generics, .. } => {
-                generics.iter().find_map(|g| Self::contains_unresolved_type(g))
+                generics.iter().find_map(Self::contains_unresolved_type)
             }
             ResolvedType::Associated { base, generics, .. } => {
                 Self::contains_unresolved_type(base)
-                    .or_else(|| generics.iter().find_map(|g| Self::contains_unresolved_type(g)))
+                    .or_else(|| generics.iter().find_map(Self::contains_unresolved_type))
             }
             // All other types (primitives, Never, Generic, ConstGeneric, ImplTrait,
             // HigherKinded, Lifetime) are acceptable outside of monomorphization contexts.

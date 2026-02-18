@@ -20,12 +20,7 @@ pub struct WorkspaceConfig {
 /// A resolved workspace with all member packages.
 /// Used by workspace resolution functions for multi-package builds.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ResolvedWorkspace {
-    /// Root directory of the workspace
-    pub root: PathBuf,
-    /// Root manifest
-    pub root_manifest: PackageManifest,
     /// Resolved member packages (directory path, manifest)
     pub members: Vec<WorkspaceMember>,
 }
@@ -123,11 +118,7 @@ pub fn resolve_workspace_members(workspace_root: &Path) -> PackageResult<Resolve
         }
     }
 
-    Ok(ResolvedWorkspace {
-        root: workspace_root.to_path_buf(),
-        root_manifest: manifest,
-        members,
-    })
+    Ok(ResolvedWorkspace { members })
 }
 
 /// Resolve dependencies with `workspace = true` using workspace-level dependency definitions

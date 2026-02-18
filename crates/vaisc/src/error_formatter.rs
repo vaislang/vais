@@ -34,115 +34,34 @@ impl ErrorFormatContext {
     }
 }
 
-/// Trait for types that can be formatted as errors with context.
-/// Reserved for extensible error formatting system.
-#[allow(dead_code)]
-pub trait FormattableError {
-    /// Format the error with the given context
-    fn format_with_context(&self, context: &ErrorFormatContext) -> String;
-
-    /// Get the error code as a string
-    fn error_code(&self) -> &str;
-
-    /// Get the error title (usually localized)
-    fn error_title(&self) -> String;
-
-    /// Get the error message
-    fn error_message(&self) -> String;
-
-    /// Get optional help text
-    fn error_help(&self) -> Option<String> {
-        None
-    }
-
-    /// Get the span for the error
-    fn error_span(&self) -> Option<Span>;
-}
-
-impl FormattableError for TypeError {
-    fn format_with_context(&self, context: &ErrorFormatContext) -> String {
-        let reporter = context.reporter();
-        let span = self.span();
-        let title = self.localized_title();
-        let message = self.localized_message();
-        let help = self.localized_help();
-
-        reporter.format_error(
-            self.error_code(),
-            &title,
-            span,
-            &message,
-            help.as_deref(),
-            &self.secondary_spans(),
-        )
-    }
-
-    fn error_code(&self) -> &str {
-        <TypeError>::error_code(self)
-    }
-
-    fn error_title(&self) -> String {
-        self.localized_title()
-    }
-
-    fn error_message(&self) -> String {
-        self.localized_message()
-    }
-
-    fn error_help(&self) -> Option<String> {
-        self.localized_help()
-    }
-
-    fn error_span(&self) -> Option<Span> {
-        self.span()
-    }
-}
-
-impl FormattableError for ParseError {
-    fn format_with_context(&self, context: &ErrorFormatContext) -> String {
-        let reporter = context.reporter();
-        let span = self.span().map(|s| Span::new(s.start, s.end));
-        let title = self.localized_title();
-        let message = self.localized_message();
-
-        reporter.format_error(self.error_code(), &title, span, &message, None, &[])
-    }
-
-    fn error_code(&self) -> &str {
-        <ParseError>::error_code(self)
-    }
-
-    fn error_title(&self) -> String {
-        self.localized_title()
-    }
-
-    fn error_message(&self) -> String {
-        self.localized_message()
-    }
-
-    fn error_span(&self) -> Option<Span> {
-        self.span().map(|s| Span::new(s.start, s.end))
-    }
-}
-
 /// Format a type error with source context (localized)
 pub fn format_type_error(error: &TypeError, source: &str, path: &Path) -> String {
     let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
-    error.format_with_context(&context)
+    let reporter = context.reporter();
+    let span = error.span();
+    let title = error.localized_title();
+    let message = error.localized_message();
+    let help = error.localized_help();
+
+    reporter.format_error(
+        error.error_code(),
+        &title,
+        span,
+        &message,
+        help.as_deref(),
+        &error.secondary_spans(),
+    )
 }
 
 /// Format a parse error with source context (localized)
 pub fn format_parse_error(error: &ParseError, source: &str, path: &Path) -> String {
     let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
-    error.format_with_context(&context)
-}
+    let reporter = context.reporter();
+    let span = error.span().map(|s| Span::new(s.start, s.end));
+    let title = error.localized_title();
+    let message = error.localized_message();
 
-/// Format any error implementing FormattableError.
-/// Generic entry point for extensible error formatting.
-#[allow(dead_code)]
-pub fn format_error<E: FormattableError>(error: &E, source: &str, path: &Path) -> String {
-    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
-    error.format_with_context(&context)
+    reporter.format_error(error.error_code(), &title, span, &message, None, &[])
 }
 
 #[cfg(test)]

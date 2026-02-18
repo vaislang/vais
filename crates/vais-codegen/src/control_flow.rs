@@ -10,20 +10,6 @@ use vais_ast::{Expr, IfElse, Literal, MatchArm, Pattern, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    /// Generate code for if-else branches.
-    /// Legacy API for backward compatibility; use generate_if_else_with_term for new code.
-    #[allow(dead_code)]
-    pub(crate) fn generate_if_else(
-        &mut self,
-        if_else: &IfElse,
-        counter: &mut usize,
-        merge_label: &str,
-    ) -> CodegenResult<(String, String)> {
-        let (val, ir, _terminated, _last_block) =
-            self.generate_if_else_with_term(if_else, counter, merge_label)?;
-        Ok((val, ir))
-    }
-
     /// Generate code for if-else branches with termination tracking
     /// Returns (value, ir, is_terminated, last_block_name)
     /// last_block_name is the block that actually branches to the outer merge

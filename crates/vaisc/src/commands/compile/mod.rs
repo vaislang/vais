@@ -7,12 +7,10 @@ use crate::runtime::{
     get_runtime_for_module,
 };
 use colored::Colorize;
-use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex};
 use vais_codegen::TargetTriple;
 use vais_types::TypeChecker;
 
@@ -25,10 +23,6 @@ mod wasm;
 
 // Re-export public functions
 pub(crate) use per_module::compile_per_module;
-#[allow(unused_imports)]
-pub use parallel::{parallel_type_check, parallel_codegen};
-#[allow(unused_imports)]
-pub use pipeline::pipeline_compile;
 pub(crate) use native::compile_to_native;
 pub(crate) use wasm::{compile_to_wasm32, compile_to_wasi};
 

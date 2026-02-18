@@ -858,22 +858,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
-    /// Gets the tag value for an enum variant with explicit enum name.
-    ///
-    /// This method provides more precise lookup when the enum name is known.
-    /// Reserved for enum disambiguation in complex match patterns.
-    #[allow(dead_code)]
-    pub(super) fn get_enum_variant_tag_with_enum(
-        &self,
-        enum_name: &str,
-        variant_name: &str,
-    ) -> i32 {
-        self.enum_variants
-            .get(&(enum_name.to_string(), variant_name.to_string()))
-            .copied()
-            .unwrap_or_else(|| self.get_enum_variant_tag(variant_name))
-    }
-
     // ========== Assert ==========
 
     pub(super) fn generate_assert(

@@ -25,17 +25,6 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: inkwell::basic_block::BasicBlock<'ctx>,
 }
 
-/// Closure information for captured variables.
-/// Reserved for full closure implementation.
-#[derive(Clone)]
-#[allow(dead_code)]
-pub(super) struct ClosureInfo<'ctx> {
-    /// The generated LLVM function
-    pub(super) func: FunctionValue<'ctx>,
-    /// Captured variable names and their values (for passing to the lambda)
-    pub(super) captures: Vec<(String, BasicValueEnum<'ctx>)>,
-}
-
 /// LLVM code generator using inkwell.
 ///
 /// This generator provides direct LLVM API access for type-safe
@@ -52,10 +41,6 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Type mapper for Vais -> LLVM type conversion
     pub(super) type_mapper: TypeMapper<'ctx>,
-
-    /// Target architecture (reserved for target-specific codegen).
-    #[allow(dead_code)]
-    pub(super) target: TargetTriple,
 
     /// Registered functions by name
     pub(super) functions: HashMap<String, FunctionValue<'ctx>>,
@@ -167,7 +152,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             module,
             builder,
             type_mapper,
-            target,
             functions: HashMap::new(),
             locals: HashMap::new(),
             string_constants: HashMap::new(),

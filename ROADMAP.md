@@ -197,31 +197,34 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 25 | E2E 테스트 확장 (700개 목표) | phase45/phase45_types/phase45_advanced 54개 추가, lazy/comptime/guard/closure/trait 등 미커버 기능, Vais 문법 6건 수정 | 701 |
 | 26 | Codegen 완성도 강화 | indirect call 구현, pattern matching 타입 추론 개선, BinOp ICE→unreachable 11건, 에러 메시지 통일 17건 | 701 |
 | 27 | 타입 시스템 건전성 강화 | i64 fallback 5건→InternalError, Generic/ConstGeneric 경고 유지, TC pre-codegen Var/Unknown 차단, self 파라미터 skip | 713 |
+| 28 | 코드 정리 & dead_code 활성화 | dead_code 38건 분류→삭제13/cfg(test)2/allow복원6/유지17, checker_module.rs 4모듈 분할, Clippy 0건 | 713 |
+| 29 | Selfhost 테스트 통합 | selfhost_mir_tests 14개, bootstrap_tests +27개, selfhost_clang_tests 21개 (3-tier), 신규 62개 테스트 | 713 |
 
-## 현재 작업 (2026-02-18) — Phase 27: 타입 시스템 건전성 강화 ✅
+## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
-- [x] 1. types.rs i64 fallback → CodegenError 전환 — ImplTrait/Var/Unknown/Associated/HigherKinded/Lifetime 5건 InternalError, Generic/ConstGeneric 경고+i64 유지 (Sonnet)
-  변경: codegen/src/types.rs (eprintln ICE → return Err(InternalError) 5건, Generic/ConstGeneric Warning 유지)
-- [x] 2. inkwell/types.rs i64 fallback → 에러 전환 — 5건 unreachable!(), Generic/ConstGeneric 경고+i64 유지 (Sonnet) [∥1]
-  변경: inkwell/types.rs (5건 unreachable!(), Generic/ConstGeneric eprintln Warning 유지)
-- [x] 3. TC pre-codegen 미해결 타입 차단 — Var/Unknown 검출 + self 파라미터 skip (Sonnet) [∥1]
-  변경: checker_fn.rs (contains_unresolved_type() 추가, check_function/check_impl_method에서 self skip)
-- [x] 4. E2E 테스트 추가 — 양성 6개 + 음성 6개 = 12개 (Sonnet) [∥1,2,3]
-  변경: phase45_types.rs (phase27_ 접두사 12개 테스트 추가)
-- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
-진행률: 5/5 (100%) ✅
+- [x] 1. dead_code 정리 — codegen 크레이트 (삭제 5건 + annotation 수정 6건) (Sonnet)
+  변경: diagnostics.rs (#[cfg(test)]), types.rs (allow 복원 3건), control_flow.rs (래퍼 삭제), function_gen/codegen.rs (#[cfg(test)]+삭제), inkwell/gen_types.rs (삭제), gen_expr/literal.rs (삭제), gen_match.rs (삭제), expr.rs (Text IR 9함수 삭제), generator.rs (ClosureInfo+target 삭제)
+- [x] 2. dead_code 정리 — vais-types/parser/vaisc 크레이트 (삭제 8건 + annotation 수정 4건) (Sonnet) [∥1]
+  변경: error_formatter.rs (trait+fn 삭제), pipeline.rs (삭제), parallel.rs (2fn 삭제), resolution.rs (삭제), workspace.rs (필드 정리), doc_gen.rs (variant 삭제), inference.rs (2fn 삭제), scope.rs/defs.rs (allow 복원)
+- [x] 3. checker_module.rs 서브모듈 분할 — 1,110줄 → 4개 모듈 (Sonnet) [∥1]
+  변경: checker_module.rs → checker_module/{mod.rs(270줄), registration.rs(310줄), traits.rs(270줄), validation.rs(70줄)}
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
+진행률: 4/4 (100%) ✅
+
+## 현재 작업 (2026-02-18) — Phase 29: Selfhost 테스트 통합 ✅
+모드: 자동진행
+- [x] 1. MIR 최적화 모듈 E2E 테스트 — selfhost_mir_tests.rs 14개 (1 pass + 13 ignored cross-module) (Sonnet)
+  변경: 신규 selfhost_mir_tests.rs (14개 테스트, compile_file_to_ir 패턴)
+- [x] 2. Selfhost bootstrap 검증 자동화 — bootstrap_tests.rs +27개 (18 pass + 14 ignored) (Sonnet) [∥1]
+  변경: bootstrap_tests.rs 확장 (Stage1 5개, Core 6개, Stdlib 8개, LSP/Tools 8개)
+- [x] 3. Selfhost IR+clang 회귀 테스트 — selfhost_clang_tests.rs 21개 (21 pass) (Sonnet) [∥1]
+  변경: 신규 selfhost_clang_tests.rs (3 fully passing, 2 known clang, 16 known IR — 3-tier 구조)
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
+진행률: 4/4 (100%) ✅
 
 ## 📋 예정 작업
 
-### Phase 28: 코드 정리 & dead_code 활성화
-- #[allow(dead_code)] 12건 정리 — 활성화 or 제거
-- diagnostics.rs 에러 경로 통합
-- checker_module.rs(1,110줄) 서브모듈 분할
-
-### Phase 29: Selfhost 테스트 통합
-- MIR 최적화 모듈 14개 메인 E2E 테스트 스위트 추가
-- selfhost bootstrap 검증 자동화
-- selfhost IR 생성 + clang 컴파일 회귀 테스트
+### Phase 30: (TBD)
 
 ---
 

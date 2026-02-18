@@ -3,26 +3,10 @@
 use inkwell::values::BasicValueEnum;
 use inkwell::AddressSpace;
 
-use vais_ast::Literal;
-
 use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
-    /// Generate LLVM value for a literal (helper for expression generation).
-    #[allow(dead_code)]
-    pub(crate) fn generate_literal(
-        &mut self,
-        lit: &Literal,
-    ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        match lit {
-            Literal::Int(n) => Ok(self.context.i64_type().const_int(*n as u64, true).into()),
-            Literal::Float(f) => Ok(self.context.f64_type().const_float(*f).into()),
-            Literal::Bool(b) => Ok(self.context.bool_type().const_int(*b as u64, false).into()),
-            Literal::String(s) => self.generate_string_literal(s),
-        }
-    }
-
     pub(crate) fn generate_string_literal(
         &mut self,
         s: &str,

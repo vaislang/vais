@@ -7,7 +7,7 @@ use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Convenience wrapper for generate_function_with_span with default span.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
         self.generate_function_with_span(f, Span::default())
     }
@@ -221,20 +221,6 @@ impl CodeGenerator {
         self.fn_ctx.current_return_type = None;
         self.clear_decreases_info();
         Ok(ir)
-    }
-
-    /// Generate a method for a struct
-    /// Methods are compiled as functions with the struct pointer as implicit first argument
-    /// Static methods (without &self) don't have the implicit self parameter
-    ///
-    /// Convenience wrapper for generate_method_with_span with default span.
-    #[allow(dead_code)]
-    pub(crate) fn generate_method(
-        &mut self,
-        struct_name: &str,
-        f: &Function,
-    ) -> CodegenResult<String> {
-        self.generate_method_with_span(struct_name, f, Span::default())
     }
 
     pub(crate) fn generate_method_with_span(

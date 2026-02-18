@@ -31,9 +31,6 @@ enum DocKind {
     Trait,
     Constant,
     ExternFunction,
-    /// Module-level documentation (reserved for future use).
-    #[allow(dead_code)]
-    Module,
 }
 
 #[derive(Debug, Clone)]
@@ -1073,7 +1070,6 @@ a:hover {
                 DocKind::Trait => "trait",
                 DocKind::Constant => "constant",
                 DocKind::ExternFunction => "extern",
-                DocKind::Module => "module",
             };
 
             content.push_str(&format!(
