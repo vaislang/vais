@@ -215,6 +215,63 @@ impl TypeChecker {
         let param_names: Vec<String> = f.params.iter().map(|p| p.name.node.clone()).collect();
         self.check_unused_variables(&param_names);
 
+        // Validate that no unresolved type variables survive into codegen for non-generic functions.
+        // Generic functions may legitimately contain Generic/ConstGeneric/ImplTrait/etc. in their
+        // signatures; those are checked at instantiation time instead.
+        if f.generics.is_empty() {
+            // Check parameter types
+            if let Some(sig) = self.functions.get(&f.name.node) {
+                let params_snapshot: Vec<(String, ResolvedType)> = sig
+                    .params
+                    .iter()
+                    .map(|(name, ty, _)| (name.clone(), ty.clone()))
+                    .collect();
+                for (param_name, ty) in &params_snapshot {
+                    // Skip 'self' parameter — its type is resolved at impl block level
+                    if param_name == "self" {
+                        continue;
+                    }
+                    let resolved = self.apply_substitutions(ty);
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
+                        let param_span = f
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *param_name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: param_name.clone(),
+                            context: format!(
+                                "{} (contains {})",
+                                f.name.node, unresolved_desc
+                            ),
+                            span: param_span,
+                            suggestion: Some(format!(
+                                "Add explicit type annotation for parameter `{}`",
+                                param_name
+                            )),
+                        });
+                    }
+                }
+
+                // Check return type
+                let ret_snapshot = sig.ret.clone();
+                let resolved_ret = self.apply_substitutions(&ret_snapshot);
+                if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved_ret) {
+                    return Err(TypeError::InferFailed {
+                        kind: "return type".to_string(),
+                        name: f.name.node.clone(),
+                        context: format!(
+                            "{} (contains {})",
+                            f.name.node, unresolved_desc
+                        ),
+                        span: Some(f.name.span),
+                        suggestion: Some("Add explicit return type annotation".to_string()),
+                    });
+                }
+            }
+        }
+
         self.current_fn_ret = None;
         self.current_fn_name = None;
         self.restore_generics(saved);
@@ -385,6 +442,10 @@ impl TypeChecker {
                 .and_then(|s| s.methods.get(&method.name.node))
             {
                 for (name, ty, _) in &sig.params {
+                    // Skip 'self' parameter — its type is resolved at impl block level
+                    if name == "self" {
+                        continue;
+                    }
                     let resolved = self.apply_substitutions(ty);
                     if matches!(resolved, ResolvedType::Var(_)) {
                         let param_span = method
@@ -490,6 +551,65 @@ impl TypeChecker {
             Stmt::Let { value, .. } => Self::expr_contains_self_call(&value.node),
             Stmt::Return(Some(e)) => Self::expr_contains_self_call(&e.node),
             _ => false,
+        }
+    }
+
+    /// Check if a resolved type tree contains any unresolved types
+    /// that should have been resolved before codegen.
+    /// Returns the name of the first unresolved type found, if any.
+    fn contains_unresolved_type(ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Var(id) => Some(format!("type variable #{}", id)),
+            ResolvedType::Unknown => Some("unknown type".to_string()),
+            // Generic/ConstGeneric/ImplTrait/Associated/HigherKinded are OK in generic function
+            // DEFINITIONS — they only become errors when they survive monomorphization,
+            // so we don't check them here; they're checked at instantiation time.
+
+            // Recurse into compound types
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Lazy(inner)
+            | ResolvedType::Range(inner) => Self::contains_unresolved_type(inner),
+            ResolvedType::Array(inner) => Self::contains_unresolved_type(inner),
+            ResolvedType::ConstArray { element, .. } => Self::contains_unresolved_type(element),
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::contains_unresolved_type(ok)
+                    .or_else(|| Self::contains_unresolved_type(err))
+            }
+            ResolvedType::Tuple(elems) => {
+                elems.iter().find_map(|e| Self::contains_unresolved_type(e))
+            }
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params
+                    .iter()
+                    .find_map(|p| Self::contains_unresolved_type(p))
+                    .or_else(|| Self::contains_unresolved_type(ret))
+            }
+            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => {
+                Self::contains_unresolved_type(inner)
+            }
+            ResolvedType::Dependent { base, .. } => Self::contains_unresolved_type(base),
+            ResolvedType::Vector { element, .. } => Self::contains_unresolved_type(element),
+            ResolvedType::Named { generics, .. } => {
+                generics.iter().find_map(|g| Self::contains_unresolved_type(g))
+            }
+            ResolvedType::DynTrait { generics, .. } => {
+                generics.iter().find_map(|g| Self::contains_unresolved_type(g))
+            }
+            ResolvedType::Associated { base, generics, .. } => {
+                Self::contains_unresolved_type(base)
+                    .or_else(|| generics.iter().find_map(|g| Self::contains_unresolved_type(g)))
+            }
+            // All other types (primitives, Never, Generic, ConstGeneric, ImplTrait,
+            // HigherKinded, Lifetime) are acceptable outside of monomorphization contexts.
+            _ => None,
         }
     }
 }

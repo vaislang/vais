@@ -196,26 +196,22 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 24 | 성능 벤치마크 & 최적화 | Vec::with_capacity 16곳, apply_substitutions primitive early-exit, codegen 1K -8.3%, 50K -3.8%, pipeline 10K -6.2% | 647 |
 | 25 | E2E 테스트 확장 (700개 목표) | phase45/phase45_types/phase45_advanced 54개 추가, lazy/comptime/guard/closure/trait 등 미커버 기능, Vais 문법 6건 수정 | 701 |
 | 26 | Codegen 완성도 강화 | indirect call 구현, pattern matching 타입 추론 개선, BinOp ICE→unreachable 11건, 에러 메시지 통일 17건 | 701 |
+| 27 | 타입 시스템 건전성 강화 | i64 fallback 5건→InternalError, Generic/ConstGeneric 경고 유지, TC pre-codegen Var/Unknown 차단, self 파라미터 skip | 713 |
 
-## 현재 작업 (2026-02-18) — Phase 26: Codegen 완성도 강화 ✅
+## 현재 작업 (2026-02-18) — Phase 27: 타입 시스템 건전성 강화 ✅
 모드: 자동진행
-- [x] 1. Inkwell indirect call 구현 — call.rs:96 함수 포인터/콜백/HOF 호출 지원 (Sonnet)
-  변경: inkwell/gen_expr/call.rs (build_indirect_call로 함수 포인터/클로저 간접 호출 구현)
-- [x] 2. Pattern matching 타입 추론 개선 — gen_match.rs 5건 struct 타입 추론 + fn return type 추론 (Sonnet) [∥1]
-  변경: inkwell/gen_match.rs (locals/function_return_structs fallback, Unsupported→InternalError, If/Block 힌트)
-- [x] 3. BinOp catch-all ICE → unreachable 전환 — generate_expr.rs(6) + expr_helpers.rs(5) 정리 (Sonnet) [∥1]
-  변경: generate_expr.rs, expr_helpers.rs (eprintln+Unsupported 11건→unreachable!())
-- [x] 5. Builtin/String 에러 메시지 통일 — Unsupported→InternalError (gen_special/call/string_ops 17건) (Sonnet) [∥1]
-  변경: gen_special.rs(7), call.rs(4), string_ops.rs(6) 에러 메시지 포맷 통일
-- [x] 6. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,5]
+- [x] 1. types.rs i64 fallback → CodegenError 전환 — ImplTrait/Var/Unknown/Associated/HigherKinded/Lifetime 5건 InternalError, Generic/ConstGeneric 경고+i64 유지 (Sonnet)
+  변경: codegen/src/types.rs (eprintln ICE → return Err(InternalError) 5건, Generic/ConstGeneric Warning 유지)
+- [x] 2. inkwell/types.rs i64 fallback → 에러 전환 — 5건 unreachable!(), Generic/ConstGeneric 경고+i64 유지 (Sonnet) [∥1]
+  변경: inkwell/types.rs (5건 unreachable!(), Generic/ConstGeneric eprintln Warning 유지)
+- [x] 3. TC pre-codegen 미해결 타입 차단 — Var/Unknown 검출 + self 파라미터 skip (Sonnet) [∥1]
+  변경: checker_fn.rs (contains_unresolved_type() 추가, check_function/check_impl_method에서 self skip)
+- [x] 4. E2E 테스트 추가 — 양성 6개 + 음성 6개 = 12개 (Sonnet) [∥1,2,3]
+  변경: phase45_types.rs (phase27_ 접두사 12개 테스트 추가)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
 진행률: 5/5 (100%) ✅
 
 ## 📋 예정 작업
-
-### Phase 27: 타입 시스템 건전성 강화
-- ICE i64 fallback 28건 해소 — types.rs(14) + inkwell/types.rs(14)
-- ImplTrait/HKT/associated type 타입 체커 레벨 완전 해결
-- codegen 도달 전 미해결 타입 차단 (에러 or monomorphization)
 
 ### Phase 28: 코드 정리 & dead_code 활성화
 - #[allow(dead_code)] 12건 정리 — 활성화 or 제거

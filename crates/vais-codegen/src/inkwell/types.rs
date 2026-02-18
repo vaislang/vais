@@ -110,24 +110,16 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Generic(name) => {
-                // ICE: generic should be substituted before codegen
-                #[cfg(debug_assertions)]
+                // Monomorphization incomplete — fall back to i64 for now.
+                // TODO: unreachable! once full monomorphization is implemented.
                 eprintln!(
-                    "ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
+                    "Warning: ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
                     name
                 );
-                #[cfg(not(debug_assertions))]
-                eprintln!("ICE: unresolved generic in Inkwell codegen, using i64 fallback");
-                let _ = name;
                 self.context.i64_type().into()
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                // ICE: should be resolved before codegen
-                #[cfg(debug_assertions)]
-                eprintln!(
-                    "ICE: unresolved type variable reached Inkwell codegen, using i64 fallback"
-                );
-                self.context.i64_type().into()
+                unreachable!("ICE: unresolved type variable reached Inkwell codegen")
             }
             ResolvedType::Never => {
                 // Never type - use void pointer as placeholder
@@ -228,42 +220,28 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::ConstGeneric(name) => {
-                // ICE: const generic should be resolved during monomorphization
-                #[cfg(debug_assertions)]
+                // Monomorphization incomplete — fall back to i64 for now.
                 eprintln!(
-                    "ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
+                    "Warning: ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
                     name
                 );
-                #[cfg(not(debug_assertions))]
-                eprintln!("ICE: unresolved const generic in Inkwell codegen, using i64 fallback");
-                let _ = name;
                 self.context.i64_type().into()
             }
             ResolvedType::Lifetime(_) => {
-                // Lifetimes are erased at runtime — no representation
-                self.context.i64_type().into()
+                unreachable!("ICE: bare lifetime has no runtime representation in Inkwell codegen")
             }
             ResolvedType::Associated { .. } => {
-                // ICE: associated type should be resolved during type checking
-                #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved associated type in Inkwell codegen, using i64 fallback");
-                self.context.i64_type().into()
+                unreachable!("ICE: unresolved associated type in Inkwell codegen")
             }
             ResolvedType::Dependent { base, .. } => {
                 // Dependent types are transparent at runtime — use base type
                 self.map_type(base)
             }
             ResolvedType::ImplTrait { .. } => {
-                // ICE: ImplTrait should be monomorphized before codegen
-                #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved ImplTrait in Inkwell codegen, using i64 fallback");
-                self.context.i64_type().into()
+                unreachable!("ICE: unresolved ImplTrait in Inkwell codegen")
             }
             ResolvedType::HigherKinded { .. } => {
-                // ICE: HKT should be monomorphized before codegen
-                #[cfg(debug_assertions)]
-                eprintln!("ICE: unresolved HKT in Inkwell codegen, using i64 fallback");
-                self.context.i64_type().into()
+                unreachable!("ICE: unresolved HKT in Inkwell codegen")
             }
         }
     }

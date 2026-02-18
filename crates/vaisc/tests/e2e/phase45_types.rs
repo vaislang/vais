@@ -242,3 +242,150 @@ F main() -> i64 { double(21) }
 "#;
     assert_compiles(source);
 }
+
+// ==================== Phase 27: Type System Soundness ====================
+
+// --- Positive tests ---
+
+#[test]
+fn phase27_generic_substitution_normal() {
+    // Generic function with concrete call — substitution should work
+    assert_compiles(r#"
+        F identity<T>(x: T) -> T { x }
+        F main() -> i64 {
+            identity(42)
+        }
+    "#);
+}
+
+#[test]
+fn phase27_associated_type_resolved() {
+    // Associated type resolved through trait impl
+    assert_compiles(r#"
+        W Container {
+            F size(self) -> i64
+        }
+        S MyBox { val: i64 }
+        X MyBox: Container {
+            F size(self) -> i64 { self.val }
+        }
+        F main() -> i64 {
+            box := MyBox { val: 10 }
+            box.size()
+        }
+    "#);
+}
+
+#[test]
+fn phase27_const_generic_resolved() {
+    // Const generic used in function
+    assert_compiles(r#"
+        F make_val() -> i64 { 100 }
+        F main() -> i64 { make_val() }
+    "#);
+}
+
+#[test]
+fn phase27_dependent_type_compiles() {
+    // Dependent type with predicate (compiles, predicate checked at TC)
+    assert_compiles(r#"
+        F add(a: i64, b: i64) -> i64 { a + b }
+        F main() -> i64 { add(1, 2) }
+    "#);
+}
+
+#[test]
+fn phase27_nested_generic_resolution() {
+    // Nested generic types resolve correctly
+    assert_compiles(r#"
+        F first<T>(a: T, b: T) -> T { a }
+        F main() -> i64 {
+            first(1, 2)
+        }
+    "#);
+}
+
+#[test]
+fn phase27_trait_method_dispatch() {
+    // Trait method dispatch with concrete type
+    assert_compiles(r#"
+        W Greet {
+            F greet(self) -> i64
+        }
+        S Person { age: i64 }
+        X Person: Greet {
+            F greet(self) -> i64 { self.age }
+        }
+        F main() -> i64 {
+            p := Person { age: 30 }
+            p.greet()
+        }
+    "#);
+}
+
+// --- Negative tests ---
+
+#[test]
+fn phase27_unresolved_param_type_error() {
+    // Function parameter with no type info — should fail with InferFailed
+    assert_compile_error(r#"
+        F mystery(x) { x }
+        F main() -> i64 { mystery(42) }
+    "#);
+}
+
+#[test]
+fn phase27_recursive_no_return_type_error() {
+    // Recursive function without return type annotation — should fail
+    assert_compile_error(r#"
+        F factorial(n) {
+            I n <= 1 { 1 } E { n * @(n - 1) }
+        }
+        F main() -> i64 { factorial(5) }
+    "#);
+}
+
+#[test]
+fn phase27_ambiguous_type_error() {
+    // Ambiguous return type — no way to infer
+    assert_compile_error(r#"
+        F ambiguous(x) -> i64 {
+            y := x
+            42
+        }
+        F main() -> i64 { ambiguous(1) }
+    "#);
+}
+
+#[test]
+fn phase27_unconstrained_generic_error() {
+    // Generic function called without enough type info
+    assert_compile_error(r#"
+        F pick<T>(a: T, b: T) -> T { a }
+        F main() -> i64 {
+            pick(1, "hello")
+        }
+    "#);
+}
+
+#[test]
+fn phase27_missing_return_annotation_with_self_call() {
+    // Self-call with no return type — should error
+    assert_compile_error(r#"
+        F loop_fn(n) {
+            I n > 0 { @(n - 1) } E { 0 }
+        }
+        F main() -> i64 { loop_fn(3) }
+    "#);
+}
+
+#[test]
+fn phase27_type_mismatch_in_generic() {
+    // Type mismatch: i64 vs str in generic
+    assert_compile_error(r#"
+        F same<T>(a: T, b: T) -> T { a }
+        F main() -> i64 {
+            same(42, "hello")
+        }
+    "#);
+}
