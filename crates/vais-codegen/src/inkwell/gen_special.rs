@@ -622,9 +622,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // store_i64(ptr: i64, val: i64) -> void
         // Stores a 64-bit integer at the given pointer
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_i64 requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_i64' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -650,9 +651,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_i64(ptr: i64) -> i64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_i64 requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_i64' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 
@@ -681,9 +683,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // the codegen pipeline (non-trivial architectural change).
         // Swaps two i64 elements in an array. ptr can be PointerValue or IntValue.
         if args.len() < 3 {
-            return Err(CodegenError::Unsupported(
-                "swap requires 3 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'swap' requires 3 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let idx1_val = self.generate_expr(&args[1].node)?;
@@ -756,9 +759,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // store_byte(ptr: i64, val: i64) -> void
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_byte requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_byte' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -789,9 +793,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_byte(ptr: i64) -> i64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_byte requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_byte' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 
@@ -823,9 +828,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // store_f64(ptr: i64, val: f64) -> void
         if args.len() < 2 {
-            return Err(CodegenError::Unsupported(
-                "store_f64 requires 2 args".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'store_f64' requires 2 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
         let val = self.generate_expr(&args[1].node)?;
@@ -851,9 +857,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         // load_f64(ptr: i64) -> f64
         if args.is_empty() {
-            return Err(CodegenError::Unsupported(
-                "load_f64 requires 1 arg".to_string(),
-            ));
+            return Err(CodegenError::InternalError(format!(
+                "builtin 'load_f64' requires 1 argument(s), got {}",
+                args.len()
+            )));
         }
         let ptr_val = self.generate_expr(&args[0].node)?;
 

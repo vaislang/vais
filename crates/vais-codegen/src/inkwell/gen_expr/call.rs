@@ -93,9 +93,71 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
             }
             _ => {
-                return Err(CodegenError::Unsupported(
-                    "Indirect calls not yet supported".to_string(),
-                ))
+                // Indirect call: evaluate the callee expression to get a function pointer.
+                // Vais closures/lambdas are represented as i64 (pointer-sized integer), so we
+                // convert i64 → i8* pointer then perform an indirect call via build_indirect_call.
+                let callee_val = self.generate_expr(callee)?;
+
+                // Evaluate arguments before building the function type.
+                let arg_values: Vec<BasicMetadataValueEnum> = args
+                    .iter()
+                    .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
+                    .collect::<CodegenResult<Vec<_>>>()?;
+
+                // Build a function type: (i64, i64, ...) -> i64, one i64 per argument.
+                let i64_type = self.context.i64_type();
+                let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+                    (0..arg_values.len())
+                        .map(|_| i64_type.into())
+                        .collect();
+                let fn_type = i64_type.fn_type(&param_types, false);
+
+                // Obtain a PointerValue for the callee.
+                let fn_ptr = if callee_val.is_pointer_value() {
+                    callee_val.into_pointer_value()
+                } else {
+                    // Convert i64 (function pointer stored as integer) to i8*.
+                    let i8_ptr_type = self
+                        .context
+                        .i8_type()
+                        .ptr_type(AddressSpace::default());
+                    self.builder
+                        .build_int_to_ptr(
+                            callee_val.into_int_value(),
+                            i8_ptr_type,
+                            "indirect_fn_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
+
+                // Cast the arguments: ensure each is an i64 (or its existing type).
+                let coerced_args: Vec<BasicMetadataValueEnum> = arg_values
+                    .into_iter()
+                    .map(|v| {
+                        if let BasicMetadataValueEnum::IntValue(iv) = v {
+                            if iv.get_type() != i64_type {
+                                self.builder
+                                    .build_int_cast(iv, i64_type, "indirect_arg_cast")
+                                    .map(BasicMetadataValueEnum::IntValue)
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+                            } else {
+                                Ok(BasicMetadataValueEnum::IntValue(iv))
+                            }
+                        } else {
+                            Ok(v)
+                        }
+                    })
+                    .collect::<CodegenResult<Vec<_>>>()?;
+
+                let call = self
+                    .builder
+                    .build_indirect_call(fn_type, fn_ptr, &coerced_args, "indirect_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                return Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| i64_type.const_int(0, false).into()));
             }
         };
 
@@ -239,9 +301,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "puts_ptr" => {
                 // puts_ptr(i64) -> i32: convert i64 to ptr then call puts
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "puts_ptr requires 1 arg".to_string(),
-                    ));
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'puts_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
                 let ptr = self
@@ -268,9 +331,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "str_to_ptr" => {
                 // str_to_ptr(ptr) -> i64: convert ptr to i64
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "str_to_ptr requires 1 arg".to_string(),
-                    ));
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'str_to_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
                 if arg.is_pointer_value() {
@@ -291,9 +355,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "ptr_to_str" => {
                 // ptr_to_str(i64) -> ptr: convert i64 to i8*
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "ptr_to_str requires 1 arg".to_string(),
-                    ));
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'ptr_to_str' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
                 if arg.is_int_value() {
@@ -314,9 +379,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "strlen_ptr" => {
                 // strlen_ptr(i64) -> i64: convert i64 to ptr then call strlen
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "strlen_ptr requires 1 arg".to_string(),
-                    ));
+                    return Err(CodegenError::InternalError(format!(
+                        "builtin 'strlen_ptr' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
                 let ptr = self

@@ -75,16 +75,7 @@ impl CodeGenerator {
             let op_str = match op {
                 BinOp::And => "and",
                 BinOp::Or => "or",
-                _ => {
-                    eprintln!(
-                        "[ICE] unexpected BinOp variant in logical operation: {:?}",
-                        op
-                    );
-                    return Err(CodegenError::Unsupported(format!(
-                        "unexpected logical operator {:?}",
-                        op
-                    )));
-                }
+                _ => unreachable!("BinOp {:?} in {} codegen path", op, "logical"),
             };
 
             let result_bool = self.next_temp(counter);
@@ -115,16 +106,7 @@ impl CodeGenerator {
                     BinOp::Gte => "fcmp oge",
                     BinOp::Eq => "fcmp oeq",
                     BinOp::Neq => "fcmp one",
-                    _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in float comparison: {:?}",
-                            op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected float comparison operator {:?}",
-                            op
-                        )));
-                    }
+                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_cmp"),
                 };
                 ir.push_str(&format!(
                     "  {} = {} double {}, {}{}\n",
@@ -138,16 +120,7 @@ impl CodeGenerator {
                     BinOp::Gte => "icmp sge",
                     BinOp::Eq => "icmp eq",
                     BinOp::Neq => "icmp ne",
-                    _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in integer comparison: {:?}",
-                            op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected integer comparison operator {:?}",
-                            op
-                        )));
-                    }
+                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "int_cmp"),
                 };
                 ir.push_str(&format!(
                     "  {} = {} i64 {}, {}{}\n",
@@ -182,16 +155,7 @@ impl CodeGenerator {
                     BinOp::Mul => "fmul",
                     BinOp::Div => "fdiv",
                     BinOp::Mod => "frem",
-                    _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in float arithmetic: {:?}",
-                            op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected float arithmetic operator {:?}",
-                            op
-                        )));
-                    }
+                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_arith"),
                 };
                 ir.push_str(&format!(
                     "  {} = {} double {}, {}{}\n",
@@ -209,16 +173,7 @@ impl CodeGenerator {
                     BinOp::BitXor => "xor",
                     BinOp::Shl => "shl",
                     BinOp::Shr => "ashr",
-                    _ => {
-                        eprintln!(
-                            "[ICE] unexpected BinOp variant in integer arithmetic: {:?}",
-                            op
-                        );
-                        return Err(CodegenError::Unsupported(format!(
-                            "unexpected integer arithmetic operator {:?}",
-                            op
-                        )));
-                    }
+                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "int_arith"),
                 };
                 ir.push_str(&format!(
                     "  {} = {} i64 {}, {}{}\n",

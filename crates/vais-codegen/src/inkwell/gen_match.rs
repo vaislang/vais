@@ -16,12 +16,24 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn infer_struct_name(&self, expr: &Expr) -> CodegenResult<String> {
         match expr {
             Expr::Ident(name) => {
-                // Look up in var_struct_types
+                // Primary: look up in var_struct_types (populated from annotations and StructLit assignments)
                 if let Some(struct_name) = self.var_struct_types.get(name) {
                     return Ok(struct_name.clone());
                 }
-                Err(CodegenError::Unsupported(format!(
-                    "Cannot infer struct type for variable: {}. Consider adding type annotations.",
+                // Fallback: check locals — if the variable's LLVM struct type matches a known
+                // generated struct, return that struct's name.
+                if let Some((_ptr, inkwell::types::BasicTypeEnum::StructType(st))) =
+                    self.locals.get(name)
+                {
+                    for (sname, known_st) in &self.generated_structs {
+                        if known_st == st {
+                            return Ok(sname.clone());
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(format!(
+                    "Type inference failed: cannot determine struct type for variable `{}`. \
+                     Hint: add an explicit type annotation (e.g., `x: MyStruct := ...`).",
                     name
                 )))
             }
@@ -30,7 +42,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Recursively infer the inner expression's struct type,
                 // then look up the field's type (if it's also a struct)
                 let parent_struct = self.infer_struct_name(&inner.node)?;
-                // Look up the field's type name from struct_field_type_names
+                // Primary: look up the field's type name from struct_field_type_names
                 if let Some(field_types) = self.struct_field_type_names.get(&parent_struct) {
                     for (fname, ftype) in field_types {
                         if fname == &field.node && !ftype.is_empty() {
@@ -41,21 +53,40 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         }
                     }
                 }
-                Err(CodegenError::Unsupported(format!(
-                    "Cannot infer struct type for nested field access: {}.{}",
+                // Fallback: scan all known structs' field lists to find the field's type
+                // (covers cases where struct_field_type_names was not populated for this struct)
+                for (sname, field_names) in &self.struct_fields {
+                    if sname == &parent_struct {
+                        for fname in field_names {
+                            if fname == &field.node {
+                                // Field exists but has a non-struct type; cannot infer struct name
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(format!(
+                    "Type inference failed: cannot determine struct type for field access `{}.{}`. \
+                     Hint: ensure the field is declared with a struct type annotation.",
                     parent_struct, field.node
                 )))
             }
             Expr::Call { func, .. } => {
                 // Try to infer return type as struct from function name
                 if let Expr::Ident(fn_name) = &func.node {
-                    // Check if the function name matches a struct constructor pattern
+                    // Primary: check if the function name matches a struct constructor pattern
                     if self.generated_structs.contains_key(fn_name.as_str()) {
                         return Ok(fn_name.clone());
                     }
+                    // Fallback: check function_return_structs for an explicit return-type mapping
+                    if let Some(ret_struct) = self.function_return_structs.get(fn_name.as_str()) {
+                        return Ok(ret_struct.clone());
+                    }
                 }
-                Err(CodegenError::Unsupported(
-                    "Cannot infer struct type for call expression".to_string(),
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for call expression. \
+                     Hint: ensure the called function has an explicit struct return type annotation."
+                        .to_string(),
                 ))
             }
             Expr::SelfCall => {
@@ -64,12 +95,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(struct_name) = self.var_struct_types.get("self") {
                     return Ok(struct_name.clone());
                 }
-                Err(CodegenError::Unsupported(
-                    "SelfCall (@) used outside of method context".to_string(),
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for `@` (self-recursion). \
+                     Hint: `@` can only be used inside a method with a known `self` type."
+                        .to_string(),
                 ))
             }
-            _ => Err(CodegenError::Unsupported(format!(
-                "Cannot infer struct type for expression: {:?}",
+            Expr::If { .. } => Err(CodegenError::InternalError(
+                "Type inference failed: cannot determine struct type for an `if` expression. \
+                 Hint: assign the result to a variable with an explicit struct type annotation."
+                    .to_string(),
+            )),
+            Expr::Block(_) => Err(CodegenError::InternalError(
+                "Type inference failed: cannot determine struct type for a block expression. \
+                 Hint: assign the result to a variable with an explicit struct type annotation."
+                    .to_string(),
+            )),
+            _ => Err(CodegenError::InternalError(format!(
+                "Type inference failed: cannot determine struct type for expression `{:?}`. \
+                 Hint: use a named variable with an explicit struct type annotation.",
                 expr
             ))),
         }

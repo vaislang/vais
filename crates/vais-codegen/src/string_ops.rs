@@ -120,9 +120,10 @@ impl CodeGenerator {
             }
             "charAt" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "charAt requires an index argument".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'charAt' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (idx_val, idx_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&idx_ir);
@@ -140,9 +141,10 @@ impl CodeGenerator {
             }
             "contains" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "contains requires a string argument".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'contains' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (substr_val, substr_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&substr_ir);
@@ -163,9 +165,10 @@ impl CodeGenerator {
             }
             "indexOf" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "indexOf requires a string argument".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'indexOf' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (substr_val, substr_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&substr_ir);
@@ -179,9 +182,10 @@ impl CodeGenerator {
             }
             "substring" => {
                 if args.len() < 2 {
-                    return Err(CodegenError::Unsupported(
-                        "substring requires start and end arguments".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'substring' requires 2 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (start_val, start_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&start_ir);
@@ -197,9 +201,10 @@ impl CodeGenerator {
             }
             "startsWith" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "startsWith requires a string argument".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'startsWith' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (prefix_val, prefix_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&prefix_ir);
@@ -213,9 +218,10 @@ impl CodeGenerator {
             }
             "endsWith" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Unsupported(
-                        "endsWith requires a string argument".to_string(),
-                    ));
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'endsWith' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
                 }
                 let (suffix_val, suffix_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&suffix_ir);
