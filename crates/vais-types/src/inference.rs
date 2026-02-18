@@ -269,6 +269,27 @@ impl TypeChecker {
         if self.substitutions.is_empty() {
             return ty.clone();
         }
+        // Fast path: primitive/leaf types have no type variables to substitute
+        match ty {
+            ResolvedType::I8
+            | ResolvedType::I16
+            | ResolvedType::I32
+            | ResolvedType::I64
+            | ResolvedType::I128
+            | ResolvedType::U8
+            | ResolvedType::U16
+            | ResolvedType::U32
+            | ResolvedType::U64
+            | ResolvedType::U128
+            | ResolvedType::F32
+            | ResolvedType::F64
+            | ResolvedType::Bool
+            | ResolvedType::Str
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Unknown => return ty.clone(),
+            _ => {}
+        }
         match ty {
             ResolvedType::Var(id) => {
                 if let Some(subst) = self.substitutions.get(id) {
@@ -306,14 +327,24 @@ impl TypeChecker {
                 ResolvedType::Range(Box::new(self.apply_substitutions(inner)))
             }
             ResolvedType::Tuple(types) => {
-                ResolvedType::Tuple(types.iter().map(|t| self.apply_substitutions(t)).collect())
+                let mut result = Vec::with_capacity(types.len());
+                for t in types {
+                    result.push(self.apply_substitutions(t));
+                }
+                ResolvedType::Tuple(result)
             }
             ResolvedType::Fn {
                 params,
                 ret,
                 effects,
             } => ResolvedType::Fn {
-                params: params.iter().map(|p| self.apply_substitutions(p)).collect(),
+                params: {
+                    let mut result = Vec::with_capacity(params.len());
+                    for p in params {
+                        result.push(self.apply_substitutions(p));
+                    }
+                    result
+                },
                 ret: Box::new(self.apply_substitutions(ret)),
                 effects: effects.clone(),
             },

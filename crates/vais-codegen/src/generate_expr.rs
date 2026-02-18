@@ -35,8 +35,8 @@ impl CodeGenerator {
             Expr::StringInterp(parts) => {
                 // Desugar string interpolation into a format() call.
                 // Build a format string with {} placeholders and collect expression args.
-                let mut format_str_parts = Vec::new();
-                let mut interp_args = Vec::new();
+                let mut format_str_parts = Vec::with_capacity(parts.len());
+                let mut interp_args = Vec::with_capacity(parts.len());
                 for part in parts {
                     match part {
                         vais_ast::StringInterpPart::Lit(s) => {
@@ -50,7 +50,7 @@ impl CodeGenerator {
                 }
                 let fmt_string = format_str_parts.join("");
                 // Build synthetic args: format string + expression args
-                let mut args: Vec<Spanned<Expr>> = Vec::new();
+                let mut args: Vec<Spanned<Expr>> = Vec::with_capacity(interp_args.len() + 1);
                 args.push(Spanned::new(Expr::String(fmt_string), expr.span));
                 args.extend(interp_args);
                 self.generate_format_call(&args, counter, expr.span)

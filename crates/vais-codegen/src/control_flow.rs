@@ -236,8 +236,8 @@ impl CodeGenerator {
         };
 
         let merge_label = self.next_label("match.merge");
-        let mut arm_labels: Vec<String> = Vec::new();
-        let mut arm_values: Vec<(String, String)> = Vec::new(); // (value, label)
+        let mut arm_labels: Vec<String> = Vec::with_capacity(arms.len());
+        let mut arm_values: Vec<(String, String)> = Vec::with_capacity(arms.len()); // (value, label)
 
         // Check if all arms are simple integer literals (can use switch)
         let all_int_literals = arms.iter().all(|arm| {
@@ -250,7 +250,7 @@ impl CodeGenerator {
         if all_int_literals && !arms.is_empty() {
             // Use LLVM switch instruction for integer pattern matching
             let default_label = self.next_label("match.default");
-            let mut switch_cases: Vec<(i64, String)> = Vec::new();
+            let mut switch_cases: Vec<(i64, String)> = Vec::with_capacity(arms.len());
             let mut default_arm: Option<&MatchArm> = None;
 
             // First pass: collect labels and find default

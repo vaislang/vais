@@ -64,8 +64,8 @@ Tests optimizer effectiveness:
 
 ## Baseline Results
 
-> **Last Updated:** 2026-02-12
-> **Git Commit:** Phase 18
+> **Last Updated:** 2026-02-18
+> **Git Commit:** Phase 24 (hot-path optimization)
 
 ### Compile-Time Benchmarks
 
@@ -406,7 +406,48 @@ Measures multi-file per-module compilation performance:
 - Auto-enabled for multi-file projects (no `--per-module` flag needed)
 - IR-hash based .o caching ensures only changed modules are recompiled
 
+### 6. Large-Scale Benchmarks (Phase 24)
+
+Measures compiler performance at scale with optimized hot-paths:
+
+> **Last Updated:** 2026-02-18
+> **Git Commit:** Phase 24
+
+#### Codegen Performance (largescale_codegen)
+
+| Input Size | Time | Change vs Phase 18 |
+|------------|------|---------------------|
+| 1K lines | 618 µs | **-8.3%** |
+| 5K lines | 2.79 ms | ~0% (noise) |
+| 10K lines | 5.50 ms | ~0% (noise) |
+| 25K lines | 14.1 ms | -1.1% |
+| 50K lines | 28.9 ms | **-3.8%** |
+
+#### Full Pipeline (largescale_incremental)
+
+| Input Size | Time | Throughput | Change |
+|------------|------|------------|--------|
+| 10K lines | 11.8 ms | 11.9 MiB/s | **-6.2%** |
+
+#### Lexer Scaling
+
+| Functions | Time | Throughput | Change |
+|-----------|------|------------|--------|
+| 500 | 95.4 µs | 183 MiB/s | ~0% |
+| 1,000 | 186.8 µs | 188 MiB/s | ~0% |
+| 5,000 | 1.57 ms | 117 MiB/s | **-2.4%** |
+
+**Key findings (Phase 24):**
+- Codegen 1K lines: -8.3% improvement (Vec::with_capacity + clone reduction)
+- Codegen 50K lines: -3.8% improvement
+- Full pipeline 10K: -6.2% improvement (type inference early-exit + substitution optimization)
+- Optimizations: 16 Vec::with_capacity sites, apply_substitutions primitive early-exit
+
 ## Changelog
+
+### 2026-02-18
+- Phase 24: Hot-path optimization — Vec::with_capacity (16 sites), apply_substitutions primitive early-exit
+- Codegen 1K: -8.3%, 50K: -3.8%, Full pipeline 10K: -6.2%
 
 ### 2026-02-08
 - Added incremental compilation benchmarks (Phase 42 Stage 3~5)

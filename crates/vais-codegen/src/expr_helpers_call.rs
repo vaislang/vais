@@ -119,7 +119,7 @@ impl CodeGenerator {
         };
 
         let mut ir = String::new();
-        let mut arg_vals = Vec::new();
+        let mut arg_vals = Vec::with_capacity(args.len());
 
         for (i, arg) in args.iter().enumerate() {
             let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
@@ -166,10 +166,10 @@ impl CodeGenerator {
             // For struct types, load the value from pointer if the expression produces a pointer
             // Struct literals return pointers (alloca), but function params expect values
             // This applies whether we have function info or not
-            let type_to_check = param_ty
-                .as_ref()
-                .cloned()
-                .unwrap_or_else(|| self.infer_expr_type(arg));
+            let type_to_check = match &param_ty {
+                Some(ty) => ty.clone(),
+                None => self.infer_expr_type(arg),
+            };
             let is_named = matches!(type_to_check, ResolvedType::Named { .. });
             let is_value = self.is_expr_value(arg);
 
@@ -433,7 +433,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let mut ir = String::new();
-        let mut arg_vals = Vec::new();
+        let mut arg_vals = Vec::with_capacity(args.len());
 
         for arg in args {
             let (val, arg_ir) = self.generate_expr(arg, counter)?;
@@ -611,8 +611,8 @@ impl CodeGenerator {
 
         // If first arg is a StringInterp, flatten it into format string + args
         if let Expr::StringInterp(parts) = &args[0].node {
-            let mut fmt_parts = Vec::new();
-            let mut interp_args = Vec::new();
+            let mut fmt_parts = Vec::with_capacity(parts.len());
+            let mut interp_args = Vec::with_capacity(parts.len());
             for part in parts {
                 match part {
                     vais_ast::StringInterpPart::Lit(s) => {
@@ -625,7 +625,7 @@ impl CodeGenerator {
                 }
             }
             let fmt_string = fmt_parts.join("");
-            let mut synthetic_args: Vec<Spanned<Expr>> = Vec::new();
+            let mut synthetic_args: Vec<Spanned<Expr>> = Vec::with_capacity(interp_args.len() + 1);
             synthetic_args.push(Spanned::new(Expr::String(fmt_string), args[0].span));
             synthetic_args.extend(interp_args);
             // Also include any additional args after the interpolated string
@@ -671,7 +671,7 @@ impl CodeGenerator {
 
         // Infer types of extra arguments (skip first format string arg)
         let extra_args = &args[1..];
-        let mut arg_types: Vec<ResolvedType> = Vec::new();
+        let mut arg_types: Vec<ResolvedType> = Vec::with_capacity(extra_args.len());
         for arg in extra_args {
             arg_types.push(self.infer_expr_type(arg));
         }
@@ -834,7 +834,7 @@ impl CodeGenerator {
 
         // Infer types of extra arguments
         let extra_args = &args[1..];
-        let mut arg_types: Vec<ResolvedType> = Vec::new();
+        let mut arg_types: Vec<ResolvedType> = Vec::with_capacity(extra_args.len());
         for arg in extra_args {
             arg_types.push(self.infer_expr_type(arg));
         }
@@ -896,7 +896,7 @@ impl CodeGenerator {
 
         // Evaluate extra arguments
         let mut snprintf_args = String::new();
-        let mut arg_vals: Vec<String> = Vec::new();
+        let mut arg_vals: Vec<String> = Vec::with_capacity(extra_args.len());
         for (i, arg) in extra_args.iter().enumerate() {
             let (val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
@@ -1057,7 +1057,7 @@ impl CodeGenerator {
 
         let full_method_name = format!("{}_{}", type_name.node, method.node);
 
-        let mut arg_vals = Vec::new();
+        let mut arg_vals = Vec::with_capacity(args.len());
         for arg in args {
             let (val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
