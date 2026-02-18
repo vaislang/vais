@@ -101,6 +101,24 @@ impl TypeChecker {
                     let arg_type = self.check_expr(arg)?;
                     if i < sig.params.len() {
                         self.unify(&sig.params[i].1, &arg_type)?;
+                        // Check dependent type refinement for literal arguments
+                        if let ResolvedType::Dependent {
+                            var_name,
+                            predicate,
+                            ..
+                        } = &sig.params[i].1
+                        {
+                            if let Some(lit_val) =
+                                Self::extract_integer_literal_from_expr(&arg.node)
+                            {
+                                self.check_refinement_from_string(
+                                    var_name,
+                                    predicate,
+                                    lit_val,
+                                    Some(arg.span),
+                                )?;
+                            }
+                        }
                     }
                 }
                 // For async functions, wrap the return type in Future

@@ -6,7 +6,6 @@
 // ============================================================================
 
 /// Calculate the Levenshtein edit distance between two strings
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     let len_a = a.len();
     let len_b = b.len();
@@ -110,7 +109,7 @@ pub(crate) fn format_did_you_mean(suggestions: &[String]) -> String {
 }
 
 /// Suggest type conversion hints based on common type mismatches
-#[allow(dead_code)]
+#[allow(dead_code)] // Will be integrated into error paths in a future phase
 pub(crate) fn suggest_type_conversion(expected: &str, found: &str) -> String {
     // Common numeric conversions
     if expected.starts_with('i') && found.starts_with('f') {

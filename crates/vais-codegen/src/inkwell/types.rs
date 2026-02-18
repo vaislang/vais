@@ -123,6 +123,7 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 // ICE: should be resolved before codegen
+                #[cfg(debug_assertions)]
                 eprintln!(
                     "ICE: unresolved type variable reached Inkwell codegen, using i64 fallback"
                 );
@@ -244,6 +245,7 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Associated { .. } => {
                 // ICE: associated type should be resolved during type checking
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved associated type in Inkwell codegen, using i64 fallback");
                 self.context.i64_type().into()
             }
@@ -253,11 +255,13 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::ImplTrait { .. } => {
                 // ICE: ImplTrait should be monomorphized before codegen
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved ImplTrait in Inkwell codegen, using i64 fallback");
                 self.context.i64_type().into()
             }
             ResolvedType::HigherKinded { .. } => {
                 // ICE: HKT should be monomorphized before codegen
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved HKT in Inkwell codegen, using i64 fallback");
                 self.context.i64_type().into()
             }

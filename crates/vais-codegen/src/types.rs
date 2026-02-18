@@ -385,6 +385,7 @@ impl CodeGenerator {
             ResolvedType::ImplTrait { .. } => {
                 // ICE: ImplTrait should be monomorphized before codegen.
                 // Return i64 fallback inline to preserve compound type structure.
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved ImplTrait in codegen, using i64 fallback");
                 String::from("i64")
             }
@@ -477,16 +478,19 @@ impl CodeGenerator {
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 // ICE: should be resolved by the type checker.
                 // Return i64 fallback inline to preserve compound type structure.
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved type variable reached codegen, using i64 fallback");
                 String::from("i64")
             }
             ResolvedType::Associated { .. } => {
                 // ICE: associated types should be resolved during type checking.
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved associated type in codegen, using i64 fallback");
                 String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
                 // ICE: HKT should be monomorphized before codegen.
+                #[cfg(debug_assertions)]
                 eprintln!("ICE: unresolved higher-kinded type in codegen, using i64 fallback");
                 String::from("i64")
             }

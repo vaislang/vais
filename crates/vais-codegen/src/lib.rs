@@ -126,8 +126,9 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
 }
 
 #[cfg(test)]
-use diagnostics::{edit_distance, suggest_type_conversion as _suggest_type_conversion};
-pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
+use diagnostics::edit_distance;
+#[allow(unused_imports)]
+pub(crate) use diagnostics::{format_did_you_mean, suggest_similar, suggest_type_conversion};
 pub use target::TargetTriple;
 // Re-export type structs from types module
 pub(crate) use types::*;
@@ -1597,20 +1598,20 @@ mod tests {
     }
 
     #[test]
-    fn test__suggest_type_conversion() {
+    fn test_suggest_type_conversion() {
         // Numeric conversions
-        assert!(_suggest_type_conversion("i64", "f64").contains("as i64"));
-        assert!(_suggest_type_conversion("f64", "i64").contains("as f64"));
-        assert!(_suggest_type_conversion("i32", "i64").contains("as i32"));
+        assert!(suggest_type_conversion("i64", "f64").contains("as i64"));
+        assert!(suggest_type_conversion("f64", "i64").contains("as f64"));
+        assert!(suggest_type_conversion("i32", "i64").contains("as i32"));
 
         // String conversions
-        assert!(_suggest_type_conversion("String", "&str").contains(".to_string()"));
-        assert!(_suggest_type_conversion("&str", "String").contains(".as_str()"));
+        assert!(suggest_type_conversion("String", "&str").contains(".to_string()"));
+        assert!(suggest_type_conversion("&str", "String").contains(".as_str()"));
 
         // Bool to int
-        assert!(_suggest_type_conversion("i64", "bool").contains("as i64"));
+        assert!(suggest_type_conversion("i64", "bool").contains("as i64"));
 
         // No suggestion for unrelated types
-        assert_eq!(_suggest_type_conversion("Vec", "HashMap"), "");
+        assert_eq!(suggest_type_conversion("Vec", "HashMap"), "");
     }
 }

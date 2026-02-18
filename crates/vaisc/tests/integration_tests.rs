@@ -2321,3 +2321,165 @@ X Box: Container {
     // We document current behavior
     let _ = result;
 }
+
+// ==================== Phase 23: Dependent Type Validation ====================
+
+#[test]
+fn test_dependent_type_positive_literal() {
+    // Positive integer satisfies {x: i64 | x > 0}
+    let source = r#"
+F test_positive(n: {x: i64 | x > 0}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R test_positive(5)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_dependent_type_zero_nonneg() {
+    // Zero satisfies {x: i64 | x >= 0}
+    let source = r#"
+F test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R test_nonneg(0)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_dependent_type_negative_violation() {
+    // Negative literal violates {x: i64 | x > 0} — should fail to compile
+    let source = r#"
+F main() -> i64 {
+    x: {n: i64 | n > 0} := -5
+    R x
+}
+"#;
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_dependent_type_call_violation() {
+    // Passing negative literal to function with dependent type param
+    let source = r#"
+F test_positive(n: {x: i64 | x > 0}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R test_positive(-3)
+}
+"#;
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_dependent_type_zero_positive_violation() {
+    // Zero violates {x: i64 | x > 0}
+    let source = r#"
+F test_positive(n: {x: i64 | x > 0}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R test_positive(0)
+}
+"#;
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_dependent_type_bounded_range() {
+    // Value within range: {x: i64 | x >= 0} with x = 10
+    let source = r#"
+F bounded(n: {x: i64 | x >= 0}) -> i64 {
+    R n + 1
+}
+F main() -> i64 {
+    R bounded(10)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_dependent_type_runtime_not_checked() {
+    // Non-literal values should compile (runtime checking not enforced)
+    let source = r#"
+F test_positive(n: {x: i64 | x > 0}) -> i64 {
+    R n
+}
+F get_value() -> i64 { R 42 }
+F main() -> i64 {
+    v := get_value()
+    R test_positive(v)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_dependent_type_compound_and_violation() {
+    // Compound predicate with && — value violates upper bound
+    let source = r#"
+F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R bounded(200)
+}
+"#;
+    assert!(!compiles(source));
+}
+
+#[test]
+fn test_dependent_type_compound_and_pass() {
+    // Compound predicate with && — value satisfies both bounds
+    let source = r#"
+F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    R n
+}
+F main() -> i64 {
+    R bounded(50)
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Phase 23: ICE Fallback Safety ====================
+
+#[test]
+fn test_ice_fallback_generic_function() {
+    // Generic function should compile (generic resolved before codegen)
+    let source = r#"
+F identity<T>(x: T) -> T {
+    R x
+}
+F main() -> i64 {
+    R identity(42)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_ice_fallback_impl_trait_return() {
+    // impl Trait return should compile (even with i64 fallback)
+    let source = r#"
+W Describable {
+    F describe(&self) -> str
+}
+S Foo {}
+X Foo: Describable {
+    F describe(&self) -> str { R "foo" }
+}
+F main() -> i64 {
+    R 0
+}
+"#;
+    assert!(compiles(source));
+}

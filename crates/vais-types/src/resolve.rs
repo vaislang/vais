@@ -195,8 +195,11 @@ impl TypeChecker {
             } => {
                 let resolved_base = self.resolve_type(&base.node);
                 // Convert predicate expression to string for storage
-                // The predicate is validated separately during type checking
                 let predicate_str = format!("{:?}", predicate.node);
+                // Cache the original AST predicate for compile-time evaluation
+                self.dependent_predicates
+                    .borrow_mut()
+                    .insert(predicate_str.clone(), predicate.node.clone());
                 ResolvedType::Dependent {
                     var_name: var_name.clone(),
                     base: Box::new(resolved_base),
@@ -328,6 +331,169 @@ impl TypeChecker {
         }
 
         Ok(())
+    }
+
+    /// Maximum recursion depth for predicate/expression evaluation.
+    const MAX_PREDICATE_DEPTH: usize = 64;
+
+    /// Try to evaluate a dependent type predicate at compile time.
+    ///
+    /// Given a predicate expression and the value of the bound variable,
+    /// attempts to evaluate the predicate to a boolean result.
+    /// Returns `Some(true)` if the predicate is satisfied, `Some(false)` if violated,
+    /// or `None` if the predicate cannot be statically evaluated.
+    pub(crate) fn try_evaluate_predicate(
+        predicate: &Expr,
+        var_name: &str,
+        value: i64,
+    ) -> Option<bool> {
+        Self::try_evaluate_predicate_inner(predicate, var_name, value, 0)
+    }
+
+    fn try_evaluate_predicate_inner(
+        predicate: &Expr,
+        var_name: &str,
+        value: i64,
+        depth: usize,
+    ) -> Option<bool> {
+        if depth > Self::MAX_PREDICATE_DEPTH {
+            return None;
+        }
+        match predicate {
+            Expr::Binary { op, left, right } => {
+                // Handle logical operators first — their operands are predicates, not values
+                match op {
+                    BinOp::And => {
+                        let l = Self::try_evaluate_predicate_inner(&left.node, var_name, value, depth + 1)?;
+                        let r = Self::try_evaluate_predicate_inner(&right.node, var_name, value, depth + 1)?;
+                        return Some(l && r);
+                    }
+                    BinOp::Or => {
+                        let l = Self::try_evaluate_predicate_inner(&left.node, var_name, value, depth + 1)?;
+                        let r = Self::try_evaluate_predicate_inner(&right.node, var_name, value, depth + 1)?;
+                        return Some(l || r);
+                    }
+                    _ => {}
+                }
+                // Comparison operators — operands are arithmetic expressions
+                let left_val = Self::try_eval_const_expr_inner(&left.node, var_name, value, depth + 1)?;
+                let right_val = Self::try_eval_const_expr_inner(&right.node, var_name, value, depth + 1)?;
+                match op {
+                    BinOp::Gt => Some(left_val > right_val),
+                    BinOp::Gte => Some(left_val >= right_val),
+                    BinOp::Lt => Some(left_val < right_val),
+                    BinOp::Lte => Some(left_val <= right_val),
+                    BinOp::Eq => Some(left_val == right_val),
+                    BinOp::Neq => Some(left_val != right_val),
+                    _ => None,
+                }
+            }
+            Expr::Unary { op: UnaryOp::Not, expr } => {
+                let inner = Self::try_evaluate_predicate_inner(&expr.node, var_name, value, depth + 1)?;
+                Some(!inner)
+            }
+            _ => None,
+        }
+    }
+
+    /// Try to evaluate a simple arithmetic expression at compile time.
+    /// Supports: variable reference, integer literals, basic arithmetic.
+    fn try_eval_const_expr_inner(expr: &Expr, var_name: &str, var_value: i64, depth: usize) -> Option<i64> {
+        if depth > Self::MAX_PREDICATE_DEPTH {
+            return None;
+        }
+        match expr {
+            Expr::Ident(name) if name == var_name => Some(var_value),
+            Expr::Int(n) => Some(*n),
+            Expr::Unary { op: UnaryOp::Neg, expr } => {
+                Self::try_eval_const_expr_inner(&expr.node, var_name, var_value, depth + 1)
+                    .and_then(|v| v.checked_neg())
+            }
+            Expr::Binary { op, left, right } => {
+                let l = Self::try_eval_const_expr_inner(&left.node, var_name, var_value, depth + 1)?;
+                let r = Self::try_eval_const_expr_inner(&right.node, var_name, var_value, depth + 1)?;
+                match op {
+                    BinOp::Add => l.checked_add(r),
+                    BinOp::Sub => l.checked_sub(r),
+                    BinOp::Mul => l.checked_mul(r),
+                    BinOp::Div => {
+                        if r != 0 { l.checked_div(r) } else { None }
+                    }
+                    BinOp::Mod => {
+                        if r != 0 { l.checked_rem(r) } else { None }
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if a value satisfies a dependent type's predicate.
+    /// Returns Err(RefinementViolation) if the predicate is definitely violated.
+    pub(crate) fn check_refinement(
+        &self,
+        var_name: &str,
+        predicate_expr: &Expr,
+        predicate_str: &str,
+        value: i64,
+        span: Option<Span>,
+    ) -> TypeResult<()> {
+        if let Some(false) = Self::try_evaluate_predicate(predicate_expr, var_name, value) {
+            return Err(TypeError::RefinementViolation {
+                predicate: predicate_str.to_string(),
+                span,
+            });
+        }
+        Ok(())
+    }
+
+    /// Check a dependent type refinement using the cached predicate expression.
+    /// Used when the predicate is stored as a string in ResolvedType::Dependent.
+    pub(crate) fn check_refinement_from_string(
+        &self,
+        var_name: &str,
+        predicate_str: &str,
+        value: i64,
+        span: Option<Span>,
+    ) -> TypeResult<()> {
+        let predicates = self.dependent_predicates.borrow();
+        if let Some(pred_expr) = predicates.get(predicate_str) {
+            if let Some(false) = Self::try_evaluate_predicate(pred_expr, var_name, value) {
+                return Err(TypeError::RefinementViolation {
+                    predicate: predicate_str.to_string(),
+                    span,
+                });
+            }
+        } else {
+            // Predicate not in cache — this can happen when the dependent type
+            // was resolved in a different module or scope. Log for debugging.
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "ICE: dependent type predicate not found in cache: {}",
+                predicate_str
+            );
+        }
+        Ok(())
+    }
+
+    /// Extract an integer literal value from an expression.
+    /// Handles `Expr::Int(n)` and `Expr::Unary { op: Neg, expr: Int(n) }`.
+    pub(crate) fn extract_integer_literal_from_expr(expr: &Expr) -> Option<i64> {
+        match expr {
+            Expr::Int(n) => Some(*n),
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+            } => {
+                if let Expr::Int(n) = &expr.node {
+                    n.checked_neg()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Resolve a const expression from AST to internal representation

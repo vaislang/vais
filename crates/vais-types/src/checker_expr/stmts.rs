@@ -30,6 +30,26 @@ impl TypeChecker {
                 let var_type = if let Some(ty) = ty {
                     let expected = self.resolve_type(&ty.node);
                     self.unify(&expected, &value_type)?;
+
+                    // Validate dependent type predicate at compile time for literal values
+                    if let Type::Dependent {
+                        var_name,
+                        base: _,
+                        predicate,
+                    } = &ty.node
+                    {
+                        if let Some(lit_val) = Self::extract_integer_literal_from_expr(&value.node) {
+                            let predicate_str = format!("{:?}", predicate.node);
+                            self.check_refinement(
+                                var_name,
+                                &predicate.node,
+                                &predicate_str,
+                                lit_val,
+                                Some(value.span),
+                            )?;
+                        }
+                    }
+
                     expected
                 } else {
                     value_type
@@ -156,4 +176,5 @@ impl TypeChecker {
             }),
         }
     }
+
 }

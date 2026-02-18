@@ -154,6 +154,10 @@ pub struct TypeChecker {
     // Multi-error collection mode: when true, errors are collected instead of returning immediately
     pub multi_error_mode: bool,
     pub collected_errors: Vec<TypeError>,
+
+    // Cache of dependent type predicate expressions (predicate_string -> original AST Expr)
+    // Used to evaluate refinement predicates at function call sites
+    pub(crate) dependent_predicates: RefCell<HashMap<String, vais_ast::Expr>>,
 }
 
 impl TypeChecker {
@@ -187,6 +191,7 @@ impl TypeChecker {
             imported_item_count: 0,
             multi_error_mode: false,
             collected_errors: Vec::new(),
+            dependent_predicates: RefCell::new(HashMap::new()),
         };
         checker.register_builtins();
         checker
