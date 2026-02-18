@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-17
+> **최종 업데이트**: 2026-02-18
 
 ---
 
@@ -194,23 +194,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 22 | 대형 파일 모듈 분할 R6 | formatter.rs→7모듈, expr.rs→5모듈, function_gen.rs→5모듈, Clippy 0건 | 637 |
 | 23 | Codegen 미지원 기능 구현 | Dependent types 검증, ICE fallback 안전화, suggest_type_conversion 통합, +9 integration tests | 647 |
 | 24 | 성능 벤치마크 & 최적화 | Vec::with_capacity 16곳, apply_substitutions primitive early-exit, codegen 1K -8.3%, 50K -3.8%, pipeline 10K -6.2% | 647 |
+| 25 | E2E 테스트 확장 (700개 목표) | phase45/phase45_types/phase45_advanced 54개 추가, lazy/comptime/guard/closure/trait 등 미커버 기능, Vais 문법 6건 수정 | 701 |
 
-## 현재 작업 (2026-02-18) — Phase 24: 성능 벤치마크 & 최적화 ✅
-- [x] 1. Hot-path 최적화: Codegen Vec::with_capacity & clone 제거 (Sonnet)
-  변경: control_flow.rs, expr_helpers_call.rs, generate_expr.rs (Vec::with_capacity 15곳, match 패턴 1곳)
-- [x] 2. Hot-path 최적화: 타입 추론 apply_substitutions clone 최소화 (Sonnet)
-  변경: inference.rs (primitive early-exit, Tuple/Fn with_capacity)
-- [x] 3. 벤치마크 실행 & BASELINE.md 업데이트 (Opus)
-  변경: benches/BASELINE.md (Phase 24 largescale 벤치마크 결과 추가)
-- [x] 4. 최적화 효과 검증 & ROADMAP 업데이트 (Opus)
-  변경: ROADMAP.md (Phase 24 히스토리 테이블 + 결과 기록)
-진행률: 4/4 (100%)
+## 현재 작업 (2026-02-18) — Phase 25: E2E 테스트 확장 (700개 목표) ✅
+모드: 자동진행
+- [x] 1. E2E 테스트: 언어 기본 edge case (lazy, comptime, union, guard, range, for/while, const, global, macro, defer, assert) 18개 (Sonnet)
+- [x] 2. E2E 테스트: 타입 시스템 & 패턴 (tuple destructuring, default params, contracts, compound assign, operator precedence, where, trait alias, struct method, enum match, nested struct) 18개 (Sonnet) [∥1]
+- [x] 3. E2E 테스트: 고급 기능 & edge case (closure capture/move, higher-order fn, self-recursion, trait dispatch, nested if, mutual recursion, pipe, block expr, expression body, enum with data, array index) 18개 (Sonnet) [∥1]
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
+진행률: 4/4 (100%) ✅
 
 ## 📋 예정 작업
 
-| # | 이름 | 내용 | 우선순위 |
-|---|------|------|---------|
-| 25 | E2E 테스트 확장 (700개 목표) | 미커버 기능 테스트 추가, edge case 커버리지 강화 | 낮음 |
+(없음)
 
 ---
 
