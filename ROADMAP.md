@@ -191,6 +191,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 19 | 리뷰 · Docs · 코드 품질 | 셸 인젝션/보안 20건 수정, 한국어 Docs, EN/JA/ZH 번역 Sync, 모듈 분할 R4/R5 | 655 |
 | 20 | Codegen 버그 수정 | div-by-zero guard, @abort 선언 복구, current_block 추적 수정, E2E +44 복구 | 647 |
 | 21 | 정리: ROADMAP 통합 & E2E 중복 제거 | Phase 히스토리 연번화 (366→209줄), execution_tests 중복 10개 제거 | 637 |
+| 22 | 대형 파일 모듈 분할 R6 | formatter.rs→7모듈, expr.rs→5모듈, function_gen.rs→5모듈, Clippy 0건 | 637 |
+
+## 📋 예정 작업
+
+| # | 이름 | 내용 | 우선순위 |
+|---|------|------|---------|
+| 23 | Codegen 미지원 기능 구현 | Dependent types 검증, monomorphization 완성 (⚠️ 표시된 미완성 기능) | 중간 |
+| 24 | 성능 벤치마크 & 최적화 | 컴파일 성능 프로파일링, 100K lines 벤치마크, hot-path 최적화 | 중간 |
+| 25 | E2E 테스트 확장 (700개 목표) | 미커버 기능 테스트 추가, edge case 커버리지 강화 | 낮음 |
 
 ---
 
