@@ -201,6 +201,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 29 | Selfhost 테스트 통합 | selfhost_mir_tests 14개, bootstrap_tests +27개, selfhost_clang_tests 21개 (3-tier), 신규 62개 테스트 | 713 |
 | 30 | Generic Monomorphization | Inkwell monomorphization 3-pass 파이프라인, TypeMapper substitution sync, ConstGeneric substitution lookup 추가, debug_assertions 경고 | 723 |
 | 30a | 리뷰 발견사항 수정 | Phase 30 리뷰 7건 — 4건 해결済 확인, pub→pub(crate) 축소, clone 최적화, transitive instantiation 기술 문서화 | 723 |
+| 31 | 대형 파일 모듈 분할 R7 | tiered.rs(1,523줄)→5모듈, item.rs(1,280줄)→4모듈, doc_gen.rs(1,228줄)→5모듈, Clippy 0건 | 723 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -256,8 +257,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: inkwell/types.rs (Generic/ConstGeneric eprintln 이미 #[cfg(debug_assertions)] 적용)
 진행률: 7/7 (100%) ✅
 
-### Phase 31: 대형 파일 모듈 분할 R7
-- [ ] tiered.rs(1,523줄), item.rs(1,280줄), doc_gen.rs(1,228줄) 등 잔여 대형 파일 모듈화
+## 현재 작업 (2026-02-19) — Phase 31: 대형 파일 모듈 분할 R7 ✅
+모드: 자동진행
+- [x] 1. tiered.rs 모듈 분할 — 1,523줄 → tiered/ 5모듈 (mod/value/interpreter/jit/tests) (Sonnet)
+  변경: tiered.rs 삭제 → tiered/{mod.rs(198줄), value.rs(52줄), interpreter.rs(431줄), jit.rs(345줄), tests.rs(513줄)}
+- [x] 2. item.rs 모듈 분할 — 1,280줄 → item/ 4모듈 (mod/declarations/traits/macros) (Sonnet) [∥1]
+  변경: item.rs 삭제 → item/{mod.rs(240줄), declarations.rs(416줄), traits.rs(192줄), macros.rs(446줄)}
+- [x] 3. doc_gen.rs 모듈 분할 — 1,228줄 → doc_gen/ 5모듈 (mod/extract/markdown/html/tests) (Sonnet) [∥1]
+  변경: doc_gen.rs 삭제 → doc_gen/{mod.rs(143줄), extract.rs(455줄), markdown.rs(209줄), html.rs(368줄), tests.rs(68줄)}
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
+진행률: 4/4 (100%) ✅
 
 ### Phase 32: E2E 테스트 확장 (750개 목표)
 - [ ] 미커버 기능 테스트 추가 — WASM, async, GPU, advanced pattern matching 등 edge case 보강
