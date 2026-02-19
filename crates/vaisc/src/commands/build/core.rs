@@ -769,8 +769,14 @@ pub(crate) fn cmd_build(
             target.clone(),
         );
         gen.set_resolved_functions(checker.get_all_functions().clone());
-        gen.generate_module(&final_ast)
-            .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+        let instantiations = checker.get_generic_instantiations();
+        if instantiations.is_empty() {
+            gen.generate_module(&final_ast)
+                .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+        } else {
+            gen.generate_module_with_instantiations(&final_ast, instantiations)
+                .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+        }
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();
 

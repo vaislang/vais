@@ -199,6 +199,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 27 | 타입 시스템 건전성 강화 | i64 fallback 5건→InternalError, Generic/ConstGeneric 경고 유지, TC pre-codegen Var/Unknown 차단, self 파라미터 skip | 713 |
 | 28 | 코드 정리 & dead_code 활성화 | dead_code 38건 분류→삭제13/cfg(test)2/allow복원6/유지17, checker_module.rs 4모듈 분할, Clippy 0건 | 713 |
 | 29 | Selfhost 테스트 통합 | selfhost_mir_tests 14개, bootstrap_tests +27개, selfhost_clang_tests 21개 (3-tier), 신규 62개 테스트 | 713 |
+| 30 | Generic Monomorphization | Inkwell monomorphization 3-pass 파이프라인, TypeMapper substitution sync, ConstGeneric substitution lookup 추가, debug_assertions 경고 | 723 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -222,9 +223,38 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
 진행률: 4/4 (100%) ✅
 
+## 현재 작업 (2026-02-18) — Phase 30: Generic Monomorphization ✅
+모드: 자동진행
+- [x] 1. Inkwell backend monomorphization — generate_module 확장 & specialized function 코드 생성 (Sonnet)
+  변경: generator.rs (generate_module→generate_module_with_instantiations 3-pass), gen_function.rs (generate_specialized_function_body + generic skip guard), core.rs (instantiations 전달)
+- [x] 2. Text IR Generic/ConstGeneric substitution lookup 추가 & debug 경고 개선 (Sonnet) [∥1]
+  변경: types.rs (Generic/ConstGeneric substitution lookup 추가, ConstGeneric 기존 누락 수정, eprintln→#[cfg(debug_assertions)], ICE: 접두사 제거)
+- [x] 3. Inkwell Generic/ConstGeneric substitution + TypeMapper sync (Sonnet) [blockedBy: 1]
+  변경: inkwell/types.rs (TypeMapper generic_substitutions 필드+set/clear), gen_types.rs (set/clear sync), gen_function.rs (4곳 sync), gen_special.rs (2곳 sync)
+- [x] 4. E2E 테스트 추가 — generic monomorphization 검증 10개 (Sonnet) [blockedBy: 1,2,3]
+  변경: 신규 e2e/phase30.rs (10개: identity/multi_instantiation/two_params/nested/arithmetic/swap/multiple_fns/bool/expression_body/repeated_type)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+진행률: 5/5 (100%) ✅
+
 ## 📋 예정 작업
 
-### Phase 30: (TBD)
+### Phase 30a: 리뷰 발견사항 수정 (2026-02-19)
+> 출처: /team-review Phase 30
+
+- [ ] 1. [성능] Struct 인스턴스화 O(N×M) → HashMap 사전구축 O(N+M) — 대상: generator.rs:273
+- [ ] 2. [성능] Vec<GenericInstantiation>.contains() → HashSet — 대상: vais-types/lib.rs:256
+- [ ] 3. [정확성] declare_specialized_function 하드코딩 generic names → func.generics 사용 — 대상: gen_types.rs:214
+- [ ] 4. [정확성] Transitive instantiation 수집 (build path only) — 대상: inference.rs:558
+- [ ] 5. [보안] unwrap→ok_or_else, Generic→Generic 순환 방어, pub→pub(crate) — 대상: gen_function.rs:544, types.rs
+- [ ] 6. [성능] clone 최적화 (Arc/참조 전환) + 빈 HashMap clone 스킵 — 대상: gen_function.rs, types.rs
+- [ ] 7. [정확성] eprintln #[cfg(debug_assertions)] 일관화, dead code 정리, 테스트 이름 수정 — 대상: inkwell/types.rs
+진행률: 0/7 (0%)
+
+### Phase 31: 대형 파일 모듈 분할 R7
+- [ ] tiered.rs(1,523줄), item.rs(1,280줄), doc_gen.rs(1,228줄) 등 잔여 대형 파일 모듈화
+
+### Phase 32: E2E 테스트 확장 (750개 목표)
+- [ ] 미커버 기능 테스트 추가 — WASM, async, GPU, advanced pattern matching 등 edge case 보강
 
 ---
 

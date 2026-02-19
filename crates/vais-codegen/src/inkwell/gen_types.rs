@@ -122,11 +122,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Set generic substitutions for the current context
     pub fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
         self.generic_substitutions = subst;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
     }
 
     /// Clear generic substitutions
     pub fn clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
+        self.type_mapper.clear_generic_substitutions();
     }
 
     /// Substitute generic type parameters with concrete types

@@ -10,6 +10,9 @@ use vais_types::ResolvedType;
 pub struct TypeMapper<'ctx> {
     context: &'ctx Context,
     struct_types: HashMap<String, StructType<'ctx>>,
+    /// Generic substitutions mirrored from InkwellCodeGenerator.
+    /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
+    pub generic_substitutions: HashMap<String, ResolvedType>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
@@ -18,7 +21,18 @@ impl<'ctx> TypeMapper<'ctx> {
         Self {
             context,
             struct_types: HashMap::new(),
+            generic_substitutions: HashMap::new(),
         }
+    }
+
+    /// Synchronise the substitution table with the generator's current map.
+    pub fn set_generic_substitutions(&mut self, subst: &HashMap<String, ResolvedType>) {
+        self.generic_substitutions = subst.clone();
+    }
+
+    /// Clear the substitution table (call when leaving a generic context).
+    pub fn clear_generic_substitutions(&mut self) {
+        self.generic_substitutions.clear();
     }
 
     /// Registers a named struct type.
@@ -110,13 +124,17 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Generic(name) => {
-                // Monomorphization incomplete — fall back to i64 for now.
-                // TODO: unreachable! once full monomorphization is implemented.
-                eprintln!(
-                    "Warning: ICE: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
-                    name
-                );
-                self.context.i64_type().into()
+                // Check if we have a substitution for this generic parameter.
+                if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
+                    self.map_type(&concrete)
+                } else {
+                    // Monomorphization should resolve all generics — warn and fallback.
+                    eprintln!(
+                        "Warning: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
+                        name
+                    );
+                    self.context.i64_type().into()
+                }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 unreachable!("ICE: unresolved type variable reached Inkwell codegen")
@@ -220,12 +238,17 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::ConstGeneric(name) => {
-                // Monomorphization incomplete — fall back to i64 for now.
-                eprintln!(
-                    "Warning: ICE: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
-                    name
-                );
-                self.context.i64_type().into()
+                // Check if we have a substitution for this const generic parameter.
+                if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
+                    self.map_type(&concrete)
+                } else {
+                    // Monomorphization should resolve all const generics — warn and fallback.
+                    eprintln!(
+                        "Warning: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
+                        name
+                    );
+                    self.context.i64_type().into()
+                }
             }
             ResolvedType::Lifetime(_) => {
                 unreachable!("ICE: bare lifetime has no runtime representation in Inkwell codegen")

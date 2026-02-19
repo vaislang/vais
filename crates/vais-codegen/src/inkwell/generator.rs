@@ -186,12 +186,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Generates code for an entire Vais module.
+    ///
+    /// Delegates to `generate_module_with_instantiations` with an empty instantiation list.
     pub fn generate_module(&mut self, vais_module: &VaisModule) -> CodegenResult<()> {
-        // First pass: collect all function signatures, struct definitions, enum definitions, and extern blocks
+        self.generate_module_with_instantiations(vais_module, &[])
+    }
+
+    /// Generates code for a Vais module with generic monomorphization.
+    ///
+    /// Three-pass approach:
+    /// 1. First pass: declare all functions/structs/enums/externs (generic functions are declared
+    ///    but their templates are stored for later specialization).
+    /// 2. Second pass: process instantiations — emit specialized struct types and specialized
+    ///    function bodies for each `GenericInstantiation` provided by the type checker.
+    /// 3. Third pass: generate bodies for non-generic functions and methods.
+    pub fn generate_module_with_instantiations(
+        &mut self,
+        vais_module: &VaisModule,
+        instantiations: &[vais_types::GenericInstantiation],
+    ) -> CodegenResult<()> {
+        // Collect generic function templates during the first pass so we can specialize them.
+        let mut generic_function_templates: HashMap<String, ast::Function> = HashMap::new();
+
+        // First pass: declare all function signatures, struct definitions, enum definitions,
+        // and extern blocks.
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
-                    self.declare_function(func)?;
+                    if !func.generics.is_empty() {
+                        // Store generic function template — declare signature but skip body.
+                        generic_function_templates
+                            .insert(func.name.node.clone(), (*func).clone());
+                        // Still declare the base signature so call-sites that reference the
+                        // unspecialized name can find it (the body is skipped in generate_function).
+                        self.declare_function(func)?;
+                    } else {
+                        self.declare_function(func)?;
+                    }
                 }
                 ast::Item::Struct(s) => {
                     self.define_struct(s)?;
@@ -212,7 +243,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Second pass: declare methods from Impl blocks and struct inline methods
+        // Second pass (part A): declare method signatures from Impl blocks and struct inline methods.
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Impl(impl_block) => {
@@ -233,10 +264,80 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Third pass: generate function bodies and method bodies
+        // Second pass (part B): process generic instantiations.
+        for inst in instantiations {
+            match &inst.kind {
+                vais_types::InstantiationKind::Struct => {
+                    // Specialized struct — resolve fields from the struct definition in the AST.
+                    // We look up the base struct to get its field types, then define_specialized_struct.
+                    for item in &vais_module.items {
+                        if let ast::Item::Struct(s) = &item.node {
+                            if s.name.node == inst.base_name {
+                                let fields: Vec<(String, ResolvedType)> = s
+                                    .fields
+                                    .iter()
+                                    .map(|f| {
+                                        (
+                                            f.name.node.clone(),
+                                            self.ast_type_to_resolved(&f.ty.node),
+                                        )
+                                    })
+                                    .collect();
+                                self.define_specialized_struct(
+                                    &inst.base_name,
+                                    &inst.type_args,
+                                    &fields,
+                                )?;
+                                break;
+                            }
+                        }
+                    }
+                }
+                vais_types::InstantiationKind::Function => {
+                    // Specialized function — declare the mangled signature then generate the body.
+                    if let Some(generic_fn) =
+                        generic_function_templates.get(&inst.base_name).cloned()
+                    {
+                        // Build param/return types from the AST function (substitution happens
+                        // inside declare_specialized_function via the substitutions map).
+                        let param_types: Vec<ResolvedType> = generic_fn
+                            .params
+                            .iter()
+                            .map(|p| self.ast_type_to_resolved(&p.ty.node))
+                            .collect();
+                        let return_type = if let Some(ret) = generic_fn.ret_type.as_ref() {
+                            self.ast_type_to_resolved(&ret.node)
+                        } else {
+                            ResolvedType::Unit
+                        };
+
+                        // Declare the specialized function (idempotent if already declared).
+                        self.declare_specialized_function(
+                            &inst.base_name,
+                            &inst.type_args,
+                            &param_types,
+                            &return_type,
+                        )?;
+
+                        // Generate the specialized body.
+                        self.generate_specialized_function_body(
+                            &generic_fn,
+                            &inst.mangled_name,
+                            &inst.type_args,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Method { .. } => {
+                    // Method specialization is handled via impl blocks — skip for now.
+                }
+            }
+        }
+
+        // Third pass: generate function bodies and method bodies (non-generic only).
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
+                    // generate_function skips generic functions automatically.
                     self.generate_function(func)?;
                 }
                 ast::Item::Impl(impl_block) => {

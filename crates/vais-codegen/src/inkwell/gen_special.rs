@@ -357,6 +357,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
 
         let fn_value = self.module.add_function(&method_name, fn_type, None);
         self.functions.insert(method_name.clone(), fn_value);
@@ -511,6 +513,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore generic substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }

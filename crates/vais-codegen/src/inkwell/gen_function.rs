@@ -3,9 +3,11 @@
 //! Handles function code generation, TCO detection and loop-based
 //! tail recursion elimination.
 
+use std::collections::HashMap;
+
 use inkwell::{AddressSpace, IntPredicate};
 
-use vais_ast::{self as ast, Expr, IfElse, Stmt};
+use vais_ast::{self as ast, Expr, GenericParamKind, IfElse, Stmt};
 use vais_types::ResolvedType;
 
 use super::generator::{InkwellCodeGenerator, TcoState};
@@ -75,6 +77,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Generate a tail-recursive function body as a loop.
     /// Instead of recursive calls, we update the parameters and branch back to the loop header.
     pub(super) fn generate_tco_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        // Skip generic function body - they are generated via specialization
+        if !func.generics.is_empty() {
+            return Ok(());
+        }
+
         let fn_value = *self
             .functions
             .get(&func.name.node)
@@ -86,13 +93,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.defer_stack.clear();
 
         let old_substitutions = self.generic_substitutions.clone();
-        if !func.generics.is_empty() {
-            for gp in &func.generics {
-                self.generic_substitutions
-                    .entry(gp.name.node.clone())
-                    .or_insert(ResolvedType::I64);
-            }
-        }
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -230,11 +230,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Clear TCO state
         self.tco_state = None;
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }
 
     pub(super) fn generate_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        // Skip generic function body - they are generated via specialization
+        if !func.generics.is_empty() {
+            return Ok(());
+        }
+
         // Check if this function has tail-recursive self-calls
         let is_tail_recursive = match &func.body {
             ast::FunctionBody::Expr(body_expr) => Self::has_tail_self_call(&body_expr.node),
@@ -261,15 +268,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.defer_stack.clear();
 
-        // For generic functions, set up default substitutions (T -> i64, etc.)
         let old_substitutions = self.generic_substitutions.clone();
-        if !func.generics.is_empty() {
-            for gp in &func.generics {
-                self.generic_substitutions
-                    .entry(gp.name.node.clone())
-                    .or_insert(ResolvedType::I64);
-            }
-        }
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -488,6 +487,166 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Restore generic substitutions
         self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
+        self.current_function = None;
+        Ok(())
+    }
+
+    /// Generate a specialized (monomorphized) function body for a generic function.
+    ///
+    /// This is called during the second pass of `generate_module_with_instantiations`
+    /// after `declare_specialized_function` has registered the LLVM function value.
+    pub(super) fn generate_specialized_function_body(
+        &mut self,
+        func: &ast::Function,
+        mangled_name: &str,
+        type_args: &[ResolvedType],
+    ) -> CodegenResult<()> {
+        // Build substitution map from actual generic param names to concrete type args
+        let type_params: Vec<_> = func
+            .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .collect();
+
+        let substitutions: HashMap<String, ResolvedType> = type_params
+            .iter()
+            .zip(type_args.iter())
+            .map(|(g, t)| (g.name.node.clone(), t.clone()))
+            .collect();
+
+        // Save and replace generic substitutions
+        let old_substitutions = self.generic_substitutions.clone();
+        self.generic_substitutions = substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
+
+        // Look up the already-declared specialized function value
+        let fn_value = *self.functions.get(mangled_name).ok_or_else(|| {
+            CodegenError::UndefinedFunction(format!(
+                "{} (specialized as {})",
+                func.name.node, mangled_name
+            ))
+        })?;
+
+        self.current_function = Some(fn_value);
+        self.locals.clear();
+        self.var_struct_types.clear();
+        self.defer_stack.clear();
+
+        // Create entry block
+        let entry = self.context.append_basic_block(fn_value, "entry");
+        self.builder.position_at_end(entry);
+
+        // Allocate space for parameters (using the declared LLVM types)
+        for (i, param) in func.params.iter().enumerate() {
+            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_type = param_value.get_type();
+            let alloca = self
+                .builder
+                .build_alloca(param_type, &param.name.node)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(alloca, param_value)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals
+                .insert(param.name.node.clone(), (alloca, param_type));
+
+            // Track struct type for parameters
+            if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+                self.var_struct_types
+                    .insert(param.name.node.clone(), struct_name);
+            }
+        }
+
+        // Determine the return type (substituted)
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
+        let ret_substituted = self.substitute_type(&ret_resolved);
+
+        // Generate function body
+        match &func.body {
+            ast::FunctionBody::Expr(body_expr) => {
+                let body_value = self.generate_expr(&body_expr.node)?;
+                self.emit_defer_cleanup()?;
+                if ret_substituted == ResolvedType::Unit {
+                    self.builder
+                        .build_return(None)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                } else {
+                    let expected_ret_type = fn_value.get_type().get_return_type();
+                    let ret_val = if let Some(ert) = expected_ret_type {
+                        if ert != body_value.get_type()
+                            && body_value.is_int_value()
+                            && ert.is_int_type()
+                        {
+                            self.builder
+                                .build_int_cast(
+                                    body_value.into_int_value(),
+                                    ert.into_int_type(),
+                                    "ret_cast",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into()
+                        } else {
+                            body_value
+                        }
+                    } else {
+                        body_value
+                    };
+                    self.builder
+                        .build_return(Some(&ret_val))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+            }
+            ast::FunctionBody::Block(stmts) => {
+                let body_value = self.generate_block(stmts)?;
+                // Only add return if the block doesn't already have a terminator
+                if self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let body_type_matches =
+                            expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
+                        if body_type_matches {
+                            self.builder
+                                .build_return(Some(&body_value))
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        } else if let Some(ert) = expected_ret_type {
+                            let default_val = self.get_default_value(ert);
+                            self.builder
+                                .build_return(Some(&default_val))
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        } else {
+                            self.builder
+                                .build_return(None)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Restore generic substitutions
+        self.generic_substitutions = old_substitutions;
+        self.type_mapper
+            .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
     }
