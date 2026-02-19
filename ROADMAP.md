@@ -202,6 +202,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 30 | Generic Monomorphization | Inkwell monomorphization 3-pass 파이프라인, TypeMapper substitution sync, ConstGeneric substitution lookup 추가, debug_assertions 경고 | 723 |
 | 30a | 리뷰 발견사항 수정 | Phase 30 리뷰 7건 — 4건 해결済 확인, pub→pub(crate) 축소, clone 최적화, transitive instantiation 기술 문서화 | 723 |
 | 31 | 대형 파일 모듈 분할 R7 | tiered.rs(1,523줄)→5모듈, item.rs(1,280줄)→4모듈, doc_gen.rs(1,228줄)→5모듈, Clippy 0건 | 723 |
+| 32 | E2E 테스트 확장 (750개 목표) | 4개 신규 테스트 모듈 (lang/patterns/generics/async), 32개 테스트 추가, Clippy 0건 | 755 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -268,8 +269,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
 진행률: 4/4 (100%) ✅
 
-### Phase 32: E2E 테스트 확장 (750개 목표)
-- [ ] 미커버 기능 테스트 추가 — WASM, async, GPU, advanced pattern matching 등 edge case 보강
+## 현재 작업 (2026-02-19) — Phase 32: E2E 테스트 확장 (750개 목표) ✅
+모드: 자동진행
+- [x] 1. E2E 테스트: defer/pipe/comptime/lazy (8개) (Sonnet)
+  변경: 신규 e2e/phase32_lang.rs (8개: defer_early_return, defer_in_loop, pipe_basic/chained, global_read/arithmetic, union_field, comptime_in_function)
+- [x] 2. E2E 테스트: advanced pattern matching (8개) (Sonnet) [∥1]
+  변경: 신규 e2e/phase32_patterns.rs (8개: nested_tuple, enum_data, or_simple, guard, wildcard_deep, multiple_arms, match_bool, match_return)
+- [x] 3. E2E 테스트: generic/trait edge cases (8개) (Sonnet) [∥1]
+  변경: 신규 e2e/phase32_generics.rs (8개: generic_struct_method, two_type_params, trait_basic/multiple_methods/multiple_types, generic_arithmetic, struct_multiple_fields, nested_struct)
+- [x] 4. E2E 테스트: async/concurrency edge cases (8개) (Sonnet) [∥1]
+  변경: 신규 e2e/phase32_async.rs (8개: async_recursive, async_match, multiple_awaits, nested_functions, async_closure, bool_return, spawn_multiple, early_return)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+진행률: 5/5 (100%) ✅
+
+### Phase 33: Codegen 완성도 강화
+- [ ] 실행 불가 테스트 개선 — assert_compiles→assert_exit_code 전환 가능한 테스트 식별 및 codegen 수정
 
 ---
 
