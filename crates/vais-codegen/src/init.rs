@@ -36,6 +36,7 @@ impl CodeGenerator {
                 trait_aliases: HashMap::new(),
                 trait_impl_methods: HashMap::new(),
                 resolved_function_sigs: HashMap::new(),
+                type_aliases: HashMap::new(),
             },
             generics: GenericState {
                 struct_defs: HashMap::new(),
@@ -151,6 +152,11 @@ impl CodeGenerator {
     /// Used to provide inferred parameter types for functions with Type::Infer parameters.
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
         self.types.resolved_function_sigs = resolved;
+    }
+
+    /// Set type aliases from the type checker (for resolving type alias names in codegen).
+    pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
+        self.types.type_aliases = aliases;
     }
 
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)

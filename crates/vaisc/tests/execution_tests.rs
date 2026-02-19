@@ -1911,7 +1911,7 @@ T Printable = Display + Debug
 
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // --- Async/Await Tests (Phase 43) ---
@@ -1923,7 +1923,7 @@ A F async_task() -> i64 = 42
 
 F main() -> i64 = 0
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]

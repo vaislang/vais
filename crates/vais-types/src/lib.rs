@@ -283,6 +283,11 @@ impl TypeChecker {
         &self.functions
     }
 
+    /// Get all type aliases (for passing to codegen)
+    pub fn get_type_aliases(&self) -> &HashMap<String, ResolvedType> {
+        &self.type_aliases
+    }
+
     /// Get the struct definition (for codegen)
     pub fn get_struct(&self, name: &str) -> Option<&StructDef> {
         self.structs.get(name)

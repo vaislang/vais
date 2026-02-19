@@ -59,7 +59,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_pipe_operator_basic() {
     // |> passes the left-hand expression as the first argument of the right-hand
-    // function. Verify that the IR is generated without errors.
+    // function. 5 |> double = double(5) = 10, exit code 10.
     let source = r#"
 F double(x: i64) -> i64 { x * 2 }
 
@@ -68,7 +68,7 @@ F main() -> i64 {
     R result
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }
 
 // ===== Pipe Operator: Chained =====
@@ -76,7 +76,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_pipe_operator_chained() {
     // Three-stage pipeline: value flows through inc, then double, then inc again.
-    // Verifies that multiple |> operators parse and codegen correctly.
+    // 3 |> inc = 4, |> double = 8, |> inc = 9, exit code 9.
     let source = r#"
 F inc(x: i64) -> i64 { x + 1 }
 F double(x: i64) -> i64 { x * 2 }
@@ -86,7 +86,7 @@ F main() -> i64 {
     R result
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 9);
 }
 
 // ===== Global Variable: Declaration Compiles =====
@@ -94,9 +94,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_global_variable_read() {
     // G declares a module-level global. The declaration itself must compile
-    // successfully. Reading a global from a function body requires the codegen
-    // global-load path; here we verify the declaration is accepted by the
-    // parser and type checker, and that main can return 0 alongside it.
+    // successfully. main returns 0 explicitly, exit code 0.
     let source = r#"
 G base_val: i64 = 10
 
@@ -104,7 +102,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Global Variable: Multiple Declarations =====
@@ -112,8 +110,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_global_variable_arithmetic() {
     // Multiple G declarations must all parse and type-check without conflict.
-    // Verifies that the module-level scope accepts several globals with
-    // distinct names and compatible types.
+    // main returns 0 explicitly, exit code 0.
     let source = r#"
 G offset_a: i64 = 5
 G offset_b: i64 = 7
@@ -123,7 +120,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Union: Field Access =====
@@ -131,8 +128,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_union_field_access() {
     // O declares an untagged C-style union. Reading a field after construction
-    // should parse and type-check. The union reuses memory for all fields, so
-    // only the most-recently-written field is meaningful at runtime.
+    // should parse and type-check. v.int_val = 42, exit code 42.
     let source = r#"
 O RawVal {
     int_val: i64,
@@ -144,7 +140,7 @@ F main() -> i64 {
     R v.int_val
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Comptime: Block Result Bound to Variable =====
@@ -152,8 +148,8 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_comptime_in_function() {
     // comptime { expr } evaluates at compile time. The result is bound to a local
-    // variable and then used in a return expression. Verifies that the TC and
-    // codegen pipeline accept comptime results in all expression positions.
+    // variable and then used in a return expression.
+    // comptime { 10 + 5 } = 15, 15 * 2 = 30, exit code 30.
     let source = r#"
 F compute_offset() -> i64 {
     base := comptime { 10 + 5 }
@@ -164,5 +160,5 @@ F main() -> i64 {
     R compute_offset()
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 30);
 }

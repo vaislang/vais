@@ -44,7 +44,7 @@ fn e2e_phase45t_default_param_override() {
 F add(a: i64, b: i64 = 10) -> i64 { a + b }
 F main() -> i64 { add(5, 20) }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 25);
 }
 
 // ==================== Contract Attributes ====================
@@ -56,7 +56,7 @@ fn e2e_phase45t_requires_attr() {
 F positive(x: i64) -> i64 { x }
 F main() -> i64 { positive(5) }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 5);
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn e2e_phase45t_ensures_attr() {
 F abs_val(x: i64) -> i64 { I x < 0 { -x } E { x } }
 F main() -> i64 { abs_val(-3) }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 3);
 }
 
 // ==================== Compound Assignment Operators ====================
@@ -139,7 +139,7 @@ F main() -> i64 {
     R x as i64
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Where Clause ====================
@@ -172,7 +172,7 @@ W Countable {
 T DisplayCount = Showable + Countable
 F main() -> i64 { 0 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== Struct Methods ====================
@@ -240,7 +240,7 @@ T Num = i64
 F double(x: Num) -> Num { x * 2 }
 F main() -> i64 { double(21) }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Phase 27: Type System Soundness ====================
@@ -250,18 +250,18 @@ F main() -> i64 { double(21) }
 #[test]
 fn phase27_generic_substitution_normal() {
     // Generic function with concrete call — substitution should work
-    assert_compiles(r#"
+    assert_exit_code(r#"
         F identity<T>(x: T) -> T { x }
         F main() -> i64 {
             identity(42)
         }
-    "#);
+    "#, 42);
 }
 
 #[test]
 fn phase27_associated_type_resolved() {
     // Associated type resolved through trait impl
-    assert_compiles(r#"
+    assert_exit_code(r#"
         W Container {
             F size(self) -> i64
         }
@@ -273,42 +273,42 @@ fn phase27_associated_type_resolved() {
             box := MyBox { val: 10 }
             box.size()
         }
-    "#);
+    "#, 10);
 }
 
 #[test]
 fn phase27_const_generic_resolved() {
     // Const generic used in function
-    assert_compiles(r#"
+    assert_exit_code(r#"
         F make_val() -> i64 { 100 }
         F main() -> i64 { make_val() }
-    "#);
+    "#, 100);
 }
 
 #[test]
 fn phase27_dependent_type_compiles() {
     // Dependent type with predicate (compiles, predicate checked at TC)
-    assert_compiles(r#"
+    assert_exit_code(r#"
         F add(a: i64, b: i64) -> i64 { a + b }
         F main() -> i64 { add(1, 2) }
-    "#);
+    "#, 3);
 }
 
 #[test]
 fn phase27_nested_generic_resolution() {
     // Nested generic types resolve correctly
-    assert_compiles(r#"
+    assert_exit_code(r#"
         F first<T>(a: T, b: T) -> T { a }
         F main() -> i64 {
             first(1, 2)
         }
-    "#);
+    "#, 1);
 }
 
 #[test]
 fn phase27_trait_method_dispatch() {
     // Trait method dispatch with concrete type
-    assert_compiles(r#"
+    assert_exit_code(r#"
         W Greet {
             F greet(self) -> i64
         }
@@ -320,7 +320,7 @@ fn phase27_trait_method_dispatch() {
             p := Person { age: 30 }
             p.greet()
         }
-    "#);
+    "#, 30);
 }
 
 // --- Negative tests ---

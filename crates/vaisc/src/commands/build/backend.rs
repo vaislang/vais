@@ -52,6 +52,7 @@ pub(crate) fn generate_with_text_backend(
 
     // Pass resolved function signatures to codegen (for inferred parameter types)
     codegen.set_resolved_functions(checker.get_all_functions().clone());
+    codegen.set_type_aliases(checker.get_type_aliases().clone());
 
     if verbose {
         println!("  {} text (IR generation)", "Backend:".cyan());

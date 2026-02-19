@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-18
+> **최종 업데이트**: 2026-02-19
 
 ---
 
@@ -203,6 +203,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 30a | 리뷰 발견사항 수정 | Phase 30 리뷰 7건 — 4건 해결済 확인, pub→pub(crate) 축소, clone 최적화, transitive instantiation 기술 문서화 | 723 |
 | 31 | 대형 파일 모듈 분할 R7 | tiered.rs(1,523줄)→5모듈, item.rs(1,280줄)→4모듈, doc_gen.rs(1,228줄)→5모듈, Clippy 0건 | 723 |
 | 32 | E2E 테스트 확장 (750개 목표) | 4개 신규 테스트 모듈 (lang/patterns/generics/async), 32개 테스트 추가, Clippy 0건 | 755 |
+| 33 | Codegen 완성도 강화 | assert_compiles→assert_exit_code 52개 전환, type alias codegen 버그 수정 (Text IR+Inkwell), Clippy 0건 | 755 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -282,8 +283,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
 진행률: 5/5 (100%) ✅
 
-### Phase 33: Codegen 완성도 강화
-- [ ] 실행 불가 테스트 개선 — assert_compiles→assert_exit_code 전환 가능한 테스트 식별 및 codegen 수정
+## 현재 작업 (2026-02-19) — Phase 33: Codegen 완성도 강화 — assert_compiles→assert_exit_code 전환 ✅
+모드: 자동진행
+- [x] 1. phase32 테스트 전환 — lang(6)+patterns(7)+generics(5) = 18개 전환 (Sonnet)
+  변경: phase32_lang.rs (6개 assert_exit_code 전환, defer 2개 유지), phase32_patterns.rs (7개 전환, nested_tuple 유지), phase32_generics.rs (5개 전환)
+- [x] 2. phase45 테스트 전환 — types(11)+advanced(2)+base(9) = 22개 전환 (Sonnet) [∥1]
+  변경: phase45_types.rs (11개 전환, default_param_basic/where_clause 유지), phase45_advanced.rs (2개 전환, higher_order_fn/trait_static 유지), phase45.rs (9개 전환)
+- [x] 3. 기타 테스트 전환 — advanced(7)+execution(2)+error_scenario(2) = 11개 전환 (Sonnet) [∥1]
+  변경: advanced.rs (7개 slice 테스트 전환, 3개 유지), execution_tests.rs (2개 전환, 1개 유지), error_scenario_tests.rs (2개 전환, 2개 유지)
+- [x] 4. Codegen 수정 — type alias codegen 버그 수정 (Opus) [blockedBy: 1,2,3]
+  변경: vais-types/src/lib.rs (get_type_aliases), inkwell/generator.rs+gen_types.rs (type_aliases 필드+룩업), state.rs+init.rs+types.rs (Text IR type alias), helpers.rs (set_type_aliases 호출). type_alias 테스트 assert_exit_code 전환 성공
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 4]
+진행률: 5/5 (100%) ✅
 
 ---
 

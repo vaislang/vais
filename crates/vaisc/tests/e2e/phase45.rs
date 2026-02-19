@@ -15,7 +15,7 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -29,7 +29,7 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 30);
 }
 
 #[test]
@@ -43,7 +43,7 @@ F main() -> i64 {
     R a + b
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Comptime =====
@@ -57,7 +57,7 @@ F main() -> i64 {
     R x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 5);
 }
 
 // ===== Union =====
@@ -75,7 +75,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Match Guard =====
@@ -244,7 +244,7 @@ F main() -> i64 {
     R 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Const =====
@@ -274,7 +274,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Macro =====
@@ -291,7 +291,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Assert Expression =====
@@ -306,5 +306,5 @@ F main() -> i64 {
     R x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }

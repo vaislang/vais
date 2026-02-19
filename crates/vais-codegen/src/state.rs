@@ -32,6 +32,8 @@ pub(crate) struct TypeRegistry {
     pub(crate) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
     /// Resolved function signatures from type checker (for inferred parameter types)
     pub(crate) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
+    /// Type aliases from type checker (for resolving type alias names in codegen)
+    pub(crate) type_aliases: HashMap<String, vais_types::ResolvedType>,
 }
 
 /// Generic type system state — templates, instantiations, substitutions

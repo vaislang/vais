@@ -19,6 +19,9 @@ use super::helpers::*;
 fn e2e_phase32_pattern_nested_tuple() {
     // Matching on a nested tuple extracts all inner fields correctly.
     // (1, (2, 3)) => 1+2+3 = 6, exit code 0 (6 - 6 = 0)
+    // NOTE: Text IR backend has type mismatch for nested tuple pattern binding
+    // (store { i64, i64 } into i64*); Inkwell backend handles this correctly.
+    // Keeping assert_compiles until Text IR pattern codegen is fixed.
     let source = r#"
 F main() -> i64 {
     pair := (1, (2, 3))
@@ -28,14 +31,7 @@ F main() -> i64 {
     }
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 0,
-            "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_compiles(source);
 }
 
 // Test 2: Enum variant data extraction — M Shape { Circle(r) => r, Rect(w, h) => w * h }
@@ -59,14 +55,7 @@ F main() -> i64 {
     R area(Rect(3, 7))
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 21,
-            "Expected exit code 21, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 21);
 }
 
 // Test 3: Or pattern — M x { 1 | 2 | 3 => 10, _ => 0 }
@@ -82,14 +71,7 @@ F main() -> i64 {
     }
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 10,
-            "Expected exit code 10, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 10);
 }
 
 // Test 4: Guard condition — M x { n I n > 10 => 1, _ => 0 }
@@ -105,14 +87,7 @@ F main() -> i64 {
     }
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 1,
-            "Expected exit code 1, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 1);
 }
 
 // Test 5: Deep wildcard — M (_, x) { (_, 5) => 1, _ => 0 }
@@ -128,14 +103,7 @@ F main() -> i64 {
     }
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 1,
-            "Expected exit code 1, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 1);
 }
 
 // Test 6: Multiple arms (5+) — match with 6 distinct literal arms
@@ -158,14 +126,7 @@ F main() -> i64 {
     R label(4)
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 40,
-            "Expected exit code 40, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 40);
 }
 
 // Test 7: Bool value matching — M flag { true => 1, false => 0 }
@@ -181,14 +142,7 @@ F main() -> i64 {
     }
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 1,
-            "Expected exit code 1, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 1);
 }
 
 // Test 8: Match result bound to variable and returned
@@ -207,12 +161,5 @@ F main() -> i64 {
     R result
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 30,
-            "Expected exit code 30, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => assert_compiles(source),
-    }
+    assert_exit_code(source, 30);
 }

@@ -29,18 +29,8 @@ F main() -> i64 {
     w.get() - 42
 }
 "#;
-    // Verify IR at minimum; execution is attempted.
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 0,
-            "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => {
-            // Fallback: IR generation must succeed.
-            assert_compiles(source);
-        }
-    }
+    // w.get() = 42, 42 - 42 = 0, exit code 0.
+    assert_exit_code(source, 0);
 }
 
 // ==================== 2. Generic function — two type parameters ====================
@@ -82,16 +72,8 @@ F main() -> i64 {
     c.describe() - 7
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 0,
-            "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => {
-            assert_compiles(source);
-        }
-    }
+    // c.describe() = 7, 7 - 7 = 0, exit code 0.
+    assert_exit_code(source, 0);
 }
 
 // ==================== 4. Trait with multiple methods ====================
@@ -124,16 +106,8 @@ F main() -> i64 {
     a + p
 }
 "#;
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 21,
-            "Expected exit code 21, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => {
-            assert_compiles(source);
-        }
-    }
+    // area=9, perimeter=12, 9+12=21, exit code 21.
+    assert_exit_code(source, 21);
 }
 
 // ==================== 5. Same trait impl'd for multiple structs ====================
@@ -164,17 +138,8 @@ F main() -> i64 {
     f.value() + b.value()
 }
 "#;
-    // 10 + 32 = 42
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 42,
-            "Expected exit code 42, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => {
-            assert_compiles(source);
-        }
-    }
+    // f.value()=10, b.value()=16*2=32, 10+32=42, exit code 42.
+    assert_exit_code(source, 42);
 }
 
 // ==================== 6. Generic function with arithmetic ====================
@@ -236,16 +201,6 @@ F main() -> i64 {
     extract(o)
 }
 "#;
-    // 30 + 12 = 42
-    match compile_and_run(source) {
-        Ok(result) => assert_eq!(
-            result.exit_code, 42,
-            "Expected exit code 42, got {}.\nstdout: {}\nstderr: {}",
-            result.exit_code, result.stdout, result.stderr
-        ),
-        Err(_) => {
-            // Nested struct codegen may not yet be fully supported; IR must compile.
-            assert_compiles(source);
-        }
-    }
+    // inner.value=30, extra=12, 30+12=42, exit code 42.
+    assert_exit_code(source, 42);
 }

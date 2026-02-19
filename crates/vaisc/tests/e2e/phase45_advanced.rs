@@ -49,7 +49,7 @@ F main() -> i64 {
     R f(0)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Higher-Order Function =====
@@ -201,7 +201,7 @@ F main() -> i64 {
     R 10 |> double |> inc
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 21);
 }
 
 // ===== Block Expression =====

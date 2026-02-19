@@ -17,6 +17,7 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     let mut gen = CodeGenerator::new("e2e_test");
     // Pass resolved function signatures for inferred parameter type support
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;

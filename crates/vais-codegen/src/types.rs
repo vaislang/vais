@@ -604,6 +604,9 @@ impl CodeGenerator {
                                     .collect(),
                             }
                         }
+                    } else if let Some(alias_target) = self.types.type_aliases.get(name) {
+                        // Resolve type alias to its underlying type
+                        alias_target.clone()
                     } else {
                         ResolvedType::Named {
                             name: name.clone(),

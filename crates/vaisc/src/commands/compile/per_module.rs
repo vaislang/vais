@@ -46,6 +46,7 @@ pub(crate) fn compile_per_module(
 
     let effective_opt_level = if debug { 0 } else { opt_level };
     let resolved_functions = checker.get_all_functions().clone();
+    let resolved_type_aliases = checker.get_type_aliases().clone();
     let _instantiations = checker.get_generic_instantiations();
 
     // Phase 1: Generate IR for all modules (parallelized with rayon)
@@ -64,6 +65,7 @@ pub(crate) fn compile_per_module(
             // Create a fresh CodeGenerator for this module
             let mut codegen = CodeGenerator::new_with_target(&module_stem, target.clone());
             codegen.set_resolved_functions(resolved_functions.clone());
+            codegen.set_type_aliases(resolved_type_aliases.clone());
             codegen.set_string_prefix(&module_stem);
 
             if gc {

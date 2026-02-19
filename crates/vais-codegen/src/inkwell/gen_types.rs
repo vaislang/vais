@@ -49,6 +49,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 generics: generic_types,
                             }
                         }
+                    } else if let Some(alias_target) = self.type_aliases.get(name) {
+                        // Resolve type alias to its underlying type
+                        alias_target.clone()
                     } else {
                         let generic_types: Vec<ResolvedType> = generics
                             .iter()

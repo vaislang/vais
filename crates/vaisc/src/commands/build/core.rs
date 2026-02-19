@@ -611,6 +611,7 @@ pub(crate) fn cmd_build(
 
                     let effective_opt_level = if debug { 0 } else { opt_level };
                     let resolved_functions = checker.get_all_functions().clone();
+                    let resolved_type_aliases = checker.get_type_aliases().clone();
 
                     let codegen_start = std::time::Instant::now();
 
@@ -630,6 +631,7 @@ pub(crate) fn cmd_build(
                             let mut codegen =
                                 vais_codegen::CodeGenerator::new_with_target(&module_stem, target.clone());
                             codegen.set_resolved_functions(resolved_functions.clone());
+                            codegen.set_type_aliases(resolved_type_aliases.clone());
                             codegen.set_string_prefix(&module_stem);
 
                             if gc {
@@ -769,6 +771,7 @@ pub(crate) fn cmd_build(
             target.clone(),
         );
         gen.set_resolved_functions(checker.get_all_functions().clone());
+        gen.set_type_aliases(checker.get_type_aliases().clone());
         let instantiations = checker.get_generic_instantiations();
         if instantiations.is_empty() {
             gen.generate_module(&final_ast)

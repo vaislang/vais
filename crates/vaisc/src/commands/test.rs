@@ -748,6 +748,7 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     let module_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
     codegen.set_resolved_functions(checker.get_all_functions().clone());
+    codegen.set_type_aliases(checker.get_type_aliases().clone());
 
     let instantiations = checker.get_generic_instantiations();
     let ir = if instantiations.is_empty() {

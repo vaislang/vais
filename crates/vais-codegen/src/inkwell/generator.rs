@@ -116,6 +116,9 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Resolved function signatures from type checker (for return/param type inference)
     pub(super) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
+
+    /// Type aliases from type checker (for resolving type alias names in codegen)
+    pub(super) type_aliases: HashMap<String, vais_types::ResolvedType>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -177,6 +180,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             defer_stack: Vec::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
+            type_aliases: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -396,6 +400,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Set resolved function signatures from the type checker.
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
         self.resolved_function_sigs = resolved;
+    }
+
+    /// Set type aliases from the type checker.
+    pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
+        self.type_aliases = aliases;
     }
 
     /// Returns the LLVM IR as a string.
