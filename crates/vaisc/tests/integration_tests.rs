@@ -29,7 +29,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         gen.generate_module(&module)
             .map_err(|e| format!("Codegen error: {:?}", e))?
     } else {
-        gen.generate_module_with_instantiations(&module, instantiations)
+        gen.generate_module_with_instantiations(&module, &instantiations)
             .map_err(|e| format!("Codegen error: {:?}", e))?
     };
 

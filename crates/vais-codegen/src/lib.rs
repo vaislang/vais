@@ -749,7 +749,7 @@ mod tests {
         // Generate code with instantiations
         let mut gen = CodeGenerator::new("test");
         let ir = gen
-            .generate_module_with_instantiations(&module, instantiations)
+            .generate_module_with_instantiations(&module, &instantiations)
             .unwrap();
 
         // Should contain specialized function identity$i64
@@ -827,7 +827,7 @@ mod tests {
         // Generate code with instantiations
         let mut gen = CodeGenerator::new("test");
         let ir = gen
-            .generate_module_with_instantiations(&module, instantiations)
+            .generate_module_with_instantiations(&module, &instantiations)
             .unwrap();
 
         // Should contain both specialized functions
@@ -855,7 +855,7 @@ mod tests {
         // Generate code with empty instantiations
         let mut gen = CodeGenerator::new("test");
         let ir = gen
-            .generate_module_with_instantiations(&module, instantiations)
+            .generate_module_with_instantiations(&module, &instantiations)
             .unwrap();
 
         // Should NOT contain any identity function definition

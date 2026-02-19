@@ -774,7 +774,7 @@ pub(crate) fn cmd_build(
             gen.generate_module(&final_ast)
                 .map_err(|e| format!("Inkwell codegen error: {}", e))?;
         } else {
-            gen.generate_module_with_instantiations(&final_ast, instantiations)
+            gen.generate_module_with_instantiations(&final_ast, &instantiations)
                 .map_err(|e| format!("Inkwell codegen error: {}", e))?;
         }
         let ir = gen.get_ir_string();

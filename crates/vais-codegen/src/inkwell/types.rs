@@ -7,17 +7,17 @@ use std::collections::HashMap;
 use vais_types::ResolvedType;
 
 /// Maps Vais types to LLVM types using inkwell.
-pub struct TypeMapper<'ctx> {
+pub(crate) struct TypeMapper<'ctx> {
     context: &'ctx Context,
     struct_types: HashMap<String, StructType<'ctx>>,
     /// Generic substitutions mirrored from InkwellCodeGenerator.
     /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
-    pub generic_substitutions: HashMap<String, ResolvedType>,
+    pub(crate) generic_substitutions: HashMap<String, ResolvedType>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
     /// Creates a new type mapper with the given LLVM context.
-    pub fn new(context: &'ctx Context) -> Self {
+    pub(crate) fn new(context: &'ctx Context) -> Self {
         Self {
             context,
             struct_types: HashMap::new(),
@@ -26,28 +26,34 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Synchronise the substitution table with the generator's current map.
-    pub fn set_generic_substitutions(&mut self, subst: &HashMap<String, ResolvedType>) {
-        self.generic_substitutions = subst.clone();
+    /// Skips clone when the source map is empty (common case after clear).
+    pub(crate) fn set_generic_substitutions(&mut self, subst: &HashMap<String, ResolvedType>) {
+        if subst.is_empty() {
+            self.generic_substitutions.clear();
+        } else {
+            self.generic_substitutions = subst.clone();
+        }
     }
 
     /// Clear the substitution table (call when leaving a generic context).
-    pub fn clear_generic_substitutions(&mut self) {
+    pub(crate) fn clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
     }
 
     /// Registers a named struct type.
-    pub fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
+    pub(crate) fn register_struct(&mut self, name: &str, struct_type: StructType<'ctx>) {
         self.struct_types.insert(name.to_string(), struct_type);
     }
 
     /// Gets a registered struct type by name.
+    #[allow(dead_code)]
     #[inline]
-    pub fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
+    pub(crate) fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
         self.struct_types.get(name).copied()
     }
 
     /// Maps a Vais resolved type to an LLVM basic type.
-    pub fn map_type(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
+    pub(crate) fn map_type(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
         match ty {
             ResolvedType::I8 => self.context.i8_type().into(),
             ResolvedType::I16 => self.context.i16_type().into(),
@@ -129,6 +135,7 @@ impl<'ctx> TypeMapper<'ctx> {
                     self.map_type(&concrete)
                 } else {
                     // Monomorphization should resolve all generics — warn and fallback.
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "Warning: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
                         name
@@ -243,6 +250,7 @@ impl<'ctx> TypeMapper<'ctx> {
                     self.map_type(&concrete)
                 } else {
                     // Monomorphization should resolve all const generics — warn and fallback.
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "Warning: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
                         name
@@ -270,7 +278,8 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Gets the size of a type in bytes (approximate).
-    pub fn size_of(&self, ty: &ResolvedType) -> u64 {
+    #[allow(dead_code)]
+    pub(crate) fn size_of(&self, ty: &ResolvedType) -> u64 {
         match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
             ResolvedType::I16 | ResolvedType::U16 => 2,
@@ -298,7 +307,8 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Gets the alignment of a type in bytes.
-    pub fn align_of(&self, ty: &ResolvedType) -> u64 {
+    #[allow(dead_code)]
+    pub(crate) fn align_of(&self, ty: &ResolvedType) -> u64 {
         match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
             ResolvedType::I16 | ResolvedType::U16 => 2,

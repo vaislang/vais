@@ -92,7 +92,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.defer_stack.clear();
 
-        let old_substitutions = self.generic_substitutions.clone();
+        // Non-generic function: substitutions should be empty, take avoids clone allocation
+        let old_substitutions = std::mem::take(&mut self.generic_substitutions);
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -101,7 +102,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Allocate space for parameters (these will be updated on each loop iteration)
         let mut param_allocas = Vec::new();
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for function '{}'",
+                    i, func.name.node
+                ))
+            })?;
             let param_type = param_value.get_type();
             let alloca = self
                 .builder
@@ -150,7 +156,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .expect("ICE: no insert block during TCO function generation")
                     .get_terminator()
                     .is_none()
                 {
@@ -192,7 +198,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .expect("ICE: no insert block during TCO function generation")
                     .get_terminator()
                     .is_none()
                 {
@@ -268,7 +274,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.defer_stack.clear();
 
-        let old_substitutions = self.generic_substitutions.clone();
+        // Non-generic function: substitutions should be empty, take avoids clone allocation
+        let old_substitutions = std::mem::take(&mut self.generic_substitutions);
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -276,7 +283,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Allocate space for parameters
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for function '{}'",
+                    i, func.name.node
+                ))
+            })?;
             // Use the actual LLVM parameter type from the declared function
             let param_type = param_value.get_type();
             let alloca = self
@@ -451,7 +463,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .expect("ICE: no insert block during function generation")
                     .get_terminator()
                     .is_none()
                 {
@@ -516,9 +528,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map(|(g, t)| (g.name.node.clone(), t.clone()))
             .collect();
 
-        // Save and replace generic substitutions
-        let old_substitutions = self.generic_substitutions.clone();
-        self.generic_substitutions = substitutions;
+        // Save and replace generic substitutions (replace avoids clone allocation)
+        let old_substitutions = std::mem::replace(&mut self.generic_substitutions, substitutions);
         self.type_mapper
             .set_generic_substitutions(&self.generic_substitutions);
 
@@ -541,7 +552,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Allocate space for parameters (using the declared LLVM types)
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for specialized function '{}'",
+                    i, mangled_name
+                ))
+            })?;
             let param_type = param_value.get_type();
             let alloca = self
                 .builder
@@ -611,7 +627,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .expect("ICE: no insert block during specialized function generation")
                     .get_terminator()
                     .is_none()
                 {

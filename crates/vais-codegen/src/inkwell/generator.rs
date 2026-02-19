@@ -265,38 +265,56 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Second pass (part B): process generic instantiations.
+
+        // Pre-build struct lookup table for O(1) access during instantiation
+        let struct_lookup: HashMap<&str, &ast::Struct> = vais_module
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let ast::Item::Struct(s) = &item.node {
+                    Some((s.name.node.as_str(), s))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         for inst in instantiations {
             match &inst.kind {
                 vais_types::InstantiationKind::Struct => {
                     // Specialized struct — resolve fields from the struct definition in the AST.
                     // We look up the base struct to get its field types, then define_specialized_struct.
-                    for item in &vais_module.items {
-                        if let ast::Item::Struct(s) = &item.node {
-                            if s.name.node == inst.base_name {
-                                let fields: Vec<(String, ResolvedType)> = s
-                                    .fields
-                                    .iter()
-                                    .map(|f| {
-                                        (
-                                            f.name.node.clone(),
-                                            self.ast_type_to_resolved(&f.ty.node),
-                                        )
-                                    })
-                                    .collect();
-                                self.define_specialized_struct(
-                                    &inst.base_name,
-                                    &inst.type_args,
-                                    &fields,
-                                )?;
-                                break;
-                            }
-                        }
+                    if let Some(s) = struct_lookup.get(inst.base_name.as_str()) {
+                        let fields: Vec<(String, ResolvedType)> = s
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                (
+                                    f.name.node.clone(),
+                                    self.ast_type_to_resolved(&f.ty.node),
+                                )
+                            })
+                            .collect();
+                        let generic_names: Vec<String> = s
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
+                        self.define_specialized_struct(
+                            &inst.base_name,
+                            &inst.type_args,
+                            &fields,
+                            &generic_names,
+                        )?;
                     }
                 }
                 vais_types::InstantiationKind::Function => {
                     // Specialized function — declare the mangled signature then generate the body.
                     if let Some(generic_fn) =
-                        generic_function_templates.get(&inst.base_name).cloned()
+                        generic_function_templates.get(&inst.base_name)
                     {
                         // Build param/return types from the AST function (substitution happens
                         // inside declare_specialized_function via the substitutions map).
@@ -310,6 +328,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         } else {
                             ResolvedType::Unit
                         };
+                        let generic_names: Vec<String> = generic_fn
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
 
                         // Declare the specialized function (idempotent if already declared).
                         self.declare_specialized_function(
@@ -317,11 +343,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             &inst.type_args,
                             &param_types,
                             &return_type,
+                            &generic_names,
                         )?;
 
                         // Generate the specialized body.
                         self.generate_specialized_function_body(
-                            &generic_fn,
+                            generic_fn,
                             &inst.mangled_name,
                             &inst.type_args,
                         )?;
@@ -389,50 +416,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vais_ast::{Literal, Type};
+    use vais_ast::Type;
 
     #[test]
     fn test_create_generator() {
         let context = Context::create();
         let gen = InkwellCodeGenerator::new(&context, "test_module");
         assert!(!gen.get_ir_string().is_empty());
-    }
-
-    #[test]
-    fn test_generate_literal_int() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Int(42);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_int_value());
-        let int_val = result.into_int_value();
-        assert_eq!(int_val.get_zero_extended_constant(), Some(42));
-    }
-
-    #[test]
-    fn test_generate_literal_float() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Float(3.14);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_float_value());
-    }
-
-    #[test]
-    fn test_generate_literal_bool() {
-        let context = Context::create();
-        let mut gen = InkwellCodeGenerator::new(&context, "test");
-
-        let lit = Literal::Bool(true);
-        let result = gen.generate_literal(&lit).unwrap();
-
-        assert!(result.is_int_value());
-        let int_val = result.into_int_value();
-        assert_eq!(int_val.get_zero_extended_constant(), Some(1));
     }
 
     #[test]

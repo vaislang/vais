@@ -155,6 +155,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         base_name: &str,
         type_args: &[ResolvedType],
         fields: &[(String, ResolvedType)],
+        generic_param_names: &[String],
     ) -> CodegenResult<StructType<'ctx>> {
         let mangled_name = self.mangle_struct_name(base_name, type_args);
 
@@ -163,14 +164,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*st);
         }
 
-        // Build substitution map from generic params to type args
+        // Build substitution map from actual generic param names to type args
         let mut substitutions = HashMap::new();
-        // Assume generic params are T, U, V... in order
-        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
-        for (i, type_arg) in type_args.iter().enumerate() {
-            if let Some(name) = generic_names.get(i) {
-                substitutions.insert(name.to_string(), type_arg.clone());
-            }
+        for (name, type_arg) in generic_param_names.iter().zip(type_args.iter()) {
+            substitutions.insert(name.clone(), type_arg.clone());
         }
 
         // Substitute types in fields
@@ -201,6 +198,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         type_args: &[ResolvedType],
         param_types: &[ResolvedType],
         return_type: &ResolvedType,
+        generic_param_names: &[String],
     ) -> CodegenResult<FunctionValue<'ctx>> {
         let mangled_name = self.mangle_function_name(base_name, type_args);
 
@@ -209,13 +207,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*fn_val);
         }
 
-        // Build substitution map
+        // Build substitution map from actual generic param names to type args
         let mut substitutions = HashMap::new();
-        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
-        for (i, type_arg) in type_args.iter().enumerate() {
-            if let Some(name) = generic_names.get(i) {
-                substitutions.insert(name.to_string(), type_arg.clone());
-            }
+        for (name, type_arg) in generic_param_names.iter().zip(type_args.iter()) {
+            substitutions.insert(name.clone(), type_arg.clone());
         }
 
         // Substitute types in parameters

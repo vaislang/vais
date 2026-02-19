@@ -561,6 +561,56 @@ impl TypeChecker {
         if all_concrete {
             let inst = GenericInstantiation::function(&sig.name, inferred_type_args.clone());
             self.add_instantiation(inst);
+
+            // NOTE(monomorphization): Transitive instantiation collection is not yet implemented.
+            //
+            // CURRENT LIMITATION
+            // ------------------
+            // Only *direct* call-site instantiations are recorded here.  When a generic
+            // function `foo<T>` calls another generic function `bar<T>` in its body, the
+            // concrete instantiation `bar<i64>` (derived by substituting the caller's
+            // inferred `T = i64`) is NOT recorded.  This means codegen must fall back to
+            // heuristics when resolving `bar`'s mangled name.
+            //
+            // CODEGEN FALLBACK (currently active)
+            // ------------------------------------
+            // `crates/vais-codegen/src/generics_helpers.rs::resolve_generic_call` handles
+            // the missing-instantiation case with a two-step fallback:
+            //   1. Direct mangle: `vais_types::mangle_name(base_name, arg_types)` — succeeds
+            //      when the callee is visible in `self.types.functions`.
+            //   2. Last-resort: use the first (and usually only) pre-recorded instantiation
+            //      for the callee.
+            // For most real-world programs these heuristics are sufficient; transitive
+            // generics only cause silent miscompilation when a callee has *multiple*
+            // distinct instantiations and none matches via mangle.
+            //
+            // IMPLEMENTATION APPROACHES (for a future phase)
+            // -----------------------------------------------
+            // Approach A — Callee recording in FunctionSig (type-checker side)
+            //   • Add `callees: Vec<String>` to `FunctionSig` (crates/vais-types/src/types/defs.rs).
+            //   • During `check_function` / `check_impl_method`, whenever a `Expr::Call` whose
+            //     target resolves to a generic function is encountered, push its name into
+            //     `sig.callees`.
+            //   • Here (after `self.add_instantiation(inst)`), iterate `sig.callees`, look up
+            //     each callee's `FunctionSig` in `self.functions`, apply
+            //     `generic_substitutions` to substitute concrete types, then call
+            //     `self.add_instantiation(GenericInstantiation::function(callee, substituted))`.
+            //   • Guard against cycles: carry a `visiting: HashSet<String>` across the
+            //     transitive walk (a callee already in `visiting` means a recursive call —
+            //     skip it).  `self.instantiations` (already a `HashSet`) deduplicates the
+            //     recorded entries automatically.
+            //
+            // Approach B — On-demand specialization in codegen (codegen side, no TC changes)
+            //   • In `resolve_generic_call`, when the two-step fallback also fails, trigger
+            //     an on-demand specialization: retrieve the function AST from
+            //     `self.generics.function_templates`, apply the inferred `type_args`, and
+            //     emit a fresh specialized function definition inline.
+            //   • This is purely a codegen concern and requires no changes to FunctionSig or
+            //     the type-checker; however it demands a second pass over the AST inside
+            //     codegen and complicates the single-pass IR emission model.
+            //
+            // Approach A is preferred: it keeps codegen a pure emitter and concentrates
+            // type-level reasoning inside the type-checker where it belongs.
         }
 
         // Verify trait bounds: each inferred concrete type must implement required traits

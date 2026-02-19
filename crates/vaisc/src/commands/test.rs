@@ -753,7 +753,7 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     let ir = if instantiations.is_empty() {
         codegen.generate_module(&ast)
     } else {
-        codegen.generate_module_with_instantiations(&ast, instantiations)
+        codegen.generate_module_with_instantiations(&ast, &instantiations)
     }
     .map_err(|e| format!("codegen error: {}", e))?;
 

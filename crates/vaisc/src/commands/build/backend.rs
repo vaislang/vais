@@ -62,7 +62,7 @@ pub(crate) fn generate_with_text_backend(
     let raw_ir = if instantiations.is_empty() {
         codegen.generate_module(final_ast)
     } else {
-        codegen.generate_module_with_instantiations(final_ast, instantiations)
+        codegen.generate_module_with_instantiations(final_ast, &instantiations)
     }
     .map_err(|e| format!("Codegen error: {}", e))?;
     let codegen_time = codegen_start.elapsed();

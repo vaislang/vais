@@ -30,7 +30,7 @@ mod scope;
 pub use inference::CheckMode;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // Re-export core types
 pub use comptime::{ComptimeEvaluator, ComptimeValue};
@@ -136,7 +136,7 @@ pub struct TypeChecker {
     pub(crate) warnings: Vec<String>,
 
     // Generic instantiations required for monomorphization
-    pub(crate) generic_instantiations: Vec<GenericInstantiation>,
+    pub(crate) generic_instantiations: HashSet<GenericInstantiation>,
 
     // Memoization cache for substitute_generics
     // Key: (type hash, substitution map hash) -> Result type
@@ -184,7 +184,7 @@ impl TypeChecker {
             substitutions: HashMap::new(),
             exhaustiveness_checker: ExhaustivenessChecker::new(),
             warnings: Vec::new(),
-            generic_instantiations: Vec::new(),
+            generic_instantiations: HashSet::new(),
             substitute_cache: RefCell::new(HashMap::new()),
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
             ownership_check_mode: Some(false), // warn-only by default
@@ -243,8 +243,8 @@ impl TypeChecker {
     }
 
     /// Get generic instantiations required for monomorphization
-    pub fn get_generic_instantiations(&self) -> &[GenericInstantiation] {
-        &self.generic_instantiations
+    pub fn get_generic_instantiations(&self) -> Vec<GenericInstantiation> {
+        self.generic_instantiations.iter().cloned().collect()
     }
 
     /// Clear generic instantiations
@@ -254,9 +254,7 @@ impl TypeChecker {
 
     /// Add a generic instantiation if not already present
     fn add_instantiation(&mut self, inst: GenericInstantiation) {
-        if !self.generic_instantiations.contains(&inst) {
-            self.generic_instantiations.push(inst);
-        }
+        self.generic_instantiations.insert(inst);
     }
 
     /// Check if a function has generic parameters
