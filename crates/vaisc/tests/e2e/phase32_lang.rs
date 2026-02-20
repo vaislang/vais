@@ -21,9 +21,7 @@ use super::helpers::*;
 
 #[test]
 fn e2e_phase32_defer_with_early_return() {
-    // defer block registered before R (early return) — must parse and compile
-    // without errors. Execution semantics (running on return) are verified at IR
-    // level; actual runtime order depends on codegen support.
+    // defer block registered before R (early return) — early return exits with 0
     let source = r#"
 F main() -> i64 {
     D { }
@@ -33,14 +31,14 @@ F main() -> i64 {
     R 1
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Defer: Inside Loop Body =====
 
 #[test]
 fn e2e_phase32_defer_in_loop() {
-    // defer inside a L loop iteration — parser and type-checker must accept this.
+    // defer inside a L loop iteration — 3 iterations, n=3
     let source = r#"
 F main() -> i64 {
     n := mut 0
@@ -51,7 +49,7 @@ F main() -> i64 {
     R n
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 3);
 }
 
 // ===== Pipe Operator: Basic =====

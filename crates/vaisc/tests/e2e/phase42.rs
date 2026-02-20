@@ -90,24 +90,24 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_expression() {
-    // Lazy with expression
+    // Lazy with expression — 10 + 32 = 42
     let source = r#"
 F main() -> i64 {
     x := lazy (10 + 32)
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_with_capture() {
-    // Lazy captures free variables
+    // Lazy captures free variables — a=10, b=20, 10+20=30
     let source = r#"
 F main() -> i64 {
     a := 10
@@ -116,12 +116,12 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 30);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_function_call() {
-    // Lazy wrapping a function call
+    // Lazy wrapping a function call — add(10, 32) = 42
     let source = r#"
 F add(a: i64, b: i64) -> i64 {
     R a + b
@@ -132,12 +132,13 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_nested() {
     // Nested lazy/force
+    // NOTE: codegen generates `ret i64 @x` (global ref without load) for nested thunk — clang error
     let source = r#"
 F main() -> i64 {
     x := lazy 42
@@ -150,19 +151,20 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_no_capture() {
-    // Lazy with no free variables (constant expression)
+    // Lazy with no free variables (constant expression) — 100
     let source = r#"
 F main() -> i64 {
     x := lazy 100
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 100);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_multiple() {
     // Multiple lazy values
+    // NOTE: codegen generates `add i64 @x, @y` (global ref without load) — clang error
     let source = r#"
 F main() -> i64 {
     x := lazy 10
@@ -176,7 +178,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_force_mutable_capture() {
-    // Lazy capturing mutable variable
+    // Lazy capturing mutable variable — thunk captures a's value at creation time (10) or eval time (20)
     let source = r#"
 F main() -> i64 {
     a := mut 10
@@ -185,12 +187,14 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    // NOTE: exit code depends on whether lazy captures by-value at creation or by-ref at eval
+    assert_exit_code(source, 20);
 }
 
 #[test]
 fn e2e_phase42_lazy_force_closure() {
     // Lazy containing a closure
+    // NOTE: codegen generates `ret i64 void` inside thunk — clang error
     let source = r#"
 F main() -> i64 {
     a := 10
@@ -206,7 +210,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_force_conditional() {
-    // Lazy with conditional expression
+    // Lazy with conditional expression — cond==1 → 42
     let source = r#"
 F main() -> i64 {
     cond := 1
@@ -214,7 +218,7 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Combined ByRef and Lazy tests =====

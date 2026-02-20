@@ -7,15 +7,13 @@ use super::helpers::*;
 //    - spawn on sync value: Future<T> (NEW)
 // 2. Yield TC: Always returns inner_type (not i64)
 // 3. Await codegen: Text IR poll loop now includes sched_yield()
-//
-// NOTE: Spawn tests verify type checking; execution depends on __async_poll runtime.
-// Most tests use assert_compiles to verify IR generation without execution.
 
 // ==================== Spawn Tests ====================
 
 #[test]
 fn e2e_phase43_spawn_async_preserves_future() {
     // spawn on async call preserves Future<T> type
+    // NOTE: clang fails — spawn codegen stores i8* for integer literal
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -32,6 +30,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_await_chain() {
+    // NOTE: clang fails — spawn codegen stores i8* for integer literal
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -48,6 +47,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase43_spawn_sync_wraps_future() {
     // spawn 42 now wraps in Future<i64>
+    // NOTE: clang fails — store i8* 42 (integer as pointer)
     let source = r#"
 F main() -> i64 {
     future := spawn 42
@@ -60,6 +60,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase43_spawn_sync_await() {
     // spawn 42 wrapped in Future<i64>, then awaited
+    // NOTE: clang fails — store i8* 42 (integer as pointer)
     let source = r#"
 F main() -> i64 {
     result := (spawn 42).await
@@ -72,6 +73,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase43_spawn_sync_arithmetic() {
     // spawn (3 + 4) wrapped in Future<i64>
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 F main() -> i64 {
     result := (spawn (3 + 4)).await
@@ -83,6 +85,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_in_variable() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F compute(x: i64) -> i64 {
     x + 10
@@ -99,6 +102,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_multiple() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -134,8 +138,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_yield_returns_inner_type_bool() {
-    // Yield now returns inner_type (bool), not i64
-    // NOTE: Codegen currently has issues with non-i64 Future types in poll functions
+    // Yield returns inner_type (bool)
+    // NOTE: clang fails — ICE: await on non-Future type `bool`
     let source = r#"
 A F check() -> bool {
     yield true
@@ -222,6 +226,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_spawns() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F task(x: i64) -> i64 {
     x * 2
@@ -282,7 +287,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_with_if() {
-    // NOTE: Codegen has issues with early returns in async functions
+    // NOTE: clang fails — async early return codegen issue
     let source = r#"
 A F conditional(x: i64) -> i64 {
     I x > 0 {
@@ -317,7 +322,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_yields() {
-    // NOTE: Codegen has issues with async functions that have explicit returns
+    // NOTE: clang fails — async generator with yield+return codegen issue
     let source = r#"
 A F generator(n: i64) -> i64 {
     L i:0..n {
@@ -336,6 +341,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_with_expression() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -351,7 +357,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_return_early() {
-    // NOTE: Codegen has issues with early returns in async functions
+    // NOTE: clang fails — async early return + yield codegen issue
     let source = r#"
 A F check(x: i64) -> i64 {
     I x < 0 {
@@ -370,6 +376,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_nested_spawn_await() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F inner(x: i64) -> i64 {
     x + 10
@@ -390,6 +397,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_sequential_await() {
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F task(x: i64) -> i64 {
     x + 1
@@ -469,7 +477,6 @@ F main() -> i64 {
 #[test]
 fn e2e_phase43_negative_yield_outside_async() {
     // yield in a non-async function currently compiles (no TC restriction)
-    // but the type check should still work correctly
     let source = r#"
 F producer() -> i64 {
     yield 42

@@ -11,7 +11,7 @@ use super::helpers::*;
 #[test]
 fn e2e_phase32_async_recursive() {
     // @ operator (self-recursion) used inside an async function.
-    // Each recursive call returns a Future<i64> that is immediately awaited.
+    // NOTE: clang fails — spawn/async codegen type mismatch
     let source = r#"
 A F countdown(n: i64) -> i64 {
     I n <= 0 {
@@ -33,7 +33,6 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_async_with_match() {
     // Match inside an async function on a parameter.
-    // Verifies that control flow within async bodies handles match arms correctly.
     let source = r#"
 A F classify(n: i64) -> i64 {
     M n {
@@ -57,7 +56,6 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_async_multiple_awaits_sequential() {
     // Tests that codegen correctly handles 4 sequential await sites in one function.
-    // Each await materialises a separate poll loop; they must not interfere.
     let source = r#"
 A F inc(x: i64) -> i64 {
     x + 1
@@ -77,9 +75,6 @@ F main() -> i64 {
 // 4. Async function that calls another async function (nested async-calls-async)
 #[test]
 fn e2e_phase32_async_nested_functions() {
-    // The outer async function awaits an inner async function.
-    // Different from three-level chain in async_runtime.rs because here the
-    // outer function also performs its own computation before returning.
     let source = r#"
 A F base(x: i64) -> i64 {
     x * 3
@@ -101,9 +96,6 @@ F main() -> i64 {
 // 5. Async function that uses a closure internally
 #[test]
 fn e2e_phase32_async_with_closure() {
-    // A closure defined and called within an async function body.
-    // Verifies that captured variables and closure calls work correctly
-    // in the async codegen context.
     let source = r#"
 A F apply_offset(base: i64, offset: i64) -> i64 {
     adder := |x| x + offset
@@ -121,9 +113,7 @@ F main() -> i64 {
 // 6. Async function returning bool
 #[test]
 fn e2e_phase32_async_bool_return() {
-    // Non-i64 return type (bool) from an async function.
-    // bool-returning async functions go through a different codegen path
-    // for the Future poll wrapper (inner_type is bool rather than i64).
+    // NOTE: clang fails — ICE: await on non-Future type `bool`
     let source = r#"
 A F is_positive(n: i64) -> bool {
     n > 0
@@ -138,12 +128,10 @@ F main() -> i64 {
     assert_compiles(source);
 }
 
-// 7. Multiple spawn expressions used simultaneously (store then await separately)
+// 7. Multiple spawn expressions used simultaneously
 #[test]
 fn e2e_phase32_spawn_multiple() {
-    // Three independent spawn calls stored in variables, then awaited.
-    // Distinct from phase43 spawn tests because all three futures are created
-    // before any is awaited, exercising the scheduler scheduling multiple tasks.
+    // NOTE: clang fails — spawn codegen type mismatch
     let source = r#"
 A F square(n: i64) -> i64 {
     n * n
@@ -165,9 +153,7 @@ F main() -> i64 {
 // 8. Async function with early return via I (conditional R)
 #[test]
 fn e2e_phase32_async_early_return() {
-    // An async function that uses an early R (return) inside an I block.
-    // The normal continuation path is also taken for non-early-exit cases,
-    // so both the early and late paths through the async body must compile.
+    // NOTE: clang fails — async early return codegen issue
     let source = r#"
 A F safe_div(a: i64, b: i64) -> i64 {
     I b == 0 {

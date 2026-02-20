@@ -204,6 +204,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 31 | 대형 파일 모듈 분할 R7 | tiered.rs(1,523줄)→5모듈, item.rs(1,280줄)→4모듈, doc_gen.rs(1,228줄)→5모듈, Clippy 0건 | 723 |
 | 32 | E2E 테스트 확장 (750개 목표) | 4개 신규 테스트 모듈 (lang/patterns/generics/async), 32개 테스트 추가, Clippy 0건 | 755 |
 | 33 | Codegen 완성도 강화 | assert_compiles→assert_exit_code 52개 전환, type alias codegen 버그 수정 (Text IR+Inkwell), Clippy 0건 | 755 |
+| 34 | Codegen 버그 수정 & 미구현 기능 | nested_tuple Text IR 수정, default param codegen 구현, lazy/force 7개+defer 2개+default 1개 전환(+11), spawn/async clang 실패 원인 분류 | 755 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -307,6 +308,33 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 3. [테스트] phase32_patterns.rs nested_tuple TODO 추적 코멘트 추가 (Warning) — 대상: crates/vaisc/tests/e2e/phase32_patterns.rs:19-34
   변경: phase32_patterns.rs (NOTE→TODO 변경, "Convert to assert_exit_code once fixed" 추적 코멘트 추가)
 진행률: 3/3 (100%) ✅
+
+---
+
+## 현재 작업 (2026-02-20) — Phase 34: Codegen 버그 수정 & 미구현 기능 ✅
+모드: 자동진행
+- [x] 1. nested_tuple 패턴 Text IR 수정 & 기존 TODO 전환 (Sonnet)
+  변경: control_flow.rs (generate_pattern_check_typed 추가, Tuple 패턴 실제 타입 사용), generate_expr.rs+expr_helpers_data.rs (Tuple literal 실제 elem 타입 추론), phase32_patterns.rs (assert_exit_code 전환)
+- [x] 2. lazy/force thunk codegen 수정 & 테스트 전환 7개 (Sonnet+Opus) [∥1]
+  변경: phase42.rs (basic/expression/with_capture/function_call/no_capture/mutable_capture/conditional 7개 → assert_exit_code 전환, nested/multiple/closure 5개 NOTE 추가)
+- [x] 3. default param & higher-order fn codegen 수정 & 전환 4개 (Sonnet+Opus) [∥1]
+  변경: generate_expr_call.rs+expr_helpers_call.rs (default param fill-in codegen 구현), state.rs+init.rs+registration.rs (default_params 필드), lib.rs (unit test), phase45_types.rs (default_param_basic → exit_code 15), phase32_lang.rs (defer 2개 → exit_code), phase45_advanced.rs (NOTE 추가)
+- [x] 4. spawn/await & async edge case 전환 시도 (Sonnet+Opus) [∥1]
+  변경: phase32_async.rs (4개 실행 불가 → NOTE 추가, 3개 기존 assert_exit_code 유지), phase43.rs (spawn/async 16개 clang 실패 확인 → assert_compiles 유지+NOTE, yield/async poll 기존 assert_exit_code 유지)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+진행률: 5/5 (100%) ✅
+
+## 📋 Phase 35: assert_compiles → assert_exit_code 추가 전환
+
+> 현재 171개 assert_compiles 잔여 → assert_exit_code로 전환하여 codegen 완성도 강화. Phase 34에서 수정된 codegen 버그 반영
+
+## 📋 Phase 36: 대형 파일 모듈 분할 R8
+
+> generate_expr.rs(2,123줄), builtins.rs(1,426줄), expr_helpers_call.rs(1,188줄) 등 1,000줄+ 파일 분할
+
+## 📋 Phase 37: E2E 테스트 800개 목표 확장
+
+> 현재 755개 → 800개 목표로 미커버 기능(union, comptime, dependent types 등) 테스트 추가
 
 ---
 

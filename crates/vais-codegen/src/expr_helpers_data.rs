@@ -58,9 +58,19 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let mut ir = String::new();
-        let len = elements.len();
 
-        let tuple_ty = format!("{{ {} }}", vec!["i64"; len].join(", "));
+        // Infer the LLVM type of each element so nested tuples (e.g., (2, 3) inside (1, (2, 3)))
+        // are represented as struct types rather than i64.
+        let elem_resolved_types: Vec<ResolvedType> = elements
+            .iter()
+            .map(|e| self.infer_expr_type(e))
+            .collect();
+        let elem_llvm_types: Vec<String> = elem_resolved_types
+            .iter()
+            .map(|t| self.type_to_llvm(t))
+            .collect();
+
+        let tuple_ty = format!("{{ {} }}", elem_llvm_types.join(", "));
 
         let tuple_ptr = self.next_temp(counter);
         ir.push_str(&format!("  {} = alloca {}\n", tuple_ptr, tuple_ty));
@@ -74,7 +84,11 @@ impl CodeGenerator {
                 "  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n",
                 elem_ptr, tuple_ty, tuple_ty, tuple_ptr, i
             ));
-            ir.push_str(&format!("  store i64 {}, i64* {}\n", val, elem_ptr));
+            let elem_ty = &elem_llvm_types[i];
+            ir.push_str(&format!(
+                "  store {} {}, {}* {}\n",
+                elem_ty, val, elem_ty, elem_ptr
+            ));
         }
 
         let result = self.next_temp(counter);

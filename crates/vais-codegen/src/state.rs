@@ -34,6 +34,9 @@ pub(crate) struct TypeRegistry {
     pub(crate) resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
     /// Type aliases from type checker (for resolving type alias names in codegen)
     pub(crate) type_aliases: HashMap<String, vais_types::ResolvedType>,
+    /// Default parameter expressions: function_name -> Vec<Option<Box<Spanned<Expr>>>>
+    /// Each element corresponds to a parameter; Some(expr) means it has a default value.
+    pub(crate) default_params: HashMap<String, Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>>,
 }
 
 /// Generic type system state — templates, instantiations, substitutions

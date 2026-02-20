@@ -334,9 +334,13 @@ impl CodeGenerator {
 
                 writeln!(ir, "{}:", current_label).unwrap();
 
-                // Generate pattern check
-                let (check_val, check_ir) =
-                    self.generate_pattern_check(&arm.pattern, &match_val, counter)?;
+                // Generate pattern check — pass match_type for correct nested tuple type inference
+                let (check_val, check_ir) = self.generate_pattern_check_typed(
+                    &arm.pattern,
+                    &match_val,
+                    counter,
+                    &match_type,
+                )?;
                 ir.push_str(&check_ir);
 
                 // Handle guard - need to bind variables first so guard can use them
@@ -496,12 +500,14 @@ impl CodeGenerator {
         }
     }
 
-    /// Generate code to check if a pattern matches
-    pub(crate) fn generate_pattern_check(
+    /// Generate code to check if a pattern matches (with explicit match type for correct type
+    /// propagation, especially for nested tuple patterns where element types may be non-i64).
+    pub(crate) fn generate_pattern_check_typed(
         &mut self,
         pattern: &Spanned<Pattern>,
         match_val: &str,
         counter: &mut usize,
+        match_type: &ResolvedType,
     ) -> CodegenResult<(String, String)> {
         match &pattern.node {
             Pattern::Wildcard => {
@@ -648,7 +654,8 @@ impl CodeGenerator {
                 let mut checks: Vec<String> = Vec::new();
 
                 for pat in patterns {
-                    let (check, check_ir) = self.generate_pattern_check(pat, match_val, counter)?;
+                    let (check, check_ir) =
+                        self.generate_pattern_check_typed(pat, match_val, counter, match_type)?;
                     ir.push_str(&check_ir);
                     checks.push(check);
                 }
@@ -668,24 +675,45 @@ impl CodeGenerator {
                 Ok((result, ir))
             }
             Pattern::Tuple(patterns) => {
-                // For tuple patterns, we need to extract and check each element
+                // For tuple patterns, we need to extract and check each element.
+                // Use the actual element types from match_type to generate correct extractvalue
+                // instructions — especially important for nested tuples where elements may be
+                // struct types (e.g., { i64, i64 }) rather than plain i64.
                 let mut ir = String::new();
                 let mut checks: Vec<String> = Vec::new();
 
+                // Get element types from match_type if it is a Tuple, otherwise fall back to i64.
+                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type
+                {
+                    elems.clone()
+                } else {
+                    vec![ResolvedType::I64; patterns.len()]
+                };
+
+                // Build the full LLVM struct type string for extractvalue.
+                let llvm_elem_strs: Vec<String> = elem_types
+                    .iter()
+                    .map(|t| self.type_to_llvm(t))
+                    .collect();
+                let tuple_llvm_ty = format!("{{ {} }}", llvm_elem_strs.join(", "));
+
                 for (i, pat) in patterns.iter().enumerate() {
-                    // Extract tuple element
+                    // Extract tuple element using the correct aggregate type.
                     let elem = self.next_temp(counter);
                     writeln!(
                         ir,
-                        "  {} = extractvalue {{ {} }} {}, {}",
-                        elem,
-                        vec!["i64"; patterns.len()].join(", "),
-                        match_val,
-                        i
+                        "  {} = extractvalue {} {}, {}",
+                        elem, tuple_llvm_ty, match_val, i
                     )
                     .unwrap();
 
-                    let (check, check_ir) = self.generate_pattern_check(pat, &elem, counter)?;
+                    // Recurse with the element's actual type.
+                    let elem_ty = elem_types
+                        .get(i)
+                        .cloned()
+                        .unwrap_or(ResolvedType::I64);
+                    let (check, check_ir) =
+                        self.generate_pattern_check_typed(pat, &elem, counter, &elem_ty)?;
                     ir.push_str(&check_ir);
                     checks.push(check);
                 }
@@ -804,6 +832,17 @@ impl CodeGenerator {
         }
     }
 
+    /// Generate code to check if a pattern matches (untyped: assumes i64 elements for tuples).
+    /// Prefer `generate_pattern_check_typed` when the match type is known.
+    pub(crate) fn generate_pattern_check(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        self.generate_pattern_check_typed(pattern, match_val, counter, &ResolvedType::I64)
+    }
+
     /// Get the tag value for an enum variant
     pub(crate) fn get_enum_variant_tag(&self, variant_name: &str) -> i32 {
         for enum_info in self.types.enums.values() {
@@ -901,20 +940,36 @@ impl CodeGenerator {
             Pattern::Tuple(patterns) => {
                 let mut ir = String::new();
 
+                // Get element types from match_type if it is a Tuple, otherwise fall back to i64.
+                // This is critical for nested tuples (e.g., (1, (2, 3))) where the inner element
+                // is { i64, i64 }, not i64 — using i64 would produce a type mismatch in LLVM IR.
+                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type
+                {
+                    elems.clone()
+                } else {
+                    vec![ResolvedType::I64; patterns.len()]
+                };
+
+                // Build the full LLVM struct type string for extractvalue.
+                let llvm_elem_strs: Vec<String> =
+                    elem_types.iter().map(|t| self.type_to_llvm(t)).collect();
+                let tuple_llvm_ty = format!("{{ {} }}", llvm_elem_strs.join(", "));
+
                 for (i, pat) in patterns.iter().enumerate() {
-                    // Extract tuple element
+                    // Extract tuple element using the correct aggregate type.
                     let elem = self.next_temp(counter);
                     writeln!(
                         ir,
-                        "  {} = extractvalue {{ {} }} {}, {}",
-                        elem,
-                        vec!["i64"; patterns.len()].join(", "),
-                        match_val,
-                        i
+                        "  {} = extractvalue {} {}, {}",
+                        elem, tuple_llvm_ty, match_val, i
                     )
                     .unwrap();
 
-                    let bind_ir = self.generate_pattern_bindings(pat, &elem, counter)?;
+                    // Recurse with the element's actual type so nested tuple bindings
+                    // also generate correct extractvalue instructions.
+                    let elem_ty = elem_types.get(i).cloned().unwrap_or(ResolvedType::I64);
+                    let bind_ir =
+                        self.generate_pattern_bindings_typed(pat, &elem, counter, &elem_ty)?;
                     ir.push_str(&bind_ir);
                 }
 

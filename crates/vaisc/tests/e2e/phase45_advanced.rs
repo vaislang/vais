@@ -57,6 +57,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase45a_higher_order_fn() {
     // Passing a named function as a first-class value
+    // NOTE: clang fails — fn pointer passed as i64 (@double without bitcast to i64)
     let source = r#"
 F apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }
 F double(x: i64) -> i64 { x * 2 }
@@ -118,7 +119,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase45a_trait_static_dispatch() {
-    // Generic function with trait bound — IR generation verified
+    // Generic function with trait bound
+    // NOTE: clang fails — unresolved generic 'T' uses i64 fallback, struct access incorrect
     let source = r#"
 W HasValue {
     F value(&self) -> i64

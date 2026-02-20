@@ -340,6 +340,28 @@ mod tests {
     }
 
     #[test]
+    fn test_default_param_call_ir() {
+        // Verify that calling a function with fewer args than params fills in defaults
+        let source = r#"
+F add(a: i64, b: i64 = 10) -> i64 { a + b }
+F main() -> i64 { add(5) }
+"#;
+        let module = parse(source).unwrap();
+        let mut checker = vais_types::TypeChecker::new();
+        checker.check_module(&module).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        gen.set_resolved_functions(checker.get_all_functions().clone());
+        gen.set_type_aliases(checker.get_type_aliases().clone());
+        let ir = gen.generate_module(&module).unwrap();
+        // The call to add(5) should include the default value 10 for b
+        assert!(
+            ir.contains("call i64 @add(i64 5, i64 10)"),
+            "Expected 'call i64 @add(i64 5, i64 10)' in IR:\n{}",
+            &ir[ir.rfind("define i64 @main").unwrap_or(0)..]
+        );
+    }
+
+    #[test]
     fn test_enum_with_variants() {
         let source = "E Color{Red,Green,Blue}";
         let module = parse(source).unwrap();

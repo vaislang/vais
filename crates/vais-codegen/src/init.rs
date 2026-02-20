@@ -37,6 +37,7 @@ impl CodeGenerator {
                 trait_impl_methods: HashMap::new(),
                 resolved_function_sigs: HashMap::new(),
                 type_aliases: HashMap::new(),
+                default_params: HashMap::new(),
             },
             generics: GenericState {
                 struct_defs: HashMap::new(),

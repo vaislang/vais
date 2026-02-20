@@ -1047,19 +1047,31 @@ impl CodeGenerator {
                 Ok((result, ir))
             }
 
-            // Tuple literal: (a, b, c)
+            // Tuple literal: (a, b, c) — including nested tuples like (1, (2, 3)).
+            // Infer each element's LLVM type to correctly handle non-i64 elements such as
+            // inner tuples (which are struct types like { i64, i64 }).
             Expr::Tuple(elements) => {
                 let mut ir = String::new();
-                let len = elements.len();
 
-                // Build tuple type string
-                let tuple_ty = format!("{{ {} }}", vec!["i64"; len].join(", "));
+                // Infer the LLVM type of each element before generating code.
+                // This ensures nested tuples use the correct struct type instead of i64.
+                let elem_resolved_types: Vec<ResolvedType> = elements
+                    .iter()
+                    .map(|e| self.infer_expr_type(e))
+                    .collect();
+                let elem_llvm_types: Vec<String> = elem_resolved_types
+                    .iter()
+                    .map(|t| self.type_to_llvm(t))
+                    .collect();
+
+                // Build tuple type string from actual element types.
+                let tuple_ty = format!("{{ {} }}", elem_llvm_types.join(", "));
 
                 // Allocate tuple on stack
                 let tuple_ptr = self.next_temp(counter);
                 ir.push_str(&format!("  {} = alloca {}\n", tuple_ptr, tuple_ty));
 
-                // Store each element
+                // Store each element using its actual LLVM type.
                 for (i, elem) in elements.iter().enumerate() {
                     let (val, elem_ir) = self.generate_expr(elem, counter)?;
                     ir.push_str(&elem_ir);
@@ -1069,7 +1081,11 @@ impl CodeGenerator {
                         "  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n",
                         elem_ptr, tuple_ty, tuple_ty, tuple_ptr, i
                     ));
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", val, elem_ptr));
+                    let elem_ty = &elem_llvm_types[i];
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        elem_ty, val, elem_ty, elem_ptr
+                    ));
                 }
 
                 // Load and return tuple value

@@ -35,7 +35,8 @@ fn e2e_phase45t_default_param_basic() {
 F add(a: i64, b: i64 = 10) -> i64 { a + b }
 F main() -> i64 { add(5) }
 "#;
-    assert_compiles(source);
+    // add(5) uses default b=10, so result = 5+10 = 15
+    assert_exit_code(source, 15);
 }
 
 #[test]

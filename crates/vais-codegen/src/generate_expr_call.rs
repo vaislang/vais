@@ -572,6 +572,38 @@ impl CodeGenerator {
             arg_vals.push(format!("{} {}", arg_ty, val));
         }
 
+        // Fill in default parameter values for omitted trailing arguments
+        let param_count = fn_info
+            .as_ref()
+            .map(|f| f.signature.params.len())
+            .unwrap_or(args.len());
+        if args.len() < param_count {
+            // Clone the default param expressions to avoid borrow conflict with &mut self
+            let defaults: Option<Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>> = self
+                .types
+                .default_params
+                .get(&fn_name)
+                .cloned();
+            if let Some(defaults) = defaults {
+                for i in args.len()..param_count {
+                    if let Some(Some(default_expr)) = defaults.get(i) {
+                        let param_ty = fn_info
+                            .as_ref()
+                            .and_then(|f| f.signature.params.get(i))
+                            .map(|(_, ty, _)| ty.clone());
+                        let arg_ty = if let Some(ref pt) = param_ty {
+                            self.type_to_llvm(pt)
+                        } else {
+                            "i64".to_string()
+                        };
+                        let (val, default_ir) = self.generate_expr(default_expr, counter)?;
+                        ir.push_str(&default_ir);
+                        arg_vals.push(format!("{} {}", arg_ty, val));
+                    }
+                }
+            }
+        }
+
         // Get return type and actual function name (may differ for builtins)
         let ret_ty = fn_info
             .as_ref()

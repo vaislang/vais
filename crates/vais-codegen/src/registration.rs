@@ -78,6 +78,16 @@ impl CodeGenerator {
             },
         );
 
+        // Store default parameter values (if any) for use at call sites
+        if f.params.iter().any(|p| p.default_value.is_some()) {
+            let defaults: Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>> = f
+                .params
+                .iter()
+                .map(|p| p.default_value.clone())
+                .collect();
+            self.types.default_params.insert(func_name.clone(), defaults);
+        }
+
         // Check for wasm_export attribute
         for attr in &f.attributes {
             if attr.name == "wasm_export" {
