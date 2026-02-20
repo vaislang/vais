@@ -296,6 +296,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 4]
 진행률: 5/5 (100%) ✅
 
+## 리뷰 발견사항 (2026-02-20)
+> 출처: /team-review Phase 33
+모드: 자동진행
+
+- [x] 1. [테스트] error_scenario_tests.rs compile_to_ir()에 set_type_aliases 추가 (Critical) — 대상: crates/vaisc/tests/error_scenario_tests.rs:30
+  변경: error_scenario_tests.rs (gen.set_type_aliases(checker.get_type_aliases().clone()) 추가)
+- [x] 2. [테스트] error_scenario_tests.rs 헬퍼 중복 제거 — compile_and_run/assert_exit_code 공통화 (Warning) — 대상: crates/vaisc/tests/error_scenario_tests.rs:66-128
+  변경: error_scenario_tests.rs (RunResult/compile_and_run 삭제, assert_exit_code 자체완결형으로 단순화 63줄→39줄, 중복사유 코멘트 추가)
+- [x] 3. [테스트] phase32_patterns.rs nested_tuple TODO 추적 코멘트 추가 (Warning) — 대상: crates/vaisc/tests/e2e/phase32_patterns.rs:19-34
+  변경: phase32_patterns.rs (NOTE→TODO 변경, "Convert to assert_exit_code once fixed" 추적 코멘트 추가)
+진행률: 3/3 (100%) ✅
+
 ---
 
 ## ⏳ 장기 관찰 항목

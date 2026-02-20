@@ -19,9 +19,9 @@ use super::helpers::*;
 fn e2e_phase32_pattern_nested_tuple() {
     // Matching on a nested tuple extracts all inner fields correctly.
     // (1, (2, 3)) => 1+2+3 = 6, exit code 0 (6 - 6 = 0)
-    // NOTE: Text IR backend has type mismatch for nested tuple pattern binding
+    // TODO: Text IR backend has type mismatch for nested tuple pattern binding
     // (store { i64, i64 } into i64*); Inkwell backend handles this correctly.
-    // Keeping assert_compiles until Text IR pattern codegen is fixed.
+    // Convert to assert_exit_code(source, 0) once Text IR pattern codegen is fixed.
     let source = r#"
 F main() -> i64 {
     pair := (1, (2, 3))

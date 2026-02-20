@@ -28,6 +28,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("error_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -63,18 +64,14 @@ fn assert_compiles(source: &str) {
     }
 }
 
-/// Result of running a compiled program
-struct RunResult {
-    exit_code: i32,
-    stdout: String,
-    stderr: String,
-}
+/// Assert that source compiles, runs via clang, and returns the expected exit code.
+/// Note: This duplicates logic from e2e/helpers.rs but is necessary because
+/// this file is a separate integration test binary that cannot import e2e modules,
+/// and uses its own compile_to_ir() with a distinct module name ("error_test").
+fn assert_exit_code(source: &str, expected: i32) {
+    let ir = compile_to_ir(source).expect("Compilation failed");
 
-/// Compile source, build executable with clang, run it, return exit code + output
-fn compile_and_run(source: &str) -> Result<RunResult, String> {
-    let ir = compile_to_ir(source)?;
-
-    let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let ll_path = tmp_dir.path().join("test.ll");
     let exe_name = if cfg!(target_os = "windows") {
         "test_exe.exe"
@@ -83,7 +80,7 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
     };
     let exe_path = tmp_dir.path().join(exe_name);
 
-    fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+    fs::write(&ll_path, &ir).expect("Failed to write IR");
 
     let clang_output = Command::new("clang")
         .arg(&ll_path)
@@ -91,40 +88,27 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
         .arg(&exe_path)
         .arg("-Wno-override-module")
         .output()
-        .map_err(|e| format!("Failed to run clang: {}", e))?;
+        .expect("Failed to run clang");
 
-    if !clang_output.status.success() {
-        let stderr = String::from_utf8_lossy(&clang_output.stderr);
-        return Err(format!("clang compilation failed:\n{}", stderr));
-    }
+    assert!(
+        clang_output.status.success(),
+        "clang compilation failed:\n{}",
+        String::from_utf8_lossy(&clang_output.stderr)
+    );
 
     let run_output = Command::new(&exe_path)
         .output()
-        .map_err(|e| format!("Failed to run executable: {}", e))?;
+        .expect("Failed to run executable");
 
     let exit_code = run_output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
-
-    Ok(RunResult {
+    assert_eq!(
+        exit_code, expected,
+        "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
+        expected,
         exit_code,
-        stdout,
-        stderr,
-    })
-}
-
-/// Assert that source compiles, runs, and returns the expected exit code
-fn assert_exit_code(source: &str, expected: i32) {
-    match compile_and_run(source) {
-        Ok(result) => {
-            assert_eq!(
-                result.exit_code, expected,
-                "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
-                expected, result.exit_code, result.stdout, result.stderr
-            );
-        }
-        Err(e) => panic!("Compilation/execution failed: {}", e),
-    }
+        String::from_utf8_lossy(&run_output.stdout),
+        String::from_utf8_lossy(&run_output.stderr)
+    );
 }
 
 // ==================== Undefined Symbol Errors ====================
