@@ -3,7 +3,7 @@
 //! This module contains core expression helpers: enum variants,
 //! binary/unary operations, casts, and assignment operations.
 
-use crate::{CodeGenerator, CodegenError, CodegenResult};
+use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Span, Spanned, Type, UnaryOp};
 use vais_types::ResolvedType;
 
@@ -321,6 +321,154 @@ impl CodeGenerator {
         }
 
         Ok((val, ir))
+    }
+
+    /// Generate identifier expression
+    pub(crate) fn generate_ident_expr(
+        &mut self,
+        name: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
+            if local.is_param() {
+                // Parameters are SSA values, use directly
+                Ok((format!("%{}", local.llvm_name), String::new()))
+            } else if local.is_ssa() {
+                // SSA variables: use the stored value directly, no load needed
+                Ok((local.llvm_name.clone(), String::new()))
+            } else if matches!(local.ty, ResolvedType::Named { .. }) {
+                // Struct variables store a pointer to the struct
+                // Load the pointer (the struct address)
+                let tmp = self.next_temp(counter);
+                let llvm_ty = self.type_to_llvm(&local.ty);
+                let ir = format!(
+                    "  {} = load {}*, {}** %{}\n",
+                    tmp, llvm_ty, llvm_ty, local.llvm_name
+                );
+                Ok((tmp, ir))
+            } else {
+                // Local variables need to be loaded from alloca
+                let tmp = self.next_temp(counter);
+                let llvm_ty = self.type_to_llvm(&local.ty);
+                let ir = format!(
+                    "  {} = load {}, {}* %{}\n",
+                    tmp, llvm_ty, llvm_ty, local.llvm_name
+                );
+                Ok((tmp, ir))
+            }
+        } else if name == "self" {
+            // Handle self reference
+            Ok(("%self".to_string(), String::new()))
+        } else if self.is_unit_enum_variant(name) {
+            // Unit enum variant (e.g., None)
+            // Create enum value on stack with just the tag
+            for enum_info in self.types.enums.values() {
+                for (tag, variant) in enum_info.variants.iter().enumerate() {
+                    if variant.name == name {
+                        let mut ir = String::new();
+                        let enum_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = alloca %{}\n",
+                            enum_ptr, enum_info.name
+                        ));
+                        // Store tag
+                        let tag_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                            tag_ptr, enum_info.name, enum_info.name, enum_ptr
+                        ));
+                        ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
+                        return Ok((enum_ptr, ir));
+                    }
+                }
+            }
+            // Fallback if not found (shouldn't happen)
+            Ok((format!("@{}", name), String::new()))
+        } else if let Some(const_info) = self.types.constants.get(name).cloned() {
+            // Constant reference - inline the constant value
+            self.generate_expr(&const_info.value, counter)
+        } else if self.types.functions.contains_key(name) {
+            // Function reference
+            Ok((format!("@{}", name), String::new()))
+        } else if let Some(self_local) = self.fn_ctx.locals.get("self").cloned() {
+            // Implicit self: check if name is a field of the self struct
+            let self_type = match &self_local.ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    inner.as_ref().clone()
+                }
+                other => other.clone(),
+            };
+            if let ResolvedType::Named {
+                name: type_name, ..
+            } = &self_type
+            {
+                let resolved_name = self.resolve_struct_name(type_name);
+                if let Some(struct_info) = self.types.structs.get(&resolved_name).cloned() {
+                    if let Some(field_idx) =
+                        struct_info.fields.iter().position(|(n, _)| n == name)
+                    {
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
+                        let mut ir = String::new();
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* %self, i32 0, i32 {}\n",
+                            field_ptr, resolved_name, resolved_name, field_idx
+                        ));
+                        if matches!(field_ty, ResolvedType::Named { .. }) {
+                            return Ok((field_ptr, ir));
+                        } else {
+                            let result = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                result, llvm_ty, llvm_ty, field_ptr
+                            ));
+                            return Ok((result, ir));
+                        }
+                    }
+                }
+            }
+            // Not a field, fall through to error
+            let mut candidates: Vec<&str> = Vec::new();
+            for var_name in self.fn_ctx.locals.keys() {
+                candidates.push(var_name.as_str());
+            }
+            for func_name in self.types.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+            let suggestions = suggest_similar(name, &candidates, 3);
+            let suggestion_text = format_did_you_mean(&suggestions);
+            Err(CodegenError::UndefinedVar(format!(
+                "{}{}",
+                name, suggestion_text
+            )))
+        } else {
+            // Undefined identifier - provide suggestions
+            let mut candidates: Vec<&str> = Vec::new();
+
+            // Add local variables
+            for var_name in self.fn_ctx.locals.keys() {
+                candidates.push(var_name.as_str());
+            }
+
+            // Add function names
+            for func_name in self.types.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+
+            // Add "self" if we're in a method context
+            if self.fn_ctx.current_function.is_some() {
+                candidates.push("self");
+            }
+
+            // Get suggestions
+            let suggestions = suggest_similar(name, &candidates, 3);
+            let suggestion_text = format_did_you_mean(&suggestions);
+            Err(CodegenError::UndefinedVar(format!(
+                "{}{}",
+                name, suggestion_text
+            )))
+        }
     }
 
     /// Generate compound assignment expression

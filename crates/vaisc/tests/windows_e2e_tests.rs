@@ -27,10 +27,78 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
     let mut gen = CodeGenerator::new("windows_test");
     // Pass resolved function signatures for inferred parameter type support
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
     Ok(ir)
+}
+
+/// Result of running a compiled program
+struct RunResult {
+    exit_code: i32,
+    #[allow(dead_code)]
+    stdout: String,
+    #[allow(dead_code)]
+    stderr: String,
+}
+
+/// Compile source, build executable with clang, run it, return exit code + output
+fn compile_and_run(source: &str) -> Result<RunResult, String> {
+    let ir = compile_to_ir(source)?;
+
+    let tmp_dir =
+        tempfile::TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let ll_path = tmp_dir.path().join("test.ll");
+    let exe_name = if cfg!(target_os = "windows") {
+        "test_exe.exe"
+    } else {
+        "test_exe"
+    };
+    let exe_path = tmp_dir.path().join(exe_name);
+
+    std::fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+
+    let clang_output = std::process::Command::new("clang")
+        .arg(&ll_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg("-Wno-override-module")
+        .output()
+        .map_err(|e| format!("Failed to run clang: {}", e))?;
+
+    if !clang_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        return Err(format!("clang compilation failed:\n{}", stderr));
+    }
+
+    let run_output = std::process::Command::new(&exe_path)
+        .output()
+        .map_err(|e| format!("Failed to run executable: {}", e))?;
+
+    let exit_code = run_output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&run_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&run_output.stderr).to_string();
+
+    Ok(RunResult {
+        exit_code,
+        stdout,
+        stderr,
+    })
+}
+
+/// Assert that source compiles, runs, and returns the expected exit code
+fn assert_exit_code(source: &str, expected: i32) {
+    match compile_and_run(source) {
+        Ok(result) => {
+            assert_eq!(
+                result.exit_code, expected,
+                "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
+                expected, result.exit_code, result.stdout, result.stderr
+            );
+        }
+        Err(e) => panic!("Compilation/execution failed: {}", e),
+    }
 }
 
 /// Assert that source compiles successfully to IR
@@ -72,7 +140,7 @@ F get_windows_path() -> i64 {
 }
 F main() -> i64 = get_windows_path()
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -87,6 +155,7 @@ F print_windows_path() -> i64 {
 }
 F main() -> i64 = print_windows_path()
 "#;
+    // NOTE: Uses extern puts — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -106,6 +175,7 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: Uses puts (via print_path) — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -136,7 +206,8 @@ F check_user_profile() -> i64 {
 }
 F main() -> i64 = check_user_profile()
 "#;
-    assert_compiles(source);
+    // getenv_mock is a regular Vais function (not extern), returns 12345678 → profile != 0 → 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 4. Process Exit Code Handling ====================
@@ -160,7 +231,8 @@ F validate_input(x: i64) -> i64 {
 }
 F main() -> i64 = validate_input(42)
 "#;
-    assert_compiles(source);
+    // validate_input(42): x=42 >= 0, x != 0, so EXIT_SUCCESS = 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 5. File I/O Pattern (open/read/write/close) ====================
@@ -209,6 +281,7 @@ F main() -> i64 {
     }
 }
 "#;
+    // NOTE: Uses extern fopen/fclose — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -239,7 +312,8 @@ C REACTOR_MAX_EVENTS: i64 = 64
 
 F main() -> i64 = PLATFORM_WINDOWS
 "#;
-    assert_compiles(source);
+    // PLATFORM_WINDOWS = 3
+    assert_exit_code(source, 3);
 }
 
 // ==================== 7. Windows Async Platform Detection ====================
@@ -289,6 +363,7 @@ F main() -> i64 {
     reactor.is_windows()
 }
 "#;
+    // NOTE: Uses extern async_platform() — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -336,7 +411,8 @@ F main() -> i64 {
     sock.is_tcp()
 }
 "#;
-    assert_compiles(source);
+    // sock = Socket::new(AF_INET, SOCK_STREAM), is_tcp() checks sock_type == SOCK_STREAM → 1
+    assert_exit_code(source, 1);
 }
 
 // ==================== 9. Multi-threading Pattern ====================
@@ -378,6 +454,7 @@ F main() -> i64 {
     thread.join()
 }
 "#;
+    // NOTE: Uses extern create_thread/join_thread/current_thread_id — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -434,7 +511,9 @@ F main() -> i64 {
     I cert_ok == 1 { 0 } E { 1 }
 }
 "#;
-    assert_compiles(source);
+    // No extern calls in main path — all mock functions are regular Vais functions
+    // cert_ok = 1 (tls_load_cert_mock returns 0 → 1), so returns 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 11. Structured Logging + File Paths ====================
@@ -496,7 +575,8 @@ F main() -> i64 {
     I result == 0 { 0 } E { 1 }
 }
 "#;
-    assert_compiles(source);
+    // No extern calls — all mock functions, result=0 → returns 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 12. Compression + File I/O ====================
@@ -557,7 +637,8 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    // No extern calls — all mock functions, main returns 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 13. Cross-platform Conditional Compilation ====================
@@ -612,6 +693,7 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: Uses extern get_platform() — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }
 
@@ -676,6 +758,8 @@ F main() -> i64 {
     I key != 0 { 0 } E { 1 }
 }
 "#;
+    // NOTE: Declares extern Reg* functions but main() doesn't call them — keep as assert_compiles
+    // (extern declarations may still cause link issues on some platforms)
     assert_compiles(source);
 }
 
@@ -770,7 +854,8 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    // malloc is available through libc, main returns 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== Bonus: Complex Windows Integration Test ====================
@@ -841,5 +926,6 @@ F main() -> i64 {
     result
 }
 "#;
+    // NOTE: Uses extern async_platform/fopen/fclose — keep as assert_compiles (link dependency)
     assert_compiles(source);
 }

@@ -3295,6 +3295,8 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: bar() uses &mut [T] slice indexing — keep as assert_compiles until slice codegen
+    // produces clang-compatible IR for &mut [T] operations
     assert_compiles(source);
 }
 
@@ -3309,6 +3311,8 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: baz() uses slice .len() — keep as assert_compiles until slice codegen
+    // produces clang-compatible IR for .len() method
     assert_compiles(source);
 }
 
@@ -3379,6 +3383,8 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: len_mut() uses &mut [f64] slice .len() — keep as assert_compiles until
+    // slice codegen produces clang-compatible IR
     assert_compiles(source);
 }
 

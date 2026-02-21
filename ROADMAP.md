@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-19
+> **최종 업데이트**: 2026-02-21
 
 ---
 
@@ -205,6 +205,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 32 | E2E 테스트 확장 (750개 목표) | 4개 신규 테스트 모듈 (lang/patterns/generics/async), 32개 테스트 추가, Clippy 0건 | 755 |
 | 33 | Codegen 완성도 강화 | assert_compiles→assert_exit_code 52개 전환, type alias codegen 버그 수정 (Text IR+Inkwell), Clippy 0건 | 755 |
 | 34 | Codegen 버그 수정 & 미구현 기능 | nested_tuple Text IR 수정, default param codegen 구현, lazy/force 7개+defer 2개+default 1개 전환(+11), spawn/async clang 실패 원인 분류 | 755 |
+| 35 | assert_compiles→assert_exit_code 추가 전환 | selfhost_lexer 68개+windows 9개+phase41 4개+phase30 3개 = 84개 전환, 33개 NOTE 분류 (잔여 66개 모두 코드젠 미지원), Clippy 0건 | 755 |
+| 36 | 대형 파일 모듈 분할 R8 | builtins.rs→5모듈, expr_helpers_call.rs→4모듈, control_flow.rs→4모듈, generate_expr.rs 2,139→1,563줄(-27%), Clippy 0건 | 755 |
+| 37 | E2E 테스트 800개 목표 확장 | 4개 신규 모듈 (union_const/comptime_defer/patterns/pipe_string), 48개 테스트 추가 (763→811), Clippy 0건 | 811 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -324,17 +327,42 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
 진행률: 5/5 (100%) ✅
 
-## 📋 Phase 35: assert_compiles → assert_exit_code 추가 전환
+## 현재 작업 (2026-02-20) — Phase 35: assert_compiles → assert_exit_code 추가 전환 ✅
+모드: 자동진행
+- [x] 1. selfhost_lexer_tests 전환 — assert_compiles→assert_exit_code 68개 (Opus)
+  변경: selfhost_lexer_tests.rs (68개 전환: module compile 2개, token methods 1개, keywords 14개, multi-char 2개, types 4개, integers 3개, strings 3개, arithmetic 5개, comparison 6개, logical 2개, bitwise 4개, delimiters 3개, punctuation 9개, assignment 8개, comments 2개, complex 3개; 12개 NOTE 유지: non-i64 ABI 10개+struct-by-value 2개)
+- [x] 2. e2e 모듈 전환 — phase41(4)+phase30(3) = 7개 전환 (Opus) [∥1]
+  변경: phase41.rs (range_basic/inclusive/slice_closed_end/slice_prefix 4개 → assert_exit_code 0), phase30.rs (generic_swap→2, generic_with_bool→42, generic_expression_body→3), advanced.rs (3개 NOTE 추가)
+- [x] 3. 기타 모듈 전환 — windows(9)+execution(0)+error_scenario(0)+phase33(0) = 9개 전환 (Opus) [∥1]
+  변경: windows_e2e_tests.rs (tls_with_paths/logging/compression/large_struct_array/path_raw_string/backslash/concatenation/env_var/socket_constants 9개 → assert_exit_code 0, 8개 NOTE 유지: extern deps), execution_tests.rs (5개 NOTE 추가: slice/where_clause/spawn), error_scenario_tests.rs (3개 NOTE 추가: duplicate fn/no main), phase33_integration_tests.rs (2개 NOTE 추가: extern TLS/async)
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3]
+진행률: 4/4 (100%) ✅
 
-> 현재 171개 assert_compiles 잔여 → assert_exit_code로 전환하여 codegen 완성도 강화. Phase 34에서 수정된 codegen 버그 반영
+## 현재 작업 (2026-02-20) — Phase 36: 대형 파일 모듈 분할 R8 ✅
+모드: 자동진행
+- [x] 1. builtins.rs 모듈 분할 — 1,426줄 → builtins/ 5모듈 (mod/io/memory/file_io/platform) (Sonnet)
+  변경: builtins.rs 삭제 → builtins/{mod.rs(190줄), io.rs(66줄), memory.rs(220줄), file_io.rs(357줄), platform.rs(610줄)}
+- [x] 2. expr_helpers_call.rs 모듈 분할 — 1,220줄 → expr_helpers_call/ 4모듈 (mod/call_gen/print_format/method_call) (Sonnet) [∥1]
+  변경: expr_helpers_call.rs 삭제 → expr_helpers_call/{mod.rs(10줄), call_gen.rs(496줄), print_format.rs(443줄), method_call.rs(286줄)}
+- [x] 3. control_flow.rs 모듈 분할 — 1,098줄 → control_flow/ 4모듈 (mod/if_else/match_gen/pattern) (Sonnet) [∥1]
+  변경: control_flow.rs 삭제 → control_flow/{mod.rs(10줄), if_else.rs(183줄), match_gen.rs(315줄), pattern.rs(601줄)}
+- [x] 4. generate_expr.rs match arm 추출 — 2,139줄→1,563줄(-27%) (Binary/Ident/If/Await 576줄 위임) (Sonnet) [∥1]
+  변경: generate_expr.rs (Ident→generate_ident_expr, Binary→generate_binary_expr, Unary→generate_unary_expr, Ternary→generate_ternary_expr, If→generate_if_expr, Await→generate_await_expr), expr_helpers.rs (+generate_ident_expr 140줄)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+진행률: 5/5 (100%) ✅
 
-## 📋 Phase 36: 대형 파일 모듈 분할 R8
-
-> generate_expr.rs(2,123줄), builtins.rs(1,426줄), expr_helpers_call.rs(1,188줄) 등 1,000줄+ 파일 분할
-
-## 📋 Phase 37: E2E 테스트 800개 목표 확장
-
-> 현재 755개 → 800개 목표로 미커버 기능(union, comptime, dependent types 등) 테스트 추가
+## 현재 작업 (2026-02-21) — Phase 37: E2E 테스트 800개 목표 확장 ✅
+모드: 자동진행
+- [x] 1. E2E 테스트: union/const/global (12개) (Opus)
+  변경: phase37_union_const.rs 신규 (union 4개: single_field/field_arithmetic/multiple_declarations/passed_to_function, const 5개: basic_usage/arithmetic/multiple/in_condition/in_local_binding, global 3개: single/multiple/with_const)
+- [x] 2. E2E 테스트: comptime/macro/defer (10개) (Opus) [∥1]
+  변경: phase37_comptime_defer.rs 신규 (comptime 5개: arithmetic/nested_expr/used_in_arithmetic/multiple_blocks/in_helper_function, macro 2개: simple_parse/with_body_parse, defer 3개: simple/with_early_return_zero/multiple)
+- [x] 3. E2E 테스트: pattern/closure 고급 (12개) (Opus) [∥1]
+  변경: phase37_patterns.rs 신규 (match 6개: nested_if_fallthrough/literal_zero/wildcard_fallback/on_function_result/or_pattern_extended/range_boundary, enum 3개: match_with_data/match_second_variant/unit_variants, closure 3개: capture_and_add/in_loop_accumulator/nested_capture)
+- [x] 4. E2E 테스트: pipe/string/numeric (14개) (Opus) [∥1]
+  변경: phase37_pipe_string.rs 신규 (pipe 3개: single/triple_chain/with_identity, string 3개: puts_hello/puts_multiple_calls/puts_with_exit_code, numeric 4개: negative_literal/modulo_operation/integer_division/compound_assign_chain, expr_body 2개: simple/chain, block 2개: expression_nested/in_if)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+진행률: 5/5 (100%) ✅
 
 ---
 

@@ -28,6 +28,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("exec_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -1845,6 +1846,7 @@ F get_slice(arr: &[i64]) -> i64 = 42
 
 F main() -> i64 = get_slice(&[1, 2, 3])
 "#;
+    // NOTE: Slice fat pointer codegen may not produce clang-compatible IR — keep as assert_compiles
     assert_compiles(source);
 }
 
@@ -1855,6 +1857,7 @@ F slice_len(s: &[i64]) -> i64 = s.len()
 
 F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
 "#;
+    // NOTE: Slice fat pointer codegen may not produce clang-compatible IR — keep as assert_compiles
     assert_compiles(source);
 }
 
@@ -1880,6 +1883,7 @@ X MyInt: Display {
 
 F main() -> i64 = print_value(MyInt { n: 42 })
 "#;
+    // NOTE: Generic trait dispatch with where clause — keep as assert_compiles (codegen completeness)
     assert_compiles(source);
 }
 
@@ -1896,6 +1900,7 @@ where T: Trait1, T: Trait2 {
 
 F main() -> i64 = 0
 "#;
+    // NOTE: Where clause with generic trait methods generates unresolved IR — keep as assert_compiles
     assert_compiles(source);
 }
 
@@ -1936,6 +1941,7 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: spawn codegen may not produce clang-compatible IR — keep as assert_compiles
     assert_compiles(source);
 }
 

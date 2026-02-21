@@ -3,7 +3,7 @@
 //! Tests that generic functions and structs are correctly monomorphized
 //! (specialized for concrete types) during code generation.
 
-use super::helpers::{assert_compiles, assert_exit_code};
+use super::helpers::assert_exit_code;
 
 #[test]
 fn generic_identity_function() {
@@ -77,13 +77,14 @@ F main() -> i64 {
 
 #[test]
 fn generic_swap_compiles() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F swap<T>(a: T, b: T) -> T { b }
 F main() -> i64 {
     swap(1, 2)
 }
 "#,
+        2,
     );
 }
 
@@ -105,13 +106,14 @@ F main() -> i64 {
 
 #[test]
 fn generic_with_bool() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F identity<T>(x: T) -> T { x }
 F main() -> i64 {
     identity(42)
 }
 "#,
+        42,
     );
 }
 

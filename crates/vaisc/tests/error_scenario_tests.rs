@@ -162,7 +162,8 @@ fn error_duplicate_function_definition() {
 F main() -> i64 = 0
 F main() -> i64 = 1
 "#;
-    // Currently this compiles (later definition overrides earlier one)
+    // Currently this compiles in IR (later definition overrides earlier one)
+    // NOTE: clang rejects duplicate function definitions — keep as assert_compiles
     assert_compiles(source);
 }
 
@@ -177,6 +178,7 @@ fn error_recursive_without_return_type() {
     // Phase 61: Recursive function without return type - but with constrained params
     // The parameters here are constrained by the comparison and arithmetic operations
     // So this actually compiles successfully with inferred types
+    // NOTE: No main() function — cannot convert to assert_exit_code
     assert_compiles("F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)");
 }
 
@@ -303,6 +305,7 @@ F main() -> i64 = add(1, 2)
 #[test]
 fn positive_explicit_types() {
     // With explicit types, should always compile
+    // NOTE: No main() function — cannot convert to assert_exit_code
     assert_compiles("F add(a: i64, b: i64) -> i64 { R a + b }");
 }
 

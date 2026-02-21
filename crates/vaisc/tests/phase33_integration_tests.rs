@@ -23,6 +23,7 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("phase33_test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -210,6 +211,7 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: Extern TLS declarations may cause link issues — keep as assert_compiles
     assert_compiles(source);
 }
 
@@ -302,6 +304,7 @@ F main() -> i64 {
     0
 }
 "#;
+    // NOTE: Extern async/kqueue declarations may cause link issues — keep as assert_compiles
     assert_compiles(source);
 }
 
