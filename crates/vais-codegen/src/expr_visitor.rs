@@ -420,10 +420,44 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_spawn(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        let (future_ptr, future_ir) = self.visit_expr(inner, counter)?;
-        let mut ir = future_ir;
-        ir.push_str(&format!("; Spawned task at {}\n", future_ptr));
-        Ok((future_ptr, ir))
+        let inner_type = self.infer_expr_type(inner);
+        let (inner_val, inner_ir) = self.visit_expr(inner, counter)?;
+
+        // If inner is already a Future (async call), pass through
+        if matches!(inner_type, ResolvedType::Future(_)) {
+            let mut ir = inner_ir;
+            ir.push_str(&format!("; Spawned async task at {}\n", inner_val));
+            return Ok((inner_val, ir));
+        }
+
+        // Sync value: wrap in an immediate Future state struct {i64 state=-1, i64 result}
+        let mut ir = inner_ir;
+        let state_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = call i64 @malloc(i64 16)\n",
+            state_ptr
+        ));
+        let typed_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
+            typed_ptr, state_ptr
+        ));
+        let state_field = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n",
+            state_field, typed_ptr
+        ));
+        ir.push_str(&format!("  store i64 -1, i64* {}\n", state_field));
+        let result_field = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
+            result_field, typed_ptr
+        ));
+        ir.push_str(&format!("  store i64 {}, i64* {}\n", inner_val, result_field));
+
+        self.needs_sync_spawn_poll = true;
+        ir.push_str(&format!("; Spawned sync task (wrapped) at {}\n", state_ptr));
+        Ok((state_ptr, ir))
     }
 
     fn visit_lambda(
@@ -625,8 +659,12 @@ impl ExprVisitor for CodeGenerator {
         // Save and set up thunk context
         let saved_function = self.fn_ctx.current_function.take();
         let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
+        let saved_lazy_bindings = std::mem::take(&mut self.lambdas.lazy_bindings);
+        let saved_return_type = self.fn_ctx.current_return_type.take();
 
         self.fn_ctx.current_function = Some(thunk_name.clone());
+        // Set thunk return type so R statements inside lazy blocks emit correct ret type
+        self.fn_ctx.current_return_type = Some(inner_type.clone());
 
         // Register captured variables as locals in thunk
         for (cap_name, cap_ty, _) in &captured_vars {
@@ -634,6 +672,13 @@ impl ExprVisitor for CodeGenerator {
                 cap_name.clone(),
                 crate::types::LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
             );
+        }
+
+        // Re-register lazy bindings for captured lazy variables so force works inside thunks
+        for (cap_name, _, _) in &captured_vars {
+            if let Some(info) = saved_lazy_bindings.get(cap_name) {
+                self.lambdas.lazy_bindings.insert(cap_name.clone(), info.clone());
+            }
         }
 
         // Generate thunk body
@@ -649,13 +694,24 @@ impl ExprVisitor for CodeGenerator {
             thunk_param_strs.join(", ")
         );
         thunk_ir.push_str(&body_ir);
-        thunk_ir.push_str(&format!("  ret {} {}\n}}\n", ret_ty, body_val));
+
+        // Only append ret if the body doesn't already contain a terminator (e.g., from R statement)
+        let body_has_ret = body_ir.lines().any(|line| {
+            let trimmed = line.trim();
+            trimmed.starts_with("ret ") || trimmed == "ret void"
+        });
+        if !body_has_ret {
+            thunk_ir.push_str(&format!("  ret {} {}\n", ret_ty, body_val));
+        }
+        thunk_ir.push_str("}\n");
 
         self.lambdas.generated_ir.push(thunk_ir);
 
         // Restore context
         self.fn_ctx.current_function = saved_function;
         self.fn_ctx.locals = saved_locals;
+        self.lambdas.lazy_bindings = saved_lazy_bindings;
+        self.fn_ctx.current_return_type = saved_return_type;
 
         // Build the lazy struct: { i1 false, T zeroinitializer, i8* thunk_ptr }
         let mut ir = capture_ir;
@@ -752,13 +808,19 @@ impl ExprVisitor for CodeGenerator {
                 let mut ir = String::new();
 
                 // The lazy value must be in an alloca so we can update computed/value fields
-                // If SSA, we need to spill it first
-                let lazy_alloca = if local.is_ssa() {
+                // Both SSA and param values are by-value (not pointers), so they need
+                // to be spilled to an alloca before we can do GEP operations on them
+                let lazy_alloca = if local.is_ssa() || local.is_param() {
                     let alloca = self.next_temp(counter);
                     ir.push_str(&format!("  {} = alloca {}\n", alloca, lazy_ty));
+                    let val_ref = if local.is_param() {
+                        format!("%{}", local.llvm_name)
+                    } else {
+                        local.llvm_name.clone()
+                    };
                     ir.push_str(&format!(
                         "  store {} {}, {}* {}\n",
-                        lazy_ty, local.llvm_name, lazy_ty, alloca
+                        lazy_ty, val_ref, lazy_ty, alloca
                     ));
                     alloca
                 } else {

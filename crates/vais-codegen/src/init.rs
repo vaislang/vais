@@ -76,6 +76,7 @@ impl CodeGenerator {
             module_name: module_name.to_string(),
             target,
             needs_unwrap_panic: false,
+            needs_sync_spawn_poll: false,
             needs_string_helpers: false,
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),

@@ -12,8 +12,8 @@ use super::helpers::*;
 
 #[test]
 fn e2e_phase43_spawn_async_preserves_future() {
-    // spawn on async call preserves Future<T> type
-    // NOTE: clang fails — spawn codegen stores i8* for integer literal
+    // spawn on async call, then await via variable — variable-based await uses fallback poll
+    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -30,7 +30,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_await_chain() {
-    // NOTE: clang fails — spawn codegen stores i8* for integer literal
+    // NOTE: async spawn+await hangs — poll loop issue with spawn passthrough
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -46,46 +46,43 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_sync_wraps_future() {
-    // spawn 42 now wraps in Future<i64>
-    // NOTE: clang fails — store i8* 42 (integer as pointer)
+    // spawn 42 wraps sync value in Future struct, not awaited here
     let source = r#"
 F main() -> i64 {
     future := spawn 42
     R 0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_sync_await() {
-    // spawn 42 wrapped in Future<i64>, then awaited
-    // NOTE: clang fails — store i8* 42 (integer as pointer)
+    // spawn 42 wrapped in Future struct, then polled immediately via __sync_spawn__poll
     let source = r#"
 F main() -> i64 {
     result := (spawn 42).await
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_sync_arithmetic() {
-    // spawn (3 + 4) wrapped in Future<i64>
-    // NOTE: clang fails — spawn codegen type mismatch
+    // spawn (3+4) wraps i64 7 in Future struct, await polls immediately
     let source = r#"
 F main() -> i64 {
     result := (spawn (3 + 4)).await
     result - 7
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_in_variable() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
     let source = r#"
 A F compute(x: i64) -> i64 {
     x + 10
@@ -102,7 +99,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_multiple() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -226,7 +223,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_spawns() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
     let source = r#"
 A F task(x: i64) -> i64 {
     x * 2
@@ -341,7 +338,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_with_expression() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: async spawn+await hangs — poll loop issue with spawn passthrough
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -376,7 +373,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_nested_spawn_await() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: inner function uses variable-based future await (f := spawn; f.await)
+    // which cannot derive correct poll function from syntax alone
     let source = r#"
 A F inner(x: i64) -> i64 {
     x + 10
@@ -397,7 +395,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_sequential_await() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
     let source = r#"
 A F task(x: i64) -> i64 {
     x + 1

@@ -137,8 +137,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_force_nested() {
-    // Nested lazy/force
-    // NOTE: codegen generates `ret i64 @x` (global ref without load) for nested thunk — clang error
+    // Nested lazy/force — force y evaluates force x which returns 42
     let source = r#"
 F main() -> i64 {
     x := lazy 42
@@ -146,7 +145,7 @@ F main() -> i64 {
     R force y
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -163,8 +162,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_force_multiple() {
-    // Multiple lazy values
-    // NOTE: codegen generates `add i64 @x, @y` (global ref without load) — clang error
+    // Multiple lazy values — force z = force x + force y = 10 + 20 = 30
     let source = r#"
 F main() -> i64 {
     x := lazy 10
@@ -173,7 +171,7 @@ F main() -> i64 {
     R force z
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 30);
 }
 
 #[test]
@@ -193,8 +191,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase42_lazy_force_closure() {
-    // Lazy containing a closure
-    // NOTE: codegen generates `ret i64 void` inside thunk — clang error
+    // Lazy containing a closure — f(32) = a + 32 = 10 + 32 = 42
     let source = r#"
 F main() -> i64 {
     a := 10
@@ -205,7 +202,7 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]

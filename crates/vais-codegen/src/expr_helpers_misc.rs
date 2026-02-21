@@ -22,17 +22,33 @@ impl CodeGenerator {
                     if let Expr::Ident(name) = &func.node {
                         format!("{}__poll", name)
                     } else {
-                        "__async_poll".to_string()
+                        "__sync_spawn__poll".to_string()
                     }
                 }
                 Expr::MethodCall { method, .. } => {
                     format!("{}__poll", method.node)
                 }
-                Expr::Spawn(inner) => get_poll_func_name(&inner.node),
-                _ => "__async_poll".to_string(),
+                Expr::Spawn(inner) => {
+                    // If inner is an async call, recurse to get the poll function name.
+                    // Otherwise (sync spawn), use the generic sync poll function.
+                    let inner_name = get_poll_func_name(&inner.node);
+                    if inner_name == "__sync_spawn__poll" {
+                        // Inner is a sync expression — use the generic immediate-ready poll
+                        "__sync_spawn__poll".to_string()
+                    } else {
+                        // Inner is an async call — use its poll function
+                        inner_name
+                    }
+                }
+                _ => "__sync_spawn__poll".to_string(),
             }
         }
         let poll_func = get_poll_func_name(&inner.node);
+
+        // Ensure the __sync_spawn__poll function is emitted if referenced
+        if poll_func == "__sync_spawn__poll" {
+            self.needs_sync_spawn_poll = true;
+        }
 
         let poll_start = self.next_label("await_poll");
         let poll_ready = self.next_label("await_ready");

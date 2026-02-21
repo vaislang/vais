@@ -209,6 +209,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 36 | 대형 파일 모듈 분할 R8 | builtins.rs→5모듈, expr_helpers_call.rs→4모듈, control_flow.rs→4모듈, generate_expr.rs 2,139→1,563줄(-27%), Clippy 0건 | 755 |
 | 37 | E2E 테스트 800개 목표 확장 | 4개 신규 모듈 (union_const/comptime_defer/patterns/pipe_string), 48개 테스트 추가 (763→811), Clippy 0건 | 811 |
 | 38 | Codegen 강화 — Generic/Slice/Bool/Where | non-concrete inst 필터, 합성 struct inst, bool cond_to_i1, Slice.len() extractvalue, ~15 테스트 전환, Clippy 0건 | 811 |
+| 39 | Codegen 완성도 — Spawn/Lazy 버그 수정 | spawn sync Future 래핑, lazy global load+4버그 수정, 6개 테스트 전환, Clippy 0건 | 811 |
+| 40 | 대형 파일 모듈 분할 R9 | ast lib.rs(1,358→200줄)→15서브모듈, codegen lib.rs(1,687→208줄)+types lib.rs(1,431→351줄) 테스트 추출, Clippy 0건 | 811 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -378,6 +380,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 실패 테스트 4건 수정 (Opus) [blockedBy: 1,2,3,4]
   변경: execution_tests.rs (slice 2개+result_chain→assert_compiles+NOTE), selfhost_lexer_tests.rs (f64_zero→assert_compiles+NOTE)
 진행률: 5/5 (100%) ✅
+
+## 현재 작업 (2026-02-21) — Phase 39: Codegen 완성도 — Spawn/Lazy 버그 수정 ✅
+모드: 자동진행
+- [x] 1. Spawn codegen 수정 — sync Future 래핑 (Text IR): spawn sync value를 Future state struct {i64 state, i64 result}로 래핑, __sync_spawn__poll 함수 생성, Future<T> 타입 i64 매핑. 3개 테스트 전환 (spawn_sync_wraps_future, spawn_sync_await, spawn_sync_arithmetic)
+- [x] 2. Lazy/Force codegen 수정 — 4가지 버그 수정:
+  - (a) collect_free_vars에 Expr::Lazy/Expr::Force 누락 → free var 캡처 실패 (nested/multiple lazy) 수정
+  - (b) visit_lazy에서 lazy_bindings save/restore 누락 → nested thunk에서 force 작동 불가 수정
+  - (c) visit_force에서 param spill to alloca 누락 → GEP on by-value param 수정
+  - (d) visit_lazy에서 block R statement 이후 중복 ret 생성 (ret i64 void) 수정
+  - 3개 테스트 전환 (lazy_force_nested, lazy_force_multiple, lazy_force_closure)
+- [ ] 3. 대형 파일 모듈 분할 R9 — 차기 Phase로 이관
+- [x] 4. 검증 & ROADMAP 업데이트 — E2E 811 통과, Clippy 0건
+진행률: 3/4 (75%) — 모듈 분할 R9는 차기 Phase로 이관
+
+## 현재 작업 (2026-02-22) — Phase 40: 대형 파일 모듈 분할 R9 ✅
+모드: 자동진행
+- [x] 1. vais-ast lib.rs 모듈 분할 — 1,358줄 → 15 서브모듈 + lib.rs 200줄 (Sonnet)
+  변경: lib.rs(1,358→200줄), 15 신규 파일 (infrastructure/items/function/generics/aggregate_types/aliases/traits/macros/constants/ast_types/statements/expressions/patterns/operators/extern_block)
+- [x] 2. codegen lib.rs 테스트 추출 — 1,687→208줄 + tests.rs 1,478줄 (Sonnet)
+  변경: lib.rs(1,687→208줄), tests.rs(1,478줄 57개 테스트)
+- [x] 3. types lib.rs 테스트 추출 — 1,431→351줄 + tests.rs 1,079줄 (Sonnet)
+  변경: lib.rs(1,431→351줄), tests.rs(1,079줄 57개 테스트)
+- [x] 4. 검증 & ROADMAP 업데이트 — 빌드 성공, Clippy 0건, E2E 811개 유지 (Opus)
+진행률: 4/4 (100%) ✅
 
 ---
 

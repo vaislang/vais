@@ -57,6 +57,19 @@ impl CodeGenerator {
             ir.push('\n');
             ir.push_str(lambda_ir);
         }
+        // Emit __sync_spawn__poll if any sync spawn was used
+        if self.needs_sync_spawn_poll {
+            ir.push_str("\n; Sync spawn poll function — always returns Ready with stored result\n");
+            ir.push_str("define { i64, i64 } @__sync_spawn__poll(i64 %state_ptr) {\n");
+            ir.push_str("entry:\n");
+            ir.push_str("  %ptr = inttoptr i64 %state_ptr to {i64, i64}*\n");
+            ir.push_str("  %result_ptr = getelementptr {i64, i64}, {i64, i64}* %ptr, i32 0, i32 1\n");
+            ir.push_str("  %result = load i64, i64* %result_ptr\n");
+            ir.push_str("  %ret_0 = insertvalue { i64, i64 } undef, i64 1, 0\n");
+            ir.push_str("  %ret_1 = insertvalue { i64, i64 } %ret_0, i64 %result, 1\n");
+            ir.push_str("  ret { i64, i64 } %ret_1\n");
+            ir.push_str("}\n");
+        }
         let vtable_ir = self.generate_vtable_globals();
         if !vtable_ir.is_empty() {
             ir.push_str("\n; VTable globals for trait objects\n");

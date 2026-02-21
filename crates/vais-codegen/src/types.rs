@@ -469,7 +469,8 @@ impl CodeGenerator {
             }
             ResolvedType::Future(_) => {
                 // Future is an opaque pointer to async state machine
-                String::from("i8*")
+                // Represented as i64 in text IR (pointer-as-integer convention)
+                String::from("i64")
             }
             ResolvedType::Never => {
                 // Never type — functions that return ! use void
