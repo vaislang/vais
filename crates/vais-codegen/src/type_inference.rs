@@ -134,7 +134,7 @@ impl CodeGenerator {
                     ResolvedType::I64 // Default
                 }
             }
-            Expr::Call { func, .. } => {
+            Expr::Call { func, args } => {
                 // Get return type from function info
                 if let Expr::Ident(fn_name) = &func.node {
                     // Check if this is an enum variant constructor
@@ -152,6 +152,20 @@ impl CodeGenerator {
                             return ResolvedType::I64;
                         }
                         return ret_ty;
+                    }
+                    // Check generic instantiation: if fn_name is a generic function,
+                    // resolve the specialization based on argument types and return its ret type.
+                    if let Some(inst_list) = self.generics.fn_instantiations.get(fn_name).cloned() {
+                        let arg_types: Vec<ResolvedType> =
+                            args.iter().map(|a| self.infer_expr_type(a)).collect();
+                        let mangled = self.resolve_generic_call(fn_name, &arg_types, &inst_list);
+                        if let Some(fn_info) = self.types.functions.get(&mangled) {
+                            let ret_ty = fn_info.signature.ret.clone();
+                            if ret_ty == ResolvedType::I32 {
+                                return ResolvedType::I64;
+                            }
+                            return ret_ty;
+                        }
                     }
                     // Struct tuple literal: Point(40, 2) — not a function, but a struct
                     let resolved = self.resolve_struct_name(fn_name);

@@ -370,6 +370,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Transform method call to function call with receiver as first arg
         // e.g., obj.method(a, b) -> TypeName_method(obj, a, b)
 
+        // Special case: Slice.len() — Slice is a fat pointer { i8*, i64 }
+        // Field 1 is the length. Detect by value shape (2-field struct) when method == "len".
+        if method == "len" {
+            let recv_val = self.generate_expr(receiver)?;
+            if recv_val.is_struct_value() {
+                let struct_val = recv_val.into_struct_value();
+                if struct_val.get_type().count_fields() == 2 {
+                    // Extract field 1 (the length i64)
+                    let len_val = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "slice_len")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    return Ok(len_val);
+                }
+            }
+        }
+
         // Try to resolve the struct type name from the receiver
         let mut struct_name = self.infer_struct_name(receiver).ok();
 

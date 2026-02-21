@@ -661,6 +661,12 @@ impl CodeGenerator {
             Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
                 bounds: bounds.iter().map(|b| b.node.clone()).collect(),
             },
+            Type::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
             _ => ResolvedType::Unknown,
         }
     }

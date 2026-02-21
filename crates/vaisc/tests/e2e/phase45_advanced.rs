@@ -57,13 +57,13 @@ F main() -> i64 {
 #[test]
 fn e2e_phase45a_higher_order_fn() {
     // Passing a named function as a first-class value
-    // NOTE: clang fails — fn pointer passed as i64 (@double without bitcast to i64)
+    // apply(double, 21) calls double(21) = 21 * 2 = 42
     let source = r#"
 F apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }
 F double(x: i64) -> i64 { x * 2 }
 F main() -> i64 { apply(double, 21) }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Self-Recursion: Fibonacci =====

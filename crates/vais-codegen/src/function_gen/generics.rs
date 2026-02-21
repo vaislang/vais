@@ -14,6 +14,17 @@ impl CodeGenerator {
         inst: &vais_types::GenericInstantiation,
         ir: &mut String,
     ) -> CodegenResult<()> {
+        // Skip instantiations with non-concrete type args (e.g., Container$T from inside a
+        // generic function body where T hasn't been substituted yet). These would produce
+        // incorrect LLVM type names like `%Container$T` instead of `%Container$i64`.
+        if inst
+            .type_args
+            .iter()
+            .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+        {
+            return Ok(());
+        }
+
         // Skip if already generated
         if self
             .generics
@@ -90,6 +101,16 @@ impl CodeGenerator {
         generic_fn: &Function,
         inst: &vais_types::GenericInstantiation,
     ) -> CodegenResult<String> {
+        // Skip instantiations with non-concrete type args (e.g., make_container$T from inside
+        // a generic function body). These would produce unresolved generic IR.
+        if inst
+            .type_args
+            .iter()
+            .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+        {
+            return Ok(String::new());
+        }
+
         // Skip if already generated
         if self
             .generics
@@ -120,22 +141,28 @@ impl CodeGenerator {
 
         self.initialize_function_state(&inst.mangled_name);
 
-        // Generate parameters with substituted types
-        let params: Vec<_> = generic_fn
+        // Collect param info (name, concrete type) first — needed for both signature and alloca
+        let param_infos: Vec<(String, ResolvedType)> = generic_fn
             .params
             .iter()
             .map(|p| {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
                 let concrete_ty = vais_types::substitute_type(&ty, &self.generics.substitutions);
-                let llvm_ty = self.type_to_llvm(&concrete_ty);
+                (p.name.node.to_string(), concrete_ty)
+            })
+            .collect();
 
-                // Register parameter as local
+        // Build LLVM parameter list and register locals (initially as SSA params)
+        let params: Vec<String> = param_infos
+            .iter()
+            .map(|(name, concrete_ty)| {
+                let llvm_ty = self.type_to_llvm(concrete_ty);
+                // Register parameter as local initially (may be updated below for struct params)
                 self.fn_ctx.locals.insert(
-                    p.name.node.to_string(),
-                    LocalVar::param(concrete_ty, p.name.node.to_string()),
+                    name.to_string(),
+                    LocalVar::param(concrete_ty.clone(), name.to_string()),
                 );
-
-                format!("{} %{}", llvm_ty, p.name.node)
+                format!("{} %{}", llvm_ty, name)
             })
             .collect();
 
@@ -171,6 +198,25 @@ impl CodeGenerator {
         ));
         ir.push_str("entry:\n");
         self.fn_ctx.current_block = "entry".to_string();
+
+        // For struct-by-value parameters, alloca+store so field access (GEP) works correctly.
+        // Without this, the param is an SSA struct value and GEP requires a pointer.
+        for (name, concrete_ty) in &param_infos {
+            if matches!(concrete_ty, ResolvedType::Named { .. }) {
+                let llvm_ty = self.type_to_llvm(concrete_ty);
+                let param_ptr = format!("__{}_ptr", name);
+                ir.push_str(&format!("  %{} = alloca {}\n", param_ptr, llvm_ty));
+                ir.push_str(&format!(
+                    "  store {} %{}, {}* %{}\n",
+                    llvm_ty, name, llvm_ty, param_ptr
+                ));
+                // Update locals to use the alloca pointer as an SSA value so field access works
+                self.fn_ctx.locals.insert(
+                    name.to_string(),
+                    LocalVar::ssa(concrete_ty.clone(), format!("%{}", param_ptr)),
+                );
+            }
+        }
 
         // Generate function body
         let mut counter = 0;

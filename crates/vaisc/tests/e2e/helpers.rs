@@ -18,9 +18,13 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
     // Pass resolved function signatures for inferred parameter type support
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
-    let ir = gen
-        .generate_module(&module)
-        .map_err(|e| format!("Codegen error: {:?}", e))?;
+    let instantiations = checker.get_generic_instantiations();
+    let ir = if instantiations.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &instantiations)
+    }
+    .map_err(|e| format!("Codegen error: {:?}", e))?;
     Ok(ir)
 }
 

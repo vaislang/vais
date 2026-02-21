@@ -52,9 +52,29 @@ impl CodeGenerator {
         arg_types: &[ResolvedType],
         instantiations_list: &[(Vec<ResolvedType>, String)],
     ) -> String {
-        // If only one instantiation exists, use it directly
+        // If only one instantiation exists, check if it has generic type args.
+        // If so, apply current substitutions to derive the concrete mangled name.
         if instantiations_list.len() == 1 {
-            return instantiations_list[0].1.clone();
+            let (type_args, name) = &instantiations_list[0];
+            let has_generic_args = type_args
+                .iter()
+                .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+            if has_generic_args && !self.generics.substitutions.is_empty() {
+                // Substitute current generics to get concrete type args
+                let concrete_args: Vec<ResolvedType> = type_args
+                    .iter()
+                    .map(|t| vais_types::substitute_type(t, &self.generics.substitutions))
+                    .collect();
+                // Only use concrete name if all args are now concrete
+                let all_concrete = concrete_args.iter().all(|t| {
+                    !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_))
+                });
+                if all_concrete {
+                    let mangled = vais_types::mangle_name(base_name, &concrete_args);
+                    return mangled;
+                }
+            }
+            return name.clone();
         }
 
         // Look up the generic function template to map argument types to type parameters

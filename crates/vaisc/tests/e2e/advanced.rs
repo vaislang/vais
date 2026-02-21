@@ -3295,8 +3295,9 @@ F main() -> i64 {
     0
 }
 "#;
-    // NOTE: bar() uses &mut [T] slice indexing — keep as assert_compiles until slice codegen
-    // produces clang-compatible IR for &mut [T] operations
+    // NOTE: bar() uses &mut [T] index-assignment (s[0] = 42) — the Assign/Index path does
+    // not handle SliceMut fat pointer extraction yet (requires bitcast+GEP from fat pointer).
+    // Keep as assert_compiles until slice mutation codegen is implemented.
     assert_compiles(source);
 }
 
@@ -3311,9 +3312,9 @@ F main() -> i64 {
     0
 }
 "#;
-    // NOTE: baz() uses slice .len() — keep as assert_compiles until slice codegen
-    // produces clang-compatible IR for .len() method
-    assert_compiles(source);
+    // baz() uses slice .len() via extractvalue { i8*, i64 } %s, 1
+    // main() returns 0 and never calls baz — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -3383,9 +3384,9 @@ F main() -> i64 {
     0
 }
 "#;
-    // NOTE: len_mut() uses &mut [f64] slice .len() — keep as assert_compiles until
-    // slice codegen produces clang-compatible IR
-    assert_compiles(source);
+    // len_mut() uses &mut [f64] slice .len() via extractvalue { i8*, i64 } %s, 1
+    // main() returns 0 and never calls len_mut — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]

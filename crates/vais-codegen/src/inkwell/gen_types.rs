@@ -110,6 +110,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Box::new(self.ast_type_to_resolved(&value.node)),
             ),
             Type::Unit => ResolvedType::Unit,
+            Type::Slice(inner) => {
+                ResolvedType::Slice(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::SliceMut(inner) => {
+                ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
             _ => ResolvedType::I64, // Fallback for Infer, ConstArray, etc.
         }
     }

@@ -569,8 +569,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.locals
                 .insert(param.name.node.clone(), (alloca, param_type));
 
-            // Track struct type for parameters
-            if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+            // Track struct type for parameters using substituted types.
+            // In specialized generic functions, param.ty.node is the AST type (e.g., `T`)
+            // which resolves to the generic param name, not the concrete struct name.
+            // Use the substituted resolved type to get the actual struct name.
+            let resolved_ty = self.ast_type_to_resolved(&param.ty.node);
+            let substituted_ty = self.substitute_type(&resolved_ty);
+            if let ResolvedType::Named { name, .. } = &substituted_ty {
+                if self.generated_structs.contains_key(name.as_str()) {
+                    self.var_struct_types
+                        .insert(param.name.node.clone(), name.clone());
+                }
+            } else if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+                // Fallback for non-generic params: use the AST type directly
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }

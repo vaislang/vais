@@ -151,12 +151,16 @@ fn e2e_phase45t_where_clause() {
 W Countable {
     F count(&self) -> i64
 }
+S Items { n: i64 }
+X Items: Countable {
+    F count(&self) -> i64 = self.n
+}
 F get_count<T>(x: T) -> i64 where T: Countable {
     x.count()
 }
-F main() -> i64 { 0 }
+F main() -> i64 = get_count(Items { n: 7 })
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 7);
 }
 
 // ==================== Trait Alias ====================

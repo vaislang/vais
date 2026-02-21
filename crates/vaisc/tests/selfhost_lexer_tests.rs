@@ -747,22 +747,22 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_type_i8() {
     let source = "F main() -> i8 = 42";
-    // NOTE: Non-i64 main return type may cause ABI mismatch — keep as assert_compiles
-    assert_compiles(source);
+    // i8(42) is sign-extended to i64(42); OS truncates exit code to 42 % 256 = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i16() {
     let source = "F main() -> i16 = 42";
-    // NOTE: Non-i64 main return type may cause ABI mismatch — keep as assert_compiles
-    assert_compiles(source);
+    // i16(42) is sign-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_i32() {
     let source = "F main() -> i32 = 42";
-    // NOTE: i32 matches C int ABI but Vais IR may generate i32 return — keep as assert_compiles
-    assert_compiles(source);
+    // i32(42) is sign-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -774,29 +774,29 @@ fn selfhost_verify_type_i64() {
 #[test]
 fn selfhost_verify_type_u8() {
     let source = "F main() -> u8 = 42";
-    // NOTE: Non-i64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // u8(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u16() {
     let source = "F main() -> u16 = 42";
-    // NOTE: Non-i64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // u16(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u32() {
     let source = "F main() -> u32 = 42";
-    // NOTE: Non-i64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // u32(42) is zero-extended to i64(42); exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn selfhost_verify_type_u64() {
     let source = "F main() -> u64 = 42";
-    // NOTE: Non-i64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // u64(42) maps to i64(42) in LLVM; exit code = 42
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -809,8 +809,8 @@ fn selfhost_verify_type_f32() {
 #[test]
 fn selfhost_verify_type_f64() {
     let source = "F main() -> f64 = 1.5";
-    // NOTE: f64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
@@ -881,8 +881,8 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_float_simple() {
     let source = "F main() -> f64 = 1.5";
-    // NOTE: f64 main return type — keep as assert_compiles
-    assert_compiles(source);
+    // fptosi(1.5) truncates toward zero → i64(1); exit code = 1
+    assert_exit_code(source, 1);
 }
 
 #[test]
@@ -912,7 +912,8 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_float_zero_point() {
     let source = "F main() -> f64 = 0.0";
-    // NOTE: f64 main return type — keep as assert_compiles
+    // NOTE: f64 main return type — C ABI returns double, OS exit code interpretation
+    // is platform-dependent (not fptosi). Keep as assert_compiles.
     assert_compiles(source);
 }
 

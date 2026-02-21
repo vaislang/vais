@@ -590,9 +590,20 @@ impl CodeGenerator {
             }
         }
 
-        // Build generic function instantiation mapping and register specialized function signatures
+        // Build generic function instantiation mapping and register specialized function signatures.
+        // Only process concrete instantiations (all type args are resolved, non-generic).
+        // Non-concrete instantiations (e.g., make_container$T from inside a generic function body)
+        // are skipped — they would produce unresolved generic IR like `@identity$T`.
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
+                // Skip instantiations with non-concrete type args
+                if inst
+                    .type_args
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                {
+                    continue;
+                }
                 if let Some(generic_fn) = self
                     .generics
                     .function_templates
@@ -663,6 +674,102 @@ impl CodeGenerator {
             }
         }
 
+        // Synthesize concrete struct instantiations from function instantiations.
+        // The type checker sometimes only records a generic struct instantiation (e.g.,
+        // Container$T from inside make_container<T>) without recording the concrete one
+        // (Container$i64). We detect this by scanning function instantiation return types
+        // and parameter types for references to generic structs with concrete type args.
+        {
+            // Collect synthetic struct instantiations we need to generate
+            let mut synthetic_insts: Vec<vais_types::GenericInstantiation> = Vec::new();
+            for inst in instantiations {
+                if let vais_types::InstantiationKind::Function = inst.kind {
+                    // Only process function instantiations with all-concrete type args
+                    if inst
+                        .type_args
+                        .iter()
+                        .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                    {
+                        continue;
+                    }
+                    // Build substitution map for this function instantiation
+                    if let Some(generic_fn) =
+                        self.generics.function_templates.get(&inst.base_name)
+                    {
+                        let subst: HashMap<String, ResolvedType> = generic_fn
+                            .generics
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .zip(inst.type_args.iter())
+                            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                            .collect();
+
+                        // Check return type for generic struct references
+                        let types_to_check: Vec<vais_ast::Type> = generic_fn
+                            .ret_type
+                            .as_ref()
+                            .map(|t| vec![t.node.clone()])
+                            .unwrap_or_default()
+                            .into_iter()
+                            .chain(generic_fn.params.iter().map(|p| p.ty.node.clone()))
+                            .collect();
+
+                        for ast_ty in &types_to_check {
+                            if let Type::Named { name: sname, generics: type_params } = ast_ty {
+                                if !type_params.is_empty()
+                                    && self.generics.struct_defs.contains_key(sname)
+                                {
+                                    // Substitute type args to get concrete types
+                                    let concrete_args: Vec<ResolvedType> = type_params
+                                        .iter()
+                                        .map(|tp| {
+                                            let resolved = self.ast_type_to_resolved(&tp.node);
+                                            vais_types::substitute_type(&resolved, &subst)
+                                        })
+                                        .collect();
+
+                                    // Only create instantiation if all type args are concrete
+                                    let all_concrete = concrete_args.iter().all(|t| {
+                                        !matches!(
+                                            t,
+                                            ResolvedType::Generic(_) | ResolvedType::Var(_)
+                                        )
+                                    });
+                                    if all_concrete {
+                                        let mangled =
+                                            vais_types::mangle_name(sname, &concrete_args);
+                                        if !self
+                                            .generics
+                                            .generated_structs
+                                            .contains_key(&mangled)
+                                        {
+                                            synthetic_insts.push(
+                                                vais_types::GenericInstantiation {
+                                                    kind: vais_types::InstantiationKind::Struct,
+                                                    base_name: sname.clone(),
+                                                    mangled_name: mangled,
+                                                    type_args: concrete_args,
+                                                    const_args: Vec::new(),
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Generate the synthetic struct instantiations
+            for inst in synthetic_insts {
+                if let Some(generic_struct) =
+                    self.generics.struct_defs.get(&inst.base_name).cloned()
+                {
+                    self.generate_specialized_struct_type(&generic_struct, &inst, &mut ir)?;
+                }
+            }
+        }
+
         // Generate non-generic struct types (skip already-emitted specialized generics)
         for (name, info) in &self.types.structs {
             if self.generics.generated_structs.contains_key(name) {
@@ -720,13 +827,31 @@ impl CodeGenerator {
             }
         }
 
-        // Second pass: generate non-generic function bodies
+        // Second pass: generate non-generic function bodies.
+        // For generic functions that have NO concrete specialized version (e.g., `identity<T>`
+        // only appears inside another generic function body), generate a "fallback" un-specialized
+        // version. This maintains backward compatibility with generate_module() behavior — such
+        // functions work correctly when called with i64 (the default numeric type).
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => {
                     if f.generics.is_empty() {
                         body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                         body_ir.push('\n');
+                    } else if !self.generics.fn_instantiations.contains_key(&f.name.node)
+                        && !self
+                            .generics
+                            .generated_functions
+                            .contains_key(&f.name.node)
+                    {
+                        // Generic function with no concrete instantiation — generate as fallback
+                        // (same as generate_module() would do: register and generate without specialization)
+                        if let Ok(()) = self.register_function(f) {
+                            if let Ok(fn_ir) = self.generate_function_with_span(f, item.span) {
+                                body_ir.push_str(&fn_ir);
+                                body_ir.push('\n');
+                            }
+                        }
                     }
                 }
                 Item::Struct(s) => {

@@ -23,9 +23,9 @@ impl CodeGenerator {
         let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
         let mut ir = cond_ir;
 
-        // Convert i64 to i1 for branch
-        let cond_bool = self.next_temp(counter);
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+        // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
+        let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
+        ir.push_str(&conv_ir);
 
         // Conditional branch
         ir.push_str(&format!(
@@ -71,8 +71,9 @@ impl CodeGenerator {
         let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
         let mut ir = cond_ir;
 
-        let cond_bool = self.next_temp(counter);
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+        // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
+        let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
+        ir.push_str(&conv_ir);
         ir.push_str(&format!(
             "  br i1 {}, label %{}, label %{}\n",
             cond_bool, then_label, else_label
@@ -169,8 +170,9 @@ impl CodeGenerator {
             let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
             ir.push_str(&cond_ir);
 
-            let cond_bool = self.next_temp(counter);
-            ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+            // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
+            let (cond_bool, conv_ir) = self.generate_cond_to_i1(iter_expr, &cond_val, counter);
+            ir.push_str(&conv_ir);
             ir.push_str(&format!(
                 "  br i1 {}, label %{}, label %{}\n",
                 cond_bool, loop_body, loop_end
@@ -225,9 +227,9 @@ impl CodeGenerator {
         let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
         ir.push_str(&cond_ir);
 
-        // Convert to i1 for branch
-        let cond_bool = self.next_temp(counter);
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+        // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
+        let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
+        ir.push_str(&conv_ir);
         ir.push_str(&format!(
             "  br i1 {}, label %{}, label %{}\n",
             cond_bool, loop_body, loop_end
