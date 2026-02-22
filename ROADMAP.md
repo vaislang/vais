@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-21
+> **최종 업데이트**: 2026-02-22
 
 ---
 
@@ -211,6 +211,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 38 | Codegen 강화 — Generic/Slice/Bool/Where | non-concrete inst 필터, 합성 struct inst, bool cond_to_i1, Slice.len() extractvalue, ~15 테스트 전환, Clippy 0건 | 811 |
 | 39 | Codegen 완성도 — Spawn/Lazy 버그 수정 | spawn sync Future 래핑, lazy global load+4버그 수정, 6개 테스트 전환, Clippy 0건 | 811 |
 | 40 | 대형 파일 모듈 분할 R9 | ast lib.rs(1,358→200줄)→15서브모듈, codegen lib.rs(1,687→208줄)+types lib.rs(1,431→351줄) 테스트 추출, Clippy 0건 | 811 |
+| 41 | E2E 테스트 850개 목표 확장 | 4개 신규 모듈 (loop_control/error_handling/string_numeric/globals_ternary), 51개 테스트 추가 (811→862), Clippy 0건 | 862 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -404,6 +405,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: lib.rs(1,431→351줄), tests.rs(1,079줄 57개 테스트)
 - [x] 4. 검증 & ROADMAP 업데이트 — 빌드 성공, Clippy 0건, E2E 811개 유지 (Opus)
 진행률: 4/4 (100%) ✅
+
+## 현재 작업 (2026-02-22) — Phase 41: E2E 테스트 850개 목표 확장 ✅
+모드: 자동진행
+- [x] 1. E2E 테스트: loop control (Continue/Break) 12개 (Opus) ✅
+- [x] 2. E2E 테스트: error handling (Ternary) 10개 (Opus) ✅
+- [x] 3. E2E 테스트: string/numeric types 18개 (Opus) ✅
+- [x] 4. E2E 테스트: globals/ternary 고급 11개 (Opus) ✅
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) ✅
+진행률: 5/5 (100%)
+결과: E2E 811→862 (+51), Clippy 0건
 
 ---
 

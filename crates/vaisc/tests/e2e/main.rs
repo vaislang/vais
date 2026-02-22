@@ -37,3 +37,7 @@ mod phase44;
 mod phase45;
 mod phase45_advanced;
 mod phase45_types;
+mod phase41_loop_control;
+mod phase41_error_handling;
+mod phase41_string_numeric;
+mod phase41_globals_ternary;
