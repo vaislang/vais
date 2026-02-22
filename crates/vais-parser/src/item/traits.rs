@@ -150,6 +150,9 @@ impl Parser {
             None
         };
 
+        // Parse optional where clause: `X MyType: MyTrait where T: Clone { ... }`
+        let _where_clause = self.parse_where_clause()?;
+
         let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
 
@@ -164,8 +167,15 @@ impl Parser {
             } else {
                 let start = self.current_span().start;
                 let method_attrs = self.parse_attributes()?;
+                // Check for async method: `A F method_name(...)`
+                let is_async = if self.check(&Token::Async) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
                 self.expect(&Token::Function)?;
-                let func = self.parse_function(false, false, method_attrs)?;
+                let func = self.parse_function(false, is_async, method_attrs)?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(func, Span::new(start, end)));
             }

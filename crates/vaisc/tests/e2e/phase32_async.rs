@@ -11,7 +11,7 @@ use super::helpers::*;
 #[test]
 fn e2e_phase32_async_recursive() {
     // @ operator (self-recursion) used inside an async function.
-    // NOTE: clang fails — spawn/async codegen type mismatch
+    // AsyncPollContext enables proper return wrapping in recursive poll functions.
     let source = r#"
 A F countdown(n: i64) -> i64 {
     I n <= 0 {
@@ -26,7 +26,7 @@ F main() -> i64 {
     result - 5
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // 2. Async function containing a M (match) expression
@@ -113,7 +113,7 @@ F main() -> i64 {
 // 6. Async function returning bool
 #[test]
 fn e2e_phase32_async_bool_return() {
-    // NOTE: clang fails — ICE: await on non-Future type `bool`
+    // Async function returning bool — dynamic poll return type resolution (i1 not i64)
     let source = r#"
 A F is_positive(n: i64) -> bool {
     n > 0
@@ -125,13 +125,13 @@ F main() -> i64 {
     I t { I f { 1 } E { 0 } } E { 1 }
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // 7. Multiple spawn expressions used simultaneously
 #[test]
 fn e2e_phase32_spawn_multiple() {
-    // NOTE: clang fails — spawn codegen type mismatch
+    // Multiple spawn+await via variables — future_poll_fns tracking for each
     let source = r#"
 A F square(n: i64) -> i64 {
     n * n
@@ -147,13 +147,13 @@ F main() -> i64 {
     r1 + r2 + r3 - 50
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // 8. Async function with early return via I (conditional R)
 #[test]
 fn e2e_phase32_async_early_return() {
-    // NOTE: clang fails — async early return codegen issue
+    // Async function with early return — AsyncPollContext wraps return values as poll results
     let source = r#"
 A F safe_div(a: i64, b: i64) -> i64 {
     I b == 0 {
@@ -168,5 +168,5 @@ F main() -> i64 {
     zero_case + normal_case - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }

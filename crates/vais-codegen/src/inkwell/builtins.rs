@@ -295,8 +295,6 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     module.add_function("usleep", i32_type.fn_type(&[i64_type.into()], false), None);
     // sched_yield() -> i32
     module.add_function("sched_yield", i32_type.fn_type(&[], false), None);
-    // close(fd: i32) -> i32
-    module.add_function("close", i32_type.fn_type(&[i32_type.into()], false), None);
     // pipe(fds: ptr) -> i32
     module.add_function("pipe", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // kqueue() -> i32
@@ -496,8 +494,6 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     );
     // pclose(stream) -> i32
     module.add_function("pclose", i32_type.fn_type(&[i8_ptr.into()], false), None);
-    // exit(status) -> void
-    module.add_function("exit", void_type.fn_type(&[i32_type.into()], false), None);
     // signal(signum, handler) -> ptr
     module.add_function(
         "signal",

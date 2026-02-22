@@ -398,10 +398,15 @@ impl CodeGenerator {
                 )));
             }
         } else if let Expr::SelfCall = &func.node {
-            (
-                self.fn_ctx.current_function.clone().unwrap_or_default(),
-                false,
-            )
+            // Inside an async poll function (e.g., countdown__poll), @(args) should
+            // call the create function (countdown), not the poll function itself.
+            let cur = self.fn_ctx.current_function.clone().unwrap_or_default();
+            let base = if cur.ends_with("__poll") {
+                cur.trim_end_matches("__poll").to_string()
+            } else {
+                cur
+            };
+            (base, false)
         } else {
             return Err(CodegenError::Unsupported(
                 "complex indirect call".to_string(),
@@ -605,9 +610,17 @@ impl CodeGenerator {
         }
 
         // Get return type and actual function name (may differ for builtins)
+        // Async functions always return i64 (state pointer) from their create function,
+        // regardless of declared return type. The value is extracted via poll function.
         let ret_ty = fn_info
             .as_ref()
-            .map(|f| self.type_to_llvm(&f.signature.ret))
+            .map(|f| {
+                if f.signature.is_async {
+                    "i64".to_string()
+                } else {
+                    self.type_to_llvm(&f.signature.ret)
+                }
+            })
             .unwrap_or_else(|| "i64".to_string());
 
         let actual_fn_name = fn_info
@@ -627,8 +640,15 @@ impl CodeGenerator {
             // Prepend captured values to arguments if this is a closure
             let mut all_args = Vec::new();
             if let Some(ref info) = closure_info {
-                for (_, capture_val) in &info.captures {
-                    all_args.push(format!("i64 {}", capture_val));
+                if info.is_ref_capture {
+                    // Reference capture: pass pointers to captured variables
+                    for (_, capture_val) in &info.captures {
+                        all_args.push(format!("i64* {}", capture_val));
+                    }
+                } else {
+                    for (_, capture_val) in &info.captures {
+                        all_args.push(format!("i64 {}", capture_val));
+                    }
                 }
             }
             all_args.extend(arg_vals);

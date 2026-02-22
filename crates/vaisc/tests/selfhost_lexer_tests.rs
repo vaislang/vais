@@ -1301,7 +1301,11 @@ F main() -> i64 = 0
 
 #[test]
 fn selfhost_verify_complex_function_with_all_constructs() {
-    // A program that exercises many token types together
+    // A program that exercises many token types together.
+    // Verifies mutable struct field assignment (self.value = ...) through a method
+    // with &self receiver, combined with a loop, break, and compound assignment.
+    // Counter starts at 0, limit is 10: increment() runs 10 times returning 1 each
+    // time, then returns 0 when value >= limit, triggering break. main returns 10.
     let source = r#"
 S Counter {
     value: i64,
@@ -1334,8 +1338,7 @@ F main() -> i64 {
     total
 }
 "#;
-    // NOTE: Uses mutable struct field assignment (self.value = ...) — keep as assert_compiles
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }
 
 #[test]

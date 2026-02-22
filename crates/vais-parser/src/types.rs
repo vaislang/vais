@@ -577,13 +577,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -636,13 +636,13 @@ impl Parser {
             let generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()
@@ -662,13 +662,13 @@ impl Parser {
             let assoc_generics = if self.check(&Token::Lt) {
                 self.advance();
                 let mut generics = Vec::new();
-                while !self.check(&Token::Gt) && !self.is_at_end() {
+                while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);
-                    if !self.check(&Token::Gt) {
+                    if !self.check_gt() {
                         self.expect(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::Gt)?;
+                self.consume_gt()?;
                 generics
             } else {
                 Vec::new()

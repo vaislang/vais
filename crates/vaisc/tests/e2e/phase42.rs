@@ -20,7 +20,7 @@ F main() -> i64 {
     R f(y)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 11);
 }
 
 #[test]
@@ -34,7 +34,7 @@ F main() -> i64 {
     R a + b
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 62);
 }
 
 #[test]
@@ -47,7 +47,7 @@ F main() -> i64 {
     R f(14)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Lambda ByMutRef parameter tests =====
@@ -62,7 +62,7 @@ F main() -> i64 {
     R f(y)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 11);
 }
 
 #[test]
@@ -76,7 +76,7 @@ F main() -> i64 {
     R result
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 20);
 }
 
 // ===== Lazy/Force evaluation tests =====
@@ -233,7 +233,7 @@ F main() -> i64 {
     R force x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 20);
 }
 
 #[test]
@@ -246,7 +246,7 @@ F main() -> i64 {
     R f(0)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Edge cases and error handling =====

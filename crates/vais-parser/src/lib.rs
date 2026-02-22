@@ -124,6 +124,11 @@ pub struct Parser {
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
     cfg_values: std::collections::HashMap<String, String>,
+    /// Pending `>` token from a split `>>` (Token::Shr) in nested generics.
+    /// When `Vec<Vec<i64>>` is tokenized, the `>>` becomes Token::Shr.
+    /// We split it into two `>` tokens: the first closes the inner generic,
+    /// and this flag records that a second `>` is still pending for the outer generic.
+    pending_gt: bool,
 }
 
 impl Parser {
@@ -138,6 +143,7 @@ impl Parser {
             depth: 0,
             source: String::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt: false,
         }
     }
 
@@ -157,6 +163,7 @@ impl Parser {
             depth: 0,
             source: source.to_string(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt: false,
         }
     }
 
@@ -174,6 +181,7 @@ impl Parser {
             depth: 0,
             source: String::new(),
             cfg_values: std::collections::HashMap::new(),
+            pending_gt: false,
         }
     }
 
@@ -563,6 +571,65 @@ impl Parser {
     /// Restore the parser to a previously saved position
     pub(crate) fn restore_position(&mut self, pos: usize) {
         self.pos = pos;
+        self.pending_gt = false;
+    }
+
+    /// Check if the current "token" is `>`, accounting for a pending `>`
+    /// left over from splitting a `>>` (Token::Shr) in nested generic contexts.
+    /// Also returns true for `>>` (Token::Shr) because `>>` will be split into
+    /// two `>` tokens when consumed via `consume_gt()`.
+    pub(crate) fn check_gt(&self) -> bool {
+        if self.pending_gt {
+            return true;
+        }
+        matches!(
+            self.peek().map(|t| &t.token),
+            Some(Token::Gt) | Some(Token::Shr)
+        )
+    }
+
+    /// Consume a single `>`, which may either be:
+    /// 1. A pending second `>` from a previously split `>>`, or
+    /// 2. A real `Token::Gt` in the stream, or
+    /// 3. A `Token::Shr` (`>>`) which we split: consume it and set `pending_gt = true`
+    ///    so the next `consume_gt()` call returns the second `>`.
+    ///
+    /// Returns a synthetic `>` SpannedToken in the pending-gt and Shr cases.
+    pub(crate) fn consume_gt(&mut self) -> ParseResult<SpannedToken> {
+        if self.pending_gt {
+            self.pending_gt = false;
+            // Return a synthetic Gt token at the current span
+            let span = self.current_span();
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span,
+            });
+        }
+        if self.check(&Token::Gt) {
+            return self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        }
+        if self.check(&Token::Shr) {
+            // Split `>>` into two `>` tokens: consume it and remember one pending `>`
+            let tok = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            })?;
+            self.pending_gt = true;
+            // Return a synthetic Gt with the span of the Shr token
+            return Ok(SpannedToken {
+                token: Token::Gt,
+                span: tok.span,
+            });
+        }
+        Err(ParseError::UnexpectedToken {
+            found: self
+                .peek()
+                .map(|t| t.token.clone())
+                .unwrap_or(Token::Ident("EOF".into())),
+            span: self.current_span(),
+            expected: "'>'".to_string(),
+        })
     }
 
     /// Check if the current token is an identifier with the given name

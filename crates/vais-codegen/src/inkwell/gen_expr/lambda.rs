@@ -257,6 +257,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .build_store(computed_ptr, bool_type.const_int(1, false))
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
+            // Write the updated lazy struct back to the original variable's alloca so
+            // subsequent force calls see the cached value.
+            if let Expr::Ident(var_name) = inner {
+                if let Some((orig_alloca, _)) = self.locals.get(var_name).copied() {
+                    // Load the full (now-updated) lazy struct and write it back
+                    let updated_struct = self
+                        .builder
+                        .build_load(struct_type, lazy_alloca, "lazy_updated")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.builder
+                        .build_store(orig_alloca, updated_struct)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+            }
+
             self.builder
                 .build_unconditional_branch(merge_bb)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

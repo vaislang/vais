@@ -212,12 +212,21 @@ impl TypeChecker {
                 }
 
                 // Build substitution map from type's generic params to receiver's concrete types
-                let generic_substitutions: HashMap<String, ResolvedType> =
+                let mut generic_substitutions: HashMap<String, ResolvedType> =
                     found_generics
                         .iter()
                         .zip(receiver_generics.iter())
                         .map(|(param, arg)| (param.clone(), arg.clone()))
                         .collect();
+
+                // Also create fresh type variables for method-level generics
+                // that are not already covered by struct-level generics
+                for method_generic in &method_sig.generics {
+                    if !generic_substitutions.contains_key(method_generic) {
+                        generic_substitutions
+                            .insert(method_generic.clone(), self.fresh_type_var());
+                    }
+                }
 
                 // Check arguments with substituted parameter types
                 for (param_type, arg) in param_types.iter().zip(args) {

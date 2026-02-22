@@ -200,11 +200,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.context.i64_type().const_int(0, false)
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    if v.is_int_value() {
-                        v.into_int_value()
-                    } else {
-                        self.context.i64_type().const_int(0, false)
-                    }
+                    self.coerce_to_i64(v)?
                 };
                 let mut val = enum_type.get_undef();
                 val = self
@@ -237,11 +233,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.context.i64_type().const_int(0, false)
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    if v.is_int_value() {
-                        v.into_int_value()
-                    } else {
-                        self.context.i64_type().const_int(0, false)
-                    }
+                    self.coerce_to_i64(v)?
                 };
                 let mut val = enum_type.get_undef();
                 val = self
@@ -274,11 +266,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.context.i64_type().const_int(0, false)
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    if v.is_int_value() {
-                        v.into_int_value()
-                    } else {
-                        self.context.i64_type().const_int(0, false)
-                    }
+                    self.coerce_to_i64(v)?
                 };
                 let mut val = enum_type.get_undef();
                 val = self
@@ -483,11 +471,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.context.i64_type().const_int(0, false)
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    if v.is_int_value() {
-                        v.into_int_value()
-                    } else {
-                        self.context.i64_type().const_int(0, false)
-                    }
+                    self.coerce_to_i64(v)?
                 };
                 let mut val = enum_type.get_undef();
                 val = self

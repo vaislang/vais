@@ -45,12 +45,14 @@ impl CodeGenerator {
         ir.push_str(&else_ir);
         ir.push_str(&format!("  br label %{}\n", merge_label));
 
-        // Merge with phi
+        // Merge with phi — infer actual type from the then-branch
         ir.push_str(&format!("{}:\n", merge_label));
         let result = self.next_temp(counter);
+        let phi_type = self.infer_expr_type(then);
+        let phi_llvm = self.type_to_llvm(&phi_type);
         ir.push_str(&format!(
-            "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-            result, then_val, then_label, else_val, else_label
+            "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+            result, phi_llvm, then_val, then_label, else_val, else_label
         ));
 
         Ok((result, ir))
@@ -115,27 +117,31 @@ impl CodeGenerator {
             String::new()
         };
 
-        // Merge block
+        // Merge block — infer actual type from the then block
         ir.push_str(&format!("{}:\n", merge_label));
         self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
+        let phi_type = self.infer_block_type(then);
+        let phi_llvm = self.type_to_llvm(&phi_type);
+        let is_void = phi_llvm == "void" || phi_type == vais_types::ResolvedType::Unit;
 
-        if !has_else {
+        if is_void || !has_else {
+            // void/Unit type cannot have phi nodes in LLVM IR
             ir.push_str(&format!("  {} = add i64 0, 0\n", result));
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             ir.push_str(&format!(
-                "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                result, then_val, then_from_label, else_val, else_from_label
+                "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+                result, phi_llvm, then_val, then_from_label, else_val, else_from_label
             ));
         } else if !then_from_label.is_empty() {
             ir.push_str(&format!(
-                "  {} = phi i64 [ {}, %{} ]\n",
-                result, then_val, then_from_label
+                "  {} = phi {} [ {}, %{} ]\n",
+                result, phi_llvm, then_val, then_from_label
             ));
         } else if !else_from_label.is_empty() {
             ir.push_str(&format!(
-                "  {} = phi i64 [ {}, %{} ]\n",
-                result, else_val, else_from_label
+                "  {} = phi {} [ {}, %{} ]\n",
+                result, phi_llvm, else_val, else_from_label
             ));
         } else {
             ir.push_str(&format!("  {} = add i64 0, 0\n", result));

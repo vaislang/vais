@@ -67,9 +67,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let arr_ptr = arr_val.into_pointer_value();
                 let idx_int = idx_val.into_int_value();
 
+                // Use the stored value's type for GEP element type.
+                // This is correct when val's type matches the array's element type,
+                // which is the common case since you store one element at a time.
+                let elem_type = val.get_type();
                 let elem_ptr = unsafe {
                     self.builder
-                        .build_gep(val.get_type(), arr_ptr, &[idx_int], "elem_ptr")
+                        .build_gep(elem_type, arr_ptr, &[idx_int], "elem_ptr")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 };
 
@@ -342,7 +346,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .iter()
                     .find(|(n, _)| n == def_field_name)
                     .map(|(_, v)| *v)
-                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into());
+                    .unwrap_or_else(|| {
+                        // Use the actual field type's zero value from the struct definition
+                        if let Some(field_type) = struct_type.get_field_type_at_index(i as u32) {
+                            self.get_default_value(field_type)
+                        } else {
+                            self.context.i64_type().const_int(0, false).into()
+                        }
+                    });
                 struct_val = self
                     .builder
                     .build_insert_value(struct_val, val, i as u32, &format!("field_{}", i))

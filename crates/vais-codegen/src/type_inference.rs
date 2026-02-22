@@ -135,6 +135,26 @@ impl CodeGenerator {
                 }
             }
             Expr::Call { func, args } => {
+                // Handle @(args) — self-recursive call returns the current function's type
+                if let Expr::SelfCall = &func.node {
+                    if let Some(fn_name) = &self.fn_ctx.current_function {
+                        if let Some(fn_info) = self.types.functions.get(fn_name) {
+                            let ret_ty = fn_info.signature.ret.clone();
+                            if fn_info.signature.is_async {
+                                return ResolvedType::Future(Box::new(ret_ty));
+                            }
+                            if ret_ty == ResolvedType::I32 {
+                                return ResolvedType::I64;
+                            }
+                            return ret_ty;
+                        }
+                    }
+                    return self
+                        .fn_ctx
+                        .current_return_type
+                        .clone()
+                        .unwrap_or(ResolvedType::I64);
+                }
                 // Get return type from function info
                 if let Expr::Ident(fn_name) = &func.node {
                     // Check if this is an enum variant constructor
@@ -147,6 +167,12 @@ impl CodeGenerator {
                     // Check function info
                     if let Some(fn_info) = self.types.functions.get(fn_name) {
                         let ret_ty = fn_info.signature.ret.clone();
+                        // Async functions return Future<T> from the caller's perspective.
+                        // The create function returns an i64 state pointer, but for type
+                        // inference, we need to express that `check()` yields Future<bool>.
+                        if fn_info.signature.is_async {
+                            return ResolvedType::Future(Box::new(ret_ty));
+                        }
                         // Convert i32 returns to i64 since codegen promotes them
                         if ret_ty == ResolvedType::I32 {
                             return ResolvedType::I64;

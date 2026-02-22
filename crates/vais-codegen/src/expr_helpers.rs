@@ -64,13 +64,27 @@ impl CodeGenerator {
 
         if is_logical {
             // For logical And/Or, convert operands to i1 first, then perform operation
-            let left_bool = self.next_temp(counter);
-            ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", left_bool, left_val));
-            let right_bool = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = icmp ne i64 {}, 0\n",
-                right_bool, right_val
-            ));
+            // If operand is already i1 (bool), skip the conversion
+            let left_bool = if matches!(left_type, ResolvedType::Bool) {
+                left_val.clone()
+            } else {
+                let tmp = self.next_temp(counter);
+                let left_llvm = self.type_to_llvm(&left_type);
+                ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", tmp, left_llvm, left_val));
+                tmp
+            };
+            let right_type = self.infer_expr_type(right);
+            let right_bool = if matches!(right_type, ResolvedType::Bool) {
+                right_val.clone()
+            } else {
+                let tmp = self.next_temp(counter);
+                let right_llvm = self.type_to_llvm(&right_type);
+                ir.push_str(&format!(
+                    "  {} = icmp ne {} {}, 0\n",
+                    tmp, right_llvm, right_val
+                ));
+                tmp
+            };
 
             let op_str = match op {
                 BinOp::And => "and",
@@ -108,9 +122,23 @@ impl CodeGenerator {
                     BinOp::Neq => "fcmp one",
                     _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_cmp"),
                 };
+                // Use float (f32) if either operand is f32 and neither is f64
+                let float_llvm = if matches!(left_type, ResolvedType::F32)
+                    || matches!(right_type, ResolvedType::F32)
+                {
+                    if matches!(left_type, ResolvedType::F64)
+                        || matches!(right_type, ResolvedType::F64)
+                    {
+                        "double"
+                    } else {
+                        "float"
+                    }
+                } else {
+                    "double"
+                };
                 ir.push_str(&format!(
-                    "  {} = {} double {}, {}{}\n",
-                    cmp_tmp, op_str, left_val, right_val, dbg_info
+                    "  {} = {} {} {}, {}{}\n",
+                    cmp_tmp, op_str, float_llvm, left_val, right_val, dbg_info
                 ));
             } else {
                 let op_str = match op {
@@ -157,9 +185,23 @@ impl CodeGenerator {
                     BinOp::Mod => "frem",
                     _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_arith"),
                 };
+                // Use float (f32) if either operand is f32 and neither is f64
+                let float_llvm = if matches!(left_type, ResolvedType::F32)
+                    || matches!(right_type, ResolvedType::F32)
+                {
+                    if matches!(left_type, ResolvedType::F64)
+                        || matches!(right_type, ResolvedType::F64)
+                    {
+                        "double"
+                    } else {
+                        "float"
+                    }
+                } else {
+                    "double"
+                };
                 ir.push_str(&format!(
-                    "  {} = {} double {}, {}{}\n",
-                    tmp, op_str, left_val, right_val, dbg_info
+                    "  {} = {} {} {}, {}{}\n",
+                    tmp, op_str, float_llvm, left_val, right_val, dbg_info
                 ));
             } else {
                 let op_str = match op {

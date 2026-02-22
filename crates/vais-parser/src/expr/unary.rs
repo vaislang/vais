@@ -12,13 +12,18 @@ impl Parser {
     /// Parse unary expression
     pub(crate) fn parse_unary(&mut self) -> ParseResult<Spanned<Expr>> {
         self.enter_depth()?;
+        let result = self.parse_unary_inner();
+        self.exit_depth();
+        result
+    }
+
+    fn parse_unary_inner(&mut self) -> ParseResult<Spanned<Expr>> {
         let start = self.current_span().start;
 
         if self.check(&Token::Minus) {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::Neg,
@@ -32,7 +37,6 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::Not,
@@ -46,7 +50,6 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::BitNot,
@@ -60,7 +63,6 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Ref(Box::new(expr)),
                 Span::new(start, end),
@@ -71,7 +73,6 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Deref(Box::new(expr)),
                 Span::new(start, end),
@@ -83,7 +84,6 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Lazy(Box::new(expr)),
                 Span::new(start, end),
@@ -95,15 +95,12 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
-            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Force(Box::new(expr)),
                 Span::new(start, end),
             ));
         }
 
-        let result = self.parse_postfix();
-        self.exit_depth();
-        result
+        self.parse_postfix()
     }
 }

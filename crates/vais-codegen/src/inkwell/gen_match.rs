@@ -206,13 +206,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let mut case_arms: Vec<(&MatchArm, inkwell::basic_block::BasicBlock<'ctx>)> =
                 Vec::new();
 
+            // Use the match value's actual int type for case constants
+            let switch_int_type = match_val.into_int_value().get_type();
+
             for arm in arms {
                 match &arm.pattern.node {
                     Pattern::Literal(Literal::Int(n)) => {
                         let arm_block = self
                             .context
                             .append_basic_block(fn_value, &self.fresh_label("match.arm"));
-                        let case_val = self.context.i64_type().const_int(*n as u64, true);
+                        let case_val = switch_int_type.const_int(*n as u64, true);
                         cases.push((case_val, arm_block));
                         case_arms.push((arm, arm_block));
                     }
@@ -462,8 +465,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(self.context.bool_type().const_int(1, false))
             }
             Pattern::Ident(name) => {
-                // Check if this identifier is a known enum variant (simple variant without data)
-                let is_enum_variant = self.enum_variants.iter().any(|((_, v), _)| v == name);
+                // Check if this identifier is a known enum variant (simple variant without data).
+                // Narrow the search: if the match value is a struct, try to find the enum type
+                // it belongs to from the match scrutinee's LLVM struct type, and only match
+                // variants from that specific enum.  Fall back to any-enum search when the
+                // struct type cannot be identified (keeps backward compatibility).
+                let matched_enum_name: Option<String> = if match_val.is_struct_value() {
+                    let sv = match_val.into_struct_value();
+                    let st = sv.get_type();
+                    // Look up which generated struct (enum backing type) this is
+                    self.generated_structs
+                        .iter()
+                        .find(|(_, known_st)| **known_st == st)
+                        .map(|(sname, _)| sname.clone())
+                } else {
+                    None
+                };
+
+                let is_enum_variant = if let Some(ref enum_name) = matched_enum_name {
+                    // Prefer variants belonging to the identified enum
+                    let narrowed = self
+                        .enum_variants
+                        .iter()
+                        .any(|((e, v), _)| e == enum_name && v == name);
+                    if narrowed {
+                        narrowed
+                    } else {
+                        // Fallback: any enum has this variant name
+                        self.enum_variants.iter().any(|((_, v), _)| v == name)
+                    }
+                } else {
+                    self.enum_variants.iter().any(|((_, v), _)| v == name)
+                };
+
                 if is_enum_variant && match_val.is_struct_value() {
                     // Compare the tag value
                     let struct_val = match_val.into_struct_value();
@@ -491,12 +525,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Pattern::Literal(lit) => {
                 match lit {
                     Literal::Int(n) => {
-                        let lit_val = self.context.i64_type().const_int(*n as u64, true);
+                        let match_int = match_val.into_int_value();
+                        // Use the match value's actual int type for the literal
+                        let lit_val = match_int.get_type().const_int(*n as u64, true);
                         let cmp = self
                             .builder
                             .build_int_compare(
                                 IntPredicate::EQ,
-                                match_val.into_int_value(),
+                                match_int,
                                 lit_val,
                                 "pat_eq",
                             )
@@ -504,9 +540,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         Ok(cmp)
                     }
                     Literal::Bool(b) => {
-                        let lit_val = self.context.bool_type().const_int(*b as u64, false);
                         let match_int = match_val.into_int_value();
-                        // Convert to same bit width if needed
+                        let match_width = match_int.get_type().get_bit_width();
+                        // Create literal in the same bit width as the match value
+                        let lit_val = if match_width == 1 {
+                            self.context.bool_type().const_int(*b as u64, false)
+                        } else {
+                            // Match value is wider (e.g. i64) — compare against 0/1
+                            match_int.get_type().const_int(*b as u64, false)
+                        };
                         let cmp = self
                             .builder
                             .build_int_compare(IntPredicate::EQ, match_int, lit_val, "pat_eq")
@@ -771,17 +813,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(())
             }
             Pattern::Variant { name: _, fields } => {
-                // Bind variant fields
-                // Enum is { i8 tag, i64 data } - extract data and bind
+                // Bind variant fields.
+                // Enum is { i8 tag, i64 data } — the data field (index 1) holds the payload.
+                // For single-field variants the payload IS the value.
+                // For multi-field variants the payload is an anonymous struct; extract each
+                // sub-field with sequential build_extract_value calls.
                 let struct_val = match_val.into_struct_value();
                 let data_val = self
                     .builder
                     .build_extract_value(struct_val, 1, "variant_data")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                // For now, assume single field variant
-                if let Some(first_field) = fields.first() {
-                    self.generate_pattern_bindings(first_field, &data_val)?;
+                if fields.len() <= 1 {
+                    // Single-field (or no-field) variant: bind directly
+                    if let Some(first_field) = fields.first() {
+                        self.generate_pattern_bindings(first_field, &data_val)?;
+                    }
+                } else {
+                    // Multi-field variant: the payload is a struct — extract each sub-field
+                    if data_val.is_struct_value() {
+                        let payload_struct = data_val.into_struct_value();
+                        for (idx, field_pat) in fields.iter().enumerate() {
+                            let sub_val = self
+                                .builder
+                                .build_extract_value(
+                                    payload_struct,
+                                    idx as u32,
+                                    &format!("variant_field_{}", idx),
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.generate_pattern_bindings(field_pat, &sub_val)?;
+                        }
+                    } else {
+                        // Payload is not a struct (type mismatch) — bind first field as fallback
+                        if let Some(first_field) = fields.first() {
+                            self.generate_pattern_bindings(first_field, &data_val)?;
+                        }
+                    }
                 }
                 Ok(())
             }

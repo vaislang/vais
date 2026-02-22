@@ -275,8 +275,19 @@ impl CodeGenerator {
                     // Pointer dereference assignment: *ptr = value
                     let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
                     ir.push_str(&ptr_ir);
+                    // Infer the pointee type for correct store instruction
+                    let ptr_type = self.infer_expr_type(inner);
+                    let pointee_llvm = match &ptr_type {
+                        ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
+                        ResolvedType::Ref(inner) => self.type_to_llvm(inner),
+                        ResolvedType::RefMut(inner) => self.type_to_llvm(inner),
+                        _ => "i64".to_string(),
+                    };
                     // Store value at the pointed-to location
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", val, ptr_val));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        pointee_llvm, val, pointee_llvm, ptr_val
+                    ));
                 } else if let Expr::Index {
                     expr: arr_expr,
                     index,
@@ -383,22 +394,42 @@ impl CodeGenerator {
                 let mut ir = load_ir;
                 ir.push_str(&rhs_ir);
 
-                let op_str = match op {
-                    BinOp::Add => "add",
-                    BinOp::Sub => "sub",
-                    BinOp::Mul => "mul",
-                    BinOp::Div => "sdiv",
-                    BinOp::Mod => "srem",
-                    BinOp::BitAnd => "and",
-                    BinOp::BitOr => "or",
-                    BinOp::BitXor => "xor",
-                    BinOp::Shl => "shl",
-                    BinOp::Shr => "ashr",
-                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "compound_assign"),
+                // Detect float type for choosing float vs integer ops
+                let target_type = self.infer_expr_type(target);
+                let is_float = matches!(target_type, ResolvedType::F64 | ResolvedType::F32);
+                let operand_llvm = if is_float {
+                    self.type_to_llvm(&target_type)
+                } else {
+                    "i64".to_string()
                 };
 
-                // Add division by zero check for sdiv and srem
-                if matches!(op, BinOp::Div | BinOp::Mod) {
+                let op_str = if is_float {
+                    match op {
+                        BinOp::Add => "fadd",
+                        BinOp::Sub => "fsub",
+                        BinOp::Mul => "fmul",
+                        BinOp::Div => "fdiv",
+                        BinOp::Mod => "frem",
+                        _ => unreachable!("BinOp {:?} in {} codegen path", op, "compound_assign_float"),
+                    }
+                } else {
+                    match op {
+                        BinOp::Add => "add",
+                        BinOp::Sub => "sub",
+                        BinOp::Mul => "mul",
+                        BinOp::Div => "sdiv",
+                        BinOp::Mod => "srem",
+                        BinOp::BitAnd => "and",
+                        BinOp::BitOr => "or",
+                        BinOp::BitXor => "xor",
+                        BinOp::Shl => "shl",
+                        BinOp::Shr => "ashr",
+                        _ => unreachable!("BinOp {:?} in {} codegen path", op, "compound_assign"),
+                    }
+                };
+
+                // Add division by zero check for sdiv and srem (only for integer ops)
+                if !is_float && matches!(op, BinOp::Div | BinOp::Mod) {
                     let zero_check = self.next_temp(counter);
                     let div_ok_label = self.next_label("div_ok");
                     let div_zero_label = self.next_label("div_zero");
@@ -421,8 +452,8 @@ impl CodeGenerator {
 
                 let result = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}\n",
-                    result, op_str, current_val, rhs_val
+                    "  {} = {} {} {}, {}\n",
+                    result, op_str, operand_llvm, current_val, rhs_val
                 ));
 
                 // Store back
@@ -1021,8 +1052,20 @@ impl CodeGenerator {
                 let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
                 let mut ir = ptr_ir;
 
+                // Infer the pointee type from the pointer expression
+                let ptr_type = self.infer_expr_type(inner);
+                let pointee_llvm = match &ptr_type {
+                    ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
+                    ResolvedType::Ref(inner) => self.type_to_llvm(inner),
+                    ResolvedType::RefMut(inner) => self.type_to_llvm(inner),
+                    _ => "i64".to_string(),
+                };
+
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = load i64, i64* {}\n", result, ptr_val));
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    result, pointee_llvm, pointee_llvm, ptr_val
+                ));
 
                 Ok((result, ir))
             }
@@ -1049,8 +1092,19 @@ impl CodeGenerator {
                     }
                     // Pointer to integer cast
                     _ if val.starts_with('%') || val.parse::<i64>().is_err() => {
-                        // Might be a pointer, try to cast
-                        ir.push_str(&format!("  {} = ptrtoint i64* {} to i64\n", result, val));
+                        // Infer the source type to get the correct pointer type
+                        let src_type = self.infer_expr_type(expr);
+                        let src_llvm = self.type_to_llvm(&src_type);
+                        // If source is already a pointer type, use it; otherwise assume i64*
+                        let ptr_type = if src_llvm.ends_with('*') {
+                            src_llvm
+                        } else {
+                            format!("{}*", src_llvm)
+                        };
+                        ir.push_str(&format!(
+                            "  {} = ptrtoint {} {} to {}\n",
+                            result, ptr_type, val, llvm_type
+                        ));
                     }
                     // Default: just use the value as-is (same size types)
                     _ => {
@@ -1126,7 +1180,21 @@ impl CodeGenerator {
 
                 // If inner is already a Future (async call), pass through — the create
                 // function already returned a state pointer.
-                if matches!(inner_type, vais_types::ResolvedType::Future(_)) {
+                // Check both infer_expr_type (TC-registered Future type) and is_async
+                // flag (direct async function lookup) for robustness.
+                let is_async_call = if let Expr::Call { func, .. } = &inner.node {
+                    if let Expr::Ident(name) = &func.node {
+                        self.types
+                            .functions
+                            .get(name.as_str())
+                            .is_some_and(|info| info.signature.is_async)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                if matches!(inner_type, vais_types::ResolvedType::Future(_)) || is_async_call {
                     return Ok((inner_val, inner_ir));
                 }
 
@@ -1479,7 +1547,6 @@ impl CodeGenerator {
             }
 
             // Try expression: expr? - propagate Err early, continue with Ok value
-            // User-defined enum layout: %EnumName = type { i32 tag, { i64 } payload }
             Expr::Try(inner) => {
                 // Determine the LLVM type name from the inner expression's type
                 let inner_type = self.infer_expr_type(inner);
@@ -1490,20 +1557,32 @@ impl CodeGenerator {
 
                 ir.push_str("  ; Try expression (?)\n");
 
-                // Extract tag (field 0, i32)
+                // Determine the tag type based on the inner type:
+                // - Optional/Result use i8 tag: { i8, T }
+                // - User-defined enums use i32 tag: { i32, { T } }
+                let (tag_type, extract_payload) = match &inner_type {
+                    ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
+                        ("i8", false) // { i8, T } — payload at field 1 directly
+                    }
+                    _ => {
+                        ("i32", true) // { i32, { T } } — payload at field 1, then field 0
+                    }
+                };
+
+                // Extract tag (field 0)
                 let tag = self.next_temp(counter);
                 ir.push_str(&format!(
                     "  {} = extractvalue {} {}, 0\n",
                     tag, llvm_type, inner_val
                 ));
 
-                // Check if Err (tag != 0, i.e., not Ok)
+                // Check if Err (tag != 0, i.e., not Ok/Some)
                 let is_err = self.next_temp(counter);
                 let err_label = self.next_label("try_err");
                 let ok_label = self.next_label("try_ok");
                 let merge_label = self.next_label("try_merge");
 
-                ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
+                ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n\n",
                     is_err, err_label, ok_label
@@ -1516,13 +1595,22 @@ impl CodeGenerator {
                     llvm_type, inner_val
                 ));
 
-                // Ok branch: extract payload value (field 1, then field 0 of the payload struct)
+                // Ok branch: extract payload value
                 ir.push_str(&format!("{}:\n", ok_label));
                 let value = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {} {}, 1, 0\n",
-                    value, llvm_type, inner_val
-                ));
+                if extract_payload {
+                    // User-defined enum: payload at field 1, then field 0 of payload struct
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, 1, 0\n",
+                        value, llvm_type, inner_val
+                    ));
+                } else {
+                    // Optional/Result: payload at field 1 directly
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, 1\n",
+                        value, llvm_type, inner_val
+                    ));
+                }
                 ir.push_str(&format!("  br label %{}\n\n", merge_label));
 
                 // Merge block
@@ -1532,7 +1620,6 @@ impl CodeGenerator {
             }
 
             // Unwrap expression: expr! - panic on Err/None, continue with value
-            // User-defined enum layout: %EnumName = type { i32 tag, { i64 } payload }
             Expr::Unwrap(inner) => {
                 // Determine the LLVM type name from the inner expression's type
                 let inner_type = self.infer_expr_type(inner);
@@ -1543,7 +1630,19 @@ impl CodeGenerator {
 
                 ir.push_str("  ; Unwrap expression\n");
 
-                // Extract tag (field 0, i32)
+                // Determine the tag type based on the inner type:
+                // - Optional/Result use i8 tag: { i8, T }
+                // - User-defined enums use i32 tag: { i32, { T } }
+                let (tag_type, extract_payload) = match &inner_type {
+                    ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
+                        ("i8", false) // { i8, T } — payload at field 1 directly
+                    }
+                    _ => {
+                        ("i32", true) // { i32, { T } } — payload at field 1, then field 0
+                    }
+                };
+
+                // Extract tag (field 0)
                 let tag = self.next_temp(counter);
                 ir.push_str(&format!(
                     "  {} = extractvalue {} {}, 0\n",
@@ -1555,7 +1654,7 @@ impl CodeGenerator {
                 let err_label = self.next_label("unwrap_err");
                 let ok_label = self.next_label("unwrap_ok");
 
-                ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
+                ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n\n",
                     is_err, err_label, ok_label
@@ -1567,13 +1666,22 @@ impl CodeGenerator {
                 ir.push_str("  call void @abort()\n");
                 ir.push_str("  unreachable\n\n");
 
-                // Ok branch: extract value (field 1, field 0 of payload struct)
+                // Ok branch: extract value
                 ir.push_str(&format!("{}:\n", ok_label));
                 let value = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {} {}, 1, 0\n",
-                    value, llvm_type, inner_val
-                ));
+                if extract_payload {
+                    // User-defined enum: payload at field 1, then field 0 of payload struct
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, 1, 0\n",
+                        value, llvm_type, inner_val
+                    ));
+                } else {
+                    // Optional/Result: payload at field 1 directly
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, 1\n",
+                        value, llvm_type, inner_val
+                    ));
+                }
 
                 // Track that we need the panic message and abort declaration
                 self.needs_unwrap_panic = true;

@@ -416,6 +416,22 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 진행률: 5/5 (100%)
 결과: E2E 811→862 (+51), Clippy 0건
 
+## 현재 작업 (2026-02-22) — Phase 42: 전체 코드베이스 건전성 강화 — 135건 이슈 체계적 수정 ✅
+모드: 자동진행
+- [x] 1. Inkwell 타입 정확성 — i64 하드코딩 제거 (Critical/High 13건+2 TODO) (Opus)
+  변경: builtins.rs (close/exit 중복 제거), gen_types.rs (Try/Unwrap 구현 143줄), gen_expr/call.rs (coerce_to_i64 헬퍼, Some/Ok/Err/Enum non-int payload), gen_expr/misc.rs (coerce_to_i64 42줄), gen_declaration.rs (void return type), gen_stmt.rs (phi node 타입 불일치), gen_advanced.rs (struct field 실제 타입), gen_match.rs (bool pattern+switch 타입 매칭), gen_aggregate.rs (TODO: slice elem type)
+- [x] 2. Text IR 타입 정확성 — i64 하드코딩 제거 (Critical/High 10건) (Opus) [∥1]
+  변경: async_gen.rs (파라미터 실제 타입), generate_expr.rs (Try/Unwrap i8 vs i32 태그, Cast ptrtoint, Deref load/store, compound assign float), expr_helpers_misc.rs (Try/Unwrap 통합), expr_helpers_control.rs (if_expr/ternary phi 실제 타입+void 가드), expr_helpers.rs (float f32 지원, logical And/Or bool 직접 사용)
+- [x] 3. Inkwell 로직 버그 수정 (High/Medium 10건) (Sonnet) [∥1]
+  변경: gen_expr/unary.rs (Not→logical NOT), gen_function.rs+gen_special.rs (double terminator guard), gen_match.rs (variant lookup 타입 기반+multi-field binding), gen_aggregate.rs (len() Slice/SliceMut 한정+method search deterministic), gen_expr/lambda.rs (force write-back), gen_stmt.rs (iterator cache alloca), gen_special.rs (struct interp→<struct>)
+- [x] 4. Parser 완성도 — 누락 문법 추가 (Medium 7건) (Sonnet) [∥1]
+  변경: expr/primary.rs (음수 패턴+match struct literal 비활성화), expr/unary.rs (depth leak→inner 분리), item/traits.rs (impl where+async method), item/declarations.rs (struct async method), item/macros.rs (+18 토큰), lib.rs+types.rs (>> 제네릭 split: pending_gt+check_gt/consume_gt)
+- [x] 5. 타입 체커 건전성 강화 (Critical 1 + High 3 + Medium 3) (Opus)
+  변경: inference.rs (occurs-check+occurs_in 헬퍼), lookup.rs (super_traits 재귀 lookup+visited set, iterator cycle 방어), lib.rs (trait_aliases merge/clone), checker_expr/calls.rs (method-level generic fresh type var), scope.rs (Pattern::Or 전체 검증), checker_module/mod.rs (contract 이중 체크 제거)
+- [x] 6. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4,5]
+  결과: cargo check 성공, Clippy 0건, Codegen 319 통과 (3 pre-existing), E2E 862개 (840 통과, 14 pre-existing 실패, 8 ignored, 0 regression). void phi regression 발견→수정 완료
+진행률: 6/6 (100%) ✅
+
 ---
 
 ## ⏳ 장기 관찰 항목

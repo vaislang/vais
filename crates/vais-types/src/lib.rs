@@ -316,6 +316,7 @@ impl TypeChecker {
         self.unions = other.unions.clone();
         self.functions = other.functions.clone();
         self.type_aliases = other.type_aliases.clone();
+        self.trait_aliases = other.trait_aliases.clone();
         self.traits = other.traits.clone();
         self.trait_impls = other.trait_impls.clone();
         self.constants = other.constants.clone();
@@ -329,6 +330,7 @@ impl TypeChecker {
         self.unions.extend(other.unions);
         self.functions.extend(other.functions);
         self.type_aliases.extend(other.type_aliases);
+        self.trait_aliases.extend(other.trait_aliases);
         self.traits.extend(other.traits);
         self.trait_impls.extend(other.trait_impls);
         self.constants.extend(other.constants);

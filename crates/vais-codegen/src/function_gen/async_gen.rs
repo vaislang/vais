@@ -98,15 +98,16 @@ impl CodeGenerator {
         ir.push_str("  store i64 0, i64* %state_field\n");
 
         // Store parameters in state struct
-        for (i, (name, _ty)) in params.iter().enumerate() {
+        for (i, (name, ty)) in params.iter().enumerate() {
             let field_idx = i + 2; // Skip state and result fields
+            let param_llvm_ty = self.type_to_llvm(ty);
             ir.push_str(&format!(
                 "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
                 name, state_struct_name, state_struct_name, field_idx
             ));
             ir.push_str(&format!(
-                "  store i64 %{}, i64* %param_{}_ptr\n",
-                name, name
+                "  store {} %{}, {}* %param_{}_ptr\n",
+                param_llvm_ty, name, param_llvm_ty, name
             ));
         }
 
@@ -140,13 +141,14 @@ impl CodeGenerator {
         // Load parameters from state into locals
         for (i, (name, ty)) in params.iter().enumerate() {
             let field_idx = i + 2;
+            let param_llvm_ty = self.type_to_llvm(ty);
             ir.push_str(&format!(
                 "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
                 name, state_struct_name, state_struct_name, field_idx
             ));
             ir.push_str(&format!(
-                "  %{} = load i64, i64* %param_{}_ptr\n",
-                name, name
+                "  %{} = load {}, {}* %param_{}_ptr\n",
+                name, param_llvm_ty, param_llvm_ty, name
             ));
 
             self.fn_ctx
@@ -162,6 +164,12 @@ impl CodeGenerator {
         // Generate state_0 (initial state) - execute function body
         ir.push_str("state_0:\n");
 
+        // Set async poll context so Return statements inside the body
+        // can generate proper poll result wrapping ({1, result})
+        self.fn_ctx.async_poll_context = Some(crate::AsyncPollContext {
+            ret_llvm: ret_llvm.clone(),
+        });
+
         let mut counter = 0;
         let body_result = match &f.body {
             FunctionBody::Expr(expr) => self.generate_expr(expr, &mut counter)?,
@@ -175,9 +183,22 @@ impl CodeGenerator {
             "  %result_ptr = getelementptr %{}, %{}* %state, i32 0, i32 1\n",
             state_struct_name, state_struct_name
         ));
+        // The codegen promotes bool comparisons to i64 (zext i1 to i64), but the
+        // result field in the state struct uses the actual return type. Truncate
+        // i64 back to i1 when the return type is bool.
+        let store_val = if ret_llvm == "i1" {
+            let trunc = format!("%body_trunc.{}", counter);
+            ir.push_str(&format!(
+                "  {} = trunc i64 {} to i1\n",
+                trunc, body_result.0
+            ));
+            trunc
+        } else {
+            body_result.0.clone()
+        };
         ir.push_str(&format!(
             "  store {} {}, {}* %result_ptr\n",
-            ret_llvm, body_result.0, ret_llvm
+            ret_llvm, store_val, ret_llvm
         ));
 
         // Set state to -1 (completed)

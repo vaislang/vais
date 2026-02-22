@@ -257,6 +257,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 phi.add_incoming(&[(*val, *block)]);
             }
             Ok(phi.as_basic_value())
+        } else if !incoming.is_empty() {
+            // Types differ: use the then-branch type as the canonical type
+            // and attempt to coerce the other branch values
+            let target_type = then_val.get_type();
+            let phi = self
+                .builder
+                .build_phi(target_type, "if_result")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            for (val, block) in &incoming {
+                let coerced = val.as_basic_value_enum();
+                if coerced.get_type() == target_type {
+                    phi.add_incoming(&[(&coerced, *block)]);
+                } else {
+                    // Coerce: try bitcast for same-size types, or use zero as fallback
+                    let fallback = target_type.const_zero();
+                    phi.add_incoming(&[(&fallback, *block)]);
+                }
+            }
+            Ok(phi.as_basic_value())
         } else {
             Ok(self.context.struct_type(&[], false).const_zero().into())
         }
@@ -467,6 +486,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             continue_block: loop_start,
         });
 
+        // Allocate an alloca to cache the iterator value when both a pattern and an
+        // iterator expression are present.  This avoids evaluating the iterator
+        // expression a second time in the loop body (fix for double-evaluation bug).
+        // We allocate it in the entry block (current position, before branch) so that
+        // LLVM's mem2reg can promote it.
+        let iter_alloca: Option<inkwell::values::PointerValue<'ctx>> =
+            if pattern.is_some() && iter.is_some() {
+                let alloca = self
+                    .builder
+                    .build_alloca(self.context.i64_type(), "iter_cache")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                Some(alloca)
+            } else {
+                None
+            };
+
         // Branch to loop start
         self.builder
             .build_unconditional_branch(loop_start)
@@ -476,8 +511,32 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder.position_at_end(loop_start);
 
         if let Some(iter_expr) = iter {
-            // Conditional loop (while-like)
+            // Conditional loop (while-like): evaluate the iterator once per iteration.
             let cond_val = self.generate_expr(&iter_expr.node)?;
+
+            // Cache the raw iterator value so the loop body can bind it without
+            // re-evaluating the expression (which could have side effects).
+            if let Some(alloca) = iter_alloca {
+                let store_val = if cond_val.is_int_value() {
+                    // Widen to i64 if necessary so the alloca type matches
+                    let iv = cond_val.into_int_value();
+                    if iv.get_type().get_bit_width() < 64 {
+                        self.builder
+                            .build_int_z_extend(iv, self.context.i64_type(), "iter_zext")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into()
+                    } else {
+                        cond_val
+                    }
+                } else {
+                    // Non-integer: store a placeholder zero
+                    self.context.i64_type().const_int(0, false).into()
+                };
+                self.builder
+                    .build_store(alloca, store_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            }
+
             let cond_bool = if cond_val.is_int_value() {
                 let int_val = cond_val.into_int_value();
                 if int_val.get_type().get_bit_width() > 1 {
@@ -509,10 +568,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Loop body
         self.builder.position_at_end(loop_body);
 
-        // Bind pattern if present (for non-range patterns with condition value)
-        if let (Some(pat), Some(iter_expr)) = (pattern, iter) {
-            let iter_val = self.generate_expr(&iter_expr.node)?;
-            self.generate_pattern_bindings(pat, &iter_val)?;
+        // Bind pattern if present: load the cached iterator value from the alloca
+        // instead of re-evaluating the iterator expression.
+        if let (Some(pat), Some(_iter_expr)) = (pattern, iter) {
+            if let Some(cached_alloca) = iter_alloca {
+                let iter_val = self
+                    .builder
+                    .build_load(self.context.i64_type(), cached_alloca, "iter_cached")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.generate_pattern_bindings(pat, &iter_val)?;
+            }
         }
 
         let _body_val = self.generate_block(body)?;

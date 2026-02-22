@@ -296,10 +296,12 @@ impl TypeChecker {
         }
     }
 
-    /// Extract contract specification from function attributes
+    /// Extract contract specification from function attributes.
     ///
     /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
-    /// Contract expressions must evaluate to bool.
+    /// NOTE: Contract expression type-checking is done in check_function() (checker_fn.rs)
+    /// for requires (before body) and ensures (after body with 'return' in scope).
+    /// This method only extracts the contract clauses without re-checking types.
     pub(crate) fn extract_contracts(
         &mut self,
         f: &Function,
@@ -312,16 +314,9 @@ impl TypeChecker {
             match attr.name.as_str() {
                 "requires" | "ensures" => {
                     if let Some(expr) = &attr.expr {
-                        // Type check the contract expression - it must be bool
-                        let expr_type = self.check_expr(expr)?;
-                        if expr_type != ResolvedType::Bool {
-                            return Err(TypeError::Mismatch {
-                                expected: "bool".to_string(),
-                                found: expr_type.to_string(),
-                                span: Some(expr.span),
-                            });
-                        }
-
+                        // Contract expressions are already type-checked in check_function()
+                        // (requires before body, ensures after body with 'return' in scope).
+                        // Here we only extract the clause for storage in FunctionSig.
                         let clause = ContractClause {
                             expr_str: attr.args.first().cloned().unwrap_or_default(),
                             span: expr.span,

@@ -116,8 +116,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_extract_value(struct_val, 0, "data_ptr")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                // The data pointer is i8* - we need to treat it as i64* for indexing
-                // (This assumes element type is i64 - ideally we'd track the actual element type)
+                // The data pointer is i8* - we need to cast to typed pointer for indexing.
+                // TODO(Phase42): Track actual element type through slice type info.
+                // For now, default to i64 which is correct for the common case.
                 let elem_type = self.context.i64_type();
                 let typed_ptr = self
                     .builder
@@ -370,19 +371,48 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Transform method call to function call with receiver as first arg
         // e.g., obj.method(a, b) -> TypeName_method(obj, a, b)
 
-        // Special case: Slice.len() — Slice is a fat pointer { i8*, i64 }
-        // Field 1 is the length. Detect by value shape (2-field struct) when method == "len".
+        // Special case: Slice.len() / SliceMut.len() — fat pointer { i8*, i64 }
+        // Field 1 is the length.  Restrict to known slice types to avoid triggering on
+        // other 2-field structs such as Result or Optional.
         if method == "len" {
-            let recv_val = self.generate_expr(receiver)?;
-            if recv_val.is_struct_value() {
-                let struct_val = recv_val.into_struct_value();
-                if struct_val.get_type().count_fields() == 2 {
-                    // Extract field 1 (the length i64)
-                    let len_val = self
-                        .builder
-                        .build_extract_value(struct_val, 1, "slice_len")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    return Ok(len_val);
+            // Check whether the receiver's resolved type is a Slice/SliceMut before
+            // generating the expression value (avoids side-effect duplication).
+            let is_slice_receiver = match receiver {
+                Expr::Ident(name) => {
+                    // Check if the variable's type name indicates a slice
+                    let type_name = self.var_struct_types.get(name).map(|s| s.as_str());
+                    matches!(type_name, Some("Slice") | Some("SliceMut"))
+                        || self.locals.get(name).is_some_and(|(_, ty)| {
+                            // Also accept if the LLVM type is { ptr, i64 } and is NOT a
+                            // known named struct (i.e. an anonymous fat-pointer struct)
+                            if let inkwell::types::BasicTypeEnum::StructType(st) = ty {
+                                let nf = st.count_fields();
+                                if nf == 2 {
+                                    // Must not be a named struct registered in generated_structs
+                                    !self.generated_structs.values().any(|known| known == st)
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        })
+                }
+                _ => false,
+            };
+
+            if is_slice_receiver {
+                let recv_val = self.generate_expr(receiver)?;
+                if recv_val.is_struct_value() {
+                    let struct_val = recv_val.into_struct_value();
+                    if struct_val.get_type().count_fields() == 2 {
+                        // Extract field 1 (the length i64)
+                        let len_val = self
+                            .builder
+                            .build_extract_value(struct_val, 1, "slice_len")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        return Ok(len_val);
+                    }
                 }
             }
         }
@@ -432,13 +462,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .or_else(|| self.module.get_function(method))
             });
 
-        // If not found, try broader search: look for any TypeName_method pattern
+        // If not found, try broader search: look for any TypeName_method pattern.
+        // When the receiver struct name is known, use it directly (deterministic).
+        // Only fall back to iterating all structs when the name is unknown.
         let fn_value = if let Some(f) = fn_value {
             f
+        } else if let Some(ref sn) = struct_name {
+            // Struct name is known — avoid non-deterministic HashMap iteration.
+            // The qualified name was already tried above; nothing more to do.
+            let tried = format!("{}_{}", sn, method);
+            return Err(CodegenError::UndefinedFunction(format!(
+                "{} (method call on {:?})",
+                tried, receiver
+            )));
         } else {
-            // Try all known struct types with this method name
+            // Struct name unknown — scan all registered structs for a matching method.
+            // Collect into a sorted Vec first to make the search order deterministic.
+            let mut candidates: Vec<String> = self.generated_structs.keys().cloned().collect();
+            candidates.sort();
             let mut found = None;
-            for sn in self.generated_structs.keys() {
+            for sn in &candidates {
                 let candidate = format!("{}_{}", sn, method);
                 if let Some(f) = self
                     .functions

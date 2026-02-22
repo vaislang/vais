@@ -31,6 +31,8 @@ impl CodeGenerator {
         self.fn_ctx.locals.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
+        self.fn_ctx.future_poll_fns.clear();
+        self.fn_ctx.async_poll_context = None;
     }
 
     pub(crate) fn generate_extern_decl(&self, info: &FunctionInfo) -> String {

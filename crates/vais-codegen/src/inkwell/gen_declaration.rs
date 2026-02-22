@@ -32,16 +32,28 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Build return type
-        let ret_type = if let Some(ref ty) = func.ret_type {
+        // Check resolved function signature from type checker for accurate return type
+        let fn_type = if let Some(ref ty) = func.ret_type {
             let resolved = self.ast_type_to_resolved(&ty.node);
-            self.type_mapper.map_type(&resolved)
+            if matches!(resolved, vais_types::ResolvedType::Unit) {
+                self.context.void_type().fn_type(&param_types, false)
+            } else {
+                let ret_type = self.type_mapper.map_type(&resolved);
+                ret_type.fn_type(&param_types, false)
+            }
+        } else if let Some(sig) = self.resolved_function_sigs.get(fn_name) {
+            // Use type checker's resolved return type
+            if matches!(sig.ret, vais_types::ResolvedType::Unit) {
+                self.context.void_type().fn_type(&param_types, false)
+            } else {
+                let ret_type = self.type_mapper.map_type(&sig.ret);
+                ret_type.fn_type(&param_types, false)
+            }
         } else {
-            // Default to i64 if return type is not specified
-            self.context.i64_type().into()
+            // Default to i64 if return type is not specified and no TC info available
+            let ret_type: inkwell::types::BasicTypeEnum = self.context.i64_type().into();
+            ret_type.fn_type(&param_types, false)
         };
-
-        // Create function type
-        let fn_type = ret_type.fn_type(&param_types, false);
 
         // Add function to module
         let fn_value = self.module.add_function(fn_name, fn_type, None);

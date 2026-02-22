@@ -51,6 +51,50 @@ impl CheckMode {
 }
 
 impl TypeChecker {
+    /// Check if a type variable `id` occurs anywhere inside `ty`.
+    /// Prevents creating cyclic substitutions (e.g., T0 -> Vec<T0>) which would
+    /// cause `apply_substitutions` to recurse infinitely.
+    fn occurs_in(id: usize, ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Var(other_id) => *other_id == id,
+            ResolvedType::Array(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Pointer(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Lazy(inner) => Self::occurs_in(id, inner),
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::occurs_in(id, ok) || Self::occurs_in(id, err)
+            }
+            ResolvedType::Tuple(types) => types.iter().any(|t| Self::occurs_in(id, t)),
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params.iter().any(|t| Self::occurs_in(id, t)) || Self::occurs_in(id, ret)
+            }
+            ResolvedType::Named { generics, .. } | ResolvedType::DynTrait { generics, .. } => {
+                generics.iter().any(|t| Self::occurs_in(id, t))
+            }
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => Self::occurs_in(id, inner),
+            ResolvedType::Dependent { base, .. } => Self::occurs_in(id, base),
+            ResolvedType::ConstArray { element, .. } | ResolvedType::Vector { element, .. } => {
+                Self::occurs_in(id, element)
+            }
+            ResolvedType::Associated {
+                base, generics, ..
+            } => {
+                Self::occurs_in(id, base) || generics.iter().any(|t| Self::occurs_in(id, t))
+            }
+            // Leaf types: no type variables inside
+            _ => false,
+        }
+    }
+
     /// Unify two types
     #[inline]
     pub(crate) fn unify(
@@ -68,6 +112,17 @@ impl TypeChecker {
         match (&expected, &found) {
             // Type variables can unify with anything
             (ResolvedType::Var(id), t) | (t, ResolvedType::Var(id)) => {
+                // Self-referential check: Var(id) unifying with itself is trivially Ok
+                if let ResolvedType::Var(other_id) = t {
+                    if *other_id == *id {
+                        return Ok(());
+                    }
+                }
+                // Occurs-check: prevent cyclic substitutions (e.g., T0 -> Option<T0>)
+                // which would cause apply_substitutions to recurse infinitely
+                if Self::occurs_in(*id, t) {
+                    return Ok(());
+                }
                 self.substitutions.insert(*id, t.clone());
                 Ok(())
             }

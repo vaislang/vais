@@ -425,36 +425,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                self.emit_defer_cleanup()?;
-                if ret_substituted == ResolvedType::Unit {
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    // Cast return value to match function signature if needed (e.g. i32 -> i64)
-                    let expected_ret_type = fn_value.get_type().get_return_type();
-                    let ret_val = if let Some(ert) = expected_ret_type {
-                        if ert != body_value.get_type()
-                            && body_value.is_int_value()
-                            && ert.is_int_type()
-                        {
-                            self.builder
-                                .build_int_cast(
-                                    body_value.into_int_value(),
-                                    ert.into_int_type(),
-                                    "ret_cast",
-                                )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into()
+                // Only build return if the current block doesn't already have a terminator
+                // (e.g. an explicit `R` / early-return inside the expr body may have emitted one)
+                if self
+                    .builder
+                    .get_insert_block()
+                    .expect("ICE: no insert block during expr-body function generation")
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        // Cast return value to match function signature if needed (e.g. i32 -> i64)
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let ret_val = if let Some(ert) = expected_ret_type {
+                            if ert != body_value.get_type()
+                                && body_value.is_int_value()
+                                && ert.is_int_type()
+                            {
+                                self.builder
+                                    .build_int_cast(
+                                        body_value.into_int_value(),
+                                        ert.into_int_type(),
+                                        "ret_cast",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                body_value
+                            }
                         } else {
                             body_value
-                        }
-                    } else {
-                        body_value
-                    };
-                    self.builder
-                        .build_return(Some(&ret_val))
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        };
+                        self.builder
+                            .build_return(Some(&ret_val))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
                 }
             }
             ast::FunctionBody::Block(stmts) => {
@@ -601,35 +611,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                self.emit_defer_cleanup()?;
-                if ret_substituted == ResolvedType::Unit {
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    let expected_ret_type = fn_value.get_type().get_return_type();
-                    let ret_val = if let Some(ert) = expected_ret_type {
-                        if ert != body_value.get_type()
-                            && body_value.is_int_value()
-                            && ert.is_int_type()
-                        {
-                            self.builder
-                                .build_int_cast(
-                                    body_value.into_int_value(),
-                                    ert.into_int_type(),
-                                    "ret_cast",
-                                )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into()
+                // Only build return if the current block doesn't already have a terminator
+                if self
+                    .builder
+                    .get_insert_block()
+                    .expect("ICE: no insert block during specialized expr-body function generation")
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let ret_val = if let Some(ert) = expected_ret_type {
+                            if ert != body_value.get_type()
+                                && body_value.is_int_value()
+                                && ert.is_int_type()
+                            {
+                                self.builder
+                                    .build_int_cast(
+                                        body_value.into_int_value(),
+                                        ert.into_int_type(),
+                                        "ret_cast",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                body_value
+                            }
                         } else {
                             body_value
-                        }
-                    } else {
-                        body_value
-                    };
-                    self.builder
-                        .build_return(Some(&ret_val))
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        };
+                        self.builder
+                            .build_return(Some(&ret_val))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
                 }
             }
             ast::FunctionBody::Block(stmts) => {

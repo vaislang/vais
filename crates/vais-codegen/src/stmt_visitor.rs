@@ -175,6 +175,16 @@ impl CodeGenerator {
                     .lazy_bindings
                     .insert(name.node.clone(), lazy_info);
             }
+            // Track future→poll function mapping for variable-based await.
+            // Use resolve_poll_func_name (instance method) instead of the static
+            // extract_poll_func_name_from_expr because Spawn expressions require
+            // an is_async check on the inner call to decide between the async
+            // function's __poll and __sync_spawn__poll.
+            if let Some(poll_fn) = self.resolve_poll_func_name(&value.node) {
+                self.fn_ctx
+                    .future_poll_fns
+                    .insert(name.node.clone(), poll_fn);
+            }
             // Return just the expression IR, no alloca/store needed
             Ok(("void".to_string(), val_ir))
         } else {
@@ -232,6 +242,13 @@ impl CodeGenerator {
                 .locals
                 .insert(name.node.clone(), LocalVar::alloca(resolved_ty, llvm_name));
 
+            // Track future→poll function mapping for variable-based await
+            if let Some(poll_fn) = self.resolve_poll_func_name(&value.node) {
+                self.fn_ctx
+                    .future_poll_fns
+                    .insert(name.node.clone(), poll_fn);
+            }
+
             Ok(("void".to_string(), ir))
         }
     }
@@ -282,6 +299,55 @@ impl CodeGenerator {
         expr: Option<&Spanned<Expr>>,
         counter: &mut usize,
     ) -> GenResult {
+        // Check if we're inside an async poll function — if so, early returns
+        // must wrap the value as a poll result {1, value} and return the poll type.
+        if let Some(poll_ctx) = self.fn_ctx.async_poll_context.clone() {
+            let mut ir = String::new();
+            let defer_ir = self.generate_defer_cleanup(counter)?;
+            ir.push_str(&defer_ir);
+
+            if let Some(expr) = expr {
+                let (val, expr_ir) = self.generate_expr(expr, counter)?;
+                ir.push_str(&expr_ir);
+
+                // Codegen promotes bool to i64 (zext), truncate back for i1 return
+                let ret_val = if poll_ctx.ret_llvm == "i1" {
+                    let trunc = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = trunc i64 {} to i1\n",
+                        trunc, val
+                    ));
+                    trunc
+                } else {
+                    val
+                };
+
+                let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
+                let t0 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} undef, i64 1, 0\n",
+                    t0, poll_ret_ty
+                ));
+                let t1 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} {}, {} {}, 1\n",
+                    t1, poll_ret_ty, t0, poll_ctx.ret_llvm, ret_val
+                ));
+                ir.push_str("  store i64 -1, i64* %state_field\n");
+                ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t1));
+            } else {
+                let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
+                let t0 = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = insertvalue {} undef, i64 1, 0\n",
+                    t0, poll_ret_ty
+                ));
+                ir.push_str("  store i64 -1, i64* %state_field\n");
+                ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t0));
+            }
+            return Ok(("void".to_string(), ir));
+        }
+
         let mut ir = String::new();
 
         // Execute deferred expressions before return (LIFO order)

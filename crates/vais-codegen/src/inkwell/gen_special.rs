@@ -40,8 +40,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         format_str.push_str("%s");
                         args.push(val.into());
                     } else {
-                        format_str.push_str("%lld");
-                        args.push(val.into());
+                        // Struct or vector values cannot be passed to printf directly.
+                        // Emit a placeholder string instead of misinterpreting the bits.
+                        format_str.push_str("<struct>");
+                        // Do not push the value — no corresponding printf argument.
                     }
                 }
             }
@@ -463,15 +465,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                self.emit_defer_cleanup()?;
-                if ret_substituted == ResolvedType::Unit {
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    self.builder
-                        .build_return(Some(&body_value))
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Only build return if the current block doesn't already have a terminator
+                // (an explicit `R` inside the expr body may have already emitted one)
+                if self
+                    .builder
+                    .get_insert_block()
+                    .expect("ICE: no insert block during method expr-body generation")
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        self.builder
+                            .build_return(Some(&body_value))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
                 }
             }
             ast::FunctionBody::Block(stmts) => {

@@ -290,10 +290,25 @@ impl TypeChecker {
             }
             Pattern::Range { .. } => Ok(()), // Ranges don't bind variables
             Pattern::Or(patterns) => {
-                // For or patterns, all patterns must bind the same variables
-                // For now, just process the first one
+                // For or patterns, all alternatives must bind the same set of variables.
+                // Process the first alternative to establish bindings, then verify
+                // that subsequent alternatives bind the same variable names.
                 if let Some(first) = patterns.first() {
                     self.register_pattern_bindings(first, expr_type)?;
+
+                    // Collect variable names bound by the first alternative
+                    let first_bindings = Self::collect_or_pattern_var_names(&first.node);
+
+                    // Verify subsequent alternatives bind the same variables
+                    for alt in patterns.iter().skip(1) {
+                        let alt_bindings = Self::collect_or_pattern_var_names(&alt.node);
+                        if first_bindings != alt_bindings {
+                            self.warnings.push(format!(
+                                "or-pattern alternatives bind different variables: {:?} vs {:?}",
+                                first_bindings, alt_bindings
+                            ));
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -303,6 +318,56 @@ impl TypeChecker {
                 // Then bind variables from the inner pattern
                 self.register_pattern_bindings(pattern, expr_type)?;
                 Ok(())
+            }
+        }
+    }
+
+    /// Collect variable names bound by a pattern (without modifying scope).
+    /// Used to verify that or-pattern alternatives bind the same variables.
+    fn collect_or_pattern_var_names(pattern: &Pattern) -> std::collections::BTreeSet<String> {
+        let mut names = std::collections::BTreeSet::new();
+        Self::collect_or_pattern_var_names_rec(pattern, &mut names);
+        names
+    }
+
+    fn collect_or_pattern_var_names_rec(
+        pattern: &Pattern,
+        names: &mut std::collections::BTreeSet<String>,
+    ) {
+        match pattern {
+            Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } => {}
+            Pattern::Ident(name) => {
+                names.insert(name.clone());
+            }
+            Pattern::Tuple(patterns) => {
+                for pat in patterns {
+                    Self::collect_or_pattern_var_names_rec(&pat.node, names);
+                }
+            }
+            Pattern::Struct { fields, .. } => {
+                for (field_name, sub_pattern) in fields {
+                    if let Some(sub_pat) = sub_pattern {
+                        Self::collect_or_pattern_var_names_rec(&sub_pat.node, names);
+                    } else {
+                        // Shorthand: `Point { x, y }` binds x and y
+                        names.insert(field_name.node.clone());
+                    }
+                }
+            }
+            Pattern::Variant { fields, .. } => {
+                for field in fields {
+                    Self::collect_or_pattern_var_names_rec(&field.node, names);
+                }
+            }
+            Pattern::Or(patterns) => {
+                // For nested or-patterns, collect from the first alternative
+                if let Some(first) = patterns.first() {
+                    Self::collect_or_pattern_var_names_rec(&first.node, names);
+                }
+            }
+            Pattern::Alias { name, pattern } => {
+                names.insert(name.clone());
+                Self::collect_or_pattern_var_names_rec(&pattern.node, names);
             }
         }
     }

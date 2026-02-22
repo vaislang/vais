@@ -250,14 +250,149 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     pub(super) fn generate_try(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Try (?) operator - propagate error if Result/Option is error/None
-        // For now, just evaluate the inner expression
-        self.generate_expr(inner)
+        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok/Some, 1=Err/None (for Result)
+        // and tag 0=None, 1=Some (for Option)
+        let val = self.generate_expr(inner)?;
+
+        // If the value is not a struct (e.g. primitive), just return it as-is (no unwrapping needed)
+        if !val.is_struct_value() {
+            return Ok(val);
+        }
+
+        let struct_val = val.into_struct_value();
+        let struct_type = struct_val.get_type();
+
+        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        if struct_type.count_fields() != 2 {
+            return Ok(struct_val.into());
+        }
+
+        let fn_value = self.current_function.ok_or_else(|| {
+            crate::CodegenError::LlvmError("No current function for try operator".to_string())
+        })?;
+
+        // Extract tag (field 0)
+        let tag = self
+            .builder
+            .build_extract_value(struct_val, 0, "try_tag")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+
+        // Check if error: for Result, tag != 0 means Err; for Option, tag == 0 means None
+        // We use the Result convention (tag 0 = Ok/Some success path)
+        // Actually in this codebase: Ok tag=0, Some tag=1, None tag=0, Err tag=1
+        // So for both Result and Option, tag != 0 means error/None needs propagation
+        // Wait - Some is tag=1 and None is tag=0 for Option. That means for Option,
+        // tag==0 is the error case (None). For Result, tag!=0 (Err=1) is error.
+        // Since we can't easily distinguish at codegen level, we use Result convention:
+        // tag != 0 means error -> propagate. This is consistent with Ok=0, Err=1.
+        let is_error = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                tag,
+                tag.get_type().const_int(0, false),
+                "try_is_err",
+            )
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        let ok_block = self
+            .context
+            .append_basic_block(fn_value, "try_ok");
+        let err_block = self
+            .context
+            .append_basic_block(fn_value, "try_err");
+
+        self.builder
+            .build_conditional_branch(is_error, err_block, ok_block)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Error path: propagate by returning the same error struct
+        self.builder.position_at_end(err_block);
+        self.builder
+            .build_return(Some(&struct_val))
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Ok path: extract payload (field 1)
+        self.builder.position_at_end(ok_block);
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, "try_payload")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(payload)
     }
 
     pub(super) fn generate_unwrap(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         // Unwrap (!) operator - panic if Result/Option is error/None
-        // For now, just evaluate the inner expression
-        self.generate_expr(inner)
+        // Result/Optional layout: { i8 tag, i64 payload } where tag 0=Ok, 1=Err
+        let val = self.generate_expr(inner)?;
+
+        // If the value is not a struct, just return it as-is
+        if !val.is_struct_value() {
+            return Ok(val);
+        }
+
+        let struct_val = val.into_struct_value();
+        let struct_type = struct_val.get_type();
+
+        // Only handle { i8, i64 } shaped structs (Result/Optional)
+        if struct_type.count_fields() != 2 {
+            return Ok(struct_val.into());
+        }
+
+        let fn_value = self.current_function.ok_or_else(|| {
+            crate::CodegenError::LlvmError("No current function for unwrap operator".to_string())
+        })?;
+
+        // Extract tag (field 0)
+        let tag = self
+            .builder
+            .build_extract_value(struct_val, 0, "unwrap_tag")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+
+        // Check if error (tag != 0)
+        let is_error = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                tag,
+                tag.get_type().const_int(0, false),
+                "unwrap_is_err",
+            )
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        let ok_block = self
+            .context
+            .append_basic_block(fn_value, "unwrap_ok");
+        let panic_block = self
+            .context
+            .append_basic_block(fn_value, "unwrap_panic");
+
+        self.builder
+            .build_conditional_branch(is_error, panic_block, ok_block)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Panic path: call abort
+        self.builder.position_at_end(panic_block);
+        if let Some(abort_fn) = self.module.get_function("abort") {
+            self.builder
+                .build_call(abort_fn, &[], "")
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        }
+        self.builder
+            .build_unreachable()
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        // Ok path: extract payload (field 1)
+        self.builder.position_at_end(ok_block);
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, "unwrap_payload")
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+
+        Ok(payload)
     }
 
     // ========== Assignment ==========

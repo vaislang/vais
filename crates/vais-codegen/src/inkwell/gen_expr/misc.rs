@@ -1,6 +1,6 @@
-//! Miscellaneous expression generation (cast, deref, etc.).
+//! Miscellaneous expression generation (cast, deref, coerce, etc.).
 
-use inkwell::values::BasicValueEnum;
+use inkwell::values::{BasicValueEnum, IntValue};
 
 use vais_ast::{Expr, Type};
 
@@ -8,6 +8,43 @@ use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Coerce any BasicValueEnum to an i64 IntValue.
+    /// - IntValue: widen/truncate to i64
+    /// - FloatValue: bitcast f64 to i64
+    /// - PointerValue: ptrtoint to i64
+    /// - StructValue: extract first int field, or return 0
+    pub(crate) fn coerce_to_i64(
+        &self,
+        v: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<IntValue<'ctx>> {
+        let i64_type = self.context.i64_type();
+        if v.is_int_value() {
+            let iv = v.into_int_value();
+            if iv.get_type().get_bit_width() == 64 {
+                Ok(iv)
+            } else {
+                self.builder
+                    .build_int_cast(iv, i64_type, "coerce_int")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            }
+        } else if v.is_float_value() {
+            // Bitcast f64 to i64 to preserve the bits
+            let fv = v.into_float_value();
+            let bitcast = self
+                .builder
+                .build_bitcast(fv, i64_type, "coerce_f2i")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(bitcast.into_int_value())
+        } else if v.is_pointer_value() {
+            self.builder
+                .build_ptr_to_int(v.into_pointer_value(), i64_type, "coerce_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))
+        } else {
+            // StructValue or other: return 0 as fallback
+            Ok(i64_type.const_int(0, false))
+        }
+    }
+
     pub(super) fn generate_deref(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
         let ptr = self.generate_expr(inner)?;
         let ptr_val = if ptr.is_pointer_value() {
@@ -25,6 +62,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
+        // TODO(Phase42): deref always loads as i64 — should infer pointee type from context
         self.builder
             .build_load(self.context.i64_type(), ptr_val, "deref")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))

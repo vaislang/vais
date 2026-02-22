@@ -88,7 +88,8 @@ pub use error::{CodegenError, CodegenResult};
 // Re-export state types
 pub use state::DecreasesInfo;
 pub(crate) use state::{
-    ContractState, FunctionContext, GenericState, LambdaState, StringPool, TypeRegistry,
+    AsyncPollContext, ContractState, FunctionContext, GenericState, LambdaState, StringPool,
+    TypeRegistry,
 };
 
 use std::collections::HashMap;

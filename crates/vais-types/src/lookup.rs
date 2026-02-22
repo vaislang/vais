@@ -191,6 +191,34 @@ impl TypeChecker {
         })
     }
 
+    /// Look up a method in a trait definition, walking super traits if not found directly.
+    /// Uses a visited set to prevent infinite recursion on cyclic super-trait declarations.
+    fn find_method_in_trait_with_supers(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<TraitMethodSig> {
+        if !visited.insert(trait_name.to_string()) {
+            return None; // Cycle detected
+        }
+        if let Some(trait_def) = self.traits.get(trait_name) {
+            // Check direct methods first
+            if let Some(method_sig) = trait_def.methods.get(method_name) {
+                return Some(method_sig.clone());
+            }
+            // Walk super traits
+            for super_trait in &trait_def.super_traits {
+                if let Some(method_sig) =
+                    self.find_method_in_trait_with_supers(super_trait, method_name, visited)
+                {
+                    return Some(method_sig);
+                }
+            }
+        }
+        None
+    }
+
     /// Find a method from trait implementations for a given type
     pub(crate) fn find_trait_method(
         &self,
@@ -210,28 +238,30 @@ impl TypeChecker {
             _ => None,
         };
         if let Some(trait_name) = dyn_trait {
-            if let Some(trait_def) = self.traits.get(&trait_name) {
-                return trait_def.methods.get(method_name).cloned();
-            }
-            return None;
+            let mut visited = std::collections::HashSet::new();
+            return self.find_method_in_trait_with_supers(&trait_name, method_name, &mut visited);
         }
 
         // Handle generic types with bounds from where clauses
         if let ResolvedType::Generic(type_param) = receiver_type {
             if let Some(bounds) = self.current_generic_bounds.get(type_param) {
                 for bound_trait in bounds {
-                    if let Some(trait_def) = self.traits.get(bound_trait) {
-                        if let Some(method_sig) = trait_def.methods.get(method_name) {
-                            return Some(method_sig.clone());
-                        }
+                    let mut visited = std::collections::HashSet::new();
+                    if let Some(method_sig) =
+                        self.find_method_in_trait_with_supers(bound_trait, method_name, &mut visited)
+                    {
+                        return Some(method_sig);
                     }
                     // Also check trait aliases
                     if let Some(alias_bounds) = self.trait_aliases.get(bound_trait.as_str()) {
                         for alias_trait in alias_bounds {
-                            if let Some(trait_def) = self.traits.get(alias_trait) {
-                                if let Some(method_sig) = trait_def.methods.get(method_name) {
-                                    return Some(method_sig.clone());
-                                }
+                            let mut visited = std::collections::HashSet::new();
+                            if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                                alias_trait,
+                                method_name,
+                                &mut visited,
+                            ) {
+                                return Some(method_sig);
                             }
                         }
                     }
@@ -249,10 +279,13 @@ impl TypeChecker {
         for trait_impl in &self.trait_impls {
             if trait_impl.type_name == type_name {
                 // Found an implementation of a trait for this type
-                if let Some(trait_def) = self.traits.get(&trait_impl.trait_name) {
-                    if let Some(method_sig) = trait_def.methods.get(method_name) {
-                        return Some(method_sig.clone());
-                    }
+                let mut visited = std::collections::HashSet::new();
+                if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                    &trait_impl.trait_name,
+                    method_name,
+                    &mut visited,
+                ) {
+                    return Some(method_sig);
                 }
             }
         }
@@ -263,6 +296,17 @@ impl TypeChecker {
     /// Get the Item type from an Iterator trait implementation
     /// Returns the element type that the iterator yields
     pub(crate) fn get_iterator_item_type(&self, iter_type: &ResolvedType) -> Option<ResolvedType> {
+        let mut visited = std::collections::HashSet::new();
+        self.get_iterator_item_type_inner(iter_type, &mut visited)
+    }
+
+    /// Inner implementation with visited set to prevent infinite recursion
+    /// when `into_iter()` returns the same type (or a cycle of types).
+    fn get_iterator_item_type_inner(
+        &self,
+        iter_type: &ResolvedType,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<ResolvedType> {
         // Handle built-in iterable types
         match iter_type {
             ResolvedType::Array(elem_type) => return Some((**elem_type).clone()),
@@ -275,6 +319,11 @@ impl TypeChecker {
             ResolvedType::Named { name, .. } => name,
             _ => return None,
         };
+
+        // Prevent infinite recursion: if we've already visited this type, bail out
+        if !visited.insert(type_name.clone()) {
+            return None;
+        }
 
         // Look for Iterator trait implementation
         for trait_impl in &self.trait_impls {
@@ -306,8 +355,8 @@ impl TypeChecker {
                 if let Some(struct_def) = self.structs.get(type_name) {
                     if let Some(into_iter_method) = struct_def.methods.get("into_iter") {
                         let iterator_type = &into_iter_method.ret;
-                        // Recursively get the item type from the iterator
-                        return self.get_iterator_item_type(iterator_type);
+                        // Recursively get the item type from the iterator (with cycle detection)
+                        return self.get_iterator_item_type_inner(iterator_type, visited);
                     }
                 }
 

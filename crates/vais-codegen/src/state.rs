@@ -75,6 +75,15 @@ pub(crate) struct FunctionContext {
     pub(crate) current_block: String,
     /// Current source file being compiled (for contract error messages)
     pub(crate) current_file: Option<String>,
+    /// Maps variable names bound to futures → the poll function name to call on await.
+    /// Populated when `let x := spawn asyncFn(...)` is processed, so that
+    /// `x.await` can resolve the correct poll function instead of falling back
+    /// to `__sync_spawn__poll`.
+    pub(crate) future_poll_fns: HashMap<String, String>,
+    /// Set to Some when inside an async poll function body.
+    /// Contains (state_struct_name, ret_llvm_type, state_field_ptr)
+    /// so that Return statements can properly wrap results.
+    pub(crate) async_poll_context: Option<AsyncPollContext>,
 }
 
 /// Lambda, closure, and async function state
@@ -118,6 +127,14 @@ pub(crate) struct ContractState {
     pub(crate) old_snapshots: HashMap<String, String>,
     /// Decreases expressions for current function (for termination proof)
     pub(crate) current_decreases_info: Option<DecreasesInfo>,
+}
+
+/// Context information when generating code inside an async poll function.
+/// Allows Return statements to properly wrap values as poll results.
+#[derive(Clone)]
+pub struct AsyncPollContext {
+    /// The LLVM return type string (e.g., "i64", "i1")
+    pub ret_llvm: String,
 }
 
 /// Information about a function's decreases clause for termination proof

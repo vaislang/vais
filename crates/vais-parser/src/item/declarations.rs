@@ -79,13 +79,20 @@ impl Parser {
             // Check for attributes or function/pub keywords
             let start = self.current_span().start;
             let method_attrs = self.parse_attributes()?;
-            if self.check(&Token::Function) || self.check(&Token::Pub) || !method_attrs.is_empty() {
+            if self.check(&Token::Function) || self.check(&Token::Pub) || self.check(&Token::Async) || !method_attrs.is_empty() {
                 let is_method_pub = self.check(&Token::Pub);
                 if is_method_pub {
                     self.advance();
                 }
+                // Check for async method: `A F method_name(...)`
+                let is_method_async = if self.check(&Token::Async) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
                 self.expect(&Token::Function)?;
-                let method = self.parse_function(is_method_pub, false, method_attrs)?;
+                let method = self.parse_function(is_method_pub, is_method_async, method_attrs)?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(method, Span::new(start, end)));
             } else {
@@ -212,6 +219,7 @@ impl Parser {
                 self.advance(); // consume ident
                 let has_plus = self.check(&Token::Plus);
                 self.pos = saved_pos; // restore
+                self.pending_gt = false;
                 has_plus
             } else {
                 false

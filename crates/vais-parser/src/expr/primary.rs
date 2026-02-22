@@ -257,11 +257,13 @@ impl Parser {
                         } else {
                             // Not a map literal, restore position and parse as block
                             self.pos = saved_pos;
+                            self.pending_gt = false;
                             self.errors.truncate(saved_errors_len);
                         }
                     } else {
                         // Not a map literal, restore position and parse as block
                         self.pos = saved_pos;
+                        self.pending_gt = false;
                         self.errors.truncate(saved_errors_len);
                     }
                 }
@@ -492,6 +494,7 @@ impl Parser {
         // This is a while loop: `L condition { ... }`
         // Reset position and parse as expression
         self.pos = saved_pos;
+        self.pending_gt = false;
 
         // Disable struct literals in condition to avoid ambiguity with block start
         // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
@@ -516,7 +519,12 @@ impl Parser {
 
     /// Parse match expression: `M expr{arms}`
     pub(crate) fn parse_match_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        // Disable struct literals in scrutinee to avoid ambiguity:
+        // `M Foo { x => ... }` would otherwise parse `Foo {` as a struct literal.
+        let old_allow_struct_literal = self.allow_struct_literal;
+        self.allow_struct_literal = false;
         let expr = self.parse_expr()?;
+        self.allow_struct_literal = old_allow_struct_literal;
         self.expect(&Token::LBrace)?;
 
         let mut arms = Vec::new();
@@ -669,6 +677,22 @@ impl Parser {
                     } else {
                         Pattern::Ident(name)
                     }
+                }
+                Token::Minus => {
+                    self.advance();
+                    let span = self.current_span();
+                    let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
+                    let n = if let Token::Int(n) = tok.token {
+                        n
+                    } else {
+                        self.exit_depth();
+                        return Err(ParseError::UnexpectedToken {
+                            found: tok.token,
+                            span: tok.span,
+                            expected: "integer literal after '-' in pattern".into(),
+                        });
+                    };
+                    Pattern::Literal(Literal::Int(-n))
                 }
                 Token::Int(n) => {
                     let n = *n;

@@ -57,6 +57,8 @@ impl CodeGenerator {
                 defer_stack: Vec::new(),
                 current_block: "entry".to_string(),
                 current_file: None,
+                future_poll_fns: HashMap::new(),
+                async_poll_context: None,
             },
             strings: StringPool {
                 constants: Vec::new(),
