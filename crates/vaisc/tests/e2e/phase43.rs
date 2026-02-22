@@ -12,8 +12,8 @@ use super::helpers::*;
 
 #[test]
 fn e2e_phase43_spawn_async_preserves_future() {
-    // spawn on async call, then await via variable — variable-based await uses fallback poll
-    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
+    // NOTE: async codegen state machine issue — poll function is correctly resolved
+    // but async create/poll codegen produces wrong runtime result (exit 214)
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -30,7 +30,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_await_chain() {
-    // NOTE: async spawn+await hangs — poll loop issue with spawn passthrough
+    // spawn on async call, await immediately — spawn passthrough for async calls
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -41,7 +41,7 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -82,7 +82,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_in_variable() {
-    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
+    // NOTE: async codegen state machine issue — poll function is correctly resolved
+    // but async create/poll codegen produces wrong runtime result (exit 214)
     let source = r#"
 A F compute(x: i64) -> i64 {
     x + 10
@@ -99,7 +100,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_multiple() {
-    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
+    // NOTE: async codegen state machine issue — poll function is correctly resolved
+    // but async create/poll codegen produces wrong runtime result (exit 214)
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -135,8 +137,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_yield_returns_inner_type_bool() {
-    // Yield returns inner_type (bool)
-    // NOTE: clang fails — ICE: await on non-Future type `bool`
+    // Yield returns inner_type (bool) — async bool return with dynamic poll return type
     let source = r#"
 A F check() -> bool {
     yield true
@@ -147,7 +148,7 @@ F main() -> i64 {
     I result { R 0 } E { R 1 }
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -223,7 +224,8 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_spawns() {
-    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
+    // NOTE: async codegen state machine issue — poll function is correctly resolved
+    // but async create/poll codegen produces wrong runtime result (exit 214)
     let source = r#"
 A F task(x: i64) -> i64 {
     x * 2
@@ -284,7 +286,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_with_if() {
-    // NOTE: clang fails — async early return codegen issue
+    // Async function with early return via if/else — AsyncPollContext wraps return values
     let source = r#"
 A F conditional(x: i64) -> i64 {
     I x > 0 {
@@ -299,7 +301,7 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -319,7 +321,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_yields() {
-    // NOTE: clang fails — async generator with yield+return codegen issue
+    // Async generator with yield in loop + final return
     let source = r#"
 A F generator(n: i64) -> i64 {
     L i:0..n {
@@ -333,12 +335,12 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_with_expression() {
-    // NOTE: async spawn+await hangs — poll loop issue with spawn passthrough
+    // Spawn on async call, immediate await expression — spawn passthrough
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -349,12 +351,12 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_async_return_early() {
-    // NOTE: clang fails — async early return + yield codegen issue
+    // Async function with early return + yield — AsyncPollContext handles both paths
     let source = r#"
 A F check(x: i64) -> i64 {
     I x < 0 {
@@ -368,13 +370,12 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_nested_spawn_await() {
-    // NOTE: inner function uses variable-based future await (f := spawn; f.await)
-    // which cannot derive correct poll function from syntax alone
+    // Nested async: outer spawns inner, variable-based await — future_poll_fns tracking
     let source = r#"
 A F inner(x: i64) -> i64 {
     x + 10
@@ -390,12 +391,13 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_sequential_await() {
-    // NOTE: variable-based future await cannot derive correct poll function from syntax alone
+    // NOTE: async codegen state machine issue — poll function is correctly resolved
+    // but async create/poll codegen produces wrong runtime result
     let source = r#"
 A F task(x: i64) -> i64 {
     x + 1

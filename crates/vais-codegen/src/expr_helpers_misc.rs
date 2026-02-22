@@ -8,6 +8,86 @@ use vais_ast::{Expr, Param, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    /// Extract the poll function name from an expression AST node (static analysis).
+    /// Used for direct await codegen. For Let bindings that involve Spawn,
+    /// prefer resolve_poll_func_name which can check is_async on the inner call.
+    #[allow(dead_code)]
+    pub(crate) fn extract_poll_func_name_from_expr(expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(name) = &func.node {
+                    Some(format!("{}__poll", name))
+                } else {
+                    None
+                }
+            }
+            Expr::MethodCall { method, .. } => Some(format!("{}__poll", method.node)),
+            Expr::Spawn(_) => {
+                // Spawn requires runtime is_async check (via self.types.functions),
+                // which static analysis cannot provide. Return None here;
+                // callers with &self access should use resolve_poll_func_name instead.
+                None
+            }
+            Expr::SelfCall => {
+                // @ operator — self-recursion calls the current function
+                None // caller must resolve from current_async_function
+            }
+            _ => None,
+        }
+    }
+
+    /// Resolve the poll function name for an await expression, using `self` to
+    /// check whether the called function is actually async. This is critical for
+    /// Spawn expressions: if the inner call targets a non-async function, Spawn
+    /// codegen wraps the result in a sync wrapper struct and we must use
+    /// `__sync_spawn__poll` (not the inner function's `__poll`).
+    pub(crate) fn resolve_poll_func_name(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(name) = &func.node {
+                    Some(format!("{}__poll", name))
+                } else if let Expr::SelfCall = &func.node {
+                    // @(args) — self-recursive call to current function
+                    self.fn_ctx
+                        .current_function
+                        .as_ref()
+                        .map(|fn_name| {
+                            // current_function inside async poll is "name__poll",
+                            // but the base name is what we need for the poll function
+                            let base = fn_name.trim_end_matches("__poll");
+                            format!("{}__poll", base)
+                        })
+                } else {
+                    None
+                }
+            }
+            Expr::MethodCall { method, .. } => Some(format!("{}__poll", method.node)),
+            Expr::Spawn(inner) => {
+                // Check whether the inner call is to an async function.
+                // This must mirror generate_expr(Spawn)'s passthrough condition:
+                // async calls produce a Future and are passed through, so we use
+                // the inner function's __poll. Non-async calls get wrapped in a
+                // sync struct, so we must use __sync_spawn__poll.
+                if let Expr::Call { func, .. } = &inner.node {
+                    if let Expr::Ident(name) = &func.node {
+                        let is_async = self
+                            .types
+                            .functions
+                            .get(name.as_str())
+                            .is_some_and(|info| info.signature.is_async);
+                        if is_async {
+                            return Some(format!("{}__poll", name));
+                        }
+                    }
+                }
+                // For non-async or non-Call inner, Spawn creates a sync wrapper
+                Some("__sync_spawn__poll".to_string())
+            }
+            Expr::SelfCall => None,
+            _ => None,
+        }
+    }
+
     pub(crate) fn generate_await_expr(
         &mut self,
         inner: &Spanned<Expr>,
@@ -16,39 +96,59 @@ impl CodeGenerator {
         let (future_ptr, future_ir) = self.generate_expr(inner, counter)?;
         let mut ir = future_ir;
 
-        fn get_poll_func_name(expr: &Expr) -> String {
-            match expr {
-                Expr::Call { func, .. } => {
-                    if let Expr::Ident(name) = &func.node {
-                        format!("{}__poll", name)
-                    } else {
-                        "__sync_spawn__poll".to_string()
-                    }
-                }
-                Expr::MethodCall { method, .. } => {
-                    format!("{}__poll", method.node)
-                }
-                Expr::Spawn(inner) => {
-                    // If inner is an async call, recurse to get the poll function name.
-                    // Otherwise (sync spawn), use the generic sync poll function.
-                    let inner_name = get_poll_func_name(&inner.node);
-                    if inner_name == "__sync_spawn__poll" {
-                        // Inner is a sync expression — use the generic immediate-ready poll
-                        "__sync_spawn__poll".to_string()
-                    } else {
-                        // Inner is an async call — use its poll function
-                        inner_name
-                    }
-                }
-                _ => "__sync_spawn__poll".to_string(),
-            }
-        }
-        let poll_func = get_poll_func_name(&inner.node);
+        // Determine the poll function to call:
+        // 1. Try static AST analysis (direct call/spawn expressions)
+        // 2. For Ident expressions, look up in future_poll_fns (variable-based await)
+        // 3. Fall back to __sync_spawn__poll
+        //
+        // IMPORTANT: For Spawn(Call{fn}) expressions, the poll function must match
+        // the pointer layout that Spawn codegen produced. Spawn codegen checks
+        // is_async on the called function to decide between passthrough (async state
+        // ptr → fn__poll) and sync wrapper ({state=-1, result} → __sync_spawn__poll).
+        // extract_poll_func_name_from_expr must use the same is_async check to stay
+        // consistent; otherwise we may call fn__poll with a sync wrapper pointer,
+        // causing an infinite loop (state=-1 doesn't match any valid poll state).
+        let poll_func = if let Some(name) = self.resolve_poll_func_name(&inner.node) {
+            name
+        } else if let Expr::Ident(var_name) = &inner.node {
+            // Variable-based await: look up the recorded poll function
+            self.fn_ctx
+                .future_poll_fns
+                .get(var_name)
+                .cloned()
+                .unwrap_or_else(|| "__sync_spawn__poll".to_string())
+        } else {
+            "__sync_spawn__poll".to_string()
+        };
 
         // Ensure the __sync_spawn__poll function is emitted if referenced
         if poll_func == "__sync_spawn__poll" {
             self.needs_sync_spawn_poll = true;
         }
+
+        // Determine the poll result type: { i64 status, <ret_llvm> value }
+        // For async functions, the poll function returns the function's actual return type.
+        // For __sync_spawn__poll, it always returns { i64, i64 }.
+        let inner_ret_llvm = if poll_func == "__sync_spawn__poll" {
+            "i64".to_string()
+        } else {
+            // Extract the async function name from the poll function name
+            let async_fn_name = poll_func.trim_end_matches("__poll");
+            // Look up the function's return type in the registry
+            self.types
+                .functions
+                .get(async_fn_name)
+                .map(|info| self.type_to_llvm(&info.signature.ret))
+                .unwrap_or_else(|| {
+                    // Also check resolved_function_sigs from the type checker
+                    self.types
+                        .resolved_function_sigs
+                        .get(async_fn_name)
+                        .map(|sig| self.type_to_llvm(&sig.ret))
+                        .unwrap_or_else(|| "i64".to_string())
+                })
+        };
+        let poll_ret_ty = format!("{{ i64, {} }}", inner_ret_llvm);
 
         let poll_start = self.next_label("await_poll");
         let poll_ready = self.next_label("await_ready");
@@ -59,14 +159,14 @@ impl CodeGenerator {
 
         let poll_result = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = call {{ i64, i64 }} @{}(i64 {})\n",
-            poll_result, poll_func, future_ptr
+            "  {} = call {} @{}(i64 {})\n",
+            poll_result, poll_ret_ty, poll_func, future_ptr
         ));
 
         let status = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = extractvalue {{ i64, i64 }} {}, 0\n",
-            status, poll_result
+            "  {} = extractvalue {} {}, 0\n",
+            status, poll_ret_ty, poll_result
         ));
 
         let is_ready = self.next_temp(counter);
@@ -84,8 +184,8 @@ impl CodeGenerator {
         ir.push_str(&format!("{}:\n", poll_ready));
         let result = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = extractvalue {{ i64, i64 }} {}, 1\n",
-            result, poll_result
+            "  {} = extractvalue {} {}, 1\n",
+            result, poll_ret_ty, poll_result
         ));
 
         Ok((result, ir))
@@ -206,110 +306,144 @@ impl CodeGenerator {
         }
     }
 
-    /// Generate try expression
+    /// Generate try expression — delegates to the canonical aggregate extractvalue implementation
     pub(crate) fn generate_try_expr(
         &mut self,
         inner: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        let inner_type = self.infer_expr_type(inner);
+        let llvm_type = self.type_to_llvm(&inner_type);
+
         let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
         let mut ir = inner_ir;
 
-        let _tag_tmp = self.next_temp(counter);
-        let result_ptr = self.next_temp(counter);
-        let tag_ptr = self.next_temp(counter);
+        ir.push_str("  ; Try expression (?)\n");
+
+        // Determine the tag type based on the inner type:
+        // - Optional/Result use i8 tag: { i8, T }
+        // - User-defined enums use i32 tag: { i32, { T } }
+        let (tag_type, extract_payload) = match &inner_type {
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
+                ("i8", false)
+            }
+            _ => {
+                ("i32", true)
+            }
+        };
+
+        // Extract tag (field 0)
         let tag = self.next_temp(counter);
-
-        ir.push_str("  ; Try expression\n");
         ir.push_str(&format!(
-            "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
-            result_ptr, inner_val
+            "  {} = extractvalue {} {}, 0\n",
+            tag, llvm_type, inner_val
         ));
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n",
-            tag_ptr, result_ptr
-        ));
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));
 
+        // Check if Err (tag != 0)
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("try_err");
         let ok_label = self.next_label("try_ok");
         let merge_label = self.next_label("try_merge");
 
-        ir.push_str(&format!("  {} = icmp eq i64 {}, 1\n", is_err, tag));
+        ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
         ir.push_str(&format!(
             "  br i1 {}, label %{}, label %{}\n\n",
             is_err, err_label, ok_label
         ));
 
+        // Err branch: early return
         ir.push_str(&format!("{}:\n", err_label));
         ir.push_str(&format!(
-            "  ret i64 {}  ; early return on Err\n\n",
-            inner_val
+            "  ret {} {}  ; early return on Err\n\n",
+            llvm_type, inner_val
         ));
 
+        // Ok branch: extract payload value
         ir.push_str(&format!("{}:\n", ok_label));
-        let value_ptr = self.next_temp(counter);
         let value = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
-            value_ptr, result_ptr
-        ));
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", value, value_ptr));
+        if extract_payload {
+            ir.push_str(&format!(
+                "  {} = extractvalue {} {}, 1, 0\n",
+                value, llvm_type, inner_val
+            ));
+        } else {
+            ir.push_str(&format!(
+                "  {} = extractvalue {} {}, 1\n",
+                value, llvm_type, inner_val
+            ));
+        }
         ir.push_str(&format!("  br label %{}\n\n", merge_label));
 
+        // Merge block
         ir.push_str(&format!("{}:\n", merge_label));
 
         Ok((value, ir))
     }
 
-    /// Generate unwrap expression
+    /// Generate unwrap expression — delegates to the canonical aggregate extractvalue implementation
     pub(crate) fn generate_unwrap_expr(
         &mut self,
         inner: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        let inner_type = self.infer_expr_type(inner);
+        let llvm_type = self.type_to_llvm(&inner_type);
+
         let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
         let mut ir = inner_ir;
 
-        let result_ptr = self.next_temp(counter);
-        let tag_ptr = self.next_temp(counter);
-        let tag = self.next_temp(counter);
-
         ir.push_str("  ; Unwrap expression\n");
-        ir.push_str(&format!(
-            "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
-            result_ptr, inner_val
-        ));
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n",
-            tag_ptr, result_ptr
-        ));
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));
 
+        // Determine the tag type based on the inner type:
+        // - Optional/Result use i8 tag: { i8, T }
+        // - User-defined enums use i32 tag: { i32, { T } }
+        let (tag_type, extract_payload) = match &inner_type {
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
+                ("i8", false)
+            }
+            _ => {
+                ("i32", true)
+            }
+        };
+
+        // Extract tag (field 0)
+        let tag = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = extractvalue {} {}, 0\n",
+            tag, llvm_type, inner_val
+        ));
+
+        // Check if Err/None (tag != 0)
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("unwrap_err");
         let ok_label = self.next_label("unwrap_ok");
 
-        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", is_err, tag));
+        ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
         ir.push_str(&format!(
             "  br i1 {}, label %{}, label %{}\n\n",
             is_err, err_label, ok_label
         ));
 
+        // Err branch: panic/abort
         ir.push_str(&format!("{}:\n", err_label));
-        ir.push_str("  call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.unwrap_panic_msg, i64 0, i64 0))\n");
+        ir.push_str("  call i32 @puts(ptr getelementptr ([22 x i8], ptr @.unwrap_panic_msg, i64 0, i64 0))\n");
         ir.push_str("  call void @abort()\n");
         ir.push_str("  unreachable\n\n");
 
+        // Ok branch: extract value
         ir.push_str(&format!("{}:\n", ok_label));
-        let value_ptr = self.next_temp(counter);
         let value = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
-            value_ptr, result_ptr
-        ));
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", value, value_ptr));
+        if extract_payload {
+            ir.push_str(&format!(
+                "  {} = extractvalue {} {}, 1, 0\n",
+                value, llvm_type, inner_val
+            ));
+        } else {
+            ir.push_str(&format!(
+                "  {} = extractvalue {} {}, 1\n",
+                value, llvm_type, inner_val
+            ));
+        }
 
         self.needs_unwrap_panic = true;
 

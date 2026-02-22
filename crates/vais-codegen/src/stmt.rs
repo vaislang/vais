@@ -186,6 +186,22 @@ impl CodeGenerator {
                         .insert(name.node.clone(), lazy_info);
                 }
 
+                // Track future→poll function mapping for variable-based await.
+                // When `fut := spawn asyncFn(...)` or `fut := asyncFn(...)`,
+                // record the poll function so `fut.await` can resolve it.
+                if matches!(
+                    inferred_ty,
+                    ResolvedType::Future(_) | ResolvedType::I64
+                ) {
+                    if let Some(poll_fn) =
+                        self.resolve_poll_func_name(&value.node)
+                    {
+                        self.fn_ctx
+                            .future_poll_fns
+                            .insert(name.node.clone(), poll_fn);
+                    }
+                }
+
                 Ok(("void".to_string(), ir))
             }
             Stmt::LetDestructure {
@@ -196,6 +212,61 @@ impl CodeGenerator {
             } => self.generate_let_destructure(pattern, value, *is_mut, counter),
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
+                // Check if we're inside an async poll function — if so, early returns
+                // must wrap the value as a poll result {1, value} and return the poll type.
+                if let Some(poll_ctx) = self.fn_ctx.async_poll_context.clone() {
+                    if let Some(expr) = expr {
+                        let (val, mut ir) = self.generate_expr(expr, counter)?;
+
+                        // Execute deferred expressions before return (LIFO order)
+                        let defer_ir = self.generate_defer_cleanup(counter)?;
+                        ir.push_str(&defer_ir);
+
+                        // Codegen promotes bool to i64 (zext), truncate back for i1 return
+                        let ret_val = if poll_ctx.ret_llvm == "i1" {
+                            let trunc = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = trunc i64 {} to i1\n",
+                                trunc, val
+                            ));
+                            trunc
+                        } else {
+                            val.clone()
+                        };
+
+                        // Store result in state struct and set state to -1 (completed)
+                        let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
+                        let t0 = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = insertvalue {} undef, i64 1, 0\n",
+                            t0, poll_ret_ty
+                        ));
+                        let t1 = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = insertvalue {} {}, {} {}, 1\n",
+                            t1, poll_ret_ty, t0, poll_ctx.ret_llvm, ret_val
+                        ));
+                        // Set state to -1 (completed)
+                        ir.push_str("  store i64 -1, i64* %state_field\n");
+                        ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t1));
+                        return Ok((val, ir));
+                    } else {
+                        // Return void in async poll — return {1, undef}
+                        let mut ir = String::new();
+                        let defer_ir = self.generate_defer_cleanup(counter)?;
+                        ir.push_str(&defer_ir);
+                        let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
+                        let t0 = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = insertvalue {} undef, i64 1, 0\n",
+                            t0, poll_ret_ty
+                        ));
+                        ir.push_str("  store i64 -1, i64* %state_field\n");
+                        ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t0));
+                        return Ok(("void".to_string(), ir));
+                    }
+                }
+
                 if let Some(expr) = expr {
                     let (val, mut ir) = self.generate_expr(expr, counter)?;
 
