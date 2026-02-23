@@ -539,11 +539,13 @@ impl CodeGenerator {
                         self.generics
                             .struct_defs
                             .insert(s.name.node.clone(), std::rc::Rc::new(s.clone()));
-                    } else {
-                        self.register_struct(s)?;
-                        for method in &s.methods {
-                            self.register_method(&s.name.node, &method.node)?;
-                        }
+                    }
+                    // Always register the struct (including generic ones) so that
+                    // struct literals using the base name can find it. For generic
+                    // structs, unresolved type params fall back to i64.
+                    self.register_struct(s)?;
+                    for method in &s.methods {
+                        self.register_method(&s.name.node, &method.node)?;
                     }
                 }
                 Item::Enum(e) => self.register_enum(e)?,
@@ -839,13 +841,12 @@ impl CodeGenerator {
                         body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                         body_ir.push('\n');
                     } else if !self.generics.fn_instantiations.contains_key(&f.name.node)
-                        && !self
-                            .generics
-                            .generated_functions
-                            .contains_key(&f.name.node)
+                        && !self.generics.generated_functions.contains_key(&f.name.node)
+                        && is_function_called_in_module(&f.name.node, module)
                     {
-                        // Generic function with no concrete instantiation — generate as fallback
-                        // (same as generate_module() would do: register and generate without specialization)
+                        // Generic function with no concrete instantiation but IS called
+                        // from within another function (e.g., identity<T> called from
+                        // double<T>). Generate a fallback version with i64.
                         if let Ok(()) = self.register_function(f) {
                             if let Ok(fn_ir) = self.generate_function_with_span(f, item.span) {
                                 body_ir.push_str(&fn_ir);
@@ -938,4 +939,152 @@ impl CodeGenerator {
 
         Ok(ir)
     }
+}
+
+/// Check whether a function with the given name is called anywhere in the module
+/// (excluding its own definition). This is used to determine whether an uninstantiated
+/// generic function needs a fallback version -- if no other function calls it, it can
+/// be safely omitted.
+fn is_function_called_in_module(name: &str, module: &Module) -> bool {
+    fn expr_calls(name: &str, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call { func, args } => {
+                if let Expr::Ident(n) = &func.node {
+                    if n == name {
+                        return true;
+                    }
+                }
+                if expr_calls(name, &func.node) {
+                    return true;
+                }
+                args.iter().any(|a| expr_calls(name, &a.node))
+            }
+            Expr::Block(stmts) => stmts.iter().any(|s| stmt_calls(name, &s.node)),
+            Expr::If { cond, then, else_ } => {
+                expr_calls(name, &cond.node)
+                    || then.iter().any(|s| stmt_calls(name, &s.node))
+                    || else_
+                        .as_ref()
+                        .map(|e| ifelse_calls(name, e))
+                        .unwrap_or(false)
+            }
+            Expr::Binary { left, right, .. } => {
+                expr_calls(name, &left.node) || expr_calls(name, &right.node)
+            }
+            Expr::Unary { expr: inner, .. } => expr_calls(name, &inner.node),
+            Expr::MethodCall { receiver, args, .. } => {
+                expr_calls(name, &receiver.node)
+                    || args.iter().any(|a| expr_calls(name, &a.node))
+            }
+            Expr::StaticMethodCall { args, .. } => {
+                args.iter().any(|a| expr_calls(name, &a.node))
+            }
+            Expr::Field { expr: inner, .. } => expr_calls(name, &inner.node),
+            Expr::Index { expr: inner, index } => {
+                expr_calls(name, &inner.node) || expr_calls(name, &index.node)
+            }
+            Expr::Ref(inner) | Expr::Deref(inner) | Expr::Try(inner) | Expr::Unwrap(inner)
+            | Expr::Await(inner) | Expr::Spawn(inner) | Expr::Yield(inner) => {
+                expr_calls(name, &inner.node)
+            }
+            Expr::Assign { target, value } | Expr::AssignOp { target, value, .. } => {
+                expr_calls(name, &target.node) || expr_calls(name, &value.node)
+            }
+            Expr::Range { start, end, .. } => {
+                start.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
+                    || end.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
+            }
+            Expr::Match { expr: scrutinee, arms } => {
+                expr_calls(name, &scrutinee.node)
+                    || arms.iter().any(|arm| expr_calls(name, &arm.body.node))
+            }
+            Expr::Lambda { body, .. } => expr_calls(name, &body.node),
+            Expr::Ternary { cond, then, else_ } => {
+                expr_calls(name, &cond.node)
+                    || expr_calls(name, &then.node)
+                    || expr_calls(name, &else_.node)
+            }
+            Expr::Array(elems) | Expr::Tuple(elems) => {
+                elems.iter().any(|e| expr_calls(name, &e.node))
+            }
+            Expr::StructLit { fields, .. } => {
+                fields.iter().any(|(_, e)| expr_calls(name, &e.node))
+            }
+            Expr::Cast { expr: inner, .. } | Expr::Comptime { body: inner } => {
+                expr_calls(name, &inner.node)
+            }
+            Expr::Loop { iter, body, .. } => {
+                iter.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
+                    || body.iter().any(|s| stmt_calls(name, &s.node))
+            }
+            Expr::While { condition, body } => {
+                expr_calls(name, &condition.node)
+                    || body.iter().any(|s| stmt_calls(name, &s.node))
+            }
+            _ => false,
+        }
+    }
+
+    fn ifelse_calls(name: &str, ie: &IfElse) -> bool {
+        match ie {
+            IfElse::Else(stmts) => stmts.iter().any(|s| stmt_calls(name, &s.node)),
+            IfElse::ElseIf(cond, then_stmts, else_opt) => {
+                expr_calls(name, &cond.node)
+                    || then_stmts.iter().any(|s| stmt_calls(name, &s.node))
+                    || else_opt
+                        .as_ref()
+                        .map(|e| ifelse_calls(name, e))
+                        .unwrap_or(false)
+            }
+        }
+    }
+
+    fn stmt_calls(name: &str, stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(e) => expr_calls(name, &e.node),
+            Stmt::Let { value, .. } => expr_calls(name, &value.node),
+            Stmt::LetDestructure { value, .. } => expr_calls(name, &value.node),
+            Stmt::Return(Some(e)) | Stmt::Break(Some(e)) | Stmt::Defer(e) => {
+                expr_calls(name, &e.node)
+            }
+            _ => false,
+        }
+    }
+
+    fn body_calls(name: &str, body: &FunctionBody) -> bool {
+        match body {
+            FunctionBody::Expr(e) => expr_calls(name, &e.node),
+            FunctionBody::Block(stmts) => stmts.iter().any(|s| stmt_calls(name, &s.node)),
+        }
+    }
+
+    for item in &module.items {
+        match &item.node {
+            Item::Function(f) => {
+                // Don't check the function's own body
+                if f.name.node == name {
+                    continue;
+                }
+                if body_calls(name, &f.body) {
+                    return true;
+                }
+            }
+            Item::Impl(impl_block) => {
+                for method in &impl_block.methods {
+                    if body_calls(name, &method.node.body) {
+                        return true;
+                    }
+                }
+            }
+            Item::Struct(s) => {
+                for method in &s.methods {
+                    if body_calls(name, &method.node.body) {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }

@@ -429,9 +429,19 @@ impl CodeGenerator {
         } else if let Some(const_info) = self.types.constants.get(name).cloned() {
             // Constant reference - inline the constant value
             self.generate_expr(&const_info.value, counter)
-        } else if self.types.functions.contains_key(name) {
-            // Function reference
-            Ok((format!("@{}", name), String::new()))
+        } else if let Some(fn_info) = self.types.functions.get(name).cloned() {
+            // Function reference used as a value — convert function pointer to i64
+            let ret_ty = self.type_to_llvm(&fn_info.signature.ret);
+            let param_types: Vec<String> = fn_info
+                .signature
+                .params
+                .iter()
+                .map(|(_, ty, _)| self.type_to_llvm(ty))
+                .collect();
+            let fn_ptr_ty = format!("{} ({})*", ret_ty, param_types.join(", "));
+            let tmp = self.next_temp(counter);
+            let ir = format!("  {} = ptrtoint {} @{} to i64\n", tmp, fn_ptr_ty, name);
+            Ok((tmp, ir))
         } else if let Some(self_local) = self.fn_ctx.locals.get("self").cloned() {
             // Implicit self: check if name is a field of the self struct
             let self_type = match &self_local.ty {

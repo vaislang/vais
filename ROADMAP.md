@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-22
+> **최종 업데이트**: 2026-02-23
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 4,000+ (통합 2,624, 단위 1,379) |
+| 전체 테스트 | 4,000+ (통합 2,700+, 단위 1,379) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -212,6 +212,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 39 | Codegen 완성도 — Spawn/Lazy 버그 수정 | spawn sync Future 래핑, lazy global load+4버그 수정, 6개 테스트 전환, Clippy 0건 | 811 |
 | 40 | 대형 파일 모듈 분할 R9 | ast lib.rs(1,358→200줄)→15서브모듈, codegen lib.rs(1,687→208줄)+types lib.rs(1,431→351줄) 테스트 추출, Clippy 0건 | 811 |
 | 41 | E2E 테스트 850개 목표 확장 | 4개 신규 모듈 (loop_control/error_handling/string_numeric/globals_ternary), 51개 테스트 추가 (811→862), Clippy 0건 | 862 |
+| 42 | 전체 코드베이스 건전성 강화 | 135건 이슈 체계적 수정 (Inkwell/Text IR/Parser/TC), Try/Unwrap 구현, occurs-check, >> 제네릭 split, void phi 수정 | 862 |
+| 43 | Codegen 완성도 — Pre-existing 전수 수정 | Try(?) phi node+struct/enum load, Slice fat pointer ABI, higher-order fn+generic template, **pre-existing 14→0** | 854 |
 
 ## 현재 작업 (2026-02-18) — Phase 28: 코드 정리 & dead_code 활성화 ✅
 모드: 자동진행
@@ -431,6 +433,50 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 6. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4,5]
   결과: cargo check 성공, Clippy 0건, Codegen 319 통과 (3 pre-existing), E2E 862개 (840 통과, 14 pre-existing 실패, 8 ignored, 0 regression). void phi regression 발견→수정 완료
 진행률: 6/6 (100%) ✅
+
+## 현재 작업 (2026-02-23) — Phase 43: Codegen 완성도 — Pre-existing 14개 실패 전수 수정 ✅
+모드: 자동진행
+- [x] 1. Try operator (?) codegen 수정 — if-else phi node에 struct/enum load 추가 (7개 테스트)
+- [x] 2. Slice fat pointer ABI 수정 — .len() extractvalue + &[array] fat pointer 생성 (4개 테스트)
+- [x] 3. Higher-order fn + generic template + generic struct 수정 (6개 테스트)
+- [x] 4. 검증 & ROADMAP 업데이트
+  결과: E2E 854 통과 (+14), 0 실패, 8 ignored, Codegen 364 통과 (322+6+34+2), Clippy 0건
+  수정 파일: expr_helpers_control.rs, generate_expr.rs, expr_helpers.rs, module_gen.rs (4파일 +304/-20줄)
+진행률: 4/4 (100%) ✅
+
+---
+
+## 📋 예정 작업
+
+### Phase 44: Codegen 타입 정확성 — i64 fallback 잔여 제거 & assert_compiles 전환
+> 목표: TODO(Phase42) 2건 해결 + assert_compiles 42개 중 전환 가능한 항목 처리
+
+- [ ] 1. gen_aggregate.rs Slice elem 타입 추적 — i64 fallback → 실제 elem type (Sonnet)
+- [ ] 2. gen_expr/misc.rs Deref pointee 타입 추론 — i64 → context 기반 pointee type (Sonnet)
+- [ ] 3. assert_compiles→assert_exit_code 전환 — phase32_lang 13개 + phase43 6개 등 전환 가능 항목 (Sonnet)
+- [ ] 4. 검증 & ROADMAP 업데이트 (Opus)
+
+### Phase 45: 대형 파일 모듈 분할 R10
+> 목표: 1,000줄 이상 파일 정리
+
+- [ ] 1. generate_expr.rs (1,787줄) → 서브모듈 분할 (Sonnet)
+- [ ] 2. auto_vectorize.rs (1,260줄) 또는 module_gen.rs (1,090줄) 분할 검토 (Sonnet)
+- [ ] 3. 검증 & ROADMAP 업데이트 (Opus)
+
+### Phase 46: E2E 테스트 900개 목표 확장
+> 현재 862개 (854 통과, 8 ignored)
+
+- [ ] 1. 미커버 기능 E2E 추가 — trait impl/associated type/GAT (12개) (Sonnet)
+- [ ] 2. 미커버 기능 E2E 추가 — struct method/enum method/nested match (12개) (Sonnet)
+- [ ] 3. 미커버 기능 E2E 추가 — closure 고급/pipe chain/string interpolation (12개) (Sonnet)
+- [ ] 4. 검증 & ROADMAP 업데이트 (Opus)
+
+### Phase 47: Spawn/Async Codegen 완성
+> 목표: async 상태 머신 codegen 완성, spawn/await clang 실패 6건+ 해결
+
+- [ ] 1. async 상태 머신 IR 생성 — poll/resume 패턴 구현 (Opus)
+- [ ] 2. spawn/await E2E 전환 — phase43.rs 6개 + phase32_async 4개 (Sonnet)
+- [ ] 3. 검증 & ROADMAP 업데이트 (Opus)
 
 ---
 

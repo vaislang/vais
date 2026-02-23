@@ -892,6 +892,21 @@ impl CodeGenerator {
                     );
                 }
 
+                // Slice/SliceMut .len() — extract length from fat pointer
+                if method_name == "len"
+                    && matches!(
+                        recv_type,
+                        ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                    )
+                {
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+                        result, recv_val
+                    ));
+                    return Ok((result, ir));
+                }
+
                 // Check for dynamic trait dispatch (dyn Trait)
                 let dyn_trait_name = match &recv_type {
                     ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
@@ -1021,6 +1036,69 @@ impl CodeGenerator {
 
             // Reference: &expr
             Expr::Ref(inner) => {
+                // Special case: &[elem, ...] array literal -> slice fat pointer { i8*, i64 }
+                if let Expr::Array(elements) = &inner.node {
+                    let len = elements.len();
+                    let mut ir = String::new();
+
+                    // Infer element type
+                    let elem_ty = if let Some(first) = elements.first() {
+                        let resolved = self.infer_expr_type(first);
+                        self.type_to_llvm(&resolved)
+                    } else {
+                        "i64".to_string()
+                    };
+                    let arr_ty = format!("[{}  x {}]", len, elem_ty);
+
+                    // Allocate array on stack
+                    let arr_ptr = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = alloca {}\n", arr_ptr, arr_ty));
+
+                    // Store each element
+                    for (i, elem) in elements.iter().enumerate() {
+                        let (val, elem_ir) = self.generate_expr(elem, counter)?;
+                        ir.push_str(&elem_ir);
+
+                        let elem_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                            elem_ptr, arr_ty, arr_ty, arr_ptr, i
+                        ));
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            elem_ty, val, elem_ty, elem_ptr
+                        ));
+                    }
+
+                    // Get pointer to first element
+                    let data_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+                        data_ptr, arr_ty, arr_ty, arr_ptr
+                    ));
+
+                    // Bitcast to i8*
+                    let data_i8 = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = bitcast {}* {} to i8*\n",
+                        data_i8, elem_ty, data_ptr
+                    ));
+
+                    // Build fat pointer: { i8*, i64 }
+                    let fat1 = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n",
+                        fat1, data_i8
+                    ));
+                    let fat2 = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
+                        fat2, fat1, len
+                    ));
+
+                    return Ok((fat2, ir));
+                }
+
                 // For simple references, just return the address
                 if let Expr::Ident(name) = &inner.node {
                     if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {

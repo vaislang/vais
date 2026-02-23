@@ -5,6 +5,7 @@
 use crate::types::LoopLabels;
 use crate::{CodeGenerator, CodegenResult};
 use vais_ast::{Expr, Spanned, Stmt};
+use vais_types::ResolvedType;
 
 impl CodeGenerator {
     pub(crate) fn generate_ternary_expr(
@@ -81,11 +82,32 @@ impl CodeGenerator {
             cond_bool, then_label, else_label
         ));
 
+        // Infer block type to detect struct/enum results that need loading
+        let phi_type = self.infer_block_type(then);
+        let phi_llvm = self.type_to_llvm(&phi_type);
+
+        // Check if the result is a struct/enum type (returned as pointer from struct/enum literals)
+        let is_struct_result = matches!(&phi_type, ResolvedType::Named { .. })
+            && !self.is_block_result_value(then);
+
         // Then block
         ir.push_str(&format!("{}:\n", then_label));
         self.fn_ctx.current_block.clone_from(&then_label);
         let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
         ir.push_str(&then_ir);
+
+        // For struct/enum results, load the value from the alloca pointer before branch
+        let then_val_for_phi = if is_struct_result && !then_terminated {
+            let loaded = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = load {}, {}* {}\n",
+                loaded, phi_llvm, phi_llvm, then_val
+            ));
+            loaded
+        } else {
+            then_val
+        };
+
         let then_actual_block = self.fn_ctx.current_block.clone();
         let then_from_label = if !then_terminated {
             ir.push_str(&format!("  br label %{}\n", merge_label));
@@ -106,6 +128,25 @@ impl CodeGenerator {
                 ("0".to_string(), String::new(), false, String::new(), false)
             };
         ir.push_str(&else_ir);
+
+        // For struct/enum results, load the value from the alloca pointer before branch
+        // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
+        // it's already a phi node value (not a pointer), so don't load it
+        let else_val_for_phi = if is_struct_result
+            && !else_terminated
+            && has_else
+            && nested_last_block.is_empty()
+        {
+            let loaded = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = load {}, {}* {}\n",
+                loaded, phi_llvm, phi_llvm, else_val
+            ));
+            loaded
+        } else {
+            else_val
+        };
+
         let else_from_label = if !else_terminated {
             ir.push_str(&format!("  br label %{}\n", merge_label));
             if !nested_last_block.is_empty() {
@@ -117,12 +158,10 @@ impl CodeGenerator {
             String::new()
         };
 
-        // Merge block — infer actual type from the then block
+        // Merge block
         ir.push_str(&format!("{}:\n", merge_label));
         self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
-        let phi_type = self.infer_block_type(then);
-        let phi_llvm = self.type_to_llvm(&phi_type);
         let is_void = phi_llvm == "void" || phi_type == vais_types::ResolvedType::Unit;
 
         if is_void || !has_else {
@@ -131,17 +170,17 @@ impl CodeGenerator {
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             ir.push_str(&format!(
                 "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
-                result, phi_llvm, then_val, then_from_label, else_val, else_from_label
+                result, phi_llvm, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
             ));
         } else if !then_from_label.is_empty() {
             ir.push_str(&format!(
                 "  {} = phi {} [ {}, %{} ]\n",
-                result, phi_llvm, then_val, then_from_label
+                result, phi_llvm, then_val_for_phi, then_from_label
             ));
         } else if !else_from_label.is_empty() {
             ir.push_str(&format!(
                 "  {} = phi {} [ {}, %{} ]\n",
-                result, phi_llvm, else_val, else_from_label
+                result, phi_llvm, else_val_for_phi, else_from_label
             ));
         } else {
             ir.push_str(&format!("  {} = add i64 0, 0\n", result));
