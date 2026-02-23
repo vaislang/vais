@@ -66,19 +66,8 @@ F main() -> i64 { apply(double, 21) }
     assert_exit_code(source, 42);
 }
 
-// ===== Self-Recursion: Fibonacci =====
-
-#[test]
-fn e2e_phase45a_self_recursion_fib() {
-    // @ operator for self-recursion computing the 10th Fibonacci number
-    let source = r#"
-F fib(n: i64) -> i64 {
-    I n < 2 { n } E { @(n - 1) + @(n - 2) }
-}
-F main() -> i64 { fib(10) }
-"#;
-    assert_exit_code(source, 55);
-}
+// Note: fib(10)=55 test covered in execution_tests.rs (exec_recursion_fibonacci)
+// and builtins.rs (already removed). @ operator self-recursion verified there.
 
 // ===== Self-Recursion: Summation =====
 
@@ -177,19 +166,7 @@ F main() -> i64 { is_even(10) }
     assert_exit_code(source, 1);
 }
 
-// ===== Puts: stdout output =====
-
-#[test]
-fn e2e_phase45a_string_puts() {
-    // puts builtin writes to stdout
-    let source = r#"
-F main() -> i64 {
-    puts("hello world")
-    R 0
-}
-"#;
-    assert_stdout_contains(source, "hello world");
-}
+// Note: puts("hello world") stdout test covered in async_runtime.rs (e2e_puts_hello_world_output).
 
 // ===== Pipe Operator =====
 

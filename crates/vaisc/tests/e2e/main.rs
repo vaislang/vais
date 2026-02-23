@@ -41,3 +41,6 @@ mod phase41_loop_control;
 mod phase41_error_handling;
 mod phase41_string_numeric;
 mod phase41_globals_ternary;
+mod phase47_trait_impl;
+mod phase47_struct_enum;
+mod phase47_closure_pipe;

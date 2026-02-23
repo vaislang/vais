@@ -46,6 +46,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     pub(super) fn generate_deref(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Infer pointee type from the expression's resolved type before generating.
+        // For Pointer(T), Ref(T), RefMut(T) the pointee type is T.
+        let pointee_llvm_type = if let Expr::Ident(name) = inner {
+            if let Some(
+                vais_types::ResolvedType::Pointer(inner_ty)
+                | vais_types::ResolvedType::Ref(inner_ty)
+                | vais_types::ResolvedType::RefMut(inner_ty),
+            ) = self.var_resolved_types.get(name)
+            {
+                self.type_mapper.map_type(inner_ty)
+            } else {
+                self.context.i64_type().into()
+            }
+        } else {
+            self.context.i64_type().into()
+        };
+
         let ptr = self.generate_expr(inner)?;
         let ptr_val = if ptr.is_pointer_value() {
             ptr.into_pointer_value()
@@ -62,9 +79,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
-        // TODO(Phase42): deref always loads as i64 — should infer pointee type from context
+        // Load using the inferred pointee type (context-based, not hardcoded i64)
         self.builder
-            .build_load(self.context.i64_type(), ptr_val, "deref")
+            .build_load(pointee_llvm_type, ptr_val, "deref")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 

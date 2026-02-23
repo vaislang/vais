@@ -90,6 +90,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
@@ -124,6 +125,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            let resolved = self.ast_type_to_resolved(&param.ty.node);
+            self.var_resolved_types
+                .insert(param.name.node.clone(), resolved);
         }
 
         // Create loop header block (jump target for tail calls)
@@ -272,6 +278,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
@@ -306,6 +313,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            let resolved = self.ast_type_to_resolved(&param.ty.node);
+            self.var_resolved_types
+                .insert(param.name.node.clone(), resolved);
         }
 
         // Generate contract checks (#[requires] attributes)
@@ -554,6 +566,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
 
         // Create entry block
@@ -595,6 +608,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.var_struct_types
                     .insert(param.name.node.clone(), struct_name);
             }
+
+            // Track resolved type for parameters (for element/pointee type inference)
+            self.var_resolved_types
+                .insert(param.name.node.clone(), substituted_ty);
         }
 
         // Determine the return type (substituted)

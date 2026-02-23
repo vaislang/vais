@@ -694,14 +694,8 @@ F main() -> i64 = add_pair(10, 20)
     assert_exit_code(source, 30);
 }
 
-#[test]
-fn exec_converted_generic_wrap() {
-    let source = r#"
-F wrap<T>(x: T) -> T = x
-F main() -> i64 = wrap(100)
-"#;
-    assert_exit_code(source, 100);
-}
+// Note: exec_converted_generic_wrap (F wrap<T>(x:T)->T = x) is near-identical
+// to exec_converted_generic_identity above — both test identity-style generic functions.
 
 #[test]
 fn exec_converted_match_default() {
@@ -1950,8 +1944,8 @@ F main() -> i64 {
     0
 }
 "#;
-    // NOTE: spawn codegen may not produce clang-compatible IR — keep as assert_compiles
-    assert_compiles(source);
+    // spawn on sync function produces valid IR — sync spawn wraps value in Future struct
+    assert_exit_code(source, 0);
 }
 
 // --- Advanced Pattern Matching ---

@@ -62,6 +62,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .insert(name.node.clone(), (thunk_name, captures));
                     }
                 }
+                // Track resolved type for variables with type annotations
+                // (used for element/pointee type inference in slice indexing and deref)
+                if let Some(t) = ty.as_ref() {
+                    let resolved = self.ast_type_to_resolved(&t.node);
+                    self.var_resolved_types
+                        .insert(name.node.clone(), resolved);
+                }
+
                 let var_type = if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
                     self.type_mapper.map_type(&resolved)

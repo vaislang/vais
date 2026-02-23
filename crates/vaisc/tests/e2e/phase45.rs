@@ -5,32 +5,9 @@ use super::helpers::*;
 // for/while loops, const, global, macro parse, defer parse, assert expr.
 
 // ===== Lazy / Force =====
-
-#[test]
-fn e2e_phase45_lazy_basic() {
-    // Basic lazy value creation and force evaluation
-    let source = r#"
-F main() -> i64 {
-    x := lazy 42
-    R force x
-}
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
-fn e2e_phase45_lazy_computation() {
-    // Lazy expression capturing outer variables
-    let source = r#"
-F main() -> i64 {
-    a := 10
-    b := 20
-    x := lazy (a + b)
-    R force x
-}
-"#;
-    assert_exit_code(source, 30);
-}
+// Note: lazy_basic (lazy 42, force → 42) covered in phase42.rs (e2e_phase42_lazy_force_basic)
+// and execution_tests.rs (exec_lazy_basic).
+// Note: lazy_computation (lazy (a+b), force → 30) covered in phase42.rs (e2e_phase42_lazy_force_with_capture).
 
 #[test]
 fn e2e_phase45_lazy_multiple_force() {
@@ -120,25 +97,7 @@ F main() -> i64 {
 }
 
 // ===== Or Pattern =====
-
-#[test]
-fn e2e_phase45_match_or_pattern() {
-    // Or patterns matching multiple literals
-    let source = r#"
-F kind(n: i64) -> i64 {
-    M n {
-        1 | 2 | 3 => 10,
-        4 | 5 => 20,
-        _ => 0
-    }
-}
-
-F main() -> i64 {
-    R kind(2)
-}
-"#;
-    assert_exit_code(source, 10);
-}
+// Note: match_or_pattern covered by phase32_patterns.rs (e2e_phase32_pattern_or_simple)
 
 // ===== Range Pattern =====
 
@@ -247,52 +206,9 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-// ===== Const =====
-
-#[test]
-fn e2e_phase45_const_literal() {
-    // Const definition used in main
-    let source = r#"
-C MAX: i64 = 100
-
-F main() -> i64 {
-    R MAX
-}
-"#;
-    assert_exit_code(source, 100);
-}
-
-// ===== Global Variable =====
-
-#[test]
-fn e2e_phase45_global_variable_parse() {
-    // Global variable declaration — parser accepts G syntax
-    let source = r#"
-G counter: i64 = 0
-
-F main() -> i64 {
-    R 0
-}
-"#;
-    assert_exit_code(source, 0);
-}
-
-// ===== Macro =====
-
-#[test]
-fn e2e_phase45_macro_parse() {
-    // Macro definition should parse without error
-    let source = r#"
-macro vec_new! {
-    () => { 0 }
-}
-
-F main() -> i64 {
-    R 0
-}
-"#;
-    assert_exit_code(source, 0);
-}
+// Note: const_literal covered by phase37_union_const.rs (e2e_p37_const_basic_usage)
+// Note: global_variable_parse covered by phase37_union_const.rs (e2e_p37_global_single)
+// Note: macro_parse covered by phase37_comptime_defer.rs (e2e_p37_macro_simple_parse)
 
 // ===== Assert Expression =====
 

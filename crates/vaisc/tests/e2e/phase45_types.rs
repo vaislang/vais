@@ -71,42 +71,8 @@ F main() -> i64 { abs_val(-3) }
 }
 
 // ==================== Compound Assignment Operators ====================
-
-#[test]
-fn e2e_phase45t_compound_assign_add() {
-    let source = r#"
-F main() -> i64 {
-    x := mut 10
-    x += 5
-    R x
-}
-"#;
-    assert_exit_code(source, 15);
-}
-
-#[test]
-fn e2e_phase45t_compound_assign_sub() {
-    let source = r#"
-F main() -> i64 {
-    x := mut 20
-    x -= 7
-    R x
-}
-"#;
-    assert_exit_code(source, 13);
-}
-
-#[test]
-fn e2e_phase45t_compound_assign_mul() {
-    let source = r#"
-F main() -> i64 {
-    x := mut 3
-    x *= 4
-    R x
-}
-"#;
-    assert_exit_code(source, 12);
-}
+// Note: compound_assign_add/sub/mul covered by phase41_string_numeric.rs
+// (e2e_p41_compound_add_assign, e2e_p41_compound_sub_assign, e2e_p41_compound_mul_assign)
 
 // ==================== Operator Precedence ====================
 
@@ -282,8 +248,8 @@ fn phase27_associated_type_resolved() {
 }
 
 #[test]
-fn phase27_const_generic_resolved() {
-    // Const generic used in function
+fn phase27_simple_function_call_return() {
+    // Simple function call returning a value
     assert_exit_code(r#"
         F make_val() -> i64 { 100 }
         F main() -> i64 { make_val() }
@@ -291,8 +257,8 @@ fn phase27_const_generic_resolved() {
 }
 
 #[test]
-fn phase27_dependent_type_compiles() {
-    // Dependent type with predicate (compiles, predicate checked at TC)
+fn phase27_two_arg_addition() {
+    // Two-argument addition function
     assert_exit_code(r#"
         F add(a: i64, b: i64) -> i64 { a + b }
         F main() -> i64 { add(1, 2) }

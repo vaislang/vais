@@ -3,24 +3,8 @@ use super::helpers::*;
 // ============================================================
 // Real-World Project Tests (Phase 13 P2 - Business Logic)
 // ============================================================
-
-#[test]
-fn e2e_project_fibonacci_computation() {
-    let source = r#"
-F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
-F main() -> i64 = fib(10)
-"#;
-    assert_exit_code(source, 55);
-}
-
-#[test]
-fn e2e_project_factorial_computation() {
-    let source = r#"
-F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
-F main() -> i64 = factorial(5)
-"#;
-    assert_exit_code(source, 120);
-}
+// Note: fibonacci (fib(10)=55) and factorial (factorial(5)=120) tests
+// are covered in execution_tests.rs (exec_recursion_fibonacci / exec_recursion_factorial).
 
 #[test]
 fn e2e_project_gcd_algorithm() {

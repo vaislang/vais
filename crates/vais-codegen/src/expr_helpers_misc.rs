@@ -191,11 +191,12 @@ impl CodeGenerator {
         Ok((result, ir))
     }
 
-    /// Generate lambda expression
+    /// Generate lambda expression with capture mode support.
     pub(crate) fn generate_lambda_expr(
         &mut self,
         params: &[Param],
         body: &Spanned<Expr>,
+        capture_mode: &vais_ast::CaptureMode,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let lambda_name = format!("__lambda_{}", self.fn_ctx.label_counter);
@@ -206,22 +207,55 @@ impl CodeGenerator {
         let mut captured_vars: Vec<(String, ResolvedType, String)> = Vec::new();
         let mut capture_ir = String::new();
 
+        let is_ref_capture = matches!(
+            capture_mode,
+            vais_ast::CaptureMode::ByRef | vais_ast::CaptureMode::ByMutRef
+        );
+
         for cap_name in &capture_names {
             if let Some(local) = self.fn_ctx.locals.get(cap_name) {
                 let ty = local.ty.clone();
-                if local.is_param() {
-                    captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
-                } else if local.is_ssa() {
-                    // SSA values are already the value itself, use directly
-                    captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+
+                if is_ref_capture {
+                    // ByRef/ByMutRef: pass pointer to the captured variable
+                    if local.is_param() || local.is_ssa() {
+                        let llvm_ty = self.type_to_llvm(&ty);
+                        let spill_name = format!("__refcap_{}", cap_name);
+                        let spill_ptr = format!("%{}", spill_name);
+                        capture_ir
+                            .push_str(&format!("  {} = alloca {}\n", spill_ptr, llvm_ty));
+                        let val = if local.is_param() {
+                            format!("%{}", local.llvm_name)
+                        } else {
+                            local.llvm_name.clone()
+                        };
+                        capture_ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            llvm_ty, val, llvm_ty, spill_ptr
+                        ));
+                        captured_vars.push((cap_name.clone(), ty, spill_ptr));
+                    } else {
+                        captured_vars.push((
+                            cap_name.clone(),
+                            ty,
+                            format!("%{}", local.llvm_name),
+                        ));
+                    }
                 } else {
-                    let tmp = self.next_temp(counter);
-                    let llvm_ty = self.type_to_llvm(&ty);
-                    capture_ir.push_str(&format!(
-                        "  {} = load {}, {}* %{}\n",
-                        tmp, llvm_ty, llvm_ty, local.llvm_name
-                    ));
-                    captured_vars.push((cap_name.clone(), ty, tmp));
+                    // ByValue/Move: load and pass the value
+                    if local.is_param() {
+                        captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
+                    } else if local.is_ssa() {
+                        captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                    } else {
+                        let tmp = self.next_temp(counter);
+                        let llvm_ty = self.type_to_llvm(&ty);
+                        capture_ir.push_str(&format!(
+                            "  {} = load {}, {}* %{}\n",
+                            tmp, llvm_ty, llvm_ty, local.llvm_name
+                        ));
+                        captured_vars.push((cap_name.clone(), ty, tmp));
+                    }
                 }
             }
         }
@@ -231,8 +265,13 @@ impl CodeGenerator {
 
         for (cap_name, cap_ty, _) in &captured_vars {
             let llvm_ty = self.type_to_llvm(cap_ty);
-            param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
-            param_types.push(llvm_ty);
+            if is_ref_capture {
+                param_strs.push(format!("{}* %__cap_{}", llvm_ty, cap_name));
+                param_types.push(format!("{}*", llvm_ty));
+            } else {
+                param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
+                param_types.push(llvm_ty);
+            }
         }
 
         for p in params {
@@ -250,10 +289,17 @@ impl CodeGenerator {
         self.fn_ctx.current_function = Some(lambda_name.clone());
 
         for (cap_name, cap_ty, _) in &captured_vars {
-            self.fn_ctx.locals.insert(
-                cap_name.clone(),
-                LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
-            );
+            if is_ref_capture {
+                self.fn_ctx.locals.insert(
+                    cap_name.clone(),
+                    LocalVar::alloca(cap_ty.clone(), format!("__cap_{}", cap_name)),
+                );
+            } else {
+                self.fn_ctx.locals.insert(
+                    cap_name.clone(),
+                    LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
+                );
+            }
         }
 
         for p in params {
@@ -300,7 +346,7 @@ impl CodeGenerator {
                     .iter()
                     .map(|(name, _, val)| (name.clone(), val.clone()))
                     .collect(),
-                is_ref_capture: false,
+                is_ref_capture,
             });
             Ok((fn_ptr_tmp, capture_ir))
         }

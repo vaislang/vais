@@ -95,11 +95,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(tuple_val.into())
     }
 
+    /// Infer the element LLVM type for a slice or array expression.
+    /// Looks up the variable's resolved type from `var_resolved_types` and extracts
+    /// the inner element type for Slice/SliceMut/Array. Falls back to i64 if unknown.
+    fn infer_element_llvm_type(
+        &self,
+        arr_expr: &Expr,
+    ) -> inkwell::types::BasicTypeEnum<'ctx> {
+        if let Expr::Ident(name) = arr_expr {
+            if let Some(
+                vais_types::ResolvedType::Slice(inner)
+                | vais_types::ResolvedType::SliceMut(inner)
+                | vais_types::ResolvedType::Array(inner),
+            ) = self.var_resolved_types.get(name)
+            {
+                return self.type_mapper.map_type(inner);
+            }
+        }
+        // Fallback to i64 for untracked expressions
+        self.context.i64_type().into()
+    }
+
     pub(super) fn generate_index(
         &mut self,
         arr: &Expr,
         index: &Expr,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Infer element type before generating (uses AST-level info)
+        let inferred_elem_type = self.infer_element_llvm_type(arr);
+
         let arr_val = self.generate_expr(arr)?;
         let idx_val = self.generate_expr(index)?;
 
@@ -116,27 +140,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_extract_value(struct_val, 0, "data_ptr")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                // The data pointer is i8* - we need to cast to typed pointer for indexing.
-                // TODO(Phase42): Track actual element type through slice type info.
-                // For now, default to i64 which is correct for the common case.
-                let elem_type = self.context.i64_type();
-                let typed_ptr = self
-                    .builder
-                    .build_bitcast(
-                        data_ptr,
-                        elem_type.ptr_type(AddressSpace::default()),
-                        "typed_ptr",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-
+                // Use the inferred element type from the variable's resolved type.
+                // The GEP instruction uses elem_type for stride calculation.
+                let elem_type = inferred_elem_type;
+                let data_ptr_val = data_ptr.into_pointer_value();
                 let idx_int = idx_val.into_int_value();
 
-                // GEP to get element pointer
+                // GEP to get element pointer (stride = sizeof(elem_type))
                 let elem_ptr = unsafe {
                     self.builder
                         .build_gep(
                             elem_type,
-                            typed_ptr.into_pointer_value(),
+                            data_ptr_val,
                             &[idx_int],
                             "elem_ptr",
                         )
@@ -151,7 +166,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Regular array/pointer indexing
+        // Regular array/pointer indexing — use inferred element type
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();
 
@@ -159,7 +174,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let elem_ptr = unsafe {
             self.builder
                 .build_gep(
-                    self.context.i64_type(), // Assume i64 elements for now
+                    inferred_elem_type,
                     arr_ptr,
                     &[idx_int],
                     "elem_ptr",
@@ -169,7 +184,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Load element
         self.builder
-            .build_load(self.context.i64_type(), elem_ptr, "elem")
+            .build_load(inferred_elem_type, elem_ptr, "elem")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 

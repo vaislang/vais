@@ -86,8 +86,8 @@ F main() -> i64 {
 // ===== i64 fallback removal — explicit type handling =====
 
 #[test]
-fn e2e_phase41_optional_type_codegen() {
-    // Optional<i64> should use {i8, i64} struct, not i64 fallback
+fn e2e_phase41_integer_literal_return() {
+    // Integer literal binding and return compiles and exits correctly
     let source = r#"
 F main() -> i64 {
     x := 42

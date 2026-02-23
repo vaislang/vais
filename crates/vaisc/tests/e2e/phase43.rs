@@ -12,8 +12,7 @@ use super::helpers::*;
 
 #[test]
 fn e2e_phase43_spawn_async_preserves_future() {
-    // NOTE: async codegen state machine issue — poll function is correctly resolved
-    // but async create/poll codegen produces wrong runtime result (exit 214)
+    // spawn on async call stores future in variable, then awaits
     let source = r#"
 A F compute(x: i64) -> i64 {
     x * 2
@@ -25,7 +24,7 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -82,8 +81,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_in_variable() {
-    // NOTE: async codegen state machine issue — poll function is correctly resolved
-    // but async create/poll codegen produces wrong runtime result (exit 214)
+    // spawn on async call, store in variable, then await
     let source = r#"
 A F compute(x: i64) -> i64 {
     x + 10
@@ -95,13 +93,12 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
 fn e2e_phase43_spawn_multiple() {
-    // NOTE: async codegen state machine issue — poll function is correctly resolved
-    // but async create/poll codegen produces wrong runtime result (exit 214)
+    // Multiple spawns on async calls, both awaited
     let source = r#"
 A F add(a: i64, b: i64) -> i64 {
     a + b
@@ -115,7 +112,7 @@ F main() -> i64 {
     (r1 + r2) - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== Yield Tests ====================
@@ -224,8 +221,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_async_multiple_spawns() {
-    // NOTE: async codegen state machine issue — poll function is correctly resolved
-    // but async create/poll codegen produces wrong runtime result (exit 214)
+    // Multiple spawns on same async function with different args, both awaited
     let source = r#"
 A F task(x: i64) -> i64 {
     x * 2
@@ -239,7 +235,7 @@ F main() -> i64 {
     (r1 + r2) - 42
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== Await Syntax Tests ====================
@@ -396,8 +392,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase43_spawn_sequential_await() {
-    // NOTE: async codegen state machine issue — poll function is correctly resolved
-    // but async create/poll codegen produces wrong runtime result
+    // Sequential spawn-await chain: each spawn uses result of previous await
     let source = r#"
 A F task(x: i64) -> i64 {
     x + 1
@@ -413,7 +408,7 @@ F main() -> i64 {
     r3 - 13
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== Edge-case Negative Tests ====================
@@ -487,6 +482,6 @@ F main() -> i64 {
     result - 42
 }
 "#;
-    // yield in sync function currently compiles (no TC restriction)
-    assert_compiles(source);
+    // yield in sync function compiles and executes — yield in sync context returns value directly
+    assert_exit_code(source, 0);
 }

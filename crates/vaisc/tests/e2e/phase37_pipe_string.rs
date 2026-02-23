@@ -96,56 +96,9 @@ F main() -> i64 {
 }
 
 // ==================== Numeric Edge Cases ====================
-
-#[test]
-fn e2e_p37_negative_literal() {
-    // Negative literal in arithmetic: -10 + 15 = 5
-    let source = r#"
-F main() -> i64 {
-    x := -10
-    R x + 15
-}
-"#;
-    assert_exit_code(source, 5);
-}
-
-#[test]
-fn e2e_p37_modulo_operation() {
-    // Modulo: 17 % 5 = 2
-    let source = r#"
-F main() -> i64 {
-    R 17 % 5
-}
-"#;
-    assert_exit_code(source, 2);
-}
-
-#[test]
-fn e2e_p37_integer_division() {
-    // Integer division: 23 / 5 = 4 (truncated)
-    let source = r#"
-F main() -> i64 {
-    R 23 / 5
-}
-"#;
-    assert_exit_code(source, 4);
-}
-
-#[test]
-fn e2e_p37_compound_assign_chain() {
-    // Compound assignment operators in sequence
-    // x=10, x+=5 => 15, x-=3 => 12, x*=2 => 24
-    let source = r#"
-F main() -> i64 {
-    x := mut 10
-    x += 5
-    x -= 3
-    x *= 2
-    R x
-}
-"#;
-    assert_exit_code(source, 24);
-}
+// Note: negative_literal, modulo_operation, integer_division, compound_assign_chain
+// covered by phase41_string_numeric.rs (e2e_p41_negative_literal, e2e_p41_modulo_basic,
+// e2e_p41_integer_division, e2e_p41_compound_add_assign/chain)
 
 // ==================== Expression Body Functions ====================
 

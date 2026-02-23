@@ -381,30 +381,8 @@ F main() -> i64 {
 }
 
 // ==================== Runtime Output Verification ====================
-
-#[test]
-fn e2e_println_integer_format() {
-    let source = r#"
-F main() -> i64 {
-    println("value = {}", 42)
-    0
-}
-"#;
-    assert_stdout_contains(source, "value = 42");
-}
-
-#[test]
-fn e2e_println_multiple_args() {
-    let source = r#"
-F main() -> i64 {
-    x := 10
-    y := 20
-    println("{} + {} = {}", x, y, x + y)
-    0
-}
-"#;
-    assert_stdout_contains(source, "10 + 20 = 30");
-}
+// Note: println format tests are covered in builtins.rs (e2e_println_format_integer,
+// e2e_println_format_multiple).
 
 #[test]
 fn e2e_puts_hello_world_output() {
@@ -417,29 +395,8 @@ F main() -> i64 {
     assert_stdout_contains(source, "hello world");
 }
 
-#[test]
-fn e2e_if_else_expression_value() {
-    let source = r#"
-F main() -> i64 {
-    x := 10
-    y := I x > 5 { 1 } E { 0 }
-    y
-}
-"#;
-    assert_exit_code(source, 1);
-}
-
-#[test]
-fn e2e_if_else_expression_false_branch() {
-    let source = r#"
-F main() -> i64 {
-    x := 3
-    y := I x > 5 { 1 } E { 0 }
-    y
-}
-"#;
-    assert_exit_code(source, 0);
-}
+// Note: e2e_if_else_expression_value and e2e_if_else_expression_false_branch
+// are covered in execution_tests.rs (exec_if_else_true_branch / exec_if_else_false_branch).
 
 #[test]
 fn e2e_match_output_verification() {
@@ -466,14 +423,7 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-#[test]
-fn e2e_recursive_fib_output() {
-    let source = r#"
-F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
-F main() -> i64 = fib(10) - 55
-"#;
-    assert_exit_code(source, 0);
-}
+// Note: e2e_recursive_fib_output covered by exec_recursion_fibonacci in execution_tests.rs.
 
 #[test]
 fn e2e_loop_with_break() {

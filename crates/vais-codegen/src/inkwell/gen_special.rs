@@ -390,6 +390,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.var_resolved_types.clear();
         self.defer_stack.clear();
 
         // Set up generic substitutions from parent struct and method generics
@@ -447,6 +448,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(sn) = self.extract_struct_type_name(&param.ty.node) {
                     self.var_struct_types.insert(param.name.node.clone(), sn);
                 }
+
+                // Track resolved type for parameters (for element/pointee type inference)
+                self.var_resolved_types
+                    .insert(param.name.node.clone(), substituted);
             }
         }
 

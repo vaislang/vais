@@ -104,18 +104,7 @@ F main() -> i64 {
     );
 }
 
-#[test]
-fn generic_with_bool() {
-    assert_exit_code(
-        r#"
-F identity<T>(x: T) -> T { x }
-F main() -> i64 {
-    identity(42)
-}
-"#,
-        42,
-    );
-}
+// Note: generic_with_bool removed — identical to generic_identity_function above
 
 #[test]
 fn generic_expression_body() {

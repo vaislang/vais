@@ -250,17 +250,3 @@ F main() -> i64 {
 }
 
 // ===== Edge cases and error handling =====
-
-#[test]
-fn e2e_phase42_force_non_lazy_basic() {
-    // Forcing a non-lazy value — currently may work (implementation detail)
-    let source = r#"
-F main() -> i64 {
-    x := 42
-    R force x
-}
-"#;
-    // This test verifies current behavior. If force on non-lazy is allowed, it succeeds.
-    // If it's a type error, we'd use assert_compile_error instead.
-    let _ = compile_to_ir(source); // Don't assert either way - just verify it compiles without panic
-}

@@ -466,7 +466,7 @@ impl ExprVisitor for CodeGenerator {
         body: &Spanned<Expr>,
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_lambda_expr(params, body, counter)
+        self.generate_lambda_expr(params, body, &vais_ast::CaptureMode::ByValue, counter)
     }
 
     fn visit_try(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {

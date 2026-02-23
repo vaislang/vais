@@ -86,6 +86,9 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
 
+    /// Variable name -> resolved type tracking (for element/pointee type inference)
+    pub(super) var_resolved_types: HashMap<String, ResolvedType>,
+
     /// Struct name -> generic parameter names (for method generic substitution)
     pub(super) struct_generic_params: HashMap<String, Vec<String>>,
 
@@ -170,6 +173,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
             var_struct_types: HashMap::new(),
+            var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),
             lambda_bindings: HashMap::new(),
             _last_lambda_info: None,
