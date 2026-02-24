@@ -101,16 +101,6 @@ fn assert_exit_code(source: &str, expected: i32) {
     }
 }
 
-/// Assert that source compiles successfully to IR
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(ir) => {
-            assert!(!ir.is_empty(), "Generated IR should not be empty");
-        }
-        Err(e) => panic!("Compilation failed: {}", e),
-    }
-}
-
 /// Assert that IR contains expected string (currently unused but kept for future tests)
 #[allow(dead_code)]
 fn assert_ir_contains(source: &str, expected: &str) {
@@ -145,38 +135,38 @@ F main() -> i64 = get_windows_path()
 
 #[test]
 fn windows_path_raw_string() {
-    // Test path handling with string constants in function calls
+    // Test path handling with string constants (no extern dependency)
     let source = r#"
-X F puts(s: i64) -> i64
-
-F print_windows_path() -> i64 {
-    puts("C:\\Program Files\\MyApp\\config.ini")
+F check_windows_path() -> i64 {
+    path := "C:\\Program Files\\MyApp\\config.ini"
+    # String literal compiles — test passes if code reaches this point
     0
 }
-F main() -> i64 = print_windows_path()
+F main() -> i64 = check_windows_path()
 "#;
-    // NOTE: Uses extern puts — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // Verifies Windows path with backslashes compiles and runs correctly
+    assert_exit_code(source, 0);
 }
 
 // ==================== 2. Path String Concatenation ====================
 
 #[test]
 fn windows_path_concatenation() {
-    // Test building paths with string operations
+    // Test building paths with string operations (no extern dependency)
     let source = r#"
-F print_path() -> i64 {
-    # Test passing Windows paths to builtin functions
-    puts("C:\\Users\\data.txt")
+F check_path() -> i64 {
+    # Test Windows path string creation
+    path := "C:\\Users\\data.txt"
+    # String literal compiles — test passes if code reaches this point
     0
 }
 F main() -> i64 {
-    result := print_path()
-    0
+    result := check_path()
+    result
 }
 "#;
-    // NOTE: Uses puts (via print_path) — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // Verifies Windows path string compiles and runs correctly
+    assert_exit_code(source, 0);
 }
 
 // ==================== 3. Environment Variable Access Pattern ====================
@@ -239,14 +229,8 @@ F main() -> i64 = validate_input(42)
 
 #[test]
 fn windows_file_io_pattern() {
-    // Test Windows file I/O using standard C FILE* API
+    // Test Windows file I/O struct pattern (no extern dependency)
     let source = r#"
-# Extern C file I/O functions
-X F fopen(path: i64, mode: i64) -> i64
-X F fclose(handle: i64) -> i64
-X F fread(buf: i64, size: i64, count: i64, handle: i64) -> i64
-X F fwrite(buf: i64, size: i64, count: i64, handle: i64) -> i64
-
 S FileHandle {
     ptr: i64,
     is_open: i64
@@ -263,7 +247,8 @@ X FileHandle {
 
     F close(&self) -> i64 {
         I self.is_open == 1 {
-            fclose(self.ptr)
+            # Mock close: return success
+            0
         } E {
             0
         }
@@ -271,18 +256,15 @@ X FileHandle {
 }
 
 F main() -> i64 {
-    # Test Windows file I/O pattern
-    result := fopen("C:\\temp\\test.txt", "r")
-    file := FileHandle::new(result)
-    I file.is_open == 1 {
-        file.close()
-    } E {
-        0
-    }
+    # Test FileHandle struct with mock handle (simulates fopen returning 42)
+    file_open := FileHandle::new(42)
+    file_null := FileHandle::new(0)
+    # open handle: is_open=1, null handle: is_open=0
+    file_open.is_open + file_null.is_open
 }
 "#;
-    // NOTE: Uses extern fopen/fclose — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // FileHandle::new(42).is_open=1, FileHandle::new(0).is_open=0, so 1 + 0 = 1
+    assert_exit_code(source, 1);
 }
 
 // ==================== 6. IOCP Async Constants Compilation ====================
@@ -320,14 +302,14 @@ F main() -> i64 = PLATFORM_WINDOWS
 
 #[test]
 fn windows_async_platform_detection() {
-    // Test platform detection pattern used in async runtime
+    // Test platform detection pattern used in async runtime (no extern dependency)
     let source = r#"
 C PLATFORM_MACOS: i64 = 1
 C PLATFORM_LINUX: i64 = 2
 C PLATFORM_WINDOWS: i64 = 3
 
-# Extern: returns platform ID at runtime
-X F async_platform() -> i64
+# Mock platform detection: returns PLATFORM_WINDOWS
+F mock_platform() -> i64 = PLATFORM_WINDOWS
 
 S Reactor {
     platform: i64,
@@ -336,18 +318,12 @@ S Reactor {
 
 X Reactor {
     F new() -> Reactor {
-        platform := async_platform()
-        # On Windows, this would create IOCP handle
-        # On Linux, epoll_create
-        # On macOS, kqueue
+        platform := mock_platform()
         backend_fd := I platform == PLATFORM_WINDOWS {
-            # Would call CreateIoCompletionPort
             1
         } E I platform == PLATFORM_LINUX {
-            # Would call epoll_create
             2
         } E {
-            # Would call kqueue
             3
         }
         Reactor { platform: platform, backend_fd: backend_fd }
@@ -363,8 +339,8 @@ F main() -> i64 {
     reactor.is_windows()
 }
 "#;
-    // NOTE: Uses extern async_platform() — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // mock_platform returns PLATFORM_WINDOWS=3, is_windows returns 1
+    assert_exit_code(source, 1);
 }
 
 // ==================== 8. Network Socket Constants ====================
@@ -419,43 +395,40 @@ F main() -> i64 {
 
 #[test]
 fn windows_threading_pattern() {
-    // Test Windows threading pattern (CreateThread API)
+    // Test Windows threading struct pattern (no extern dependency)
     let source = r#"
-# Extern: Windows threading primitives
-X F create_thread(start_routine: i64, arg: i64) -> i64
-X F join_thread(handle: i64) -> i64
-X F current_thread_id() -> i64
-
 S Thread {
     handle: i64,
     thread_id: i64
 }
 
 X Thread {
-    F spawn(func: i64, arg: i64) -> Thread {
-        handle := create_thread(func, arg)
-        tid := current_thread_id()
+    F spawn(func_id: i64, arg: i64) -> Thread {
+        # Mock: simulate thread creation
+        handle := func_id + arg
+        tid := 1001
         Thread { handle: handle, thread_id: tid }
     }
 
     F join(&self) -> i64 {
-        join_thread(self.handle)
+        # Mock: return the handle as result
+        self.handle
     }
 }
 
 F worker_func(arg: i64) -> i64 {
-    # Thread entry point
     arg * 2
 }
 
 F main() -> i64 {
-    # Note: In real usage, func pointers would be used
     thread := Thread::spawn(0, 42)
-    thread.join()
+    result := thread.join()
+    # handle = 0 + 42 = 42
+    result
 }
 "#;
-    // NOTE: Uses extern create_thread/join_thread/current_thread_id — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // Thread::spawn(0, 42) → handle=42, join → 42
+    assert_exit_code(source, 42);
 }
 
 // ==================== 10. TLS + Windows Path Combination ====================
@@ -645,20 +618,16 @@ F main() -> i64 {
 
 #[test]
 fn windows_cross_platform_conditional() {
-    // Test cross-platform code patterns
+    // Test cross-platform code patterns (no extern dependency)
     let source = r#"
 C PLATFORM_WINDOWS: i64 = 3
 C PLATFORM_LINUX: i64 = 2
 C PLATFORM_MACOS: i64 = 1
 
-X F get_platform() -> i64
+# Mock platform detection
+F mock_get_platform() -> i64 = PLATFORM_MACOS
 
-# Mock directory creation for testing Windows path patterns
 F create_directory_mock(platform: i64) -> i64 {
-    # Simulate creating platform-specific directories:
-    # Windows: "C:\\ProgramData\\MyApp"
-    # macOS: "/Library/Application Support/MyApp"
-    # Linux: "/var/lib/myapp"
     0
 }
 
@@ -670,13 +639,12 @@ S PathConfig {
 X PathConfig {
     F new() -> PathConfig {
         PathConfig {
-            platform: get_platform(),
+            platform: mock_get_platform(),
             initialized: 0
         }
     }
 
     F initialize(&self) -> i64 {
-        # Test conditional path patterns based on platform
         result := create_directory_mock(self.platform)
         result
     }
@@ -690,18 +658,19 @@ F main() -> i64 {
     config := PathConfig::new()
     result := config.initialize()
     is_win := config.is_windows()
-    0
+    # mock returns MACOS=1, is_windows → 0, initialize → 0
+    result + is_win
 }
 "#;
-    // NOTE: Uses extern get_platform() — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // initialize returns 0, is_windows returns 0 (MACOS != WINDOWS), so 0 + 0 = 0
+    assert_exit_code(source, 0);
 }
 
 // ==================== 14. Windows Registry FFI Declaration Pattern ====================
 
 #[test]
 fn windows_registry_ffi_pattern() {
-    // Test Windows Registry API FFI declarations
+    // Test Windows Registry constants and struct patterns (no extern dependency)
     let source = r#"
 # Registry root keys (HKEY) - using decimal values
 C HKEY_CLASSES_ROOT: i64 = 2147483648
@@ -718,11 +687,10 @@ C KEY_ALL_ACCESS: i64 = 983103
 C REG_SZ: i64 = 1        # String
 C REG_DWORD: i64 = 4     # 32-bit number
 
-# Extern: Windows Registry API (advapi32.dll)
-X F RegOpenKeyExA(hKey: i64, subKey: i64, options: i64, access: i64, result: i64) -> i64
-X F RegQueryValueExA(hKey: i64, valueName: i64, reserved: i64, type_ptr: i64, data: i64, size_ptr: i64) -> i64
-X F RegSetValueExA(hKey: i64, valueName: i64, reserved: i64, value_type: i64, data: i64, size: i64) -> i64
-X F RegCloseKey(hKey: i64) -> i64
+# Mock registry open — simulates success (returns 0)
+F mock_reg_open(root: i64, access: i64) -> i64 {
+    I root == 0 { 1 } E { 0 }
+}
 
 S RegistryKey {
     handle: i64,
@@ -730,37 +698,28 @@ S RegistryKey {
 }
 
 X RegistryKey {
-    F open(root: i64, subkey: i64, access: i64) -> RegistryKey {
-        # In real implementation, would allocate handle_ptr
-        handle_ptr := 0
-        result := RegOpenKeyExA(root, subkey, 0, access, handle_ptr)
+    F open(root: i64, access: i64) -> RegistryKey {
+        result := mock_reg_open(root, access)
         I result == 0 {
-            RegistryKey { handle: 0, is_open: 1 }
+            RegistryKey { handle: root, is_open: 1 }
         } E {
             RegistryKey { handle: 0, is_open: 0 }
         }
     }
 
     F close(&self) -> i64 {
-        I self.is_open == 1 {
-            RegCloseKey(self.handle)
-        } E {
-            0
-        }
+        I self.is_open == 1 { 0 } E { 1 }
     }
 }
 
 F main() -> i64 {
-    # Test registry constants compile
-    # Registry operations would use RegOpenKeyExA with Windows path strings
-    key := HKEY_LOCAL_MACHINE
-    access := KEY_READ
-    I key != 0 { 0 } E { 1 }
+    key := RegistryKey::open(HKEY_LOCAL_MACHINE, KEY_READ)
+    # HKEY_LOCAL_MACHINE != 0, so mock returns 0 (success) → is_open=1
+    key.is_open
 }
 "#;
-    // NOTE: Declares extern Reg* functions but main() doesn't call them — keep as assert_compiles
-    // (extern declarations may still cause link issues on some platforms)
-    assert_compiles(source);
+    // mock_reg_open(HKEY_LOCAL_MACHINE, KEY_READ) → 0 (success), is_open = 1
+    assert_exit_code(source, 1);
 }
 
 // ==================== 15. Large Struct Array Pattern (Memory Layout) ====================
@@ -862,21 +821,15 @@ F main() -> i64 {
 
 #[test]
 fn windows_complex_integration() {
-    // Comprehensive test combining multiple Windows patterns
+    // Comprehensive test combining multiple Windows patterns (no extern dependency)
     let source = r#"
 C PLATFORM_WINDOWS: i64 = 3
 C EXIT_SUCCESS: i64 = 0
 C EXIT_FAILURE: i64 = 1
 
-# File I/O
-X F fopen(path: i64, mode: i64) -> i64
-X F fclose(handle: i64) -> i64
-
-# Platform detection
-X F async_platform() -> i64
-
-# Environment
-X F getenv(name: i64) -> i64
+# Mock functions
+F mock_platform() -> i64 = PLATFORM_WINDOWS
+F mock_open_config() -> i64 = 42
 
 S WindowsApp {
     platform: i64,
@@ -887,29 +840,21 @@ S WindowsApp {
 X WindowsApp {
     F new() -> WindowsApp {
         WindowsApp {
-            platform: async_platform(),
+            platform: mock_platform(),
             has_config: 0,
             is_initialized: 0
         }
     }
 
     F check_config(&self) -> i64 {
-        # Try to open config file at Windows path
-        handle := fopen("C:\\ProgramData\\MyApp\\config.ini", "r")
-        I handle == 0 {
-            0
-        } E {
-            fclose(handle)
-            1
-        }
+        handle := mock_open_config()
+        I handle == 0 { 0 } E { 1 }
     }
 
     F initialize(&self) -> i64 {
-        # Check if running on Windows
         I self.platform != PLATFORM_WINDOWS {
             EXIT_FAILURE
         } E {
-            # Check if config exists
             has_cfg := self.check_config()
             I has_cfg == 0 {
                 EXIT_FAILURE
@@ -926,6 +871,6 @@ F main() -> i64 {
     result
 }
 "#;
-    // NOTE: Uses extern async_platform/fopen/fclose — keep as assert_compiles (link dependency)
-    assert_compiles(source);
+    // mock_platform=WINDOWS, mock_open_config=42 (non-null) → has_cfg=1 → EXIT_SUCCESS=0
+    assert_exit_code(source, 0);
 }

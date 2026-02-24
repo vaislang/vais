@@ -178,8 +178,11 @@ fn error_recursive_without_return_type() {
     // Phase 61: Recursive function without return type - but with constrained params
     // The parameters here are constrained by the comparison and arithmetic operations
     // So this actually compiles successfully with inferred types
-    // NOTE: No main() function — cannot convert to assert_exit_code
-    assert_compiles("F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)");
+    // Wrap with main() to verify execution: fib(10) = 55
+    assert_exit_code(
+        "F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
+        55,
+    );
 }
 
 // ==================== Struct Errors ====================
@@ -304,9 +307,12 @@ F main() -> i64 = add(1, 2)
 
 #[test]
 fn positive_explicit_types() {
-    // With explicit types, should always compile
-    // NOTE: No main() function — cannot convert to assert_exit_code
-    assert_compiles("F add(a: i64, b: i64) -> i64 { R a + b }");
+    // With explicit types, should always compile and run
+    // Wrap with main() to verify execution: add(20, 22) = 42
+    assert_exit_code(
+        "F add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
+        42,
+    );
 }
 
 // ==================== Enum/Match Errors ====================

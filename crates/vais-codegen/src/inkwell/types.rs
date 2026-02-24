@@ -93,15 +93,34 @@ impl<'ctx> TypeMapper<'ctx> {
                 };
                 elem_llvm.array_type(sz).into()
             }
-            ResolvedType::Pointer(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::RefMut(inner) => {
+            ResolvedType::Pointer(inner) => {
                 // In LLVM 17+, pointers are opaque
                 let _inner_llvm = self.map_type(inner);
                 self.context
                     .i8_type()
                     .ptr_type(AddressSpace::default())
                     .into()
+            }
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                // &[T] and &mut [T] are fat pointers (same as Slice/SliceMut)
+                // — a slice reference IS a fat pointer, not a pointer to one
+                match inner.as_ref() {
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
+                        let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                        let len_type = self.context.i64_type();
+                        self.context
+                            .struct_type(&[ptr_type.into(), len_type.into()], false)
+                            .into()
+                    }
+                    _ => {
+                        // In LLVM 17+, pointers are opaque
+                        let _inner_llvm = self.map_type(inner);
+                        self.context
+                            .i8_type()
+                            .ptr_type(AddressSpace::default())
+                            .into()
+                    }
+                }
             }
             ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => {
                 // Slice is a fat pointer: { ptr: i8*, len: i64 }

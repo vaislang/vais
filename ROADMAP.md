@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-24 (Phase 48)
+> **최종 업데이트**: 2026-02-24 (Phase 49)
 
 ---
 
@@ -219,6 +219,33 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 46 | 대형 파일 모듈 분할 R10 | generate_expr.rs(1,787→768줄, mod.rs+special.rs), module_gen.rs(1,090→3서브모듈), 중복 인라인 코드 1,019줄 제거, Clippy 0건 | 822 |
 | 47 | E2E 테스트 900개 목표 확장 | 3개 신규 모듈 (trait_impl/struct_enum/closure_pipe), 78개 테스트 추가 (822→900), Clippy 0건 | 900 |
 | 48 | Spawn/Async Codegen 완성 | phase43.rs 5개 assert_compiles→assert_exit_code 전환, async 상태 머신 codegen 검증 완료 (단일 스레드 협력 스케줄링), Clippy 0건 | 900 |
+| 49 | Codegen 완성도 — 잔여 assert_compiles 해결 | 14개 assert_compiles→assert_exit_code 전환 (windows 8, phase33 2, error 2, execution 2), Slice fat pointer ABI 수정 (Ref(Slice)→직접 fat pointer), 잔여 7개, Clippy 0건 | 900 |
+
+## 현재 작업 (2026-02-24) — Phase 50: Codegen 완성도 — E2E 실패 14개 전수 수정
+모드: 자동진행
+- [ ] 1. Phase 49 미커밋 변경사항 커밋 (Opus)
+- [ ] 2. Nested struct field access codegen 수정 — Text IR 재귀 타입 추론 구현 (Opus)
+- [ ] 3. Array/Slice index assignment codegen 수정 — Text IR Expr::Index 케이스 추가 (Opus) [∥2]
+- [ ] 4. Slice/OwnedString 연쇄 수정 & 나머지 E2E 검증 (Opus) [blockedBy: 2,3]
+- [ ] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 4]
+진행률: 0/5 (0%)
+
+## 현재 작업 (2026-02-24) — Phase 49: Codegen 완성도 — 잔여 assert_compiles 21개 해결 ✅
+모드: 자동진행
+- [x] 1. Windows 테스트 8개 extern 제거 & assert_exit_code 전환 (Opus)
+  변경: windows_e2e_tests.rs — 8개 테스트에서 extern 함수 제거, mock Vais 함수로 대체, assert_exit_code 전환
+- [x] 2. Phase33+Error 테스트 4개 재작성 & assert_exit_code 전환 (Opus) [∥1]
+  변경: phase33_integration_tests.rs (tls_extern+async_reactor 2개), error_scenario_tests.rs (recursive_fib+explicit_types 2개) — extern 제거+main() 래퍼 추가
+- [x] 3. Codegen 수정: Slice literal fat pointer ABI 구현 (Opus) [∥1]
+  변경: types.rs+inkwell/types.rs — Ref(Slice)/RefMut(Slice)가 `{ i8*, i64 }` fat pointer를 직접 반환 (기존: `{ i8*, i64 }*` 포인터-to-fat-pointer)
+  전환: exec_slice_type_compiles → assert_exit_code(42)
+- [x] 4. 기타 Codegen 수정: result_chain/where_clause/f64/dup_fn/struct_by_value 전환 시도 (Opus)
+  전환 성공: exec_std_result_chain → assert_exit_code(43) (enum if-else codegen 정상 동작 확인)
+  전환 불가: where_clause_multiple_bounds (unresolved @method1/@method2), duplicate_fn (clang 거부)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+  검증: cargo check 통과, cargo clippy 0건, E2E 900개 (886 통과, 14 pre-existing 실패, 0 ignored, 0 regression)
+  잔여 assert_compiles: 21→7개 (14개 전환 성공)
+진행률: 5/5 (100%) ✅
 
 ## 현재 작업 (2026-02-24) — Phase 48: Spawn/Async Codegen 완성 ✅
 모드: 자동진행
@@ -533,6 +560,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 1. async 상태 머신 codegen 분석 — 이미 정상 동작 확인 (Opus)
 - [x] 2. spawn/await E2E 전환 — phase43.rs 5개 전환 (Opus)
 - [x] 3. 검증 & ROADMAP 업데이트 (Opus)
+
+### Phase 49: Codegen 완성도 — 잔여 assert_compiles 21개 해결 ✅
+> 목표: assert_compiles 21개 → 가능한 한 assert_exit_code로 전환 (결과: 14개 전환, 7개 잔여)
+
+- [x] 1. Windows 테스트 8개 extern 제거 & assert_exit_code 전환 (Opus)
+- [x] 2. Phase33+Error 테스트 4개 재작성 & assert_exit_code 전환 (Opus) [∥1]
+- [x] 3. Codegen 수정: Slice literal fat pointer ABI 구현 (Opus) [∥1]
+- [x] 4. 기타 Codegen 수정: result_chain/where_clause/f64/dup_fn/struct_by_value 전환 시도 (Opus)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
 
 ---
 

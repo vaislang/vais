@@ -924,10 +924,9 @@ F main() -> i64 {
     v1 + v2
 }
 "#;
-    // NOTE: if-else codegen produces ptr (alloca) vs i64 phi node type mismatch
-    // when enum variant Ok(a/b) is returned. Pre-existing codegen limitation.
-    // Expected: 42 + 1 = 43
-    assert_compiles(source);
+    // Expected: safe_div(84,2)=Ok(42), safe_div(10,0)=Err(1)
+    // v1=42, v2=1, total=43
+    assert_exit_code(source, 43);
 }
 
 // --- String (inline struct + methods) ---
@@ -1846,10 +1845,9 @@ F get_slice(arr: &[i64]) -> i64 = 42
 
 F main() -> i64 = get_slice(&[1, 2, 3])
 "#;
-    // NOTE: Slice literal &[1,2,3] codegen passes ptr instead of { ptr, i64 } fat pointer.
-    // Caller emits `call i64 @get_slice(ptr %ref_tmp)` but function signature expects
-    // `{ ptr, i64 }`. Keep as assert_compiles until slice literal call ABI is fixed.
-    assert_compiles(source);
+    // Slice literal &[1,2,3] now correctly builds { i8*, i64 } fat pointer
+    // and function signature matches. get_slice always returns 42.
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -1859,9 +1857,9 @@ F slice_len(s: &[i64]) -> i64 = s.len()
 
 F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
 "#;
-    // NOTE: Slice literal codegen passes ptr instead of { ptr, i64 } fat pointer.
-    // Same issue as exec_slice_type_compiles — caller/callee ABI mismatch.
-    // Keep as assert_compiles until slice literal call ABI is fixed.
+    // NOTE: .len() on slice generates `call @len` but len is not defined as a function.
+    // Need to implement .len() as extractvalue from fat pointer { i8*, i64 } field 1.
+    // Keep as assert_compiles until slice method codegen is implemented.
     assert_compiles(source);
 }
 
@@ -1903,7 +1901,9 @@ where T: Trait1, T: Trait2 {
 
 F main() -> i64 = 0
 "#;
-    // NOTE: Where clause with generic trait methods generates unresolved IR — keep as assert_compiles
+    // NOTE: Where clause generic function emits unresolved @method1/@method2 in IR.
+    // Even without being called, the function definition references undefined symbols.
+    // Keep as assert_compiles until dead-code elimination or lazy monomorphization.
     assert_compiles(source);
 }
 

@@ -289,17 +289,21 @@ impl CodeGenerator {
             ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
             ResolvedType::Ref(inner) => {
                 // &dyn Trait is a fat pointer itself (not a pointer to fat pointer)
-                if matches!(inner.as_ref(), ResolvedType::DynTrait { .. }) {
-                    self.type_to_llvm_impl(inner)?
-                } else {
-                    format!("{}*", self.type_to_llvm_impl(inner)?)
+                // &[T] (Slice) and &mut [T] (SliceMut) are also fat pointers { i8*, i64 }
+                // — a slice reference IS a fat pointer, not a pointer to one
+                match inner.as_ref() {
+                    ResolvedType::DynTrait { .. }
+                    | ResolvedType::Slice(_)
+                    | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                    _ => format!("{}*", self.type_to_llvm_impl(inner)?),
                 }
             }
             ResolvedType::RefMut(inner) => {
-                if matches!(inner.as_ref(), ResolvedType::DynTrait { .. }) {
-                    self.type_to_llvm_impl(inner)?
-                } else {
-                    format!("{}*", self.type_to_llvm_impl(inner)?)
+                match inner.as_ref() {
+                    ResolvedType::DynTrait { .. }
+                    | ResolvedType::Slice(_)
+                    | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                    _ => format!("{}*", self.type_to_llvm_impl(inner)?),
                 }
             }
             ResolvedType::Range(_inner) => {
