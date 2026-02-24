@@ -269,6 +269,23 @@ impl CodeGenerator {
         index: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // If the index is a Range expression (e.g., arr[1..3], arr[..2]),
+        // delegate to generate_slice instead of element access
+        if let Expr::Range {
+            start,
+            end,
+            inclusive,
+        } = &index.node
+        {
+            return self.generate_slice(
+                array,
+                start.as_ref().map(|s| s.as_ref()),
+                end.as_ref().map(|e| e.as_ref()),
+                *inclusive,
+                counter,
+            );
+        }
+
         let (arr_val, arr_ir) = self.generate_expr(array, counter)?;
         let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
 
@@ -299,6 +316,9 @@ impl CodeGenerator {
     }
 
     /// Generate field access expression
+    ///
+    /// Supports both simple (`obj.field`) and nested (`obj.a.b.c`) field access
+    /// by using `infer_expr_type` to determine the struct type of any sub-expression.
     pub(crate) fn generate_field_expr(
         &mut self,
         obj: &Spanned<Expr>,
@@ -308,77 +328,88 @@ impl CodeGenerator {
         let (obj_val, obj_ir) = self.generate_expr(obj, counter)?;
         let mut ir = obj_ir;
 
-        if let Expr::Ident(var_name) = &obj.node {
-            if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
-                if let ResolvedType::Named {
-                    name: orig_type_name,
-                    ..
-                } = &local.ty
-                {
-                    let type_name = &self.resolve_struct_name(orig_type_name);
-                    // First check if it's a struct
-                    if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
-                        let field_idx = struct_info
-                            .fields
-                            .iter()
-                            .position(|(n, _)| n == &field.node)
-                            .ok_or_else(|| {
-                                CodegenError::TypeError(format!(
-                                    "Unknown field '{}' in struct '{}'",
-                                    field.node, type_name
-                                ))
-                            })?;
+        // Infer the type of the object expression (works for both Ident and nested Field)
+        let obj_type = self.infer_expr_type(obj);
 
-                        let field_ty = &struct_info.fields[field_idx].1;
-                        let llvm_ty = self.type_to_llvm(field_ty);
+        // Unwrap Ref/RefMut to get the inner Named type (for &self patterns)
+        let resolved_type = match &obj_type {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            other => other,
+        };
 
-                        let field_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                            field_ptr, type_name, type_name, obj_val, field_idx
-                        ));
+        if let ResolvedType::Named {
+            name: orig_type_name,
+            ..
+        } = resolved_type
+        {
+            let type_name = self.resolve_struct_name(orig_type_name);
+            // First check if it's a struct
+            if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
+                let field_idx = struct_info
+                    .fields
+                    .iter()
+                    .position(|(n, _)| n == &field.node)
+                    .ok_or_else(|| {
+                        CodegenError::TypeError(format!(
+                            "Unknown field '{}' in struct '{}'",
+                            field.node, type_name
+                        ))
+                    })?;
 
-                        let result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = load {}, {}* {}\n",
-                            result, llvm_ty, llvm_ty, field_ptr
-                        ));
+                let field_ty = &struct_info.fields[field_idx].1;
+                let llvm_ty = self.type_to_llvm(field_ty);
 
-                        return Ok((result, ir));
-                    }
-                    // Then check if it's a union
-                    else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
-                        let field_ty = union_info
-                            .fields
-                            .iter()
-                            .find(|(n, _)| n == &field.node)
-                            .map(|(_, ty)| ty.clone())
-                            .ok_or_else(|| {
-                                CodegenError::TypeError(format!(
-                                    "Unknown field '{}' in union '{}'",
-                                    field.node, type_name
-                                ))
-                            })?;
+                let field_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                    field_ptr, type_name, type_name, obj_val, field_idx
+                ));
 
-                        let llvm_ty = self.type_to_llvm(&field_ty);
-
-                        // For union field access, bitcast union pointer to field type pointer
-                        // All fields share offset 0
-                        let field_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = bitcast %{}* {} to {}*\n",
-                            field_ptr, type_name, obj_val, llvm_ty
-                        ));
-
-                        let result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = load {}, {}* {}\n",
-                            result, llvm_ty, llvm_ty, field_ptr
-                        ));
-
-                        return Ok((result, ir));
-                    }
+                // For struct-typed fields, return the pointer directly
+                // (the caller or next field access will GEP into it)
+                if matches!(field_ty, ResolvedType::Named { .. }) {
+                    return Ok((field_ptr, ir));
                 }
+
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    result, llvm_ty, llvm_ty, field_ptr
+                ));
+
+                return Ok((result, ir));
+            }
+            // Then check if it's a union
+            else if let Some(union_info) = self.types.unions.get(&type_name).cloned() {
+                let field_ty = union_info
+                    .fields
+                    .iter()
+                    .find(|(n, _)| n == &field.node)
+                    .map(|(_, ty)| ty.clone())
+                    .ok_or_else(|| {
+                        CodegenError::TypeError(format!(
+                            "Unknown field '{}' in union '{}'",
+                            field.node, type_name
+                        ))
+                    })?;
+
+                let llvm_ty = self.type_to_llvm(&field_ty);
+
+                // For union field access, bitcast union pointer to field type pointer
+                // All fields share offset 0
+                let field_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = bitcast %{}* {} to {}*\n",
+                    field_ptr, type_name, obj_val, llvm_ty
+                ));
+
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    result, llvm_ty, llvm_ty, field_ptr
+                ));
+
+                return Ok((result, ir));
             }
         }
 

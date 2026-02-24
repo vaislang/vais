@@ -156,6 +156,26 @@ impl CodeGenerator {
             return self.generate_string_method_call(&recv_val, &ir, method_name, args, counter);
         }
 
+        // Slice .len() — extract length from fat pointer { i8*, i64 } field 1
+        if method_name == "len" {
+            let is_slice_type = match &recv_type {
+                ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => matches!(
+                    inner.as_ref(),
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                ),
+                _ => false,
+            };
+            if is_slice_type {
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+                    result, recv_val
+                ));
+                return Ok((result, ir));
+            }
+        }
+
         // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
         // For non-generic structs, this is a no-op (Vec → Vec)
         let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
@@ -181,14 +201,14 @@ impl CodeGenerator {
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
-        let ret_type = if let ResolvedType::Named { name, .. } = &recv_type {
-            if let Some(_struct_info) = self.types.structs.get(name) {
-                "i64"
+        // Infer the actual return type of the method from function info
+        let ret_type = {
+            let fn_info = self.types.functions.get(&full_method_name);
+            if let Some(info) = fn_info {
+                self.type_to_llvm(&info.signature.ret)
             } else {
-                "i64"
+                "i64".to_string()
             }
-        } else {
-            "i64"
         };
 
         let tmp = self.next_temp(counter);

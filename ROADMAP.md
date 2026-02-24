@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-24 (Phase 49)
+> **최종 업데이트**: 2026-02-25 (Phase 50)
 
 ---
 
@@ -220,15 +220,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 47 | E2E 테스트 900개 목표 확장 | 3개 신규 모듈 (trait_impl/struct_enum/closure_pipe), 78개 테스트 추가 (822→900), Clippy 0건 | 900 |
 | 48 | Spawn/Async Codegen 완성 | phase43.rs 5개 assert_compiles→assert_exit_code 전환, async 상태 머신 codegen 검증 완료 (단일 스레드 협력 스케줄링), Clippy 0건 | 900 |
 | 49 | Codegen 완성도 — 잔여 assert_compiles 해결 | 14개 assert_compiles→assert_exit_code 전환 (windows 8, phase33 2, error 2, execution 2), Slice fat pointer ABI 수정 (Ref(Slice)→직접 fat pointer), 잔여 7개, Clippy 0건 | 900 |
+| 50 | Codegen 완성도 — pre-existing 14+1 E2E 전수 수정 | nested struct field 재귀 타입추론, array index assignment, slice .len() extractvalue, Range→generate_slice 디스패치, method call 리턴타입 추론, SSA 변수 재대입 수정 — E2E 900 전체 통과(0 fail), Clippy 0건 | 900 |
 
-## 현재 작업 (2026-02-24) — Phase 50: Codegen 완성도 — E2E 실패 14개 전수 수정
+## 현재 작업 (2026-02-25) — Phase 50: Codegen 완성도 — E2E 실패 14+1개 전수 수정 ✅
 모드: 자동진행
-- [ ] 1. Phase 49 미커밋 변경사항 커밋 (Opus)
-- [ ] 2. Nested struct field access codegen 수정 — Text IR 재귀 타입 추론 구현 (Opus)
-- [ ] 3. Array/Slice index assignment codegen 수정 — Text IR Expr::Index 케이스 추가 (Opus) [∥2]
-- [ ] 4. Slice/OwnedString 연쇄 수정 & 나머지 E2E 검증 (Opus) [blockedBy: 2,3]
-- [ ] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 4]
-진행률: 0/5 (0%)
+- [x] 1. Phase 49 미커밋 변경사항 커밋 (Opus)
+- [x] 2. Nested struct field access codegen 수정 — Text IR 재귀 타입 추론 구현 (Opus)
+  변경: expr_helpers_data.rs — generate_field_expr에 infer_expr_type 기반 재귀 타입 추론 (Ident만→전체 Expr 지원), struct 필드는 pointer 반환
+- [x] 3. Array/Slice index assignment codegen 수정 — Text IR Expr::Index 케이스 추가 (Opus) [∥2]
+  변경: expr_helpers.rs — generate_assign_expr에 Expr::Index 케이스 추가 (GEP+store)
+- [x] 4. Slice/OwnedString 연쇄 수정 & 나머지 E2E 검증 (Opus) [blockedBy: 2,3]
+  변경: method_call.rs — slice .len() extractvalue 구현, method call 리턴타입 함수 시그니처 조회
+  변경: expr_helpers_data.rs — Range index → generate_slice 디스패치
+  변경: expr_helpers.rs — SSA 변수 재대입 시 locals map 업데이트 (store 대신 alias 교체)
+- [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 4]
+  검증: cargo check 통과, cargo clippy 0건, E2E 900개 전체 통과 (0 fail, 0 ignored, 0 regression)
+  기타 테스트: error_scenario 21통과, execution 119통과, phase33 20통과, windows 17통과
+진행률: 5/5 (100%) ✅
 
 ## 현재 작업 (2026-02-24) — Phase 49: Codegen 완성도 — 잔여 assert_compiles 21개 해결 ✅
 모드: 자동진행
@@ -569,6 +577,22 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 3. Codegen 수정: Slice literal fat pointer ABI 구현 (Opus) [∥1]
 - [x] 4. 기타 Codegen 수정: result_chain/where_clause/f64/dup_fn/struct_by_value 전환 시도 (Opus)
 - [x] 5. 검증 & ROADMAP 업데이트 (Opus) [blockedBy: 1,2,3,4]
+
+### Phase 50: Codegen 완성도 — pre-existing E2E 14+1개 전수 수정 ✅
+> 목표: pre-existing E2E 실패 14개 + error_scenario 1개 전수 해결 (결과: 15개 전부 수정, E2E 900 전체 통과)
+
+수정 내용:
+1. **Nested struct field access** (5개 복구): generate_field_expr에 infer_expr_type 기반 재귀 타입 추론 구현. Expr::Ident만 처리하던 것을 모든 sub-expression 지원으로 확장. 중첩 struct 필드는 포인터 반환(load 없음).
+2. **Array index assignment** (4개 복구): generate_assign_expr에 Expr::Index 케이스 추가. arr[i] = value 패턴의 GEP+store IR 생성.
+3. **Slice .len()** (2개 복구): method_call.rs에 Slice/SliceMut/Ref(Slice)/RefMut(Slice) 타입 감지 추가. `extractvalue { i8*, i64 } %s, 1` 으로 fat pointer에서 길이 추출.
+4. **Range slicing** (2개 복구): generate_index_expr에서 Expr::Range 감지 → generate_slice 디스패치. 기존에 Range struct를 i64 index로 사용하려던 오류 수정.
+5. **Method return type** (1개 복구: OwnedString): method_call.rs에서 ret_type을 항상 i64로 하던 것을 함수 시그니처에서 실제 리턴타입 조회로 변경.
+6. **SSA variable reassignment** (1개 복구: error_assignment_to_immutable): SSA 변수(`x := 5`)에 대한 재대입(`x = 10`)이 `store` 대신 locals map의 alias 교체로 처리.
+
+- [x] 1. Phase 49 미커밋 변경사항 커밋 (Opus)
+- [x] 2. Nested struct + Array index codegen 수정 (Opus) [∥]
+- [x] 3. Slice .len() + Range dispatch + Method ret type + SSA reassign 수정 (Opus)
+- [x] 4. 검증 & ROADMAP 업데이트 (Opus)
 
 ---
 

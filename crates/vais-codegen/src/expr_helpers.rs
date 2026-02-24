@@ -301,25 +301,35 @@ impl CodeGenerator {
         if let Expr::Ident(name) = &target.node {
             if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                 if !local.is_param() {
-                    let llvm_ty = self.type_to_llvm(&local.ty);
-                    // For struct types (Named), the local is a double pointer (%Type**).
-                    // We need to alloca a new struct, store the value, then update the pointer.
-                    if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
-                        let tmp_ptr = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
-                            llvm_ty, val, llvm_ty, tmp_ptr
-                        ));
-                        ir.push_str(&format!(
-                            "  store {}* {}, {}** %{}\n",
-                            llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
-                        ));
+                    if local.is_ssa() {
+                        // SSA variable: update the alias to the new value (no store needed)
+                        // This handles `x := 5; x = 10` where x is non-mutable SSA
+                        let local_ty = local.ty.clone();
+                        self.fn_ctx.locals.insert(
+                            name.clone(),
+                            crate::LocalVar::ssa(local_ty, val.clone()),
+                        );
                     } else {
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* %{}\n",
-                            llvm_ty, val, llvm_ty, local.llvm_name
-                        ));
+                        let llvm_ty = self.type_to_llvm(&local.ty);
+                        // For struct types (Named), the local is a double pointer (%Type**).
+                        // We need to alloca a new struct, store the value, then update the pointer.
+                        if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
+                            let tmp_ptr = self.next_temp(counter);
+                            ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
+                            ir.push_str(&format!(
+                                "  store {} {}, {}* {}\n",
+                                llvm_ty, val, llvm_ty, tmp_ptr
+                            ));
+                            ir.push_str(&format!(
+                                "  store {}* {}, {}** %{}\n",
+                                llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
+                            ));
+                        } else {
+                            ir.push_str(&format!(
+                                "  store {} {}, {}* %{}\n",
+                                llvm_ty, val, llvm_ty, local.llvm_name
+                            ));
+                        }
                     }
                 }
             }
@@ -331,35 +341,67 @@ impl CodeGenerator {
             let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
             ir.push_str(&obj_ir);
 
-            if let Expr::Ident(var_name) = &obj_expr.node {
-                if let Some(local) = self.fn_ctx.locals.get(var_name.as_str()).cloned() {
-                    if let ResolvedType::Named {
-                        name: struct_name, ..
-                    } = &local.ty
-                    {
-                        if let Some(struct_info) = self.types.structs.get(struct_name).cloned() {
-                            if let Some(field_idx) = struct_info
-                                .fields
-                                .iter()
-                                .position(|(n, _)| n == &field.node)
-                            {
-                                let field_ty = &struct_info.fields[field_idx].1;
-                                let llvm_ty = self.type_to_llvm(field_ty);
+            // Use infer_expr_type to support both simple (obj.field) and nested field assignment
+            let obj_type = self.infer_expr_type(obj_expr);
+            let resolved_type = match &obj_type {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
 
-                                let field_ptr = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                                    field_ptr, struct_name, struct_name, obj_val, field_idx
-                                ));
-                                ir.push_str(&format!(
-                                    "  store {} {}, {}* {}\n",
-                                    llvm_ty, val, llvm_ty, field_ptr
-                                ));
-                            }
-                        }
+            if let ResolvedType::Named {
+                name: orig_name, ..
+            } = &resolved_type
+            {
+                let struct_name = self.resolve_struct_name(orig_name);
+                if let Some(struct_info) = self.types.structs.get(&struct_name).cloned() {
+                    if let Some(field_idx) = struct_info
+                        .fields
+                        .iter()
+                        .position(|(n, _)| n == &field.node)
+                    {
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
+
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                            field_ptr, struct_name, struct_name, obj_val, field_idx
+                        ));
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            llvm_ty, val, llvm_ty, field_ptr
+                        ));
                     }
                 }
             }
+        } else if let Expr::Index {
+            expr: arr_expr,
+            index,
+        } = &target.node
+        {
+            // Array/slice index assignment: arr[i] = value
+            let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
+            let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
+            ir.push_str(&arr_ir);
+            ir.push_str(&idx_ir);
+
+            // Infer element type for correct GEP + store
+            let arr_ty = self.infer_expr_type(arr_expr);
+            let elem_llvm_ty = match &arr_ty {
+                ResolvedType::Pointer(elem) => self.type_to_llvm(elem),
+                ResolvedType::Array(elem) => self.type_to_llvm(elem),
+                _ => "i64".to_string(),
+            };
+
+            let elem_ptr = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                elem_ptr, elem_llvm_ty, elem_llvm_ty, arr_val, idx_val
+            ));
+            ir.push_str(&format!(
+                "  store {} {}, {}* {}\n",
+                elem_llvm_ty, val, elem_llvm_ty, elem_ptr
+            ));
         }
 
         Ok((val, ir))
