@@ -454,4 +454,209 @@ mod tests {
             "{ i8*, i64, i64, i8*, i8* }"
         );
     }
+
+    // ========== ABI Version ==========
+
+    #[test]
+    fn test_abi_version_is_1_0_0() {
+        assert_eq!(ABI_VERSION, "1.0.0");
+    }
+
+    // ========== CallingConvention ==========
+
+    #[test]
+    fn test_calling_convention_parse_vais_lowercase() {
+        assert_eq!(
+            CallingConvention::parse_abi("vais"),
+            Some(CallingConvention::Vais)
+        );
+    }
+
+    #[test]
+    fn test_calling_convention_debug() {
+        // Verify Debug is implemented
+        let cc = CallingConvention::C;
+        let debug_str = format!("{:?}", cc);
+        assert!(debug_str.contains("C"));
+    }
+
+    #[test]
+    fn test_calling_convention_clone() {
+        let cc = CallingConvention::Fast;
+        let cloned = cc;
+        assert_eq!(cc, cloned);
+    }
+
+    #[test]
+    fn test_calling_convention_equality() {
+        assert_eq!(CallingConvention::C, CallingConvention::C);
+        assert_ne!(CallingConvention::C, CallingConvention::Fast);
+        assert_ne!(CallingConvention::StdCall, CallingConvention::FastCall);
+    }
+
+    // ========== AbiCompatibility ==========
+
+    #[test]
+    fn test_abi_compatibility_debug() {
+        let compat = AbiCompatibility::Compatible;
+        let debug_str = format!("{:?}", compat);
+        assert!(debug_str.contains("Compatible"));
+    }
+
+    #[test]
+    fn test_abi_compatibility_equality() {
+        assert_eq!(AbiCompatibility::Compatible, AbiCompatibility::Compatible);
+        assert_ne!(AbiCompatibility::Compatible, AbiCompatibility::Incompatible);
+        assert_ne!(
+            AbiCompatibility::MinorDifference,
+            AbiCompatibility::Incompatible
+        );
+    }
+
+    #[test]
+    fn test_abi_compatibility_clone() {
+        let compat = AbiCompatibility::MinorDifference;
+        let cloned = compat;
+        assert_eq!(compat, cloned);
+    }
+
+    // ========== Alignment edge cases ==========
+
+    #[test]
+    fn test_alignment_for_size_zero() {
+        assert_eq!(alignment::for_size(0), 1);
+    }
+
+    #[test]
+    fn test_alignment_for_size_large() {
+        assert_eq!(alignment::for_size(1024), 8);
+        assert_eq!(alignment::for_size(usize::MAX), 8);
+    }
+
+    #[test]
+    fn test_alignment_constants_power_of_two() {
+        // All alignment constants should be powers of 2
+        assert!(alignment::I8.is_power_of_two());
+        assert!(alignment::I16.is_power_of_two());
+        assert!(alignment::I32.is_power_of_two());
+        assert!(alignment::I64.is_power_of_two());
+        assert!(alignment::F32.is_power_of_two());
+        assert!(alignment::F64.is_power_of_two());
+        assert!(alignment::POINTER.is_power_of_two());
+        assert!(alignment::BOOL.is_power_of_two());
+    }
+
+    // ========== Struct layout edge cases ==========
+
+    #[test]
+    fn test_struct_field_offset_zero_align_one() {
+        assert_eq!(struct_layout::calculate_field_offset(0, 1), 0);
+    }
+
+    #[test]
+    fn test_struct_field_offset_already_aligned() {
+        assert_eq!(struct_layout::calculate_field_offset(4, 4), 4);
+        assert_eq!(struct_layout::calculate_field_offset(8, 4), 8);
+        assert_eq!(struct_layout::calculate_field_offset(16, 8), 16);
+    }
+
+    #[test]
+    fn test_struct_field_offset_needs_padding() {
+        assert_eq!(struct_layout::calculate_field_offset(1, 2), 2);
+        assert_eq!(struct_layout::calculate_field_offset(3, 4), 4);
+        assert_eq!(struct_layout::calculate_field_offset(7, 8), 8);
+        assert_eq!(struct_layout::calculate_field_offset(9, 4), 12);
+    }
+
+    #[test]
+    fn test_struct_size_align_one() {
+        assert_eq!(struct_layout::calculate_struct_size(1, 1), 1);
+        assert_eq!(struct_layout::calculate_struct_size(5, 1), 5);
+    }
+
+    #[test]
+    fn test_struct_size_zero() {
+        assert_eq!(struct_layout::calculate_struct_size(0, 4), 0);
+    }
+
+    #[test]
+    fn test_struct_layout_ordering_constants() {
+        assert_eq!(struct_layout::REPR_C_ORDERING, "declaration-order");
+        assert_eq!(struct_layout::DEFAULT_ORDERING, "declaration-order");
+    }
+
+    // ========== VTable edge cases ==========
+
+    #[test]
+    fn test_vtable_method_slot_large_index() {
+        assert_eq!(vtable::method_slot(100), 103);
+        assert_eq!(vtable::method_slot(1000), 1003);
+    }
+
+    #[test]
+    fn test_vtable_type_many_methods() {
+        let result = vtable::vtable_type_with_methods(5);
+        assert!(result.starts_with("{ i8*, i64, i64"));
+        // Should have 5 method slots
+        let method_ptrs = result.matches("i8*").count();
+        assert_eq!(method_ptrs, 6); // 1 for drop_fn + 5 for methods
+    }
+
+    #[test]
+    fn test_vtable_metadata_slots() {
+        assert_eq!(vtable::METADATA_SLOTS, vtable::SLOT_METHODS_START);
+    }
+
+    // ========== Compatibility with empty ==========
+
+    #[test]
+    fn test_compatibility_empty_string() {
+        assert_eq!(
+            check_abi_compatibility(""),
+            AbiCompatibility::Incompatible
+        );
+    }
+
+    #[test]
+    fn test_compatibility_non_numeric() {
+        assert_eq!(
+            check_abi_compatibility("a.b.c"),
+            AbiCompatibility::Incompatible
+        );
+    }
+
+    #[test]
+    fn test_compatibility_negative_numbers() {
+        assert_eq!(
+            check_abi_compatibility("-1.0.0"),
+            AbiCompatibility::Incompatible
+        );
+    }
+
+    // ========== Full CallingConvention roundtrip ==========
+
+    #[test]
+    fn test_all_calling_conventions_have_llvm_str() {
+        let conventions = [
+            CallingConvention::C,
+            CallingConvention::Vais,
+            CallingConvention::Fast,
+            CallingConvention::StdCall,
+            CallingConvention::FastCall,
+            CallingConvention::System,
+        ];
+        for cc in &conventions {
+            let llvm_str = cc.to_llvm_str();
+            assert!(!llvm_str.is_empty(), "Convention {:?} has empty LLVM string", cc);
+        }
+    }
+
+    #[test]
+    fn test_c_and_vais_same_llvm_str() {
+        // Vais convention is currently same as C
+        assert_eq!(
+            CallingConvention::C.to_llvm_str(),
+            CallingConvention::Vais.to_llvm_str()
+        );
+    }
 }

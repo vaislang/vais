@@ -147,3 +147,178 @@ pub(crate) fn suggest_type_conversion(expected: &str, found: &str) -> String {
 
     String::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== edit_distance ==========
+
+    #[test]
+    fn test_edit_distance_identical() {
+        assert_eq!(edit_distance("hello", "hello"), 0);
+    }
+
+    #[test]
+    fn test_edit_distance_empty() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("abc", ""), 3);
+        assert_eq!(edit_distance("", "xyz"), 3);
+    }
+
+    #[test]
+    fn test_edit_distance_one_char_diff() {
+        assert_eq!(edit_distance("cat", "bat"), 1);
+        assert_eq!(edit_distance("cat", "cats"), 1);
+        assert_eq!(edit_distance("cats", "cat"), 1);
+    }
+
+    #[test]
+    fn test_edit_distance_completely_different() {
+        assert_eq!(edit_distance("abc", "xyz"), 3);
+    }
+
+    #[test]
+    fn test_edit_distance_symmetric() {
+        assert_eq!(
+            edit_distance("kitten", "sitting"),
+            edit_distance("sitting", "kitten")
+        );
+    }
+
+    #[test]
+    fn test_edit_distance_transposition() {
+        assert_eq!(edit_distance("ab", "ba"), 2); // swap = delete + insert
+    }
+
+    // ========== suggest_similar ==========
+
+    #[test]
+    fn test_suggest_similar_exact() {
+        let candidates = &["foo", "bar", "baz"];
+        let result = suggest_similar("foo", candidates, 3);
+        assert_eq!(result, vec!["foo"]);
+    }
+
+    #[test]
+    fn test_suggest_similar_close() {
+        let candidates = &["print_i64", "print_f64", "puts"];
+        let result = suggest_similar("print_i65", candidates, 3);
+        assert!(result.contains(&"print_i64".to_string()));
+    }
+
+    #[test]
+    fn test_suggest_similar_none() {
+        let candidates = &["foo", "bar"];
+        let result = suggest_similar("completely_different_name", candidates, 3);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_suggest_similar_case_insensitive() {
+        let candidates = &["Print", "puts"];
+        let result = suggest_similar("print", candidates, 3);
+        assert!(result.contains(&"Print".to_string()));
+    }
+
+    #[test]
+    fn test_suggest_similar_max_suggestions() {
+        let candidates = &["aa", "ab", "ac", "ad"];
+        let result = suggest_similar("aa", candidates, 2);
+        assert!(result.len() <= 2);
+    }
+
+    #[test]
+    fn test_suggest_similar_empty_candidates() {
+        let candidates: &[&str] = &[];
+        let result = suggest_similar("foo", candidates, 3);
+        assert!(result.is_empty());
+    }
+
+    // ========== format_did_you_mean ==========
+
+    #[test]
+    fn test_format_did_you_mean_empty() {
+        assert_eq!(format_did_you_mean(&[]), "");
+    }
+
+    #[test]
+    fn test_format_did_you_mean_one() {
+        let suggestions = vec!["foo".to_string()];
+        assert_eq!(format_did_you_mean(&suggestions), ". Did you mean `foo`?");
+    }
+
+    #[test]
+    fn test_format_did_you_mean_two() {
+        let suggestions = vec!["foo".to_string(), "bar".to_string()];
+        let result = format_did_you_mean(&suggestions);
+        assert!(result.contains("foo"));
+        assert!(result.contains("bar"));
+        assert!(result.contains("or"));
+    }
+
+    #[test]
+    fn test_format_did_you_mean_three() {
+        let suggestions = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let result = format_did_you_mean(&suggestions);
+        assert!(result.contains("a"));
+        assert!(result.contains("b"));
+        assert!(result.contains("c"));
+    }
+
+    // ========== suggest_type_conversion ==========
+
+    #[test]
+    fn test_suggest_type_conversion_float_to_int() {
+        let result = suggest_type_conversion("i64", "f64");
+        assert!(result.contains("as i64"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_int_to_float() {
+        let result = suggest_type_conversion("f64", "i64");
+        assert!(result.contains("as f64"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_int_sizes() {
+        let result = suggest_type_conversion("i64", "i32");
+        assert!(result.contains("as i64"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_float_sizes() {
+        let result = suggest_type_conversion("f64", "f32");
+        assert!(result.contains("as f64"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_string_to_str() {
+        let result = suggest_type_conversion("&str", "String");
+        assert!(result.contains("as_str"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_str_to_string() {
+        let result = suggest_type_conversion("String", "&str");
+        assert!(result.contains("to_string"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_bool_to_int() {
+        let result = suggest_type_conversion("i64", "bool");
+        assert!(result.contains("boolean to integer"));
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_same_type() {
+        let result = suggest_type_conversion("i64", "i64");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_suggest_type_conversion_no_suggestion() {
+        let result = suggest_type_conversion("Vec", "HashMap");
+        assert!(result.is_empty());
+    }
+}

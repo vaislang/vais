@@ -422,3 +422,359 @@ impl TargetTriple {
         ]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== parse ==========
+
+    #[test]
+    fn test_parse_native() {
+        assert_eq!(TargetTriple::parse("native"), Some(TargetTriple::Native));
+        assert_eq!(TargetTriple::parse("auto"), Some(TargetTriple::Native));
+    }
+
+    #[test]
+    fn test_parse_x86_64_linux() {
+        assert_eq!(
+            TargetTriple::parse("x86_64-linux"),
+            Some(TargetTriple::X86_64Linux)
+        );
+        assert_eq!(
+            TargetTriple::parse("x86_64-unknown-linux-gnu"),
+            Some(TargetTriple::X86_64Linux)
+        );
+    }
+
+    #[test]
+    fn test_parse_x86_64_linux_musl() {
+        assert_eq!(
+            TargetTriple::parse("x86_64-linux-musl"),
+            Some(TargetTriple::X86_64LinuxMusl)
+        );
+    }
+
+    #[test]
+    fn test_parse_x86_64_windows() {
+        assert_eq!(
+            TargetTriple::parse("x86_64-windows-msvc"),
+            Some(TargetTriple::X86_64WindowsMsvc)
+        );
+        assert_eq!(
+            TargetTriple::parse("x86_64-windows-gnu"),
+            Some(TargetTriple::X86_64WindowsGnu)
+        );
+    }
+
+    #[test]
+    fn test_parse_aarch64_darwin() {
+        assert_eq!(
+            TargetTriple::parse("aarch64-darwin"),
+            Some(TargetTriple::Aarch64Darwin)
+        );
+        assert_eq!(
+            TargetTriple::parse("aarch64-apple-darwin"),
+            Some(TargetTriple::Aarch64Darwin)
+        );
+        assert_eq!(
+            TargetTriple::parse("arm64"),
+            Some(TargetTriple::Aarch64Darwin)
+        );
+    }
+
+    #[test]
+    fn test_parse_wasm() {
+        assert_eq!(
+            TargetTriple::parse("wasm32"),
+            Some(TargetTriple::Wasm32Unknown)
+        );
+        assert_eq!(
+            TargetTriple::parse("wasm32-unknown-unknown"),
+            Some(TargetTriple::Wasm32Unknown)
+        );
+        assert_eq!(
+            TargetTriple::parse("wasi"),
+            Some(TargetTriple::WasiPreview1)
+        );
+        assert_eq!(
+            TargetTriple::parse("wasi-preview2"),
+            Some(TargetTriple::WasiPreview2)
+        );
+    }
+
+    #[test]
+    fn test_parse_riscv64() {
+        assert_eq!(
+            TargetTriple::parse("riscv64"),
+            Some(TargetTriple::Riscv64LinuxGnu)
+        );
+    }
+
+    #[test]
+    fn test_parse_freebsd() {
+        assert_eq!(
+            TargetTriple::parse("x86_64-freebsd"),
+            Some(TargetTriple::X86_64FreeBsd)
+        );
+        assert_eq!(
+            TargetTriple::parse("aarch64-freebsd"),
+            Some(TargetTriple::Aarch64FreeBsd)
+        );
+    }
+
+    #[test]
+    fn test_parse_case_insensitive() {
+        assert_eq!(
+            TargetTriple::parse("NATIVE"),
+            Some(TargetTriple::Native)
+        );
+        assert_eq!(
+            TargetTriple::parse("X86_64-Linux"),
+            Some(TargetTriple::X86_64Linux)
+        );
+    }
+
+    #[test]
+    fn test_parse_unknown() {
+        assert_eq!(TargetTriple::parse("unknown-target"), None);
+        assert_eq!(TargetTriple::parse(""), None);
+    }
+
+    #[test]
+    fn test_parse_android() {
+        assert_eq!(
+            TargetTriple::parse("aarch64-android"),
+            Some(TargetTriple::Aarch64Android)
+        );
+        assert_eq!(
+            TargetTriple::parse("armv7-android"),
+            Some(TargetTriple::Armv7Android)
+        );
+    }
+
+    #[test]
+    fn test_parse_ios() {
+        assert_eq!(
+            TargetTriple::parse("aarch64-ios"),
+            Some(TargetTriple::Aarch64Ios)
+        );
+        assert_eq!(
+            TargetTriple::parse("aarch64-ios-sim"),
+            Some(TargetTriple::Aarch64IosSimulator)
+        );
+    }
+
+    // ========== triple_str ==========
+
+    #[test]
+    fn test_triple_str() {
+        assert_eq!(TargetTriple::X86_64Linux.triple_str(), "x86_64-unknown-linux-gnu");
+        assert_eq!(TargetTriple::Aarch64Darwin.triple_str(), "aarch64-apple-darwin");
+        assert_eq!(TargetTriple::Wasm32Unknown.triple_str(), "wasm32-unknown-unknown");
+        assert_eq!(TargetTriple::Native.triple_str(), "");
+    }
+
+    // ========== predicates ==========
+
+    #[test]
+    fn test_is_wasm() {
+        assert!(TargetTriple::Wasm32Unknown.is_wasm());
+        assert!(TargetTriple::WasiPreview1.is_wasm());
+        assert!(TargetTriple::WasiPreview2.is_wasm());
+        assert!(!TargetTriple::X86_64Linux.is_wasm());
+    }
+
+    #[test]
+    fn test_is_windows() {
+        assert!(TargetTriple::X86_64WindowsMsvc.is_windows());
+        assert!(TargetTriple::X86_64WindowsGnu.is_windows());
+        assert!(TargetTriple::Aarch64WindowsMsvc.is_windows());
+        assert!(!TargetTriple::X86_64Linux.is_windows());
+    }
+
+    #[test]
+    fn test_is_apple() {
+        assert!(TargetTriple::X86_64Darwin.is_apple());
+        assert!(TargetTriple::Aarch64Darwin.is_apple());
+        assert!(TargetTriple::Aarch64Ios.is_apple());
+        assert!(TargetTriple::Aarch64IosSimulator.is_apple());
+        assert!(!TargetTriple::X86_64Linux.is_apple());
+    }
+
+    #[test]
+    fn test_is_android() {
+        assert!(TargetTriple::Aarch64Android.is_android());
+        assert!(TargetTriple::Armv7Android.is_android());
+        assert!(!TargetTriple::Aarch64Linux.is_android());
+    }
+
+    #[test]
+    fn test_is_ios() {
+        assert!(TargetTriple::Aarch64Ios.is_ios());
+        assert!(TargetTriple::Aarch64IosSimulator.is_ios());
+        assert!(!TargetTriple::Aarch64Darwin.is_ios());
+    }
+
+    #[test]
+    fn test_is_musl() {
+        assert!(TargetTriple::X86_64LinuxMusl.is_musl());
+        assert!(TargetTriple::Aarch64LinuxMusl.is_musl());
+        assert!(!TargetTriple::X86_64Linux.is_musl());
+    }
+
+    #[test]
+    fn test_is_freebsd() {
+        assert!(TargetTriple::X86_64FreeBsd.is_freebsd());
+        assert!(TargetTriple::Aarch64FreeBsd.is_freebsd());
+        assert!(!TargetTriple::X86_64Linux.is_freebsd());
+    }
+
+    #[test]
+    fn test_is_linux() {
+        assert!(TargetTriple::X86_64Linux.is_linux());
+        assert!(TargetTriple::Aarch64Linux.is_linux());
+        assert!(TargetTriple::Riscv64LinuxGnu.is_linux());
+        assert!(!TargetTriple::Aarch64Darwin.is_linux());
+        assert!(!TargetTriple::Wasm32Unknown.is_linux());
+    }
+
+    // ========== target_os & target_arch ==========
+
+    #[test]
+    fn test_target_os() {
+        assert_eq!(TargetTriple::X86_64Linux.target_os(), "linux");
+        assert_eq!(TargetTriple::Aarch64Darwin.target_os(), "macos");
+        assert_eq!(TargetTriple::X86_64WindowsMsvc.target_os(), "windows");
+        assert_eq!(TargetTriple::Wasm32Unknown.target_os(), "wasm");
+        assert_eq!(TargetTriple::Aarch64Android.target_os(), "android");
+        assert_eq!(TargetTriple::X86_64FreeBsd.target_os(), "freebsd");
+        assert_eq!(TargetTriple::Aarch64Ios.target_os(), "ios");
+    }
+
+    #[test]
+    fn test_target_arch() {
+        assert_eq!(TargetTriple::X86_64Linux.target_arch(), "x86_64");
+        assert_eq!(TargetTriple::Aarch64Darwin.target_arch(), "aarch64");
+        assert_eq!(TargetTriple::Armv7Android.target_arch(), "arm");
+        assert_eq!(TargetTriple::Riscv64LinuxGnu.target_arch(), "riscv64");
+        assert_eq!(TargetTriple::Wasm32Unknown.target_arch(), "wasm32");
+    }
+
+    // ========== pointer_bits ==========
+
+    #[test]
+    fn test_pointer_bits_64() {
+        assert_eq!(TargetTriple::X86_64Linux.pointer_bits(), 64);
+        assert_eq!(TargetTriple::Aarch64Darwin.pointer_bits(), 64);
+    }
+
+    #[test]
+    fn test_pointer_bits_32() {
+        assert_eq!(TargetTriple::Wasm32Unknown.pointer_bits(), 32);
+        assert_eq!(TargetTriple::WasiPreview1.pointer_bits(), 32);
+        assert_eq!(TargetTriple::Armv7Android.pointer_bits(), 32);
+    }
+
+    // ========== output_extension ==========
+
+    #[test]
+    fn test_output_extension_windows() {
+        assert_eq!(TargetTriple::X86_64WindowsMsvc.output_extension(), "exe");
+        assert_eq!(TargetTriple::X86_64WindowsGnu.output_extension(), "exe");
+    }
+
+    #[test]
+    fn test_output_extension_wasm() {
+        assert_eq!(TargetTriple::Wasm32Unknown.output_extension(), "wasm");
+        assert_eq!(TargetTriple::WasiPreview1.output_extension(), "wasm");
+    }
+
+    #[test]
+    fn test_output_extension_unix() {
+        assert_eq!(TargetTriple::X86_64Linux.output_extension(), "");
+        assert_eq!(TargetTriple::Aarch64Darwin.output_extension(), "");
+    }
+
+    // ========== cfg_values ==========
+
+    #[test]
+    fn test_cfg_values_linux() {
+        let cfg = TargetTriple::X86_64Linux.cfg_values();
+        assert_eq!(cfg.get("target_os").unwrap(), "linux");
+        assert_eq!(cfg.get("target_arch").unwrap(), "x86_64");
+        assert_eq!(cfg.get("target_family").unwrap(), "unix");
+    }
+
+    #[test]
+    fn test_cfg_values_windows() {
+        let cfg = TargetTriple::X86_64WindowsMsvc.cfg_values();
+        assert_eq!(cfg.get("target_os").unwrap(), "windows");
+        assert_eq!(cfg.get("target_family").unwrap(), "windows");
+    }
+
+    #[test]
+    fn test_cfg_values_wasm() {
+        let cfg = TargetTriple::Wasm32Unknown.cfg_values();
+        assert_eq!(cfg.get("target_os").unwrap(), "wasm");
+        assert_eq!(cfg.get("target_family").unwrap(), "wasm");
+    }
+
+    // ========== all_targets ==========
+
+    #[test]
+    fn test_all_targets_parseable() {
+        for target_str in TargetTriple::all_targets() {
+            assert!(
+                TargetTriple::parse(target_str).is_some(),
+                "Target '{}' should be parseable",
+                target_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_targets_not_empty() {
+        assert!(!TargetTriple::all_targets().is_empty());
+        assert!(TargetTriple::all_targets().len() >= 15);
+    }
+
+    // ========== data_layout ==========
+
+    #[test]
+    fn test_data_layout_not_empty_for_non_native() {
+        let targets = [
+            TargetTriple::X86_64Linux,
+            TargetTriple::Aarch64Darwin,
+            TargetTriple::Wasm32Unknown,
+            TargetTriple::Riscv64LinuxGnu,
+        ];
+        for target in targets {
+            assert!(
+                !target.data_layout().is_empty(),
+                "Data layout for {:?} should not be empty",
+                target
+            );
+        }
+    }
+
+    #[test]
+    fn test_data_layout_native_is_empty() {
+        assert_eq!(TargetTriple::Native.data_layout(), "");
+    }
+
+    // ========== equality ==========
+
+    #[test]
+    fn test_target_equality() {
+        assert_eq!(TargetTriple::Native, TargetTriple::Native);
+        assert_ne!(TargetTriple::Native, TargetTriple::X86_64Linux);
+    }
+
+    #[test]
+    fn test_target_clone() {
+        let t = TargetTriple::Aarch64Darwin;
+        let cloned = t.clone();
+        assert_eq!(t, cloned);
+    }
+}

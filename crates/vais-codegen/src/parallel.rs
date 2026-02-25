@@ -317,4 +317,184 @@ entry:
         assert_eq!(stats.functions_optimized, 0);
         assert_eq!(stats.thread_count, 0);
     }
+
+    // ========== ParallelConfig ==========
+
+    #[test]
+    fn test_parallel_config_effective_threads_auto() {
+        let config = ParallelConfig::default();
+        // Auto mode should return something > 0
+        assert!(config.effective_threads() > 0);
+    }
+
+    #[test]
+    fn test_parallel_config_effective_threads_specified() {
+        let config = ParallelConfig::new(8);
+        assert_eq!(config.effective_threads(), 8);
+    }
+
+    #[test]
+    fn test_parallel_config_clone() {
+        let config = ParallelConfig::new(4);
+        let cloned = config.clone();
+        assert_eq!(cloned.num_threads, 4);
+        assert_eq!(cloned.parallel_parse, true);
+        assert_eq!(cloned.parallel_optimize, true);
+    }
+
+    // ========== split_ir edge cases ==========
+
+    #[test]
+    fn test_split_ir_empty() {
+        let (preamble, functions) = split_ir_into_functions("");
+        assert!(preamble.is_empty() || preamble.trim().is_empty());
+        assert!(functions.is_empty());
+    }
+
+    #[test]
+    fn test_split_ir_preamble_only() {
+        let ir = "; ModuleID = 'test'\nsource_filename = \"<vais>\"\n";
+        let (preamble, functions) = split_ir_into_functions(ir);
+        assert!(preamble.contains("ModuleID"));
+        assert!(functions.is_empty());
+    }
+
+    #[test]
+    fn test_split_ir_single_function() {
+        let ir = "define i64 @foo() {\nentry:\n  ret i64 42\n}\n";
+        let (preamble, functions) = split_ir_into_functions(ir);
+        assert!(preamble.is_empty() || preamble.trim().is_empty());
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].0, "foo");
+    }
+
+    #[test]
+    fn test_split_ir_nested_braces() {
+        let ir = r#"define i64 @test() {
+entry:
+  br i1 true, label %then, label %else
+then:
+  ret i64 1
+else:
+  ret i64 0
+}
+"#;
+        let (_, functions) = split_ir_into_functions(ir);
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].0, "test");
+        assert!(functions[0].1.contains("then:"));
+        assert!(functions[0].1.contains("else:"));
+    }
+
+    #[test]
+    fn test_split_ir_with_declares() {
+        let ir = r#"declare i64 @printf(i8*, ...)
+
+define i64 @main() {
+entry:
+  ret i64 0
+}
+"#;
+        let (preamble, functions) = split_ir_into_functions(ir);
+        assert!(preamble.contains("declare"));
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].0, "main");
+    }
+
+    #[test]
+    fn test_split_ir_preserves_function_content() {
+        let ir = r#"define i64 @add(i64 %a, i64 %b) {
+entry:
+  %result = add i64 %a, %b
+  ret i64 %result
+}
+"#;
+        let (_, functions) = split_ir_into_functions(ir);
+        assert_eq!(functions.len(), 1);
+        assert!(functions[0].1.contains("add i64 %a, %b"));
+        assert!(functions[0].1.contains("ret i64 %result"));
+    }
+
+    // ========== extract_function_name edge cases ==========
+
+    #[test]
+    fn test_extract_function_name_void_return() {
+        assert_eq!(
+            extract_function_name("define void @init() {"),
+            Some("init".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_function_name_complex_return() {
+        assert_eq!(
+            extract_function_name("define { i64, i64 } @pair() {"),
+            Some("pair".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_function_name_no_at_sign() {
+        assert_eq!(extract_function_name("not a function definition"), None);
+    }
+
+    #[test]
+    fn test_extract_function_name_no_parens() {
+        assert_eq!(extract_function_name("define i64 @no_parens"), None);
+    }
+
+    // ========== parallel_optimize_functions ==========
+
+    #[test]
+    fn test_parallel_optimize_single_function_uses_pass_directly() {
+        let ir = "define i64 @only_one() {\nentry:\n  ret i64 0\n}\n";
+        let called = std::sync::atomic::AtomicBool::new(false);
+        let result = parallel_optimize_functions(ir, |fn_ir| {
+            called.store(true, std::sync::atomic::Ordering::SeqCst);
+            fn_ir.to_string()
+        });
+        assert!(called.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(result.contains("@only_one"));
+    }
+
+    #[test]
+    fn test_parallel_optimize_transforms_functions() {
+        let ir = r#"define i64 @a() {
+entry:
+  ret i64 0
+}
+
+define i64 @b() {
+entry:
+  ret i64 0
+}
+"#;
+        let result = parallel_optimize_functions(ir, |fn_ir| {
+            fn_ir.replace("ret i64 0", "ret i64 42")
+        });
+        // Both functions should be transformed
+        assert!(result.contains("ret i64 42"));
+        assert!(!result.contains("ret i64 0"));
+    }
+
+    // ========== ParallelStats ==========
+
+    #[test]
+    fn test_parallel_stats_clone() {
+        let mut stats = ParallelStats::default();
+        stats.modules_parsed = 10;
+        stats.functions_optimized = 50;
+        stats.thread_count = 4;
+        let cloned = stats.clone();
+        assert_eq!(cloned.modules_parsed, 10);
+        assert_eq!(cloned.functions_optimized, 50);
+        assert_eq!(cloned.thread_count, 4);
+    }
+
+    #[test]
+    fn test_parallel_stats_debug() {
+        let stats = ParallelStats::default();
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("ParallelStats"));
+    }
 }

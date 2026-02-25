@@ -541,4 +541,313 @@ mod tests {
         assert_eq!(TargetTriple::Wasm32Unknown.pointer_bits(), 32);
         assert_eq!(TargetTriple::Armv7Android.pointer_bits(), 32);
     }
+
+    // ========== CrossCompileConfig ==========
+
+    #[test]
+    fn test_cross_compile_config_wasi_preview2_has_component_config() {
+        let config = CrossCompileConfig::new(TargetTriple::WasiPreview2);
+        assert!(config.component_config.is_some());
+    }
+
+    #[test]
+    fn test_cross_compile_config_non_wasi_no_component_config() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        assert!(config.component_config.is_none());
+    }
+
+    #[test]
+    fn test_cross_compile_config_defaults() {
+        let config = CrossCompileConfig::new(TargetTriple::Aarch64Darwin);
+        assert!(config.sysroot.is_none());
+        assert!(config.include_paths.is_empty());
+        assert!(config.lib_paths.is_empty());
+        assert!(config.linker_flags.is_empty());
+        assert!(config.env_vars.is_empty());
+    }
+
+    #[test]
+    fn test_clang_command_with_sysroot() {
+        let mut config = CrossCompileConfig::new(TargetTriple::Aarch64Linux);
+        config.sysroot = Some(std::path::PathBuf::from("/my/sysroot"));
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s.contains("--sysroot=/my/sysroot")));
+    }
+
+    #[test]
+    fn test_clang_command_with_include_paths() {
+        let mut config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        config.include_paths.push(std::path::PathBuf::from("/usr/include"));
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s == "-I/usr/include"));
+    }
+
+    #[test]
+    fn test_clang_command_with_lib_paths() {
+        let mut config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        config.lib_paths.push(std::path::PathBuf::from("/usr/lib"));
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s == "-L/usr/lib"));
+    }
+
+    #[test]
+    fn test_clang_command_with_linker_flags() {
+        let mut config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        config.linker_flags.push("--gc-sections".to_string());
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s == "-Wl,--gc-sections"));
+    }
+
+    // ========== Linker command ==========
+
+    #[test]
+    fn test_linker_command_windows_msvc() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64WindowsMsvc);
+        let cmd = config.linker_command();
+        assert_eq!(cmd[0], "lld-link");
+    }
+
+    #[test]
+    fn test_linker_command_wasm() {
+        let config = CrossCompileConfig::new(TargetTriple::Wasm32Unknown);
+        let cmd = config.linker_command();
+        assert_eq!(cmd[0], "wasm-ld");
+    }
+
+    #[test]
+    fn test_linker_command_wasi_preview1() {
+        let config = CrossCompileConfig::new(TargetTriple::WasiPreview1);
+        let cmd = config.linker_command();
+        assert_eq!(cmd[0], "wasm-ld");
+    }
+
+    #[test]
+    fn test_linker_command_linux_uses_clang() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        let cmd = config.linker_command();
+        assert_eq!(cmd[0], "clang");
+    }
+
+    // ========== RuntimeLibs ==========
+
+    #[test]
+    fn test_runtime_libs_musl() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::X86_64LinuxMusl);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+        // musl combines most things in libc
+        assert!(!libs.system_libs.contains(&"pthread".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_aarch64_musl() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64LinuxMusl);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_windows_msvc() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::X86_64WindowsMsvc);
+        assert!(libs.libs.contains(&"msvcrt".to_string()));
+        assert!(libs.system_libs.contains(&"kernel32".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_windows_gnu() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::X86_64WindowsGnu);
+        assert!(libs.libs.contains(&"mingw32".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_darwin() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64Darwin);
+        assert!(libs.system_libs.contains(&"System".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_android() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64Android);
+        assert!(libs.system_libs.contains(&"log".to_string()));
+        assert!(libs.system_libs.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_ios() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64Ios);
+        assert!(libs.system_libs.contains(&"System".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_ios_simulator() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64IosSimulator);
+        assert!(libs.system_libs.contains(&"System".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_freebsd() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::X86_64FreeBsd);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+        assert!(libs.system_libs.contains(&"pthread".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_aarch64_freebsd() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64FreeBsd);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_wasi_preview2() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::WasiPreview2);
+        assert!(libs.libs.contains(&"wasi-emulated-mman".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_native() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Native);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_aarch64_linux() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64Linux);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+        assert!(libs.system_libs.contains(&"m".to_string()));
+        assert!(libs.system_libs.contains(&"pthread".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_riscv64() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Riscv64LinuxGnu);
+        assert!(libs.system_libs.contains(&"c".to_string()));
+    }
+
+    // ========== CrossCompileError ==========
+
+    #[test]
+    fn test_cross_compile_error_display_sdk_not_found() {
+        let err = CrossCompileError::SdkNotFound {
+            target: "arm64".to_string(),
+            hint: "install SDK".to_string(),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("SDK not found"));
+        assert!(msg.contains("arm64"));
+        assert!(msg.contains("install SDK"));
+    }
+
+    #[test]
+    fn test_cross_compile_error_display_unsupported() {
+        let err = CrossCompileError::UnsupportedTarget("sparc64".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Unsupported target"));
+        assert!(msg.contains("sparc64"));
+    }
+
+    #[test]
+    fn test_cross_compile_error_display_config() {
+        let err = CrossCompileError::ConfigError("bad config".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Configuration error"));
+        assert!(msg.contains("bad config"));
+    }
+
+    #[test]
+    fn test_cross_compile_error_is_error() {
+        let err = CrossCompileError::ConfigError("test".to_string());
+        // Verify it implements std::error::Error
+        let _: &dyn std::error::Error = &err;
+    }
+
+    // ========== create_component non-wasi ==========
+
+    #[test]
+    fn test_create_component_non_wasi_target() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        let result = config.create_component(
+            std::path::Path::new("test.wasm"),
+            std::path::Path::new("output.wasm"),
+        );
+        assert!(result.is_err());
+    }
+
+    // ========== with_component_config ==========
+
+    #[test]
+    fn test_with_component_config() {
+        let config = CrossCompileConfig::new(TargetTriple::WasiPreview2);
+        let link_config = ComponentLinkConfig::new();
+        let config = config.with_component_config(link_config);
+        assert!(config.component_link_config().is_some());
+    }
+
+    #[test]
+    fn test_component_link_config_none_for_linux() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        assert!(config.component_link_config().is_none());
+    }
+
+    // ========== clang_command with target ==========
+
+    #[test]
+    fn test_clang_command_wasm_target() {
+        let config = CrossCompileConfig::new(TargetTriple::Wasm32Unknown);
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s.contains("wasm32")));
+    }
+
+    #[test]
+    fn test_clang_command_windows_target() {
+        let config = CrossCompileConfig::new(TargetTriple::X86_64WindowsMsvc);
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s.contains("x86_64") && s.contains("windows")));
+    }
+
+    #[test]
+    fn test_clang_command_riscv64_target() {
+        let config = CrossCompileConfig::new(TargetTriple::Riscv64LinuxGnu);
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s.contains("riscv64")));
+    }
+
+    #[test]
+    fn test_clang_command_armv7_android() {
+        let config = CrossCompileConfig::new(TargetTriple::Armv7Android);
+        let cmd = config.clang_command();
+        assert!(cmd.iter().any(|s| s.contains("arm")));
+    }
+
+    // ========== Clone ==========
+
+    #[test]
+    fn test_cross_compile_config_clone() {
+        let mut config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
+        config.sysroot = Some(std::path::PathBuf::from("/sysroot"));
+        config.include_paths.push(std::path::PathBuf::from("/inc"));
+        let cloned = config.clone();
+        assert_eq!(cloned.sysroot, config.sysroot);
+        assert_eq!(cloned.include_paths.len(), 1);
+    }
+
+    #[test]
+    fn test_runtime_libs_clone() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::X86_64Linux);
+        let cloned = libs.clone();
+        assert_eq!(cloned.system_libs, libs.system_libs);
+    }
+
+    // ========== Aarch64 Windows ==========
+
+    #[test]
+    fn test_runtime_libs_aarch64_windows() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Aarch64WindowsMsvc);
+        assert!(libs.libs.contains(&"msvcrt".to_string()));
+        assert!(libs.system_libs.contains(&"kernel32".to_string()));
+        assert!(libs.system_libs.contains(&"user32".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_libs_armv7_android() {
+        let libs = RuntimeLibs::for_target(&TargetTriple::Armv7Android);
+        assert!(libs.system_libs.contains(&"log".to_string()));
+    }
 }

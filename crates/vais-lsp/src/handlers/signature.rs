@@ -315,3 +315,146 @@ pub(crate) async fn handle_signature_help(
 
     Ok(None)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== get_builtin_signature tests ==========
+
+    #[test]
+    fn test_builtin_sig_puts() {
+        let (sig, params) = get_builtin_signature("puts").unwrap();
+        assert_eq!(sig, "fn(str) -> i64");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_builtin_sig_memcpy() {
+        let (sig, params) = get_builtin_signature("memcpy").unwrap();
+        assert_eq!(sig, "fn(i64, i64, i64) -> i64");
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_builtin_sig_pow() {
+        let (sig, params) = get_builtin_signature("pow").unwrap();
+        assert_eq!(sig, "fn(f64, f64) -> f64");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_builtin_sig_read_i64() {
+        let (sig, params) = get_builtin_signature("read_i64").unwrap();
+        assert_eq!(sig, "fn() -> i64");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_builtin_sig_unknown() {
+        assert!(get_builtin_signature("not_a_builtin").is_none());
+    }
+
+    // ========== find_call_context tests ==========
+
+    #[test]
+    fn test_find_call_context_simple() {
+        let content = "foo(x, y)";
+        // cursor at position 4 (after opening paren)
+        let result = find_call_context(content, 4);
+        assert!(result.is_some());
+        let (name, param) = result.unwrap();
+        assert_eq!(name, "foo");
+        assert_eq!(param, 0);
+    }
+
+    #[test]
+    fn test_find_call_context_second_param() {
+        let content = "foo(x, y)";
+        // cursor at position 7 (on y)
+        let result = find_call_context(content, 7);
+        assert!(result.is_some());
+        let (name, param) = result.unwrap();
+        assert_eq!(name, "foo");
+        assert_eq!(param, 1);
+    }
+
+    #[test]
+    fn test_find_call_context_third_param() {
+        let content = "bar(a, b, c)";
+        // cursor at position 10 (on c)
+        let result = find_call_context(content, 10);
+        assert!(result.is_some());
+        let (name, param) = result.unwrap();
+        assert_eq!(name, "bar");
+        assert_eq!(param, 2);
+    }
+
+    #[test]
+    fn test_find_call_context_nested() {
+        let content = "foo(bar(x), y)";
+        // cursor at position 12 (on y, after the nested call)
+        let result = find_call_context(content, 12);
+        assert!(result.is_some());
+        let (name, param) = result.unwrap();
+        assert_eq!(name, "foo");
+        assert_eq!(param, 1);
+    }
+
+    #[test]
+    fn test_find_call_context_no_call() {
+        let content = "let x = 42";
+        let result = find_call_context(content, 5);
+        assert!(result.is_none());
+    }
+
+    // ========== extract_function_name tests ==========
+
+    #[test]
+    fn test_extract_function_name_simple() {
+        let chars: Vec<char> = "foo(".chars().collect();
+        assert_eq!(extract_function_name(&chars, 3), Some("foo".to_string()));
+    }
+
+    #[test]
+    fn test_extract_function_name_with_underscore() {
+        let chars: Vec<char> = "my_func(".chars().collect();
+        assert_eq!(
+            extract_function_name(&chars, 7),
+            Some("my_func".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_function_name_at_start() {
+        let chars: Vec<char> = "(".chars().collect();
+        assert!(extract_function_name(&chars, 0).is_none());
+    }
+
+    // ========== count_active_parameter tests ==========
+
+    #[test]
+    fn test_count_active_parameter_no_comma() {
+        let chars: Vec<char> = "x)".chars().collect();
+        assert_eq!(count_active_parameter(&chars, 0, 1), 0);
+    }
+
+    #[test]
+    fn test_count_active_parameter_one_comma() {
+        let chars: Vec<char> = "x, y)".chars().collect();
+        assert_eq!(count_active_parameter(&chars, 0, 4), 1);
+    }
+
+    #[test]
+    fn test_count_active_parameter_two_commas() {
+        let chars: Vec<char> = "a, b, c)".chars().collect();
+        assert_eq!(count_active_parameter(&chars, 0, 7), 2);
+    }
+
+    #[test]
+    fn test_count_active_parameter_nested_parens() {
+        // Commas inside nested parens should not be counted
+        let chars: Vec<char> = "f(a, b), c)".chars().collect();
+        assert_eq!(count_active_parameter(&chars, 0, 10), 1);
+    }
+}

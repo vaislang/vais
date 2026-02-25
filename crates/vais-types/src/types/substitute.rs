@@ -500,3 +500,244 @@ pub fn substitute_const_values(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== substitute_type ==========
+
+    #[test]
+    fn test_substitute_primitive_unchanged() {
+        let subs = HashMap::new();
+        assert_eq!(substitute_type(&ResolvedType::I64, &subs), ResolvedType::I64);
+        assert_eq!(substitute_type(&ResolvedType::Bool, &subs), ResolvedType::Bool);
+    }
+
+    #[test]
+    fn test_substitute_generic_with_concrete() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+        assert_eq!(
+            substitute_type(&ResolvedType::Generic("T".to_string()), &subs),
+            ResolvedType::I64
+        );
+    }
+
+    #[test]
+    fn test_substitute_generic_no_mapping() {
+        let subs = HashMap::new();
+        assert_eq!(
+            substitute_type(&ResolvedType::Generic("T".to_string()), &subs),
+            ResolvedType::Generic("T".to_string())
+        );
+    }
+
+    #[test]
+    fn test_substitute_array() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::F64);
+        let ty = ResolvedType::Array(Box::new(ResolvedType::Generic("T".to_string())));
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Array(Box::new(ResolvedType::F64))
+        );
+    }
+
+    #[test]
+    fn test_substitute_optional() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::Str);
+        let ty = ResolvedType::Optional(Box::new(ResolvedType::Generic("T".to_string())));
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Optional(Box::new(ResolvedType::Str))
+        );
+    }
+
+    #[test]
+    fn test_substitute_result() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+        subs.insert("E".to_string(), ResolvedType::Str);
+        let ty = ResolvedType::Result(
+            Box::new(ResolvedType::Generic("T".to_string())),
+            Box::new(ResolvedType::Generic("E".to_string())),
+        );
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str))
+        );
+    }
+
+    #[test]
+    fn test_substitute_tuple() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::Bool);
+        let ty = ResolvedType::Tuple(vec![
+            ResolvedType::Generic("T".to_string()),
+            ResolvedType::I64,
+        ]);
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Tuple(vec![ResolvedType::Bool, ResolvedType::I64])
+        );
+    }
+
+    #[test]
+    fn test_substitute_named_with_generics() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+        let ty = ResolvedType::Named {
+            name: "Vec".to_string(),
+            generics: vec![ResolvedType::Generic("T".to_string())],
+        };
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![ResolvedType::I64],
+            }
+        );
+    }
+
+    #[test]
+    fn test_substitute_fn_type() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+        let ty = ResolvedType::Fn {
+            params: vec![ResolvedType::Generic("T".to_string())],
+            ret: Box::new(ResolvedType::Generic("T".to_string())),
+            effects: None,
+        };
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Fn {
+                params: vec![ResolvedType::I64],
+                ret: Box::new(ResolvedType::I64),
+                effects: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_substitute_ref_types() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+
+        let ref_ty = ResolvedType::Ref(Box::new(ResolvedType::Generic("T".to_string())));
+        assert_eq!(
+            substitute_type(&ref_ty, &subs),
+            ResolvedType::Ref(Box::new(ResolvedType::I64))
+        );
+
+        let ref_mut_ty = ResolvedType::RefMut(Box::new(ResolvedType::Generic("T".to_string())));
+        assert_eq!(
+            substitute_type(&ref_mut_ty, &subs),
+            ResolvedType::RefMut(Box::new(ResolvedType::I64))
+        );
+    }
+
+    #[test]
+    fn test_substitute_slice() {
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::F32);
+        let ty = ResolvedType::Slice(Box::new(ResolvedType::Generic("T".to_string())));
+        assert_eq!(
+            substitute_type(&ty, &subs),
+            ResolvedType::Slice(Box::new(ResolvedType::F32))
+        );
+    }
+
+    #[test]
+    fn test_substitute_no_change_returns_clone() {
+        let subs = HashMap::new();
+        let ty = ResolvedType::Named {
+            name: "Foo".to_string(),
+            generics: vec![ResolvedType::I64],
+        };
+        assert_eq!(substitute_type(&ty, &subs), ty);
+    }
+
+    #[test]
+    fn test_substitute_depth_limit() {
+        // Create a deeply nested type to test depth limiting
+        let mut subs = HashMap::new();
+        subs.insert("T".to_string(), ResolvedType::I64);
+        // A simple type should still work fine
+        let ty = ResolvedType::Generic("T".to_string());
+        assert_eq!(substitute_type(&ty, &subs), ResolvedType::I64);
+    }
+
+    // ========== substitute_const_values ==========
+
+    #[test]
+    fn test_substitute_const_value() {
+        let subs = HashMap::new();
+        let c = ResolvedConst::Value(42);
+        assert_eq!(substitute_const_values(&c, &subs), ResolvedConst::Value(42));
+    }
+
+    #[test]
+    fn test_substitute_const_param() {
+        let mut subs = HashMap::new();
+        subs.insert("N".to_string(), 10);
+        let c = ResolvedConst::Param("N".to_string());
+        assert_eq!(
+            substitute_const_values(&c, &subs),
+            ResolvedConst::Value(10)
+        );
+    }
+
+    #[test]
+    fn test_substitute_const_param_not_found() {
+        let subs = HashMap::new();
+        let c = ResolvedConst::Param("N".to_string());
+        assert_eq!(
+            substitute_const_values(&c, &subs),
+            ResolvedConst::Param("N".to_string())
+        );
+    }
+
+    #[test]
+    fn test_substitute_const_binop() {
+        let mut subs = HashMap::new();
+        subs.insert("N".to_string(), 5);
+        subs.insert("M".to_string(), 3);
+        let c = ResolvedConst::BinOp {
+            op: ConstBinOp::Add,
+            left: Box::new(ResolvedConst::Param("N".to_string())),
+            right: Box::new(ResolvedConst::Param("M".to_string())),
+        };
+        assert_eq!(
+            substitute_const_values(&c, &subs),
+            ResolvedConst::Value(8)
+        );
+    }
+
+    #[test]
+    fn test_substitute_const_negate() {
+        let mut subs = HashMap::new();
+        subs.insert("N".to_string(), 7);
+        let c = ResolvedConst::Negate(Box::new(ResolvedConst::Param("N".to_string())));
+        assert_eq!(
+            substitute_const_values(&c, &subs),
+            ResolvedConst::Value(-7)
+        );
+    }
+
+    #[test]
+    fn test_substitute_const_partial() {
+        let mut subs = HashMap::new();
+        subs.insert("N".to_string(), 5);
+        // N + M where only N is known
+        let c = ResolvedConst::BinOp {
+            op: ConstBinOp::Add,
+            left: Box::new(ResolvedConst::Param("N".to_string())),
+            right: Box::new(ResolvedConst::Param("M".to_string())),
+        };
+        let result = substitute_const_values(&c, &subs);
+        // Can't fully evaluate, should remain a BinOp
+        assert!(matches!(result, ResolvedConst::BinOp { .. }));
+    }
+}

@@ -140,3 +140,98 @@ pub async fn health() -> axum::Json<HealthResponse> {
         version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn make_test_token(scopes: Vec<String>) -> ApiToken {
+        ApiToken {
+            id: uuid::Uuid::new_v4(),
+            user_id: uuid::Uuid::new_v4(),
+            name: "test".to_string(),
+            token_hash: "hash".to_string(),
+            scopes,
+            expires_at: None,
+            last_used_at: None,
+            created_at: Utc::now(),
+        }
+    }
+
+    fn make_auth_user(is_admin: bool, scopes: Vec<String>) -> AuthUser {
+        let token = make_test_token(scopes);
+        AuthUser {
+            user_id: token.user_id,
+            username: "testuser".to_string(),
+            is_admin,
+            token,
+        }
+    }
+
+    #[test]
+    fn test_has_scope_with_scope() {
+        let user = make_auth_user(false, vec!["publish".to_string()]);
+        assert!(user.has_scope("publish"));
+        assert!(!user.has_scope("yank"));
+        assert!(!user.has_scope("admin"));
+    }
+
+    #[test]
+    fn test_has_scope_admin_has_all() {
+        let user = make_auth_user(true, vec![]);
+        assert!(user.has_scope("publish"));
+        assert!(user.has_scope("yank"));
+        assert!(user.has_scope("admin"));
+        assert!(user.has_scope("anything"));
+    }
+
+    #[test]
+    fn test_has_scope_empty_scopes() {
+        let user = make_auth_user(false, vec![]);
+        assert!(!user.has_scope("publish"));
+    }
+
+    #[test]
+    fn test_has_scope_multiple_scopes() {
+        let user = make_auth_user(
+            false,
+            vec!["publish".to_string(), "yank".to_string()],
+        );
+        assert!(user.has_scope("publish"));
+        assert!(user.has_scope("yank"));
+        assert!(!user.has_scope("admin"));
+    }
+
+    #[test]
+    fn test_require_scope_ok() {
+        let user = make_auth_user(false, vec!["publish".to_string()]);
+        assert!(user.require_scope("publish").is_ok());
+    }
+
+    #[test]
+    fn test_require_scope_forbidden() {
+        let user = make_auth_user(false, vec!["publish".to_string()]);
+        let result = user.require_scope("admin");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_require_scope_admin_always_ok() {
+        let user = make_auth_user(true, vec![]);
+        assert!(user.require_scope("publish").is_ok());
+        assert!(user.require_scope("yank").is_ok());
+        assert!(user.require_scope("admin").is_ok());
+    }
+
+    #[test]
+    fn test_health_response_serialize() {
+        let resp = HealthResponse {
+            status: "ok".to_string(),
+            version: "1.0.0".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"status\":\"ok\""));
+        assert!(json.contains("\"version\":\"1.0.0\""));
+    }
+}

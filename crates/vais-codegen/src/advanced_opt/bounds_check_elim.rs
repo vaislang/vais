@@ -550,4 +550,241 @@ entry:
         let result = eliminate_bounds_checks(ir);
         assert!(result.contains("ret i64 0"));
     }
+
+    // ========== ValueRange edge cases ==========
+
+    #[test]
+    fn test_value_range_constant() {
+        let range = ValueRange::constant(5);
+        assert_eq!(range.lo, Some(5));
+        assert_eq!(range.hi, Some(6));
+        assert!(range.hi_sym.is_none());
+    }
+
+    #[test]
+    fn test_value_range_constant_zero() {
+        let range = ValueRange::constant(0);
+        assert_eq!(range.lo, Some(0));
+        assert_eq!(range.hi, Some(1));
+        assert!(range.is_safe_for_const_length(1));
+        assert!(!range.is_safe_for_const_length(0));
+    }
+
+    #[test]
+    fn test_value_range_bounded_negative_lo() {
+        let range = ValueRange::bounded(-5, 10);
+        assert!(!range.is_safe_for_const_length(10)); // lo < 0
+    }
+
+    #[test]
+    fn test_value_range_safe_for_length_no_sym() {
+        let range = ValueRange::bounded(0, 10);
+        assert!(!range.is_safe_for_length("%n")); // no hi_sym
+    }
+
+    #[test]
+    fn test_value_range_safe_for_length_no_lo() {
+        let range = ValueRange {
+            lo: None,
+            hi: None,
+            hi_sym: Some("%n".to_string()),
+        };
+        assert!(!range.is_safe_for_length("%n")); // lo is None
+    }
+
+    #[test]
+    fn test_value_range_safe_for_const_length_unbounded() {
+        let range = ValueRange {
+            lo: Some(0),
+            hi: None,
+            hi_sym: None,
+        };
+        assert!(!range.is_safe_for_const_length(100)); // hi is None
+    }
+
+    #[test]
+    fn test_value_range_clone_eq() {
+        let range = ValueRange::bounded_sym(0, "%len".to_string());
+        let cloned = range.clone();
+        assert_eq!(range, cloned);
+    }
+
+    // ========== parse_induction_phi edge cases ==========
+
+    #[test]
+    fn test_parse_induction_phi_i32() {
+        let phi = "%i = phi i32 [ 0, %entry ], [ %i.next, %loop ]";
+        assert_eq!(parse_induction_phi(phi), Some("%i".to_string()));
+    }
+
+    #[test]
+    fn test_parse_induction_phi_underscore_next() {
+        let phi = "%idx = phi i64 [ 0, %entry ], [ %idx_next, %body ]";
+        assert_eq!(parse_induction_phi(phi), Some("%idx".to_string()));
+    }
+
+    #[test]
+    fn test_parse_induction_phi_no_zero_start() {
+        let phi = "%i = phi i64 [ 1, %entry ], [ %i.next, %loop ]";
+        assert_eq!(parse_induction_phi(phi), None); // doesn't start at 0
+    }
+
+    #[test]
+    fn test_parse_induction_phi_no_percent() {
+        let line = "not_a_var = phi i64 [ 0, %entry ], [ not_a_var.next, %loop ]";
+        assert_eq!(parse_induction_phi(line), None);
+    }
+
+    // ========== parse_comparison edge cases ==========
+
+    #[test]
+    fn test_parse_comparison_slt() {
+        let cmp = "%cond = icmp slt i64 %i, %n";
+        let result = parse_comparison(cmp);
+        assert!(result.is_some());
+        let (_, idx, bound) = result.unwrap();
+        assert_eq!(idx, "%i");
+        assert_eq!(bound, "%n");
+    }
+
+    #[test]
+    fn test_parse_comparison_not_a_comparison() {
+        let line = "%x = add i64 %a, %b";
+        assert!(parse_comparison(line).is_none());
+    }
+
+    // ========== parse_array_alloca edge cases ==========
+
+    #[test]
+    fn test_parse_array_alloca_i32() {
+        let alloca = "%arr = alloca [5 x i32]";
+        let result = parse_array_alloca(alloca);
+        assert_eq!(result, Some(("%arr".to_string(), 5)));
+    }
+
+    #[test]
+    fn test_parse_array_alloca_no_bracket() {
+        let alloca = "%x = alloca i64";
+        assert!(parse_array_alloca(alloca).is_none());
+    }
+
+    // ========== parse_const_gep ==========
+
+    #[test]
+    fn test_parse_const_gep_valid() {
+        let gep = "%ptr = getelementptr [10 x i64], [10 x i64]* %arr, i64 0, i64 3";
+        let result = parse_const_gep(gep);
+        assert!(result.is_some());
+        let (base, idx) = result.unwrap();
+        assert_eq!(base, "%arr");
+        assert_eq!(idx, 3);
+    }
+
+    #[test]
+    fn test_parse_const_gep_not_gep() {
+        let line = "%x = add i64 1, 2";
+        assert!(parse_const_gep(line).is_none());
+    }
+
+    #[test]
+    fn test_parse_const_gep_too_few_parts() {
+        let line = "getelementptr i64, i64* %ptr";
+        // Only 2 comma-separated parts, need >= 3
+        assert!(parse_const_gep(line).is_none());
+    }
+
+    // ========== extract_true_target / extract_true_label ==========
+
+    #[test]
+    fn test_extract_true_target_valid() {
+        let br = "br i1 %cond, label %safe, label %trap";
+        let target = extract_true_target(br);
+        assert!(target.is_some());
+        assert!(target.unwrap().contains("%safe"));
+    }
+
+    #[test]
+    fn test_extract_true_target_no_labels() {
+        let br = "br label %next";
+        let target = extract_true_target(br);
+        // split on "label" gives 2 parts, but the logic still works
+        assert!(target.is_some());
+    }
+
+    #[test]
+    fn test_extract_true_label_conditional() {
+        let br = "br i1 %cmp, label %then, label %else";
+        let label = extract_true_label(br);
+        assert!(label.is_some());
+    }
+
+    // ========== RangeAnalysis default ==========
+
+    #[test]
+    fn test_range_analysis_default() {
+        let analysis = RangeAnalysis::default();
+        assert!(analysis.ranges.is_empty());
+        assert!(analysis.eliminable.is_empty());
+    }
+
+    // ========== BoundsCheck struct ==========
+
+    #[test]
+    fn test_bounds_check_clone() {
+        let bc = BoundsCheck {
+            index_var: "%i".to_string(),
+            length: "%n".to_string(),
+            line_idx: 42,
+            is_explicit: true,
+        };
+        let cloned = bc.clone();
+        assert_eq!(cloned.index_var, "%i");
+        assert_eq!(cloned.length, "%n");
+        assert_eq!(cloned.line_idx, 42);
+        assert!(cloned.is_explicit);
+    }
+
+    // ========== analyze_bounds_checks with constant accesses ==========
+
+    #[test]
+    fn test_analyze_constant_access_out_of_bounds() {
+        // Index 10 is NOT safe for array of length 5
+        let ir = r#"
+define i64 @oob() {
+entry:
+  %arr = alloca [5 x i64]
+  %ptr = getelementptr [5 x i64], [5 x i64]* %arr, i64 0, i64 10
+  %val = load i64, i64* %ptr
+  ret i64 %val
+}
+"#;
+        let analysis = analyze_bounds_checks(ir);
+        // Index 10 >= length 5, so no safe range should be recorded for this access
+        // (constant access analysis only records safe accesses)
+        let has_unsafe = analysis.ranges.values().any(|r| {
+            r.lo == Some(10) && r.hi == Some(11)
+        });
+        assert!(!has_unsafe);
+    }
+
+    #[test]
+    fn test_analyze_no_functions() {
+        let ir = "; just a comment\n@global = global i64 0\n";
+        let analysis = analyze_bounds_checks(ir);
+        assert!(analysis.ranges.is_empty());
+        assert!(analysis.eliminable.is_empty());
+    }
+
+    #[test]
+    fn test_eliminate_bounds_checks_preserves_ir() {
+        let ir = r#"define i64 @simple() {
+entry:
+  %x = add i64 1, 2
+  ret i64 %x
+}
+"#;
+        let result = eliminate_bounds_checks(ir);
+        assert!(result.contains("add i64 1, 2"));
+        assert!(result.contains("ret i64 %x"));
+    }
 }

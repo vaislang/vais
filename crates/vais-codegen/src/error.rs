@@ -125,4 +125,106 @@ mod tests {
         let unique: std::collections::HashSet<String> = codes.iter().cloned().collect();
         assert_eq!(codes.len(), unique.len(), "All error codes must be unique");
     }
+
+    // ========== Error Display ==========
+
+    #[test]
+    fn test_error_display() {
+        assert_eq!(
+            CodegenError::UndefinedVar("x".to_string()).to_string(),
+            "Undefined variable: x"
+        );
+        assert_eq!(
+            CodegenError::UndefinedFunction("foo".to_string()).to_string(),
+            "Undefined function: foo"
+        );
+        assert_eq!(
+            CodegenError::TypeError("mismatch".to_string()).to_string(),
+            "Type error: mismatch"
+        );
+        assert_eq!(
+            CodegenError::LlvmError("segfault".to_string()).to_string(),
+            "LLVM error: segfault"
+        );
+        assert_eq!(
+            CodegenError::Unsupported("async".to_string()).to_string(),
+            "Unsupported feature: async"
+        );
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("deep".to_string()).to_string(),
+            "Recursion depth limit exceeded: deep"
+        );
+        assert_eq!(
+            CodegenError::InternalError("ICE".to_string()).to_string(),
+            "ICE: ICE"
+        );
+    }
+
+    // ========== Error Codes ==========
+
+    #[test]
+    fn test_error_code_values() {
+        assert_eq!(CodegenError::UndefinedVar("".into()).error_code(), "C001");
+        assert_eq!(CodegenError::UndefinedFunction("".into()).error_code(), "C002");
+        assert_eq!(CodegenError::TypeError("".into()).error_code(), "C003");
+        assert_eq!(CodegenError::LlvmError("".into()).error_code(), "C004");
+        assert_eq!(CodegenError::Unsupported("".into()).error_code(), "C005");
+        assert_eq!(CodegenError::RecursionLimitExceeded("".into()).error_code(), "C006");
+        assert_eq!(CodegenError::InternalError("".into()).error_code(), "C007");
+    }
+
+    // ========== Help messages ==========
+
+    #[test]
+    fn test_help_undefined_var() {
+        let err = CodegenError::UndefinedVar("x".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("defined before use"));
+    }
+
+    #[test]
+    fn test_help_undefined_var_with_suggestion() {
+        let err = CodegenError::UndefinedVar("Did you mean 'y'?".to_string());
+        assert!(err.help().is_none());
+    }
+
+    #[test]
+    fn test_help_undefined_function() {
+        let err = CodegenError::UndefinedFunction("foo".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("defined before calling"));
+    }
+
+    #[test]
+    fn test_help_undefined_function_with_suggestion() {
+        let err = CodegenError::UndefinedFunction("Did you mean 'bar'?".to_string());
+        assert!(err.help().is_none());
+    }
+
+    #[test]
+    fn test_help_type_error() {
+        let err = CodegenError::TypeError("mismatch".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("compatible types"));
+    }
+
+    #[test]
+    fn test_help_unsupported() {
+        let err = CodegenError::Unsupported("async generators".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("async generators"));
+    }
+
+    #[test]
+    fn test_help_recursion_limit() {
+        let err = CodegenError::RecursionLimitExceeded("deep nesting".to_string());
+        let help = err.help().unwrap();
+        assert!(help.contains("reducing nesting"));
+    }
+
+    #[test]
+    fn test_help_llvm_error() {
+        let err = CodegenError::LlvmError("crash".to_string());
+        assert!(err.help().is_none());
+    }
 }

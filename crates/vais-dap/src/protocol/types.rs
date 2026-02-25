@@ -659,3 +659,258 @@ pub struct DisassembledInstruction {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_column: Option<i64>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_type_serde() {
+        let json = serde_json::to_string(&MessageType::Request).unwrap();
+        assert_eq!(json, "\"request\"");
+        let json = serde_json::to_string(&MessageType::Response).unwrap();
+        assert_eq!(json, "\"response\"");
+        let json = serde_json::to_string(&MessageType::Event).unwrap();
+        assert_eq!(json, "\"event\"");
+    }
+
+    #[test]
+    fn test_message_type_roundtrip() {
+        for msg_type in &[MessageType::Request, MessageType::Response, MessageType::Event] {
+            let json = serde_json::to_string(msg_type).unwrap();
+            let parsed: MessageType = serde_json::from_str(&json).unwrap();
+            assert_eq!(&parsed, msg_type);
+        }
+    }
+
+    #[test]
+    fn test_request_serde() {
+        let req = Request {
+            base: ProtocolMessage {
+                seq: 1,
+                message_type: MessageType::Request,
+            },
+            command: "initialize".to_string(),
+            arguments: Some(serde_json::json!({"clientID": "test"})),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"command\":\"initialize\""));
+        assert!(json.contains("\"seq\":1"));
+
+        let parsed: Request = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.command, "initialize");
+        assert_eq!(parsed.base.seq, 1);
+    }
+
+    #[test]
+    fn test_response_success() {
+        let resp = Response {
+            base: ProtocolMessage {
+                seq: 2,
+                message_type: MessageType::Response,
+            },
+            request_seq: 1,
+            success: true,
+            command: "initialize".to_string(),
+            message: None,
+            body: Some(serde_json::json!({"supportsConfigurationDoneRequest": true})),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let parsed: Response = serde_json::from_str(&json).unwrap();
+        assert!(parsed.success);
+        assert_eq!(parsed.request_seq, 1);
+        assert!(parsed.body.is_some());
+    }
+
+    #[test]
+    fn test_response_failure() {
+        let resp = Response {
+            base: ProtocolMessage {
+                seq: 3,
+                message_type: MessageType::Response,
+            },
+            request_seq: 2,
+            success: false,
+            command: "launch".to_string(),
+            message: Some("Launch failed".to_string()),
+            body: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let parsed: Response = serde_json::from_str(&json).unwrap();
+        assert!(!parsed.success);
+        assert_eq!(parsed.message.as_deref(), Some("Launch failed"));
+    }
+
+    #[test]
+    fn test_event_serde() {
+        let event = Event {
+            base: ProtocolMessage {
+                seq: 5,
+                message_type: MessageType::Event,
+            },
+            event: "stopped".to_string(),
+            body: Some(serde_json::json!({"reason": "breakpoint", "threadId": 1})),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: Event = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.event, "stopped");
+        assert!(parsed.body.is_some());
+    }
+
+    #[test]
+    fn test_capabilities_default() {
+        let caps = Capabilities::default();
+        assert!(caps.supports_configuration_done_request.is_none());
+        assert!(caps.supports_function_breakpoints.is_none());
+    }
+
+    #[test]
+    fn test_source_default() {
+        let source = Source::default();
+        assert!(source.name.is_none());
+        assert!(source.path.is_none());
+        assert!(source.source_reference.is_none());
+    }
+
+    #[test]
+    fn test_source_with_path() {
+        let source = Source {
+            path: Some("/test/file.vais".to_string()),
+            name: Some("file.vais".to_string()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("file.vais"));
+        let parsed: Source = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.path.as_deref(), Some("/test/file.vais"));
+    }
+
+    #[test]
+    fn test_breakpoint_serde() {
+        let bp = Breakpoint {
+            id: Some(1),
+            verified: true,
+            message: None,
+            source: Some(Source {
+                path: Some("/test/file.vais".to_string()),
+                ..Default::default()
+            }),
+            line: Some(10),
+            column: None,
+            end_line: None,
+            end_column: None,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&bp).unwrap();
+        let parsed: Breakpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, Some(1));
+        assert!(parsed.verified);
+        assert_eq!(parsed.line, Some(10));
+    }
+
+    #[test]
+    fn test_stopped_reason_serde() {
+        let json = serde_json::to_string(&StoppedReason::Breakpoint).unwrap();
+        assert_eq!(json, "\"breakpoint\"");
+        let json = serde_json::to_string(&StoppedReason::Step).unwrap();
+        assert_eq!(json, "\"step\"");
+    }
+
+    #[test]
+    fn test_stack_frame_serde() {
+        let frame = StackFrame {
+            id: 1,
+            name: "main".to_string(),
+            source: Some(Source {
+                path: Some("/test.vais".to_string()),
+                ..Default::default()
+            }),
+            line: 5,
+            column: 0,
+            end_line: None,
+            end_column: None,
+            can_restart: None,
+            instruction_pointer_reference: None,
+            module_id: None,
+            presentation_hint: None,
+        };
+        let json = serde_json::to_string(&frame).unwrap();
+        let parsed: StackFrame = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, 1);
+        assert_eq!(parsed.name, "main");
+        assert_eq!(parsed.line, 5);
+    }
+
+    #[test]
+    fn test_variable_serde() {
+        let var = Variable {
+            name: "x".to_string(),
+            value: "42".to_string(),
+            var_type: Some("i64".to_string()),
+            presentation_hint: None,
+            evaluate_name: Some("x".to_string()),
+            variables_reference: 0,
+            named_variables: None,
+            indexed_variables: None,
+            memory_reference: None,
+        };
+        let json = serde_json::to_string(&var).unwrap();
+        let parsed: Variable = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "x");
+        assert_eq!(parsed.value, "42");
+        assert_eq!(parsed.var_type.as_deref(), Some("i64"));
+    }
+
+    #[test]
+    fn test_scope_serde() {
+        let scope = Scope {
+            name: "Locals".to_string(),
+            presentation_hint: Some(ScopePresentationHint::Locals),
+            variables_reference: 1,
+            named_variables: Some(3),
+            indexed_variables: None,
+            expensive: Some(false),
+            source: None,
+            line: None,
+            column: None,
+            end_line: None,
+            end_column: None,
+        };
+        let json = serde_json::to_string(&scope).unwrap();
+        let parsed: Scope = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "Locals");
+        assert_eq!(parsed.expensive, Some(false));
+        assert_eq!(parsed.variables_reference, 1);
+    }
+
+    #[test]
+    fn test_thread_serde() {
+        let thread = Thread {
+            id: 1,
+            name: "main".to_string(),
+        };
+        let json = serde_json::to_string(&thread).unwrap();
+        let parsed: Thread = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, 1);
+        assert_eq!(parsed.name, "main");
+    }
+
+    #[test]
+    fn test_disassembled_instruction() {
+        let instr = DisassembledInstruction {
+            address: "0x401000".to_string(),
+            instruction_bytes: Some("48 89 e5".to_string()),
+            instruction: "mov rbp, rsp".to_string(),
+            symbol: Some("main".to_string()),
+            location: None,
+            line: Some(1),
+            column: None,
+            end_line: None,
+            end_column: None,
+        };
+        let json = serde_json::to_string(&instr).unwrap();
+        let parsed: DisassembledInstruction = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.address, "0x401000");
+        assert_eq!(parsed.instruction, "mov rbp, rsp");
+    }
+}

@@ -800,4 +800,287 @@ entry:
             optimized
         );
     }
+
+    // ========== FieldInfo tests ==========
+
+    #[test]
+    fn test_field_info_i8() {
+        let field = FieldInfo::new("flag", "i8");
+        assert_eq!(field.size, 1);
+        assert_eq!(field.alignment, 1);
+        assert_eq!(field.offset, 0);
+        assert!(!field.is_hot);
+    }
+
+    #[test]
+    fn test_field_info_with_frequency_hot() {
+        let field = FieldInfo::new("x", "i64").with_frequency(0.9);
+        assert!(field.is_hot);
+        assert_eq!(field.access_frequency, 0.9);
+    }
+
+    #[test]
+    fn test_field_info_with_frequency_cold() {
+        let field = FieldInfo::new("unused", "i64").with_frequency(0.1);
+        assert!(!field.is_hot);
+        assert_eq!(field.access_frequency, 0.1);
+    }
+
+    #[test]
+    fn test_field_info_pointer() {
+        let field = FieldInfo::new("ptr", "i64*");
+        assert_eq!(field.size, 8);
+        assert_eq!(field.alignment, 8);
+    }
+
+    #[test]
+    fn test_field_info_i16() {
+        let field = FieldInfo::new("short", "i16");
+        assert_eq!(field.size, 2);
+        assert_eq!(field.alignment, 2);
+    }
+
+    #[test]
+    fn test_field_info_i128() {
+        let field = FieldInfo::new("big", "i128");
+        assert_eq!(field.size, 16);
+        assert_eq!(field.alignment, 16);
+    }
+
+    #[test]
+    fn test_field_info_float() {
+        let field = FieldInfo::new("f", "float");
+        assert_eq!(field.size, 4);
+        assert_eq!(field.alignment, 4);
+    }
+
+    // ========== StructLayout tests ==========
+
+    #[test]
+    fn test_struct_layout_empty() {
+        let mut layout = StructLayout::new("Empty");
+        layout.calculate_layout();
+        assert_eq!(layout.total_size, 0);
+        assert_eq!(layout.padding, 0);
+        assert_eq!(layout.efficiency(), 1.0);
+    }
+
+    #[test]
+    fn test_struct_layout_single_field() {
+        let mut layout = StructLayout::new("Single");
+        layout.add_field(FieldInfo::new("x", "i32"));
+        layout.calculate_layout();
+        assert_eq!(layout.total_size, 4);
+        assert_eq!(layout.padding, 0);
+        assert_eq!(layout.alignment, 4);
+    }
+
+    #[test]
+    fn test_struct_layout_clone() {
+        let mut layout = StructLayout::new("Test");
+        layout.add_field(FieldInfo::new("a", "i64"));
+        layout.calculate_layout();
+        let cloned = layout.clone();
+        assert_eq!(cloned.name, "Test");
+        assert_eq!(cloned.total_size, layout.total_size);
+    }
+
+    // ========== type_size_align tests ==========
+
+    #[test]
+    fn test_type_size_align_i1() {
+        assert_eq!(type_size_align("i1"), (1, 1));
+    }
+
+    #[test]
+    fn test_type_size_align_double() {
+        assert_eq!(type_size_align("double"), (8, 8));
+    }
+
+    #[test]
+    fn test_type_size_align_vector() {
+        // <4 x float> = 16 bytes, aligned to 16
+        assert_eq!(type_size_align("<4 x float>"), (16, 16));
+        // <8 x i32> = 32 bytes, aligned to 32
+        assert_eq!(type_size_align("<8 x i32>"), (32, 32));
+    }
+
+    #[test]
+    fn test_type_size_align_array() {
+        // [8 x i8] = 8 bytes, aligned to 1
+        assert_eq!(type_size_align("[8 x i8]"), (8, 1));
+    }
+
+    #[test]
+    fn test_type_size_align_unknown() {
+        // Unknown type defaults to pointer size
+        assert_eq!(type_size_align("some_type"), (8, 8));
+    }
+
+    // ========== LayoutSuggestion tests ==========
+
+    #[test]
+    fn test_layout_suggestion_reorder_comment() {
+        let s = LayoutSuggestion::ReorderFields {
+            struct_name: "Foo".to_string(),
+            new_order: vec!["b".to_string(), "a".to_string()],
+            size_before: 24,
+            size_after: 16,
+            padding_saved: 8,
+        };
+        let comment = s.to_comment();
+        assert!(comment.contains("LAYOUT SUGGESTION"));
+        assert!(comment.contains("Foo"));
+        assert!(comment.contains("saves 8 bytes"));
+    }
+
+    #[test]
+    fn test_layout_suggestion_cache_align_comment() {
+        let s = LayoutSuggestion::CacheLineAlign {
+            struct_name: "Bar".to_string(),
+            current_align: 8,
+            suggested_align: 64,
+        };
+        let comment = s.to_comment();
+        assert!(comment.contains("Align Bar to 64 bytes"));
+    }
+
+    #[test]
+    fn test_layout_suggestion_split_hot_cold_comment() {
+        let s = LayoutSuggestion::SplitHotCold {
+            struct_name: "Baz".to_string(),
+            hot_fields: vec!["a".to_string()],
+            cold_fields: vec!["b".to_string()],
+        };
+        let comment = s.to_comment();
+        assert!(comment.contains("Split Baz"));
+        assert!(comment.contains("hot"));
+        assert!(comment.contains("cold"));
+    }
+
+    #[test]
+    fn test_layout_suggestion_add_padding_comment() {
+        let s = LayoutSuggestion::AddPadding {
+            struct_name: "Qux".to_string(),
+            field_after: "x".to_string(),
+            padding_bytes: 48,
+        };
+        let comment = s.to_comment();
+        assert!(comment.contains("48 bytes padding"));
+        assert!(comment.contains("Qux.x"));
+    }
+
+    #[test]
+    fn test_layout_suggestion_aos_to_soa_comment() {
+        let s = LayoutSuggestion::AosToSoa {
+            struct_name: "Particle".to_string(),
+            array_name: "particles".to_string(),
+            soa_struct_name: "Particle_SoA".to_string(),
+            soa_fields: vec![("x".to_string(), "f32*".to_string())],
+        };
+        let comment = s.to_comment();
+        assert!(comment.contains("Convert Particle[]"));
+        assert!(comment.contains("SoA"));
+    }
+
+    // ========== DataLayoutOptimizer tests ==========
+
+    #[test]
+    fn test_data_layout_optimizer_custom_cache_line() {
+        let opt = DataLayoutOptimizer::new().with_cache_line_size(128);
+        assert_eq!(opt.cache_line_size, 128);
+    }
+
+    #[test]
+    fn test_data_layout_optimizer_default() {
+        let opt = DataLayoutOptimizer::default();
+        assert_eq!(opt.cache_line_size, DEFAULT_CACHE_LINE_SIZE);
+        assert!(opt.structs.is_empty());
+        assert!(opt.suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_optimize_struct_layout_no_structs() {
+        let ir = "define void @test() {\nentry:\n  ret void\n}\n";
+        let result = optimize_struct_layout(ir);
+        assert!(result.contains("ret void"));
+    }
+
+    // ========== parse helpers ==========
+
+    #[test]
+    fn test_parse_struct_type_complex() {
+        let line = "%Node = type { i64, i8*, i64, i32 }";
+        let (name, fields) = parse_struct_type(line).unwrap();
+        assert_eq!(name, "Node");
+        assert_eq!(fields.len(), 4);
+        assert_eq!(fields[0], "i64");
+        assert_eq!(fields[1], "i8*");
+    }
+
+    #[test]
+    fn test_parse_struct_type_invalid() {
+        assert!(parse_struct_type("not a struct def").is_none());
+    }
+
+    #[test]
+    fn test_parse_array_type() {
+        let result = parse_array_type("[10 x i64]");
+        assert_eq!(result, Some((10, "i64".to_string())));
+    }
+
+    #[test]
+    fn test_parse_array_type_invalid() {
+        assert!(parse_array_type("not an array").is_none());
+    }
+
+    #[test]
+    fn test_parse_vector_type() {
+        let result = parse_vector_type("<4 x float>");
+        assert_eq!(result, Some((4, "float".to_string())));
+    }
+
+    #[test]
+    fn test_parse_vector_type_invalid() {
+        assert!(parse_vector_type("not a vector").is_none());
+    }
+
+    // ========== suggest_field_reorder edge cases ==========
+
+    #[test]
+    fn test_suggest_field_reorder_already_optimal() {
+        let fields = vec![
+            ("a".to_string(), "i64".to_string()),
+            ("b".to_string(), "i64".to_string()),
+        ];
+        let reordered = suggest_field_reorder(&fields);
+        // Both i64, order shouldn't change
+        assert_eq!(reordered[0].0, "a");
+        assert_eq!(reordered[1].0, "b");
+    }
+
+    #[test]
+    fn test_suggest_field_reorder_single_field() {
+        let fields = vec![("x".to_string(), "i32".to_string())];
+        let reordered = suggest_field_reorder(&fields);
+        assert_eq!(reordered.len(), 1);
+        assert_eq!(reordered[0].0, "x");
+    }
+
+    #[test]
+    fn test_padding_savings_no_savings() {
+        // Already optimal order
+        let fields = vec![
+            ("a".to_string(), "i64".to_string()),
+            ("b".to_string(), "i32".to_string()),
+            ("c".to_string(), "i8".to_string()),
+        ];
+        let (original, optimized) = padding_savings(&fields);
+        assert_eq!(original, optimized);
+    }
+
+    #[test]
+    fn test_cache_line_size_constant() {
+        assert_eq!(DEFAULT_CACHE_LINE_SIZE, 64);
+    }
 }

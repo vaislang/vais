@@ -402,3 +402,123 @@ pub struct MemoryEventBody {
     /// Number of bytes updated
     pub count: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stopped_event_breakpoint() {
+        let body = StoppedEventBody::breakpoint(1, vec![5, 6]);
+        assert_eq!(body.thread_id, Some(1));
+        assert_eq!(body.hit_breakpoint_ids, Some(vec![5, 6]));
+        assert!(matches!(body.reason, StoppedReason::Breakpoint));
+    }
+
+    #[test]
+    fn test_stopped_event_step() {
+        let body = StoppedEventBody::step(2);
+        assert_eq!(body.thread_id, Some(2));
+        assert!(matches!(body.reason, StoppedReason::Step));
+        assert!(body.hit_breakpoint_ids.is_none());
+    }
+
+    #[test]
+    fn test_stopped_event_pause() {
+        let body = StoppedEventBody::pause(3);
+        assert_eq!(body.thread_id, Some(3));
+        assert!(matches!(body.reason, StoppedReason::Pause));
+    }
+
+    #[test]
+    fn test_stopped_event_exception() {
+        let body = StoppedEventBody::exception(4, "segfault".to_string());
+        assert_eq!(body.thread_id, Some(4));
+        assert!(matches!(body.reason, StoppedReason::Exception));
+        assert_eq!(body.description.as_deref(), Some("segfault"));
+    }
+
+    #[test]
+    fn test_stopped_event_entry() {
+        let body = StoppedEventBody::entry(5);
+        assert_eq!(body.thread_id, Some(5));
+        assert!(matches!(body.reason, StoppedReason::Entry));
+    }
+
+    #[test]
+    fn test_output_event_stdout() {
+        let body = OutputEventBody::stdout("hello\n");
+        assert_eq!(body.output, "hello\n");
+        assert!(matches!(body.category, Some(OutputCategory::Stdout)));
+    }
+
+    #[test]
+    fn test_output_event_stderr() {
+        let body = OutputEventBody::stderr("error msg");
+        assert_eq!(body.output, "error msg");
+        assert!(matches!(body.category, Some(OutputCategory::Stderr)));
+    }
+
+    #[test]
+    fn test_output_event_console() {
+        let body = OutputEventBody::console("debug info");
+        assert_eq!(body.output, "debug info");
+        assert!(matches!(body.category, Some(OutputCategory::Console)));
+    }
+
+    #[test]
+    fn test_exited_event_serde() {
+        let body = ExitedEventBody { exit_code: 42 };
+        let json = serde_json::to_string(&body).unwrap();
+        let parsed: ExitedEventBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.exit_code, 42);
+    }
+
+    #[test]
+    fn test_thread_event_serde() {
+        let body = ThreadEventBody {
+            reason: ThreadEventReason::Started,
+            thread_id: 1,
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        let parsed: ThreadEventBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.thread_id, 1);
+    }
+
+    #[test]
+    fn test_continued_event_serde() {
+        let body = ContinuedEventBody {
+            thread_id: 1,
+            all_threads_continued: Some(true),
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        let parsed: ContinuedEventBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.thread_id, 1);
+        assert_eq!(parsed.all_threads_continued, Some(true));
+    }
+
+    #[test]
+    fn test_memory_event_serde() {
+        let body = MemoryEventBody {
+            memory_reference: "0x1000".to_string(),
+            offset: 0,
+            count: 256,
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        let parsed: MemoryEventBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.memory_reference, "0x1000");
+        assert_eq!(parsed.count, 256);
+    }
+
+    #[test]
+    fn test_breakpoint_event_reason_serde() {
+        for reason in &[
+            BreakpointEventReason::Changed,
+            BreakpointEventReason::New,
+            BreakpointEventReason::Removed,
+        ] {
+            let json = serde_json::to_string(reason).unwrap();
+            let _parsed: BreakpointEventReason = serde_json::from_str(&json).unwrap();
+        }
+    }
+}

@@ -1276,3 +1276,282 @@ impl LanguageServer for VaisBackend {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ropey::Rope;
+    use tower_lsp::lsp_types::*;
+
+    // ========== position_in_range tests ==========
+
+    #[test]
+    fn test_position_in_range_inside() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(position_in_range(&Position::new(2, 0), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_at_start() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(position_in_range(&Position::new(1, 5), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_at_end() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(position_in_range(&Position::new(3, 10), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_before() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(!position_in_range(&Position::new(0, 0), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_after() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(!position_in_range(&Position::new(4, 0), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_same_line_before_start() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(!position_in_range(&Position::new(1, 3), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_same_line_after_end() {
+        let range = Range {
+            start: Position::new(1, 5),
+            end: Position::new(3, 10),
+        };
+        assert!(!position_in_range(&Position::new(3, 15), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_single_line() {
+        let range = Range {
+            start: Position::new(5, 2),
+            end: Position::new(5, 8),
+        };
+        assert!(position_in_range(&Position::new(5, 5), &range));
+        assert!(!position_in_range(&Position::new(5, 1), &range));
+        assert!(!position_in_range(&Position::new(5, 9), &range));
+    }
+
+    // ========== get_builtin_hover tests ==========
+
+    #[test]
+    fn test_builtin_hover_puts() {
+        let hover = get_builtin_hover("puts");
+        assert!(hover.is_some());
+        let hover = hover.unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(str) -> i64"));
+            assert!(markup.value.contains("Print a string"));
+        } else {
+            panic!("Expected markup content");
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_malloc() {
+        let hover = get_builtin_hover("malloc");
+        assert!(hover.is_some());
+        let hover = hover.unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64) -> i64"));
+            assert!(markup.value.contains("Allocate"));
+        } else {
+            panic!("Expected markup content");
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_sqrt() {
+        let hover = get_builtin_hover("sqrt");
+        assert!(hover.is_some());
+        let hover = hover.unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64) -> f64"));
+            assert!(markup.value.contains("Square root"));
+        } else {
+            panic!("Expected markup content");
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_unknown() {
+        assert!(get_builtin_hover("unknown_function").is_none());
+    }
+
+    #[test]
+    fn test_builtin_hover_pi() {
+        let hover = get_builtin_hover("PI");
+        assert!(hover.is_some());
+    }
+
+    #[test]
+    fn test_builtin_hover_all_io() {
+        // Test all IO builtins exist
+        for name in &["puts", "putchar", "read_i64", "read_f64", "read_char"] {
+            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_all_math() {
+        for name in &[
+            "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil", "round", "abs",
+            "abs_i64", "min", "max",
+        ] {
+            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_memory() {
+        for name in &["malloc", "free", "memcpy", "strlen"] {
+            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_load_store() {
+        for name in &["load_i64", "store_i64", "load_byte", "store_byte"] {
+            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_markup_format() {
+        let hover = get_builtin_hover("puts").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert_eq!(markup.kind, MarkupKind::Markdown);
+            assert!(markup.value.contains("```vais"));
+            assert!(markup.value.contains("Built-in function"));
+        } else {
+            panic!("Expected markup content");
+        }
+    }
+
+    // ========== Document / Symbol Def / Symbol Ref struct tests ==========
+
+    #[test]
+    fn test_symbol_def_construction() {
+        let def = SymbolDef {
+            name: "test_func".to_string(),
+            kind: SymbolKind::FUNCTION,
+            span: Span::new(0, 10),
+        };
+        assert_eq!(def.name, "test_func");
+        assert_eq!(def.kind, SymbolKind::FUNCTION);
+    }
+
+    #[test]
+    fn test_symbol_ref_construction() {
+        let sym_ref = SymbolRef {
+            name: "x".to_string(),
+            span: Span::new(5, 6),
+        };
+        assert_eq!(sym_ref.name, "x");
+    }
+
+    #[test]
+    fn test_folding_range_info_construction() {
+        let info = FoldingRangeInfo {
+            start_line: 1,
+            end_line: 10,
+            kind: Some(FoldingRangeKind::Region),
+        };
+        assert_eq!(info.start_line, 1);
+        assert_eq!(info.end_line, 10);
+    }
+
+    #[test]
+    fn test_inlay_hint_info_construction() {
+        let hint = InlayHintInfo {
+            position: 42,
+            label: ": i64".to_string(),
+            kind: InlayHintKind::TYPE,
+        };
+        assert_eq!(hint.position, 42);
+        assert_eq!(hint.label, ": i64");
+    }
+
+    #[test]
+    fn test_call_graph_entry_construction() {
+        let entry = CallGraphEntry {
+            caller: "main".to_string(),
+            caller_span: Span::new(0, 4),
+            callee: "foo".to_string(),
+            call_span: Span::new(20, 23),
+        };
+        assert_eq!(entry.caller, "main");
+        assert_eq!(entry.callee, "foo");
+    }
+
+    #[test]
+    fn test_document_construction() {
+        let doc = Document {
+            content: Rope::from_str("F main() -> i64 = 42"),
+            ast: None,
+            version: 1,
+            symbol_cache: None,
+        };
+        assert_eq!(doc.version, 1);
+        assert!(doc.ast.is_none());
+        assert!(doc.symbol_cache.is_none());
+    }
+
+    #[test]
+    fn test_document_with_ast() {
+        let source = "F main() -> i64 = 42";
+        let ast = vais_parser::parse(source).ok();
+        let doc = Document {
+            content: Rope::from_str(source),
+            ast,
+            version: 2,
+            symbol_cache: None,
+        };
+        assert_eq!(doc.version, 2);
+        assert!(doc.ast.is_some());
+    }
+
+    #[test]
+    fn test_symbol_cache_construction() {
+        let cache = SymbolCache {
+            version: 1,
+            definitions: vec![SymbolDef {
+                name: "foo".to_string(),
+                kind: SymbolKind::FUNCTION,
+                span: Span::new(2, 5),
+            }],
+            references: vec![],
+            call_graph: vec![],
+        };
+        assert_eq!(cache.version, 1);
+        assert_eq!(cache.definitions.len(), 1);
+        assert_eq!(cache.definitions[0].name, "foo");
+    }
+}

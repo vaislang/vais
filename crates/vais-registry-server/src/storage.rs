@@ -389,6 +389,23 @@ mod tests {
     }
 
     #[test]
+    fn test_sha256_empty() {
+        let hash = sha256_hex(b"");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn test_sha256_deterministic() {
+        let data = b"reproducible";
+        let h1 = sha256_hex(data);
+        let h2 = sha256_hex(data);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
     fn test_storage_operations() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
@@ -416,5 +433,181 @@ mod tests {
         // Delete
         assert!(storage.delete_archive("test-pkg", "1.0.0").unwrap());
         assert!(!storage.archive_exists("test-pkg", "1.0.0"));
+    }
+
+    #[test]
+    fn test_storage_new_creates_directory() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage_path = temp_dir.path().join("nested").join("storage");
+        let _storage = PackageStorage::new(storage_path.clone()).unwrap();
+        assert!(storage_path.exists());
+    }
+
+    #[test]
+    fn test_archive_not_exists() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        assert!(!storage.archive_exists("nonexistent", "1.0.0"));
+    }
+
+    #[test]
+    fn test_read_nonexistent_archive() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.read_archive("nonexistent", "1.0.0");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delete_nonexistent_archive() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.delete_archive("nonexistent", "1.0.0").unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_archive_size() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let data = b"some data here";
+        storage.store_archive("pkg", "1.0.0", data).unwrap();
+        let size = storage.archive_size("pkg", "1.0.0").unwrap();
+        assert_eq!(size, data.len() as u64);
+    }
+
+    #[test]
+    fn test_archive_size_nonexistent() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.archive_size("nonexistent", "1.0.0");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_versions() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        storage.store_archive("pkg", "1.0.0", b"v1").unwrap();
+        storage.store_archive("pkg", "2.0.0", b"v2").unwrap();
+        storage.store_archive("pkg", "3.0.0", b"v3").unwrap();
+
+        assert!(storage.archive_exists("pkg", "1.0.0"));
+        assert!(storage.archive_exists("pkg", "2.0.0"));
+        assert!(storage.archive_exists("pkg", "3.0.0"));
+
+        let mut versions = storage.list_versions("pkg").unwrap();
+        versions.sort();
+        assert_eq!(versions, vec!["1.0.0", "2.0.0", "3.0.0"]);
+    }
+
+    #[test]
+    fn test_list_versions_no_package() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let versions = storage.list_versions("nonexistent").unwrap();
+        assert!(versions.is_empty());
+    }
+
+    #[test]
+    fn test_checksum_mismatch() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        storage.store_archive("pkg", "1.0.0", b"data").unwrap();
+        let result = storage
+            .verify_checksum("pkg", "1.0.0", "wrong_checksum")
+            .unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_path_traversal_store() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.store_archive("../escape", "1.0.0", b"data");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path_traversal_read() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.read_archive("../escape", "1.0.0");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path_traversal_version() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let result = storage.store_archive("pkg", "../escape", b"data");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path_traversal_slash() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        assert!(!storage.archive_exists("foo/bar", "1.0.0"));
+        assert!(!storage.archive_exists("pkg", "1/0"));
+    }
+
+    #[test]
+    fn test_path_traversal_backslash() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        assert!(!storage.archive_exists("foo\\bar", "1.0.0"));
+    }
+
+    #[test]
+    fn test_path_traversal_null_byte() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        assert!(!storage.archive_exists("foo\0bar", "1.0.0"));
+    }
+
+    #[test]
+    fn test_package_dir() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let dir = storage.package_dir("my-package");
+        assert!(dir.ends_with("my-package"));
+    }
+
+    #[test]
+    fn test_archive_path() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let path = storage.archive_path("my-package", "1.0.0");
+        assert!(path.ends_with("my-package/1.0.0.tar.gz"));
+    }
+
+    #[test]
+    fn test_total_size_empty() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        let size = storage.total_size().unwrap();
+        assert_eq!(size, 0);
+    }
+
+    #[test]
+    fn test_total_size_with_archives() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        storage.store_archive("a", "1.0.0", b"hello").unwrap();
+        storage.store_archive("b", "1.0.0", b"world!").unwrap();
+        let size = storage.total_size().unwrap();
+        assert_eq!(size, 11); // 5 + 6
+    }
+
+    #[test]
+    fn test_store_and_overwrite() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+        storage.store_archive("pkg", "1.0.0", b"old").unwrap();
+        storage.store_archive("pkg", "1.0.0", b"new data").unwrap();
+        let data = storage.read_archive("pkg", "1.0.0").unwrap();
+        assert_eq!(data, b"new data");
     }
 }

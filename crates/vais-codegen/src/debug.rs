@@ -392,4 +392,339 @@ mod tests {
         let builder = DebugInfoBuilder::new(config);
         assert!(builder.is_enabled());
     }
+
+    // ========== DebugConfig ==========
+
+    #[test]
+    fn test_debug_config_default_values() {
+        let config = DebugConfig::default();
+        assert_eq!(config.source_file, "<vais>");
+        assert_eq!(config.source_dir, ".");
+        assert_eq!(config.producer, "vaisc 0.1.0");
+        assert!(!config.enabled);
+    }
+
+    #[test]
+    fn test_debug_config_new_enables() {
+        let config = DebugConfig::new("main.vais", "/src");
+        assert_eq!(config.source_file, "main.vais");
+        assert_eq!(config.source_dir, "/src");
+        assert!(config.enabled);
+    }
+
+    #[test]
+    fn test_debug_config_clone() {
+        let config = DebugConfig::new("test.vais", "/test");
+        let cloned = config.clone();
+        assert_eq!(cloned.source_file, config.source_file);
+        assert_eq!(cloned.source_dir, config.source_dir);
+        assert_eq!(cloned.enabled, config.enabled);
+    }
+
+    // ========== Line and column calculation edge cases ==========
+
+    #[test]
+    fn test_line_calculation_empty_source() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("");
+        // Even empty source should return line 1
+        assert_eq!(builder.offset_to_line(0), 1);
+    }
+
+    #[test]
+    fn test_line_calculation_single_line() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("hello world");
+        assert_eq!(builder.offset_to_line(0), 1);
+        assert_eq!(builder.offset_to_line(5), 1);
+        assert_eq!(builder.offset_to_line(10), 1);
+    }
+
+    #[test]
+    fn test_line_calculation_newlines_only() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("\n\n\n");
+        assert_eq!(builder.offset_to_line(0), 1);
+        assert_eq!(builder.offset_to_line(1), 2);
+        assert_eq!(builder.offset_to_line(2), 3);
+    }
+
+    #[test]
+    fn test_column_calculation_first_column() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("abc\ndef");
+        assert_eq!(builder.offset_to_column(0), 1); // 'a' is column 1
+        assert_eq!(builder.offset_to_column(4), 1); // 'd' is column 1 of line 2
+    }
+
+    #[test]
+    fn test_column_calculation_end_of_line() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("abc\ndef");
+        assert_eq!(builder.offset_to_column(2), 3); // 'c' is column 3
+    }
+
+    #[test]
+    fn test_offset_to_line_no_source() {
+        let config = DebugConfig::new("test.vais", ".");
+        let builder = DebugInfoBuilder::new(config);
+        // No source code set - should return 1
+        assert_eq!(builder.offset_to_line(100), 1);
+    }
+
+    #[test]
+    fn test_offset_to_column_no_source() {
+        let config = DebugConfig::new("test.vais", ".");
+        let builder = DebugInfoBuilder::new(config);
+        assert_eq!(builder.offset_to_column(100), 1);
+    }
+
+    // ========== Initialize and metadata ==========
+
+    #[test]
+    fn test_initialize_creates_metadata() {
+        let config = DebugConfig::new("test.vais", "/src");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        let ir = builder.finalize();
+        assert!(ir.contains("DIFile"));
+        assert!(ir.contains("DICompileUnit"));
+        assert!(ir.contains("llvm.dbg.cu"));
+        assert!(ir.contains("test.vais"));
+        assert!(ir.contains("/src"));
+    }
+
+    #[test]
+    fn test_initialize_disabled_no_metadata() {
+        let config = DebugConfig::default(); // disabled
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        let ir = builder.finalize();
+        assert!(ir.is_empty());
+    }
+
+    #[test]
+    fn test_finalize_empty_when_disabled() {
+        let config = DebugConfig::default();
+        let builder = DebugInfoBuilder::new(config);
+        assert!(builder.finalize().is_empty());
+    }
+
+    // ========== Function debug info ==========
+
+    #[test]
+    fn test_create_function_debug_info() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        let sp_id = builder.create_function_debug_info("main", 1, true);
+        assert!(sp_id.is_some());
+    }
+
+    #[test]
+    fn test_create_function_debug_info_disabled() {
+        let config = DebugConfig::default();
+        let mut builder = DebugInfoBuilder::new(config);
+        let sp_id = builder.create_function_debug_info("main", 1, true);
+        assert!(sp_id.is_none());
+    }
+
+    #[test]
+    fn test_get_function_debug_info() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        assert!(builder.get_function_debug_info("main").is_some());
+        assert!(builder.get_function_debug_info("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_function_debug_info_in_finalize() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("add", 5, true);
+        let ir = builder.finalize();
+        assert!(ir.contains("DISubprogram"));
+        assert!(ir.contains("\"add\""));
+        assert!(ir.contains("DISPFlagDefinition"));
+    }
+
+    #[test]
+    fn test_function_debug_info_local_to_unit() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("helper", 10, false);
+        let ir = builder.finalize();
+        assert!(ir.contains("DISPFlagLocalToUnit"));
+    }
+
+    // ========== Local variable debug info ==========
+
+    #[test]
+    fn test_create_local_variable_debug_info() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        let var_id = builder.create_local_variable_debug_info("x", 2, None);
+        assert!(var_id.is_some());
+    }
+
+    #[test]
+    fn test_create_local_variable_with_arg_no() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("add", 1, true);
+        let var_id = builder.create_local_variable_debug_info("a", 1, Some(1));
+        assert!(var_id.is_some());
+        let ir = builder.finalize();
+        assert!(ir.contains("DILocalVariable"));
+        assert!(ir.contains("arg: 1"));
+    }
+
+    #[test]
+    fn test_create_local_variable_disabled() {
+        let config = DebugConfig::default();
+        let mut builder = DebugInfoBuilder::new(config);
+        let var_id = builder.create_local_variable_debug_info("x", 1, None);
+        assert!(var_id.is_none());
+    }
+
+    // ========== Location info ==========
+
+    #[test]
+    fn test_create_location() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        let loc = builder.create_location(5, 10);
+        assert!(loc.is_some());
+        let ir = builder.finalize();
+        assert!(ir.contains("DILocation"));
+        assert!(ir.contains("line: 5"));
+        assert!(ir.contains("column: 10"));
+    }
+
+    #[test]
+    fn test_create_location_disabled() {
+        let config = DebugConfig::default();
+        let mut builder = DebugInfoBuilder::new(config);
+        let loc = builder.create_location(1, 1);
+        assert!(loc.is_none());
+    }
+
+    // ========== dbg_ref ==========
+
+    #[test]
+    fn test_dbg_ref() {
+        let config = DebugConfig::new("test.vais", ".");
+        let builder = DebugInfoBuilder::new(config);
+        assert_eq!(builder.dbg_ref(42), ", !dbg !42");
+    }
+
+    #[test]
+    fn test_dbg_ref_from_offset_disabled() {
+        let config = DebugConfig::default();
+        let mut builder = DebugInfoBuilder::new(config);
+        assert_eq!(builder.dbg_ref_from_offset(0), "");
+    }
+
+    #[test]
+    fn test_dbg_ref_from_offset_enabled() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("hello\nworld\n");
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        let dbg = builder.dbg_ref_from_offset(6); // 'w' of "world"
+        assert!(dbg.contains("!dbg"));
+    }
+
+    // ========== set_current_scope ==========
+
+    #[test]
+    fn test_set_current_scope() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("func_a", 1, true);
+        builder.create_function_debug_info("func_b", 10, true);
+        builder.set_current_scope("func_a");
+        // Should be able to create location under func_a's scope
+        let loc = builder.create_location(3, 1);
+        assert!(loc.is_some());
+    }
+
+    #[test]
+    fn test_set_current_scope_nonexistent() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        // Setting to nonexistent function should not crash
+        builder.set_current_scope("no_such_function");
+    }
+
+    // ========== generate_dbg_declare ==========
+
+    #[test]
+    fn test_generate_dbg_declare() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        let ir = builder.generate_dbg_declare("%x.addr", "x", 3);
+        assert!(ir.contains("llvm.dbg.declare"));
+        assert!(ir.contains("%x.addr"));
+    }
+
+    #[test]
+    fn test_generate_dbg_declare_disabled() {
+        let config = DebugConfig::default();
+        let mut builder = DebugInfoBuilder::new(config);
+        let ir = builder.generate_dbg_declare("%x.addr", "x", 3);
+        assert!(ir.is_empty());
+    }
+
+    // ========== Multiple functions ==========
+
+    #[test]
+    fn test_multiple_functions_metadata() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.initialize();
+        builder.create_function_debug_info("add", 1, true);
+        builder.create_function_debug_info("sub", 5, true);
+        builder.create_function_debug_info("mul", 10, true);
+        assert!(builder.get_function_debug_info("add").is_some());
+        assert!(builder.get_function_debug_info("sub").is_some());
+        assert!(builder.get_function_debug_info("mul").is_some());
+        let ir = builder.finalize();
+        assert!(ir.contains("\"add\""));
+        assert!(ir.contains("\"sub\""));
+        assert!(ir.contains("\"mul\""));
+    }
+
+    // ========== dbg_ref_from_span ==========
+
+    #[test]
+    fn test_dbg_ref_from_span() {
+        let config = DebugConfig::new("test.vais", ".");
+        let mut builder = DebugInfoBuilder::new(config);
+        builder.set_source_code("F main() -> i64 { R 42 }");
+        builder.initialize();
+        builder.create_function_debug_info("main", 1, true);
+        let span = vais_ast::Span::new(0, 24);
+        let dbg = builder.dbg_ref_from_span(span);
+        assert!(dbg.contains("!dbg"));
+    }
 }

@@ -774,4 +774,286 @@ entry:
             Some("@global".to_string())
         );
     }
+
+    // ========== AliasResult ==========
+
+    #[test]
+    fn test_alias_result_may_alias() {
+        assert!(!AliasResult::NoAlias.may_alias());
+        assert!(AliasResult::MayAlias.may_alias());
+        assert!(AliasResult::MustAlias.may_alias());
+        assert!(AliasResult::PartialAlias.may_alias());
+    }
+
+    #[test]
+    fn test_alias_result_merge_mixed() {
+        assert_eq!(
+            AliasResult::MustAlias.merge(AliasResult::NoAlias),
+            AliasResult::MayAlias
+        );
+        assert_eq!(
+            AliasResult::NoAlias.merge(AliasResult::MustAlias),
+            AliasResult::MayAlias
+        );
+        assert_eq!(
+            AliasResult::PartialAlias.merge(AliasResult::NoAlias),
+            AliasResult::MayAlias
+        );
+    }
+
+    #[test]
+    fn test_alias_result_equality() {
+        assert_eq!(AliasResult::NoAlias, AliasResult::NoAlias);
+        assert_ne!(AliasResult::NoAlias, AliasResult::MayAlias);
+    }
+
+    // ========== PointerBase ==========
+
+    #[test]
+    fn test_pointer_base_disjoint_globals() {
+        let g1 = PointerBase::Global("g1".to_string());
+        let g2 = PointerBase::Global("g2".to_string());
+        assert!(g1.disjoint(&g2));
+    }
+
+    #[test]
+    fn test_pointer_base_not_disjoint_same() {
+        let s1 = PointerBase::Stack("x".to_string());
+        let s1_clone = PointerBase::Stack("x".to_string());
+        assert!(!s1.disjoint(&s1_clone));
+    }
+
+    #[test]
+    fn test_pointer_base_unknown_not_disjoint() {
+        let stack = PointerBase::Stack("x".to_string());
+        let unknown = PointerBase::Unknown;
+        assert!(!stack.disjoint(&unknown));
+    }
+
+    #[test]
+    fn test_pointer_base_heap_heap_disjoint() {
+        let h1 = PointerBase::Heap("alloc1".to_string());
+        let h2 = PointerBase::Heap("alloc2".to_string());
+        assert!(h1.disjoint(&h2));
+    }
+
+    #[test]
+    fn test_pointer_base_heap_stack_disjoint() {
+        let heap = PointerBase::Heap("h".to_string());
+        let stack = PointerBase::Stack("s".to_string());
+        assert!(heap.disjoint(&stack));
+        assert!(stack.disjoint(&heap));
+    }
+
+    #[test]
+    fn test_pointer_base_parameter() {
+        let p1 = PointerBase::Parameter("fn".to_string(), 0);
+        let p2 = PointerBase::Parameter("fn".to_string(), 1);
+        // Parameters with different indices don't necessarily disjoint
+        assert!(!p1.disjoint(&p2));
+    }
+
+    // ========== PointerInfo ==========
+
+    #[test]
+    fn test_pointer_info_default() {
+        let info = PointerInfo::default();
+        assert!(!info.escapes);
+        assert!(info.alias_set.is_empty());
+        assert!(info.offset.is_none());
+        assert!(info.size.is_none());
+        assert_eq!(info.base, PointerBase::Unknown);
+    }
+
+    // ========== FunctionSummary ==========
+
+    #[test]
+    fn test_function_summary_default() {
+        let summary = FunctionSummary::default();
+        assert!(summary.modifies.is_empty());
+        assert!(summary.reads.is_empty());
+        assert!(summary.escapes.is_empty());
+        assert!(!summary.is_pure);
+        assert!(!summary.is_readonly);
+        assert!(!summary.allocates_escaping);
+    }
+
+    // ========== AliasAnalysis query ==========
+
+    #[test]
+    fn test_query_unknown_pointers() {
+        let analysis = AliasAnalysis::new();
+        assert_eq!(analysis.query("%unknown1", "%unknown2"), AliasResult::MayAlias);
+    }
+
+    #[test]
+    fn test_query_disjoint_stack_pointers() {
+        let mut analysis = AliasAnalysis::new();
+        analysis.pointers.insert(
+            "%x".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%x".to_string()),
+                ..Default::default()
+            },
+        );
+        analysis.pointers.insert(
+            "%y".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%y".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(analysis.query("%x", "%y"), AliasResult::NoAlias);
+    }
+
+    #[test]
+    fn test_query_same_base_same_offset() {
+        let mut analysis = AliasAnalysis::new();
+        analysis.pointers.insert(
+            "%a".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%arr".to_string()),
+                offset: Some(0),
+                ..Default::default()
+            },
+        );
+        analysis.pointers.insert(
+            "%b".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%arr".to_string()),
+                offset: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(analysis.query("%a", "%b"), AliasResult::MustAlias);
+    }
+
+    // ========== Escapes ==========
+
+    #[test]
+    fn test_escapes_unknown() {
+        let analysis = AliasAnalysis::new();
+        // Unknown pointers conservatively escape
+        assert!(analysis.escapes("%unknown"));
+    }
+
+    #[test]
+    fn test_escapes_non_escaping() {
+        let mut analysis = AliasAnalysis::new();
+        analysis.pointers.insert(
+            "%local".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%local".to_string()),
+                escapes: false,
+                ..Default::default()
+            },
+        );
+        assert!(!analysis.escapes("%local"));
+    }
+
+    // ========== Function summary analysis ==========
+
+    #[test]
+    fn test_pure_function_detection() {
+        let ir = r#"
+define i64 @add(i64 %a, i64 %b) {
+entry:
+  %result = add i64 %a, %b
+  ret i64 %result
+}
+"#;
+        let analysis = analyze_aliases(ir);
+        let summary = analysis.get_function_summary("add");
+        assert!(summary.is_some());
+        let s = summary.unwrap();
+        assert!(s.is_pure);
+    }
+
+    // ========== Helper function tests ==========
+
+    #[test]
+    fn test_extract_def_var() {
+        assert_eq!(extract_def_var("%x = alloca i64"), Some("%x".to_string()));
+        assert_eq!(extract_def_var("@g = global i64 0"), None);
+        assert_eq!(extract_def_var("store i64 0, i64* %x"), None);
+    }
+
+    #[test]
+    fn test_extract_load_src() {
+        assert_eq!(
+            extract_load_src("%v = load i64, i64* %ptr"),
+            Some("%ptr".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_ret_value() {
+        assert_eq!(
+            extract_ret_value("ret i64 %result"),
+            Some("%result".to_string())
+        );
+        assert_eq!(extract_ret_value("ret void"), None);
+        assert_eq!(extract_ret_value("ret i64 42"), None);
+    }
+
+    #[test]
+    fn test_extract_called_function() {
+        assert_eq!(
+            extract_called_function("  %r = call i64 @foo(i64 %x)"),
+            Some("foo".to_string())
+        );
+        assert_eq!(
+            extract_called_function("  call void @bar()"),
+            Some("bar".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_call_args() {
+        let args = extract_call_args("  %r = call i64 @foo(i64 %a, i64 %b)");
+        assert!(args.contains(&"%a".to_string()));
+        assert!(args.contains(&"%b".to_string()));
+    }
+
+    #[test]
+    fn test_extract_call_args_empty() {
+        let args = extract_call_args("  call void @noop()");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn test_extract_store_value() {
+        assert_eq!(
+            extract_store_value("store i64 42, i64* %x"),
+            Some("42".to_string())
+        );
+        assert_eq!(
+            extract_store_value("store i64 %val, i64* %x"),
+            Some("%val".to_string())
+        );
+    }
+
+    // ========== Generate metadata ==========
+
+    #[test]
+    fn test_generate_metadata_empty() {
+        let mut analysis = AliasAnalysis::new();
+        let metadata = analysis.generate_metadata("test");
+        assert!(metadata.is_empty());
+    }
+
+    #[test]
+    fn test_generate_metadata_with_non_escaping() {
+        let mut analysis = AliasAnalysis::new();
+        analysis.pointers.insert(
+            "%x".to_string(),
+            PointerInfo {
+                base: PointerBase::Stack("%x".to_string()),
+                escapes: false,
+                ..Default::default()
+            },
+        );
+        let metadata = analysis.generate_metadata("test_func");
+        assert!(metadata.contains("Alias scopes for function test_func"));
+    }
 }

@@ -700,3 +700,222 @@ impl TypeError {
 
 /// Type checking result
 pub type TypeResult<T> = Result<T, TypeError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========== Error Display ==========
+
+    #[test]
+    fn test_mismatch_display() {
+        let err = TypeError::Mismatch {
+            expected: "i64".to_string(),
+            found: "bool".to_string(),
+            span: None,
+        };
+        assert_eq!(
+            err.to_string(),
+            "Type mismatch: expected i64, found bool"
+        );
+    }
+
+    #[test]
+    fn test_undefined_var_display() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        assert_eq!(err.to_string(), "Undefined variable: x");
+    }
+
+    #[test]
+    fn test_undefined_function_display() {
+        let err = TypeError::UndefinedFunction {
+            name: "foo".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        assert_eq!(err.to_string(), "Undefined function: foo");
+    }
+
+    #[test]
+    fn test_arg_count_display() {
+        let err = TypeError::ArgCount {
+            expected: 2,
+            got: 3,
+            span: None,
+        };
+        assert_eq!(
+            err.to_string(),
+            "Wrong number of arguments: expected 2, got 3"
+        );
+    }
+
+    // ========== Error Codes ==========
+
+    #[test]
+    fn test_error_codes_unique() {
+        let errors = vec![
+            TypeError::Mismatch { expected: String::new(), found: String::new(), span: None },
+            TypeError::UndefinedVar { name: String::new(), span: None, suggestion: None },
+            TypeError::UndefinedType { name: String::new(), span: None, suggestion: None },
+            TypeError::UndefinedFunction { name: String::new(), span: None, suggestion: None },
+            TypeError::NotCallable(String::new(), None),
+            TypeError::ArgCount { expected: 0, got: 0, span: None },
+            TypeError::CannotInfer,
+            TypeError::Duplicate(String::new(), None),
+            TypeError::ImmutableAssign(String::new(), None),
+            TypeError::NonExhaustiveMatch(String::new(), None),
+            TypeError::UnreachablePattern(0, None),
+        ];
+
+        let codes: Vec<&str> = errors.iter().map(|e| e.error_code()).collect();
+        let mut unique = codes.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(codes.len(), unique.len(), "Error codes must be unique");
+    }
+
+    #[test]
+    fn test_error_code_format() {
+        let err = TypeError::Mismatch {
+            expected: String::new(),
+            found: String::new(),
+            span: None,
+        };
+        assert_eq!(err.error_code(), "E001");
+    }
+
+    // ========== Span ==========
+
+    #[test]
+    fn test_span_none() {
+        let err = TypeError::CannotInfer;
+        assert!(err.span().is_none());
+    }
+
+    #[test]
+    fn test_span_some() {
+        let span = vais_ast::Span { start: 0, end: 10 };
+        let err = TypeError::Mismatch {
+            expected: "i64".to_string(),
+            found: "bool".to_string(),
+            span: Some(span),
+        };
+        assert_eq!(err.span(), Some(span));
+    }
+
+    // ========== Help messages ==========
+
+    #[test]
+    fn test_help_undefined_var_with_suggestion() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: Some("y".to_string()),
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("did you mean 'y'?"));
+    }
+
+    #[test]
+    fn test_help_undefined_var_no_suggestion() {
+        let err = TypeError::UndefinedVar {
+            name: "x".to_string(),
+            span: None,
+            suggestion: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("x"));
+        assert!(help.contains("not found"));
+    }
+
+    #[test]
+    fn test_help_immutable_assign() {
+        let err = TypeError::ImmutableAssign("x".to_string(), None);
+        let help = err.help().unwrap();
+        assert!(help.contains("mutable"));
+    }
+
+    #[test]
+    fn test_help_cannot_infer() {
+        let err = TypeError::CannotInfer;
+        let help = err.help().unwrap();
+        assert!(help.contains("type annotation"));
+    }
+
+    #[test]
+    fn test_help_arg_count() {
+        let err = TypeError::ArgCount {
+            expected: 2,
+            got: 3,
+            span: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("2"));
+    }
+
+    #[test]
+    fn test_help_arg_count_zero() {
+        let err = TypeError::ArgCount {
+            expected: 0,
+            got: 1,
+            span: None,
+        };
+        let help = err.help().unwrap();
+        assert!(help.contains("no arguments"));
+    }
+
+    // ========== Secondary Spans ==========
+
+    #[test]
+    fn test_secondary_spans_use_after_move() {
+        let span = vais_ast::Span { start: 10, end: 20 };
+        let err = TypeError::UseAfterMove {
+            var_name: "x".to_string(),
+            moved_at: Some(span),
+            use_at: None,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("moved here"));
+    }
+
+    #[test]
+    fn test_secondary_spans_no_secondaries() {
+        let err = TypeError::CannotInfer;
+        assert!(err.secondary_spans().is_empty());
+    }
+
+    #[test]
+    fn test_secondary_spans_borrow_conflict() {
+        let span = vais_ast::Span { start: 5, end: 15 };
+        let err = TypeError::BorrowConflict {
+            var_name: "x".to_string(),
+            existing_borrow_at: Some(span),
+            new_borrow_at: None,
+            existing_is_mut: true,
+            new_is_mut: false,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("mutable borrow"));
+    }
+
+    #[test]
+    fn test_secondary_spans_borrow_conflict_immutable() {
+        let span = vais_ast::Span { start: 5, end: 15 };
+        let err = TypeError::BorrowConflict {
+            var_name: "x".to_string(),
+            existing_borrow_at: Some(span),
+            new_borrow_at: None,
+            existing_is_mut: false,
+            new_is_mut: true,
+        };
+        let spans = err.secondary_spans();
+        assert_eq!(spans.len(), 1);
+        assert!(spans[0].1.contains("first borrow"));
+    }
+}
