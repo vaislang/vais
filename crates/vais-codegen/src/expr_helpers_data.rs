@@ -2,7 +2,7 @@
 //!
 //! Contains array, tuple, struct literal, index, and field expression generation.
 
-use crate::{CodeGenerator, CodegenError, CodegenResult};
+use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
@@ -165,9 +165,13 @@ impl CodeGenerator {
                     .iter()
                     .position(|(n, _)| n == &field_name.node)
                     .ok_or_else(|| {
+                        let candidates: Vec<&str> =
+                            struct_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                        let suggestions = suggest_similar(&field_name.node, &candidates, 3);
+                        let suggestion_text = format_did_you_mean(&suggestions);
                         CodegenError::TypeError(format!(
-                            "Unknown field '{}' in struct '{}'",
-                            field_name.node, type_name
+                            "Unknown field '{}' in struct '{}'{}",
+                            field_name.node, type_name, suggestion_text
                         ))
                     })?;
 
@@ -230,9 +234,13 @@ impl CodeGenerator {
                 .find(|(n, _)| n == &field_name.node)
                 .map(|(_, ty)| ty.clone())
                 .ok_or_else(|| {
+                    let candidates: Vec<&str> =
+                        union_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                    let suggestions = suggest_similar(&field_name.node, &candidates, 3);
+                    let suggestion_text = format_did_you_mean(&suggestions);
                     CodegenError::TypeError(format!(
-                        "Unknown field '{}' in union '{}'",
-                        field_name.node, type_name
+                        "Unknown field '{}' in union '{}'{}",
+                        field_name.node, type_name, suggestion_text
                     ))
                 })?;
 
@@ -299,7 +307,12 @@ impl CodeGenerator {
             vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false),
             vais_types::ResolvedType::Slice(ref elem)
             | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true),
-            _ => ("i64".to_string(), false),
+            ref other => {
+                return Err(CodegenError::TypeError(format!(
+                    "Cannot index into type '{}'",
+                    other
+                )));
+            }
         };
 
         // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
@@ -369,9 +382,13 @@ impl CodeGenerator {
                     .iter()
                     .position(|(n, _)| n == &field.node)
                     .ok_or_else(|| {
+                        let candidates: Vec<&str> =
+                            struct_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                        let suggestions = suggest_similar(&field.node, &candidates, 3);
+                        let suggestion_text = format_did_you_mean(&suggestions);
                         CodegenError::TypeError(format!(
-                            "Unknown field '{}' in struct '{}'",
-                            field.node, type_name
+                            "Unknown field '{}' in struct '{}'{}",
+                            field.node, type_name, suggestion_text
                         ))
                     })?;
 
@@ -406,9 +423,13 @@ impl CodeGenerator {
                     .find(|(n, _)| n == &field.node)
                     .map(|(_, ty)| ty.clone())
                     .ok_or_else(|| {
+                        let candidates: Vec<&str> =
+                            union_info.fields.iter().map(|(n, _)| n.as_str()).collect();
+                        let suggestions = suggest_similar(&field.node, &candidates, 3);
+                        let suggestion_text = format_did_you_mean(&suggestions);
                         CodegenError::TypeError(format!(
-                            "Unknown field '{}' in union '{}'",
-                            field.node, type_name
+                            "Unknown field '{}' in union '{}'{}",
+                            field.node, type_name, suggestion_text
                         ))
                     })?;
 

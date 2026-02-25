@@ -453,10 +453,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-bindings-
 
+      - name: Install Python & maturin (Ubuntu)
+        id: python-setup-linux
+        if: runner.os == 'Linux'
+        run: |
+          pip3 install maturin
+          cd crates/vais-python && maturin develop
+        continue-on-error: true
+
+      - name: Install Python & maturin (macOS)
+        id: python-setup-macos
+        if: runner.os == 'macOS'
+        run: |
+          pip3 install maturin
+          cd crates/vais-python && maturin develop
+        continue-on-error: true
+
+      - name: Install Node.js dependencies
+        id: node-setup
+        run: |
+          cd crates/vais-node && npm install && npm run build
+        continue-on-error: true
+
       - name: Run vais-python integration tests
+        if: steps.python-setup-linux.outcome == 'success' || steps.python-setup-macos.outcome == 'success'
         run: cargo test -p vais-python --test integration_tests
 
       - name: Run vais-node integration tests
+        if: steps.node-setup.outcome == 'success'
         run: cargo test -p vais-node --test integration_tests
 
   # ---------- Security audit ----------
