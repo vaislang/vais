@@ -68,7 +68,17 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = self.resolve_fn_return_type(f, &f.name.node);
+        let ret_type_raw = self.resolve_fn_return_type(f, &f.name.node);
+
+        // main() must return i64 for C ABI compatibility, regardless of declared return type.
+        // If main declares f64/f32 return, we force i64 and add fptosi at the return site.
+        let is_main_float_ret = f.name.node == "main"
+            && matches!(ret_type_raw, ResolvedType::F64 | ResolvedType::F32);
+        let ret_type = if is_main_float_ret {
+            ResolvedType::I64
+        } else {
+            ret_type_raw.clone()
+        };
 
         // Store current return type for nested return statements
         self.fn_ctx.current_return_type = Some(ret_type.clone());
@@ -146,6 +156,24 @@ impl CodeGenerator {
                 let ensures_ir =
                     self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
                 ir.push_str(&ensures_ir);
+
+                // main() with f64/f32 body needs fptosi conversion to i64
+                let value = if is_main_float_ret {
+                    let float_ty = if matches!(ret_type_raw, ResolvedType::F32) {
+                        "float"
+                    } else {
+                        "double"
+                    };
+                    let converted = format!("%main_fptosi.{}", counter);
+                    counter += 1;
+                    ir.push_str(&format!(
+                        "  {} = fptosi {} {} to i64\n",
+                        converted, float_ty, value
+                    ));
+                    converted
+                } else {
+                    value
+                };
 
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {

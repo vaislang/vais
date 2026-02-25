@@ -60,12 +60,36 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ))
             }
             Expr::Index { expr: arr, index } => {
-                // Array index assignment
+                // Array/slice index assignment
                 let arr_val = self.generate_expr(&arr.node)?;
                 let idx_val = self.generate_expr(&index.node)?;
-
-                let arr_ptr = arr_val.into_pointer_value();
                 let idx_int = idx_val.into_int_value();
+
+                // Check if this is a slice fat pointer { ptr, i64 } — extract data pointer
+                let arr_ptr = if arr_val.is_struct_value() {
+                    let struct_val = arr_val.into_struct_value();
+                    let struct_type = struct_val.get_type();
+                    if struct_type.count_fields() == 2 {
+                        // Slice fat pointer: extract field 0 (data pointer)
+                        self.builder
+                            .build_extract_value(struct_val, 0, "slice_data_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_pointer_value()
+                    } else {
+                        arr_val.into_pointer_value()
+                    }
+                } else if arr_val.is_pointer_value() {
+                    arr_val.into_pointer_value()
+                } else {
+                    // Fallback: treat as pointer (e.g. i64 interpreted as ptr)
+                    self.builder
+                        .build_int_to_ptr(
+                            arr_val.into_int_value(),
+                            val.get_type().ptr_type(AddressSpace::default()),
+                            "idx_assign_ptr",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
 
                 // Use the stored value's type for GEP element type.
                 // This is correct when val's type matches the array's element type,

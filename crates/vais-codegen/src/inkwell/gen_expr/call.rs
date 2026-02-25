@@ -448,8 +448,36 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .copied()
             .or_else(|| self.module.get_function(&fn_name));
 
+        // If found a generic function (declaration only, no body), try monomorphized versions.
+        // Generic functions are declared but their bodies are skipped; specialized versions
+        // like "get_val$Holder" have actual bodies generated from GenericInstantiation.
         let fn_value = if let Some(func) = fn_value {
-            func
+            if func.count_basic_blocks() == 0 && !func.get_name().to_str().unwrap_or("").starts_with("llvm.") {
+                // This is likely a generic function without a body — try to find
+                // a monomorphized version by scanning registered functions.
+                let base = fn_name.clone();
+                let prefix = format!("{}$", base);
+                let specialized = self
+                    .functions
+                    .iter()
+                    .find(|(k, _)| k.starts_with(&prefix))
+                    .map(|(_, v)| *v)
+                    .or_else(|| {
+                        let mut f = self.module.get_first_function();
+                        while let Some(func) = f {
+                            if let Ok(name) = func.get_name().to_str() {
+                                if name.starts_with(&prefix) && func.count_basic_blocks() > 0 {
+                                    return Some(func);
+                                }
+                            }
+                            f = func.get_next_function();
+                        }
+                        None
+                    });
+                specialized.unwrap_or(func)
+            } else {
+                func
+            }
         } else {
             // Check if this is an enum variant constructor (tuple variant)
             let is_enum_variant = self

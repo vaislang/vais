@@ -912,9 +912,9 @@ F main() -> i64 {
 #[test]
 fn selfhost_verify_float_zero_point() {
     let source = "F main() -> f64 = 0.0";
-    // NOTE: f64 main return type — C ABI returns double, OS exit code interpretation
-    // is platform-dependent (not fptosi). Keep as assert_compiles.
-    assert_compiles(source);
+    // main() declared as f64 but codegen forces i64 return with fptosi conversion.
+    // 0.0 -> fptosi -> 0
+    assert_exit_code(source, 0);
 }
 
 // ============================================================================
@@ -1405,7 +1405,8 @@ F main() -> i64 {
     d + m
 }
 "#;
-    // NOTE: Struct-by-value method parameter causes clang type mismatch — keep as assert_compiles
+    // NOTE: Text IR struct-by-value parameter ABI mismatch — dot() expects %Vec2 but caller passes ptr.
+    // Keep as assert_compiles until struct pass-by-value codegen is fixed in Text IR backend.
     assert_compiles(source);
 }
 

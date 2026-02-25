@@ -108,8 +108,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase45a_trait_static_dispatch() {
-    // Generic function with trait bound
-    // NOTE: clang fails — unresolved generic 'T' uses i64 fallback, struct access incorrect
+    // Generic function with trait bound — monomorphized to get_val$Holder
     let source = r#"
 W HasValue {
     F value(&self) -> i64
@@ -126,7 +125,7 @@ F main() -> i64 {
     R get_val(h)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ===== Nested If-Else: Deep Nesting =====

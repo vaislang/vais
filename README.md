@@ -99,7 +99,7 @@ playground/        # Web playground frontend
 ```bash
 cargo build --release
 cargo test                                     # Run all 4,000+ tests
-cargo test -p vaisc                            # Run vaisc tests (772 tests)
+cargo test -p vaisc                            # Run vaisc tests (900+ E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -168,7 +168,7 @@ Coverage is measured automatically on every push and pull request to `main` and 
 - [x] Borrow checker (Non-Lexical Lifetimes, CFG-based dataflow, `--strict-borrow`)
 - [x] Slice types (`&[T]` / `&mut [T]` with fat pointers)
 - [x] Parallel compilation (DAG-based dependency resolution, 2-4x speedup)
-- [x] Self-hosting compiler (50,000+ LOC, 21/21 clang success, Bootstrap Phase 38)
+- [x] Self-hosting compiler (50,000+ LOC, 21/21 clang success, Bootstrap Phase 50)
 - [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
 - [x] REPL (interactive environment)
 - [x] VSCode extension + IntelliJ plugin (syntax highlighting, LSP integration)

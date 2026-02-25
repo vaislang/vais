@@ -3262,14 +3262,6 @@ F main() -> i64 {
 
 // ==================== Slice Type Tests ====================
 
-/// Assert that source compiles successfully (parse + type check + codegen to IR)
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(_) => {}
-        Err(e) => panic!("Expected compilation to succeed, but got error: {}", e),
-    }
-}
-
 #[test]
 fn test_slice_type_parse() {
     let source = r#"
@@ -3295,10 +3287,9 @@ F main() -> i64 {
     0
 }
 "#;
-    // NOTE: bar() uses &mut [T] index-assignment (s[0] = 42) — the Assign/Index path does
-    // not handle SliceMut fat pointer extraction yet (requires bitcast+GEP from fat pointer).
-    // Keep as assert_compiles until slice mutation codegen is implemented.
-    assert_compiles(source);
+    // bar() uses &mut [T] index-assignment (s[0] = 42) — fat pointer extraction in Assign/Index.
+    // main() returns 0 and never calls bar — exit code is 0
+    assert_exit_code(source, 0);
 }
 
 #[test]

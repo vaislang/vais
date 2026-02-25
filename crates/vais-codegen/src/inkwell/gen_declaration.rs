@@ -33,10 +33,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Build return type
         // Check resolved function signature from type checker for accurate return type
+        // Special case: main() must return i64 for C ABI compatibility, regardless of
+        // the declared return type (e.g. f64, i32, etc.)
+        let is_main = fn_name == "main";
         let fn_type = if let Some(ref ty) = func.ret_type {
             let resolved = self.ast_type_to_resolved(&ty.node);
             if matches!(resolved, vais_types::ResolvedType::Unit) {
                 self.context.void_type().fn_type(&param_types, false)
+            } else if is_main {
+                // main() always returns i64 for C ABI
+                let ret_type: inkwell::types::BasicTypeEnum = self.context.i64_type().into();
+                ret_type.fn_type(&param_types, false)
             } else {
                 let ret_type = self.type_mapper.map_type(&resolved);
                 ret_type.fn_type(&param_types, false)

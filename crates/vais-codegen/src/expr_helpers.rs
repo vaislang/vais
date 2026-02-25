@@ -387,16 +387,36 @@ impl CodeGenerator {
 
             // Infer element type for correct GEP + store
             let arr_ty = self.infer_expr_type(arr_expr);
-            let elem_llvm_ty = match &arr_ty {
-                ResolvedType::Pointer(elem) => self.type_to_llvm(elem),
-                ResolvedType::Array(elem) => self.type_to_llvm(elem),
-                _ => "i64".to_string(),
+            let (elem_llvm_ty, is_fat_ptr) = match &arr_ty {
+                ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), false),
+                ResolvedType::Array(elem) => (self.type_to_llvm(elem), false),
+                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                    (self.type_to_llvm(elem), true)
+                }
+                _ => ("i64".to_string(), false),
+            };
+
+            // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
+            let base_ptr = if is_fat_ptr {
+                let data_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    data_ptr, arr_val
+                ));
+                let typed_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = bitcast i8* {} to {}*\n",
+                    typed_ptr, data_ptr, elem_llvm_ty
+                ));
+                typed_ptr
+            } else {
+                arr_val.clone()
             };
 
             let elem_ptr = self.next_temp(counter);
             ir.push_str(&format!(
                 "  {} = getelementptr {}, {}* {}, i64 {}\n",
-                elem_ptr, elem_llvm_ty, elem_llvm_ty, arr_val, idx_val
+                elem_ptr, elem_llvm_ty, elem_llvm_ty, base_ptr, idx_val
             ));
             ir.push_str(&format!(
                 "  store {} {}, {}* {}\n",

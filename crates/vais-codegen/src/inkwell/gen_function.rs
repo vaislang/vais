@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use inkwell::values::BasicValueEnum;
 use inkwell::{AddressSpace, IntPredicate};
 
 use vais_ast::{self as ast, Expr, GenericParamKind, IfElse, Stmt};
@@ -452,24 +453,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
-                        // Cast return value to match function signature if needed (e.g. i32 -> i64)
+                        // Cast return value to match function signature if needed
+                        // (e.g. i32 -> i64, f64 -> i64 for main())
                         let expected_ret_type = fn_value.get_type().get_return_type();
                         let ret_val = if let Some(ert) = expected_ret_type {
-                            if ert != body_value.get_type()
-                                && body_value.is_int_value()
-                                && ert.is_int_type()
-                            {
-                                self.builder
-                                    .build_int_cast(
-                                        body_value.into_int_value(),
-                                        ert.into_int_type(),
-                                        "ret_cast",
-                                    )
-                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                    .into()
-                            } else {
-                                body_value
-                            }
+                            self.coerce_return_value(body_value, ert)?
                         } else {
                             body_value
                         };
@@ -495,19 +483,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
-                        // Check if body value type matches expected return type
+                        // Cast return value to match function signature if needed
                         let expected_ret_type = fn_value.get_type().get_return_type();
-                        let body_type_matches =
-                            expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
-                        if body_type_matches {
+                        if let Some(ert) = expected_ret_type {
+                            let ret_val = self.coerce_return_value(body_value, ert)?;
                             self.builder
-                                .build_return(Some(&body_value))
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                        } else if let Some(ert) = expected_ret_type {
-                            // Type mismatch: return a default value of the expected type
-                            let default_val = self.get_default_value(ert);
-                            self.builder
-                                .build_return(Some(&default_val))
+                                .build_return(Some(&ret_val))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         } else {
                             self.builder
@@ -525,6 +506,45 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .set_generic_substitutions(&self.generic_substitutions);
         self.current_function = None;
         Ok(())
+    }
+
+    /// Coerce a return value to match the expected LLVM return type.
+    /// Handles int-to-int (e.g. i32 -> i64), float-to-int (e.g. f64 -> i64 for main()),
+    /// and type-match passthrough.
+    fn coerce_return_value(
+        &self,
+        body_value: BasicValueEnum<'ctx>,
+        expected: inkwell::types::BasicTypeEnum<'ctx>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if expected == body_value.get_type() {
+            return Ok(body_value);
+        }
+        // Int to int cast (e.g. i32 -> i64)
+        if body_value.is_int_value() && expected.is_int_type() {
+            let casted = self
+                .builder
+                .build_int_cast(
+                    body_value.into_int_value(),
+                    expected.into_int_type(),
+                    "ret_cast",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(casted.into());
+        }
+        // Float to int cast (e.g. main() -> f64 with C ABI i64 return)
+        if body_value.is_float_value() && expected.is_int_type() {
+            let casted = self
+                .builder
+                .build_float_to_signed_int(
+                    body_value.into_float_value(),
+                    expected.into_int_type(),
+                    "fptosi_ret",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(casted.into());
+        }
+        // Fallback: return default value of expected type
+        Ok(self.get_default_value(expected))
     }
 
     /// Generate a specialized (monomorphized) function body for a generic function.

@@ -463,8 +463,8 @@ F main() -> i64 {
   },
 
   'async-await': {
-    name: 'Async/Await',
-    description: 'Asynchronous programming',
+    name: 'Async/Await (compile only)',
+    description: 'Asynchronous programming (requires async runtime)',
     code: `# Async functions with A keyword
 A F fetch_data(id: i64) -> i64 {
     # Simulate async work
@@ -581,8 +581,8 @@ F main() -> i64 {
   },
 
   'lazy-evaluation': {
-    name: 'Lazy Evaluation',
-    description: 'Deferred computation with lazy/force',
+    name: 'Lazy Evaluation (compile only)',
+    description: 'Deferred computation with lazy/force (codegen in progress)',
     code: `# Lazy evaluation with caching
 F expensive(n: i64) -> i64 {
     # Simulate heavy computation
@@ -601,6 +601,196 @@ F main() -> i64 {
 
     result
 }`
+  },
+
+  'result-option': {
+    name: 'Result & Option',
+    description: 'Error handling with Result and Option types',
+    code: `# Result and Option pattern matching
+E Option<T> {
+    Some(T),
+    None
+}
+
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F find_value(key: i64) -> Option<i64> {
+    I key == 1 { Some(100) }
+    E I key == 2 { Some(200) }
+    E { None }
+}
+
+F divide(a: i64, b: i64) -> Result<i64, str> {
+    I b == 0 { Err("division by zero") }
+    E { Ok(a / b) }
+}
+
+F main() -> i64 {
+    # Pattern match on Option
+    M find_value(1) {
+        Some(v) => {
+            puts("Found:")
+            print_i64(v)
+        },
+        None => puts("Not found")
+    }
+
+    # Pattern match on Result
+    M divide(10, 2) {
+        Ok(v) => {
+            puts("Result:")
+            print_i64(v)
+        },
+        Err(msg) => puts(msg)
+    }
+
+    0
+}`
+  },
+
+  'try-operator': {
+    name: 'Try Operator (?)',
+    description: 'Propagate errors with the ? operator',
+    code: `# Try operator (?) for error propagation
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F parse_number(s: str) -> Result<i64, str> {
+    I s == "42" { Ok(42) }
+    E I s == "0" { Ok(0) }
+    E { Err("parse error") }
+}
+
+F validate(n: i64) -> Result<i64, str> {
+    I n < 0 { Err("negative") }
+    E { Ok(n * 2) }
+}
+
+# ? operator unwraps Ok or returns Err early
+F process(input: str) -> Result<i64, str> {
+    n := parse_number(input)?
+    result := validate(n)?
+    Ok(result)
+}
+
+F main() -> i64 {
+    M process("42") {
+        Ok(v) => {
+            puts("Success:")
+            print_i64(v)    # 84
+        },
+        Err(e) => puts(e)
+    }
+
+    M process("bad") {
+        Ok(v) => print_i64(v),
+        Err(e) => {
+            puts("Error:")
+            puts(e)         # "parse error"
+        }
+    }
+
+    0
+}`
+  },
+
+  'unwrap-operator': {
+    name: 'Unwrap Operator (!)',
+    description: 'Unwrap values or panic with the ! operator',
+    code: `# Unwrap operator (!) for assertive access
+E Option<T> {
+    Some(T),
+    None
+}
+
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F get_config() -> Option<i64> {
+    Some(42)
+}
+
+F compute() -> Result<i64, str> {
+    Ok(100)
+}
+
+F main() -> i64 {
+    # ! unwraps Some/Ok, panics on None/Err
+    config := get_config()!      # 42
+    value := compute()!          # 100
+
+    print_i64(config)
+    print_i64(value)
+
+    config + value    # 142
+}`
+  },
+
+  'where-clause': {
+    name: 'Where Clause',
+    description: 'Constrain generic types with where clauses',
+    code: `# Where clause for generic constraints
+W Printable {
+    F to_string(&self) -> str
+}
+
+W Comparable {
+    F compare(&self, other: &Self) -> i64
+}
+
+# Generic function with where clause
+F print_if_positive<T>(val: T, n: i64) -> i64
+    where T: Printable
+{
+    I n > 0 {
+        puts("Value is associated with positive number")
+        1
+    } E {
+        0
+    }
+}
+
+# Multiple constraints
+F process<T>(item: T) -> i64
+    where T: Printable + Comparable
+{
+    0
+}
+
+F main() -> i64 {
+    puts("Where clause example")
+    0
+}`
+  },
+
+  'defer-statement': {
+    name: 'Defer Statement',
+    description: 'Execute cleanup code when scope exits',
+    code: `# Defer statement (D keyword)
+F main() -> i64 {
+    # Deferred actions run in LIFO order at scope exit
+    D puts("cleanup: third (runs first)")
+    D puts("cleanup: second")
+    D puts("cleanup: first (runs last)")
+
+    puts("main body executing")
+    puts("doing work...")
+
+    0
+}
+# Output order:
+# main body executing
+# doing work...
+# cleanup: first (runs last)
+# cleanup: second
+# cleanup: third (runs first)`
   }
 };
 

@@ -294,16 +294,35 @@ impl CodeGenerator {
 
         // Infer element type for correct LLVM IR generation
         let arr_ty = self.infer_expr_type(array);
-        let elem_llvm_ty = match arr_ty {
-            vais_types::ResolvedType::Pointer(ref elem) => self.type_to_llvm(elem),
-            vais_types::ResolvedType::Array(ref elem) => self.type_to_llvm(elem),
-            _ => "i64".to_string(),
+        let (elem_llvm_ty, is_fat_ptr) = match arr_ty {
+            vais_types::ResolvedType::Pointer(ref elem) => (self.type_to_llvm(elem), false),
+            vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false),
+            vais_types::ResolvedType::Slice(ref elem)
+            | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true),
+            _ => ("i64".to_string(), false),
+        };
+
+        // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
+        let base_ptr = if is_fat_ptr {
+            let data_ptr = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                data_ptr, arr_val
+            ));
+            let typed_ptr = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = bitcast i8* {} to {}*\n",
+                typed_ptr, data_ptr, elem_llvm_ty
+            ));
+            typed_ptr
+        } else {
+            arr_val.clone()
         };
 
         let elem_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = getelementptr {}, {}* {}, i64 {}\n",
-            elem_ptr, elem_llvm_ty, elem_llvm_ty, arr_val, idx_val
+            elem_ptr, elem_llvm_ty, elem_llvm_ty, base_ptr, idx_val
         ));
 
         let result = self.next_temp(counter);
