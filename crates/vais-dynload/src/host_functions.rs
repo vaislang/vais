@@ -558,4 +558,135 @@ mod tests {
         assert!(registry.get("vais", "now_ms").is_some());
         assert!(registry.get("vais", "random").is_some());
     }
+
+    #[test]
+    fn test_registry_default() {
+        let registry = HostFunctionRegistry::default();
+        assert!(registry.list().is_empty());
+    }
+
+    #[test]
+    fn test_registry_list() {
+        let mut registry = HostFunctionRegistry::new();
+        registry.register(HostFunction::new("fn1", "mod1"));
+        registry.register(HostFunction::new("fn2", "mod1"));
+        registry.register(HostFunction::new("fn3", "mod2"));
+
+        let funcs = registry.list();
+        assert_eq!(funcs.len(), 3);
+    }
+
+    #[test]
+    fn test_host_function_no_capability() {
+        let func = HostFunction::new("open", "module");
+        assert!(func.required_capability.is_none());
+        assert!(func.description.is_empty());
+        assert!(func.param_types.is_empty());
+        assert!(func.result_types.is_empty());
+    }
+
+    #[test]
+    fn test_grant_capability_idempotent() {
+        let registry = HostFunctionRegistry::new();
+        registry.grant_capability(PluginCapability::Console);
+        registry.grant_capability(PluginCapability::Console);
+        // Should still just have one Console capability
+        assert!(registry.has_capability(&PluginCapability::Console));
+    }
+
+    #[test]
+    fn test_revoke_nonexistent_capability() {
+        let registry = HostFunctionRegistry::new();
+        registry.revoke_capability(&PluginCapability::Network);
+        // Should not panic
+        assert!(!registry.has_capability(&PluginCapability::Network));
+    }
+
+    #[test]
+    fn test_is_call_allowed_not_registered() {
+        let registry = HostFunctionRegistry::new();
+        let result = registry.is_call_allowed("unknown", "fn");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::HostFunctionNotRegistered(_)
+        ));
+    }
+
+    #[test]
+    fn test_is_call_allowed_no_capability_needed() {
+        let mut registry = HostFunctionRegistry::new();
+        registry.register(HostFunction::new("free_fn", "mod"));
+        // No capability required, should be allowed
+        assert!(registry.is_call_allowed("mod", "free_fn").is_ok());
+    }
+
+    #[test]
+    fn test_is_call_allowed_security_violation() {
+        let mut registry = HostFunctionRegistry::new();
+        registry
+            .register(HostFunction::new("write", "fs").with_capability(PluginCapability::FsWrite));
+        let result = registry.is_call_allowed("fs", "write");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::SecurityViolation(_)
+        ));
+    }
+
+    #[test]
+    fn test_standard_functions_with_capabilities() {
+        let registry = HostFunctionRegistry::with_standard_functions();
+
+        // Verify print requires Console capability
+        let print_fn = registry.get("vais", "print").unwrap();
+        assert_eq!(
+            print_fn.required_capability,
+            Some(PluginCapability::Console)
+        );
+
+        // Verify alloc has no required capability
+        let alloc_fn = registry.get("vais", "alloc").unwrap();
+        assert!(alloc_fn.required_capability.is_none());
+
+        // Verify network functions exist
+        assert!(registry.get("vais_net", "http_get").is_some());
+        assert!(registry.get("vais_net", "http_post").is_some());
+
+        // Verify fs functions exist
+        assert!(registry.get("vais_fs", "read_file").is_some());
+        assert!(registry.get("vais_fs", "write_file").is_some());
+        assert!(registry.get("vais_fs", "file_exists").is_some());
+    }
+
+    #[test]
+    fn test_host_functions_with_standard() {
+        let host_fns = HostFunctions::with_standard();
+        let registry = host_fns.registry();
+        assert!(registry.get("vais", "print").is_some());
+    }
+
+    #[test]
+    fn test_host_functions_registry_access() {
+        let registry = Arc::new(HostFunctionRegistry::new());
+        let host_fns = HostFunctions::new(registry.clone());
+        assert!(Arc::ptr_eq(host_fns.registry(), &registry));
+    }
+
+    #[test]
+    fn test_multiple_capabilities() {
+        let registry = HostFunctionRegistry::new();
+        registry.grant_capability(PluginCapability::Console);
+        registry.grant_capability(PluginCapability::Time);
+        registry.grant_capability(PluginCapability::Random);
+
+        assert!(registry.has_capability(&PluginCapability::Console));
+        assert!(registry.has_capability(&PluginCapability::Time));
+        assert!(registry.has_capability(&PluginCapability::Random));
+        assert!(!registry.has_capability(&PluginCapability::Network));
+
+        registry.revoke_capability(&PluginCapability::Time);
+        assert!(!registry.has_capability(&PluginCapability::Time));
+        assert!(registry.has_capability(&PluginCapability::Console));
+    }
 }

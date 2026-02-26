@@ -652,4 +652,166 @@ entry = "plugin.wasm"
             None => env::remove_var("VAIS_PLUGIN_PATH"),
         }
     }
+
+    #[test]
+    fn test_discovery_default() {
+        let discovery = PluginDiscovery::default();
+        assert!(discovery.cached_plugins().is_empty());
+    }
+
+    #[test]
+    fn test_plugin_source_equality() {
+        assert_eq!(PluginSource::UserDir, PluginSource::UserDir);
+        assert_eq!(PluginSource::SystemDir, PluginSource::SystemDir);
+        assert_ne!(PluginSource::UserDir, PluginSource::SystemDir);
+    }
+
+    #[test]
+    fn test_plugin_source_explicit_description() {
+        let source = PluginSource::Explicit(PathBuf::from("/my/path"));
+        let desc = source.description();
+        assert!(desc.contains("Explicit"));
+        assert!(desc.contains("/my/path"));
+    }
+
+    #[test]
+    fn test_scan_nonexistent_directory() {
+        let discovery = PluginDiscovery::new();
+        let result =
+            discovery.scan_directory("/nonexistent/path/12345", PluginSource::UserDir);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_detect_standalone_native_plugin() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugin_path = temp_dir.path().join("my-lib.so");
+        fs::write(&plugin_path, "fake native lib").unwrap();
+
+        let discovery = PluginDiscovery::new();
+        let result =
+            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        assert!(result.is_ok());
+        let plugin = result.unwrap().unwrap();
+        assert_eq!(plugin.name(), "my-lib");
+        assert_eq!(plugin.format(), PluginFormat::Native);
+    }
+
+    #[test]
+    fn test_detect_standalone_vais_plugin() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugin_path = temp_dir.path().join("script.vais");
+        fs::write(&plugin_path, "F main() -> i64 { 0 }").unwrap();
+
+        let discovery = PluginDiscovery::new();
+        let result =
+            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        assert!(result.is_ok());
+        let plugin = result.unwrap().unwrap();
+        assert_eq!(plugin.name(), "script");
+        assert_eq!(plugin.format(), PluginFormat::Vais);
+    }
+
+    #[test]
+    fn test_detect_standalone_unknown_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugin_path = temp_dir.path().join("file.txt");
+        fs::write(&plugin_path, "not a plugin").unwrap();
+
+        let discovery = PluginDiscovery::new();
+        let result =
+            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_discovered_plugin_accessors() {
+        let manifest = PluginManifest::default();
+        let plugin = DiscoveredPlugin {
+            manifest,
+            path: PathBuf::from("/test"),
+            source: PluginSource::UserDir,
+            entry_path: PathBuf::from("/test/plugin.wasm"),
+        };
+
+        assert_eq!(plugin.name(), "unnamed");
+        assert_eq!(plugin.version(), "0.0.0");
+        assert_eq!(plugin.format(), PluginFormat::Wasm);
+    }
+
+    #[test]
+    fn test_discovery_config_without_env_path() {
+        let config = DiscoveryConfig::new().without_env_path();
+        assert!(!config.search_env_path);
+    }
+
+    #[test]
+    fn test_discovery_config_with_vais_version() {
+        let config = DiscoveryConfig::new().with_vais_version("1.0.0");
+        assert_eq!(config.vais_version, Some("1.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_cache_find_plugin_hit() {
+        let mut discovery = PluginDiscovery::with_config(
+            DiscoveryConfig::new()
+                .without_user_dir()
+                .without_system_dirs()
+                .without_env_path(),
+        );
+
+        let manifest = PluginManifest::default();
+        discovery.cache.insert(
+            "cached-plugin".to_string(),
+            DiscoveredPlugin {
+                manifest,
+                path: PathBuf::from("/test"),
+                source: PluginSource::UserDir,
+                entry_path: PathBuf::from("/test/plugin.wasm"),
+            },
+        );
+
+        let result = discovery.find_plugin("cached-plugin").unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().name(), "unnamed");
+    }
+
+    #[test]
+    fn test_scan_directory_with_standalone_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create standalone plugin files
+        fs::write(temp_dir.path().join("plugin1.wasm"), "wasm data").unwrap();
+        fs::write(temp_dir.path().join("plugin2.vais"), "vais code").unwrap();
+        fs::write(temp_dir.path().join("readme.txt"), "text file").unwrap();
+
+        let discovery = PluginDiscovery::new();
+        let result =
+            discovery.scan_directory(temp_dir.path(), PluginSource::UserDir);
+        assert!(result.is_ok());
+        let plugins = result.unwrap();
+        assert_eq!(plugins.len(), 2); // wasm + vais, not txt
+    }
+
+    #[test]
+    fn test_scan_all_with_format_filter() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("a.wasm"), "wasm").unwrap();
+        fs::write(temp_dir.path().join("b.vais"), "vais").unwrap();
+
+        let mut discovery = PluginDiscovery::with_config(
+            DiscoveryConfig::new()
+                .without_user_dir()
+                .without_system_dirs()
+                .without_env_path()
+                .with_path(temp_dir.path())
+                .with_format(PluginFormat::Wasm),
+        );
+
+        let plugins = discovery.scan_all().unwrap();
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].format(), PluginFormat::Wasm);
+    }
 }

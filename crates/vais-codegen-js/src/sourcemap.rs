@@ -437,4 +437,130 @@ mod tests {
         assert!(json.contains(r#""mappings":""#));
         assert!(json.contains(r#""file":"empty.js""#));
     }
+
+    #[test]
+    fn test_vlq_encoding_two() {
+        let mut output = String::new();
+        encode_vlq_value(2, &mut output);
+        assert_eq!(output, "E"); // 2 -> 0b000100 -> 'E'
+    }
+
+    #[test]
+    fn test_vlq_encoding_negative_two() {
+        let mut output = String::new();
+        encode_vlq_value(-2, &mut output);
+        assert_eq!(output, "F"); // -2 -> 0b000101 -> 'F'
+    }
+
+    #[test]
+    fn test_vlq_encoding_fifteen() {
+        let mut output = String::new();
+        encode_vlq_value(15, &mut output);
+        assert_eq!(output, "e"); // 15 -> 30 -> 0b011110 -> 30 = 'e'
+    }
+
+    #[test]
+    fn test_base64_encode_empty() {
+        assert_eq!(base64_encode(b""), "");
+    }
+
+    #[test]
+    fn test_base64_encode_hello() {
+        assert_eq!(base64_encode(b"Hello"), "SGVsbG8=");
+    }
+
+    #[test]
+    fn test_escape_json_tab() {
+        assert_eq!(escape_json("a\tb"), r#"a\tb"#);
+    }
+
+    #[test]
+    fn test_escape_json_carriage_return() {
+        assert_eq!(escape_json("a\rb"), r#"a\rb"#);
+    }
+
+    #[test]
+    fn test_escape_json_plain() {
+        assert_eq!(escape_json("hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_source_map_three_lines() {
+        let mut map = SourceMap::new("test.vais", "test.js");
+        map.add_mapping(0, 0, 0, 0);
+        map.add_mapping(1, 0, 1, 0);
+        map.add_mapping(2, 0, 2, 0);
+
+        let encoded = map.encode_mappings();
+        // Each line: column 0 (delta 0), source 0, src_line delta=1, src_col 0
+        assert!(encoded.contains(';'));
+        // Count semicolons: should be 2
+        assert_eq!(encoded.matches(';').count(), 2);
+    }
+
+    #[test]
+    fn test_source_map_json_contains_all_fields() {
+        let map = SourceMap::new("src.vais", "out.js");
+        let json = map.to_json();
+        assert!(json.contains(r#""version":3"#));
+        assert!(json.contains(r#""file":"out.js""#));
+        assert!(json.contains(r#""sourceRoot":"""#));
+        assert!(json.contains(r#""sources":["src.vais"]"#));
+        assert!(json.contains(r#""names":[]"#));
+        assert!(json.contains(r#""mappings":"""#));
+    }
+
+    #[test]
+    fn test_inline_comment_is_valid_base64() {
+        let mut map = SourceMap::new("a.vais", "a.js");
+        map.add_mapping(0, 0, 0, 0);
+        let comment = map.to_inline_comment();
+        assert!(comment.starts_with("//# sourceMappingURL=data:application/json;charset=utf-8;base64,"));
+        let b64 = comment
+            .strip_prefix("//# sourceMappingURL=data:application/json;charset=utf-8;base64,")
+            .unwrap();
+        // Base64 should only contain valid chars
+        assert!(b64.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
+    }
+
+    #[test]
+    fn test_file_comment_custom_path() {
+        let comment = SourceMap::to_file_comment("dist/bundle.js.map");
+        assert_eq!(comment, "//# sourceMappingURL=dist/bundle.js.map");
+    }
+
+    #[test]
+    fn test_source_map_clone() {
+        let mut map = SourceMap::new("a.vais", "a.js");
+        map.add_mapping(0, 0, 0, 0);
+        let cloned = map.clone();
+        assert_eq!(cloned.to_json(), map.to_json());
+    }
+
+    #[test]
+    fn test_vlq_encoding_five() {
+        let mut output = String::new();
+        encode_vlq_value(5, &mut output);
+        assert_eq!(output, "K"); // 5 -> 10 -> 0b001010 -> 10 = 'K'
+    }
+
+    #[test]
+    fn test_escape_json_combined() {
+        assert_eq!(escape_json("a\"b\\c\nd\re\tf"), r#"a\"b\\c\nd\re\tf"#);
+    }
+
+    #[test]
+    fn test_base64_encode_longer() {
+        assert_eq!(base64_encode(b"ABCDEF"), "QUJDREVG");
+    }
+
+    #[test]
+    fn test_source_map_gap_lines() {
+        let mut map = SourceMap::new("t.vais", "t.js");
+        map.add_mapping(0, 0, 0, 0);
+        map.add_mapping(3, 0, 3, 0); // skip lines 1, 2
+        let encoded = map.encode_mappings();
+        // Should have 3 semicolons for the gap
+        assert_eq!(encoded.matches(';').count(), 3);
+    }
 }

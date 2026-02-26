@@ -3,7 +3,7 @@
 
 [coverage]
 # Timeout for the entire coverage process (in seconds)
-timeout = 300
+timeout = "300s"
 
 # Output formats: Stdout, Xml, Html, Lcov
 # Multiple formats can be specified

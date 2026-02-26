@@ -403,4 +403,70 @@ mod tests {
         assert_eq!(parts.len(), 3);
         assert_eq!(parts[0], "start");
     }
+
+    #[test]
+    fn test_code_validator_valid_code() {
+        let validator = CodeValidator::new("test".to_string());
+        let result = validator.validate("F main() -> i64 { 42 }").unwrap();
+        assert!(result.success);
+        assert_eq!(result.passed_tests, 1);
+        assert_eq!(result.total_tests, 1);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_code_validator_invalid_code() {
+        let validator = CodeValidator::new("test".to_string());
+        let result = validator.validate("{{{invalid!!!").unwrap();
+        assert!(!result.success);
+        assert_eq!(result.passed_tests, 0);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_code_validator_empty_code() {
+        let validator = CodeValidator::new("test".to_string());
+        let result = validator.validate("").unwrap();
+        // Empty code should parse successfully (empty module)
+        assert!(result.success);
+    }
+
+    #[test]
+    fn test_tutorial_runner_default() {
+        let runner = TutorialRunner::default();
+        // Default creation should succeed
+        assert_eq!(runner.tutorial.progress.current_chapter, 0);
+    }
+
+    #[test]
+    fn test_command_parsing_single_word() {
+        let cmd = "help";
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0], "help");
+    }
+
+    #[test]
+    fn test_command_parsing_empty() {
+        let cmd = "";
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        assert!(parts.is_empty());
+    }
+
+    #[test]
+    fn test_check_nonexistent_file() {
+        let mut runner = TutorialRunner::new().unwrap();
+        runner.tutorial.goto_lesson(0, 0).unwrap();
+        let result = runner.check_file("/nonexistent/file.vais");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_code_with_valid_solution() {
+        let mut runner = TutorialRunner::new().unwrap();
+        runner.tutorial.goto_lesson(0, 0).unwrap();
+        let solution = runner.tutorial.get_lesson(0, 0).unwrap().solution.clone();
+        let result = runner.verify_code(&solution);
+        assert!(result.is_ok());
+    }
 }

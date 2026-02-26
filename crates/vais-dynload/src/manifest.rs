@@ -524,4 +524,224 @@ optional = true
         assert_eq!(required.len(), 1);
         assert_eq!(required[0].name, "required-dep");
     }
+
+    #[test]
+    fn test_default_manifest() {
+        let manifest = PluginManifest::default();
+        assert_eq!(manifest.plugin.name, "unnamed");
+        assert_eq!(manifest.plugin.version, "0.0.0");
+        assert_eq!(manifest.plugin.format, PluginFormat::Wasm);
+        assert!(manifest.capabilities.is_empty());
+        assert!(manifest.dependencies.is_empty());
+        assert!(manifest.exports.is_empty());
+        assert!(manifest.config.is_empty());
+    }
+
+    #[test]
+    fn test_has_dangerous_capabilities_true() {
+        let toml = r#"
+capabilities = ["fs_write", "network"]
+
+[plugin]
+name = "dangerous"
+version = "1.0.0"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert!(manifest.has_dangerous_capabilities());
+    }
+
+    #[test]
+    fn test_has_dangerous_capabilities_false() {
+        let toml = r#"
+capabilities = ["console", "time", "random"]
+
+[plugin]
+name = "safe"
+version = "1.0.0"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert!(!manifest.has_dangerous_capabilities());
+    }
+
+    #[test]
+    fn test_entry_point_default() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+entry = "main.wasm"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert_eq!(manifest.entry_point(), Some("main.wasm"));
+    }
+
+    #[test]
+    fn test_entry_point_none() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert_eq!(manifest.entry_point(), None);
+    }
+
+    #[test]
+    fn test_capability_description_coverage() {
+        let caps = vec![
+            PluginCapability::FsRead,
+            PluginCapability::FsWrite,
+            PluginCapability::Network,
+            PluginCapability::Env,
+            PluginCapability::Process,
+            PluginCapability::Time,
+            PluginCapability::Random,
+            PluginCapability::Console,
+            PluginCapability::ExtendedMemory,
+            PluginCapability::Threading,
+            PluginCapability::Gpu,
+            PluginCapability::Custom("test".to_string()),
+        ];
+
+        for cap in caps {
+            let desc = cap.description();
+            assert!(!desc.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_capability_is_dangerous_all() {
+        assert!(PluginCapability::Env.is_dangerous());
+        assert!(!PluginCapability::FsRead.is_dangerous());
+        assert!(!PluginCapability::Random.is_dangerous());
+        assert!(!PluginCapability::ExtendedMemory.is_dangerous());
+        assert!(!PluginCapability::Threading.is_dangerous());
+        assert!(!PluginCapability::Gpu.is_dangerous());
+        assert!(!PluginCapability::Custom("x".to_string()).is_dangerous());
+    }
+
+    #[test]
+    fn test_version_incompatible_below_min() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+min_vais_version = ">=2.0.0"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert!(!manifest.is_compatible_with("1.0.0").unwrap());
+    }
+
+    #[test]
+    fn test_version_compatible_no_constraints() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert!(manifest.is_compatible_with("0.1.0").unwrap());
+        assert!(manifest.is_compatible_with("99.99.99").unwrap());
+    }
+
+    #[test]
+    fn test_validate_invalid_min_version() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+min_vais_version = "not_valid"
+"#;
+        let result = PluginManifest::parse(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_dependency_version() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+
+[[dependencies]]
+name = "dep"
+version = "invalid_version"
+"#;
+        let result = PluginManifest::parse(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_with_all_formats() {
+        for format in ["wasm", "native", "vais"] {
+            let toml = format!(
+                r#"
+[plugin]
+name = "test-{}"
+version = "1.0.0"
+format = "{}"
+"#,
+                format, format
+            );
+            let manifest = PluginManifest::parse(&toml).unwrap();
+            assert_eq!(manifest.plugin.name, format!("test-{}", format));
+        }
+    }
+
+    #[test]
+    fn test_parse_with_exports_and_params() {
+        let toml = r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+
+[[exports]]
+name = "process_data"
+description = "Process input data"
+returns = "i64"
+
+[[exports.params]]
+name = "input"
+type = "string"
+optional = false
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert_eq!(manifest.exports.len(), 1);
+        assert_eq!(manifest.exports[0].name, "process_data");
+        assert_eq!(manifest.exports[0].returns, Some("i64".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_metadata_fields() {
+        let toml = r#"
+[plugin]
+name = "full-meta"
+version = "2.3.4"
+description = "A full metadata plugin"
+authors = ["Dev1", "Dev2"]
+license = "Apache-2.0"
+homepage = "https://example.com"
+repository = "https://github.com/test/repo"
+"#;
+        let manifest = PluginManifest::parse(toml).unwrap();
+        assert_eq!(manifest.plugin.description, "A full metadata plugin");
+        assert_eq!(manifest.plugin.authors.len(), 2);
+        assert_eq!(manifest.plugin.license, Some("Apache-2.0".to_string()));
+        assert_eq!(
+            manifest.plugin.homepage,
+            Some("https://example.com".to_string())
+        );
+        assert_eq!(
+            manifest.plugin.repository,
+            Some("https://github.com/test/repo".to_string())
+        );
+    }
+
+    #[test]
+    fn test_platform_config_default() {
+        let config = PlatformConfig::default();
+        assert!(config.windows.is_none());
+        assert!(config.macos.is_none());
+        assert!(config.linux.is_none());
+    }
 }

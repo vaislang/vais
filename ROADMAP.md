@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-25 (Phase 55 — 코드 커버리지 개선, 5개 크레이트 +644 단위 테스트)
+> **최종 업데이트**: 2026-02-26 (Phase 56 — 코드 커버리지 개선, 보조 4개 크레이트 +698 테스트, llvm-cov 87.37%)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 4,600+ (통합 2,700+, 단위 2,023) |
+| 전체 테스트 | 5,300+ (통합 2,700+, 단위 2,721) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -226,13 +226,14 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 53 | 종합 검토 & 외부 자료 정합성 | VSCode 키워드 6개 추가, IntelliJ 문법 수정, README 수치 갱신, Docs 4개 신규(Defer/Global/Union/Macro), Playground 예제 6개 추가, 대형 프로젝트 적합성 보고서 | 900 |
 | 54 | CI 수정 & Codecov 조정 & 테스트 수정 | bindings-test 빌드 스텝+continue-on-error, audit continue-on-error, codecov 타겟 60%, error_suggestion_tests 2건 수정 (field suggestion+indexing type error) | 900 |
 | 55 | 코드 커버리지 개선 — 핵심 크레이트 | codegen 362→699(+337), types 214→412(+198), lsp 40→86(+46), dap 45→103(+58), registry 19→90(+71), 총 +644 단위 테스트, Clippy 0건 | 900 |
+| 56 | 코드 커버리지 개선 — 보조 크레이트 | gc 19→102(밀도32.4), dynload 120→209(밀도42.5), tutorial 63→120(밀도44.4), codegen-js 160→267(밀도43.1), 총 +698 테스트, llvm-cov 87.37%, Clippy 0건 | 900 |
 
 ### 잔여 기술 부채 (Phase 54 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
 | assert_compiles 4개 잔여 | codegen 근본 한계 | duplicate_fn(clang), struct-by-value(Text IR ABI), slice_len(call-site ABI), where_clause(TC E022) |
-| 코드 커버리지 63% | 테스트 밀도 불균형 | 타겟 크레이트별 현황은 Phase 55 참조 |
+| 코드 커버리지 87%+ (llvm-cov) | Phase 56에서 대폭 개선 | 4개 보조 크레이트 밀도 32~44, CI tarpaulin은 Linux 전용 |
 
 ---
 
@@ -278,12 +279,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ### Phase 56: 코드 커버리지 개선 — 보조 크레이트 테스트 강화
 
 > **목표**: 전체 커버리지 70% → 75%+
+> 모드: 자동진행
 
-- [ ] 1. vais-gc 테스트 보강 (밀도 16.2 → 25+)
-- [ ] 2. vais-dynload 테스트 보강 (밀도 24.5 → 35+)
-- [ ] 3. vais-tutorial 테스트 보강 (밀도 23.5 → 35+)
-- [ ] 4. vais-codegen-js 테스트 보강 (밀도 25.8 → 35+)
-- [ ] 5. tarpaulin 실행 & 전체 커버리지 측정 검증
+- [x] 1. vais-gc 테스트 보강 (밀도 16.2 → 25+) ✅ 2026-02-26
+  변경: gc.rs(+313), concurrent.rs(+195), generational.rs(+142), lib.rs(+28) — 102 tests, 밀도 32.4
+- [x] 2. vais-dynload 테스트 보강 (밀도 24.5 → 35+) ✅ 2026-02-26
+  변경: error.rs, host_functions.rs, manifest.rs, module_loader.rs, plugin_discovery.rs, resource_limits.rs, wasm_sandbox.rs — 209 tests, 밀도 42.5
+- [x] 3. vais-tutorial 테스트 보강 (밀도 23.5 → 35+) ✅ 2026-02-26
+  변경: lessons.rs(+218), lib.rs(+625), runner.rs(+66) — 120 tests, 밀도 44.4
+- [x] 4. vais-codegen-js 테스트 보강 (밀도 25.8 → 35+) ✅ 2026-02-26
+  변경: expr.rs, items.rs, lib.rs, modules.rs, sourcemap.rs, stmt.rs, tree_shaking.rs, types.rs — 267 tests, 밀도 43.1
+- [x] 5. tarpaulin 실행 & 전체 커버리지 측정 검증 ✅ 2026-02-26
+  변경: cargo llvm-cov 기준 Line 87.37% (macOS에서 tarpaulin 미지원 → llvm-cov 대체), tarpaulin.toml timeout 형식 수정
+진행률: 5/5 (100%)
 
 ---
 

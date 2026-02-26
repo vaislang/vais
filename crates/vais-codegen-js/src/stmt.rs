@@ -180,4 +180,128 @@ mod tests {
         assert_eq!(gen.generate_stmt(&Stmt::Break(None)).unwrap(), "break;");
         assert_eq!(gen.generate_stmt(&Stmt::Continue).unwrap(), "continue;");
     }
+
+    #[test]
+    fn test_return_void() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::Return(None);
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert_eq!(result, "return;");
+    }
+
+    #[test]
+    fn test_break_with_value() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::Break(Some(Box::new(Spanned::new(
+            Expr::Int(42),
+            Span::new(0, 2),
+        ))));
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert!(result.contains("break;"));
+        assert!(result.contains("42"));
+    }
+
+    #[test]
+    fn test_defer_statement() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::Defer(Box::new(Spanned::new(
+            Expr::Ident("cleanup".to_string()),
+            Span::new(0, 7),
+        )));
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert!(result.contains("defer"));
+        assert!(result.contains("cleanup"));
+    }
+
+    #[test]
+    fn test_error_statement() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::Error {
+            message: "something broke".to_string(),
+            skipped_tokens: vec![],
+        };
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert!(result.contains("parse error"));
+        assert!(result.contains("something broke"));
+    }
+
+    #[test]
+    fn test_expr_statement() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::Expr(Box::new(Spanned::new(
+            Expr::Int(99),
+            Span::new(0, 2),
+        )));
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert_eq!(result, "99;");
+    }
+
+    #[test]
+    fn test_let_destructure_tuple() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::LetDestructure {
+            pattern: Spanned::new(
+                Pattern::Tuple(vec![
+                    Spanned::new(Pattern::Ident("a".to_string()), Span::new(0, 1)),
+                    Spanned::new(Pattern::Ident("b".to_string()), Span::new(3, 4)),
+                ]),
+                Span::new(0, 5),
+            ),
+            value: Box::new(Spanned::new(Expr::Int(0), Span::new(8, 9))),
+            is_mut: false,
+        };
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert!(result.contains("const"));
+        assert!(result.contains("[a, b]"));
+    }
+
+    #[test]
+    fn test_let_destructure_mutable() {
+        let mut gen = JsCodeGenerator::new();
+        let stmt = Stmt::LetDestructure {
+            pattern: Spanned::new(Pattern::Ident("x".to_string()), Span::new(0, 1)),
+            value: Box::new(Spanned::new(Expr::Int(0), Span::new(5, 6))),
+            is_mut: true,
+        };
+        let result = gen.generate_stmt(&stmt).unwrap();
+        assert!(result.starts_with("let "));
+    }
+
+    #[test]
+    fn test_function_body_expr() {
+        let mut gen = JsCodeGenerator::new();
+        let body = FunctionBody::Expr(Box::new(Spanned::new(
+            Expr::Int(42),
+            Span::new(0, 2),
+        )));
+        let result = gen.generate_function_body(&body).unwrap();
+        assert_eq!(result, "return 42;");
+    }
+
+    #[test]
+    fn test_function_body_block_with_return() {
+        let mut gen = JsCodeGenerator::new();
+        let body = FunctionBody::Block(vec![
+            Spanned::new(
+                Stmt::Let {
+                    name: Spanned::new("x".to_string(), Span::new(0, 1)),
+                    ty: None,
+                    value: Box::new(Spanned::new(Expr::Int(1), Span::new(5, 6))),
+                    is_mut: false,
+                    ownership: Ownership::Regular,
+                },
+                Span::new(0, 7),
+            ),
+            Spanned::new(
+                Stmt::Expr(Box::new(Spanned::new(
+                    Expr::Ident("x".to_string()),
+                    Span::new(8, 9),
+                ))),
+                Span::new(8, 10),
+            ),
+        ]);
+        let result = gen.generate_function_body(&body).unwrap();
+        assert!(result.contains("const x = 1;"));
+        assert!(result.contains("return x;"));
+    }
 }

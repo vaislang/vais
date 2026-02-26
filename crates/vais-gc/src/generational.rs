@@ -917,4 +917,146 @@ mod tests {
             "Minor GC should have been auto-triggered"
         );
     }
+
+    #[test]
+    fn test_default_config() {
+        let config = GenGcConfig::default();
+        assert_eq!(config.young_threshold, 256 * 1024);
+        assert_eq!(config.old_threshold, 4 * 1024 * 1024);
+        assert_eq!(config.promotion_age, 3);
+        assert_eq!(config.card_size, 512);
+    }
+
+    #[test]
+    fn test_generational_gc_default() {
+        let gc = GenerationalGc::default();
+        assert_eq!(gc.object_count(), 0);
+    }
+
+    #[test]
+    fn test_remembered_set_default() {
+        let rs = RememberedSet::default();
+        assert!(rs.is_empty());
+        assert_eq!(rs.len(), 0);
+    }
+
+    #[test]
+    fn test_remembered_set_clear() {
+        let mut rs = RememberedSet::new();
+        rs.add(1, 2);
+        rs.add(3, 4);
+        assert_eq!(rs.len(), 2);
+        rs.clear();
+        assert_eq!(rs.len(), 0);
+        assert!(rs.is_empty());
+    }
+
+    #[test]
+    fn test_card_table_range() {
+        let card_table = CardTable::new(4096, 512);
+        let (start, end) = card_table.card_range(0);
+        assert_eq!(start, 0);
+        assert_eq!(end, 512);
+
+        let (start, end) = card_table.card_range(1);
+        assert_eq!(start, 512);
+        assert_eq!(end, 1024);
+    }
+
+    #[test]
+    fn test_card_table_below_base() {
+        let mut card_table = CardTable::new(4096, 512);
+        card_table.set_base(1000);
+        // Address below base should not be dirty
+        assert!(!card_table.is_dirty(500));
+        card_table.mark_dirty(500); // Should be no-op (below base)
+        assert!(!card_table.is_dirty(500));
+    }
+
+    #[test]
+    fn test_is_alive_after_major_gc() {
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            old_threshold: 1024 * 1024,
+            promotion_age: 0,
+            ..Default::default()
+        });
+
+        let ptr = gc.alloc(100, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_minor(); // promote
+        gc.collect_major();
+
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_get_generation_none_for_unknown() {
+        let gc = GenerationalGc::new();
+        assert_eq!(gc.get_generation(12345), None);
+    }
+
+    #[test]
+    fn test_set_young_threshold() {
+        let mut gc = GenerationalGc::new();
+        gc.set_young_threshold(100);
+        // Verify by allocating enough to trigger
+        let ptr = gc.alloc(200, 1) as usize;
+        gc.add_root(ptr);
+        // Should have triggered minor GC
+        assert!(gc.get_stats().minor_collections > 0);
+    }
+
+    #[test]
+    fn test_set_old_threshold() {
+        let mut gc = GenerationalGc::new();
+        gc.set_old_threshold(999);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_set_promotion_age() {
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            ..Default::default()
+        });
+        gc.set_promotion_age(1);
+
+        let ptr = gc.alloc(100, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_minor(); // age 1 = promote
+
+        assert_eq!(gc.get_generation(ptr), Some(Generation::Old));
+    }
+
+    #[test]
+    fn test_write_barrier_null_target() {
+        let mut gc = GenerationalGc::new();
+        gc.write_barrier(100, 200, 0); // null target, should be no-op
+    }
+
+    #[test]
+    fn test_write_barrier_young_to_young() {
+        let mut gc = GenerationalGc::with_config(GenGcConfig {
+            young_threshold: 1024 * 1024,
+            ..Default::default()
+        });
+        let ptr1 = gc.alloc(100, 1) as usize;
+        let ptr2 = gc.alloc(100, 2) as usize;
+        // Both young, should not add to remembered set
+        gc.write_barrier(ptr1, 0, ptr2);
+        assert_eq!(gc.get_stats().remembered_set_size, 0);
+    }
+
+    #[test]
+    fn test_remove_root_non_existent() {
+        let mut gc = GenerationalGc::new();
+        gc.remove_root(99999); // should not panic
+    }
+
+    #[test]
+    fn test_add_root_zero() {
+        let mut gc = GenerationalGc::new();
+        gc.add_root(0); // should be no-op
+    }
 }

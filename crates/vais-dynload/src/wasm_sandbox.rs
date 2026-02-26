@@ -655,4 +655,145 @@ mod tests {
         sandbox.clear_cache();
         assert_eq!(sandbox.module_cache.lock().len(), 0);
     }
+
+    #[test]
+    fn test_sandbox_config_with_limits() {
+        let config =
+            SandboxConfig::new().with_limits(ResourceLimits::restrictive());
+        assert_eq!(config.limits.memory.max_bytes, 16 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_sandbox_config_with_capabilities() {
+        let config = SandboxConfig::new().with_capabilities(vec![
+            PluginCapability::Console,
+            PluginCapability::Time,
+            PluginCapability::Console, // duplicate should be ignored
+        ]);
+        // Console is already in default, plus Time
+        assert!(config.capabilities.contains(&PluginCapability::Console));
+        assert!(config.capabilities.contains(&PluginCapability::Time));
+    }
+
+    #[test]
+    fn test_sandbox_config_with_wasi() {
+        let config = SandboxConfig::new().with_wasi(true);
+        assert!(config.enable_wasi);
+    }
+
+    #[test]
+    fn test_sandbox_grant_revoke_capability() {
+        let config = SandboxConfig::restrictive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+
+        sandbox.grant_capability(PluginCapability::FsRead);
+        assert!(sandbox.host_registry.has_capability(&PluginCapability::FsRead));
+
+        sandbox.revoke_capability(&PluginCapability::FsRead);
+        assert!(!sandbox.host_registry.has_capability(&PluginCapability::FsRead));
+    }
+
+    #[test]
+    fn test_sandbox_config_access() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let cfg = sandbox.config();
+        assert!(cfg.debug);
+        assert!(cfg.enable_wasi);
+    }
+
+    #[test]
+    fn test_wasm_instance_name() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let wat = r#"(module (func (export "f")))"#;
+        let instance = sandbox.load_plugin_wat(wat, "my-module").unwrap();
+        assert_eq!(instance.name(), "my-module");
+    }
+
+    #[test]
+    fn test_wasm_remaining_fuel() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let wat = r#"(module (func (export "f")))"#;
+        let instance = sandbox.load_plugin_wat(wat, "test").unwrap();
+        let fuel = instance.remaining_fuel();
+        assert!(fuel.is_some());
+        assert!(fuel.unwrap() > 0);
+    }
+
+    #[test]
+    fn test_wasm_check_limits_ok() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let wat = r#"(module (func (export "f")))"#;
+        let instance = sandbox.load_plugin_wat(wat, "test").unwrap();
+        assert!(instance.check_limits().is_ok());
+    }
+
+    #[test]
+    fn test_wasm_i64_function() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let wat = r#"
+            (module
+                (func (export "mul") (param i64 i64) (result i64)
+                    local.get 0
+                    local.get 1
+                    i64.mul
+                )
+            )
+        "#;
+        let mut instance = sandbox.load_plugin_wat(wat, "test").unwrap();
+        let result = instance.call_i64("mul", &[7, 6]).unwrap();
+        assert_eq!(result, 42);
+    }
+
+    #[test]
+    fn test_wasm_call_void() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let wat = r#"(module (func (export "noop")))"#;
+        let mut instance = sandbox.load_plugin_wat(wat, "test").unwrap();
+        assert!(instance.call_void("noop").is_ok());
+    }
+
+    #[test]
+    fn test_wasm_invalid_module() {
+        let config = SandboxConfig::permissive();
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+        let result = sandbox.load_plugin_bytes(b"invalid wasm bytes", "bad");
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, DynloadError::WasmValidationError(_)));
+        }
+    }
+
+    #[test]
+    fn test_wasm_cache_eviction() {
+        let config = SandboxConfig::restrictive(); // cache_size = 5
+        let sandbox = WasmSandbox::with_config(config).unwrap();
+
+        // Load more modules than cache size
+        for i in 0..7 {
+            let wat = format!(
+                r#"(module (func (export "f{i}") (result i32) i32.const {i}))"#
+            );
+            let _inst = sandbox
+                .load_plugin_wat(&wat, &format!("mod{i}"))
+                .unwrap();
+        }
+
+        // Cache should be capped at config.cache_size (5)
+        let cache = sandbox.module_cache.lock();
+        assert!(cache.len() <= 5);
+    }
+
+    #[test]
+    fn test_sandbox_default() {
+        let sandbox = WasmSandbox::default();
+        // Default should work without error
+        let wat = r#"(module (func (export "f")))"#;
+        let _inst = sandbox.load_plugin_wat(wat, "test").unwrap();
+    }
 }

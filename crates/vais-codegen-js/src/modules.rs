@@ -298,4 +298,61 @@ mod tests {
         assert!(mod2.contains("function func2()"));
         assert!(!mod2.contains("export function func2()"));
     }
+
+    #[test]
+    fn test_barrel_export_empty() {
+        let gen = JsCodeGenerator::new();
+        let result = gen.generate_barrel_export(&[]);
+        assert!(result.contains("Auto-generated barrel export"));
+        // No export lines for empty
+        assert!(!result.contains("export *"));
+    }
+
+    #[test]
+    fn test_barrel_export_with_js_extension() {
+        let gen = JsCodeGenerator::new();
+        let modules = vec!["already.js".to_string()];
+        let result = gen.generate_barrel_export(&modules);
+        // Should not double-add .js
+        assert!(result.contains("export * from './already.js';"));
+    }
+
+    #[test]
+    fn test_path_to_js_filename_no_extension() {
+        assert_eq!(path_to_js_filename(Path::new("simple")), "simple.js");
+    }
+
+    #[test]
+    fn test_use_path_to_module_empty() {
+        let gen = JsCodeGenerator::new();
+        let result = gen.use_path_to_module(&[]);
+        assert_eq!(result, "'./module.js'");
+    }
+
+    #[test]
+    fn test_use_path_two_segments() {
+        let gen = JsCodeGenerator::new();
+        let path = vec![
+            Spanned::new("std".to_string(), Span::new(0, 3)),
+            Spanned::new("io".to_string(), Span::new(5, 7)),
+        ];
+        let result = gen.use_path_to_module(&path);
+        assert_eq!(result, "'./io.js'");
+    }
+
+    #[test]
+    fn test_use_import_preserves_last_segment_name() {
+        let gen = JsCodeGenerator::new();
+        let use_item = make_use(&["collections"], None);
+        let result = gen.generate_use(&use_item).unwrap();
+        assert!(result.contains("as collections"));
+    }
+
+    #[test]
+    fn test_path_to_js_filename_deep_path() {
+        assert_eq!(
+            path_to_js_filename(&PathBuf::from("/a/b/c/deep.vais")),
+            "deep.js"
+        );
+    }
 }

@@ -897,4 +897,199 @@ mod tests {
         assert_eq!(stats.collections, 5);
         assert_eq!(stats.objects_count, 5);
     }
+
+    #[test]
+    fn test_remove_root_then_collect() {
+        let gc = ConcurrentGc::new();
+        let ptr = gc.alloc(100, 1) as usize;
+        gc.add_root(ptr);
+
+        // Should survive
+        gc.collect_sync();
+        assert!(gc.is_alive(ptr));
+
+        // Remove root, should be collected
+        gc.remove_root(ptr);
+        gc.collect_sync();
+        assert!(!gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_null_root_ignored() {
+        let gc = ConcurrentGc::new();
+        gc.add_root(0); // Should be no-op
+        gc.remove_root(0); // Should be no-op
+    }
+
+    #[test]
+    fn test_object_count() {
+        let gc = ConcurrentGc::new();
+        assert_eq!(gc.object_count(), 0);
+
+        gc.alloc(100, 1);
+        assert_eq!(gc.object_count(), 1);
+
+        gc.alloc(200, 2);
+        assert_eq!(gc.object_count(), 2);
+
+        gc.collect_sync();
+        assert_eq!(gc.object_count(), 0);
+    }
+
+    #[test]
+    fn test_concurrent_gc_default_config() {
+        let config = ConcurrentGcConfig::default();
+        assert_eq!(config.gc_threshold, 1024 * 1024);
+        assert_eq!(config.target_pause_ns, 1_000_000);
+        assert_eq!(config.max_marking_steps, 1000);
+        assert!(config.concurrent_sweep);
+        assert!(config.write_barrier);
+    }
+
+    #[test]
+    fn test_concurrent_gc_header_color_ops() {
+        let header = ConcurrentGcHeader::new(64, 1);
+        assert_eq!(header.get_color(), Color::White);
+
+        header.set_color(Color::Gray);
+        assert_eq!(header.get_color(), Color::Gray);
+
+        assert!(header.compare_and_set_color(Color::Gray, Color::Black));
+        assert_eq!(header.get_color(), Color::Black);
+
+        // Should fail if expected doesn't match
+        assert!(!header.compare_and_set_color(Color::White, Color::Gray));
+        assert_eq!(header.get_color(), Color::Black);
+    }
+
+    #[test]
+    fn test_concurrent_gc_header_pinned() {
+        let header = ConcurrentGcHeader::new(64, 1);
+        assert!(!header.pinned.load(Ordering::Relaxed));
+        header.pinned.store(true, Ordering::Relaxed);
+        assert!(header.pinned.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_concurrent_gc_object_creation() {
+        let obj = ConcurrentGcObject::new(128, 42);
+        assert_eq!(obj.header.size.load(Ordering::Relaxed), 128);
+        assert_eq!(obj.header.type_id, 42);
+        assert_eq!(obj.data.len(), 128);
+        assert!(!obj.data_ptr().is_null());
+    }
+
+    #[test]
+    fn test_write_barrier_entry_fields() {
+        let entry = WriteBarrierEntry {
+            source: 100,
+            old_target: 200,
+            new_target: 300,
+            timestamp: 42,
+        };
+        assert_eq!(entry.source, 100);
+        assert_eq!(entry.old_target, 200);
+        assert_eq!(entry.new_target, 300);
+        assert_eq!(entry.timestamp, 42);
+    }
+
+    #[test]
+    fn test_gc_phase_transitions() {
+        let gc = ConcurrentGc::new();
+        assert_eq!(gc.get_phase(), GcPhase::Idle);
+
+        // Collection runs through phases
+        let ptr = gc.alloc(100, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_sync();
+
+        // After collection should be back to idle
+        assert_eq!(gc.get_phase(), GcPhase::Idle);
+    }
+
+    #[test]
+    fn test_stats_bytes_tracking() {
+        let gc = ConcurrentGc::new();
+        gc.alloc(100, 1);
+        gc.alloc(200, 2);
+
+        let stats = gc.get_stats();
+        assert_eq!(stats.bytes_allocated, 300);
+
+        gc.collect_sync();
+        let stats = gc.get_stats();
+        assert_eq!(stats.last_freed, 2);
+        assert_eq!(stats.last_bytes_freed, 300);
+    }
+
+    #[test]
+    fn test_shutdown() {
+        let gc = ConcurrentGc::new();
+        gc.alloc(100, 1);
+        gc.shutdown();
+        // Should not panic
+    }
+
+    #[test]
+    fn test_incremental_gc_idle_state() {
+        let gc = ConcurrentGc::new();
+        let inc = IncrementalGc::new(Arc::clone(&gc));
+        assert!(!inc.is_collecting());
+    }
+
+    #[test]
+    fn test_incremental_gc_start_and_step() {
+        let gc = ConcurrentGc::new();
+        let mut inc = IncrementalGc::new(Arc::clone(&gc));
+
+        gc.alloc(100, 1);
+
+        inc.start_collection();
+        assert!(inc.is_collecting());
+
+        // Step through phases until complete
+        let mut steps = 0;
+        while inc.is_collecting() && steps < 100 {
+            inc.step();
+            steps += 1;
+        }
+        assert!(!inc.is_collecting());
+    }
+
+    #[test]
+    fn test_request_collection_from_idle() {
+        let gc = ConcurrentGc::new();
+        gc.request_collection();
+        // Phase should move from Idle
+        let phase = gc.get_phase();
+        assert_eq!(phase, GcPhase::InitialMark);
+    }
+
+    #[test]
+    fn test_default_concurrent_gc_fn() {
+        let gc = default_concurrent_gc();
+        assert_eq!(gc.object_count(), 0);
+        assert_eq!(gc.get_phase(), GcPhase::Idle);
+    }
+
+    #[test]
+    fn test_stress_concurrent_alloc_collect() {
+        let gc = ConcurrentGc::new();
+        let mut rooted = Vec::new();
+
+        for i in 0..50 {
+            let ptr = gc.alloc(64, i) as usize;
+            if i % 5 == 0 {
+                gc.add_root(ptr);
+                rooted.push(ptr);
+            }
+        }
+
+        gc.collect_sync();
+
+        for ptr in &rooted {
+            assert!(gc.is_alive(*ptr));
+        }
+        assert_eq!(gc.object_count(), rooted.len());
+    }
 }

@@ -629,4 +629,155 @@ mod tests {
         let events = loader.check_for_changes().unwrap();
         assert!(events.is_empty());
     }
+
+    #[test]
+    fn test_module_loader_default_config() {
+        let config = ModuleLoaderConfig::default();
+        assert_eq!(config.compiler_command, "vaisc");
+        assert!(config.compiler_args.is_empty());
+        assert!(config.output_dir.is_none());
+        assert!(config.hot_reload);
+        assert_eq!(config.debounce_ms, 100);
+        assert_eq!(config.max_cache_size, 50);
+    }
+
+    #[test]
+    fn test_module_loader_config_with_output_dir() {
+        let config = ModuleLoaderConfig::new().with_output_dir("/tmp/test_output");
+        assert_eq!(
+            config.output_dir,
+            Some(PathBuf::from("/tmp/test_output"))
+        );
+    }
+
+    #[test]
+    fn test_module_loader_no_hot_reload() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert!(loader.list_modules().is_empty());
+    }
+
+    #[test]
+    fn test_get_nonexistent_module() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert!(loader.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_reload_not_loaded() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.reload("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotLoaded(_)
+        ));
+    }
+
+    #[test]
+    fn test_poll_changes_no_hot_reload() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        let result = loader.poll_changes(10).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_poll_changes_with_timeout() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(true)).unwrap();
+        // Should return None after timeout with no events
+        let result = loader.poll_changes(1).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_path_to_id_various() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+        assert_eq!(
+            loader.path_to_id(Path::new("/a/b/c/test.vais")),
+            "test"
+        );
+        assert_eq!(
+            loader.path_to_id(Path::new("no_ext")),
+            "no_ext"
+        );
+    }
+
+    #[test]
+    fn test_multiple_reload_callbacks() {
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+
+        let count = Arc::new(Mutex::new(0u32));
+        let c1 = count.clone();
+        let c2 = count.clone();
+
+        loader.on_reload(move |_| {
+            *c1.lock() += 1;
+        });
+        loader.on_reload(move |_| {
+            *c2.lock() += 1;
+        });
+
+        loader.notify_callbacks(ReloadEvent::Unloaded {
+            module_id: "test".to_string(),
+        });
+
+        assert_eq!(*count.lock(), 2);
+    }
+
+    #[test]
+    fn test_reload_event_variants() {
+        // Ensure all ReloadEvent variants can be constructed
+        let _e1 = ReloadEvent::Reloaded {
+            module_id: "m".to_string(),
+            version: 1,
+        };
+        let _e2 = ReloadEvent::ReloadFailed {
+            module_id: "m".to_string(),
+            error: "err".to_string(),
+        };
+        let _e3 = ReloadEvent::Unloaded {
+            module_id: "m".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_module_handle_clone() {
+        let handle = ModuleHandle {
+            id: "test".to_string(),
+            version: 1,
+            source_path: PathBuf::from("/test.vais"),
+            lib_path: PathBuf::from("/test.dylib"),
+            last_modified: SystemTime::now(),
+        };
+        let cloned = handle.clone();
+        assert_eq!(cloned.id, handle.id);
+        assert_eq!(cloned.version, handle.version);
+    }
+
+    #[test]
+    fn test_module_handle_debug() {
+        let handle = ModuleHandle {
+            id: "debug_test".to_string(),
+            version: 3,
+            source_path: PathBuf::from("/debug.vais"),
+            lib_path: PathBuf::from("/debug.dylib"),
+            last_modified: SystemTime::now(),
+        };
+        let debug = format!("{:?}", handle);
+        assert!(debug.contains("debug_test"));
+    }
+
+    #[test]
+    fn test_module_loader_config_default() {
+        let config = ModuleLoaderConfig::default();
+        assert_eq!(config.compiler_command, "vaisc");
+        assert!(config.hot_reload);
+        assert_eq!(config.max_cache_size, 50);
+    }
 }

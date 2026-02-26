@@ -930,4 +930,222 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_chapter_ids_sequential() {
+        let chapters = create_chapters();
+        for (i, chapter) in chapters.iter().enumerate() {
+            assert_eq!(chapter.id, i);
+        }
+    }
+
+    #[test]
+    fn test_all_lessons_have_hints() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                assert!(
+                    !lesson.hints.is_empty(),
+                    "Lesson {} has no hints",
+                    lesson.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_lessons_have_test_cases() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                assert!(
+                    !lesson.test_cases.is_empty(),
+                    "Lesson {} has no test cases",
+                    lesson.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_chapter1_lesson_count() {
+        let chapter = create_chapter1_basics();
+        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.lessons[0].id, "ch1_variables");
+        assert_eq!(chapter.lessons[1].id, "ch1_functions");
+        assert_eq!(chapter.lessons[2].id, "ch1_types");
+    }
+
+    #[test]
+    fn test_chapter2_lesson_count() {
+        let chapter = create_chapter2_control_flow();
+        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.lessons[0].id, "ch2_if_else");
+        assert_eq!(chapter.lessons[1].id, "ch2_loops");
+        assert_eq!(chapter.lessons[2].id, "ch2_match");
+    }
+
+    #[test]
+    fn test_chapter3_lesson_count() {
+        let chapter = create_chapter3_collections();
+        assert_eq!(chapter.lessons.len(), 3);
+    }
+
+    #[test]
+    fn test_chapter4_lesson_count() {
+        let chapter = create_chapter4_error_handling();
+        assert_eq!(chapter.lessons.len(), 3);
+    }
+
+    #[test]
+    fn test_chapter5_lesson_count() {
+        let chapter = create_chapter5_structs_traits();
+        assert_eq!(chapter.lessons.len(), 3);
+    }
+
+    #[test]
+    fn test_total_lessons() {
+        let chapters = create_chapters();
+        let total: usize = chapters.iter().map(|c| c.lessons.len()).sum();
+        assert_eq!(total, 15);
+    }
+
+    #[test]
+    fn test_all_chapters_have_descriptions() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            assert!(!chapter.title.is_empty());
+            assert!(!chapter.description.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_lesson_code_templates_not_empty() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                assert!(
+                    !lesson.code_template.is_empty(),
+                    "Lesson {} has empty code template",
+                    lesson.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_lesson_descriptions_not_empty() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                assert!(
+                    !lesson.description.is_empty(),
+                    "Lesson {} has empty description",
+                    lesson.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_test_cases_should_compile() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                // All test cases in the tutorial should have should_compile = true
+                for tc in &lesson.test_cases {
+                    assert!(
+                        tc.should_compile,
+                        "Lesson {} has test case that shouldn't compile",
+                        lesson.id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_solutions_not_empty() {
+        let chapters = create_chapters();
+        for chapter in chapters {
+            for lesson in chapter.lessons {
+                assert!(
+                    !lesson.solution.is_empty(),
+                    "Lesson {} has empty solution",
+                    lesson.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_chapter_ids_start_at_zero() {
+        let chapters = create_chapters();
+        assert_eq!(chapters[0].id, 0);
+    }
+
+    #[test]
+    fn test_lesson_ids_have_chapter_prefix() {
+        let chapters = create_chapters();
+        for (i, chapter) in chapters.iter().enumerate() {
+            let prefix = format!("ch{}_", i + 1);
+            for lesson in &chapter.lessons {
+                assert!(
+                    lesson.id.starts_with(&prefix),
+                    "Lesson {} should start with prefix {}",
+                    lesson.id,
+                    prefix
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_chapter_titles_non_trivial() {
+        let chapters = create_chapters();
+        for chapter in &chapters {
+            assert!(chapter.title.len() > 5, "Chapter title too short: {}", chapter.title);
+        }
+    }
+
+    #[test]
+    fn test_chapter3_topics() {
+        let chapter = create_chapter3_collections();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch3_vectors"));
+    }
+
+    #[test]
+    fn test_chapter4_topics() {
+        let chapter = create_chapter4_error_handling();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch4_result"));
+    }
+
+    #[test]
+    fn test_chapter5_topics() {
+        let chapter = create_chapter5_structs_traits();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch5_structs"));
+    }
+
+    #[test]
+    fn test_lesson_hints_are_strings() {
+        let chapters = create_chapters();
+        for chapter in &chapters {
+            for lesson in &chapter.lessons {
+                for hint in &lesson.hints {
+                    assert!(hint.len() > 0, "Hint in {} is empty", lesson.id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_chapters_have_increasing_ids() {
+        let chapters = create_chapters();
+        for i in 1..chapters.len() {
+            assert!(chapters[i].id > chapters[i - 1].id);
+        }
+    }
 }

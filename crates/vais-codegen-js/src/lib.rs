@@ -367,4 +367,90 @@ mod tests {
         assert!(result.contains("class Point"));
         assert!(result.contains("constructor(x, y)"));
     }
+
+    #[test]
+    fn test_js_config_default() {
+        let config = JsConfig::default();
+        assert!(config.use_const_let);
+        assert!(!config.emit_jsdoc);
+        assert_eq!(config.indent, "  ");
+        assert_eq!(config.target, "es2020");
+    }
+
+    #[test]
+    fn test_js_codegen_with_config() {
+        let config = JsConfig {
+            use_const_let: false,
+            emit_jsdoc: true,
+            indent: "    ".to_string(),
+            target: "es2015".to_string(),
+        };
+        let gen = JsCodeGenerator::with_config(config);
+        assert!(!gen.config.use_const_let);
+        assert!(gen.config.emit_jsdoc);
+        assert_eq!(gen.config.indent, "    ");
+    }
+
+    #[test]
+    fn test_js_codegen_default() {
+        let gen = JsCodeGenerator::default();
+        assert_eq!(gen.config.indent, "  ");
+    }
+
+    #[test]
+    fn test_next_label() {
+        let mut gen = JsCodeGenerator::new();
+        assert_eq!(gen.next_label(), "_L1");
+        assert_eq!(gen.next_label(), "_L2");
+        assert_eq!(gen.next_label(), "_L3");
+    }
+
+    #[test]
+    fn test_indent() {
+        let mut gen = JsCodeGenerator::new();
+        assert_eq!(gen.indent(), "");
+        gen.indent_level = 1;
+        assert_eq!(gen.indent(), "  ");
+        gen.indent_level = 3;
+        assert_eq!(gen.indent(), "      ");
+    }
+
+    #[test]
+    fn test_js_codegen_error_display() {
+        let e1 = JsCodegenError::UnsupportedFeature("test".to_string());
+        assert!(e1.to_string().contains("Unsupported feature"));
+
+        let e2 = JsCodegenError::TypeError("type err".to_string());
+        assert!(e2.to_string().contains("Type error"));
+
+        let e3 = JsCodegenError::Internal("internal".to_string());
+        assert!(e3.to_string().contains("Internal error"));
+    }
+
+    #[test]
+    fn test_public_function() {
+        let mut gen = JsCodeGenerator::new();
+        let module = Module {
+            items: vec![Spanned::new(
+                Item::Function(Function {
+                    name: Spanned::new("greet".to_string(), Span::new(0, 5)),
+                    generics: vec![],
+                    params: vec![],
+                    ret_type: None,
+                    body: FunctionBody::Expr(Box::new(Spanned::new(
+                        Expr::String("hello".to_string()),
+                        Span::new(0, 7),
+                    ))),
+                    is_pub: true,
+                    is_async: false,
+                    attributes: vec![],
+                    where_clause: vec![],
+                }),
+                Span::new(0, 10),
+            )],
+            modules_map: None,
+        };
+        let result = gen.generate_module(&module).unwrap();
+        assert!(result.contains("export function greet()"));
+    }
 }

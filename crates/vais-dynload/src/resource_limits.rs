@@ -394,4 +394,229 @@ mod tests {
         usage.add_time(600);
         assert!(usage.exceeds_time(&time_limit));
     }
+
+    // === MemoryLimit additional tests ===
+
+    #[test]
+    fn test_memory_limit_new() {
+        let limit = MemoryLimit::new(128 * 1024);
+        assert_eq!(limit.max_bytes, 128 * 1024);
+        assert_eq!(limit.max_wasm_pages, (128 * 1024 / (64 * 1024)) as u32);
+        assert!(limit.track_usage);
+    }
+
+    #[test]
+    fn test_memory_limit_unlimited() {
+        let limit = MemoryLimit::unlimited();
+        assert_eq!(limit.max_bytes, u64::MAX);
+        assert_eq!(limit.max_wasm_pages, u32::MAX);
+        assert!(!limit.track_usage);
+    }
+
+    #[test]
+    fn test_memory_limit_with_initial() {
+        let limit = MemoryLimit::megabytes(32).with_initial(512);
+        assert_eq!(limit.initial_bytes, 512);
+        assert_eq!(limit.max_bytes, 32 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_memory_limit_with_tracking() {
+        let limit = MemoryLimit::default().with_tracking(false);
+        assert!(!limit.track_usage);
+    }
+
+    #[test]
+    fn test_memory_limit_new_caps_initial() {
+        // When max_bytes < 1MB, initial_bytes should be capped to max_bytes
+        let limit = MemoryLimit::new(512);
+        assert_eq!(limit.initial_bytes, 512);
+    }
+
+    // === TimeLimit additional tests ===
+
+    #[test]
+    fn test_time_limit_new() {
+        let limit = TimeLimit::new(2000);
+        assert_eq!(limit.max_duration_ms, 2000);
+        assert!(limit.fuel_limit.is_some());
+        assert_eq!(limit.fuel_limit.unwrap(), 2000 * 2000);
+        assert!(limit.check_interval_ms > 0);
+    }
+
+    #[test]
+    fn test_time_limit_from_duration() {
+        let limit = TimeLimit::from_duration(Duration::from_secs(3));
+        assert_eq!(limit.max_duration_ms, 3000);
+    }
+
+    #[test]
+    fn test_time_limit_as_duration() {
+        let limit = TimeLimit::seconds(5);
+        let duration = limit.as_duration();
+        assert_eq!(duration, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn test_time_limit_unlimited() {
+        let limit = TimeLimit::unlimited();
+        assert_eq!(limit.max_duration_ms, u64::MAX);
+        assert!(limit.fuel_limit.is_none());
+        assert!(!limit.use_epoch_interruption);
+    }
+
+    #[test]
+    fn test_time_limit_with_fuel() {
+        let limit = TimeLimit::seconds(1).with_fuel(5000);
+        assert_eq!(limit.fuel_limit, Some(5000));
+    }
+
+    #[test]
+    fn test_time_limit_without_fuel() {
+        let limit = TimeLimit::default().without_fuel();
+        assert!(limit.fuel_limit.is_none());
+    }
+
+    // === StackLimit additional tests ===
+
+    #[test]
+    fn test_stack_limit_default() {
+        let limit = StackLimit::default();
+        assert_eq!(limit.max_bytes, 1024 * 1024);
+        assert_eq!(limit.max_call_depth, 1000);
+    }
+
+    #[test]
+    fn test_stack_limit_new() {
+        let limit = StackLimit::new(2048, 500);
+        assert_eq!(limit.max_bytes, 2048);
+        assert_eq!(limit.max_call_depth, 500);
+    }
+
+    // === ResourceLimits additional tests ===
+
+    #[test]
+    fn test_resource_limits_new() {
+        let limits = ResourceLimits::new();
+        assert_eq!(limits.memory.max_bytes, 64 * 1024 * 1024);
+        assert_eq!(limits.time.max_duration_ms, 5000);
+    }
+
+    #[test]
+    fn test_resource_limits_permissive() {
+        let limits = ResourceLimits::permissive();
+        assert_eq!(limits.memory.max_bytes, 256 * 1024 * 1024);
+        assert!(limits.time.fuel_limit.is_none());
+        assert_eq!(limits.max_instances, 10);
+    }
+
+    #[test]
+    fn test_resource_limits_with_builders() {
+        let limits = ResourceLimits::new()
+            .with_memory(MemoryLimit::megabytes(8))
+            .with_time(TimeLimit::seconds(2))
+            .with_stack(StackLimit::new(4096, 200));
+        assert_eq!(limits.memory.max_bytes, 8 * 1024 * 1024);
+        assert_eq!(limits.time.max_duration_ms, 2000);
+        assert_eq!(limits.stack.max_bytes, 4096);
+        assert_eq!(limits.stack.max_call_depth, 200);
+    }
+
+    #[test]
+    fn test_resource_limits_validate_zero_time() {
+        let mut limits = ResourceLimits::default();
+        limits.time.max_duration_ms = 0;
+        assert!(limits.validate().is_err());
+    }
+
+    #[test]
+    fn test_resource_limits_validate_zero_call_depth() {
+        let mut limits = ResourceLimits::default();
+        limits.stack.max_call_depth = 0;
+        assert!(limits.validate().is_err());
+    }
+
+    // === ResourceUsage additional tests ===
+
+    #[test]
+    fn test_resource_usage_default() {
+        let usage = ResourceUsage::default();
+        assert_eq!(usage.memory_bytes, 0);
+        assert_eq!(usage.peak_memory_bytes, 0);
+        assert_eq!(usage.execution_time_ms, 0);
+        assert!(usage.fuel_consumed.is_none());
+        assert_eq!(usage.call_count, 0);
+    }
+
+    #[test]
+    fn test_resource_usage_peak_memory_tracking() {
+        let mut usage = ResourceUsage::new();
+        usage.update_memory(1000);
+        usage.update_memory(5000);
+        usage.update_memory(3000);
+        assert_eq!(usage.memory_bytes, 3000);
+        assert_eq!(usage.peak_memory_bytes, 5000);
+    }
+
+    #[test]
+    fn test_resource_usage_fuel_consumed() {
+        let mut usage = ResourceUsage::new();
+        assert!(usage.fuel_consumed.is_none());
+        usage.add_fuel(100);
+        assert_eq!(usage.fuel_consumed, Some(100));
+        usage.add_fuel(200);
+        assert_eq!(usage.fuel_consumed, Some(300));
+    }
+
+    #[test]
+    fn test_resource_usage_call_counting() {
+        let mut usage = ResourceUsage::new();
+        for _ in 0..10 {
+            usage.increment_calls();
+        }
+        assert_eq!(usage.call_count, 10);
+    }
+
+    #[test]
+    fn test_memory_limit_megabytes_large() {
+        let limit = MemoryLimit::megabytes(1024);
+        assert_eq!(limit.max_bytes, 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_time_limit_check_interval_min() {
+        // Very short timeout should clamp check_interval_ms to at least 10
+        let limit = TimeLimit::new(100);
+        assert!(limit.check_interval_ms >= 10);
+    }
+
+    #[test]
+    fn test_resource_limits_clone() {
+        let limits = ResourceLimits::restrictive();
+        let cloned = limits.clone();
+        assert_eq!(cloned.memory.max_bytes, limits.memory.max_bytes);
+        assert_eq!(cloned.time.max_duration_ms, limits.time.max_duration_ms);
+        assert_eq!(cloned.max_tables, limits.max_tables);
+    }
+
+    #[test]
+    fn test_resource_usage_combined() {
+        let mut usage = ResourceUsage::new();
+        usage.update_memory(1024);
+        usage.add_time(50);
+        usage.add_fuel(100);
+        usage.increment_calls();
+
+        assert_eq!(usage.memory_bytes, 1024);
+        assert_eq!(usage.execution_time_ms, 50);
+        assert_eq!(usage.fuel_consumed, Some(100));
+        assert_eq!(usage.call_count, 1);
+    }
+
+    #[test]
+    fn test_resource_limits_debug() {
+        let limits = ResourceLimits::default();
+        let debug = format!("{:?}", limits);
+        assert!(debug.contains("ResourceLimits"));
+    }
 }
