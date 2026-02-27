@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use vais_ast::{BinOp, Expr, Function, IfElse, Type};
 
-/// Options parsed from #[contract(...)] attribute
+/// Options parsed from `#[contract(...)]` attribute
 #[derive(Debug, Default)]
 struct ContractOptions {
     /// Whether #[contract] is present

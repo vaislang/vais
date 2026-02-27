@@ -1,6 +1,6 @@
 //! Derive macro framework
 //!
-//! Provides automatic code generation for common traits via #[derive(...)] attributes.
+//! Provides automatic code generation for common traits via `#[derive(...)]` attributes.
 //! Scans struct and enum definitions for `#[derive(...)]` and generates corresponding
 //! trait impl blocks that are injected back into the module AST.
 //!
