@@ -20,6 +20,6 @@ pub struct ExternFunction {
     pub params: Vec<Param>,
     pub ret_type: Option<Spanned<Type>>,
     pub is_vararg: bool,
-    /// Attributes like `#[wasm_import("env", "js_alert")]`
+    /// Attributes like `#\[wasm_import("env", "js_alert")\]`
     pub attributes: Vec<Attribute>,
 }

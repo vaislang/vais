@@ -97,11 +97,11 @@ impl VectorWidth {
 pub enum LoopDependence {
     /// No dependence
     None,
-    /// Flow dependence (read-after-write): a[i] = ...; ... = a[i]
+    /// Flow dependence (read-after-write): `a[i] = ...; ... = a[i]`
     Flow { distance: Option<i64> },
-    /// Anti dependence (write-after-read): ... = a[i]; a[i] = ...
+    /// Anti dependence (write-after-read): `... = a[i]; a[i] = ...`
     Anti { distance: Option<i64> },
-    /// Output dependence (write-after-write): a[i] = ...; a[i] = ...
+    /// Output dependence (write-after-write): `a[i] = ...; a[i] = ...`
     Output { distance: Option<i64> },
     /// Unknown dependence (conservative)
     Unknown,

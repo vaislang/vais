@@ -6,9 +6,9 @@
 //! # Key techniques
 //!
 //! 1. **Loop induction variable analysis**: Determine that `i` in `L i := 0; i < n; i += 1`
-//!    is always in range `[0, n)`.
-//! 2. **Guard-based elimination**: If `I i < arr.len` dominates `arr[i]`, the check is proven.
-//! 3. **Constant index elimination**: `arr[0]` on a known-length array needs no check.
+//!    is always in range `\[0, n)`.
+//! 2. **Guard-based elimination**: If `I i < arr.len` dominates `arr\[i\]`, the check is proven.
+//! 3. **Constant index elimination**: `arr\[0\]` on a known-length array needs no check.
 
 use std::collections::HashMap;
 

@@ -52,9 +52,9 @@
 //! ```
 //!
 //! References:
-//! - Component Model spec: https://github.com/WebAssembly/component-model
-//! - WIT IDL spec: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
-//! - wasm-bindgen: https://rustwasm.github.io/wasm-bindgen/
+//! - Component Model spec: <https://github.com/WebAssembly/component-model>
+//! - WIT IDL spec: <https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md>
+//! - wasm-bindgen: <https://rustwasm.github.io/wasm-bindgen/>
 
 mod bindgen;
 mod conversion;
