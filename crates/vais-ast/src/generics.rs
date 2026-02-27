@@ -8,13 +8,13 @@ use crate::infrastructure::Spanned;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Variance {
     /// Invariant (default): T is neither covariant nor contravariant
-    /// Container<A> has no subtyping relation with Container<B>
+    /// `Container<A>` has no subtyping relation with `Container<B>`
     #[default]
     Invariant,
-    /// Covariant (+T): if A <: B then Container<A> <: Container<B>
+    /// Covariant (+T): if A <: B then `Container<A>` <: `Container<B>`
     /// Used for read-only/producer types (e.g., Iterator, Supplier)
     Covariant,
-    /// Contravariant (-T): if A <: B then Container<B> <: Container<A>
+    /// Contravariant (-T): if A <: B then `Container<B>` <: `Container<A>`
     /// Used for write-only/consumer types (e.g., Predicate, Consumer)
     Contravariant,
 }

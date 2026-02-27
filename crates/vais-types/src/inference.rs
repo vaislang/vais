@@ -52,7 +52,7 @@ impl CheckMode {
 
 impl TypeChecker {
     /// Check if a type variable `id` occurs anywhere inside `ty`.
-    /// Prevents creating cyclic substitutions (e.g., T0 -> Vec<T0>) which would
+    /// Prevents creating cyclic substitutions (e.g., T0 -> `Vec<T0>`) which would
     /// cause `apply_substitutions` to recurse infinitely.
     fn occurs_in(id: usize, ty: &ResolvedType) -> bool {
         match ty {

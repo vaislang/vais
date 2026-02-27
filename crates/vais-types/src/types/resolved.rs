@@ -208,7 +208,7 @@ pub enum ResolvedType {
     /// GAT support: `<T as Trait>::Item<'a, i64>` with generic arguments
     /// After resolution, this becomes the concrete type
     Associated {
-        /// Base type (T in <T as Trait>::Item)
+        /// Base type (T in `<T as Trait>::Item`)
         base: Box<ResolvedType>,
         /// Trait name (None if using Self::Item syntax)
         trait_name: Option<String>,

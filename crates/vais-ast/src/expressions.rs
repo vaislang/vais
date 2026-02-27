@@ -188,7 +188,7 @@ pub enum Expr {
     },
     /// Lazy expression: `lazy expr` - Deferred evaluation
     /// The expression is not evaluated until explicitly forced.
-    /// Creates a Lazy<T> thunk that memoizes the result.
+    /// Creates a `Lazy<T>` thunk that memoizes the result.
     Lazy(Box<Spanned<Expr>>),
     /// Force expression: `force expr` - Force evaluation of lazy value
     /// Evaluates a lazy thunk and returns the cached result.

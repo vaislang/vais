@@ -29,11 +29,11 @@ pub enum ImplTargetType {
     /// Most specific - applies to exactly one type
     Concrete(String),
 
-    /// Generic with bounds: impl<T: Bar> Foo for T
+    /// Generic with bounds: `impl<T: Bar> Foo for T`
     /// More specific than unbounded - applies to types satisfying bounds
     Generic(String, Vec<String>),
 
-    /// Blanket impl: impl<T> Foo for T
+    /// Blanket impl: `impl<T> Foo for T`
     /// Least specific - applies to all types
     Blanket(String),
 }
