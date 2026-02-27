@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772200050278,
+  "lastUpdate": 1772202216788,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -27551,6 +27551,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1848342,
             "range": "± 25508",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "75c1cb2570d158a36375dcc0a792522d82890399",
+          "message": "fix(ci): tarpaulin RCA — ptrace/subprocess 충돌 근본 수정\n\n근본 원인: tarpaulin ptrace가 integration test의 subprocess spawn\n(clang 컴파일 + 바이너리 실행)과 충돌하여 segfault 발생.\nfollow-exec=true가 문제를 악화시킴.\n\n수정:\n- follow-exec=false: subprocess ptrace 추적 비활성화\n- --lib + 12개 안전한 integration test만 명시 실행\n  (subprocess를 spawn하지 않는 test만 선별)\n- UNSAFE targets 13개 제외 (e2e, execution_tests 등)\n  이들은 별도 Test 작업에서 검증됨\n- bins=false, fail-under 제거, exclude 통합\n\n이전: --lib only → 41.95% (17,942/42,769 lines)\n기대: --lib + safe integration tests → ~62%+ 복구\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-27T23:16:45+09:00",
+          "tree_id": "8a7d5eebb7b350bae40a1eb7d4b508f83c867c4c",
+          "url": "https://github.com/vaislang/vais/commit/75c1cb2570d158a36375dcc0a792522d82890399"
+        },
+        "date": 1772202215949,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2424,
+            "range": "± 27",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5143,
+            "range": "± 431",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6212,
+            "range": "± 74",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10778,
+            "range": "± 119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18226,
+            "range": "± 134",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34277,
+            "range": "± 172",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30844,
+            "range": "± 163",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67352,
+            "range": "± 546",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 301839,
+            "range": "± 1655",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 455132,
+            "range": "± 6354",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118178,
+            "range": "± 724",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 773965,
+            "range": "± 3066",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 172344,
+            "range": "± 1120",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 201524,
+            "range": "± 1398",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 208371,
+            "range": "± 770",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 255329,
+            "range": "± 1047",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 543832,
+            "range": "± 2132",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 756474,
+            "range": "± 2248",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 420570,
+            "range": "± 1748",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1183975,
+            "range": "± 11266",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39118,
+            "range": "± 320",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 198848,
+            "range": "± 1364",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 383796,
+            "range": "± 4782",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1859671,
+            "range": "± 20459",
             "unit": "ns/iter"
           }
         ]
