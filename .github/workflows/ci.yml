@@ -309,34 +309,23 @@ jobs:
             ${{ runner.os }}-cargo-coverage-
 
       - name: Generate coverage reports
-        # tarpaulin uses ptrace which has two conflict modes:
-        # 1. Subprocess spawn: tests calling Command::new (clang, binaries) → segfault
-        # 2. Large codegen: selfhost 50K+ LOC compilation overwhelms ptrace → segfault
+        # Use LLVM engine instead of ptrace (default on Linux).
+        # ptrace causes segfaults with: subprocess spawning, large codegen,
+        # and cumulative memory pressure across many test binaries.
+        # LLVM source-based coverage avoids ptrace entirely.
         #
-        # EXCLUDED integration tests:
-        #   Subprocess: e2e, execution_tests, error_scenario_tests, selfhost_lexer_tests,
-        #     selfhost_clang_tests, selfhost_stdlib_tests, phase33_integration_tests,
-        #     windows_e2e_tests, cross_verify_tests, import_security_tests,
-        #     registry_e2e_tests, parallel_codegen_tests, lto_tests
-        #   Heavy codegen: bootstrap_tests, selfhost_mir_tests (selfhost 50K+ LOC files)
+        # Note: --engine llvm cannot collect coverage from tests with non-zero
+        # exit codes or fork() calls. Tests spawning subprocesses (e2e,
+        # execution_tests, etc.) may show lower coverage for the subprocess
+        # portion, but the test harness and compiler pipeline are covered.
         run: |
           cargo tarpaulin \
             --workspace \
+            --engine llvm \
             --exclude vais-python \
             --exclude vais-node \
             --exclude vais-dap \
             --exclude vais-playground-server \
-            --lib \
-            --test endurance_tests \
-            --test error_message_tests \
-            --test error_snapshot_tests \
-            --test integration_tests \
-            --test memory_safety_tests \
-            --test parallel_typecheck_tests \
-            --test phase34_stability_tests \
-            --test pipeline_compile_tests \
-            --test scale_test \
-            --test stress_tests \
             --timeout 300 \
             --out Html --out Lcov --out Json \
             --output-dir target/coverage

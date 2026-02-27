@@ -1,12 +1,15 @@
 # Cargo-tarpaulin configuration for test coverage reporting
 # Reference: https://github.com/xd009642/tarpaulin
 #
-# IMPORTANT: tarpaulin uses ptrace on Linux, which conflicts with tests that
-# spawn subprocesses (clang, compiled binaries). Only lib tests and integration
-# tests that do NOT spawn subprocesses are included.
-# See: https://github.com/xd009642/tarpaulin/issues/317
+# Uses LLVM source-based coverage (--engine llvm) instead of ptrace.
+# ptrace (Linux default) causes segfaults with subprocess spawning,
+# large codegen, and cumulative memory pressure.
+# LLVM coverage is also default on Mac/Windows.
 
 [coverage]
+# Use LLVM source-based coverage instead of ptrace
+engine = "llvm"
+
 # Timeout for the entire coverage process (in seconds)
 timeout = "300s"
 
@@ -43,26 +46,17 @@ count = true
 # Work with multiple packages
 workspace = true
 
-# Run lib targets (inline #[cfg(test)] unit tests — always safe)
+# Run all target types
 lib = true
-
-# Do NOT run binary targets
 bins = false
-
-# Do NOT run example targets
 examples = false
-
-# Run integration test targets (filtered by --test in CI)
 tests = true
 
 # Use colored output
 color = "Auto"
 
-# Parallel execution (disabled — ptrace is single-threaded)
+# Parallel execution
 parallel = false
-
-# Precise reporting (line-level granularity)
-precise = true
 
 # Verbose output for debugging
 verbose = true
@@ -70,8 +64,8 @@ verbose = true
 # Run debug builds for accurate source mapping
 release = false
 
-# Do NOT follow child process execution — ptrace conflicts with subprocess spawning
-follow-exec = false
+# Follow child process execution (safe with LLVM engine, no ptrace conflicts)
+follow-exec = true
 
 # Include all features
 all-features = false
