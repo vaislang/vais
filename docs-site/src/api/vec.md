@@ -20,7 +20,7 @@ U std/option
 
 ## Struct
 
-### Vec<T>
+### `Vec<T>`
 
 ```vais
 S Vec<T> {

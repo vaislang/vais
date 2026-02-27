@@ -53,7 +53,7 @@ Non-owning reference that does not prevent deallocation.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `rc_new` | `F rc_new(value: i64) -> Rc` | Helper to create Rc<i64> |
+| `rc_new` | `F rc_new(value: i64) -> Rc` | Helper to create `Rc<i64>` |
 | `rc_clone` | `F rc_clone(rc: Rc) -> Rc` | Helper to clone Rc |
 | `rc_drop` | `F rc_drop(rc: Rc) -> i64` | Helper to drop Rc |
 

@@ -70,7 +70,7 @@
     },
     "selfHosting": {
       "title": "自托管编译器",
-      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 520 个 E2E 测试和总共 2,500 多个测试支持。"
+      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 900 个 E2E 测试和总共 5,300 多个测试支持。"
     }
   },
   "playground": {

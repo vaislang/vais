@@ -510,7 +510,7 @@ W Functor<Container> {
 
 Vais의 제네릭 타입은 다음 variance 규칙을 따릅니다:
 
-- **Covariant (공변)**: `Vec<T>` — T가 서브타입이면 Vec<T>도 서브타입
+- **Covariant (공변)**: `Vec<T>` — T가 서브타입이면 `Vec<T>`도 서브타입
 - **Invariant (불변)**: `&mut T` — T의 서브타입 관계가 보존되지 않음
 - **Contravariant (반변)**: 함수 파라미터 위치
 

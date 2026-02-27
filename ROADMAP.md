@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-26 (Phase 56 — 코드 커버리지 개선, 보조 4개 크레이트 +698 테스트, llvm-cov 87.37%)
+> **최종 업데이트**: 2026-02-27 (Phase 57 — 홈페이지/Docs/Playground 업데이트)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 5,300+ (통합 2,700+, 단위 2,721) |
+| 전체 테스트 | 5,396+ (통합 2,700+, 단위 2,721) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -227,6 +227,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 54 | CI 수정 & Codecov 조정 & 테스트 수정 | bindings-test 빌드 스텝+continue-on-error, audit continue-on-error, codecov 타겟 60%, error_suggestion_tests 2건 수정 (field suggestion+indexing type error) | 900 |
 | 55 | 코드 커버리지 개선 — 핵심 크레이트 | codegen 362→699(+337), types 214→412(+198), lsp 40→86(+46), dap 45→103(+58), registry 19→90(+71), 총 +644 단위 테스트, Clippy 0건 | 900 |
 | 56 | 코드 커버리지 개선 — 보조 크레이트 | gc 19→102(밀도32.4), dynload 120→209(밀도42.5), tutorial 63→120(밀도44.4), codegen-js 160→267(밀도43.1), 총 +698 테스트, llvm-cov 87.37%, Clippy 0건 | 900 |
+| 57 | 홈페이지/Docs/Playground 업데이트 | 수치 업데이트 (900 E2E, 5300+ tests, 29 crates, Phase 56), docs-site 경고 21→0건, playground 예제 수 정정, 23파일 +74/-49줄 | 900 |
 
 ### 잔여 기술 부채 (Phase 54 기준)
 
@@ -238,6 +239,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 ---
 
 ## 📋 예정 작업
+
+### Phase 57: 홈페이지/Docs/Playground 업데이트
+
+> **목표**: 오래된 수치 업데이트 + docs-site 경고 수정
+> 모드: 자동진행
+
+- [x] 1. 홈페이지 수치 업데이트 — HTML + i18n 4개 파일 (Sonnet) ✅ 2026-02-27
+  변경: website/index.html, public/locales/{en,ko,ja,zh}.json (520→900 E2E, 2500→5300 total tests)
+- [x] 2. README.md 수치 업데이트 (Sonnet) ✅ 2026-02-27
+  변경: README.md (28+→29 crates, 4000→5300 tests, Phase 50→56)
+- [x] 3. Playground 문서 수치 업데이트 (Sonnet) ✅ 2026-02-27
+  변경: playground/{README,PROJECT_SUMMARY,IMPLEMENTATION_SUMMARY,TUTORIAL}.md (예제 13/18→31개)
+- [x] 4. Docs-site HTML 태그 경고 24건 수정 (Sonnet) ✅ 2026-02-27
+  변경: 10개 md파일에서 제네릭 문법 backtick 처리 (mdbook 경고 21→0건)
+- [x] 5. 검증 & 빌드 확인 ✅ 2026-02-27
+  변경: mdbook build 0 warnings, 전체 수치 일관성 확인
+진행률: 5/5 (100%)
 
 ### Phase 55: 코드 커버리지 개선 — 핵심 크레이트 테스트 강화
 

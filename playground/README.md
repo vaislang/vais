@@ -6,7 +6,7 @@ Web-based interactive playground for the Vais programming language.
 
 - **Monaco Editor** with Vais syntax highlighting
 - **Real-time compilation** and execution (Server, WASM, or Preview mode)
-- **18 example programs** demonstrating language features
+- **31 example programs** demonstrating language features
 - **Auto-completion** for Vais keywords and functions
 - **Keyboard shortcuts** for quick actions
 - **Responsive design** for desktop and mobile
@@ -59,7 +59,7 @@ playground/
 4. **Control Flow** - If-else and loops
 5. **Struct** - Struct definition and methods
 6. **Enum** - Enum types and pattern matching
-7. **Match** - Pattern matching expressions
+7. **Pattern Matching** - Pattern matching expressions
 8. **Loops** - Different loop types
 9. **Self Recursion** - Using the @ operator
 10. **Type Inference** - Automatic type inference
@@ -68,9 +68,22 @@ playground/
 13. **String Interpolation** - String formatting with variables
 14. **Pipe Operator** - Function chaining with |>
 15. **Mutable Variables** - Mutable references with ~mut
-16. **Destructuring** - Pattern destructuring
-17. **Type Infer Params** - Parameter type inference
-18. **Minimal** - Simplest valid program
+16. **Destructuring & Swap** - Pattern destructuring
+17. **Parameter Inference** - Parameter type inference
+18. **Minimal Program** - Simplest valid program
+19. **Slice Types** - Slice type usage
+20. **Traits** - Trait definitions and implementations
+21. **Async/Await** - Async programming (compile only)
+22. **Ownership** - Ownership and borrowing
+23. **WASM Interop** - WebAssembly interop
+24. **Lambda Capture** - Lambda closures with captures
+25. **Range Loops** - Range-based iteration
+26. **Lazy Evaluation** - Lazy evaluation (compile only)
+27. **Result & Option** - Error handling types
+28. **Try Operator (?)** - Error propagation
+29. **Unwrap Operator (!)** - Unwrapping values
+30. **Where Clause** - Generic constraints
+31. **Defer Statement** - Deferred cleanup code
 
 ## Keyboard Shortcuts
 

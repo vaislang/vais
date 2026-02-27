@@ -676,7 +676,7 @@ Check out the [Language Specification](../docs/LANGUAGE_SPEC.md) for complete de
 ## Resources
 
 - **Language Spec**: Complete language reference
-- **Examples**: 13 working examples in the playground
+- **Examples**: 31 working examples in the playground
 - **GitHub**: Source code and issues
 - **Docs**: Comprehensive documentation
 

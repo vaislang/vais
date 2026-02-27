@@ -70,7 +70,7 @@
     },
     "selfHosting": {
       "title": "Self-Hosting Compiler",
-      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 520 E2E tests and 2,500+ total tests."
+      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 900 E2E tests and 5,300+ total tests."
     }
   },
   "playground": {

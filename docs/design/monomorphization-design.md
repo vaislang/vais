@@ -196,7 +196,7 @@ fn generate_generic_struct(&mut self, inst: &GenericInstantiation) -> CodegenRes
 
 ### 3. Standard Library Changes
 
-#### 3.1 Vec<T> Definition
+#### 3.1 `Vec<T>` Definition
 
 ```vais
 # Vec<T> - generic dynamic array
@@ -233,7 +233,7 @@ X Vec<T> {
 }
 ```
 
-#### 3.2 HashMap<K, V> Definition
+#### 3.2 `HashMap<K, V>` Definition
 
 ```vais
 # Entry<K, V> - linked list node
@@ -279,7 +279,7 @@ X HashMap<K, V> {
 
 ### 4. Built-in Generic Functions
 
-#### 4.1 sizeof<T>
+#### 4.1 `sizeof<T>`
 
 Returns the size in bytes of type T at compile time:
 
@@ -336,8 +336,8 @@ fn builtin_store<T>(ptr: i64, value: T)
 3. Update function calls to use mangled names
 
 #### Phase 4: Standard Library
-1. Convert Vec to Vec<T>
-2. Convert HashMap to HashMap<K, V>
+1. Convert Vec to `Vec<T>`
+2. Convert HashMap to `HashMap<K, V>`
 3. Add tests for generic collections
 
 ### 6. Limitations & Future Work
@@ -418,5 +418,5 @@ entry:
 
 1. **Unit tests**: Test name mangling, type substitution
 2. **Integration tests**: Full compilation of generic code
-3. **Standard library tests**: Vec<T>, HashMap<K, V> with various types
+3. **Standard library tests**: `Vec<T>`, `HashMap<K, V>` with various types
 4. **Performance tests**: Ensure no runtime overhead vs hand-written code

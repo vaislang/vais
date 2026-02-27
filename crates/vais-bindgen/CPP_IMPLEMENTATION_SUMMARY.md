@@ -170,7 +170,7 @@ pub fn cpp_to_vais_type(cpp_type: &CppType) -> VaisType {
 | T& | *T | Reference (as pointer) |
 | const T | T | Const ignored |
 | std::string | String | String type |
-| std::vector<T> | Vec<T> | Dynamic array |
+| `std::vector<T>` | `Vec<T>` | Dynamic array |
 
 ### 4. Class Handling (`src/cpp/classes.rs`)
 

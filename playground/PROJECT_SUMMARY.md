@@ -44,7 +44,7 @@ A complete web-based interactive development environment for the Vais programmin
    - Dark theme colors
 
 6. **src/examples.js** (365 lines)
-   - 13 complete example programs
+   - 31 complete example programs
    - Hello World
    - Fibonacci
    - Generics
@@ -145,7 +145,7 @@ A complete web-based interactive development environment for the Vais programmin
 
 - **Documentation**: 58.5 KB across 7 files
 
-- **Example Programs**: 13 programs demonstrating all major features
+- **Example Programs**: 31 programs demonstrating all major features
 
 - **UI Components**: 8 major components
   - Header
@@ -162,7 +162,7 @@ A complete web-based interactive development environment for the Vais programmin
 ✅ **21 Core Features**
 - Monaco editor integration
 - Vais syntax highlighting
-- 13 example programs
+- 31 example programs
 - Code compilation (mock mode)
 - Output display with formatting
 - Error and warning reporting
@@ -270,7 +270,7 @@ Intelligent suggestions for:
 - Code templates
 
 ### 3. Examples
-13 carefully crafted examples:
+31 carefully crafted examples:
 - Basic programs
 - Advanced features
 - Best practices
@@ -310,7 +310,7 @@ Works on:
 
 ### Immediate (Ready for Use)
 ✅ Playground is fully functional in mock mode
-✅ All 13 examples work
+✅ All 31 examples work
 ✅ Documentation is complete
 ✅ UI is polished and responsive
 
@@ -367,7 +367,7 @@ Works on:
 
 ### Manual Testing Checklist
 - [ ] Load playground in browser
-- [ ] Click through all 13 examples
+- [ ] Click through all 31 examples
 - [ ] Test Run button for each example
 - [ ] Try keyboard shortcuts
 - [ ] Test Format button

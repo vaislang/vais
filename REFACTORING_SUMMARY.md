@@ -147,7 +147,7 @@ return Err(error_formatter::format_type_error(&e, &main_source, input));
    - 구조체 이름이 올바르게 변환되는지 확인
 
 8. **test_type_to_llvm_cache_generic_types**
-   - 제네릭 타입 (Vec<T> 등)
+   - 제네릭 타입 (`Vec<T>` 등)
    - 제네릭 구조체 변환 검증
 
 9. **test_type_to_llvm_cache_isolation**

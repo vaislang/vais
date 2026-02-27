@@ -1473,7 +1473,7 @@ entry:
 }  ; %x automatically freed when function returns
 ```
 
-**Heap allocation** (Box<T>):
+**Heap allocation** (`Box<T>`):
 ```vais
 b:Box<Point> = Box.new(Point{x:1,y:2})
 ```
