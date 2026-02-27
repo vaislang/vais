@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-/// A semantic version (major.minor.patch[-prerelease][+build])
+/// A semantic version (major.minor.patch\[-prerelease\]\[+build\])
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Version {
     pub major: u64,

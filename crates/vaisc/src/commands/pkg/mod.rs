@@ -165,7 +165,7 @@ pub(crate) enum PkgCommands {
 
     /// Publish package to registry
     Publish {
-        /// Registry URL (default: https://registry.vais.dev)
+        /// Registry URL (default: <https://registry.vais.dev>)
         #[arg(long)]
         registry: Option<String>,
 
