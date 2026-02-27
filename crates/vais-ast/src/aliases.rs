@@ -1,8 +1,8 @@
 //! Type aliases and trait aliases
 
-use crate::infrastructure::Spanned;
 use crate::ast_types::Type;
 use crate::generics::GenericParam;
+use crate::infrastructure::Spanned;
 
 /// Type alias
 #[derive(Debug, Clone, PartialEq)]

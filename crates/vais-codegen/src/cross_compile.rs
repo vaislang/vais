@@ -577,7 +577,9 @@ mod tests {
     #[test]
     fn test_clang_command_with_include_paths() {
         let mut config = CrossCompileConfig::new(TargetTriple::X86_64Linux);
-        config.include_paths.push(std::path::PathBuf::from("/usr/include"));
+        config
+            .include_paths
+            .push(std::path::PathBuf::from("/usr/include"));
         let cmd = config.clang_command();
         assert!(cmd.iter().any(|s| s == "-I/usr/include"));
     }
@@ -799,7 +801,9 @@ mod tests {
     fn test_clang_command_windows_target() {
         let config = CrossCompileConfig::new(TargetTriple::X86_64WindowsMsvc);
         let cmd = config.clang_command();
-        assert!(cmd.iter().any(|s| s.contains("x86_64") && s.contains("windows")));
+        assert!(cmd
+            .iter()
+            .any(|s| s.contains("x86_64") && s.contains("windows")));
     }
 
     #[test]

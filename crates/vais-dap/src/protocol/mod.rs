@@ -1,7 +1,7 @@
 //! DAP Protocol Implementation
 //!
 //! This module implements the Debug Adapter Protocol specification.
-//! See: https://microsoft.github.io/debug-adapter-protocol/
+//! See: <https://microsoft.github.io/debug-adapter-protocol/>
 
 pub mod codec;
 pub mod events;

@@ -1,5 +1,5 @@
-use crate::*;
 use crate::borrow_check::check_body;
+use crate::*;
 use std::collections::HashMap;
 
 use super::helpers::make_test_body;
@@ -26,7 +26,6 @@ fn test_no_errors_copy_types() {
     assert_eq!(errors.len(), 0, "Copy types should not produce errors");
 }
 
-
 #[test]
 fn test_copy_type_no_move_error() {
     // Copy types can be "moved" multiple times
@@ -48,7 +47,6 @@ fn test_copy_type_no_move_error() {
     let errors = check_body(&body);
     assert_eq!(errors.len(), 0, "Copy types don't actually move");
 }
-
 
 #[test]
 fn test_lifetime_ref_copy_semantics() {
@@ -122,5 +120,3 @@ fn test_lifetime_ref_copy_semantics() {
 // ========================================================================
 // Negative Tests (Error Detection)
 // ========================================================================
-
-

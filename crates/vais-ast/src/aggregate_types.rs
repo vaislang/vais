@@ -1,9 +1,9 @@
 //! Aggregate type definitions: Struct, Field, Enum, Variant, VariantFields, Union
 
-use crate::infrastructure::{Attribute, Spanned};
 use crate::ast_types::Type;
 use crate::function::Function;
 use crate::generics::{GenericParam, WherePredicate};
+use crate::infrastructure::{Attribute, Spanned};
 
 /// Struct definition
 #[derive(Debug, Clone, PartialEq)]

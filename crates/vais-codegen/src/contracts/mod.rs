@@ -3,13 +3,13 @@
 //! Generates LLVM IR for requires (preconditions) and ensures (postconditions).
 //! Contract checks are only generated in debug builds.
 
-mod requires;
+mod assert_assume;
+mod auto_checks;
+mod decreases;
 mod ensures;
 mod helpers;
-mod auto_checks;
-mod assert_assume;
 mod invariants;
-mod decreases;
+mod requires;
 
 use crate::CodeGenerator;
 use helpers::escape_string_for_llvm;

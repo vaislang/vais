@@ -1018,10 +1018,7 @@ mod tests {
             generics: vec![],
             params: vec![],
             ret_type: None,
-            body: FunctionBody::Expr(Box::new(Spanned::new(
-                Expr::Int(42),
-                Span::new(0, 2),
-            ))),
+            body: FunctionBody::Expr(Box::new(Spanned::new(Expr::Int(42), Span::new(0, 2)))),
             is_pub: false,
             is_async: true,
             attributes: vec![],

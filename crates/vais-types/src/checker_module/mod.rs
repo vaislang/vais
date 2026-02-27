@@ -185,10 +185,7 @@ impl TypeChecker {
     }
 
     /// Set current generics with their bounds for type resolution
-    pub(crate) fn set_generics(
-        &mut self,
-        generics: &[GenericParam],
-    ) -> SavedGenericState {
+    pub(crate) fn set_generics(&mut self, generics: &[GenericParam]) -> SavedGenericState {
         let prev_generics = std::mem::replace(
             &mut self.current_generics,
             generics.iter().map(|g| &g.name.node).cloned().collect(),

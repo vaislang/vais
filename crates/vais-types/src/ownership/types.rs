@@ -64,4 +64,3 @@ pub struct ReferenceInfo {
     /// Whether the reference is mutable
     pub is_mut: bool,
 }
-

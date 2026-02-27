@@ -1,9 +1,9 @@
 //! Auto-inferred contract checks (nonnull, safe_div, etc.).
 
+use crate::{CodeGenerator, CodegenResult};
 use std::collections::HashSet;
 use std::fmt::Write;
 use vais_ast::{BinOp, Expr, Function, IfElse, Type};
-use crate::{CodeGenerator, CodegenResult};
 
 /// Options parsed from #[contract(...)] attribute
 #[derive(Debug, Default)]

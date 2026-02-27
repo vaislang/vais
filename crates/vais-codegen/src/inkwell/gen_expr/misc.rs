@@ -13,10 +13,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// - FloatValue: bitcast f64 to i64
     /// - PointerValue: ptrtoint to i64
     /// - StructValue: extract first int field, or return 0
-    pub(crate) fn coerce_to_i64(
-        &self,
-        v: BasicValueEnum<'ctx>,
-    ) -> CodegenResult<IntValue<'ctx>> {
+    pub(crate) fn coerce_to_i64(&self, v: BasicValueEnum<'ctx>) -> CodegenResult<IntValue<'ctx>> {
         let i64_type = self.context.i64_type();
         if v.is_int_value() {
             let iv = v.into_int_value();

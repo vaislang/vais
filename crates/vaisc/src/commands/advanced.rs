@@ -242,9 +242,13 @@ pub(crate) fn cmd_watch(
 
     // Collect all .vais files to watch (for import tracking)
     let mut watched_files: HashSet<PathBuf> = HashSet::new();
-    let canonical_input = input
-        .canonicalize()
-        .map_err(|e| format!("failed to canonicalize input path {}: {}", input.display(), e))?;
+    let canonical_input = input.canonicalize().map_err(|e| {
+        format!(
+            "failed to canonicalize input path {}: {}",
+            input.display(),
+            e
+        )
+    })?;
     watched_files.insert(canonical_input);
 
     // Scan for import statements and add imported files

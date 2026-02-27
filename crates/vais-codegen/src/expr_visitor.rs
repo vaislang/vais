@@ -433,10 +433,7 @@ impl ExprVisitor for CodeGenerator {
         // Sync value: wrap in an immediate Future state struct {i64 state=-1, i64 result}
         let mut ir = inner_ir;
         let state_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i64 @malloc(i64 16)\n",
-            state_ptr
-        ));
+        ir.push_str(&format!("  {} = call i64 @malloc(i64 16)\n", state_ptr));
         let typed_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
@@ -453,7 +450,10 @@ impl ExprVisitor for CodeGenerator {
             "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
             result_field, typed_ptr
         ));
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", inner_val, result_field));
+        ir.push_str(&format!(
+            "  store i64 {}, i64* {}\n",
+            inner_val, result_field
+        ));
 
         self.needs_sync_spawn_poll = true;
         ir.push_str(&format!("; Spawned sync task (wrapped) at {}\n", state_ptr));
@@ -677,7 +677,9 @@ impl ExprVisitor for CodeGenerator {
         // Re-register lazy bindings for captured lazy variables so force works inside thunks
         for (cap_name, _, _) in &captured_vars {
             if let Some(info) = saved_lazy_bindings.get(cap_name) {
-                self.lambdas.lazy_bindings.insert(cap_name.clone(), info.clone());
+                self.lambdas
+                    .lazy_bindings
+                    .insert(cap_name.clone(), info.clone());
             }
         }
 

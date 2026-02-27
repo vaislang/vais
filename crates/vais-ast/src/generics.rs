@@ -1,7 +1,7 @@
 //! Generic parameters, variance, and where predicates
 
-use crate::infrastructure::Spanned;
 use crate::ast_types::Type;
+use crate::infrastructure::Spanned;
 
 /// Variance annotation for generic type parameters
 /// Controls subtyping relationship between parameterized types

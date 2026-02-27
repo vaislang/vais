@@ -146,10 +146,7 @@ mod tests {
             ServerError::InvalidVersion("xyz".to_string()).to_string(),
             "Invalid version: xyz"
         );
-        assert_eq!(
-            ServerError::InvalidChecksum.to_string(),
-            "Invalid checksum"
-        );
+        assert_eq!(ServerError::InvalidChecksum.to_string(), "Invalid checksum");
         assert_eq!(ServerError::Unauthorized.to_string(), "Unauthorized");
         assert_eq!(
             ServerError::Forbidden("not owner".to_string()).to_string(),

@@ -1,7 +1,7 @@
 //! Core OwnershipChecker struct and scope management
 
-use crate::types::{TypeError, TypeResult};
 use super::{BorrowInfo, OwnershipInfo};
+use crate::types::{TypeError, TypeResult};
 use std::collections::HashMap;
 
 /// The ownership and borrow checker
@@ -85,8 +85,8 @@ impl OwnershipChecker {
     }
 
     pub(super) fn pop_scope(&mut self) {
-        use std::collections::HashSet;
         use super::ReferenceInfo;
+        use std::collections::HashSet;
 
         // Check for dangling references: references in outer scopes that point to
         // variables being dropped in this scope

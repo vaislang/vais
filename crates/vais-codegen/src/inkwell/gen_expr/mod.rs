@@ -4,13 +4,13 @@
 //! binary/unary operations, function calls, etc.
 
 // Submodules organized by expression category
-mod literal;
-mod var;
 mod binary;
-mod unary;
 mod call;
 mod lambda;
+mod literal;
 mod misc;
+mod unary;
+mod var;
 
 // Re-export the main generate_expr implementation
 use inkwell::values::BasicValueEnum;

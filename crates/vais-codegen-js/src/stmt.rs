@@ -192,10 +192,7 @@ mod tests {
     #[test]
     fn test_break_with_value() {
         let mut gen = JsCodeGenerator::new();
-        let stmt = Stmt::Break(Some(Box::new(Spanned::new(
-            Expr::Int(42),
-            Span::new(0, 2),
-        ))));
+        let stmt = Stmt::Break(Some(Box::new(Spanned::new(Expr::Int(42), Span::new(0, 2)))));
         let result = gen.generate_stmt(&stmt).unwrap();
         assert!(result.contains("break;"));
         assert!(result.contains("42"));
@@ -228,10 +225,7 @@ mod tests {
     #[test]
     fn test_expr_statement() {
         let mut gen = JsCodeGenerator::new();
-        let stmt = Stmt::Expr(Box::new(Spanned::new(
-            Expr::Int(99),
-            Span::new(0, 2),
-        )));
+        let stmt = Stmt::Expr(Box::new(Spanned::new(Expr::Int(99), Span::new(0, 2))));
         let result = gen.generate_stmt(&stmt).unwrap();
         assert_eq!(result, "99;");
     }
@@ -270,10 +264,7 @@ mod tests {
     #[test]
     fn test_function_body_expr() {
         let mut gen = JsCodeGenerator::new();
-        let body = FunctionBody::Expr(Box::new(Spanned::new(
-            Expr::Int(42),
-            Span::new(0, 2),
-        )));
+        let body = FunctionBody::Expr(Box::new(Spanned::new(Expr::Int(42), Span::new(0, 2))));
         let result = gen.generate_function_body(&body).unwrap();
         assert_eq!(result, "return 42;");
     }

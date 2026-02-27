@@ -677,8 +677,7 @@ entry = "plugin.wasm"
     #[test]
     fn test_scan_nonexistent_directory() {
         let discovery = PluginDiscovery::new();
-        let result =
-            discovery.scan_directory("/nonexistent/path/12345", PluginSource::UserDir);
+        let result = discovery.scan_directory("/nonexistent/path/12345", PluginSource::UserDir);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }
@@ -690,8 +689,7 @@ entry = "plugin.wasm"
         fs::write(&plugin_path, "fake native lib").unwrap();
 
         let discovery = PluginDiscovery::new();
-        let result =
-            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        let result = discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
         assert!(result.is_ok());
         let plugin = result.unwrap().unwrap();
         assert_eq!(plugin.name(), "my-lib");
@@ -705,8 +703,7 @@ entry = "plugin.wasm"
         fs::write(&plugin_path, "F main() -> i64 { 0 }").unwrap();
 
         let discovery = PluginDiscovery::new();
-        let result =
-            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        let result = discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
         assert!(result.is_ok());
         let plugin = result.unwrap().unwrap();
         assert_eq!(plugin.name(), "script");
@@ -720,8 +717,7 @@ entry = "plugin.wasm"
         fs::write(&plugin_path, "not a plugin").unwrap();
 
         let discovery = PluginDiscovery::new();
-        let result =
-            discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
+        let result = discovery.detect_standalone_plugin(&plugin_path, PluginSource::UserDir);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
@@ -788,8 +784,7 @@ entry = "plugin.wasm"
         fs::write(temp_dir.path().join("readme.txt"), "text file").unwrap();
 
         let discovery = PluginDiscovery::new();
-        let result =
-            discovery.scan_directory(temp_dir.path(), PluginSource::UserDir);
+        let result = discovery.scan_directory(temp_dir.path(), PluginSource::UserDir);
         assert!(result.is_ok());
         let plugins = result.unwrap();
         assert_eq!(plugins.len(), 2); // wasm + vais, not txt

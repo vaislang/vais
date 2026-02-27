@@ -239,9 +239,7 @@ impl CodeGenerator {
             }
 
             // Assignment expression
-            Expr::Assign { target, value } => {
-                self.generate_assign_expr(target, value, counter)
-            }
+            Expr::Assign { target, value } => self.generate_assign_expr(target, value, counter),
 
             // Compound assignment (+=, -=, etc.)
             Expr::AssignOp { op, target, value } => {

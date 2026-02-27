@@ -77,8 +77,14 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert!(result.stdout.contains("first"), "stdout should contain 'first'");
-    assert!(result.stdout.contains("second"), "stdout should contain 'second'");
+    assert!(
+        result.stdout.contains("first"),
+        "stdout should contain 'first'"
+    );
+    assert!(
+        result.stdout.contains("second"),
+        "stdout should contain 'second'"
+    );
 }
 
 #[test]

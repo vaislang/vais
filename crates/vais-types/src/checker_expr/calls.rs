@@ -1,9 +1,9 @@
 //! Function/method call expression checking
 
+use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
 use std::collections::HashMap;
 use vais_ast::*;
-use crate::TypeChecker;
-use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
 
 impl TypeChecker {
     /// Check SelfCall expression (@)
@@ -132,8 +132,7 @@ impl TypeChecker {
         let func_type = self.check_expr(func)?;
 
         match func_type {
-            ResolvedType::Fn { params, ret, .. }
-            | ResolvedType::FnPtr { params, ret, .. } => {
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 if params.len() != args.len() {
                     return Err(TypeError::ArgCount {
                         expected: params.len(),
@@ -212,19 +211,17 @@ impl TypeChecker {
                 }
 
                 // Build substitution map from type's generic params to receiver's concrete types
-                let mut generic_substitutions: HashMap<String, ResolvedType> =
-                    found_generics
-                        .iter()
-                        .zip(receiver_generics.iter())
-                        .map(|(param, arg)| (param.clone(), arg.clone()))
-                        .collect();
+                let mut generic_substitutions: HashMap<String, ResolvedType> = found_generics
+                    .iter()
+                    .zip(receiver_generics.iter())
+                    .map(|(param, arg)| (param.clone(), arg.clone()))
+                    .collect();
 
                 // Also create fresh type variables for method-level generics
                 // that are not already covered by struct-level generics
                 for method_generic in &method_sig.generics {
                     if !generic_substitutions.contains_key(method_generic) {
-                        generic_substitutions
-                            .insert(method_generic.clone(), self.fresh_type_var());
+                        generic_substitutions.insert(method_generic.clone(), self.fresh_type_var());
                     }
                 }
 
@@ -384,10 +381,8 @@ impl TypeChecker {
         }
 
         // Try to find similar method names for suggestion
-        let suggestion = types::find_similar_name(
-            &method.node,
-            self.functions.keys().map(|s| s.as_str()),
-        );
+        let suggestion =
+            types::find_similar_name(&method.node, self.functions.keys().map(|s| s.as_str()));
         Err(TypeError::UndefinedFunction {
             name: method.node.clone(),
             span: Some(method.span),
@@ -463,9 +458,9 @@ impl TypeChecker {
                         .generics
                         .iter()
                         .map(|param| {
-                            let ty = generic_substitutions.get(param).expect(
-                                "Generic parameter should exist in substitutions map",
-                            );
+                            let ty = generic_substitutions
+                                .get(param)
+                                .expect("Generic parameter should exist in substitutions map");
                             self.apply_substitutions(ty)
                         })
                         .collect();
@@ -474,10 +469,8 @@ impl TypeChecker {
                         .iter()
                         .all(|t| !matches!(t, ResolvedType::Var(_)));
                     if all_concrete {
-                        let inst = GenericInstantiation::struct_type(
-                            &type_name.node,
-                            inferred_type_args,
-                        );
+                        let inst =
+                            GenericInstantiation::struct_type(&type_name.node, inferred_type_args);
                         self.add_instantiation(inst);
                     }
 
@@ -496,10 +489,7 @@ impl TypeChecker {
 
         // Get struct methods for suggestion if available
         let suggestion = if let Some(struct_def) = self.structs.get(&type_name.node) {
-            types::find_similar_name(
-                &method.node,
-                struct_def.methods.keys().map(|s| s.as_str()),
-            )
+            types::find_similar_name(&method.node, struct_def.methods.keys().map(|s| s.as_str()))
         } else {
             None
         };

@@ -1,9 +1,9 @@
 //! Postcondition (ensures) checks.
 
+use crate::{CodeGenerator, CodegenResult};
 use std::fmt::Write;
 use vais_ast::Function;
 use vais_types::ResolvedType;
-use crate::{CodeGenerator, CodegenResult};
 
 impl CodeGenerator {
     /// Generate ensures (postcondition) checks for a function

@@ -87,8 +87,8 @@ impl CodeGenerator {
         let phi_llvm = self.type_to_llvm(&phi_type);
 
         // Check if the result is a struct/enum type (returned as pointer from struct/enum literals)
-        let is_struct_result = matches!(&phi_type, ResolvedType::Named { .. })
-            && !self.is_block_result_value(then);
+        let is_struct_result =
+            matches!(&phi_type, ResolvedType::Named { .. }) && !self.is_block_result_value(then);
 
         // Then block
         ir.push_str(&format!("{}:\n", then_label));
@@ -132,20 +132,17 @@ impl CodeGenerator {
         // For struct/enum results, load the value from the alloca pointer before branch
         // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
         // it's already a phi node value (not a pointer), so don't load it
-        let else_val_for_phi = if is_struct_result
-            && !else_terminated
-            && has_else
-            && nested_last_block.is_empty()
-        {
-            let loaded = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = load {}, {}* {}\n",
-                loaded, phi_llvm, phi_llvm, else_val
-            ));
-            loaded
-        } else {
-            else_val
-        };
+        let else_val_for_phi =
+            if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
+                let loaded = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, phi_llvm, phi_llvm, else_val
+                ));
+                loaded
+            } else {
+                else_val
+            };
 
         let else_from_label = if !else_terminated {
             ir.push_str(&format!("  br label %{}\n", merge_label));
@@ -170,7 +167,12 @@ impl CodeGenerator {
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             ir.push_str(&format!(
                 "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
-                result, phi_llvm, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
+                result,
+                phi_llvm,
+                then_val_for_phi,
+                then_from_label,
+                else_val_for_phi,
+                else_from_label
             ));
         } else if !then_from_label.is_empty() {
             ir.push_str(&format!(

@@ -1,8 +1,8 @@
 //! Precondition (requires) checks.
 
-use std::fmt::Write;
-use vais_ast::{Function, Spanned, Expr};
 use crate::{CodeGenerator, CodegenResult};
+use std::fmt::Write;
+use vais_ast::{Expr, Function, Spanned};
 
 impl CodeGenerator {
     /// Generate requires (precondition) checks for a function

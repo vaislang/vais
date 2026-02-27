@@ -194,8 +194,7 @@ impl CodeGenerator {
                         continue;
                     }
                     // Build substitution map for this function instantiation
-                    if let Some(generic_fn) =
-                        self.generics.function_templates.get(&inst.base_name)
+                    if let Some(generic_fn) = self.generics.function_templates.get(&inst.base_name)
                     {
                         let subst: HashMap<String, ResolvedType> = generic_fn
                             .generics
@@ -216,7 +215,11 @@ impl CodeGenerator {
                             .collect();
 
                         for ast_ty in &types_to_check {
-                            if let Type::Named { name: sname, generics: type_params } = ast_ty {
+                            if let Type::Named {
+                                name: sname,
+                                generics: type_params,
+                            } = ast_ty
+                            {
                                 if !type_params.is_empty()
                                     && self.generics.struct_defs.contains_key(sname)
                                 {
@@ -239,11 +242,7 @@ impl CodeGenerator {
                                     if all_concrete {
                                         let mangled =
                                             vais_types::mangle_name(sname, &concrete_args);
-                                        if !self
-                                            .generics
-                                            .generated_structs
-                                            .contains_key(&mangled)
-                                        {
+                                        if !self.generics.generated_structs.contains_key(&mangled) {
                                             synthetic_insts.push(
                                                 vais_types::GenericInstantiation {
                                                     kind: vais_types::InstantiationKind::Struct,
@@ -472,28 +471,37 @@ fn is_function_called_in_module(name: &str, module: &Module) -> bool {
             }
             Expr::Unary { expr: inner, .. } => expr_calls(name, &inner.node),
             Expr::MethodCall { receiver, args, .. } => {
-                expr_calls(name, &receiver.node)
-                    || args.iter().any(|a| expr_calls(name, &a.node))
+                expr_calls(name, &receiver.node) || args.iter().any(|a| expr_calls(name, &a.node))
             }
-            Expr::StaticMethodCall { args, .. } => {
-                args.iter().any(|a| expr_calls(name, &a.node))
-            }
+            Expr::StaticMethodCall { args, .. } => args.iter().any(|a| expr_calls(name, &a.node)),
             Expr::Field { expr: inner, .. } => expr_calls(name, &inner.node),
             Expr::Index { expr: inner, index } => {
                 expr_calls(name, &inner.node) || expr_calls(name, &index.node)
             }
-            Expr::Ref(inner) | Expr::Deref(inner) | Expr::Try(inner) | Expr::Unwrap(inner)
-            | Expr::Await(inner) | Expr::Spawn(inner) | Expr::Yield(inner) => {
-                expr_calls(name, &inner.node)
-            }
+            Expr::Ref(inner)
+            | Expr::Deref(inner)
+            | Expr::Try(inner)
+            | Expr::Unwrap(inner)
+            | Expr::Await(inner)
+            | Expr::Spawn(inner)
+            | Expr::Yield(inner) => expr_calls(name, &inner.node),
             Expr::Assign { target, value } | Expr::AssignOp { target, value, .. } => {
                 expr_calls(name, &target.node) || expr_calls(name, &value.node)
             }
             Expr::Range { start, end, .. } => {
-                start.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
-                    || end.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
+                start
+                    .as_ref()
+                    .map(|e| expr_calls(name, &e.node))
+                    .unwrap_or(false)
+                    || end
+                        .as_ref()
+                        .map(|e| expr_calls(name, &e.node))
+                        .unwrap_or(false)
             }
-            Expr::Match { expr: scrutinee, arms } => {
+            Expr::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 expr_calls(name, &scrutinee.node)
                     || arms.iter().any(|arm| expr_calls(name, &arm.body.node))
             }
@@ -506,19 +514,18 @@ fn is_function_called_in_module(name: &str, module: &Module) -> bool {
             Expr::Array(elems) | Expr::Tuple(elems) => {
                 elems.iter().any(|e| expr_calls(name, &e.node))
             }
-            Expr::StructLit { fields, .. } => {
-                fields.iter().any(|(_, e)| expr_calls(name, &e.node))
-            }
+            Expr::StructLit { fields, .. } => fields.iter().any(|(_, e)| expr_calls(name, &e.node)),
             Expr::Cast { expr: inner, .. } | Expr::Comptime { body: inner } => {
                 expr_calls(name, &inner.node)
             }
             Expr::Loop { iter, body, .. } => {
-                iter.as_ref().map(|e| expr_calls(name, &e.node)).unwrap_or(false)
+                iter.as_ref()
+                    .map(|e| expr_calls(name, &e.node))
+                    .unwrap_or(false)
                     || body.iter().any(|s| stmt_calls(name, &s.node))
             }
             Expr::While { condition, body } => {
-                expr_calls(name, &condition.node)
-                    || body.iter().any(|s| stmt_calls(name, &s.node))
+                expr_calls(name, &condition.node) || body.iter().any(|s| stmt_calls(name, &s.node))
             }
             _ => false,
         }

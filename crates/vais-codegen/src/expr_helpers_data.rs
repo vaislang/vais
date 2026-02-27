@@ -61,10 +61,8 @@ impl CodeGenerator {
 
         // Infer the LLVM type of each element so nested tuples (e.g., (2, 3) inside (1, (2, 3)))
         // are represented as struct types rather than i64.
-        let elem_resolved_types: Vec<ResolvedType> = elements
-            .iter()
-            .map(|e| self.infer_expr_type(e))
-            .collect();
+        let elem_resolved_types: Vec<ResolvedType> =
+            elements.iter().map(|e| self.infer_expr_type(e)).collect();
         let elem_llvm_types: Vec<String> = elem_resolved_types
             .iter()
             .map(|t| self.type_to_llvm(t))

@@ -1,13 +1,16 @@
 //! Collection and aggregate type checking (arrays, tuples, structs, ranges, etc.)
 
+use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
 use std::collections::HashMap;
 use vais_ast::*;
-use crate::TypeChecker;
-use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
 
 impl TypeChecker {
     /// Check collection expressions
-    pub(crate) fn check_collection_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_collection_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Binary { op, left, right } => {
                 let left_type = match self.check_expr(left) {

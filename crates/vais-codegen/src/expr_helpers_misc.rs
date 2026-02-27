@@ -48,15 +48,12 @@ impl CodeGenerator {
                     Some(format!("{}__poll", name))
                 } else if let Expr::SelfCall = &func.node {
                     // @(args) — self-recursive call to current function
-                    self.fn_ctx
-                        .current_function
-                        .as_ref()
-                        .map(|fn_name| {
-                            // current_function inside async poll is "name__poll",
-                            // but the base name is what we need for the poll function
-                            let base = fn_name.trim_end_matches("__poll");
-                            format!("{}__poll", base)
-                        })
+                    self.fn_ctx.current_function.as_ref().map(|fn_name| {
+                        // current_function inside async poll is "name__poll",
+                        // but the base name is what we need for the poll function
+                        let base = fn_name.trim_end_matches("__poll");
+                        format!("{}__poll", base)
+                    })
                 } else {
                     None
                 }
@@ -222,8 +219,7 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&ty);
                         let spill_name = format!("__refcap_{}", cap_name);
                         let spill_ptr = format!("%{}", spill_name);
-                        capture_ir
-                            .push_str(&format!("  {} = alloca {}\n", spill_ptr, llvm_ty));
+                        capture_ir.push_str(&format!("  {} = alloca {}\n", spill_ptr, llvm_ty));
                         let val = if local.is_param() {
                             format!("%{}", local.llvm_name)
                         } else {
@@ -235,11 +231,7 @@ impl CodeGenerator {
                         ));
                         captured_vars.push((cap_name.clone(), ty, spill_ptr));
                     } else {
-                        captured_vars.push((
-                            cap_name.clone(),
-                            ty,
-                            format!("%{}", local.llvm_name),
-                        ));
+                        captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
                     }
                 } else {
                     // ByValue/Move: load and pass the value
@@ -370,12 +362,8 @@ impl CodeGenerator {
         // - Optional/Result use i8 tag: { i8, T }
         // - User-defined enums use i32 tag: { i32, { T } }
         let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
-                ("i8", false)
-            }
-            _ => {
-                ("i32", true)
-            }
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
+            _ => ("i32", true),
         };
 
         // Extract tag (field 0)
@@ -444,12 +432,8 @@ impl CodeGenerator {
         // - Optional/Result use i8 tag: { i8, T }
         // - User-defined enums use i32 tag: { i32, { T } }
         let (tag_type, extract_payload) = match &inner_type {
-            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => {
-                ("i8", false)
-            }
-            _ => {
-                ("i32", true)
-            }
+            ResolvedType::Optional(_) | ResolvedType::Result(_, _) => ("i8", false),
+            _ => ("i32", true),
         };
 
         // Extract tag (field 0)

@@ -277,4 +277,3 @@ fn try_replace_branch_cond(line: &str, icmp_to_i1: &HashMap<String, String>) -> 
 
     None
 }
-

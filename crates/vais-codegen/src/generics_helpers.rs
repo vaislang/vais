@@ -66,9 +66,9 @@ impl CodeGenerator {
                     .map(|t| vais_types::substitute_type(t, &self.generics.substitutions))
                     .collect();
                 // Only use concrete name if all args are now concrete
-                let all_concrete = concrete_args.iter().all(|t| {
-                    !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_))
-                });
+                let all_concrete = concrete_args
+                    .iter()
+                    .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
                 if all_concrete {
                     let mangled = vais_types::mangle_name(base_name, &concrete_args);
                     return mangled;

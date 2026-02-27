@@ -63,7 +63,11 @@ impl Parser {
     }
 
     /// Parse struct: `Name{fields}` with optional methods
-    pub(super) fn parse_struct(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Struct> {
+    pub(super) fn parse_struct(
+        &mut self,
+        is_pub: bool,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<Struct> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -79,7 +83,11 @@ impl Parser {
             // Check for attributes or function/pub keywords
             let start = self.current_span().start;
             let method_attrs = self.parse_attributes()?;
-            if self.check(&Token::Function) || self.check(&Token::Pub) || self.check(&Token::Async) || !method_attrs.is_empty() {
+            if self.check(&Token::Function)
+                || self.check(&Token::Pub)
+                || self.check(&Token::Async)
+                || !method_attrs.is_empty()
+            {
                 let is_method_pub = self.check(&Token::Pub);
                 if is_method_pub {
                     self.advance();
@@ -117,7 +125,11 @@ impl Parser {
     }
 
     /// Parse enum: `Name{variants}`
-    pub(super) fn parse_enum(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Enum> {
+    pub(super) fn parse_enum(
+        &mut self,
+        is_pub: bool,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<Enum> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 

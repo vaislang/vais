@@ -388,4 +388,3 @@ fn is_loop_invariant_with_context(line: &str, loop_vars: &HashSet<String>) -> bo
 fn is_phi_or_load(line: &str) -> bool {
     line.contains(" = phi ") || line.contains(" = load ")
 }
-

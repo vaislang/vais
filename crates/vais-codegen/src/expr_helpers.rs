@@ -70,7 +70,10 @@ impl CodeGenerator {
             } else {
                 let tmp = self.next_temp(counter);
                 let left_llvm = self.type_to_llvm(&left_type);
-                ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", tmp, left_llvm, left_val));
+                ir.push_str(&format!(
+                    "  {} = icmp ne {} {}, 0\n",
+                    tmp, left_llvm, left_val
+                ));
                 tmp
             };
             let right_type = self.infer_expr_type(right);
@@ -305,10 +308,9 @@ impl CodeGenerator {
                         // SSA variable: update the alias to the new value (no store needed)
                         // This handles `x := 5; x = 10` where x is non-mutable SSA
                         let local_ty = local.ty.clone();
-                        self.fn_ctx.locals.insert(
-                            name.clone(),
-                            crate::LocalVar::ssa(local_ty, val.clone()),
-                        );
+                        self.fn_ctx
+                            .locals
+                            .insert(name.clone(), crate::LocalVar::ssa(local_ty, val.clone()));
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // For struct types (Named), the local is a double pointer (%Type**).
@@ -471,10 +473,7 @@ impl CodeGenerator {
                     if variant.name == name {
                         let mut ir = String::new();
                         let enum_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = alloca %{}\n",
-                            enum_ptr, enum_info.name
-                        ));
+                        ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_info.name));
                         // Store tag
                         let tag_ptr = self.next_temp(counter);
                         ir.push_str(&format!(
@@ -507,9 +506,7 @@ impl CodeGenerator {
         } else if let Some(self_local) = self.fn_ctx.locals.get("self").cloned() {
             // Implicit self: check if name is a field of the self struct
             let self_type = match &self_local.ty {
-                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                    inner.as_ref().clone()
-                }
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
                 other => other.clone(),
             };
             if let ResolvedType::Named {
@@ -518,8 +515,7 @@ impl CodeGenerator {
             {
                 let resolved_name = self.resolve_struct_name(type_name);
                 if let Some(struct_info) = self.types.structs.get(&resolved_name).cloned() {
-                    if let Some(field_idx) =
-                        struct_info.fields.iter().position(|(n, _)| n == name)
+                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name)
                     {
                         let field_ty = &struct_info.fields[field_idx].1;
                         let llvm_ty = self.type_to_llvm(field_ty);

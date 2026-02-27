@@ -644,10 +644,7 @@ mod tests {
     #[test]
     fn test_module_loader_config_with_output_dir() {
         let config = ModuleLoaderConfig::new().with_output_dir("/tmp/test_output");
-        assert_eq!(
-            config.output_dir,
-            Some(PathBuf::from("/tmp/test_output"))
-        );
+        assert_eq!(config.output_dir, Some(PathBuf::from("/tmp/test_output")));
     }
 
     #[test]
@@ -697,14 +694,8 @@ mod tests {
     fn test_path_to_id_various() {
         let loader =
             ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
-        assert_eq!(
-            loader.path_to_id(Path::new("/a/b/c/test.vais")),
-            "test"
-        );
-        assert_eq!(
-            loader.path_to_id(Path::new("no_ext")),
-            "no_ext"
-        );
+        assert_eq!(loader.path_to_id(Path::new("/a/b/c/test.vais")), "test");
+        assert_eq!(loader.path_to_id(Path::new("no_ext")), "no_ext");
     }
 
     #[test]

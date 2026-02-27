@@ -258,8 +258,7 @@ fn test_tiered_jit_with_custom_thresholds() {
 
 #[test]
 fn test_hot_path_score_calculation() {
-    let source =
-        "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
+    let source = "F loop_heavy()->i64{x:=0;L{I x>=100{R x} x:=x+1}0} F main()->i64{loop_heavy()}";
     let ast = parse(source).unwrap();
 
     let mut interp = Interpreter::new();

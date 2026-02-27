@@ -1,8 +1,6 @@
-use crate::*;
 use crate::borrow_check::{check_body, BorrowError};
+use crate::*;
 use std::collections::HashMap;
-
-
 
 #[test]
 fn test_nll_reborrow_after_last_use() {
@@ -71,7 +69,6 @@ fn test_nll_reborrow_after_last_use() {
     assert_eq!(errors.len(), 0, "NLL should allow reborrow after last use");
 }
 
-
 #[test]
 fn test_nll_borrow_expires_before_move() {
     // Shared borrow, use borrow_target once, then move original → OK
@@ -138,7 +135,6 @@ fn test_nll_borrow_expires_before_move() {
         "NLL should allow move after borrow expires"
     );
 }
-
 
 #[test]
 fn test_nll_borrow_still_active() {
@@ -230,7 +226,6 @@ fn test_nll_borrow_still_active() {
     }
 }
 
-
 #[test]
 fn test_nll_two_phase_borrow_shared_ok() {
     // ReservedMutable + Shared → OK (two-phase borrow not yet activated)
@@ -290,7 +285,6 @@ fn test_nll_two_phase_borrow_shared_ok() {
     assert_eq!(errors.len(), 1, "Current implementation detects conflict");
 }
 
-
 #[test]
 fn test_nll_two_phase_borrow_after_activation() {
     // This test verifies activation logic exists even though we don't use it by default
@@ -346,7 +340,6 @@ fn test_nll_two_phase_borrow_after_activation() {
     let errors = check_body(&body);
     assert_eq!(errors.len(), 0, "Simple borrow and use should not error");
 }
-
 
 #[test]
 fn test_nll_conditional_borrow_expire() {
@@ -437,7 +430,6 @@ fn test_nll_conditional_borrow_expire() {
     );
 }
 
-
 #[test]
 fn test_nll_loop_borrow_lifetime() {
     // Loop with borrow created and used in same iteration → next iteration OK
@@ -510,7 +502,6 @@ fn test_nll_loop_borrow_lifetime() {
         "Loop borrow used in same iteration should be OK"
     );
 }
-
 
 #[test]
 fn test_nll_multiple_borrows_different_scopes() {
@@ -593,5 +584,3 @@ fn test_nll_multiple_borrows_different_scopes() {
 // ========================================================================
 // Lifetime E2E Tests
 // ========================================================================
-
-

@@ -1,7 +1,7 @@
 //! AST checking for ownership violations
 
-use crate::types::{ResolvedType, TypeError, TypeResult};
 use super::{OwnershipChecker, OwnershipState};
+use crate::types::{ResolvedType, TypeError, TypeResult};
 use vais_ast::*;
 
 impl OwnershipChecker {
@@ -399,5 +399,4 @@ impl OwnershipChecker {
             }
         }
     }
-
 }

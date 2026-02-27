@@ -940,11 +940,13 @@ mod tests {
     fn test_generate_string_literal() {
         let mut gen = JsCodeGenerator::new();
         assert_eq!(
-            gen.generate_expr(&Expr::String("hello".to_string())).unwrap(),
+            gen.generate_expr(&Expr::String("hello".to_string()))
+                .unwrap(),
             "\"hello\""
         );
         assert_eq!(
-            gen.generate_expr(&Expr::String("say \"hi\"".to_string())).unwrap(),
+            gen.generate_expr(&Expr::String("say \"hi\"".to_string()))
+                .unwrap(),
             "\"say \\\"hi\\\"\""
         );
     }
@@ -964,7 +966,8 @@ mod tests {
         );
         // Reserved word gets sanitized
         assert_eq!(
-            gen.generate_expr(&Expr::Ident("class".to_string())).unwrap(),
+            gen.generate_expr(&Expr::Ident("class".to_string()))
+                .unwrap(),
             "_class"
         );
     }
@@ -1122,10 +1125,7 @@ mod tests {
             Spanned::new(Expr::String("key".to_string()), Span::new(0, 5)),
             Spanned::new(Expr::Int(1), Span::new(8, 9)),
         )]);
-        assert_eq!(
-            gen.generate_expr(&expr).unwrap(),
-            "new Map([[\"key\", 1]])"
-        );
+        assert_eq!(gen.generate_expr(&expr).unwrap(), "new Map([[\"key\", 1]])");
     }
 
     #[test]
@@ -1154,16 +1154,14 @@ mod tests {
     fn test_generate_lambda() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Lambda {
-            params: vec![
-                Param {
-                    name: Spanned::new("x".to_string(), Span::new(1, 2)),
-                    ty: Spanned::new(Type::Infer, Span::new(0, 0)),
-                    is_mut: false,
-                    is_vararg: false,
-                    ownership: Ownership::Regular,
-                    default_value: None,
-                },
-            ],
+            params: vec![Param {
+                name: Spanned::new("x".to_string(), Span::new(1, 2)),
+                ty: Spanned::new(Type::Infer, Span::new(0, 0)),
+                is_mut: false,
+                is_vararg: false,
+                ownership: Ownership::Regular,
+                default_value: None,
+            }],
             body: Box::new(Spanned::new(
                 Expr::Binary {
                     op: BinOp::Mul,
@@ -1255,10 +1253,7 @@ mod tests {
     fn test_generate_cast_i32() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Cast {
-            expr: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            expr: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             ty: Spanned::new(
                 Type::Named {
                     name: "i32".to_string(),
@@ -1274,10 +1269,7 @@ mod tests {
     fn test_generate_cast_f64() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Cast {
-            expr: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            expr: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             ty: Spanned::new(
                 Type::Named {
                     name: "f64".to_string(),
@@ -1293,10 +1285,7 @@ mod tests {
     fn test_generate_cast_bool() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Cast {
-            expr: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            expr: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             ty: Spanned::new(
                 Type::Named {
                     name: "bool".to_string(),
@@ -1312,10 +1301,7 @@ mod tests {
     fn test_generate_cast_string() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Cast {
-            expr: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            expr: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             ty: Spanned::new(
                 Type::Named {
                     name: "String".to_string(),
@@ -1331,10 +1317,7 @@ mod tests {
     fn test_generate_cast_unknown_type() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Cast {
-            expr: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            expr: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             ty: Spanned::new(
                 Type::Named {
                     name: "MyType".to_string(),
@@ -1350,10 +1333,7 @@ mod tests {
     fn test_generate_assign() {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::Assign {
-            target: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            target: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             value: Box::new(Spanned::new(Expr::Int(10), Span::new(4, 6))),
         };
         assert_eq!(gen.generate_expr(&expr).unwrap(), "x = 10");
@@ -1364,10 +1344,7 @@ mod tests {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::AssignOp {
             op: BinOp::Add,
-            target: Box::new(Spanned::new(
-                Expr::Ident("x".to_string()),
-                Span::new(0, 1),
-            )),
+            target: Box::new(Spanned::new(Expr::Ident("x".to_string()), Span::new(0, 1))),
             value: Box::new(Spanned::new(Expr::Int(1), Span::new(5, 6))),
         };
         assert_eq!(gen.generate_expr(&expr).unwrap(), "x += 1");
@@ -1498,10 +1475,7 @@ mod tests {
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::While {
             condition: Box::new(Spanned::new(Expr::Bool(true), Span::new(0, 4))),
-            body: vec![Spanned::new(
-                Stmt::Break(None),
-                Span::new(5, 11),
-            )],
+            body: vec![Spanned::new(Stmt::Break(None), Span::new(5, 11))],
         };
         let result = gen.generate_expr(&expr).unwrap();
         assert!(result.contains("while (true)"));
@@ -1618,7 +1592,8 @@ mod tests {
     fn test_pattern_condition_wildcard() {
         let mut gen = JsCodeGenerator::new();
         assert_eq!(
-            gen.generate_pattern_condition(&Pattern::Wildcard, "x").unwrap(),
+            gen.generate_pattern_condition(&Pattern::Wildcard, "x")
+                .unwrap(),
             "true"
         );
     }
@@ -1681,7 +1656,7 @@ mod tests {
 
     #[test]
     fn test_macro_invoke() {
-        use vais_ast::macros::{MacroInvoke, Delimiter};
+        use vais_ast::macros::{Delimiter, MacroInvoke};
         let mut gen = JsCodeGenerator::new();
         let expr = Expr::MacroInvoke(MacroInvoke {
             name: Spanned::new("println".to_string(), Span::new(0, 7)),

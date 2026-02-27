@@ -165,11 +165,17 @@ mod tests {
     #[test]
     fn test_error_code_values() {
         assert_eq!(CodegenError::UndefinedVar("".into()).error_code(), "C001");
-        assert_eq!(CodegenError::UndefinedFunction("".into()).error_code(), "C002");
+        assert_eq!(
+            CodegenError::UndefinedFunction("".into()).error_code(),
+            "C002"
+        );
         assert_eq!(CodegenError::TypeError("".into()).error_code(), "C003");
         assert_eq!(CodegenError::LlvmError("".into()).error_code(), "C004");
         assert_eq!(CodegenError::Unsupported("".into()).error_code(), "C005");
-        assert_eq!(CodegenError::RecursionLimitExceeded("".into()).error_code(), "C006");
+        assert_eq!(
+            CodegenError::RecursionLimitExceeded("".into()).error_code(),
+            "C006"
+        );
         assert_eq!(CodegenError::InternalError("".into()).error_code(), "C007");
     }
 

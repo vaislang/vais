@@ -226,7 +226,12 @@ impl Formatter {
     }
 
     /// Format a match expression with proper indentation
-    pub(crate) fn format_match_expr(&mut self, indent: &str, expr: &Spanned<Expr>, arms: &[MatchArm]) {
+    pub(crate) fn format_match_expr(
+        &mut self,
+        indent: &str,
+        expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+    ) {
         self.output.push_str(indent);
         self.output.push_str("M ");
         self.output.push_str(&self.format_expr(&expr.node));

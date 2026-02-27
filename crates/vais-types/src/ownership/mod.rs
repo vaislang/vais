@@ -7,17 +7,17 @@
 //!
 //! The checker runs as a second pass after type checking, operating on the typed AST.
 
-mod types;
-mod core;
-mod var_tracking;
-mod copy_check;
-mod move_track;
-mod borrow_track;
 mod ast_check;
+mod borrow_track;
+mod copy_check;
+mod core;
 mod helpers;
+mod move_track;
+mod types;
+mod var_tracking;
 
-pub use types::*;
 pub use core::*;
+pub use types::*;
 
 #[cfg(test)]
 mod tests;

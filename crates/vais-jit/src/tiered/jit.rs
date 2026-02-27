@@ -1,8 +1,8 @@
 use super::*;
+use crate::JitError;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use vais_ast::Module as AstModule;
-use crate::JitError;
 
 /// OSR (On-Stack Replacement) point for loop hot spot replacement.
 #[derive(Debug, Clone)]
@@ -244,7 +244,9 @@ impl TieredJit {
 
         profile.update_hot_path_score();
 
-        let execution_count = profile.execution_count.load(std::sync::atomic::Ordering::Relaxed);
+        let execution_count = profile
+            .execution_count
+            .load(std::sync::atomic::Ordering::Relaxed);
         let current_tier = *profile
             .current_tier
             .read()
@@ -260,7 +262,9 @@ impl TieredJit {
             .hot_path_score
             .read()
             .unwrap_or_else(|e| e.into_inner());
-        let deopt_count = profile.deopt_count.load(std::sync::atomic::Ordering::Relaxed);
+        let deopt_count = profile
+            .deopt_count
+            .load(std::sync::atomic::Ordering::Relaxed);
         let is_blacklisted = profile.is_blacklisted();
 
         Some(FunctionStats {
@@ -286,7 +290,9 @@ impl TieredJit {
             .map(|(name, profile)| {
                 profile.update_hot_path_score();
 
-                let execution_count = profile.execution_count.load(std::sync::atomic::Ordering::Relaxed);
+                let execution_count = profile
+                    .execution_count
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 let current_tier = *profile
                     .current_tier
                     .read()
@@ -302,7 +308,9 @@ impl TieredJit {
                     .hot_path_score
                     .read()
                     .unwrap_or_else(|e| e.into_inner());
-                let deopt_count = profile.deopt_count.load(std::sync::atomic::Ordering::Relaxed);
+                let deopt_count = profile
+                    .deopt_count
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 let is_blacklisted = profile.is_blacklisted();
 
                 (

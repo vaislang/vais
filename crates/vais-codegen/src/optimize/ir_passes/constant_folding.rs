@@ -70,4 +70,3 @@ where
         dest, result, a, op, b
     ))
 }
-

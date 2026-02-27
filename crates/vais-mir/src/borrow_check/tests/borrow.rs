@@ -1,8 +1,6 @@
-use crate::*;
 use crate::borrow_check::{check_body, BorrowError};
+use crate::*;
 use std::collections::HashMap;
-
-
 
 #[test]
 fn test_mutable_borrow_conflict() {
@@ -62,7 +60,6 @@ fn test_mutable_borrow_conflict() {
         _ => panic!("Expected MutableBorrowConflict error, got: {:?}", errors[0]),
     }
 }
-
 
 #[test]
 fn test_mutable_borrow_conflict_real() {
@@ -125,7 +122,6 @@ fn test_mutable_borrow_conflict_real() {
         _ => panic!("Expected MutableBorrowConflict error, got: {:?}", errors[0]),
     }
 }
-
 
 #[test]
 fn test_shared_borrow_while_mutable() {
@@ -194,7 +190,6 @@ fn test_shared_borrow_while_mutable() {
     assert_eq!(errors.len(), 0, "Borrowing different locals should be OK");
 }
 
-
 #[test]
 fn test_multiple_shared_borrows_ok() {
     // Multiple & borrows on immutable local
@@ -259,7 +254,6 @@ fn test_multiple_shared_borrows_ok() {
     assert_eq!(errors.len(), 0, "Multiple shared borrows should be OK");
 }
 
-
 #[test]
 fn test_borrow_invalidated_by_assign() {
     // Assign to a borrowed place should clear borrows
@@ -318,7 +312,6 @@ fn test_borrow_invalidated_by_assign() {
         "Assignment should invalidate previous borrows"
     );
 }
-
 
 #[test]
 fn test_lifetime_borrow_conflict_with_lifetime() {
@@ -393,5 +386,3 @@ fn test_lifetime_borrow_conflict_with_lifetime() {
         _ => panic!("Expected MutableBorrowConflict, got {:?}", errors[0]),
     }
 }
-
-

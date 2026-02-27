@@ -98,10 +98,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Infer the element LLVM type for a slice or array expression.
     /// Looks up the variable's resolved type from `var_resolved_types` and extracts
     /// the inner element type for Slice/SliceMut/Array. Falls back to i64 if unknown.
-    fn infer_element_llvm_type(
-        &self,
-        arr_expr: &Expr,
-    ) -> inkwell::types::BasicTypeEnum<'ctx> {
+    fn infer_element_llvm_type(&self, arr_expr: &Expr) -> inkwell::types::BasicTypeEnum<'ctx> {
         if let Expr::Ident(name) = arr_expr {
             if let Some(
                 vais_types::ResolvedType::Slice(inner)
@@ -149,12 +146,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // GEP to get element pointer (stride = sizeof(elem_type))
                 let elem_ptr = unsafe {
                     self.builder
-                        .build_gep(
-                            elem_type,
-                            data_ptr_val,
-                            &[idx_int],
-                            "elem_ptr",
-                        )
+                        .build_gep(elem_type, data_ptr_val, &[idx_int], "elem_ptr")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 };
 
@@ -173,12 +165,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Get element pointer
         let elem_ptr = unsafe {
             self.builder
-                .build_gep(
-                    inferred_elem_type,
-                    arr_ptr,
-                    &[idx_int],
-                    "elem_ptr",
-                )
+                .build_gep(inferred_elem_type, arr_ptr, &[idx_int], "elem_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
         };
 

@@ -107,9 +107,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Build a function type: (i64, i64, ...) -> i64, one i64 per argument.
                 let i64_type = self.context.i64_type();
                 let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-                    (0..arg_values.len())
-                        .map(|_| i64_type.into())
-                        .collect();
+                    (0..arg_values.len()).map(|_| i64_type.into()).collect();
                 let fn_type = i64_type.fn_type(&param_types, false);
 
                 // Obtain a PointerValue for the callee.
@@ -117,10 +115,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     callee_val.into_pointer_value()
                 } else {
                     // Convert i64 (function pointer stored as integer) to i8*.
-                    let i8_ptr_type = self
-                        .context
-                        .i8_type()
-                        .ptr_type(AddressSpace::default());
+                    let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
                     self.builder
                         .build_int_to_ptr(
                             callee_val.into_int_value(),
@@ -452,7 +447,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Generic functions are declared but their bodies are skipped; specialized versions
         // like "get_val$Holder" have actual bodies generated from GenericInstantiation.
         let fn_value = if let Some(func) = fn_value {
-            if func.count_basic_blocks() == 0 && !func.get_name().to_str().unwrap_or("").starts_with("llvm.") {
+            if func.count_basic_blocks() == 0
+                && !func.get_name().to_str().unwrap_or("").starts_with("llvm.")
+            {
                 // This is likely a generic function without a body — try to find
                 // a monomorphized version by scanning registered functions.
                 let base = fn_name.clone();

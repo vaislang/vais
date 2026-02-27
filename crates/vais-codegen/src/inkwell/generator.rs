@@ -223,8 +223,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ast::Item::Function(func) => {
                     if !func.generics.is_empty() {
                         // Store generic function template — declare signature but skip body.
-                        generic_function_templates
-                            .insert(func.name.node.clone(), (*func).clone());
+                        generic_function_templates.insert(func.name.node.clone(), (*func).clone());
                         // Still declare the base signature so call-sites that reference the
                         // unspecialized name can find it (the body is skipped in generate_function).
                         self.declare_function(func)?;
@@ -296,12 +295,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         let fields: Vec<(String, ResolvedType)> = s
                             .fields
                             .iter()
-                            .map(|f| {
-                                (
-                                    f.name.node.clone(),
-                                    self.ast_type_to_resolved(&f.ty.node),
-                                )
-                            })
+                            .map(|f| (f.name.node.clone(), self.ast_type_to_resolved(&f.ty.node)))
                             .collect();
                         let generic_names: Vec<String> = s
                             .generics
@@ -321,9 +315,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 vais_types::InstantiationKind::Function => {
                     // Specialized function — declare the mangled signature then generate the body.
-                    if let Some(generic_fn) =
-                        generic_function_templates.get(&inst.base_name)
-                    {
+                    if let Some(generic_fn) = generic_function_templates.get(&inst.base_name) {
                         // Build param/return types from the AST function (substitution happens
                         // inside declare_specialized_function via the substitutions map).
                         let param_types: Vec<ResolvedType> = generic_fn

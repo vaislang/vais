@@ -1,22 +1,22 @@
 //! IR optimization passes (constant folding, DCE, CSE, strength reduction, etc.)
 
-mod constant_folding;
-mod dead_code;
-mod tail_call;
-mod cse;
-mod strength_reduction;
 mod branch_opt;
-mod loop_opt;
+mod constant_folding;
+mod cse;
+mod dead_code;
 mod helpers;
+mod loop_opt;
+mod strength_reduction;
+mod tail_call;
 
 // Re-export all optimization passes
-pub(crate) use constant_folding::constant_folding;
-pub(crate) use dead_code::{dead_code_elimination, dead_store_elimination};
-pub(crate) use tail_call::tail_call_optimization;
-pub(crate) use cse::common_subexpression_elimination;
-pub(crate) use strength_reduction::strength_reduction;
 pub(crate) use branch_opt::{branch_optimization, conditional_branch_simplification};
+pub(crate) use constant_folding::constant_folding;
+pub(crate) use cse::common_subexpression_elimination;
+pub(crate) use dead_code::{dead_code_elimination, dead_store_elimination};
 pub(crate) use loop_opt::loop_invariant_motion;
+pub(crate) use strength_reduction::strength_reduction;
+pub(crate) use tail_call::tail_call_optimization;
 
 #[cfg(test)]
 mod tests {

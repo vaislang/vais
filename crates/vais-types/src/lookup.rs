@@ -247,9 +247,11 @@ impl TypeChecker {
             if let Some(bounds) = self.current_generic_bounds.get(type_param) {
                 for bound_trait in bounds {
                     let mut visited = std::collections::HashSet::new();
-                    if let Some(method_sig) =
-                        self.find_method_in_trait_with_supers(bound_trait, method_name, &mut visited)
-                    {
+                    if let Some(method_sig) = self.find_method_in_trait_with_supers(
+                        bound_trait,
+                        method_name,
+                        &mut visited,
+                    ) {
                         return Some(method_sig);
                     }
                     // Also check trait aliases

@@ -175,7 +175,11 @@ impl CodeGenerator {
                 // Track bindings added in loop
                 let mut new_bindings = Vec::new();
                 if let Some(pat) = pattern {
-                    self.collect_pattern_bindings_with_tracking(&pat.node, bound, &mut new_bindings);
+                    self.collect_pattern_bindings_with_tracking(
+                        &pat.node,
+                        bound,
+                        &mut new_bindings,
+                    );
                 }
                 for stmt in body {
                     self.collect_free_vars_in_stmt_with_tracking(

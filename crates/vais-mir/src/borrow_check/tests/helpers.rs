@@ -2,7 +2,11 @@ use crate::*;
 use std::collections::HashMap;
 
 /// Helper to create a simple body for testing.
-pub(super) fn make_test_body(ty: MirType, statements: Vec<Statement>, terminator: Terminator) -> Body {
+pub(super) fn make_test_body(
+    ty: MirType,
+    statements: Vec<Statement>,
+    terminator: Terminator,
+) -> Body {
     Body {
         name: "test".to_string(),
         params: vec![ty.clone()],

@@ -221,18 +221,22 @@ F main() -> i64 { double(21) }
 #[test]
 fn phase27_generic_substitution_normal() {
     // Generic function with concrete call — substitution should work
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         F identity<T>(x: T) -> T { x }
         F main() -> i64 {
             identity(42)
         }
-    "#, 42);
+    "#,
+        42,
+    );
 }
 
 #[test]
 fn phase27_associated_type_resolved() {
     // Associated type resolved through trait impl
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         W Container {
             F size(self) -> i64
         }
@@ -244,42 +248,54 @@ fn phase27_associated_type_resolved() {
             box := MyBox { val: 10 }
             box.size()
         }
-    "#, 10);
+    "#,
+        10,
+    );
 }
 
 #[test]
 fn phase27_simple_function_call_return() {
     // Simple function call returning a value
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         F make_val() -> i64 { 100 }
         F main() -> i64 { make_val() }
-    "#, 100);
+    "#,
+        100,
+    );
 }
 
 #[test]
 fn phase27_two_arg_addition() {
     // Two-argument addition function
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         F add(a: i64, b: i64) -> i64 { a + b }
         F main() -> i64 { add(1, 2) }
-    "#, 3);
+    "#,
+        3,
+    );
 }
 
 #[test]
 fn phase27_nested_generic_resolution() {
     // Nested generic types resolve correctly
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         F first<T>(a: T, b: T) -> T { a }
         F main() -> i64 {
             first(1, 2)
         }
-    "#, 1);
+    "#,
+        1,
+    );
 }
 
 #[test]
 fn phase27_trait_method_dispatch() {
     // Trait method dispatch with concrete type
-    assert_exit_code(r#"
+    assert_exit_code(
+        r#"
         W Greet {
             F greet(self) -> i64
         }
@@ -291,7 +307,9 @@ fn phase27_trait_method_dispatch() {
             p := Person { age: 30 }
             p.greet()
         }
-    "#, 30);
+    "#,
+        30,
+    );
 }
 
 // --- Negative tests ---
@@ -299,64 +317,76 @@ fn phase27_trait_method_dispatch() {
 #[test]
 fn phase27_unresolved_param_type_error() {
     // Function parameter with no type info — should fail with InferFailed
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F mystery(x) { x }
         F main() -> i64 { mystery(42) }
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn phase27_recursive_no_return_type_error() {
     // Recursive function without return type annotation — should fail
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F factorial(n) {
             I n <= 1 { 1 } E { n * @(n - 1) }
         }
         F main() -> i64 { factorial(5) }
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn phase27_ambiguous_type_error() {
     // Ambiguous return type — no way to infer
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F ambiguous(x) -> i64 {
             y := x
             42
         }
         F main() -> i64 { ambiguous(1) }
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn phase27_unconstrained_generic_error() {
     // Generic function called without enough type info
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F pick<T>(a: T, b: T) -> T { a }
         F main() -> i64 {
             pick(1, "hello")
         }
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn phase27_missing_return_annotation_with_self_call() {
     // Self-call with no return type — should error
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F loop_fn(n) {
             I n > 0 { @(n - 1) } E { 0 }
         }
         F main() -> i64 { loop_fn(3) }
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn phase27_type_mismatch_in_generic() {
     // Type mismatch: i64 vs str in generic
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
         F same<T>(a: T, b: T) -> T { a }
         F main() -> i64 {
             same(42, "hello")
         }
-    "#);
+    "#,
+    );
 }

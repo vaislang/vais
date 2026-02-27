@@ -1,8 +1,8 @@
 //! Constant definitions: ConstDef, GlobalDef, ConstExpr, ConstBinOp
 
-use crate::infrastructure::{Attribute, Spanned};
 use crate::ast_types::Type;
 use crate::expressions::Expr;
+use crate::infrastructure::{Attribute, Spanned};
 
 /// Constant definition: `C NAME: Type = value`
 ///

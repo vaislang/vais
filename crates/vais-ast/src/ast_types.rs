@@ -1,8 +1,8 @@
 //! Type expressions (named ast_types to avoid conflict with the `types` module name)
 
-use crate::infrastructure::Spanned;
 use crate::constants::ConstExpr;
 use crate::expressions::Expr;
+use crate::infrastructure::Spanned;
 
 /// Type expressions
 #[derive(Debug, Clone, PartialEq)]

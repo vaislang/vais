@@ -1104,7 +1104,11 @@ mod tests {
     fn test_chapter_titles_non_trivial() {
         let chapters = create_chapters();
         for chapter in &chapters {
-            assert!(chapter.title.len() > 5, "Chapter title too short: {}", chapter.title);
+            assert!(
+                chapter.title.len() > 5,
+                "Chapter title too short: {}",
+                chapter.title
+            );
         }
     }
 

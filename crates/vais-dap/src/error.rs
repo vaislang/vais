@@ -115,17 +115,23 @@ mod tests {
             DapError::InvalidRequest("missing field".to_string()).to_string(),
             "Invalid request: missing field"
         );
-        assert_eq!(DapError::NotInitialized.to_string(), "Session not initialized");
-        assert_eq!(DapError::NoActiveSession.to_string(), "No active debug session");
-        assert_eq!(DapError::ProcessNotRunning.to_string(), "Process not running");
+        assert_eq!(
+            DapError::NotInitialized.to_string(),
+            "Session not initialized"
+        );
+        assert_eq!(
+            DapError::NoActiveSession.to_string(),
+            "No active debug session"
+        );
+        assert_eq!(
+            DapError::ProcessNotRunning.to_string(),
+            "Process not running"
+        );
         assert_eq!(
             DapError::ThreadNotFound(42).to_string(),
             "Thread 42 not found"
         );
-        assert_eq!(
-            DapError::FrameNotFound(7).to_string(),
-            "Frame 7 not found"
-        );
+        assert_eq!(DapError::FrameNotFound(7).to_string(), "Frame 7 not found");
         assert_eq!(
             DapError::VariableNotFound(99).to_string(),
             "Variable reference 99 not found"

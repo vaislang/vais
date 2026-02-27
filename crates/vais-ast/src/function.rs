@@ -1,10 +1,10 @@
 //! Function definition, parameters, and related types
 
-use crate::infrastructure::{Attribute, Spanned};
 use crate::ast_types::Type;
 use crate::expressions::Expr;
-use crate::statements::Stmt;
 use crate::generics::{GenericParam, WherePredicate};
+use crate::infrastructure::{Attribute, Spanned};
+use crate::statements::Stmt;
 
 /// Function definition with signature and body.
 ///

@@ -611,10 +611,7 @@ mod tests {
 
     #[test]
     fn test_compatibility_empty_string() {
-        assert_eq!(
-            check_abi_compatibility(""),
-            AbiCompatibility::Incompatible
-        );
+        assert_eq!(check_abi_compatibility(""), AbiCompatibility::Incompatible);
     }
 
     #[test]
@@ -647,7 +644,11 @@ mod tests {
         ];
         for cc in &conventions {
             let llvm_str = cc.to_llvm_str();
-            assert!(!llvm_str.is_empty(), "Convention {:?} has empty LLVM string", cc);
+            assert!(
+                !llvm_str.is_empty(),
+                "Convention {:?} has empty LLVM string",
+                cc
+            );
         }
     }
 

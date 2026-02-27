@@ -1415,7 +1415,11 @@ mod tests {
     fn test_builtin_hover_all_io() {
         // Test all IO builtins exist
         for name in &["puts", "putchar", "read_i64", "read_f64", "read_char"] {
-            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+            assert!(
+                get_builtin_hover(name).is_some(),
+                "Missing hover for {}",
+                name
+            );
         }
     }
 
@@ -1425,21 +1429,33 @@ mod tests {
             "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil", "round", "abs",
             "abs_i64", "min", "max",
         ] {
-            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+            assert!(
+                get_builtin_hover(name).is_some(),
+                "Missing hover for {}",
+                name
+            );
         }
     }
 
     #[test]
     fn test_builtin_hover_memory() {
         for name in &["malloc", "free", "memcpy", "strlen"] {
-            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+            assert!(
+                get_builtin_hover(name).is_some(),
+                "Missing hover for {}",
+                name
+            );
         }
     }
 
     #[test]
     fn test_builtin_hover_load_store() {
         for name in &["load_i64", "store_i64", "load_byte", "store_byte"] {
-            assert!(get_builtin_hover(name).is_some(), "Missing hover for {}", name);
+            assert!(
+                get_builtin_hover(name).is_some(),
+                "Missing hover for {}",
+                name
+            );
         }
     }
 

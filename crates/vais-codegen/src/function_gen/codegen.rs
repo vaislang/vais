@@ -72,8 +72,8 @@ impl CodeGenerator {
 
         // main() must return i64 for C ABI compatibility, regardless of declared return type.
         // If main declares f64/f32 return, we force i64 and add fptosi at the return site.
-        let is_main_float_ret = f.name.node == "main"
-            && matches!(ret_type_raw, ResolvedType::F64 | ResolvedType::F32);
+        let is_main_float_ret =
+            f.name.node == "main" && matches!(ret_type_raw, ResolvedType::F64 | ResolvedType::F32);
         let ret_type = if is_main_float_ret {
             ResolvedType::I64
         } else {

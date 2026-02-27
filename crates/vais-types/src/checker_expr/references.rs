@@ -1,12 +1,15 @@
 //! Reference and pointer type checking
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     #[inline]
-    pub(crate) fn check_reference_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_reference_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Ref(inner) => {
                 let inner_type = match self.check_expr(inner) {
@@ -20,7 +23,7 @@ impl TypeChecker {
                     ResolvedType::Pointer(elem_ty) if matches!(inner.node, Expr::Array(_)) => {
                         Some(Ok(ResolvedType::Slice(elem_ty.clone())))
                     }
-                    _ => Some(Ok(ResolvedType::Ref(Box::new(inner_type))))
+                    _ => Some(Ok(ResolvedType::Ref(Box::new(inner_type)))),
                 }
             }
 

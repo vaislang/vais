@@ -15,16 +15,16 @@ use vais_codegen::TargetTriple;
 use vais_types::TypeChecker;
 
 // Submodules
-mod per_module;
-mod parallel;
-mod pipeline;
 mod native;
+mod parallel;
+mod per_module;
+mod pipeline;
 mod wasm;
 
 // Re-export public functions
-pub(crate) use per_module::compile_per_module;
 pub(crate) use native::compile_to_native;
-pub(crate) use wasm::{compile_to_wasm32, compile_to_wasi};
+pub(crate) use per_module::compile_per_module;
+pub(crate) use wasm::{compile_to_wasi, compile_to_wasm32};
 
 /// Route IR compilation to the appropriate backend based on target triple.
 #[allow(clippy::too_many_arguments)]

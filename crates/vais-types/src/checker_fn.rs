@@ -241,10 +241,7 @@ impl TypeChecker {
                         return Err(TypeError::InferFailed {
                             kind: "parameter".to_string(),
                             name: param_name.clone(),
-                            context: format!(
-                                "{} (contains {})",
-                                f.name.node, unresolved_desc
-                            ),
+                            context: format!("{} (contains {})", f.name.node, unresolved_desc),
                             span: param_span,
                             suggestion: Some(format!(
                                 "Add explicit type annotation for parameter `{}`",
@@ -261,10 +258,7 @@ impl TypeChecker {
                     return Err(TypeError::InferFailed {
                         kind: "return type".to_string(),
                         name: f.name.node.clone(),
-                        context: format!(
-                            "{} (contains {})",
-                            f.name.node, unresolved_desc
-                        ),
+                        context: format!("{} (contains {})", f.name.node, unresolved_desc),
                         span: Some(f.name.span),
                         suggestion: Some("Add explicit return type annotation".to_string()),
                     });
@@ -580,21 +574,17 @@ impl TypeChecker {
             ResolvedType::Array(inner) => Self::contains_unresolved_type(inner),
             ResolvedType::ConstArray { element, .. } => Self::contains_unresolved_type(element),
             ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
-                Self::contains_unresolved_type(ok)
-                    .or_else(|| Self::contains_unresolved_type(err))
+                Self::contains_unresolved_type(ok).or_else(|| Self::contains_unresolved_type(err))
             }
-            ResolvedType::Tuple(elems) => {
-                elems.iter().find_map(Self::contains_unresolved_type)
-            }
+            ResolvedType::Tuple(elems) => elems.iter().find_map(Self::contains_unresolved_type),
             ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 params
                     .iter()
                     .find_map(Self::contains_unresolved_type)
                     .or_else(|| Self::contains_unresolved_type(ret))
             }
-            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => {
-                Self::contains_unresolved_type(inner)
-            }
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => Self::contains_unresolved_type(inner),
             ResolvedType::Dependent { base, .. } => Self::contains_unresolved_type(base),
             ResolvedType::Vector { element, .. } => Self::contains_unresolved_type(element),
             ResolvedType::Named { generics, .. } => {
@@ -603,10 +593,8 @@ impl TypeChecker {
             ResolvedType::DynTrait { generics, .. } => {
                 generics.iter().find_map(Self::contains_unresolved_type)
             }
-            ResolvedType::Associated { base, generics, .. } => {
-                Self::contains_unresolved_type(base)
-                    .or_else(|| generics.iter().find_map(Self::contains_unresolved_type))
-            }
+            ResolvedType::Associated { base, generics, .. } => Self::contains_unresolved_type(base)
+                .or_else(|| generics.iter().find_map(Self::contains_unresolved_type)),
             // All other types (primitives, Never, Generic, ConstGeneric, ImplTrait,
             // HigherKinded, Lifetime) are acceptable outside of monomorphization contexts.
             _ => None,

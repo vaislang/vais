@@ -1452,9 +1452,21 @@ F main() -> i64 {
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
     // The slice .len() should use extractvalue, NOT a call to @len
-    assert!(ir.contains("extractvalue"), "Expected extractvalue in IR:\n{}", ir);
-    assert!(!ir.contains("call i64 @len"), "Should not call @len:\n{}", ir);
-    assert!(!ir.contains("call i64 @baz_len"), "Should not call @baz_len:\n{}", ir);
+    assert!(
+        ir.contains("extractvalue"),
+        "Expected extractvalue in IR:\n{}",
+        ir
+    );
+    assert!(
+        !ir.contains("call i64 @len"),
+        "Should not call @len:\n{}",
+        ir
+    );
+    assert!(
+        !ir.contains("call i64 @baz_len"),
+        "Should not call @baz_len:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1472,9 +1484,17 @@ F main() -> i64 = get_slice(&[1, 2, 3])
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
     // The slice literal &[1,2,3] should build a fat pointer via insertvalue
-    assert!(ir.contains("insertvalue"), "Expected insertvalue in IR:\n{}", ir);
+    assert!(
+        ir.contains("insertvalue"),
+        "Expected insertvalue in IR:\n{}",
+        ir
+    );
     assert!(ir.contains("bitcast"), "Expected bitcast in IR:\n{}", ir);
-    assert!(ir.contains("{ i8*, i64 }"), "Expected fat pointer type:\n{}", ir);
+    assert!(
+        ir.contains("{ i8*, i64 }"),
+        "Expected fat pointer type:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1493,7 +1513,11 @@ F main() -> i64 {
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
-    assert!(ir.contains("@__sync_spawn__poll"), "Expected __sync_spawn__poll call:\n{}", ir);
+    assert!(
+        ir.contains("@__sync_spawn__poll"),
+        "Expected __sync_spawn__poll call:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1516,7 +1540,11 @@ F main() -> i64 {
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
-    assert!(ir.contains("@compute__poll"), "Expected compute__poll call:\n{}", ir);
+    assert!(
+        ir.contains("@compute__poll"),
+        "Expected compute__poll call:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1540,7 +1568,11 @@ F main() -> i64 {
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
-    assert!(ir.contains("@compute__poll"), "Expected compute__poll in variable-based await:\n{}", ir);
+    assert!(
+        ir.contains("@compute__poll"),
+        "Expected compute__poll in variable-based await:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1563,7 +1595,11 @@ F main() -> i64 {
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
-    assert!(ir.contains("@compute__poll"), "Expected compute__poll for spawn+await chain:\n{}", ir);
+    assert!(
+        ir.contains("@compute__poll"),
+        "Expected compute__poll for spawn+await chain:\n{}",
+        ir
+    );
 }
 
 #[test]
@@ -1590,7 +1626,11 @@ F main() -> i64 {
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let ir = gen.generate_module(&module).unwrap();
-    assert!(ir.contains("@conditional__poll"), "Expected conditional__poll:\n{}", ir);
+    assert!(
+        ir.contains("@conditional__poll"),
+        "Expected conditional__poll:\n{}",
+        ir
+    );
 }
 
 #[test]

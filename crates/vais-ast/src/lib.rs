@@ -2,22 +2,22 @@
 //!
 //! AI-optimized AST with minimal node types for efficient parsing and code generation.
 
-pub mod infrastructure;
-pub mod operators;
-pub mod constants;
-pub mod ast_types;
-pub mod patterns;
-pub mod macros;
-pub mod expressions;
-pub mod statements;
-pub mod function;
-pub mod generics;
 pub mod aggregate_types;
 pub mod aliases;
-pub mod traits;
-pub mod items;
+pub mod ast_types;
+pub mod constants;
+pub mod expressions;
 pub mod extern_block;
 pub mod formatter;
+pub mod function;
+pub mod generics;
+pub mod infrastructure;
+pub mod items;
+pub mod macros;
+pub mod operators;
+pub mod patterns;
+pub mod statements;
+pub mod traits;
 
 // Re-export infrastructure types
 pub use infrastructure::{Attribute, Span, Spanned};
@@ -36,8 +36,8 @@ pub use patterns::{CaptureMode, Literal, Pattern};
 
 // Re-export macro types
 pub use macros::{
-    Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement,
-    MacroRule, MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, RepetitionKind,
+    Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
+    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, RepetitionKind,
 };
 
 // Re-export expression types
@@ -47,7 +47,7 @@ pub use expressions::{Expr, IfElse, MatchArm, StringInterpPart};
 pub use statements::Stmt;
 
 // Re-export function types
-pub use function::{CallArgs, FunctionBody, NamedArg, Ownership, Param, Function};
+pub use function::{CallArgs, Function, FunctionBody, NamedArg, Ownership, Param};
 
 // Re-export generic types
 pub use generics::{GenericParam, GenericParamKind, Variance, WherePredicate};

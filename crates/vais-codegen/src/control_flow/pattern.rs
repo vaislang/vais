@@ -186,18 +186,15 @@ impl CodeGenerator {
                 let mut checks: Vec<String> = Vec::new();
 
                 // Get element types from match_type if it is a Tuple, otherwise fall back to i64.
-                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type
-                {
+                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type {
                     elems.clone()
                 } else {
                     vec![ResolvedType::I64; patterns.len()]
                 };
 
                 // Build the full LLVM struct type string for extractvalue.
-                let llvm_elem_strs: Vec<String> = elem_types
-                    .iter()
-                    .map(|t| self.type_to_llvm(t))
-                    .collect();
+                let llvm_elem_strs: Vec<String> =
+                    elem_types.iter().map(|t| self.type_to_llvm(t)).collect();
                 let tuple_llvm_ty = format!("{{ {} }}", llvm_elem_strs.join(", "));
 
                 for (i, pat) in patterns.iter().enumerate() {
@@ -211,10 +208,7 @@ impl CodeGenerator {
                     .unwrap();
 
                     // Recurse with the element's actual type.
-                    let elem_ty = elem_types
-                        .get(i)
-                        .cloned()
-                        .unwrap_or(ResolvedType::I64);
+                    let elem_ty = elem_types.get(i).cloned().unwrap_or(ResolvedType::I64);
                     let (check, check_ir) =
                         self.generate_pattern_check_typed(pat, &elem, counter, &elem_ty)?;
                     ir.push_str(&check_ir);
@@ -446,8 +440,7 @@ impl CodeGenerator {
                 // Get element types from match_type if it is a Tuple, otherwise fall back to i64.
                 // This is critical for nested tuples (e.g., (1, (2, 3))) where the inner element
                 // is { i64, i64 }, not i64 — using i64 would produce a type mismatch in LLVM IR.
-                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type
-                {
+                let elem_types: Vec<ResolvedType> = if let ResolvedType::Tuple(elems) = match_type {
                     elems.clone()
                 } else {
                     vec![ResolvedType::I64; patterns.len()]

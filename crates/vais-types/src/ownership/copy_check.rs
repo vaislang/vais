@@ -1,7 +1,7 @@
 //! Copy type determination
 
-use crate::types::ResolvedType;
 use super::OwnershipChecker;
+use crate::types::ResolvedType;
 
 impl OwnershipChecker {
     /// Determine if a type is Copy (can be implicitly copied rather than moved)

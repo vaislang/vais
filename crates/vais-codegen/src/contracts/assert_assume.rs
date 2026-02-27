@@ -1,8 +1,8 @@
 //! Assert and assume expression generation.
 
-use std::fmt::Write;
-use vais_ast::{Spanned, Expr};
 use crate::{CodeGenerator, CodegenResult};
+use std::fmt::Write;
+use vais_ast::{Expr, Spanned};
 
 impl CodeGenerator {
     /// Generate assert expression

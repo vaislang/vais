@@ -883,7 +883,10 @@ entry:
     #[test]
     fn test_query_unknown_pointers() {
         let analysis = AliasAnalysis::new();
-        assert_eq!(analysis.query("%unknown1", "%unknown2"), AliasResult::MayAlias);
+        assert_eq!(
+            analysis.query("%unknown1", "%unknown2"),
+            AliasResult::MayAlias
+        );
     }
 
     #[test]

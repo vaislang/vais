@@ -992,10 +992,7 @@ mod tests {
                     false,
                     Expr::Binary {
                         op: BinOp::Add,
-                        left: Box::new(Spanned::new(
-                            make_call("helper"),
-                            Span::new(0, 1),
-                        )),
+                        left: Box::new(Spanned::new(make_call("helper"), Span::new(0, 1))),
                         right: Box::new(Spanned::new(Expr::Int(1), Span::new(0, 1))),
                     },
                 ),
@@ -1081,7 +1078,9 @@ mod tests {
     #[test]
     fn test_is_builtin_type_all_primitives() {
         // Integer types
-        for ty in &["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize"] {
+        for ty in &[
+            "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+        ] {
             assert!(TreeShaker::is_builtin_type(ty), "{} should be builtin", ty);
         }
         // Float types

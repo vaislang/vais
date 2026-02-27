@@ -286,7 +286,11 @@ impl ImplRegistry {
     /// Uses specialization rules to select the most specific impl
     pub fn resolve_impl(&self, type_name: &str, trait_name: &str) -> Option<&TraitImplInfo> {
         // Early return if no matching trait impls exist
-        if !self.impls.iter().any(|impl_info| impl_info.trait_name == trait_name) {
+        if !self
+            .impls
+            .iter()
+            .any(|impl_info| impl_info.trait_name == trait_name)
+        {
             return None;
         }
 

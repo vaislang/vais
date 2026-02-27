@@ -1,16 +1,16 @@
 //! Built-in function and type registration for the type checker.
 
 mod core;
-mod print;
-mod memory;
-mod stdlib;
+mod enum_builtins;
 mod file_io;
-mod simd;
 mod gc;
-mod system;
 mod io;
 mod math;
-mod enum_builtins;
+mod memory;
+mod print;
+mod simd;
+mod stdlib;
+mod system;
 
 use super::TypeChecker;
 use crate::types::{EffectAnnotation, EnumDef, FunctionSig, ResolvedType, VariantFieldTypes};

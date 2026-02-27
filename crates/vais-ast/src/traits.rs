@@ -1,10 +1,10 @@
 //! Trait and impl definitions
 
-use crate::infrastructure::Spanned;
+use crate::aliases::AssociatedType;
 use crate::ast_types::Type;
 use crate::function::{Function, FunctionBody, Param};
 use crate::generics::{GenericParam, WherePredicate};
-use crate::aliases::AssociatedType;
+use crate::infrastructure::Spanned;
 
 /// Trait definition: `W Name { methods }`
 #[derive(Debug, Clone, PartialEq)]

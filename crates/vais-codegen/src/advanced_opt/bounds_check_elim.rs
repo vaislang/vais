@@ -761,9 +761,10 @@ entry:
         let analysis = analyze_bounds_checks(ir);
         // Index 10 >= length 5, so no safe range should be recorded for this access
         // (constant access analysis only records safe accesses)
-        let has_unsafe = analysis.ranges.values().any(|r| {
-            r.lo == Some(10) && r.hi == Some(11)
-        });
+        let has_unsafe = analysis
+            .ranges
+            .values()
+            .any(|r| r.lo == Some(10) && r.hi == Some(11));
         assert!(!has_unsafe);
     }
 

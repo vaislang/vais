@@ -1,5 +1,5 @@
+use crate::borrow_check::{check_module, BorrowError, Location};
 use crate::*;
-use crate::borrow_check::{check_module, Location, BorrowError};
 use std::collections::HashMap;
 
 use super::helpers::make_test_body;
@@ -59,7 +59,6 @@ fn test_check_module() {
 
 // New tests for advanced features
 
-
 #[test]
 fn test_error_display_format() {
     // Check that BorrowError::Display produces correct error code format
@@ -85,7 +84,6 @@ fn test_error_display_format() {
     assert!(display2.contains("mutable more than once"));
 }
 
-
 #[test]
 fn test_location_display() {
     // Check Location display format
@@ -97,5 +95,3 @@ fn test_location_display() {
     let display2 = format!("{}", loc2);
     assert_eq!(display2, "0:0");
 }
-
-

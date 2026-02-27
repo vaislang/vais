@@ -128,9 +128,9 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
 
 #[cfg(test)]
 use diagnostics::edit_distance;
-pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
 #[cfg(test)]
 pub(crate) use diagnostics::suggest_type_conversion;
+pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
 pub use target::TargetTriple;
 // Re-export type structs from types module
 pub(crate) use types::*;

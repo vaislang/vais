@@ -1,8 +1,8 @@
 //! Statement type checking
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{Linearity, ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     /// Check a block of statements
@@ -38,7 +38,8 @@ impl TypeChecker {
                         predicate,
                     } = &ty.node
                     {
-                        if let Some(lit_val) = Self::extract_integer_literal_from_expr(&value.node) {
+                        if let Some(lit_val) = Self::extract_integer_literal_from_expr(&value.node)
+                        {
                             let predicate_str = format!("{:?}", predicate.node);
                             self.check_refinement(
                                 var_name,
@@ -176,5 +177,4 @@ impl TypeChecker {
             }),
         }
     }
-
 }

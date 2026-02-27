@@ -515,12 +515,16 @@ mod tests {
         let mut map = SourceMap::new("a.vais", "a.js");
         map.add_mapping(0, 0, 0, 0);
         let comment = map.to_inline_comment();
-        assert!(comment.starts_with("//# sourceMappingURL=data:application/json;charset=utf-8;base64,"));
+        assert!(
+            comment.starts_with("//# sourceMappingURL=data:application/json;charset=utf-8;base64,")
+        );
         let b64 = comment
             .strip_prefix("//# sourceMappingURL=data:application/json;charset=utf-8;base64,")
             .unwrap();
         // Base64 should only contain valid chars
-        assert!(b64.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
+        assert!(b64
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
     }
 
     #[test]

@@ -234,7 +234,6 @@ fn exec_return_constant_42() {
     assert_exit_code("F main() -> i64 = 42", 42);
 }
 
-
 #[test]
 fn exec_arithmetic_add() {
     assert_exit_code("F main() -> i64 = 3 + 4", 7);
@@ -265,7 +264,6 @@ fn exec_arithmetic_precedence() {
     assert_exit_code("F main() -> i64 = 2 + 3 * 4", 14);
 }
 
-
 #[test]
 fn exec_function_call() {
     let source = r#"
@@ -274,7 +272,6 @@ F main() -> i64 = add(20, 22)
 "#;
     assert_exit_code(source, 42);
 }
-
 
 #[test]
 fn exec_recursion_factorial() {
@@ -347,7 +344,6 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-
 #[test]
 fn exec_loop_with_break() {
     let source = r#"
@@ -365,9 +361,6 @@ F main() -> i64 {
     // sum of 0..9 = 45
     assert_exit_code(source, 45);
 }
-
-
-
 
 #[test]
 fn exec_left_shift() {
@@ -420,7 +413,6 @@ fn exec_negative_numbers() {
     assert_exit_code("F main() -> i64 = 0 - 42", 214);
     // -42 as u8 = 214 (exit codes are 0-255)
 }
-
 
 // ==================== Printf / Stdout Tests ====================
 
@@ -539,7 +531,6 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
-
 
 // ==================== Match Execution Tests ====================
 
@@ -2074,7 +2065,6 @@ F main() -> i64 {
 }
 
 // --- Recursion with Different Patterns ---
-
 
 #[test]
 fn exec_tail_recursion_sum() {

@@ -1,8 +1,6 @@
-use crate::*;
 use crate::borrow_check::{check_body, BorrowError};
+use crate::*;
 use std::collections::HashMap;
-
-
 
 #[test]
 fn test_use_after_move() {
@@ -55,7 +53,6 @@ fn test_use_after_move() {
     }
 }
 
-
 #[test]
 fn test_double_drop() {
     // Drop the same non-copy value twice
@@ -99,7 +96,6 @@ fn test_double_drop() {
     }
 }
 
-
 #[test]
 fn test_move_prevents_drop() {
     // Move a value, then drop it (should not error - drop is no-op after move)
@@ -139,7 +135,6 @@ fn test_move_prevents_drop() {
     let errors = check_body(&body);
     assert_eq!(errors.len(), 0, "Drop after move should be allowed (no-op)");
 }
-
 
 #[test]
 fn test_assign_after_move() {
@@ -201,7 +196,6 @@ fn test_assign_after_move() {
     );
 }
 
-
 #[test]
 fn test_use_after_drop() {
     // Drop a value, then try to use it
@@ -254,7 +248,6 @@ fn test_use_after_drop() {
         _ => panic!("Expected UseAfterFree error"),
     }
 }
-
 
 #[test]
 fn test_move_while_borrowed() {
@@ -310,7 +303,6 @@ fn test_move_while_borrowed() {
     }
 }
 
-
 #[test]
 fn test_return_value_not_dropped() {
     // Return a non-copy value (should not cause errors)
@@ -347,7 +339,6 @@ fn test_return_value_not_dropped() {
     let errors = check_body(&body);
     assert_eq!(errors.len(), 0, "Returning a value should not error");
 }
-
 
 #[test]
 fn test_lifetime_use_after_move_str() {
@@ -410,5 +401,3 @@ fn test_lifetime_use_after_move_str() {
         _ => panic!("Expected UseAfterMove, got {:?}", errors[0]),
     }
 }
-
-

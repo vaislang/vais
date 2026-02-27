@@ -187,11 +187,8 @@ impl CodeGenerator {
             .unwrap_or(args.len());
         if args.len() < param_count {
             // Clone the default param expressions to avoid borrow issues with &mut self
-            let defaults: Option<Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>> = self
-                .types
-                .default_params
-                .get(&fn_name)
-                .cloned();
+            let defaults: Option<Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>> =
+                self.types.default_params.get(&fn_name).cloned();
             if let Some(defaults) = defaults {
                 for i in args.len()..param_count {
                     if let Some(Some(default_expr)) = defaults.get(i) {

@@ -1,17 +1,17 @@
 //! Expression and statement type checking.
 
-mod stmts;
-mod literals;
-mod control_flow;
+mod async_effects;
 mod calls;
 mod collections;
+mod control_flow;
+mod literals;
 mod references;
-mod async_effects;
 mod special;
+mod stmts;
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{ResolvedType, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     /// Check an expression - main dispatcher
@@ -32,10 +32,20 @@ impl TypeChecker {
         if let Expr::Call { func, args } = &expr.node {
             return self.check_call_expr(func, args, expr.span);
         }
-        if let Expr::MethodCall { receiver, method, args } = &expr.node {
+        if let Expr::MethodCall {
+            receiver,
+            method,
+            args,
+        } = &expr.node
+        {
             return self.check_method_call(receiver, method, args, expr.span);
         }
-        if let Expr::StaticMethodCall { type_name, method, args } = &expr.node {
+        if let Expr::StaticMethodCall {
+            type_name,
+            method,
+            args,
+        } = &expr.node
+        {
             return self.check_static_method_call(type_name, method, args, expr.span);
         }
 

@@ -1,7 +1,7 @@
 //! Move semantics tracking
 
-use crate::types::{ResolvedType, TypeError, TypeResult};
 use super::{OwnershipChecker, OwnershipState};
+use crate::types::{ResolvedType, TypeError, TypeResult};
 use vais_ast::{Expr, Span, Spanned};
 
 impl OwnershipChecker {

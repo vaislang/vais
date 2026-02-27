@@ -1,6 +1,6 @@
 //! Binary operation generation.
 
-use inkwell::values::{BasicValueEnum, IntValue, FunctionValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use vais_ast::BinOp;

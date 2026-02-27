@@ -1,10 +1,10 @@
 //! Statement AST node
 
-use crate::infrastructure::Spanned;
 use crate::ast_types::Type;
 use crate::expressions::Expr;
-use crate::patterns::Pattern;
 use crate::function::Ownership;
+use crate::infrastructure::Spanned;
+use crate::patterns::Pattern;
 
 /// Statements
 #[derive(Debug, Clone, PartialEq)]

@@ -125,9 +125,7 @@ impl TypeChecker {
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
             Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.resolve_type(&inner.node))),
-            Type::Slice(inner) => {
-                ResolvedType::Slice(Box::new(self.resolve_type(&inner.node)))
-            }
+            Type::Slice(inner) => ResolvedType::Slice(Box::new(self.resolve_type(&inner.node))),
             Type::SliceMut(inner) => {
                 ResolvedType::SliceMut(Box::new(self.resolve_type(&inner.node)))
             }
@@ -364,20 +362,42 @@ impl TypeChecker {
                 // Handle logical operators first — their operands are predicates, not values
                 match op {
                     BinOp::And => {
-                        let l = Self::try_evaluate_predicate_inner(&left.node, var_name, value, depth + 1)?;
-                        let r = Self::try_evaluate_predicate_inner(&right.node, var_name, value, depth + 1)?;
+                        let l = Self::try_evaluate_predicate_inner(
+                            &left.node,
+                            var_name,
+                            value,
+                            depth + 1,
+                        )?;
+                        let r = Self::try_evaluate_predicate_inner(
+                            &right.node,
+                            var_name,
+                            value,
+                            depth + 1,
+                        )?;
                         return Some(l && r);
                     }
                     BinOp::Or => {
-                        let l = Self::try_evaluate_predicate_inner(&left.node, var_name, value, depth + 1)?;
-                        let r = Self::try_evaluate_predicate_inner(&right.node, var_name, value, depth + 1)?;
+                        let l = Self::try_evaluate_predicate_inner(
+                            &left.node,
+                            var_name,
+                            value,
+                            depth + 1,
+                        )?;
+                        let r = Self::try_evaluate_predicate_inner(
+                            &right.node,
+                            var_name,
+                            value,
+                            depth + 1,
+                        )?;
                         return Some(l || r);
                     }
                     _ => {}
                 }
                 // Comparison operators — operands are arithmetic expressions
-                let left_val = Self::try_eval_const_expr_inner(&left.node, var_name, value, depth + 1)?;
-                let right_val = Self::try_eval_const_expr_inner(&right.node, var_name, value, depth + 1)?;
+                let left_val =
+                    Self::try_eval_const_expr_inner(&left.node, var_name, value, depth + 1)?;
+                let right_val =
+                    Self::try_eval_const_expr_inner(&right.node, var_name, value, depth + 1)?;
                 match op {
                     BinOp::Gt => Some(left_val > right_val),
                     BinOp::Gte => Some(left_val >= right_val),
@@ -388,8 +408,12 @@ impl TypeChecker {
                     _ => None,
                 }
             }
-            Expr::Unary { op: UnaryOp::Not, expr } => {
-                let inner = Self::try_evaluate_predicate_inner(&expr.node, var_name, value, depth + 1)?;
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+            } => {
+                let inner =
+                    Self::try_evaluate_predicate_inner(&expr.node, var_name, value, depth + 1)?;
                 Some(!inner)
             }
             _ => None,
@@ -398,29 +422,45 @@ impl TypeChecker {
 
     /// Try to evaluate a simple arithmetic expression at compile time.
     /// Supports: variable reference, integer literals, basic arithmetic.
-    fn try_eval_const_expr_inner(expr: &Expr, var_name: &str, var_value: i64, depth: usize) -> Option<i64> {
+    fn try_eval_const_expr_inner(
+        expr: &Expr,
+        var_name: &str,
+        var_value: i64,
+        depth: usize,
+    ) -> Option<i64> {
         if depth > Self::MAX_PREDICATE_DEPTH {
             return None;
         }
         match expr {
             Expr::Ident(name) if name == var_name => Some(var_value),
             Expr::Int(n) => Some(*n),
-            Expr::Unary { op: UnaryOp::Neg, expr } => {
-                Self::try_eval_const_expr_inner(&expr.node, var_name, var_value, depth + 1)
-                    .and_then(|v| v.checked_neg())
-            }
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+            } => Self::try_eval_const_expr_inner(&expr.node, var_name, var_value, depth + 1)
+                .and_then(|v| v.checked_neg()),
             Expr::Binary { op, left, right } => {
-                let l = Self::try_eval_const_expr_inner(&left.node, var_name, var_value, depth + 1)?;
-                let r = Self::try_eval_const_expr_inner(&right.node, var_name, var_value, depth + 1)?;
+                let l =
+                    Self::try_eval_const_expr_inner(&left.node, var_name, var_value, depth + 1)?;
+                let r =
+                    Self::try_eval_const_expr_inner(&right.node, var_name, var_value, depth + 1)?;
                 match op {
                     BinOp::Add => l.checked_add(r),
                     BinOp::Sub => l.checked_sub(r),
                     BinOp::Mul => l.checked_mul(r),
                     BinOp::Div => {
-                        if r != 0 { l.checked_div(r) } else { None }
+                        if r != 0 {
+                            l.checked_div(r)
+                        } else {
+                            None
+                        }
                     }
                     BinOp::Mod => {
-                        if r != 0 { l.checked_rem(r) } else { None }
+                        if r != 0 {
+                            l.checked_rem(r)
+                        } else {
+                            None
+                        }
                     }
                     _ => None,
                 }

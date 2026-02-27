@@ -85,9 +85,7 @@ impl TypeChecker {
             ResolvedType::ConstArray { element, .. } | ResolvedType::Vector { element, .. } => {
                 Self::occurs_in(id, element)
             }
-            ResolvedType::Associated {
-                base, generics, ..
-            } => {
+            ResolvedType::Associated { base, generics, .. } => {
                 Self::occurs_in(id, base) || generics.iter().any(|t| Self::occurs_in(id, t))
             }
             // Leaf types: no type variables inside
@@ -893,5 +891,4 @@ impl TypeChecker {
             self.apply_substitutions(&first_type),
         )))
     }
-
 }

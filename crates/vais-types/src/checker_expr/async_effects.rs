@@ -1,12 +1,15 @@
 //! Async, await, spawn, yield, lazy, force expression checking
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     #[inline]
-    pub(crate) fn check_async_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_async_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Await(inner) => {
                 let inner_type = match self.check_expr(inner) {

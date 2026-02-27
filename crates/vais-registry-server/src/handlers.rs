@@ -194,10 +194,7 @@ mod tests {
 
     #[test]
     fn test_has_scope_multiple_scopes() {
-        let user = make_auth_user(
-            false,
-            vec!["publish".to_string(), "yank".to_string()],
-        );
+        let user = make_auth_user(false, vec!["publish".to_string(), "yank".to_string()]);
         assert!(user.has_scope("publish"));
         assert!(user.has_scope("yank"));
         assert!(!user.has_scope("admin"));

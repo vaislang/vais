@@ -313,10 +313,7 @@ impl CodeGenerator {
                 // Codegen promotes bool to i64 (zext), truncate back for i1 return
                 let ret_val = if poll_ctx.ret_llvm == "i1" {
                     let trunc = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = trunc i64 {} to i1\n",
-                        trunc, val
-                    ));
+                    ir.push_str(&format!("  {} = trunc i64 {} to i1\n", trunc, val));
                     trunc
                 } else {
                     val

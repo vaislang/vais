@@ -1,11 +1,11 @@
 //! Expression AST nodes: Expr, IfElse, MatchArm, StringInterpPart
 
-use crate::infrastructure::Spanned;
 use crate::ast_types::Type;
+use crate::function::Param;
+use crate::infrastructure::Spanned;
+use crate::macros::MacroInvoke;
 use crate::operators::{BinOp, UnaryOp};
 use crate::patterns::{CaptureMode, Pattern};
-use crate::function::Param;
-use crate::macros::MacroInvoke;
 use crate::statements::Stmt;
 
 /// Part of a string interpolation expression.

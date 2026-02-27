@@ -296,12 +296,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        let ok_block = self
-            .context
-            .append_basic_block(fn_value, "try_ok");
-        let err_block = self
-            .context
-            .append_basic_block(fn_value, "try_err");
+        let ok_block = self.context.append_basic_block(fn_value, "try_ok");
+        let err_block = self.context.append_basic_block(fn_value, "try_err");
 
         self.builder
             .build_conditional_branch(is_error, err_block, ok_block)
@@ -363,12 +359,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        let ok_block = self
-            .context
-            .append_basic_block(fn_value, "unwrap_ok");
-        let panic_block = self
-            .context
-            .append_basic_block(fn_value, "unwrap_panic");
+        let ok_block = self.context.append_basic_block(fn_value, "unwrap_ok");
+        let panic_block = self.context.append_basic_block(fn_value, "unwrap_panic");
 
         self.builder
             .build_conditional_branch(is_error, panic_block, ok_block)

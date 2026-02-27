@@ -525,10 +525,7 @@ mod tests {
 
     #[test]
     fn test_parse_case_insensitive() {
-        assert_eq!(
-            TargetTriple::parse("NATIVE"),
-            Some(TargetTriple::Native)
-        );
+        assert_eq!(TargetTriple::parse("NATIVE"), Some(TargetTriple::Native));
         assert_eq!(
             TargetTriple::parse("X86_64-Linux"),
             Some(TargetTriple::X86_64Linux)
@@ -569,9 +566,18 @@ mod tests {
 
     #[test]
     fn test_triple_str() {
-        assert_eq!(TargetTriple::X86_64Linux.triple_str(), "x86_64-unknown-linux-gnu");
-        assert_eq!(TargetTriple::Aarch64Darwin.triple_str(), "aarch64-apple-darwin");
-        assert_eq!(TargetTriple::Wasm32Unknown.triple_str(), "wasm32-unknown-unknown");
+        assert_eq!(
+            TargetTriple::X86_64Linux.triple_str(),
+            "x86_64-unknown-linux-gnu"
+        );
+        assert_eq!(
+            TargetTriple::Aarch64Darwin.triple_str(),
+            "aarch64-apple-darwin"
+        );
+        assert_eq!(
+            TargetTriple::Wasm32Unknown.triple_str(),
+            "wasm32-unknown-unknown"
+        );
         assert_eq!(TargetTriple::Native.triple_str(), "");
     }
 

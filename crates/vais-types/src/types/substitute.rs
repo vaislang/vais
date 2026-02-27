@@ -510,8 +510,14 @@ mod tests {
     #[test]
     fn test_substitute_primitive_unchanged() {
         let subs = HashMap::new();
-        assert_eq!(substitute_type(&ResolvedType::I64, &subs), ResolvedType::I64);
-        assert_eq!(substitute_type(&ResolvedType::Bool, &subs), ResolvedType::Bool);
+        assert_eq!(
+            substitute_type(&ResolvedType::I64, &subs),
+            ResolvedType::I64
+        );
+        assert_eq!(
+            substitute_type(&ResolvedType::Bool, &subs),
+            ResolvedType::Bool
+        );
     }
 
     #[test]
@@ -683,10 +689,7 @@ mod tests {
         let mut subs = HashMap::new();
         subs.insert("N".to_string(), 10);
         let c = ResolvedConst::Param("N".to_string());
-        assert_eq!(
-            substitute_const_values(&c, &subs),
-            ResolvedConst::Value(10)
-        );
+        assert_eq!(substitute_const_values(&c, &subs), ResolvedConst::Value(10));
     }
 
     #[test]
@@ -709,10 +712,7 @@ mod tests {
             left: Box::new(ResolvedConst::Param("N".to_string())),
             right: Box::new(ResolvedConst::Param("M".to_string())),
         };
-        assert_eq!(
-            substitute_const_values(&c, &subs),
-            ResolvedConst::Value(8)
-        );
+        assert_eq!(substitute_const_values(&c, &subs), ResolvedConst::Value(8));
     }
 
     #[test]
@@ -720,10 +720,7 @@ mod tests {
         let mut subs = HashMap::new();
         subs.insert("N".to_string(), 7);
         let c = ResolvedConst::Negate(Box::new(ResolvedConst::Param("N".to_string())));
-        assert_eq!(
-            substitute_const_values(&c, &subs),
-            ResolvedConst::Value(-7)
-        );
+        assert_eq!(substitute_const_values(&c, &subs), ResolvedConst::Value(-7));
     }
 
     #[test]

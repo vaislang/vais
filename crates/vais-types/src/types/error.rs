@@ -714,10 +714,7 @@ mod tests {
             found: "bool".to_string(),
             span: None,
         };
-        assert_eq!(
-            err.to_string(),
-            "Type mismatch: expected i64, found bool"
-        );
+        assert_eq!(err.to_string(), "Type mismatch: expected i64, found bool");
     }
 
     #[test]
@@ -758,12 +755,32 @@ mod tests {
     #[test]
     fn test_error_codes_unique() {
         let errors = vec![
-            TypeError::Mismatch { expected: String::new(), found: String::new(), span: None },
-            TypeError::UndefinedVar { name: String::new(), span: None, suggestion: None },
-            TypeError::UndefinedType { name: String::new(), span: None, suggestion: None },
-            TypeError::UndefinedFunction { name: String::new(), span: None, suggestion: None },
+            TypeError::Mismatch {
+                expected: String::new(),
+                found: String::new(),
+                span: None,
+            },
+            TypeError::UndefinedVar {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
+            TypeError::UndefinedType {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
+            TypeError::UndefinedFunction {
+                name: String::new(),
+                span: None,
+                suggestion: None,
+            },
             TypeError::NotCallable(String::new(), None),
-            TypeError::ArgCount { expected: 0, got: 0, span: None },
+            TypeError::ArgCount {
+                expected: 0,
+                got: 0,
+                span: None,
+            },
             TypeError::CannotInfer,
             TypeError::Duplicate(String::new(), None),
             TypeError::ImmutableAssign(String::new(), None),

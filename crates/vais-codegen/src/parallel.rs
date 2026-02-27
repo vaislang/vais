@@ -469,9 +469,8 @@ entry:
   ret i64 0
 }
 "#;
-        let result = parallel_optimize_functions(ir, |fn_ir| {
-            fn_ir.replace("ret i64 0", "ret i64 42")
-        });
+        let result =
+            parallel_optimize_functions(ir, |fn_ir| fn_ir.replace("ret i64 0", "ret i64 42"));
         // Both functions should be transformed
         assert!(result.contains("ret i64 42"));
         assert!(!result.contains("ret i64 0"));

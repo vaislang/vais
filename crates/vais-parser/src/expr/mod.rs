@@ -12,10 +12,10 @@ use vais_ast::*;
 
 use crate::{ParseResult, Parser};
 
-mod precedence;
-mod unary;
 mod postfix;
+mod precedence;
 mod primary;
+mod unary;
 
 /// Check if a string contains interpolation syntax: `{<non-empty>}`.
 /// Empty `{}` is NOT interpolation (backward compat with format strings).

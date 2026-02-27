@@ -879,10 +879,7 @@ mod tests {
 
     #[test]
     fn test_display_result() {
-        let result = ResolvedType::Result(
-            Box::new(ResolvedType::I64),
-            Box::new(ResolvedType::Str),
-        );
+        let result = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
         assert_eq!(result.to_string(), "Result<i64, str>");
     }
 

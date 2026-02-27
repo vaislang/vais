@@ -1,7 +1,7 @@
 //! Contract helper utilities.
 
-use std::fmt::Write;
 use crate::CodeGenerator;
+use std::fmt::Write;
 
 impl CodeGenerator {
     pub(super) fn get_or_create_contract_string(&mut self, s: &str) -> String {
@@ -32,7 +32,6 @@ impl CodeGenerator {
 
         gep_expr
     }
-
 }
 
 /// Escape a string for LLVM IR constant

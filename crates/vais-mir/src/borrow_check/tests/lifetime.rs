@@ -1,8 +1,6 @@
-use crate::*;
 use crate::borrow_check::{check_body, BorrowError};
+use crate::*;
 use std::collections::HashMap;
-
-
 
 #[test]
 fn test_lifetime_single_ref_ok() {
@@ -58,7 +56,6 @@ fn test_lifetime_single_ref_ok() {
     let errors = check_body(&body);
     assert_eq!(errors.len(), 0, "Single lifetime ref should have no errors");
 }
-
 
 #[test]
 fn test_lifetime_multiple_refs_same_lifetime() {
@@ -147,7 +144,6 @@ fn test_lifetime_multiple_refs_same_lifetime() {
     );
 }
 
-
 #[test]
 fn test_lifetime_outlives_satisfied() {
     // lifetime_bounds: [('a, ['b'])], meaning 'a: 'b ('a outlives 'b).
@@ -223,7 +219,6 @@ fn test_lifetime_outlives_satisfied() {
     );
 }
 
-
 #[test]
 fn test_lifetime_elision_single_input() {
     // One ref parameter, return is ref. Elision rule: return lifetime = input lifetime.
@@ -279,7 +274,6 @@ fn test_lifetime_elision_single_input() {
         "Lifetime elision should work without errors"
     );
 }
-
 
 #[test]
 fn test_lifetime_violation_shorter_than_longer() {
@@ -344,7 +338,6 @@ fn test_lifetime_violation_shorter_than_longer() {
     // Valid bounds should not produce errors
     assert_eq!(errors.len(), 0, "Valid lifetime bounds should not error");
 }
-
 
 #[test]
 fn test_lifetime_violation_return_local() {
@@ -413,7 +406,6 @@ fn test_lifetime_violation_return_local() {
     );
 }
 
-
 #[test]
 fn test_lifetime_double_drop_with_lifetime_locals() {
     // Body with lifetime params, but using non-copy locals that get dropped twice.
@@ -464,4 +456,3 @@ fn test_lifetime_double_drop_with_lifetime_locals() {
         _ => panic!("Expected DoubleFree, got {:?}", errors[0]),
     }
 }
-

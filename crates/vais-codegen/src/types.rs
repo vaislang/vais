@@ -298,14 +298,12 @@ impl CodeGenerator {
                     _ => format!("{}*", self.type_to_llvm_impl(inner)?),
                 }
             }
-            ResolvedType::RefMut(inner) => {
-                match inner.as_ref() {
-                    ResolvedType::DynTrait { .. }
-                    | ResolvedType::Slice(_)
-                    | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
-                    _ => format!("{}*", self.type_to_llvm_impl(inner)?),
-                }
-            }
+            ResolvedType::RefMut(inner) => match inner.as_ref() {
+                ResolvedType::DynTrait { .. }
+                | ResolvedType::Slice(_)
+                | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                _ => format!("{}*", self.type_to_llvm_impl(inner)?),
+            },
             ResolvedType::Range(_inner) => {
                 // Range is represented as a struct: { i64 start, i64 end, i1 inclusive }
                 String::from("{ i64, i64, i1 }")
@@ -390,7 +388,7 @@ impl CodeGenerator {
             }
             ResolvedType::ImplTrait { .. } => {
                 return Err(crate::CodegenError::InternalError(
-                    "ImplTrait should be monomorphized before codegen".to_string()
+                    "ImplTrait should be monomorphized before codegen".to_string(),
                 ));
             }
             ResolvedType::FnPtr {
@@ -428,7 +426,7 @@ impl CodeGenerator {
             }
             ResolvedType::Lifetime(_) => {
                 return Err(crate::CodegenError::InternalError(
-                    "bare lifetime has no runtime representation".to_string()
+                    "bare lifetime has no runtime representation".to_string(),
                 ));
             }
             ResolvedType::Map(key, _val) => {
@@ -482,17 +480,17 @@ impl CodeGenerator {
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 return Err(crate::CodegenError::InternalError(
-                    "unresolved type variable reached codegen".to_string()
+                    "unresolved type variable reached codegen".to_string(),
                 ));
             }
             ResolvedType::Associated { .. } => {
                 return Err(crate::CodegenError::InternalError(
-                    "unresolved associated type in codegen".to_string()
+                    "unresolved associated type in codegen".to_string(),
                 ));
             }
             ResolvedType::HigherKinded { .. } => {
                 return Err(crate::CodegenError::InternalError(
-                    "unresolved higher-kinded type in codegen".to_string()
+                    "unresolved higher-kinded type in codegen".to_string(),
                 ));
             }
         })
@@ -1325,7 +1323,8 @@ mod sizeof_alignof_tests {
     #[test]
     fn test_type_to_llvm_ref_slice_fat_pointer() {
         let gen = CodeGenerator::new("test");
-        let slice_ref = ResolvedType::Ref(Box::new(ResolvedType::Slice(Box::new(ResolvedType::I64))));
+        let slice_ref =
+            ResolvedType::Ref(Box::new(ResolvedType::Slice(Box::new(ResolvedType::I64))));
         // &[T] should be a fat pointer { i8*, i64 }, not pointer-to-fat-pointer
         assert_eq!(gen.type_to_llvm(&slice_ref), "{ i8*, i64 }");
     }
@@ -1445,7 +1444,10 @@ mod sizeof_alignof_tests {
             fields: vec![
                 ("flag".to_string(), ResolvedType::Bool),
                 ("value".to_string(), ResolvedType::F64),
-                ("data".to_string(), ResolvedType::Pointer(Box::new(ResolvedType::I8))),
+                (
+                    "data".to_string(),
+                    ResolvedType::Pointer(Box::new(ResolvedType::I8)),
+                ),
             ],
             _repr_c: false,
             _invariants: vec![],
@@ -1463,9 +1465,21 @@ mod sizeof_alignof_tests {
         let info = EnumInfo {
             name: "Color".to_string(),
             variants: vec![
-                EnumVariantInfo { name: "Red".to_string(), _tag: 0, fields: EnumVariantFields::Unit },
-                EnumVariantInfo { name: "Green".to_string(), _tag: 1, fields: EnumVariantFields::Unit },
-                EnumVariantInfo { name: "Blue".to_string(), _tag: 2, fields: EnumVariantFields::Unit },
+                EnumVariantInfo {
+                    name: "Red".to_string(),
+                    _tag: 0,
+                    fields: EnumVariantFields::Unit,
+                },
+                EnumVariantInfo {
+                    name: "Green".to_string(),
+                    _tag: 1,
+                    fields: EnumVariantFields::Unit,
+                },
+                EnumVariantInfo {
+                    name: "Blue".to_string(),
+                    _tag: 2,
+                    fields: EnumVariantFields::Unit,
+                },
             ],
         };
         let def = gen.generate_enum_type("Color", &info);
@@ -1478,9 +1492,21 @@ mod sizeof_alignof_tests {
         let info = EnumInfo {
             name: "Value".to_string(),
             variants: vec![
-                EnumVariantInfo { name: "Int".to_string(), _tag: 0, fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]) },
-                EnumVariantInfo { name: "Float".to_string(), _tag: 1, fields: EnumVariantFields::Tuple(vec![ResolvedType::F64]) },
-                EnumVariantInfo { name: "None".to_string(), _tag: 2, fields: EnumVariantFields::Unit },
+                EnumVariantInfo {
+                    name: "Int".to_string(),
+                    _tag: 0,
+                    fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                },
+                EnumVariantInfo {
+                    name: "Float".to_string(),
+                    _tag: 1,
+                    fields: EnumVariantFields::Tuple(vec![ResolvedType::F64]),
+                },
+                EnumVariantInfo {
+                    name: "None".to_string(),
+                    _tag: 2,
+                    fields: EnumVariantFields::Unit,
+                },
             ],
         };
         let def = gen.generate_enum_type("Value", &info);

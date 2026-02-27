@@ -102,7 +102,8 @@ fn assert_exit_code(source: &str, expected: i32) {
 
     let exit_code = run_output.status.code().unwrap_or(-1);
     assert_eq!(
-        exit_code, expected,
+        exit_code,
+        expected,
         "Expected exit code {}, got {}.\nstdout: {}\nstderr: {}",
         expected,
         exit_code,

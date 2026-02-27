@@ -1,6 +1,6 @@
-use super::*;
 use super::extract::*;
 use super::html::html_escape;
+use super::*;
 
 use vais_parser::parse;
 

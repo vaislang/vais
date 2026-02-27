@@ -501,7 +501,10 @@ mod tests {
         let mut tutorial = Tutorial::with_progress_file(temp_file.path());
         let result = tutorial.goto_lesson(999, 0);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TutorialError::ChapterNotFound(999)));
+        assert!(matches!(
+            result.unwrap_err(),
+            TutorialError::ChapterNotFound(999)
+        ));
     }
 
     #[test]
@@ -510,7 +513,10 @@ mod tests {
         let mut tutorial = Tutorial::with_progress_file(temp_file.path());
         let result = tutorial.goto_lesson(0, 999);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TutorialError::LessonNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            TutorialError::LessonNotFound(_)
+        ));
     }
 
     #[test]
@@ -741,7 +747,11 @@ mod tests {
         let restored: Progress = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.current_chapter, 2);
         assert_eq!(restored.current_lesson, 3);
-        assert!(restored.completed_lessons.get("l1").copied().unwrap_or(false));
+        assert!(restored
+            .completed_lessons
+            .get("l1")
+            .copied()
+            .unwrap_or(false));
         assert_eq!(*restored.hints_used.get("l1").unwrap(), 2);
     }
 
@@ -845,9 +855,14 @@ mod tests {
             }],
             hints: vec![],
         };
-        let result = tutorial.validate_code("F main() -> i64 { R 0 }", &lesson).unwrap();
+        let result = tutorial
+            .validate_code("F main() -> i64 { R 0 }", &lesson)
+            .unwrap();
         assert!(!result.success);
-        assert!(result.errors.iter().any(|e| e.contains("should not compile")));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("should not compile")));
     }
 
     #[test]
@@ -877,7 +892,9 @@ mod tests {
             ],
             hints: vec![],
         };
-        let result = tutorial.validate_code("F main() -> i64 { R 0 }", &lesson).unwrap();
+        let result = tutorial
+            .validate_code("F main() -> i64 { R 0 }", &lesson)
+            .unwrap();
         assert!(result.success);
         assert_eq!(result.passed_tests, 2);
         assert_eq!(result.total_tests, 2);
@@ -898,7 +915,10 @@ mod tests {
         let tutorial = Tutorial::with_progress_file(temp_file.path());
         let result = tutorial.list_lessons(999);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TutorialError::ChapterNotFound(999)));
+        assert!(matches!(
+            result.unwrap_err(),
+            TutorialError::ChapterNotFound(999)
+        ));
     }
 
     #[test]

@@ -1,12 +1,15 @@
 //! Special expression types (try, unwrap, cast, assign, lambda, comptime, etc.)
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::comptime;
 use crate::types::{self, ResolvedType, TypeError, TypeResult, VariantFieldTypes};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
-    pub(crate) fn check_special_expr(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_special_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Try(inner) => {
                 let inner_type = match self.check_expr(inner) {

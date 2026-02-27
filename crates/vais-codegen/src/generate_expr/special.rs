@@ -40,10 +40,7 @@ impl CodeGenerator {
         // Sync value: wrap in an immediate Future state struct {i64 state, i64 result}
         let mut ir = inner_ir;
         let state_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i64 @malloc(i64 16)\n",
-            state_ptr
-        ));
+        ir.push_str(&format!("  {} = call i64 @malloc(i64 16)\n", state_ptr));
         let typed_ptr = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
@@ -62,7 +59,10 @@ impl CodeGenerator {
             "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
             result_field, typed_ptr
         ));
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", inner_val, result_field));
+        ir.push_str(&format!(
+            "  store i64 {}, i64* {}\n",
+            inner_val, result_field
+        ));
 
         self.needs_sync_spawn_poll = true;
         Ok((state_ptr, ir))
@@ -76,9 +76,9 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         // Evaluate at compile time
         let mut evaluator = vais_types::ComptimeEvaluator::new();
-        let value = evaluator.eval(body).map_err(|e| {
-            CodegenError::TypeError(format!("Comptime evaluation failed: {}", e))
-        })?;
+        let value = evaluator
+            .eval(body)
+            .map_err(|e| CodegenError::TypeError(format!("Comptime evaluation failed: {}", e)))?;
 
         // Return the evaluated constant
         match value {
@@ -119,7 +119,8 @@ impl CodeGenerator {
                         }
                         _ => {
                             return Err(CodegenError::TypeError(
-                                "Comptime arrays can only contain simple values (int, float, bool)".to_string()
+                                "Comptime arrays can only contain simple values (int, float, bool)"
+                                    .to_string(),
                             ));
                         }
                     }

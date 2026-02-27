@@ -628,8 +628,10 @@ pub(crate) fn cmd_build(
                             let is_main = **module_path == input_canonical;
 
                             // Create a fresh CodeGenerator for this module
-                            let mut codegen =
-                                vais_codegen::CodeGenerator::new_with_target(&module_stem, target.clone());
+                            let mut codegen = vais_codegen::CodeGenerator::new_with_target(
+                                &module_stem,
+                                target.clone(),
+                            );
                             codegen.set_resolved_functions(resolved_functions.clone());
                             codegen.set_type_aliases(resolved_type_aliases.clone());
                             codegen.set_string_prefix(&module_stem);

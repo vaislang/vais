@@ -1,11 +1,10 @@
 //! Termination proofs and decreases checks.
 
-use std::fmt::Write;
-use vais_ast::{Function, Spanned, Expr, IfElse};
 use crate::{CodeGenerator, CodegenResult};
+use std::fmt::Write;
+use vais_ast::{Expr, Function, IfElse, Spanned};
 
 impl CodeGenerator {
-
     /// Generate old() snapshots for ensures clauses
     ///
     /// Called at function entry to capture pre-state values for old() references.

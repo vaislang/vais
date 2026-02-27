@@ -1,8 +1,8 @@
 //! Control flow expression checking (if, loop, match, etc.)
 
-use vais_ast::*;
-use crate::TypeChecker;
 use crate::types::{ResolvedType, TypeResult};
+use crate::TypeChecker;
+use vais_ast::*;
 
 impl TypeChecker {
     /// Check if-else branch
@@ -37,7 +37,10 @@ impl TypeChecker {
     }
 
     /// Check control flow expressions
-    pub(crate) fn check_control_flow(&mut self, expr: &Spanned<Expr>) -> Option<TypeResult<ResolvedType>> {
+    pub(crate) fn check_control_flow(
+        &mut self,
+        expr: &Spanned<Expr>,
+    ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Ternary { cond, then, else_ } => {
                 let cond_type = match self.check_expr(cond) {
@@ -161,7 +164,10 @@ impl TypeChecker {
                 Some(Ok(ResolvedType::Unit))
             }
 
-            Expr::Match { expr: scrutinee, arms } => {
+            Expr::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 let expr_type = match self.check_expr(scrutinee) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),

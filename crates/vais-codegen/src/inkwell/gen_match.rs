@@ -530,12 +530,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         let lit_val = match_int.get_type().const_int(*n as u64, true);
                         let cmp = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                match_int,
-                                lit_val,
-                                "pat_eq",
-                            )
+                            .build_int_compare(IntPredicate::EQ, match_int, lit_val, "pat_eq")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         Ok(cmp)
                     }

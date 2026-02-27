@@ -304,7 +304,10 @@ impl DependencyGraph {
             }
             if scc.is_empty() {
                 // This should never happen if algorithm is correct, but be defensive
-                eprintln!("Warning: Tarjan SCC algorithm produced empty component for {:?}", file);
+                eprintln!(
+                    "Warning: Tarjan SCC algorithm produced empty component for {:?}",
+                    file
+                );
             }
             state.sccs.push(scc);
         }

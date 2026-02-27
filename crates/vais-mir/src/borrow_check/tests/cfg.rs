@@ -1,8 +1,6 @@
+use crate::borrow_check::{cfg_predecessors, cfg_successors, check_body, BorrowError};
 use crate::*;
-use crate::borrow_check::{check_body, BorrowError, cfg_successors, cfg_predecessors};
 use std::collections::HashMap;
-
-
 
 #[test]
 fn test_cfg_successors() {
@@ -91,7 +89,6 @@ fn test_cfg_successors() {
     assert_eq!(successors.get(&BasicBlockId(3)).unwrap().len(), 0);
 }
 
-
 #[test]
 fn test_cfg_predecessors() {
     // Use the same body as test_cfg_successors
@@ -174,7 +171,6 @@ fn test_cfg_predecessors() {
         .unwrap()
         .contains(&BasicBlockId(2)));
 }
-
 
 #[test]
 fn test_cfg_move_on_one_branch() {
@@ -268,7 +264,6 @@ fn test_cfg_move_on_one_branch() {
     }
 }
 
-
 #[test]
 fn test_cfg_loop_fixpoint() {
     // Test that loop analysis reaches fixpoint
@@ -352,7 +347,6 @@ fn test_cfg_loop_fixpoint() {
         "Loop analysis should reach fixpoint without errors"
     );
 }
-
 
 #[test]
 fn test_cfg_if_else_both_move() {
@@ -440,7 +434,6 @@ fn test_cfg_if_else_both_move() {
     );
 }
 
-
 #[test]
 fn test_cfg_if_else_use_after_partial_move() {
     // Move in then branch, not in else, then use at merge → error
@@ -522,7 +515,6 @@ fn test_cfg_if_else_use_after_partial_move() {
         _ => panic!("Expected UseAfterMove"),
     }
 }
-
 
 #[test]
 fn test_cfg_if_else_reassign_after_move() {
@@ -610,7 +602,6 @@ fn test_cfg_if_else_reassign_after_move() {
     );
 }
 
-
 #[test]
 fn test_cfg_if_else_drop_one_branch() {
     // Drop in then branch, not in else → merge considers Dropped → use → error
@@ -689,7 +680,6 @@ fn test_cfg_if_else_drop_one_branch() {
         _ => panic!("Expected UseAfterFree"),
     }
 }
-
 
 #[test]
 fn test_cfg_if_else_borrow_conflict_merge() {
@@ -795,7 +785,6 @@ fn test_cfg_if_else_borrow_conflict_merge() {
     }
 }
 
-
 #[test]
 fn test_cfg_diamond_no_error() {
     // Diamond CFG: each branch moves a different variable, merge uses remaining ones OK
@@ -890,7 +879,6 @@ fn test_cfg_diamond_no_error() {
     );
 }
 
-
 #[test]
 fn test_cfg_sequential_blocks() {
     // Sequential Goto chain: bb0 → bb1 → bb2, move in bb0, use in bb2 → error
@@ -960,7 +948,6 @@ fn test_cfg_sequential_blocks() {
         _ => panic!("Expected UseAfterMove"),
     }
 }
-
 
 #[test]
 fn test_cfg_loop_borrow_conflict() {
@@ -1055,7 +1042,6 @@ fn test_cfg_loop_borrow_conflict() {
     }
 }
 
-
 #[test]
 fn test_cfg_loop_reassign_ok() {
     // Loop: move x, reassign x → Owned at back-edge → next iteration move OK
@@ -1149,7 +1135,6 @@ fn test_cfg_loop_reassign_ok() {
     assert_eq!(errors.len(), 0, "Loop reassign after move should be OK");
 }
 
-
 #[test]
 fn test_cfg_unreachable_branch_no_error() {
     // SwitchInt → then (Goto merge), else (Unreachable) → merge use OK
@@ -1232,5 +1217,3 @@ fn test_cfg_unreachable_branch_no_error() {
 }
 
 // ======== NLL Tests ========
-
-

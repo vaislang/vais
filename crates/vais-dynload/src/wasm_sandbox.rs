@@ -658,8 +658,7 @@ mod tests {
 
     #[test]
     fn test_sandbox_config_with_limits() {
-        let config =
-            SandboxConfig::new().with_limits(ResourceLimits::restrictive());
+        let config = SandboxConfig::new().with_limits(ResourceLimits::restrictive());
         assert_eq!(config.limits.memory.max_bytes, 16 * 1024 * 1024);
     }
 
@@ -687,10 +686,14 @@ mod tests {
         let sandbox = WasmSandbox::with_config(config).unwrap();
 
         sandbox.grant_capability(PluginCapability::FsRead);
-        assert!(sandbox.host_registry.has_capability(&PluginCapability::FsRead));
+        assert!(sandbox
+            .host_registry
+            .has_capability(&PluginCapability::FsRead));
 
         sandbox.revoke_capability(&PluginCapability::FsRead);
-        assert!(!sandbox.host_registry.has_capability(&PluginCapability::FsRead));
+        assert!(!sandbox
+            .host_registry
+            .has_capability(&PluginCapability::FsRead));
     }
 
     #[test]
@@ -776,12 +779,8 @@ mod tests {
 
         // Load more modules than cache size
         for i in 0..7 {
-            let wat = format!(
-                r#"(module (func (export "f{i}") (result i32) i32.const {i}))"#
-            );
-            let _inst = sandbox
-                .load_plugin_wat(&wat, &format!("mod{i}"))
-                .unwrap();
+            let wat = format!(r#"(module (func (export "f{i}") (result i32) i32.const {i}))"#);
+            let _inst = sandbox.load_plugin_wat(&wat, &format!("mod{i}")).unwrap();
         }
 
         // Cache should be capped at config.cache_size (5)

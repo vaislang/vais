@@ -1,8 +1,8 @@
 use super::*;
+use crate::JitError;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use vais_ast::{Module as AstModule, *};
-use crate::JitError;
 
 /// Interpreter for Tier 0 execution.
 pub struct Interpreter {

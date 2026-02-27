@@ -1,13 +1,13 @@
 //! Top-level module and item definitions
 
-use crate::infrastructure::Spanned;
-use crate::function::Function;
 use crate::aggregate_types::{Enum, Struct, Union};
 use crate::aliases::{TraitAlias, TypeAlias};
-use crate::traits::{Impl, Trait};
-use crate::macros::MacroDef;
-use crate::extern_block::ExternBlock;
 use crate::constants::{ConstDef, GlobalDef};
+use crate::extern_block::ExternBlock;
+use crate::function::Function;
+use crate::infrastructure::Spanned;
+use crate::macros::MacroDef;
+use crate::traits::{Impl, Trait};
 
 /// Top-level module containing all program items.
 ///

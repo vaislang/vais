@@ -1,8 +1,8 @@
 //! Struct invariant checks.
 
+use crate::{CodeGenerator, CodegenResult};
 use std::fmt::Write;
 use vais_types::ResolvedType;
-use crate::{CodeGenerator, CodegenResult};
 
 impl CodeGenerator {
     /// Generate invariant checks for a struct type

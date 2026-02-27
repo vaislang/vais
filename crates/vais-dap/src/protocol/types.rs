@@ -676,7 +676,11 @@ mod tests {
 
     #[test]
     fn test_message_type_roundtrip() {
-        for msg_type in &[MessageType::Request, MessageType::Response, MessageType::Event] {
+        for msg_type in &[
+            MessageType::Request,
+            MessageType::Response,
+            MessageType::Event,
+        ] {
             let json = serde_json::to_string(msg_type).unwrap();
             let parsed: MessageType = serde_json::from_str(&json).unwrap();
             assert_eq!(&parsed, msg_type);

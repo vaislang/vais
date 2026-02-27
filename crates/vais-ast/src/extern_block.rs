@@ -1,8 +1,8 @@
 //! Extern block and extern function declarations
 
-use crate::infrastructure::{Attribute, Spanned};
 use crate::ast_types::Type;
 use crate::function::Param;
+use crate::infrastructure::{Attribute, Spanned};
 
 /// Extern block: `N "C" { declarations }`
 #[derive(Debug, Clone, PartialEq)]
