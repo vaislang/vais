@@ -472,7 +472,7 @@ impl Parser {
     ///
     /// # Returns
     ///
-    /// A tuple of (Module, Vec<ParseError>) containing the parsed module
+    /// A tuple of `(Module, Vec<ParseError>)` containing the parsed module
     /// and all errors encountered during parsing.
     pub fn parse_module_with_recovery(&mut self) -> (Module, Vec<ParseError>) {
         self.recovery_mode = true;
@@ -943,7 +943,7 @@ pub fn parse_with_cfg(
 ///
 /// # Returns
 ///
-/// A tuple of (Module, Vec<ParseError>) containing the parsed AST
+/// A tuple of `(Module, Vec<ParseError>)` containing the parsed AST
 /// (with Error nodes for problematic sections) and all collected errors.
 ///
 /// # Examples

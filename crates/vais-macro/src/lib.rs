@@ -6,7 +6,7 @@
 //! # Modules
 //!
 //! - [`expansion`]: AST-level macro expansion with hygienic naming
-//! - [`derive` module](derive): `#[derive(...)]` attribute macro framework
+//! - [`derive`](mod@derive): `#[derive(...)]` attribute macro framework
 //!
 //! # Example
 //!
