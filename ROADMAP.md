@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-27 (Phase 57 — 홈페이지/Docs/Playground 업데이트)
+> **최종 업데이트**: 2026-02-28 (Phase 58 완료 — tarpaulin→cargo-llvm-cov 전환, Phase 59~62 계획)
 
 ---
 
@@ -228,88 +228,137 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 55 | 코드 커버리지 개선 — 핵심 크레이트 | codegen 362→699(+337), types 214→412(+198), lsp 40→86(+46), dap 45→103(+58), registry 19→90(+71), 총 +644 단위 테스트, Clippy 0건 | 900 |
 | 56 | 코드 커버리지 개선 — 보조 크레이트 | gc 19→102(밀도32.4), dynload 120→209(밀도42.5), tutorial 63→120(밀도44.4), codegen-js 160→267(밀도43.1), 총 +698 테스트, llvm-cov 87.37%, Clippy 0건 | 900 |
 | 57 | 홈페이지/Docs/Playground 업데이트 | 수치 업데이트 (900 E2E, 5300+ tests, 29 crates, Phase 56), docs-site 경고 21→0건, playground 예제 수 정정, 23파일 +74/-49줄 | 900 |
+| 58 | Codecov 측정 인프라 최적화 | tarpaulin→cargo-llvm-cov 전환, codecov.yml ignore 동기화 (4 크레이트), 컴포넌트 타겟 상향 (project 75%, core 80%), scripts/coverage.sh+.cargo/config.toml 갱신 | 900 |
 
-### 잔여 기술 부채 (Phase 54 기준)
+### 잔여 기술 부채 (Phase 58 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
 | assert_compiles 4개 잔여 | codegen 근본 한계 | duplicate_fn(clang), struct-by-value(Text IR ABI), slice_len(call-site ABI), where_clause(TC E022) |
-| 코드 커버리지 87%+ (llvm-cov) | Phase 56에서 대폭 개선 | 4개 보조 크레이트 밀도 32~44, CI tarpaulin은 Linux 전용 |
+| Codecov (CI) | Phase 58: tarpaulin→cargo-llvm-cov 전환 완료, CI push 후 수치 확인 예정 | macOS llvm-cov 87.37%, Phase 59~62에서 100% 목표 |
 
 ---
 
 ## 📋 예정 작업
 
-### Phase 57: 홈페이지/Docs/Playground 업데이트
+### Phase 58: Codecov 측정 인프라 최적화 (57% → 70-75%)
 
-> **목표**: 오래된 수치 업데이트 + docs-site 경고 수정
-> 모드: 자동진행
+> **목표**: 코드 변경 없이 Codecov 수치를 정확하게 올리기 — 측정 도구 전환 + ignore 조정
+> **배경**: macOS llvm-cov 87.37% vs CI tarpaulin Codecov 57% 괴리의 근본 원인 해결
+> **전략**: (1) 제외 크레이트를 Codecov ignore에 동기화 (2) tarpaulin→cargo-llvm-cov 전환
+> **모드: 자동진행**
 
-- [x] 1. 홈페이지 수치 업데이트 — HTML + i18n 4개 파일 (Sonnet) ✅ 2026-02-27
-  변경: website/index.html, public/locales/{en,ko,ja,zh}.json (520→900 E2E, 2500→5300 total tests)
-- [x] 2. README.md 수치 업데이트 (Sonnet) ✅ 2026-02-27
-  변경: README.md (28+→29 crates, 4000→5300 tests, Phase 50→56)
-- [x] 3. Playground 문서 수치 업데이트 (Sonnet) ✅ 2026-02-27
-  변경: playground/{README,PROJECT_SUMMARY,IMPLEMENTATION_SUMMARY,TUTORIAL}.md (예제 13/18→31개)
-- [x] 4. Docs-site HTML 태그 경고 24건 수정 (Sonnet) ✅ 2026-02-27
-  변경: 10개 md파일에서 제네릭 문법 backtick 처리 (mdbook 경고 21→0건)
-- [x] 5. 검증 & 빌드 확인 ✅ 2026-02-27
-  변경: mdbook build 0 warnings, 전체 수치 일관성 확인
-진행률: 5/5 (100%)
+- [x] 1. codecov.yml ignore에 tarpaulin 제외 크레이트 동기화
+  대상: codecov.yml — crates/vais-python/**, crates/vais-node/**, crates/vais-dap/**, crates/vais-playground-server/** 추가
+  효과: 커버리지 0%인 크레이트가 분모에서 제거 → +5-8%
+- [x] 2. CI coverage job을 cargo-llvm-cov로 전환
+  대상: .github/workflows/ci.yml — tarpaulin→cargo-llvm-cov (taiki-e/install-action), llvm-tools-preview 컴포넌트
+  내용: cargo-llvm-cov 설치 → --workspace --exclude 4개 → lcov 출력 → Codecov 업로드
+  효과: subprocess fork 커버리지 손실 해소 → +10-15%
+- [x] 3. codecov.yml 컴포넌트 타겟 상향 조정
+  대상: codecov.yml — project 63→75%, patch 65→80%, core 70→80%, tooling 65→75%, advanced 60→70%, extensibility 58→68%, infrastructure 60→70%, services 65→75%
+  추가: vais-dap, vais-playground-server를 tooling/services 컴포넌트에서 제거 (ignore와 일치)
+- [x] 4. 로컬 검증: scripts/coverage.sh + .cargo/config.toml cargo-llvm-cov 전환
+  대상: scripts/coverage.sh (tarpaulin→llvm-cov), .cargo/config.toml alias (tarpaulin→llvm-cov)
+  효과: 로컬-CI 동일 도구 사용으로 재현성 확보
+- [ ] 5. CI push & Codecov 수치 확인
+  대상: git push → CI 실행 → Codecov 대시보드 확인
+  효과: 실제 Codecov 수치 70%+ 달성 검증
 
-### Phase 55: 코드 커버리지 개선 — 핵심 크레이트 테스트 강화
+### Phase 59: 저밀도 크레이트 테스트 강화 (70-75% → 82-85%)
 
-> **목표**: 전체 커버리지 63% → 70%+ (Codecov 기준)
-> **전략**: 테스트 밀도가 낮고 LOC 비중이 큰 크레이트 우선
+> **목표**: 테스트 밀도가 낮은 4개 크레이트에 단위 테스트 추가
+> **전략**: LOC 대비 테스트 0~15/1K인 크레이트 우선
 
-#### 크레이트별 현황 (테스트 밀도 = Tests / 1K LOC)
+- [ ] 1. vais-ast 단위 테스트 신규 추가 — 0→80+ tests (Sonnet)
+  대상: crates/vais-ast/src/ 전체 (3,318 LOC, 현재 0 tests)
+  내용: AST 노드 생성자, Display impl, Clone/PartialEq, 15개 서브모듈 커버
+  효과: +2-3%
+- [ ] 2. vaisc 단위 테스트 강화 — 188→400+ tests (Sonnet)
+  대상: crates/vaisc/src/ (19,695 LOC, 현재 밀도 9.5)
+  내용: registry/, incremental/, imports.rs, repl.rs, commands/ 모듈
+  효과: +3-5%
+- [ ] 3. vais-gpu 단위 테스트 강화 — 54→130+ tests (Sonnet)
+  대상: crates/vais-gpu/src/ (4,034 LOC, 현재 밀도 13.4)
+  내용: CUDA/Metal/OpenCL/WebGPU 백엔드 codegen 경로
+  효과: +1-2%
+- [ ] 4. vais-lsp + vais-hotreload 테스트 보강 (Sonnet)
+  대상: crates/vais-lsp/src/ (6,690 LOC), crates/vais-hotreload/src/ (911 LOC)
+  내용: LSP handler 엣지케이스 +80, hotreload 상태관리 +30
+  효과: +1-2%
+- [ ] 5. 검증: cargo test + Clippy 0건 + llvm-cov 측정 (Sonnet)
+  대상: 전체 워크스페이스
+  효과: 82-85% 달성 확인
 
-| 순위 | 크레이트 | LOC | Tests | 밀도 | 전체 비중 | 달성 |
-|------|----------|-----|-------|------|----------|------|
-| 1 | vais-codegen | 42,878 | 699 | 16.3 | 27.7% | ✅ 밀도 15+ |
-| 2 | vais-types | 18,978 | 412 | 21.7 | 12.3% | ✅ 밀도 20+ |
-| 3 | vais-dap | 7,086 | 103 | 14.5 | 4.6% | ✅ 밀도 15+ |
-| 4 | vais-lsp | 6,252 | 86 | 13.7 | 4.0% | ✅ 밀도 10+ |
-| 5 | vais-registry-server | 4,028 | 90 | 22.3 | 2.6% | ✅ 밀도 10+ |
+### Phase 60: 에러 경로 & 엣지 케이스 테스트 (85% → 90-93%)
 
-#### 세부 작업
+> **목표**: 커버리지에 잡히지 않는 에러/recovery/fallback 경로 테스트
+> **전략**: lcov.info에서 미커버 라인 분석 → 에러 경로 위주 테스트 추가
 
-- [x] 1. vais-codegen 단위 테스트 Part 1: inkwell 모듈 (Sonnet) ✅ 2026-02-25
-  변경: cross_compile.rs(+42), debug.rs(+38), parallel.rs(+21), types.rs(+85), abi.rs(+30), alias_analysis.rs(+27)
-- [x] 2. vais-codegen 단위 테스트 Part 2: expr/control_flow (Sonnet) ✅ 2026-02-25
-  변경: target.rs(+45), error.rs(+12), diagnostics.rs(+18)
-- [x] 3. vais-codegen 단위 테스트 Part 3: fn/module/builtins (Sonnet) ✅ 2026-02-25
-  변경: bounds_check_elim.rs(+28), auto_vectorize.rs(+53), data_layout.rs(+37) — 총 codegen +377 tests (362→699)
-- [x] 4. vais-types 단위 테스트 Part 1: inference/types/builtins (Sonnet) ✅ 2026-02-25
-  변경: inference/types/builtins 모듈 전반 (+118 tests, 173→291)
-- [x] 5. vais-types 단위 테스트 Part 2: checker (Sonnet) ✅ 2026-02-25
-  변경: checker_fn/checker_expr/checker_module/resolve/lookup/scope 모듈 전반
-- [x] 6. vais-lsp 테스트 추가 (Sonnet) ✅ 2026-02-25
-  변경: backend/handlers/symbol_analysis/hints/folding (+43 tests, 15→58)
-- [x] 7. vais-dap 테스트 추가 (Sonnet) ✅ 2026-02-25
-  변경: debugger/session/server/protocol (+35 tests, 35→70)
-- [x] 8. vais-registry-server 통합 테스트 (Sonnet) ✅ 2026-02-25
-  변경: db/handlers/models/config/storage (+71 tests, 2→73)
-- [x] 9. 커버리지 측정 & 검증 ✅ 2026-02-25
-  변경: 전체 lib 테스트 통과, Clippy 0건
-진행률: 9/9 (100%)
+- [ ] 1. codegen 에러 경로 테스트 추가 (Sonnet)
+  대상: crates/vais-codegen/src/ — ICE, InternalError, Unsupported 분기
+  내용: 의도적 잘못된 입력으로 에러 경로 실행, +100-150 tests
+  효과: +2-3%
+- [ ] 2. parser recovery 경로 테스트 추가 (Sonnet)
+  대상: crates/vais-parser/src/ — 구문 에러 복구, unexpected token 처리
+  내용: 불완전/잘못된 소스에 대한 파서 에러 복구 테스트, +50-80 tests
+  효과: +1-2%
+- [ ] 3. type checker 에러 경로 테스트 추가 (Sonnet)
+  대상: crates/vais-types/src/ — 타입 불일치, 미해결 변수, 순환 타입 등
+  내용: 다양한 타입 에러 시나리오, +80-100 tests
+  효과: +1-2%
+- [ ] 4. vais-dap 커버리지 재포함 + async 테스트 보강 (Sonnet)
+  대상: tarpaulin.toml에서 vais-dap 제외 해제, codecov.yml ignore에서 제거
+  내용: tokio::test 기반 async 테스트 +60-80, 디버거 프로토콜 경로
+  효과: +2-3%
+- [ ] 5. 검증: cargo test + llvm-cov 90%+ 확인 (Sonnet)
+  대상: 전체 워크스페이스
+  효과: 90-93% 달성 확인
 
-### Phase 56: 코드 커버리지 개선 — 보조 크레이트 테스트 강화
+### Phase 61: Dead Code 제거 & 커버리지 제외 정리 (93% → 95-97%)
 
-> **목표**: 전체 커버리지 70% → 75%+
-> 모드: 자동진행
+> **목표**: 측정 불가/불필요 코드 정리로 커버리지 분모 축소
+> **전략**: dead code 삭제, unreachable 경로 #[cfg(not(tarpaulin_include))] 표시, OS별 분기 정리
 
-- [x] 1. vais-gc 테스트 보강 (밀도 16.2 → 25+) ✅ 2026-02-26
-  변경: gc.rs(+313), concurrent.rs(+195), generational.rs(+142), lib.rs(+28) — 102 tests, 밀도 32.4
-- [x] 2. vais-dynload 테스트 보강 (밀도 24.5 → 35+) ✅ 2026-02-26
-  변경: error.rs, host_functions.rs, manifest.rs, module_loader.rs, plugin_discovery.rs, resource_limits.rs, wasm_sandbox.rs — 209 tests, 밀도 42.5
-- [x] 3. vais-tutorial 테스트 보강 (밀도 23.5 → 35+) ✅ 2026-02-26
-  변경: lessons.rs(+218), lib.rs(+625), runner.rs(+66) — 120 tests, 밀도 44.4
-- [x] 4. vais-codegen-js 테스트 보강 (밀도 25.8 → 35+) ✅ 2026-02-26
-  변경: expr.rs, items.rs, lib.rs, modules.rs, sourcemap.rs, stmt.rs, tree_shaking.rs, types.rs — 267 tests, 밀도 43.1
-- [x] 5. tarpaulin 실행 & 전체 커버리지 측정 검증 ✅ 2026-02-26
-  변경: cargo llvm-cov 기준 Line 87.37% (macOS에서 tarpaulin 미지원 → llvm-cov 대체), tarpaulin.toml timeout 형식 수정
-진행률: 5/5 (100%)
+- [ ] 1. dead code 탐색 & 제거 (Sonnet)
+  대상: 전체 워크스페이스 — #[allow(dead_code)] 검토, 실제 미사용 함수/구조체 삭제
+  내용: cargo clippy + 수동 검토, 미사용 pub 함수 축소
+  효과: +1-2% (분모 축소)
+- [ ] 2. unreachable/panic 경로에 커버리지 제외 어트리뷰트 추가 (Sonnet)
+  대상: unreachable!(), panic!(), todo!() 포함 함수에 #[cfg_attr(coverage, no_coverage)] 또는 인라인 제외
+  내용: 의도적으로 도달 불가한 방어 코드 식별 & 제외 마킹
+  효과: +1-2%
+- [ ] 3. #[cfg(target_os)] 분기 정리 (Haiku)
+  대상: OS별 조건부 컴파일 코드 — windows/linux/macos 분기
+  내용: CI가 Ubuntu 단일 OS이므로, 다른 OS 전용 코드를 codecov ignore에 추가하거나 조건부 제외
+  효과: +0.5-1%
+- [ ] 4. 검증: cargo test + Clippy 0건 + llvm-cov 95%+ 확인 (Sonnet)
+  대상: 전체 워크스페이스
+  효과: 95-97% 달성 확인
+
+### Phase 62: Codecov 100% 도전 — 최종 갭 해소 (97% → 99-100%)
+
+> **목표**: 남은 3-5% 갭을 해소하여 Codecov 100% 근접
+> **전략**: lcov 미커버 라인 전수 분석 → 개별 대응
+
+- [ ] 1. lcov.info 미커버 라인 전수 분석 (Sonnet)
+  대상: target/coverage/lcov.info 파싱 → 미커버 라인 목록화
+  내용: 파일별/함수별 미커버 라인 집계, 카테고리 분류 (에러/분기/초기화/FFI)
+  효과: 남은 갭의 정확한 원인 파악
+- [ ] 2. 분류별 잔여 테스트 추가 (Sonnet)
+  대상: 미커버 분석 결과 기반 — 테스트 가능한 경로에 대해 테스트 추가
+  내용: 초기화 코드, 드문 분기, 복합 조건 등
+  효과: +1-2%
+- [ ] 3. FFI/외부 의존성 경로 mock 테스트 (Sonnet)
+  대상: LLVM FFI, 파일 I/O, 네트워크 경로
+  내용: mock/stub으로 외부 의존성 경로 커버
+  효과: +0.5-1%
+- [ ] 4. 최종 검증 & Codecov 대시보드 확인 (Sonnet)
+  대상: CI push → Codecov 99%+ 확인
+  효과: 최종 달성률 확정
+- [ ] 5. ROADMAP/README 수치 업데이트 (Haiku)
+  대상: ROADMAP.md, README.md, docs-site, website
+  효과: 커버리지 달성 수치 반영
 
 ---
 

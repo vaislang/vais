@@ -283,6 +283,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - name: Install LLVM 17
         run: |
@@ -292,8 +294,8 @@ jobs:
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -308,41 +310,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-coverage-
 
-      - name: Generate coverage reports
-        # Use LLVM engine instead of ptrace (default on Linux).
-        # ptrace causes segfaults with: subprocess spawning, large codegen,
-        # and cumulative memory pressure across many test binaries.
-        # LLVM source-based coverage avoids ptrace entirely.
-        #
-        # Note: --engine llvm cannot collect coverage from tests with non-zero
-        # exit codes or fork() calls. Tests spawning subprocesses (e2e,
-        # execution_tests, etc.) may show lower coverage for the subprocess
-        # portion, but the test harness and compiler pipeline are covered.
+      - name: Generate coverage reports (lcov)
+        # cargo-llvm-cov uses LLVM source-based coverage instrumentation.
+        # Unlike tarpaulin (ptrace/LLVM engine), it:
+        #   - Natively instruments via rustc -C instrument-coverage
+        #   - No subprocess/fork coverage loss
+        #   - Consistent results across Linux/macOS
+        # Excluded crates match tarpaulin.toml: python, node, dap, playground-server
         run: |
-          cargo tarpaulin \
+          cargo llvm-cov \
             --workspace \
-            --engine llvm \
             --exclude vais-python \
             --exclude vais-node \
             --exclude vais-dap \
             --exclude vais-playground-server \
-            --timeout 300 \
-            --out Html --out Lcov --out Json \
-            --output-dir target/coverage
+            --lcov \
+            --output-path target/coverage/lcov.info
         continue-on-error: true
 
-      - name: Check coverage threshold
+      - name: Generate coverage summary
         run: |
-          if [ -f target/coverage/tarpaulin-report.json ]; then
-            COVERAGE=$(python3 -c "
-          import json
-          with open('target/coverage/tarpaulin-report.json') as f:
-              data = json.load(f)
-          covered = sum(1 for f in data.get('files', []) for l in f.get('traces', []) if l.get('stats', {}).get('Line', 0) > 0)
-          total = sum(1 for f in data.get('files', []) for l in f.get('traces', []))
-          print(f'{covered}/{total} = {covered*100/total:.1f}%' if total > 0 else '0/0 = 0%')
-          ")
-            echo "Coverage: $COVERAGE"
+          if [ -f target/coverage/lcov.info ]; then
+            LINES=$(grep -c "^DA:" target/coverage/lcov.info 2>/dev/null || echo 0)
+            COVERED=$(grep "^DA:" target/coverage/lcov.info 2>/dev/null | grep -cv ",0$" || echo 0)
+            if [ "$LINES" -gt 0 ]; then
+              PCT=$(python3 -c "print(f'{$COVERED * 100 / $LINES:.1f}')")
+              echo "Coverage: $COVERED/$LINES = ${PCT}%"
+            else
+              echo "Coverage: no data"
+            fi
+          else
+            echo "Coverage: lcov.info not found"
           fi
         continue-on-error: true
 

@@ -10,13 +10,13 @@ coverage:
   status:
     project:
       default:
-        target: 63%
+        target: 75%
         threshold: 2%
         if_ci_failed: error
 
     patch:
       default:
-        target: 65%
+        target: 80%
         threshold: 3%
 
     changes:
@@ -32,12 +32,18 @@ comment:
   require_head: true
 
 # Ignore paths from coverage
+# Excludes match tarpaulin.toml exclude list — crates with 0% coverage
+# that inflate the denominator if included
 ignore:
   - "benches/**/*"
   - "examples/**/*"
   - "tests/**/*"
   - "target/**/*"
   - "scripts/**/*"
+  - "crates/vais-python/**"
+  - "crates/vais-node/**"
+  - "crates/vais-dap/**"
+  - "crates/vais-playground-server/**"
 
 # Flag configuration for different test types
 flags:
@@ -51,7 +57,7 @@ component_management:
   default_rules:
     statuses:
       - type: project
-        target: 63%
+        target: 75%
   individual_components:
     # Core compiler components
     - component_id: core
@@ -66,20 +72,19 @@ component_management:
         - crates/vais-mir/**
       statuses:
         - type: project
-          target: 70%
+          target: 80%
 
     # Language tooling
     - component_id: tooling
       name: Language Tooling
       paths:
         - crates/vais-lsp/**
-        - crates/vais-dap/**
         - crates/vaisc/**
         - crates/vais-bindgen/**
         - crates/vais-macro/**
       statuses:
         - type: project
-          target: 65%
+          target: 75%
 
     # Runtime & advanced features
     - component_id: advanced
@@ -91,7 +96,7 @@ component_management:
         - crates/vais-query/**
       statuses:
         - type: project
-          target: 60%
+          target: 70%
 
     # Plugin & dynamic loading
     - component_id: extensibility
@@ -102,7 +107,7 @@ component_management:
         - crates/vais-hotreload/**
       statuses:
         - type: project
-          target: 58%
+          target: 68%
 
     # Infrastructure & ecosystem
     - component_id: infrastructure
@@ -115,14 +120,13 @@ component_management:
         - crates/vais-testgen/**
       statuses:
         - type: project
-          target: 60%
+          target: 70%
 
-    # Ecosystem services
+    # Ecosystem services (playground-server excluded from coverage measurement)
     - component_id: services
       name: Ecosystem Services
       paths:
         - crates/vais-registry-server/**
-        - crates/vais-playground-server/**
       statuses:
         - type: project
-          target: 65%
+          target: 75%
