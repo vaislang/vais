@@ -315,6 +315,7 @@ jobs:
             --exclude vais-python \
             --exclude vais-node \
             --exclude vais-dap \
+            --lib \
             --timeout 300 \
             --out Html --out Lcov --out Json \
             --output-dir target/coverage
