@@ -314,6 +314,7 @@ jobs:
             --workspace \
             --exclude vais-python \
             --exclude vais-node \
+            --exclude vais-dap \
             --timeout 300 \
             --out Html --out Lcov --out Json \
             --output-dir target/coverage
