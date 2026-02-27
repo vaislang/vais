@@ -318,6 +318,7 @@ jobs:
         #   - Consistent results across Linux/macOS
         # Excluded crates match tarpaulin.toml: python, node, dap, playground-server
         run: |
+          mkdir -p target/coverage
           cargo llvm-cov \
             --workspace \
             --exclude vais-python \
