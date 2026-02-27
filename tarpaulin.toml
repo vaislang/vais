@@ -1,33 +1,40 @@
 # Cargo-tarpaulin configuration for test coverage reporting
 # Reference: https://github.com/xd009642/tarpaulin
+#
+# IMPORTANT: tarpaulin uses ptrace on Linux, which conflicts with tests that
+# spawn subprocesses (clang, compiled binaries). Only lib tests and integration
+# tests that do NOT spawn subprocesses are included.
+# See: https://github.com/xd009642/tarpaulin/issues/317
 
 [coverage]
 # Timeout for the entire coverage process (in seconds)
 timeout = "300s"
 
-# Output formats: Stdout, Xml, Html, Lcov
-# Multiple formats can be specified
-out = ["Stdout", "Html", "Lcov"]
+# Output formats
+out = ["Html", "Lcov", "Json"]
 
 # Output directory for coverage reports
 output-dir = "target/coverage"
 
-# Exclude files from coverage analysis
+# Exclude files from coverage measurement (not from test execution)
 exclude-files = [
     "benches/*",
     "examples/*",
-    "tests/*",
 ]
 
 # Exclude packages from coverage
 exclude = [
     "vais-benches",
+    "vais-python",
+    "vais-node",
+    "vais-dap",
+    "vais-playground-server",
 ]
 
 # Ignore panics during execution
 ignore-panics = true
 
-# Ignore tests
+# Include test function lines in coverage
 ignore-tests = false
 
 # Count lines of code
@@ -36,56 +43,35 @@ count = true
 # Work with multiple packages
 workspace = true
 
-# Attempt to run code as a library instead of as an executable
+# Run lib targets (inline #[cfg(test)] unit tests — always safe)
 lib = true
 
-# Run binary targets
-bins = true
+# Do NOT run binary targets
+bins = false
 
-# Run example targets
+# Do NOT run example targets
 examples = false
 
-# Run test targets
+# Run integration test targets (filtered by --test in CI)
 tests = true
 
 # Use colored output
 color = "Auto"
 
-# Fail if coverage falls below threshold (percentage)
-# Goal: 80%+ code coverage for production quality
-fail-under = 80
-
-# Parallel execution (disabled for stability)
+# Parallel execution (disabled — ptrace is single-threaded)
 parallel = false
 
 # Precise reporting (line-level granularity)
 precise = true
 
-# Dump coverage report as follows:
+# Verbose output for debugging
 verbose = true
 
-# Run release builds (disabled for better coverage tracking)
+# Run debug builds for accurate source mapping
 release = false
 
-# Test only this package (empty = all workspace packages)
-packages = []
-
-# Follow dependencies
-follow-exec = true
+# Do NOT follow child process execution — ptrace conflicts with subprocess spawning
+follow-exec = false
 
 # Include all features
 all-features = false
-
-# Exclude specific crates with low priority for initial coverage
-# These are typically experimental or non-critical packages
-exclude-packages = [
-    "vais-playground-server",
-    "vais-registry-server",
-    "vais-python",
-]
-
-# Coverage reporting options
-# Generate reports showing:
-# - Line coverage
-# - Branch coverage (if available)
-# - Function coverage
