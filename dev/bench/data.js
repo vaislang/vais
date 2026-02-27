@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772203858354,
+  "lastUpdate": 1772205364849,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -27887,6 +27887,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1850747,
             "range": "± 17112",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "4c717af9294380298dbca404640586d22adb77c0",
+          "message": "fix(ci): tarpaulin RCA — ptrace→LLVM engine 전환으로 segfault 근본 해결\n\n근본 원인 분석 (RCA):\n- ptrace 엔진(Linux 기본)이 3가지 모드로 segfault 유발:\n  1. Subprocess spawn (clang, 바이너리 실행)\n  2. 대형 codegen (selfhost 50K+ LOC → 계측 포인트 폭증)\n  3. 누적 메모리 압박 (다수 test binary 연속 실행)\n- --lib + safe test 선별로도 해결 불가 (vais-security integration_tests에서 재발)\n\n해결: --engine llvm (LLVM source-based coverage)\n- ptrace 대신 컴파일 시 계측 삽입 → subprocess/메모리 충돌 없음\n- Mac/Windows에서는 이미 기본 엔진\n- 모든 test target 실행 가능 (--lib/--test 제한 제거)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-28T00:08:40+09:00",
+          "tree_id": "c1885a420a38344753c413995ba02e0a5df73f6a",
+          "url": "https://github.com/vaislang/vais/commit/4c717af9294380298dbca404640586d22adb77c0"
+        },
+        "date": 1772205364500,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2408,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5393,
+            "range": "± 39",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6117,
+            "range": "± 179",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11197,
+            "range": "± 135",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17893,
+            "range": "± 48",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33967,
+            "range": "± 262",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30115,
+            "range": "± 490",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66391,
+            "range": "± 360",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 301627,
+            "range": "± 12394",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 453161,
+            "range": "± 1655",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 116262,
+            "range": "± 8133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 772056,
+            "range": "± 2728",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 172527,
+            "range": "± 1749",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 200827,
+            "range": "± 1296",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 208218,
+            "range": "± 1102",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 254799,
+            "range": "± 1804",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 543219,
+            "range": "± 2706",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 753161,
+            "range": "± 3197",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 418743,
+            "range": "± 13201",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1182775,
+            "range": "± 30008",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38669,
+            "range": "± 443",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 197541,
+            "range": "± 1756",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 379745,
+            "range": "± 2342",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1830171,
+            "range": "± 18613",
             "unit": "ns/iter"
           }
         ]
