@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-28 (Phase 63 — 버전 체계 리셋 0.0.5, Codecov 68.7%)
+> **최종 업데이트**: 2026-02-28 (Phase 65 — Pre-existing 실패 전수 확인, E2E 900 0-fail)
 
 ---
 
@@ -235,9 +235,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 60 | 에러 경로 & 엣지 케이스 테스트 | +395 테스트 (codegen 117, parser 94, types 106, dap 78), vais-dap ignore 해제, Clippy 0건 | 900 |
 | 61 | Dead Code 제거 & 커버리지 제외 정리 | -208줄 dead code 삭제, codecov.yml ignore 확장 (tutorial/selfhost/std/docs/playground), CI exclude 동기화, Phase 60 테스트 11건 수정 | 900 |
 | 62 | Codecov 갭 해소 — 커버리지 테스트 강화 | +390 테스트 7파일 (types: comptime 96, effects 53, substitute 48, mangle 49, resolved 58, parser: coverage 46, macro 40), types 80%, parser 77%, 전체 68.7% | 900 |
-| 63 | 버전 체계 리셋 & 릴리스 | 1.0.0→0.0.5 프리릴리스 전환, 버전 정책 수립 (문법 확정 시 v1.0.0), Codecov 100% 비현실성 문서화 | 900 |
+| 63 | 버전 체계 리셋 | 1.0.0→0.0.5 프리릴리스 전환, 버전 정책 수립 (문법 확정 시 v1.0.0), Codecov 100% 비현실성 문서화 | 900 |
+| 64 | EBNF 공식 문법 스펙 | docs/grammar/vais.ebnf (154 rules), grammar_coverage 223개 + roundtrip 10개 테스트, LANGUAGE_SPEC 교체 | 900 |
+| 65 | Pre-existing E2E 실패 검증 | 14개 E2E + 3개 codegen 실패 — 이전 Phase(43,44,50,51)에서 전수 수정 완료 확인, 코드 변경 불필요 | 900 |
 
-### 잔여 기술 부채 (Phase 63 기준)
+### 잔여 기술 부채 (Phase 65 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -343,47 +345,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 63: v0.0.5 릴리스 — 버전 체계 리셋 & 선택적 import (진행 중)
-
-> **목표**: 버전 체계를 0.x.x 프리릴리스로 리셋. v1.0.0 이후 377개 커밋 반영한 v0.0.5 릴리스.
-> **배경**: 언어 문법이 아직 진화 중이므로 정식 v1.0.0은 문법 확정 후 배포. 기존 v1.0.0은 v1.0.0-alpha로 간주.
-> **주요 변경**: 선택적 import(`U module.{A,B}`), 900+ E2E, 68.7% 커버리지, 135+ 코드젠 건전성 수정.
-> **모드: 자동진행**
-
-- [x] 1. 버전 다운그레이드 — Cargo.toml, README, CHANGELOG, RELEASE_NOTES (Opus)
-- [x] 2. ROADMAP 버전 정책 문서화 — 0.x.x 프리릴리스 체계, Codecov 현실적 목표 (Opus)
-- [ ] 3. cargo build --release & 로컬 설치 — /opt/homebrew/bin/vaisc 교체 (Opus)
-- [ ] 4. VaisDB 빌드 테스트 — vaisc build src/main.vais 파서 에러 0 확인 (Opus)
-- [ ] 5. git tag v0.0.5 & GitHub Release (Opus)
-진행률: 2/5 (40%)
-
----
-
-### Phase 64: EBNF 공식 문법 스펙 + 자동 검증 시스템 (2026-02-28) ✅
-
-- [x] 1. EBNF 공식 문법 작성 — docs/grammar/vais.ebnf (637줄, 18섹션, 154 production rules) (Opus)
-  변경: docs/grammar/vais.ebnf, docs/grammar/README.md (EBNF + 10개 모호성 해결 규칙)
-- [x] 2. Grammar Coverage 테스트 — 223개 테스트, 모든 production rule alternative 커버 (Opus)
-  변경: crates/vais-parser/tests/grammar_coverage_tests.rs (1,769줄)
-- [x] 3. Round-Trip 일관성 테스트 — 10개 테스트, 결정적 파싱 + 구문 거부 (Opus)
-  변경: crates/vais-parser/tests/grammar_roundtrip_tests.rs (314줄)
-- [x] 4. LANGUAGE_SPEC.md Grammar Summary 교체 + 검증 (Opus)
-  변경: docs/LANGUAGE_SPEC.md (Grammar Summary → EBNF 참조로 교체)
-진행률: 4/4 (100%)
-
----
-
-### Phase 65: Pre-existing E2E 실패 수정 — 14개 E2E + 3개 Codegen 📋
+### Phase 65: Pre-existing E2E 실패 수정 — 14개 E2E + 3개 Codegen ✅
 
 > **목표**: 14개 pre-existing E2E 실패 + 3개 codegen 테스트 실패 해결
-> **근거**: 분석 결과 slice_len, result_*, try_operator_*, higher_order_fn 등 핵심 기능 테스트 실패 중
-> **우선순위**: 높음 — 기본 언어 기능의 정확성 보장
+> **결과**: 이전 Phase(43, 44, 50, 51)에서 이미 전수 수정 완료 — 코드 변경 불필요
 
-- [ ] 1. Slice 관련 수정 — slice_len, slice_mut_len, slice_literal_fat_pointer codegen (Opus)
-- [ ] 2. Result/Option 수정 — 5개 result_* 테스트 + 2개 try_operator_* 테스트 (Opus)
-- [ ] 3. 기타 E2E 수정 — typed_memory_vec, error_ensure_pattern, datetime_duration, higher_order_fn (Opus)
-- [ ] 4. Codegen 테스트 수정 — test_no_code_for_generic_template + test_slice_len_codegen (Opus)
-- [ ] 5. 검증 — 전체 E2E 0 failure, Codegen 0 failure (Opus)
+- [x] 1. Slice 관련 — slice_len, slice_mut_len, slice_literal_fat_pointer ✅ 2026-02-28
+  변경: 없음 (Phase 50에서 수정 완료 — extractvalue fat pointer, generate_slice 디스패치)
+- [x] 2. Result/Option — 5개 result_* + 2개 try_operator_* ✅ 2026-02-28
+  변경: 없음 (Phase 43에서 수정 완료 — Try phi node, struct/enum load)
+- [x] 3. 기타 E2E — typed_memory_vec, error_ensure_pattern, datetime_duration, higher_order_fn ✅ 2026-02-28
+  변경: 없음 (Phase 43, 50에서 수정 완료 — higher_order_fn generic template, method call 리턴타입)
+- [x] 4. Codegen 테스트 — test_no_code_for_generic_template + test_slice_len_codegen ✅ 2026-02-28
+  변경: 없음 (Phase 43, 50에서 수정 완료)
+- [x] 5. 검증 — E2E 900 passed (0 fail), Codegen 858 passed (0 fail), Clippy 0건 ✅ 2026-02-28
 
 ---
 
@@ -466,6 +441,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [ ] 3. Transitive instantiation — 제네릭 함수 → 제네릭 함수 호출 시 인스턴스 수집 (Opus)
 - [ ] 4. 테스트 — 각 기능별 E2E 테스트 추가 (Sonnet)
 - [ ] 5. 검증 — 전체 테스트 통과, InternalError 경로 감소 (Opus)
+
+---
+
+### Phase 72: v0.0.5 릴리스 — 빌드 & 배포 📋
+
+> **목표**: 모든 코드 변경 완료 후 v0.0.5 릴리스 배포
+> **배경**: Phase 63에서 버전 다운그레이드(Cargo.toml, README, CHANGELOG) + 버전 정책 문서화 완료. 나머지 빌드/테스트/태깅 작업.
+> **선행 조건**: Phase 65~71 코드 작업 완료 후 진행
+
+- [ ] 1. cargo build --release & 로컬 설치 — /opt/homebrew/bin/vaisc 교체 (Opus)
+- [ ] 2. VaisDB 빌드 테스트 — vaisc build src/main.vais 파서 에러 0 확인 (Opus)
+- [ ] 3. git tag v0.0.5 & GitHub Release (Opus)
 
 ---
 
