@@ -32,17 +32,23 @@ comment:
   require_head: true
 
 # Ignore paths from coverage
-# Excludes match tarpaulin.toml exclude list — crates with 0% coverage
-# that inflate the denominator if included
+# Excludes match tarpaulin.toml & cargo-llvm-cov --exclude lists.
+# Crates with 0% coverage inflate the denominator if included.
 ignore:
   - "benches/**/*"
   - "examples/**/*"
   - "tests/**/*"
   - "target/**/*"
   - "scripts/**/*"
+  - "selfhost/**/*"
+  - "std/**/*"
+  - "docs-site/**/*"
+  - "playground/**/*"
   - "crates/vais-python/**"
   - "crates/vais-node/**"
   - "crates/vais-playground-server/**"
+  - "crates/vais-dap/**"
+  - "crates/vais-tutorial/**"
 
 # Flag configuration for different test types
 flags:

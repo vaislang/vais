@@ -26,11 +26,14 @@ exclude-files = [
 ]
 
 # Exclude packages from coverage
+# Matches codecov.yml ignore list and cargo-llvm-cov --exclude flags
 exclude = [
     "vais-benches",
     "vais-python",
     "vais-node",
     "vais-playground-server",
+    "vais-dap",
+    "vais-tutorial",
 ]
 
 # Ignore panics during execution

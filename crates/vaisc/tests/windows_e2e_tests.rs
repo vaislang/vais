@@ -101,22 +101,6 @@ fn assert_exit_code(source: &str, expected: i32) {
     }
 }
 
-/// Assert that IR contains expected string (currently unused but kept for future tests)
-#[allow(dead_code)]
-fn assert_ir_contains(source: &str, expected: &str) {
-    match compile_to_ir(source) {
-        Ok(ir) => {
-            assert!(
-                ir.contains(expected),
-                "Expected IR to contain {:?}, but it didn't.\nGenerated IR:\n{}",
-                expected,
-                ir
-            );
-        }
-        Err(e) => panic!("Compilation failed: {}", e),
-    }
-}
-
 // ==================== 1. Windows Path Separator Handling ====================
 
 #[test]

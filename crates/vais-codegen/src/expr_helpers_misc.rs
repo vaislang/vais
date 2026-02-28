@@ -8,34 +8,6 @@ use vais_ast::{Expr, Param, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    /// Extract the poll function name from an expression AST node (static analysis).
-    /// Used for direct await codegen. For Let bindings that involve Spawn,
-    /// prefer resolve_poll_func_name which can check is_async on the inner call.
-    #[allow(dead_code)]
-    pub(crate) fn extract_poll_func_name_from_expr(expr: &Expr) -> Option<String> {
-        match expr {
-            Expr::Call { func, .. } => {
-                if let Expr::Ident(name) = &func.node {
-                    Some(format!("{}__poll", name))
-                } else {
-                    None
-                }
-            }
-            Expr::MethodCall { method, .. } => Some(format!("{}__poll", method.node)),
-            Expr::Spawn(_) => {
-                // Spawn requires runtime is_async check (via self.types.functions),
-                // which static analysis cannot provide. Return None here;
-                // callers with &self access should use resolve_poll_func_name instead.
-                None
-            }
-            Expr::SelfCall => {
-                // @ operator — self-recursion calls the current function
-                None // caller must resolve from current_async_function
-            }
-            _ => None,
-        }
-    }
-
     /// Resolve the poll function name for an await expression, using `self` to
     /// check whether the called function is actually async. This is critical for
     /// Spawn expressions: if the inner call targets a non-async function, Spawn

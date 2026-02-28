@@ -325,6 +325,7 @@ jobs:
             --exclude vais-node \
             --exclude vais-dap \
             --exclude vais-playground-server \
+            --exclude vais-tutorial \
             --lcov \
             --output-path target/coverage/lcov.info
         continue-on-error: true

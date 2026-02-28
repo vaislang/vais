@@ -354,65 +354,6 @@ impl Parser {
         skipped
     }
 
-    /// Synchronize to the next expression boundary for error recovery.
-    /// Skips tokens until an expression delimiter is found.
-    /// Returns the list of skipped tokens (as strings for debugging).
-    ///
-    /// Reserved for IDE/LSP error recovery mode.
-    #[allow(dead_code)]
-    fn synchronize_expression(&mut self) -> Vec<String> {
-        let mut skipped = Vec::new();
-        let mut brace_depth = 0;
-        let mut paren_depth = 0;
-        let mut bracket_depth = 0;
-
-        while !self.is_at_end() {
-            if let Some(tok) = self.peek() {
-                match &tok.token {
-                    // Track nesting
-                    Token::LBrace => brace_depth += 1,
-                    Token::RBrace => {
-                        if brace_depth > 0 {
-                            brace_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LParen => paren_depth += 1,
-                    Token::RParen => {
-                        if paren_depth > 0 {
-                            paren_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    Token::LBracket => bracket_depth += 1,
-                    Token::RBracket => {
-                        if bracket_depth > 0 {
-                            bracket_depth -= 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    // At top level (not nested), these are boundaries
-                    Token::Comma | Token::Semi
-                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                    {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Skip this token
-            if let Some(tok) = self.advance() {
-                skipped.push(format!("{:?}", tok.token));
-            }
-        }
-
-        skipped
-    }
-
     /// Parses a complete module (top-level items).
     ///
     /// This is the main entry point for parsing. It consumes all tokens

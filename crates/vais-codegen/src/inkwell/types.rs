@@ -45,13 +45,6 @@ impl<'ctx> TypeMapper<'ctx> {
         self.struct_types.insert(name.to_string(), struct_type);
     }
 
-    /// Gets a registered struct type by name.
-    #[allow(dead_code)]
-    #[inline]
-    pub(crate) fn get_struct(&self, name: &str) -> Option<StructType<'ctx>> {
-        self.struct_types.get(name).copied()
-    }
-
     /// Maps a Vais resolved type to an LLVM basic type.
     pub(crate) fn map_type(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
         match ty {
@@ -296,53 +289,4 @@ impl<'ctx> TypeMapper<'ctx> {
         }
     }
 
-    /// Gets the size of a type in bytes (approximate).
-    #[allow(dead_code)]
-    pub(crate) fn size_of(&self, ty: &ResolvedType) -> u64 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
-            ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
-            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str
-            | ResolvedType::Pointer(_)
-            | ResolvedType::Ref(_)
-            | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Unit => 0,
-            ResolvedType::ConstArray { element, size } => {
-                let sz = match size {
-                    vais_types::ResolvedConst::Value(n) => *n as u64,
-                    _ => 1,
-                };
-                self.size_of(element) * sz
-            }
-            ResolvedType::Array(_) => 8, // pointer
-            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.size_of(e)).sum(),
-            ResolvedType::Optional(inner) => 1 + self.size_of(inner),
-            ResolvedType::Result(ok, err) => 1 + std::cmp::max(self.size_of(ok), self.size_of(err)),
-            _ => 8, // Default for structs, enums, functions
-        }
-    }
-
-    /// Gets the alignment of a type in bytes.
-    #[allow(dead_code)]
-    pub(crate) fn align_of(&self, ty: &ResolvedType) -> u64 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
-            ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
-            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str
-            | ResolvedType::Pointer(_)
-            | ResolvedType::Ref(_)
-            | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Unit => 1,
-            ResolvedType::Tuple(elems) => elems.iter().map(|e| self.align_of(e)).max().unwrap_or(8),
-            ResolvedType::Optional(inner) => self.align_of(inner),
-            ResolvedType::Result(ok, err) => std::cmp::max(self.align_of(ok), self.align_of(err)),
-            _ => 8, // Default for structs, enums, functions
-        }
-    }
 }

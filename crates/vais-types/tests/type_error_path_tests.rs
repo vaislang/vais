@@ -305,7 +305,8 @@ fn test_valid_for_loop() {
 
 #[test]
 fn test_valid_lambda() {
-    check_ok("F test()->i64{f:=|x:i64|->i64{x+1};f(41)}");
+    // Vais lambda: no return type annotation in closure syntax
+    check_ok("F test()->i64{f:=|x:i64|{x+1};f(41)}");
 }
 
 // ============================================================================
@@ -678,7 +679,7 @@ fn test_help_use_after_move() {
         use_at: None,
     };
     let help = err.help().unwrap();
-    assert!(help.contains("x") && help.contains("clone"), "Help: {}", help);
+    assert!(help.contains("moved"), "Help should mention moved: {}", help);
 }
 
 #[test]

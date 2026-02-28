@@ -6,7 +6,6 @@
 //! This file provides enhanced helpers for execution testing and houses
 //! tests that specifically verify runtime output correctness.
 
-#[allow(dead_code)]
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

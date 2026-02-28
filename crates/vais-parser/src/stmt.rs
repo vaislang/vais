@@ -115,36 +115,6 @@ impl Parser {
         Ok(Spanned::new(stmt, Span::new(start, end)))
     }
 
-    /// Parse statement with error recovery.
-    ///
-    /// If parsing fails and recovery mode is enabled, creates an Error node
-    /// and synchronizes to the next statement boundary.
-    ///
-    /// Reserved for IDE/LSP error recovery mode.
-    #[allow(dead_code)]
-    pub(crate) fn parse_stmt_with_recovery(&mut self) -> Spanned<Stmt> {
-        match self.parse_stmt() {
-            Ok(stmt) => stmt,
-            Err(e) => {
-                let start = self.current_span().start;
-                let message = e.to_string();
-                self.record_error(e);
-
-                // Synchronize to next statement boundary
-                let skipped_tokens = self.synchronize_statement();
-
-                let end = self.prev_span().end;
-                Spanned::new(
-                    Stmt::Error {
-                        message,
-                        skipped_tokens,
-                    },
-                    Span::new(start, end),
-                )
-            }
-        }
-    }
-
     /// Check if current position is a let statement
     fn is_let_stmt(&self) -> bool {
         if let Some(tok) = self.peek() {
@@ -323,33 +293,4 @@ impl Parser {
         })
     }
 
-    /// Parse expression with error recovery.
-    ///
-    /// If parsing fails and recovery mode is enabled, creates an Error expression
-    /// and synchronizes to the next expression boundary.
-    ///
-    /// Reserved for IDE/LSP error recovery mode.
-    #[allow(dead_code)]
-    pub(crate) fn parse_expr_with_recovery(&mut self) -> Spanned<Expr> {
-        match self.parse_expr() {
-            Ok(expr) => expr,
-            Err(e) => {
-                let start = self.current_span().start;
-                let message = e.to_string();
-                self.record_error(e);
-
-                // Synchronize to next expression boundary
-                let skipped_tokens = self.synchronize_expression();
-
-                let end = self.prev_span().end;
-                Spanned::new(
-                    Expr::Error {
-                        message,
-                        skipped_tokens,
-                    },
-                    Span::new(start, end),
-                )
-            }
-        }
-    }
 }

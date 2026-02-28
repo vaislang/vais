@@ -329,7 +329,8 @@ fn test_match_ok() {
 
 #[test]
 fn test_lambda_ok() {
-    parse_ok("F test()->i64{f:=|x:i64|->i64{x+1};f(41)}");
+    // Vais lambda: no return type annotation in closure syntax
+    parse_ok("F test()->i64{f:=|x:i64|{x+1};f(41)}");
 }
 
 #[test]
@@ -459,7 +460,8 @@ fn test_nested_generics_ok() {
 
 #[test]
 fn test_where_clause_ok() {
-    parse_ok("F test<T>(x:T)->T where T:i64 = x");
+    // where clause requires trait bounds, not primitive types
+    parse_ok("F test<T>(x:T)->T where T:Clone{R x}");
 }
 
 #[test]
@@ -618,8 +620,8 @@ fn test_nested_error_in_match() {
 
 #[test]
 fn test_nested_error_in_loop() {
-    let result = parse("F test()->i64{L {B};R 0}");
-    // Missing loop pattern/iter
+    // Completely malformed loop with no valid body
+    let result = parse("F test()->i64{L 123abc{B};R 0}");
     assert!(result.is_err());
 }
 

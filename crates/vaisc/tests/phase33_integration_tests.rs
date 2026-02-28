@@ -96,15 +96,6 @@ fn compile_and_run_with_extra_sources(
     })
 }
 
-/// Assert that source compiles to LLVM IR without errors
-#[allow(dead_code)]
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(_) => {}
-        Err(e) => panic!("Compilation failed: {}", e),
-    }
-}
-
 /// Assert that source compiles, runs, and returns the expected exit code
 fn assert_exit_code(source: &str, expected: i32) {
     match compile_and_run(source) {
