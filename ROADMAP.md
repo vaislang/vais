@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-01 (Phase 68 — Struct ABI 수정, selfhost clang 21/21, E2E 919)
+> **최종 업데이트**: 2026-03-01 (Phase 69 — Grammar Coverage 275개, E2E 919)
 
 ---
 
@@ -241,8 +241,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 66 | 타입 시스템 Unify 완성 | unify() 6개 variant(ConstArray/Vector/Map/ConstGeneric/Associated/Lifetime) + apply_substitutions() 13개 compound type, +29 테스트 | 900 |
 | 67 | Codegen i64 Fallback 제거 & 기능 확장 | Monomorphization 전이적 인스턴스화, Map literal Inkwell codegen, 6개 compound assignment(%=/&=/|=/^=/<<=/>>= ), +19 E2E | 919 |
 | 68 | Struct ABI 정합성 수정 | Method struct param double-ptr→SSA 수정, method call struct-value load 추가, selfhost clang 21/21 통과 | 919 |
+| 69 | Grammar Coverage 갭 해소 | grammar_coverage 223→275 (+52), DependentType/Contract/ConstParam/Variance/Map-Block 5섹션 | 919 |
 
-### 잔여 기술 부채 (Phase 68 기준)
+### 잔여 기술 부채 (Phase 69 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -422,16 +423,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 69: Grammar Coverage 갭 해소 — 미테스트 문법 규칙 📋
+### Phase 69: Grammar Coverage 갭 해소 — 미테스트 문법 규칙 ✅
 
 > **목표**: Phase 64 분석에서 발견된 ~15개 미테스트 grammar production rule 커버
-> **근거**: DependentType, Contract 속성, Const 파라미터, Variance 등 테스트 부재
+> **결과**: grammar_coverage 223→275 (+52 테스트), 5개 신규 섹션
 
-- [ ] 1. DependentType 테스트 — `{x: T | predicate}` 파서 테스트 추가 (Sonnet)
-- [ ] 2. Contract 속성 테스트 — requires/ensures/invariant/decreases 파서 테스트 (Sonnet)
-- [ ] 3. Const 파라미터 & Variance 테스트 — `const N: u64`, `+T`/`-T` 파서 테스트 (Sonnet)
-- [ ] 4. Map/Block 모호성 테스트 — backtracking 경로 명시적 테스트 (Sonnet)
-- [ ] 5. 검증 — grammar_coverage 테스트 250개+, 전체 parser 테스트 통과 (Opus)
+- [x] 1. DependentType 테스트 — `{x: T | predicate}` 8개 테스트 ✅ 2026-03-01
+  변경: grammar_coverage_tests.rs Section 10 (+8 tests: 기본/복합/return/generic 중첩)
+- [x] 2. Contract 속성 테스트 — requires/ensures/invariant/decreases 11개 테스트 ✅ 2026-03-01
+  변경: grammar_coverage_tests.rs Section 11 (+11 tests: 4속성+복수+old/assert/assume)
+- [x] 3. Const 파라미터 & Variance 테스트 — 16개 테스트 ✅ 2026-03-01
+  변경: grammar_coverage_tests.rs Section 12 (+16 tests: const param/variance/HKT)
+- [x] 4. Map/Block 모호성 테스트 — 12개 + negative 5개 테스트 ✅ 2026-03-01
+  변경: grammar_coverage_tests.rs Section 13-14 (+17 tests: map/block/backtracking/negative)
+- [x] 5. 검증 — grammar_coverage 275개, 전체 parser 테스트 통과, Clippy 0건 ✅ 2026-03-01
 
 ---
 

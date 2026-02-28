@@ -1767,3 +1767,454 @@ mod edge_cases {
         }
     }
 }
+
+// =============================================================================
+// Section 10: Dependent Types (Refinement types)
+// =============================================================================
+mod dependent_types {
+    use super::*;
+
+    #[test]
+    fn grammar_dependent_type_basic() {
+        // {n: i64 | n > 0} — positive integer refinement
+        assert_parses("F f(x: {n: i64 | n > 0}) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_dependent_type_ast_structure() {
+        let m = parse_ok("F f(x: {n: i64 | n > 0}) -> i64 = x");
+        match &m.items[0].node {
+            Item::Function(f) => {
+                let param_ty = &f.params[0].ty.node;
+                match param_ty {
+                    Type::Dependent {
+                        var_name,
+                        base,
+                        predicate,
+                    } => {
+                        assert_eq!(var_name, "n");
+                        assert!(matches!(base.node, Type::Named { .. }));
+                        // predicate is n > 0, a binary expression
+                        assert!(matches!(predicate.node, Expr::Binary { .. }));
+                    }
+                    other => panic!("Expected Dependent type, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_dependent_type_equality_predicate() {
+        // {x: i64 | x == 42}
+        assert_parses("F f(x: {x: i64 | x == 42}) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_dependent_type_complex_predicate() {
+        // {n: i64 | n >= 0 && n < 100}
+        assert_parses("F f(x: {n: i64 | n >= 0 && n < 100}) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_dependent_type_in_return_position() {
+        assert_parses("F abs(x: i64) -> {r: i64 | r >= 0} = I x < 0 { 0 - x } E { x }");
+    }
+
+    #[test]
+    fn grammar_dependent_type_with_function_call_predicate() {
+        // {s: str | len(s) > 0}
+        assert_parses("F f(x: {s: str | len(s) > 0}) -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_dependent_type_bool_base() {
+        // {b: bool | b == true}
+        assert_parses("F f(x: {b: bool | b == true}) -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_dependent_type_nested_in_generic() {
+        // Vec<{n: i64 | n > 0}>
+        assert_parses("F f(x: Vec<{n: i64 | n > 0}>) -> i64 = 0");
+    }
+}
+
+// =============================================================================
+// Section 11: Contract Attributes (requires/ensures/invariant/decreases)
+// =============================================================================
+mod contract_attributes {
+    use super::*;
+
+    #[test]
+    fn grammar_contract_requires_basic() {
+        let m = parse_ok("#[requires(x > 0)]\nF f(x: i64) -> i64 = x");
+        match &m.items[0].node {
+            Item::Function(f) => {
+                assert_eq!(f.attributes.len(), 1);
+                assert_eq!(f.attributes[0].name, "requires");
+                assert!(f.attributes[0].expr.is_some());
+            }
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_contract_ensures_basic() {
+        let m = parse_ok("#[ensures(result >= 0)]\nF abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
+        match &m.items[0].node {
+            Item::Function(f) => {
+                assert_eq!(f.attributes[0].name, "ensures");
+                assert!(f.attributes[0].expr.is_some());
+            }
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_contract_invariant() {
+        assert_parses("#[invariant(self.count >= 0)]\nF inc(self) -> i64 = self.count + 1");
+    }
+
+    #[test]
+    fn grammar_contract_decreases() {
+        assert_parses("#[decreases(n)]\nF fib(n: i64) -> i64 = I n <= 1 { n } E { @(n - 1) + @(n - 2) }");
+    }
+
+    #[test]
+    fn grammar_contract_multiple_contracts() {
+        assert_parses(
+            "#[requires(x > 0)]\n#[requires(y > 0)]\n#[ensures(result > 0)]\nF mul(x: i64, y: i64) -> i64 = x * y",
+        );
+    }
+
+    #[test]
+    fn grammar_contract_requires_complex_expr() {
+        // Contract with logical AND in predicate
+        assert_parses("#[requires(x >= 0 && x < 100)]\nF f(x: i64) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_contract_ensures_with_old() {
+        // old(expr) in ensures — references pre-state value
+        assert_parses("F inc(x: i64) -> i64 { old(x)\n R x + 1 }");
+    }
+
+    #[test]
+    fn grammar_contract_assert_builtin() {
+        assert_parses_expr("assert(x > 0)");
+    }
+
+    #[test]
+    fn grammar_contract_assert_with_message() {
+        assert_parses_expr("assert(x > 0, \"x must be positive\")");
+    }
+
+    #[test]
+    fn grammar_contract_assume_builtin() {
+        assert_parses_expr("assume(x > 0)");
+    }
+
+    #[test]
+    fn grammar_contract_old_in_expr() {
+        assert_parses_expr("old(x) + 1");
+    }
+}
+
+// =============================================================================
+// Section 12: Const Parameters & Variance Annotations
+// =============================================================================
+mod const_params_and_variance {
+    use super::*;
+
+    // --- Const generic parameters ---
+
+    #[test]
+    fn grammar_const_param_basic() {
+        assert_parses("F f<const N: u64>() -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_const_param_ast_structure() {
+        let m = parse_ok("F f<const N: u64>() -> i64 = 0");
+        match &m.items[0].node {
+            Item::Function(f) => {
+                assert_eq!(f.generics.len(), 1);
+                let param = &f.generics[0];
+                assert_eq!(param.name.node, "N");
+                assert!(param.is_const());
+                match &param.kind {
+                    GenericParamKind::Const { ty } => {
+                        assert!(matches!(ty.node, Type::Named { .. }));
+                    }
+                    other => panic!("Expected Const param kind, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_const_param_with_type_param() {
+        // Mixed type + const params
+        assert_parses("F f<T, const N: u64>(arr: T) -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_const_param_multiple() {
+        assert_parses("F f<const M: i64, const N: i64>() -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_const_param_struct() {
+        assert_parses("S Array<T, const N: u64> { data: T }");
+    }
+
+    #[test]
+    fn grammar_const_param_i64_type() {
+        assert_parses("F f<const SIZE: i64>() -> i64 = 0");
+    }
+
+    // --- Variance annotations ---
+
+    #[test]
+    fn grammar_variance_covariant() {
+        let m = parse_ok("S Producer<+T> { value: T }");
+        match &m.items[0].node {
+            Item::Struct(s) => {
+                assert_eq!(s.generics.len(), 1);
+                assert!(s.generics[0].is_covariant());
+                assert_eq!(s.generics[0].variance, Variance::Covariant);
+            }
+            other => panic!("Expected Struct, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_variance_contravariant() {
+        let m = parse_ok("S Consumer<-T> { handler: fn(T) -> i64 }");
+        match &m.items[0].node {
+            Item::Struct(s) => {
+                assert_eq!(s.generics.len(), 1);
+                assert!(s.generics[0].is_contravariant());
+                assert_eq!(s.generics[0].variance, Variance::Contravariant);
+            }
+            other => panic!("Expected Struct, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_variance_invariant_default() {
+        let m = parse_ok("S Container<T> { value: T }");
+        match &m.items[0].node {
+            Item::Struct(s) => {
+                assert_eq!(s.generics[0].variance, Variance::Invariant);
+            }
+            other => panic!("Expected Struct, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_variance_mixed() {
+        // +T covariant, -U contravariant, V invariant (default)
+        let m = parse_ok("S Mixed<+T, -U, V> { a: T, b: V }");
+        match &m.items[0].node {
+            Item::Struct(s) => {
+                assert_eq!(s.generics.len(), 3);
+                assert_eq!(s.generics[0].variance, Variance::Covariant);
+                assert_eq!(s.generics[1].variance, Variance::Contravariant);
+                assert_eq!(s.generics[2].variance, Variance::Invariant);
+            }
+            other => panic!("Expected Struct, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_variance_in_function() {
+        assert_parses("F f<+T>(x: T) -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_variance_covariant_with_bound() {
+        assert_parses("F f<+T: Display>(x: T) -> i64 = 0");
+    }
+
+    #[test]
+    fn grammar_variance_contravariant_with_bound() {
+        assert_parses("F f<-T: Clone>(x: T) -> i64 = 0");
+    }
+
+    // --- Higher-kinded type parameters (HKT) ---
+
+    #[test]
+    fn grammar_hkt_basic() {
+        // Note: use 'Ctr' not 'F' because F is a keyword in Vais
+        // Use space between > > to avoid >> being tokenized as Shr
+        let m = parse_ok("F f<Ctr<_> >(x: i64) -> i64 = 0");
+        match &m.items[0].node {
+            Item::Function(f) => {
+                assert!(f.generics[0].is_higher_kinded());
+                match &f.generics[0].kind {
+                    GenericParamKind::HigherKinded { arity, .. } => {
+                        assert_eq!(arity, &1);
+                    }
+                    other => panic!("Expected HigherKinded, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_hkt_multi_arity() {
+        // Use space between > > to avoid >> tokenized as Shr
+        let m = parse_ok("F f<Ctr<_, _> >(x: i64) -> i64 = 0");
+        match &m.items[0].node {
+            Item::Function(f) => match &f.generics[0].kind {
+                GenericParamKind::HigherKinded { arity, .. } => {
+                    assert_eq!(arity, &2);
+                }
+                other => panic!("Expected HigherKinded, got {:?}", other),
+            },
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_hkt_with_bound() {
+        // Use space between > > to avoid >> tokenized as Shr
+        assert_parses("F f<Ctr<_>: Functor>(x: i64) -> i64 = 0");
+    }
+}
+
+// =============================================================================
+// Section 13: Map/Block Ambiguity (backtracking path tests)
+// =============================================================================
+mod map_block_ambiguity {
+    use super::*;
+
+    #[test]
+    fn grammar_map_literal_string_keys() {
+        // Clear map literal: {"key": value, ...}
+        assert_parses("F f() -> i64 { m := {\"a\": 1, \"b\": 2}\n R 0 }");
+    }
+
+    #[test]
+    fn grammar_map_literal_single_entry() {
+        assert_parses("F f() -> i64 { m := {\"key\": 42}\n R 0 }");
+    }
+
+    #[test]
+    fn grammar_map_literal_trailing_comma() {
+        assert_parses("F f() -> i64 { m := {\"a\": 1, \"b\": 2,}\n R 0 }");
+    }
+
+    #[test]
+    fn grammar_map_literal_numeric_keys() {
+        assert_parses("F f() -> i64 { m := {1: \"one\", 2: \"two\"}\n R 0 }");
+    }
+
+    #[test]
+    fn grammar_block_simple() {
+        // Clear block: {stmts}
+        assert_parses_expr("{ x := 1\n x + 1 }");
+    }
+
+    #[test]
+    fn grammar_block_single_expr() {
+        // {expr} — must parse as block, not map
+        assert_parses_expr("{ 42 }");
+    }
+
+    #[test]
+    fn grammar_block_with_let() {
+        // {let ...} — clearly a block (let statement)
+        assert_parses_expr("{ x := 10\n R x }");
+    }
+
+    #[test]
+    fn grammar_empty_braces() {
+        // {} — empty block
+        assert_parses_expr("{}");
+    }
+
+    #[test]
+    fn grammar_map_literal_is_map_ast() {
+        // Verify {k: v} is parsed as MapLit, not Block
+        let m = parse_ok("F f() -> i64 { m := {\"x\": 1}\n R 0 }");
+        match &m.items[0].node {
+            Item::Function(f) => match &f.body {
+                FunctionBody::Block(stmts) => {
+                    // First stmt is Let binding to map literal
+                    match &stmts[0].node {
+                        Stmt::Let { value, .. } => match &value.node {
+                            Expr::MapLit(pairs) => {
+                                assert_eq!(pairs.len(), 1);
+                            }
+                            other => panic!("Expected MapLit, got {:?}", other),
+                        },
+                        other => panic!("Expected Let, got {:?}", other),
+                    }
+                }
+                other => panic!("Expected Block body, got {:?}", other),
+            },
+            other => panic!("Expected Function, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn grammar_block_with_ident_not_map() {
+        // {x + 1} — ident followed by operator, not colon → block, not map
+        assert_parses_expr("{ x + 1 }");
+    }
+
+    #[test]
+    fn grammar_block_with_return() {
+        // {R 0} — return statement → clearly block
+        assert_parses("F f() -> i64 { R 0 }");
+    }
+
+    #[test]
+    fn grammar_map_vs_block_ident_colon() {
+        // Ambiguous: {x: 1} could be map or struct-like
+        // The parser tries map first (key: value pattern)
+        assert_parses("F f() -> i64 { m := {x: 1}\n R 0 }");
+    }
+}
+
+// =============================================================================
+// Section 14: Negative cases for new features
+// =============================================================================
+mod negative_new_features {
+    use super::*;
+
+    #[test]
+    fn grammar_neg_dependent_type_missing_pipe() {
+        // {n: i64 n > 0} — missing |
+        assert_parse_fails("F f(x: {n: i64 n > 0}) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_neg_dependent_type_missing_closing_brace() {
+        // {n: i64 | n > 0 — missing }
+        assert_parse_fails("F f(x: {n: i64 | n > 0) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_neg_dependent_type_no_var_name() {
+        // {: i64 | true} — missing variable name
+        assert_parse_fails("F f(x: {: i64 | true}) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_neg_contract_requires_no_parens() {
+        // #[requires x > 0] — missing parentheses
+        assert_parse_fails("#[requires x > 0]\nF f(x: i64) -> i64 = x");
+    }
+
+    #[test]
+    fn grammar_neg_const_param_no_type() {
+        // const N — missing type annotation
+        assert_parse_fails("F f<const N>() -> i64 = 0");
+    }
+}
