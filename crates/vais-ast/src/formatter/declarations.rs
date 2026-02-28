@@ -81,7 +81,8 @@ impl Formatter {
         self.output.push_str(": ");
         self.output.push_str(&self.format_type(&c.ty.node));
         self.output.push_str(" = ");
-        self.format_expr(&c.value.node);
+        let expr_str = self.format_expr(&c.value.node);
+        self.output.push_str(&expr_str);
         self.output.push('\n');
     }
 
@@ -97,7 +98,8 @@ impl Formatter {
         self.output.push_str(": ");
         self.output.push_str(&self.format_type(&g.ty.node));
         self.output.push_str(" = ");
-        self.format_expr(&g.value.node);
+        let expr_str = self.format_expr(&g.value.node);
+        self.output.push_str(&expr_str);
         self.output.push('\n');
     }
 

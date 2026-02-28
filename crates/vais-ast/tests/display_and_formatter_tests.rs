@@ -1374,7 +1374,7 @@ fn test_formatter_format_const() {
         is_pub: true,
         attributes: vec![],
     }));
-    assert!(result.contains("P C MAX"));
+    assert!(result.contains("pub C MAX"));
     assert!(result.contains("100"));
 }
 
@@ -1444,7 +1444,7 @@ fn test_formatter_format_function_pub_async() {
         attributes: vec![],
         where_clause: vec![],
     }));
-    assert!(result.contains("P A F fetch"));
+    assert!(result.contains("pub async F fetch"));
 }
 
 #[test]
@@ -1469,7 +1469,7 @@ fn test_formatter_format_struct() {
         attributes: vec![],
         where_clause: vec![],
     }));
-    assert!(result.contains("P S Point"));
+    assert!(result.contains("pub S Point"));
     assert!(result.contains("x: f64"));
     assert!(result.contains("y: f64"));
 }
@@ -1520,7 +1520,7 @@ fn test_formatter_format_use() {
         alias: None,
         items: None,
     }));
-    assert!(result.contains("U std.io"));
+    assert!(result.contains("U std::io"));
 }
 
 #[test]
@@ -1633,7 +1633,7 @@ fn test_formatter_format_trait() {
         is_pub: true,
         where_clause: vec![],
     }));
-    assert!(result.contains("P W Printable"));
+    assert!(result.contains("pub W Printable"));
     assert!(result.contains("F print"));
 }
 
