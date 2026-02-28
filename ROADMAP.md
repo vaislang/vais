@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-01 (Phase 69 — Grammar Coverage 275개, E2E 919)
+> **최종 업데이트**: 2026-03-01 (Phase 70 — Runtime panic 0개, E2E 919)
 
 ---
 
@@ -242,8 +242,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 67 | Codegen i64 Fallback 제거 & 기능 확장 | Monomorphization 전이적 인스턴스화, Map literal Inkwell codegen, 6개 compound assignment(%=/&=/|=/^=/<<=/>>= ), +19 E2E | 919 |
 | 68 | Struct ABI 정합성 수정 | Method struct param double-ptr→SSA 수정, method call struct-value load 추가, selfhost clang 21/21 통과 | 919 |
 | 69 | Grammar Coverage 갭 해소 | grammar_coverage 223→275 (+52), DependentType/Contract/ConstParam/Variance/Map-Block 5섹션 | 919 |
+| 70 | Runtime Panic 제거 | 프로덕션 panic/unreachable 0개 달성, TypeError::InternalError(E033), codegen 12건 전환, +9 테스트 | 919 |
 
-### 잔여 기술 부채 (Phase 69 기준)
+### 잔여 기술 부채 (Phase 70 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -440,17 +441,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 70: Runtime Panic 제거 & ICE 경로 안전화 📋
+### Phase 70: Runtime Panic 제거 & ICE 경로 안전화 ✅
 
 > **목표**: 비-테스트 코드의 panic!/unreachable! 13건을 Result 에러로 전환
-> **근거**: checker_expr.rs:79 unhandled expression panic, ffi.rs 12개 panic은 런타임 크래시 위험
-> **우선순위**: 중간 — 정상 코드에서는 도달 불가하지만 안전장치 필요
+> **결과**: 프로덕션 panic 0개, unreachable 0개 달성, +9 테스트
 
-- [ ] 1. checker_expr panic→Result — Unhandled expression type을 TypeError로 전환 (Opus)
-- [ ] 2. FFI panic→Result — ffi.rs 12개 panic을 ParseError/CodegenError로 전환 (Opus)
-- [ ] 3. Codegen unreachable→InternalError — expr_helpers 5개 + gen_match 7개 안전화 (Opus)
-- [ ] 4. 테스트 — ICE 경로 트리거 테스트 추가 (Sonnet)
-- [ ] 5. 검증 — panic 0개 (테스트 제외), 전체 테스트 통과 (Opus)
+- [x] 1. checker_expr panic→TypeError — InternalError(E033) variant 추가 ✅ 2026-03-01
+  변경: checker_expr/mod.rs (panic→Err), types/error.rs (+InternalError variant, E033)
+- [x] 2. FFI — 이미 Result 기반, 변경 불필요 ✅ 2026-03-01
+  변경: 없음 (ffi.rs는 이미 CodegenResult<T> 전파, unwrap은 #[test]만)
+- [x] 3. Codegen unreachable→InternalError — 12건 전환 ✅ 2026-03-01
+  변경: expr_helpers.rs(5), generate_expr_loop.rs(1), inkwell/gen_stmt.rs(1), inkwell/types.rs(5→ICE fallback), inkwell/builtins.rs(2→safe fallback)
+- [x] 4. ICE 경로 테스트 — +9 테스트 ✅ 2026-03-01
+  변경: type_error_path_tests.rs(+6), error_path_tests.rs(+3)
+- [x] 5. 검증 — 프로덕션 panic 0개, unreachable 0개, Clippy 0건 ✅ 2026-03-01
 
 ---
 

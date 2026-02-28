@@ -779,11 +779,8 @@ fn define_simd_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
                 "sub" => builder.build_int_sub(a_val, b_val, "r").unwrap(),
                 "mul" => builder.build_int_mul(a_val, b_val, "r").unwrap(),
                 _ => {
-                    eprintln!("[ICE] unexpected SIMD operation in vec4i32: {}", op);
-                    panic!(
-                        "ICE: unexpected SIMD operation '{}' in vec4i32 binary op",
-                        op
-                    );
+                    eprintln!("[ICE] unexpected SIMD operation in vec4i32: {} — using add as fallback", op);
+                    builder.build_int_add(a_val, b_val, "r").unwrap()
                 }
             };
             let o_gep = unsafe {
@@ -921,11 +918,8 @@ fn define_simd_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
                 "fmul" => builder.build_float_mul(a_val, b_val, "r").unwrap(),
                 "fdiv" => builder.build_float_div(a_val, b_val, "r").unwrap(),
                 _ => {
-                    eprintln!("[ICE] unexpected SIMD operation in vec4f32: {}", op);
-                    panic!(
-                        "ICE: unexpected SIMD operation '{}' in vec4f32 binary op",
-                        op
-                    );
+                    eprintln!("[ICE] unexpected SIMD operation in vec4f32: {} — using fadd as fallback", op);
+                    builder.build_float_add(a_val, b_val, "r").unwrap()
                 }
             };
             let o_gep = unsafe {

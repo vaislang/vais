@@ -76,6 +76,9 @@ impl TypeChecker {
 
         // If we reach here, we've missed an expression type
         // This shouldn't happen - it's a compiler bug
-        panic!("Unhandled expression type in check_expr: {:?}", expr.node);
+        Err(crate::types::TypeError::InternalError {
+            message: format!("unhandled expression type in check_expr: {:?}", expr.node),
+            span: Some(expr.span),
+        })
     }
 }

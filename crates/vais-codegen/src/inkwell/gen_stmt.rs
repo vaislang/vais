@@ -343,7 +343,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 end,
                 inclusive,
             } => (start.as_deref(), end.as_deref(), *inclusive),
-            _ => unreachable!("generate_range_for_loop called with non-range iter"),
+            _ => return Err(CodegenError::InternalError("generate_range_for_loop called with non-range iter".to_string())),
         };
 
         // Generate start and end values

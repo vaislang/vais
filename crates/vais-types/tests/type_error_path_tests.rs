@@ -1087,3 +1087,64 @@ fn test_display_immutable_assign() {
     let err = TypeError::ImmutableAssign("x".to_string(), None);
     assert!(err.to_string().contains("x"));
 }
+
+// ============================================================================
+// E033: Internal Compiler Error
+// ============================================================================
+
+#[test]
+fn test_internal_error_display() {
+    let err = TypeError::InternalError {
+        message: "unhandled expression type".to_string(),
+        span: None,
+    };
+    assert!(err.to_string().contains("ICE"));
+    assert!(err.to_string().contains("unhandled expression type"));
+}
+
+#[test]
+fn test_internal_error_code() {
+    let err = TypeError::InternalError {
+        message: "test".to_string(),
+        span: None,
+    };
+    assert_eq!(err.error_code(), "E033");
+}
+
+#[test]
+fn test_internal_error_help() {
+    let err = TypeError::InternalError {
+        message: "test".to_string(),
+        span: None,
+    };
+    let help = err.help().unwrap();
+    assert!(help.contains("compiler bug"));
+}
+
+#[test]
+fn test_internal_error_span() {
+    let span = vais_ast::Span { start: 0, end: 10 };
+    let err = TypeError::InternalError {
+        message: "test".to_string(),
+        span: Some(span),
+    };
+    assert_eq!(err.span(), Some(span));
+}
+
+#[test]
+fn test_internal_error_no_span() {
+    let err = TypeError::InternalError {
+        message: "test".to_string(),
+        span: None,
+    };
+    assert!(err.span().is_none());
+}
+
+#[test]
+fn test_internal_error_secondary_spans_empty() {
+    let err = TypeError::InternalError {
+        message: "test".to_string(),
+        span: None,
+    };
+    assert!(err.secondary_spans().is_empty());
+}

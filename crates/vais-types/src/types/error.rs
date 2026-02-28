@@ -217,6 +217,12 @@ pub enum TypeError {
         span: Option<Span>,
         suggestion: Option<String>,
     },
+
+    #[error("ICE: {message}")]
+    InternalError {
+        message: String,
+        span: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -255,6 +261,7 @@ impl TypeError {
             TypeError::NoSuchField { span, .. } => *span,
             TypeError::ExternSignatureMismatch { span, .. } => *span,
             TypeError::InferFailed { span, .. } => *span,
+            TypeError::InternalError { span, .. } => *span,
         }
     }
 
@@ -359,6 +366,7 @@ impl TypeError {
             TypeError::NoSuchField { .. } => "E030",
             TypeError::ExternSignatureMismatch { .. } => "E031",
             TypeError::InferFailed { .. } => "E032",
+            TypeError::InternalError { .. } => "E033",
         }
     }
 
@@ -501,6 +509,9 @@ impl TypeError {
             }
             TypeError::InferFailed { suggestion, .. } => {
                 suggestion.clone()
+            }
+            TypeError::InternalError { .. } => {
+                Some("this is likely a compiler bug -- please report it".to_string())
             }
             TypeError::NotCallable(type_name, _) => {
                 Some(format!("expression of type `{}` is not callable; only functions and closures can be called", type_name))
@@ -677,6 +688,9 @@ impl TypeError {
                 &key,
                 &[("kind", kind), ("name", name), ("context", context)],
             ),
+            TypeError::InternalError { message, .. } => {
+                vais_i18n::get(&key, &[("message", message)])
+            }
         }
     }
 

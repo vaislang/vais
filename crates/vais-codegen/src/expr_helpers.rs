@@ -92,7 +92,7 @@ impl CodeGenerator {
             let op_str = match op {
                 BinOp::And => "and",
                 BinOp::Or => "or",
-                _ => unreachable!("BinOp {:?} in {} codegen path", op, "logical"),
+                _ => return Err(CodegenError::InternalError(format!("BinOp {:?} in logical codegen path", op))),
             };
 
             let result_bool = self.next_temp(counter);
@@ -123,7 +123,7 @@ impl CodeGenerator {
                     BinOp::Gte => "fcmp oge",
                     BinOp::Eq => "fcmp oeq",
                     BinOp::Neq => "fcmp one",
-                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_cmp"),
+                    _ => return Err(CodegenError::InternalError(format!("BinOp {:?} in float_cmp codegen path", op))),
                 };
                 // Use float (f32) if either operand is f32 and neither is f64
                 let float_llvm = if matches!(left_type, ResolvedType::F32)
@@ -151,7 +151,7 @@ impl CodeGenerator {
                     BinOp::Gte => "icmp sge",
                     BinOp::Eq => "icmp eq",
                     BinOp::Neq => "icmp ne",
-                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "int_cmp"),
+                    _ => return Err(CodegenError::InternalError(format!("BinOp {:?} in int_cmp codegen path", op))),
                 };
                 ir.push_str(&format!(
                     "  {} = {} i64 {}, {}{}\n",
@@ -186,7 +186,7 @@ impl CodeGenerator {
                     BinOp::Mul => "fmul",
                     BinOp::Div => "fdiv",
                     BinOp::Mod => "frem",
-                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "float_arith"),
+                    _ => return Err(CodegenError::InternalError(format!("BinOp {:?} in float_arith codegen path", op))),
                 };
                 // Use float (f32) if either operand is f32 and neither is f64
                 let float_llvm = if matches!(left_type, ResolvedType::F32)
@@ -218,7 +218,7 @@ impl CodeGenerator {
                     BinOp::BitXor => "xor",
                     BinOp::Shl => "shl",
                     BinOp::Shr => "ashr",
-                    _ => unreachable!("BinOp {:?} in {} codegen path", op, "int_arith"),
+                    _ => return Err(CodegenError::InternalError(format!("BinOp {:?} in int_arith codegen path", op))),
                 };
                 ir.push_str(&format!(
                     "  {} = {} i64 {}, {}{}\n",

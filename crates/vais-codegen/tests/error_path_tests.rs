@@ -910,3 +910,30 @@ fn test_visitor_module_types_exist() {
     // Verify visitor types exist and can be referenced
     let _: Option<GenResult> = None;
 }
+
+// ============================================================================
+// 35. InternalError — ICE paths return Result instead of panicking
+// ============================================================================
+
+#[test]
+fn test_internal_error_display() {
+    use vais_codegen::CodegenError;
+    let err = CodegenError::InternalError("test ICE message".to_string());
+    assert!(err.to_string().contains("ICE"));
+    assert!(err.to_string().contains("test ICE message"));
+}
+
+#[test]
+fn test_internal_error_code() {
+    use vais_codegen::CodegenError;
+    let err = CodegenError::InternalError("test".to_string());
+    assert_eq!(err.error_code(), "C007");
+}
+
+#[test]
+fn test_internal_error_help() {
+    use vais_codegen::CodegenError;
+    let err = CodegenError::InternalError("test".to_string());
+    let help = err.help().unwrap();
+    assert!(help.contains("compiler bug"));
+}

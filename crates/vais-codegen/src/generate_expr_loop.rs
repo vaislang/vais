@@ -3,7 +3,7 @@
 use vais_ast::{Expr, Pattern, Spanned, Stmt};
 use vais_types::ResolvedType;
 
-use crate::{CodeGenerator, CodegenResult, LocalVar, LoopLabels};
+use crate::{CodeGenerator, CodegenError, CodegenResult, LocalVar, LoopLabels};
 
 impl CodeGenerator {
     pub(crate) fn generate_range_for_loop(
@@ -19,7 +19,7 @@ impl CodeGenerator {
                 end,
                 inclusive,
             } => (start.as_deref(), end.as_deref(), *inclusive),
-            _ => unreachable!("generate_range_for_loop called with non-range iter"),
+            _ => return Err(CodegenError::InternalError("generate_range_for_loop called with non-range iter".to_string())),
         };
 
         let mut ir = String::new();
