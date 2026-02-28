@@ -146,12 +146,12 @@ pub fn check_object_safety(trait_def: &TraitDef) -> Result<(), Vec<ObjectSafetyV
             }
         }
 
-        // Note: Check 5 (generic methods) is not yet implemented because the current
-        // TraitMethodSig doesn't store generic parameters. When trait methods gain
-        // generic support, we would check here:
-        // if !method_sig.generics.is_empty() {
-        //     violations.push(ObjectSafetyViolation::MethodHasTypeParams { ... });
-        // }
+        // Check 5: Method must not have type parameters (generic methods)
+        if !method_sig.generics.is_empty() {
+            violations.push(ObjectSafetyViolation::MethodHasTypeParams {
+                method_name: method_name.clone(),
+            });
+        }
     }
 
     if violations.is_empty() {
@@ -228,6 +228,7 @@ mod tests {
             name.to_string(),
             TraitMethodSig {
                 name: name.to_string(),
+                generics: vec![],
                 params: params
                     .into_iter()
                     .map(|(n, t)| (n.to_string(), t, false))
@@ -246,6 +247,7 @@ mod tests {
         methods.insert(
             "draw".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "draw".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -279,6 +281,7 @@ mod tests {
         methods.insert(
             "clone".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "clone".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -319,6 +322,7 @@ mod tests {
         methods.insert(
             "new".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "new".to_string(),
                 params: vec![], // No self parameter!
                 ret: ResolvedType::Generic("Self".to_string()),
@@ -352,6 +356,7 @@ mod tests {
         methods.insert(
             "merge".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "merge".to_string(),
                 params: vec![
                     (
@@ -479,6 +484,7 @@ mod tests {
         methods.insert(
             "get".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "get".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -496,6 +502,7 @@ mod tests {
         methods.insert(
             "clone".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "clone".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -563,5 +570,117 @@ mod tests {
 
         let v3 = ObjectSafetyViolation::TraitHasSizedBound;
         assert!(v3.description().contains("Sized"));
+    }
+
+    #[test]
+    fn test_not_object_safe_generic_method() {
+        let mut methods = HashMap::new();
+        methods.insert(
+            "convert".to_string(),
+            TraitMethodSig {
+                name: "convert".to_string(),
+                generics: vec!["T".to_string()], // Generic method!
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::I64,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
+
+        let trait_def = TraitDef {
+            name: "Converter".to_string(),
+            generics: vec![],
+            super_traits: vec![],
+            associated_types: HashMap::new(),
+            methods,
+        };
+
+        let result = check_object_safety(&trait_def);
+        assert!(
+            result.is_err(),
+            "Trait with generic method should not be object-safe"
+        );
+
+        let violations = result.unwrap_err();
+        assert!(violations.iter().any(|v| matches!(
+            v,
+            ObjectSafetyViolation::MethodHasTypeParams { method_name } if method_name == "convert"
+        )));
+    }
+
+    #[test]
+    fn test_object_safe_no_generic_methods() {
+        // Verify a trait without generic methods IS object-safe
+        let (name, sig) = create_method(
+            "process",
+            vec![(
+                "self",
+                ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+            )],
+            ResolvedType::I64,
+        );
+        let mut methods = HashMap::new();
+        methods.insert(name, sig);
+
+        let trait_def = TraitDef {
+            name: "Processor".to_string(),
+            generics: vec![],
+            super_traits: vec![],
+            associated_types: HashMap::new(),
+            methods,
+        };
+
+        assert!(
+            check_object_safety(&trait_def).is_ok(),
+            "Trait without generic methods should be object-safe"
+        );
+    }
+
+    #[test]
+    fn test_multiple_violations_including_generic() {
+        let mut methods = HashMap::new();
+
+        // Generic method (violation)
+        methods.insert(
+            "transform".to_string(),
+            TraitMethodSig {
+                name: "transform".to_string(),
+                generics: vec!["U".to_string()],
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::Generic("Self".to_string()), // Also returns Self (another violation)
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
+
+        let trait_def = TraitDef {
+            name: "Multi".to_string(),
+            generics: vec![],
+            super_traits: vec![],
+            associated_types: HashMap::new(),
+            methods,
+        };
+
+        let result = check_object_safety(&trait_def);
+        assert!(result.is_err());
+
+        let violations = result.unwrap_err();
+        // Should have both violations: generic method AND returns Self
+        assert!(violations
+            .iter()
+            .any(|v| matches!(v, ObjectSafetyViolation::MethodHasTypeParams { .. })));
+        assert!(violations
+            .iter()
+            .any(|v| matches!(v, ObjectSafetyViolation::MethodReturnsSelf { .. })));
     }
 }

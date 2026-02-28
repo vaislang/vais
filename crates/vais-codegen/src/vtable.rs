@@ -469,6 +469,7 @@ mod tests {
         methods.insert(
             "speak".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "speak".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -484,6 +485,7 @@ mod tests {
         methods.insert(
             "move_to".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "move_to".to_string(),
                 params: vec![
                     (

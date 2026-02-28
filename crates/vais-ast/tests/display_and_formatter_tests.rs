@@ -1250,6 +1250,7 @@ fn test_trait_with_super_traits() {
 fn test_trait_method_with_default() {
     let method = TraitMethod {
         name: sp_str("default_method"),
+        generics: vec![],
         params: vec![],
         ret_type: Some(named_type("i64")),
         default_body: Some(FunctionBody::Expr(Box::new(sp_expr(Expr::Int(0))))),
@@ -1263,6 +1264,7 @@ fn test_trait_method_with_default() {
 fn test_trait_method_async_const() {
     let method = TraitMethod {
         name: sp_str("compute"),
+        generics: vec![],
         params: vec![],
         ret_type: None,
         default_body: None,
@@ -1624,6 +1626,7 @@ fn test_formatter_format_trait() {
         associated_types: vec![],
         methods: vec![TraitMethod {
             name: sp_str("print"),
+            generics: vec![],
             params: vec![],
             ret_type: None,
             default_body: None,

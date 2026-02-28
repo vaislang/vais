@@ -12,6 +12,7 @@ mod tests {
         methods.insert(
             "draw".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "draw".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -28,6 +29,7 @@ mod tests {
         methods.insert(
             "area".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "area".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -266,6 +268,7 @@ mod tests {
         methods2.insert(
             "describe".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "describe".to_string(),
                 params: vec![(
                     "self".to_string(),
@@ -314,6 +317,7 @@ mod tests {
         methods.insert(
             "fetch".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "fetch".to_string(),
                 params: vec![
                     (
@@ -334,6 +338,7 @@ mod tests {
         methods.insert(
             "name".to_string(),
             TraitMethodSig {
+                generics: vec![],
                 name: "name".to_string(),
                 params: vec![(
                     "self".to_string(),

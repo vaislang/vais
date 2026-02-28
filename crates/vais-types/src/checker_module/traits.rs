@@ -279,6 +279,7 @@ impl TypeChecker {
                 method.name.node.clone(),
                 TraitMethodSig {
                     name: method.name.node.clone(),
+                    generics: method.generics.iter().map(|g| g.name.node.clone()).collect(),
                     params,
                     ret,
                     has_default: method.default_body.is_some(),

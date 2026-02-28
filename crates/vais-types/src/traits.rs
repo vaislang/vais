@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone)]
 pub struct TraitMethodSig {
     pub name: String,
+    pub generics: Vec<String>, // Method-level generic parameters (e.g., ["T"] for F get<T>)
     pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut) - first param is &self
     pub ret: ResolvedType,
     pub has_default: bool,

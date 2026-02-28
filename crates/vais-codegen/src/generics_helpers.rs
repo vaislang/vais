@@ -113,6 +113,30 @@ impl CodeGenerator {
             }
         }
 
+        // Try substituting generic type args in instantiations (for transitive calls)
+        if !self.generics.substitutions.is_empty() {
+            for (inst_types, _) in instantiations_list {
+                let has_generic = inst_types
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                if has_generic {
+                    let concrete_args: Vec<ResolvedType> = inst_types
+                        .iter()
+                        .map(|t| vais_types::substitute_type(t, &self.generics.substitutions))
+                        .collect();
+                    let all_concrete = concrete_args
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(base_name, &concrete_args);
+                        if self.types.functions.contains_key(&mangled) {
+                            return mangled;
+                        }
+                    }
+                }
+            }
+        }
+
         // Fallback: try to mangle based on argument types directly
         let mangled = vais_types::mangle_name(base_name, arg_types);
         if self.types.functions.contains_key(&mangled) {

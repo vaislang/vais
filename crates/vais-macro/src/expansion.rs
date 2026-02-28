@@ -198,6 +198,7 @@ impl<'a> AstExpander<'a> {
             };
             expanded_methods.push(TraitMethod {
                 name: method.name,
+                generics: method.generics,
                 params: method.params,
                 ret_type: method.ret_type,
                 is_async: method.is_async,

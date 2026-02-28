@@ -101,6 +101,9 @@ impl Parser {
         self.expect(&Token::Function)?;
         let name = self.parse_ident()?;
 
+        // Parse optional generic parameters: F get<T>(&self) -> T
+        let generics = self.parse_generics()?;
+
         let lparen_span = self.current_span();
         self.expect(&Token::LParen)?;
         let params = self.parse_params()?;
@@ -129,6 +132,7 @@ impl Parser {
 
         Ok(TraitMethod {
             name,
+            generics,
             params,
             ret_type,
             default_body,

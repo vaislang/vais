@@ -23,6 +23,7 @@ pub struct Trait {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitMethod {
     pub name: Spanned<String>,
+    pub generics: Vec<GenericParam>, // Method-level generic parameters (e.g., F get<T>(&self) -> T)
     pub params: Vec<Param>,
     pub ret_type: Option<Spanned<Type>>,
     pub default_body: Option<FunctionBody>,

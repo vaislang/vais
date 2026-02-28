@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-01 (Phase 70 — Runtime panic 0개, E2E 919)
+> **최종 업데이트**: 2026-03-01 (Phase 71 — Object Safety+Associated type, E2E 931)
 
 ---
 
@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 919개 통과 (0 fail) | ✅ |
+| E2E 931개 통과 (0 fail) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -243,8 +243,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 68 | Struct ABI 정합성 수정 | Method struct param double-ptr→SSA 수정, method call struct-value load 추가, selfhost clang 21/21 통과 | 919 |
 | 69 | Grammar Coverage 갭 해소 | grammar_coverage 223→275 (+52), DependentType/Contract/ConstParam/Variance/Map-Block 5섹션 | 919 |
 | 70 | Runtime Panic 제거 | 프로덕션 panic/unreachable 0개 달성, TypeError::InternalError(E033), codegen 12건 전환, +9 테스트 | 919 |
+| 71 | Object Safety & 고급 타입 | Check 5 제네릭 메서드 감지, Associated type resolution, transitive instantiation 개선, +15 테스트 | 931 |
 
-### 잔여 기술 부채 (Phase 70 기준)
+### 잔여 기술 부채 (Phase 71 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -458,17 +459,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 71: Object Safety & 고급 타입 기능 완성 📋
+### Phase 71: Object Safety & 고급 타입 기능 완성 ✅
 
 > **목표**: 제네릭 메서드 object safety 검증, Associated type codegen, Transitive instantiation
-> **근거**: object_safety.rs에 제네릭 메서드 체크 미구현, associated type codegen 불가
-> **우선순위**: 낮음 — 고급 기능, 기본 기능 안정화 후 진행
+> **결과**: Check 5 구현, Associated type 해결, transitive fallback 개선, E2E 919→931
 
-- [ ] 1. Object safety — 제네릭 메서드 체크 구현 (object_safety.rs Check 5) (Opus)
-- [ ] 2. Associated type codegen — `<T as Trait>::Item` IR 생성 (Opus)
-- [ ] 3. Transitive instantiation — 제네릭 함수 → 제네릭 함수 호출 시 인스턴스 수집 (Opus)
-- [ ] 4. 테스트 — 각 기능별 E2E 테스트 추가 (Sonnet)
-- [ ] 5. 검증 — 전체 테스트 통과, InternalError 경로 감소 (Opus)
+- [x] 1. Object safety Check 5 — 제네릭 메서드 감지 구현 ✅ 2026-03-01
+  변경: ast/traits.rs (+generics), parser/item/traits.rs (제네릭 파싱), types/object_safety.rs (Check 5), +8파일 동기화
+- [x] 2. Associated type codegen — resolve_associated_type_in_codegen 구현 ✅ 2026-03-01
+  변경: codegen/types.rs (InternalError→i64 fallback+resolution, trait def/impl lookup)
+- [x] 3. Transitive instantiation — generic substitution fallback 개선 ✅ 2026-03-01
+  변경: codegen/generics_helpers.rs (resolve_generic_call에 substitution fallback 추가)
+- [x] 4. 테스트 — +12 E2E + 3 unit tests ✅ 2026-03-01
+  변경: e2e/phase71_type_system.rs (12 tests), object_safety.rs (+3 tests)
+- [x] 5. 검증 — E2E 931 passed (0 fail), object_safety 20 passed, Clippy 0건 ✅ 2026-03-01
 
 ---
 

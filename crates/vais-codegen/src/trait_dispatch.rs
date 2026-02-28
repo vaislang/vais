@@ -38,6 +38,7 @@ impl CodeGenerator {
                 m.name.node.clone(),
                 vais_types::TraitMethodSig {
                     name: m.name.node.clone(),
+                    generics: m.generics.iter().map(|g| g.name.node.clone()).collect(),
                     params,
                     ret,
                     has_default: m.default_body.is_some(),

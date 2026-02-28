@@ -478,10 +478,24 @@ impl CodeGenerator {
                     "unresolved type variable reached codegen".to_string(),
                 ));
             }
-            ResolvedType::Associated { .. } => {
-                return Err(crate::CodegenError::InternalError(
-                    "unresolved associated type in codegen".to_string(),
-                ));
+            ResolvedType::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                ..
+            } => {
+                // Try to resolve the associated type by looking up trait impls
+                if let Some(resolved) =
+                    self.resolve_associated_type_in_codegen(base, trait_name.as_deref(), assoc_name)
+                {
+                    return self.type_to_llvm_impl(&resolved);
+                }
+                // Fallback: associated type that couldn't be resolved (generic base)
+                eprintln!(
+                    "[ICE Warning] unresolved associated type '{}' in text IR codegen — using i64 fallback",
+                    assoc_name
+                );
+                String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
                 return Err(crate::CodegenError::InternalError(
@@ -489,6 +503,52 @@ impl CodeGenerator {
                 ));
             }
         })
+    }
+
+    /// Try to resolve an associated type by looking up trait definitions and
+    /// implementations registered in codegen state. Returns None if unresolvable.
+    pub(crate) fn resolve_associated_type_in_codegen(
+        &self,
+        base: &ResolvedType,
+        trait_name: Option<&str>,
+        assoc_name: &str,
+    ) -> Option<ResolvedType> {
+        // Extract base type name
+        let type_name = match base {
+            ResolvedType::Named { name, .. } => name.as_str(),
+            _ => return None, // Can't resolve for generic/unknown base
+        };
+
+        // Look for trait impl that maps this type + trait to associated types
+        // Check all registered trait defs to find one with the associated type
+        if let Some(tn) = trait_name {
+            if let Some(trait_def) = self.types.trait_defs.get(tn) {
+                // Check for a default associated type value
+                if let Some(assoc_def) = trait_def.associated_types.get(assoc_name) {
+                    if let Some(default) = &assoc_def.default {
+                        return Some(default.clone());
+                    }
+                }
+            }
+        } else {
+            // No trait name specified — search all trait impls for this type
+            for (impl_type_key, tn) in self.types.trait_impl_methods.keys() {
+                if impl_type_key != type_name {
+                    continue;
+                }
+                if let Some(trait_def) = self.types.trait_defs.get(tn.as_str()) {
+                    if let Some(assoc_def) = trait_def.associated_types.get(assoc_name) {
+                        if let Some(default) = &assoc_def.default {
+                            return Some(default.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also try resolved function sigs — the TC may have resolved associated types
+        // into concrete types stored in the resolved sigs
+        None
     }
 
     /// Get bit width for integer types

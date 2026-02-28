@@ -45,3 +45,4 @@ mod phase47_closure_pipe;
 mod phase47_struct_enum;
 mod phase47_trait_impl;
 mod phase67_monomorphization;
+mod phase71_type_system;

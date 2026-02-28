@@ -1119,6 +1119,7 @@ mod tests {
             super_traits: vec![],
             methods: vec![TraitMethod {
                 name: Spanned::new("greet".to_string(), Span::new(6, 11)),
+                generics: vec![],
                 params: vec![],
                 ret_type: None,
                 is_async: false,
@@ -1147,6 +1148,7 @@ mod tests {
             super_traits: vec![],
             methods: vec![TraitMethod {
                 name: Spanned::new("draw".to_string(), Span::new(9, 13)),
+                generics: vec![],
                 params: vec![],
                 ret_type: None,
                 is_async: false,
