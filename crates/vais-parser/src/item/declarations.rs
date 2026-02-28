@@ -324,6 +324,11 @@ impl Parser {
         self.expect(&Token::Eq)?;
         let value = self.parse_expr()?;
 
+        // Optional semicolon terminator
+        if self.check(&Token::Semi) {
+            self.advance();
+        }
+
         Ok(ConstDef {
             name,
             ty,
@@ -340,6 +345,11 @@ impl Parser {
         let ty = self.parse_type()?;
         self.expect(&Token::Eq)?;
         let value = self.parse_expr()?;
+
+        // Optional semicolon terminator
+        if self.check(&Token::Semi) {
+            self.advance();
+        }
 
         Ok(GlobalDef {
             name,

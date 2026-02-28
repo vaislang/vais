@@ -160,8 +160,18 @@ impl Parser {
                     let mut fields = Vec::new();
                     while !self.check(&Token::RBrace) && !self.is_at_end() {
                         let field_name = self.parse_ident()?;
-                        self.expect(&Token::Colon)?;
-                        let value = self.parse_expr()?;
+                        // Support field punning: `Struct { field }` == `Struct { field: field }`
+                        let value = if self.check(&Token::Colon) {
+                            self.advance();
+                            self.parse_expr()?
+                        } else {
+                            // Field punning: value = ident with same name
+                            let fn_span = field_name.span.clone();
+                            Spanned::new(
+                                Expr::Ident(field_name.node.clone()),
+                                fn_span,
+                            )
+                        };
                         fields.push((field_name, value));
                         if !self.check(&Token::RBrace) {
                             self.expect(&Token::Comma)?;
@@ -727,6 +737,31 @@ impl Parser {
                     self.advance();
                     Pattern::Literal(Literal::String(s))
                 }
+                Token::Tilde => {
+                    // ~ident in pattern context: mutable binding shorthand, treat as ident
+                    self.advance();
+                    if let Some(tok_inner) = self.peek() {
+                        if let Token::Ident(s) = &tok_inner.token {
+                            let name = s.clone();
+                            self.advance();
+                            Pattern::Ident(name)
+                        } else {
+                            let found = tok_inner.token.clone();
+                            let span = tok_inner.span.clone();
+                            self.exit_depth();
+                            return Err(ParseError::UnexpectedToken {
+                                found,
+                                span,
+                                expected: "identifier after '~' in pattern".into(),
+                            });
+                        }
+                    } else {
+                        self.exit_depth();
+                        return Err(ParseError::UnexpectedEof {
+                            span: self.current_span(),
+                        });
+                    }
+                }
                 Token::LParen => {
                     self.advance();
                     let mut patterns = Vec::new();
@@ -811,6 +846,9 @@ impl Parser {
             Token::SelfLower => "self".to_string(),
             Token::Str => "str".to_string(),
             Token::Bool => "bool".to_string(),
+            Token::Clone => "clone".to_string(),
+            Token::Weak => "weak".to_string(),
+            Token::Global => "G".to_string(),
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token,

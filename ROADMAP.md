@@ -481,6 +481,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 모든 코드 변경 완료 후 v0.0.5 릴리스 배포
 > **배경**: Phase 63에서 버전 다운그레이드(Cargo.toml, README, CHANGELOG) + 버전 정책 문서화 완료. 나머지 빌드/테스트/태깅 작업.
 > **선행 조건**: Phase 65~71 코드 작업 완료 후 진행
+> **모드: 자동진행**
 
 - [ ] 1. cargo build --release & 로컬 설치 — /opt/homebrew/bin/vaisc 교체 (Opus)
 - [ ] 2. VaisDB 빌드 테스트 — vaisc build src/main.vais 파서 에러 0 확인 (Opus)

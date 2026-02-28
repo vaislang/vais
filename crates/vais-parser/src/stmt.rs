@@ -125,12 +125,12 @@ impl Parser {
                     false
                 }
             } else if matches!(tok.token, Token::Tilde) {
-                // Check for ~ ident := expr (mutable shorthand prefix)
+                // Check for ~ ident := expr or ~ ident = expr (mutable shorthand prefix)
                 if let Some(next) = self.tokens.get(self.pos + 1) {
                     if let Token::Ident(_) = &next.token {
                         self.tokens
                             .get(self.pos + 2)
-                            .map(|t| matches!(t.token, Token::ColonEq | Token::Colon))
+                            .map(|t| matches!(t.token, Token::ColonEq | Token::Colon | Token::Eq))
                             .unwrap_or(false)
                     } else {
                         false
@@ -236,6 +236,10 @@ impl Parser {
                 self.advance();
             }
             (None, is_mut, ownership)
+        } else if tilde_prefix && self.check(&Token::Eq) {
+            // ~x = expr  →  shorthand for mutable let binding (same as x := mut expr)
+            self.advance();
+            (None, true, Ownership::Regular)
         } else if self.check(&Token::Colon) {
             self.advance();
             // Check for ownership modifiers: `x: linear T = expr`, `x: affine T = expr`
