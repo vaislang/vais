@@ -254,12 +254,13 @@ fn test_extract_enum_doc_pub() {
 
 #[test]
 fn test_extract_documentation_full() {
-    let source = r#"/// A simple function
-F add(a:i64,b:i64)->i64=a+b
+    let source = r#"F add(a: i64, b: i64) -> i64 {
+    a + b
+}
 
-S Point{x:i64,y:i64}
+S Point { x: i64, y: i64 }
 
-E Color{Red,Green,Blue}
+E Color { Red, Green, Blue }
 "#;
     let ast = parse(source).unwrap();
     let doc = extract_documentation(std::path::Path::new("test.vais"), &ast, source);
