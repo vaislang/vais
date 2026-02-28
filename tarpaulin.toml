@@ -30,7 +30,6 @@ exclude = [
     "vais-benches",
     "vais-python",
     "vais-node",
-    "vais-dap",
     "vais-playground-server",
 ]
 

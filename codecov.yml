@@ -42,7 +42,6 @@ ignore:
   - "scripts/**/*"
   - "crates/vais-python/**"
   - "crates/vais-node/**"
-  - "crates/vais-dap/**"
   - "crates/vais-playground-server/**"
 
 # Flag configuration for different test types
