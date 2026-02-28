@@ -2,11 +2,9 @@
 //! Verifies that selfhost .vais files generate LLVM IR that clang can compile.
 //! All tests are #[ignore] because they require clang to be installed.
 //!
-//! Current status (as of Phase 27):
-//!   PASS (IR + clang): codegen, mir, module
-//!   KNOWN IR+clang: parser, type_checker  — IR succeeds but clang rejects due to
-//!     a pre-existing `inttoptr i64 %t... to i8*` opaque-pointer codegen bug
-//!   KNOWN IR-fail: all remaining 16 files — pre-existing type/codegen errors that
+//! Current status (as of Phase 65):
+//!   PASS (IR + clang): codegen, mir, module, parser, type_checker
+//!   KNOWN IR-fail: remaining files — pre-existing type/codegen errors that
 //!     prevent IR generation (UndefinedVar, type Mismatch, etc.)
 
 use std::path::{Path, PathBuf};
@@ -112,56 +110,20 @@ fn selfhost_clang_module() {
     clang_compile_ir(&ir, "module").expect("clang compilation failed");
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// KNOWN CLANG ISSUE: IR generation succeeds but clang rejects the output.
-// Pre-existing codegen bug: `inttoptr i64 %t... to i8*` is rejected by
-// clang's opaque-pointer mode (LLVM 15+). Tracked as a known issue.
-// These tests assert that IR generation still succeeds (regression anchor),
-// and document the expected clang error.
-// ────────────────────────────────────────────────────────────────────────────
-
 #[test]
-#[ignore] // Requires clang; known clang failure: inttoptr i64 opaque-pointer codegen bug
+#[ignore] // Requires clang
 fn selfhost_clang_type_checker() {
     let path = project_root().join("selfhost/type_checker.vais");
-    // IR generation must succeed — assert here to catch future regressions
     let ir = compile_file_to_ir(path.to_str().unwrap()).expect("IR generation failed");
-    // Known issue: clang rejects `inttoptr i64 %t... to i8*` with opaque pointers.
-    // When this bug is fixed, this test should be promoted to the FULLY PASSING section.
-    match clang_compile_ir(&ir, "type_checker") {
-        Ok(()) => {
-            // The known bug has been fixed — this test can now be promoted.
-        }
-        Err(e) => {
-            assert!(
-                e.contains("inttoptr") || e.contains("defined with type"),
-                "Unexpected clang error (not the known inttoptr bug): {}",
-                e
-            );
-        }
-    }
+    clang_compile_ir(&ir, "type_checker").expect("clang compilation failed");
 }
 
 #[test]
-#[ignore] // Requires clang; known clang failure: inttoptr i64 opaque-pointer codegen bug
+#[ignore] // Requires clang
 fn selfhost_clang_parser() {
     let path = project_root().join("selfhost/parser.vais");
-    // IR generation must succeed — assert here to catch future regressions
     let ir = compile_file_to_ir(path.to_str().unwrap()).expect("IR generation failed");
-    // Known issue: clang rejects `inttoptr i64 %t... to i8*` with opaque pointers.
-    // When this bug is fixed, this test should be promoted to the FULLY PASSING section.
-    match clang_compile_ir(&ir, "parser") {
-        Ok(()) => {
-            // The known bug has been fixed — this test can now be promoted.
-        }
-        Err(e) => {
-            assert!(
-                e.contains("inttoptr") || e.contains("defined with type"),
-                "Unexpected clang error (not the known inttoptr bug): {}",
-                e
-            );
-        }
-    }
+    clang_compile_ir(&ir, "parser").expect("clang compilation failed");
 }
 
 // ────────────────────────────────────────────────────────────────────────────

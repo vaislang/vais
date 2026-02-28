@@ -194,10 +194,23 @@ impl CodeGenerator {
         let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
 
         for arg in args {
-            let (val, arg_ir) = self.generate_expr(arg, counter)?;
+            let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
             let arg_type = self.infer_expr_type(arg);
             let arg_llvm_ty = self.type_to_llvm(&arg_type);
+
+            // For struct types, load the value from pointer if the expression produces a pointer.
+            // Struct literals and local struct variables return pointers (alloca),
+            // but function params expect values.
+            if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+                let loaded = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, arg_llvm_ty, arg_llvm_ty, val
+                ));
+                val = loaded;
+            }
+
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
@@ -237,10 +250,21 @@ impl CodeGenerator {
 
         let mut arg_vals = Vec::with_capacity(args.len());
         for arg in args {
-            let (val, arg_ir) = self.generate_expr(arg, counter)?;
+            let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
             let arg_type = self.infer_expr_type(arg);
             let arg_llvm_ty = self.type_to_llvm(&arg_type);
+
+            // For struct types, load the value from pointer if the expression produces a pointer.
+            if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+                let loaded = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, arg_llvm_ty, arg_llvm_ty, val
+                ));
+                val = loaded;
+            }
+
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 

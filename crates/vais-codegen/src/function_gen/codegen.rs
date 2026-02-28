@@ -350,16 +350,18 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             if matches!(ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(&ty);
-                let param_ptr = format!("%__{}_ptr", p.name.node);
+                let param_ptr_name = format!("__{}_ptr", p.name.node);
+                let param_ptr = format!("%{}", param_ptr_name);
                 ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
                 ir.push_str(&format!(
                     "  store {} %{}, {}* {}\n",
                     llvm_ty, p.name.node, llvm_ty, param_ptr
                 ));
-                // Update locals to use the pointer instead of the value
+                // Update locals to use SSA with the pointer as the value (including %)
+                // This makes the ident handler treat it as a direct pointer value, not a double pointer
                 self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
-                    LocalVar::alloca(ty.clone(), param_ptr.trim_start_matches('%').to_string()),
+                    LocalVar::ssa(ty.clone(), param_ptr),
                 );
             }
         }

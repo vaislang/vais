@@ -1405,9 +1405,8 @@ F main() -> i64 {
     d + m
 }
 "#;
-    // NOTE: Text IR struct-by-value parameter ABI mismatch — dot() expects %Vec2 but caller passes ptr.
-    // Keep as assert_compiles until struct pass-by-value codegen is fixed in Text IR backend.
-    assert_compiles(source);
+    // dot(b) = 3*1 + 4*2 = 11, mag_squared() = 9+16 = 25, d + m = 36
+    assert_exit_code(source, 36);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-01 (Phase 67 — Monomorphization+Map codegen+Compound assign, E2E 919)
+> **최종 업데이트**: 2026-03-01 (Phase 68 — Struct ABI 수정, selfhost clang 21/21, E2E 919)
 
 ---
 
@@ -240,8 +240,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 65 | Pre-existing E2E 실패 검증 | 14개 E2E + 3개 codegen 실패 — 이전 Phase(43,44,50,51)에서 전수 수정 완료 확인, 코드 변경 불필요 | 900 |
 | 66 | 타입 시스템 Unify 완성 | unify() 6개 variant(ConstArray/Vector/Map/ConstGeneric/Associated/Lifetime) + apply_substitutions() 13개 compound type, +29 테스트 | 900 |
 | 67 | Codegen i64 Fallback 제거 & 기능 확장 | Monomorphization 전이적 인스턴스화, Map literal Inkwell codegen, 6개 compound assignment(%=/&=/|=/^=/<<=/>>= ), +19 E2E | 919 |
+| 68 | Struct ABI 정합성 수정 | Method struct param double-ptr→SSA 수정, method call struct-value load 추가, selfhost clang 21/21 통과 | 919 |
 
-### 잔여 기술 부채 (Phase 67 기준)
+### 잔여 기술 부채 (Phase 68 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -405,16 +406,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 68: Struct ABI 정합성 & Opaque Pointer 수정 📋
+### Phase 68: Struct ABI 정합성 & Opaque Pointer 수정 ✅
 
 > **목표**: Struct-by-value 파라미터 ABI 불일치 해결, inttoptr opaque pointer 버그 수정
-> **근거**: Text IR과 clang 간 `%StructName` vs `ptr` 타입 불일치로 링킹 실패
-> **영향**: selfhost 컴파일 안정성, assert_compiles → assert_exit_code 전환 가능
+> **결과**: Method struct param double-pointer 버그 + method call struct-value load 누락 수정, selfhost clang 21/21 통과
 
-- [ ] 1. Struct-by-value ABI 수정 — Text IR에서 ptr 파라미터 타입 사용 (Opus)
-- [ ] 2. Opaque pointer 전환 — `inttoptr i64 to i8*` → opaque ptr 패턴 (Opus)
-- [ ] 3. Selfhost 검증 — parser.vais, type_checker.vais clang 컴파일 통과 (Opus)
-- [ ] 4. assert_compiles 전환 — ABI 수정으로 전환 가능해진 테스트 전환 (Opus)
+- [x] 1. Struct-by-value ABI 수정 — method param LocalVar::alloca→ssa 전환 ✅ 2026-03-01
+  변경: codegen/function_gen/codegen.rs (method struct param SSA 등록), expr_helpers_call/method_call.rs (struct-value load 추가)
+- [x] 2. Opaque pointer — inttoptr 패턴은 method ABI 수정으로 자연 해소 ✅ 2026-03-01
+  변경: 별도 수정 불필요 (struct param이 올바르게 load되면서 ptr/type 불일치 해소)
+- [x] 3. Selfhost 검증 — parser.vais, type_checker.vais clang 21/21 통과 ✅ 2026-03-01
+  변경: selfhost_clang_tests.rs (parser/type_checker FULLY PASSING 승격)
+- [x] 4. assert_compiles 전환 — complex_nested_structs_and_methods → assert_exit_code(36) ✅ 2026-03-01
+  변경: selfhost_lexer_tests.rs (assert_compiles→assert_exit_code 전환)
 
 ---
 
