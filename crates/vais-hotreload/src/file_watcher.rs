@@ -203,6 +203,13 @@ mod tests {
     }
 
     #[test]
+    fn test_file_watcher_default() {
+        let watcher = FileWatcher::default();
+        assert!(watcher.watched_paths().is_empty());
+        assert_eq!(watcher.debounce_duration, Duration::from_millis(100));
+    }
+
+    #[test]
     fn test_watch_path() {
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test.vais");
@@ -214,10 +221,111 @@ mod tests {
     }
 
     #[test]
+    fn test_watch_multiple_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let file1 = temp_dir.path().join("a.vais");
+        let file2 = temp_dir.path().join("b.vais");
+        fs::write(&file1, "F a() -> i64 { 0 }").unwrap();
+        fs::write(&file2, "F b() -> i64 { 0 }").unwrap();
+
+        let mut watcher = FileWatcher::new().unwrap();
+        assert!(watcher.watch(&file1).is_ok());
+        assert!(watcher.watch(&file2).is_ok());
+        assert_eq!(watcher.watched_paths().len(), 2);
+    }
+
+    #[test]
+    fn test_unwatch_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.vais");
+        fs::write(&test_file, "F main() -> i64 { 0 }").unwrap();
+
+        let mut watcher = FileWatcher::new().unwrap();
+        watcher.watch(&test_file).unwrap();
+        assert_eq!(watcher.watched_paths().len(), 1);
+
+        watcher.unwatch(&test_file).unwrap();
+        assert_eq!(watcher.watched_paths().len(), 0);
+    }
+
+    #[test]
     fn test_debounce() {
         let watcher = FileWatcher::with_debounce(200);
         assert!(watcher.is_ok());
         let watcher = watcher.unwrap();
         assert_eq!(watcher.debounce_duration, Duration::from_millis(200));
+    }
+
+    #[test]
+    fn test_debounce_zero() {
+        let watcher = FileWatcher::with_debounce(0).unwrap();
+        assert_eq!(watcher.debounce_duration, Duration::from_millis(0));
+    }
+
+    #[test]
+    fn test_default_debounce() {
+        let watcher = FileWatcher::new().unwrap();
+        assert_eq!(watcher.debounce_duration, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_watched_paths_empty_initially() {
+        let watcher = FileWatcher::new().unwrap();
+        assert!(watcher.watched_paths().is_empty());
+    }
+
+    #[test]
+    fn test_check_no_events() {
+        let mut watcher = FileWatcher::new().unwrap();
+        let result = watcher.check().unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_watch_event_modified_debug() {
+        let event = WatchEvent::Modified(PathBuf::from("test.vais"));
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("Modified"));
+        assert!(debug.contains("test.vais"));
+    }
+
+    #[test]
+    fn test_watch_event_created_debug() {
+        let event = WatchEvent::Created(PathBuf::from("new.vais"));
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("Created"));
+        assert!(debug.contains("new.vais"));
+    }
+
+    #[test]
+    fn test_watch_event_removed_debug() {
+        let event = WatchEvent::Removed(PathBuf::from("old.vais"));
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("Removed"));
+        assert!(debug.contains("old.vais"));
+    }
+
+    #[test]
+    fn test_watch_event_clone() {
+        let event = WatchEvent::Modified(PathBuf::from("test.vais"));
+        let cloned = event.clone();
+        assert!(matches!(cloned, WatchEvent::Modified(p) if p == Path::new("test.vais")));
+    }
+
+    #[test]
+    fn test_watched_paths_contains_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.vais");
+        fs::write(&test_file, "F main() -> i64 { 0 }").unwrap();
+
+        let mut watcher = FileWatcher::new().unwrap();
+        watcher.watch(&test_file).unwrap();
+        assert!(watcher.watched_paths().contains(&test_file));
+    }
+
+    #[test]
+    fn test_last_event_time_initially_none() {
+        let watcher = FileWatcher::new().unwrap();
+        assert!(watcher.last_event_time.is_none());
     }
 }

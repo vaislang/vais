@@ -1281,7 +1281,6 @@ impl LanguageServer for VaisBackend {
 mod tests {
     use super::*;
     use ropey::Rope;
-    use tower_lsp::lsp_types::*;
 
     // ========== position_in_range tests ==========
 
@@ -1569,5 +1568,507 @@ mod tests {
         assert_eq!(cache.version, 1);
         assert_eq!(cache.definitions.len(), 1);
         assert_eq!(cache.definitions[0].name, "foo");
+    }
+
+    // ========== Additional position_in_range edge case tests ==========
+
+    #[test]
+    fn test_position_in_range_single_char() {
+        let range = Range {
+            start: Position::new(0, 0),
+            end: Position::new(0, 1),
+        };
+        assert!(position_in_range(&Position::new(0, 0), &range));
+        assert!(position_in_range(&Position::new(0, 1), &range));
+        assert!(!position_in_range(&Position::new(0, 2), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_zero_width() {
+        let range = Range {
+            start: Position::new(5, 10),
+            end: Position::new(5, 10),
+        };
+        assert!(position_in_range(&Position::new(5, 10), &range));
+        assert!(!position_in_range(&Position::new(5, 9), &range));
+        assert!(!position_in_range(&Position::new(5, 11), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_multiline_middle() {
+        let range = Range {
+            start: Position::new(1, 0),
+            end: Position::new(10, 0),
+        };
+        assert!(position_in_range(&Position::new(5, 50), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_start_line_boundary() {
+        let range = Range {
+            start: Position::new(2, 5),
+            end: Position::new(5, 10),
+        };
+        assert!(!position_in_range(&Position::new(2, 4), &range));
+        assert!(position_in_range(&Position::new(2, 5), &range));
+        assert!(position_in_range(&Position::new(2, 6), &range));
+    }
+
+    #[test]
+    fn test_position_in_range_end_line_boundary() {
+        let range = Range {
+            start: Position::new(2, 5),
+            end: Position::new(5, 10),
+        };
+        assert!(position_in_range(&Position::new(5, 9), &range));
+        assert!(position_in_range(&Position::new(5, 10), &range));
+        assert!(!position_in_range(&Position::new(5, 11), &range));
+    }
+
+    // ========== Additional builtin hover tests ==========
+
+    #[test]
+    fn test_builtin_hover_print_i64() {
+        let hover = get_builtin_hover("print_i64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_print_f64() {
+        let hover = get_builtin_hover("print_f64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_free() {
+        let hover = get_builtin_hover("free").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Free heap memory"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_memcpy() {
+        let hover = get_builtin_hover("memcpy").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64, i64, i64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_strlen() {
+        let hover = get_builtin_hover("strlen").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64) -> i64"));
+            assert!(markup.value.contains("length"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_putchar() {
+        let hover = get_builtin_hover("putchar").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_tau() {
+        let hover = get_builtin_hover("TAU").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("6.28318"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_sin() {
+        let hover = get_builtin_hover("sin").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64) -> f64"));
+            assert!(markup.value.contains("Sine"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_cos() {
+        let hover = get_builtin_hover("cos").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Cosine"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_tan() {
+        let hover = get_builtin_hover("tan").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Tangent"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_pow() {
+        let hover = get_builtin_hover("pow").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64, f64) -> f64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_log() {
+        let hover = get_builtin_hover("log").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Natural logarithm"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_exp() {
+        let hover = get_builtin_hover("exp").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Exponential"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_floor() {
+        let hover = get_builtin_hover("floor").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Round down"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_ceil() {
+        let hover = get_builtin_hover("ceil").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Round up"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_round() {
+        let hover = get_builtin_hover("round").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Round to nearest"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_abs() {
+        let hover = get_builtin_hover("abs").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Absolute value"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_abs_i64() {
+        let hover = get_builtin_hover("abs_i64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_min() {
+        let hover = get_builtin_hover("min").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64, f64) -> f64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_max() {
+        let hover = get_builtin_hover("max").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(f64, f64) -> f64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_read_i64() {
+        let hover = get_builtin_hover("read_i64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn() -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_read_f64() {
+        let hover = get_builtin_hover("read_f64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn() -> f64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_read_line() {
+        let hover = get_builtin_hover("read_line").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Read line"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_read_char() {
+        let hover = get_builtin_hover("read_char").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Read single character"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_load_i64() {
+        let hover = get_builtin_hover("load_i64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("Load a 64-bit integer"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_store_i64() {
+        let hover = get_builtin_hover("store_i64").unwrap();
+        if let HoverContents::Markup(markup) = &hover.contents {
+            assert!(markup.value.contains("fn(i64, i64) -> i64"));
+        }
+    }
+
+    #[test]
+    fn test_builtin_hover_no_range() {
+        // All builtin hovers should have range: None
+        let hover = get_builtin_hover("puts").unwrap();
+        assert!(hover.range.is_none());
+    }
+
+    #[test]
+    fn test_builtin_hover_case_sensitive() {
+        assert!(get_builtin_hover("Puts").is_none());
+        assert!(get_builtin_hover("PUTS").is_none());
+        assert!(get_builtin_hover("pi").is_none());
+    }
+
+    // ========== Additional struct/clone tests ==========
+
+    #[test]
+    fn test_symbol_def_clone() {
+        let def = SymbolDef {
+            name: "bar".to_string(),
+            kind: SymbolKind::VARIABLE,
+            span: Span::new(0, 3),
+        };
+        let cloned = def.clone();
+        assert_eq!(cloned.name, "bar");
+        assert_eq!(cloned.kind, SymbolKind::VARIABLE);
+    }
+
+    #[test]
+    fn test_symbol_ref_clone() {
+        let sym_ref = SymbolRef {
+            name: "y".to_string(),
+            span: Span::new(10, 11),
+        };
+        let cloned = sym_ref.clone();
+        assert_eq!(cloned.name, "y");
+    }
+
+    #[test]
+    fn test_symbol_cache_clone() {
+        let cache = SymbolCache {
+            version: 5,
+            definitions: vec![],
+            references: vec![],
+            call_graph: vec![],
+        };
+        let cloned = cache.clone();
+        assert_eq!(cloned.version, 5);
+    }
+
+    #[test]
+    fn test_call_graph_entry_clone() {
+        let entry = CallGraphEntry {
+            caller: "a".to_string(),
+            caller_span: Span::new(0, 1),
+            callee: "b".to_string(),
+            call_span: Span::new(5, 6),
+        };
+        let cloned = entry.clone();
+        assert_eq!(cloned.caller, "a");
+        assert_eq!(cloned.callee, "b");
+    }
+
+    #[test]
+    fn test_folding_range_info_clone() {
+        let info = FoldingRangeInfo {
+            start_line: 0,
+            end_line: 100,
+            kind: Some(FoldingRangeKind::Imports),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.start_line, 0);
+        assert_eq!(cloned.end_line, 100);
+    }
+
+    #[test]
+    fn test_inlay_hint_info_clone() {
+        let hint = InlayHintInfo {
+            position: 10,
+            label: ": f64".to_string(),
+            kind: InlayHintKind::TYPE,
+        };
+        let cloned = hint.clone();
+        assert_eq!(cloned.position, 10);
+        assert_eq!(cloned.label, ": f64");
+    }
+
+    #[test]
+    fn test_symbol_def_debug() {
+        let def = SymbolDef {
+            name: "test".to_string(),
+            kind: SymbolKind::STRUCT,
+            span: Span::new(0, 4),
+        };
+        let debug = format!("{:?}", def);
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_symbol_ref_debug() {
+        let sym_ref = SymbolRef {
+            name: "x".to_string(),
+            span: Span::new(0, 1),
+        };
+        let debug = format!("{:?}", sym_ref);
+        assert!(debug.contains("x"));
+    }
+
+    #[test]
+    fn test_symbol_cache_empty() {
+        let cache = SymbolCache {
+            version: 0,
+            definitions: vec![],
+            references: vec![],
+            call_graph: vec![],
+        };
+        assert!(cache.definitions.is_empty());
+        assert!(cache.references.is_empty());
+        assert!(cache.call_graph.is_empty());
+    }
+
+    #[test]
+    fn test_symbol_cache_with_references() {
+        let cache = SymbolCache {
+            version: 1,
+            definitions: vec![],
+            references: vec![
+                SymbolRef {
+                    name: "x".to_string(),
+                    span: Span::new(0, 1),
+                },
+                SymbolRef {
+                    name: "y".to_string(),
+                    span: Span::new(5, 6),
+                },
+            ],
+            call_graph: vec![],
+        };
+        assert_eq!(cache.references.len(), 2);
+    }
+
+    #[test]
+    fn test_symbol_cache_with_call_graph() {
+        let cache = SymbolCache {
+            version: 1,
+            definitions: vec![],
+            references: vec![],
+            call_graph: vec![CallGraphEntry {
+                caller: "main".to_string(),
+                caller_span: Span::new(0, 4),
+                callee: "helper".to_string(),
+                call_span: Span::new(20, 26),
+            }],
+        };
+        assert_eq!(cache.call_graph.len(), 1);
+        assert_eq!(cache.call_graph[0].callee, "helper");
+    }
+
+    #[test]
+    fn test_document_rope_content() {
+        let source = "F main() -> i64 {\n    R 0\n}";
+        let doc = Document {
+            content: Rope::from_str(source),
+            ast: None,
+            version: 1,
+            symbol_cache: None,
+        };
+        assert_eq!(doc.content.len_lines(), 3);
+    }
+
+    #[test]
+    fn test_document_multiple_versions() {
+        let doc1 = Document {
+            content: Rope::from_str("v1"),
+            ast: None,
+            version: 1,
+            symbol_cache: None,
+        };
+        let doc2 = Document {
+            content: Rope::from_str("v2"),
+            ast: None,
+            version: 2,
+            symbol_cache: None,
+        };
+        assert!(doc2.version > doc1.version);
+    }
+
+    #[test]
+    fn test_folding_range_info_without_kind() {
+        let info = FoldingRangeInfo {
+            start_line: 5,
+            end_line: 10,
+            kind: None,
+        };
+        assert!(info.kind.is_none());
+    }
+
+    #[test]
+    fn test_symbol_def_kinds() {
+        let kinds = vec![
+            SymbolKind::FUNCTION,
+            SymbolKind::VARIABLE,
+            SymbolKind::STRUCT,
+            SymbolKind::ENUM,
+            SymbolKind::INTERFACE,
+            SymbolKind::FIELD,
+            SymbolKind::ENUM_MEMBER,
+        ];
+        for kind in kinds {
+            let def = SymbolDef {
+                name: "x".to_string(),
+                kind,
+                span: Span::new(0, 1),
+            };
+            assert_eq!(def.kind, kind);
+        }
+    }
+
+    #[test]
+    fn test_inlay_hint_kinds() {
+        let type_hint = InlayHintInfo {
+            position: 0,
+            label: ": i64".to_string(),
+            kind: InlayHintKind::TYPE,
+        };
+        assert_eq!(type_hint.kind, InlayHintKind::TYPE);
+
+        let param_hint = InlayHintInfo {
+            position: 0,
+            label: "x: ".to_string(),
+            kind: InlayHintKind::PARAMETER,
+        };
+        assert_eq!(param_hint.kind, InlayHintKind::PARAMETER);
     }
 }

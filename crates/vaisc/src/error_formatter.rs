@@ -86,4 +86,83 @@ mod tests {
 
         assert_eq!(context.filename(), "unknown");
     }
+
+    #[test]
+    fn test_error_format_context_nested_path() {
+        let source = "F main() {}".to_string();
+        let path = PathBuf::from("/home/user/project/src/lib.vais");
+        let context = ErrorFormatContext::new(source, path);
+
+        assert_eq!(context.filename(), "lib.vais");
+    }
+
+    #[test]
+    fn test_error_format_context_reporter() {
+        let source = "F main() { R 1 }".to_string();
+        let path = PathBuf::from("test.vais");
+        let context = ErrorFormatContext::new(source, path);
+
+        // Just verify reporter can be created without panic
+        let _reporter = context.reporter();
+    }
+
+    #[test]
+    fn test_error_format_context_empty_source() {
+        let source = String::new();
+        let path = PathBuf::from("empty.vais");
+        let context = ErrorFormatContext::new(source, path);
+
+        assert!(context.source.is_empty());
+        assert_eq!(context.filename(), "empty.vais");
+    }
+
+    #[test]
+    fn test_error_format_context_path_with_extension() {
+        let source = "code".to_string();
+        let path = PathBuf::from("my_module.vais");
+        let context = ErrorFormatContext::new(source, path);
+        assert_eq!(context.filename(), "my_module.vais");
+    }
+
+    #[test]
+    fn test_error_format_context_path_directory_only() {
+        let source = "code".to_string();
+        let path = PathBuf::from("/tmp/");
+        let context = ErrorFormatContext::new(source, path);
+        // file_name() of "/tmp/" would be None or "tmp" depending on trailing slash
+        // Just ensure it doesn't panic
+        let _name = context.filename();
+    }
+
+    #[test]
+    fn test_error_format_context_preserves_source() {
+        let source = "F main() { R 42 }\nF helper() { R 1 }".to_string();
+        let path = PathBuf::from("test.vais");
+        let context = ErrorFormatContext::new(source.clone(), path);
+        assert_eq!(context.source, source);
+    }
+
+    #[test]
+    fn test_error_format_context_preserves_path() {
+        let source = "code".to_string();
+        let path = PathBuf::from("/my/project/src/main.vais");
+        let context = ErrorFormatContext::new(source, path.clone());
+        assert_eq!(context.path, path);
+    }
+
+    #[test]
+    fn test_error_format_context_multiline_source() {
+        let source = "F main() {\n    R 42\n}\n".to_string();
+        let path = PathBuf::from("test.vais");
+        let context = ErrorFormatContext::new(source, path);
+        assert!(context.source.contains("R 42"));
+    }
+
+    #[test]
+    fn test_error_format_context_unicode_filename() {
+        let source = "code".to_string();
+        let path = PathBuf::from("unicode_파일.vais");
+        let context = ErrorFormatContext::new(source, path);
+        assert_eq!(context.filename(), "unicode_파일.vais");
+    }
 }

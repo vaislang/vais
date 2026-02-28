@@ -477,4 +477,214 @@ mod tests {
         assert_eq!(ctx.prefix_lines.len(), 1);
         assert_eq!(ctx.current_line_prefix, "    ");
     }
+
+    #[test]
+    fn test_completion_context_first_line() {
+        let source = "F main() -> i64 { 0 }";
+        let pos = Position {
+            line: 0,
+            character: 2,
+        };
+        let ctx = CompletionContext::from_document(source, pos, None);
+        assert!(ctx.prefix_lines.is_empty());
+        assert_eq!(ctx.current_line_prefix, "F ");
+    }
+
+    #[test]
+    fn test_completion_context_empty_document() {
+        let source = "";
+        let pos = Position {
+            line: 0,
+            character: 0,
+        };
+        let ctx = CompletionContext::from_document(source, pos, None);
+        assert!(ctx.prefix_lines.is_empty());
+    }
+
+    #[test]
+    fn test_completion_context_with_ast() {
+        let source = "F foo() -> i64 { 0 }\nS Bar { x: i64 }\n";
+        let ast = vais_parser::parse(source).ok();
+        let pos = Position {
+            line: 1,
+            character: 0,
+        };
+        let ctx = CompletionContext::from_document(source, pos, ast.as_ref());
+        assert!(ctx.available_functions.contains(&"foo".to_string()));
+        assert!(ctx.available_structs.contains(&"Bar".to_string()));
+    }
+
+    #[test]
+    fn test_function_body_suggestion_str() {
+        let ctx = make_context(&["F name() -> str {"], "");
+        let items = suggest_function_body(&ctx);
+        assert!(!items.is_empty());
+        assert!(items[0]
+            .insert_text
+            .as_ref()
+            .unwrap()
+            .contains("\"\""));
+    }
+
+    #[test]
+    fn test_function_body_suggestion_option() {
+        let ctx = make_context(&["F find() -> Option<i64> {"], "");
+        let items = suggest_function_body(&ctx);
+        assert!(!items.is_empty());
+        assert!(items[0].insert_text.as_ref().unwrap().contains("None"));
+    }
+
+    #[test]
+    fn test_function_body_suggestion_result() {
+        let ctx = make_context(&["F parse() -> Result<i64, str> {"], "");
+        let items = suggest_function_body(&ctx);
+        assert!(!items.is_empty());
+        assert!(items[0].insert_text.as_ref().unwrap().contains("Ok"));
+    }
+
+    #[test]
+    fn test_function_body_no_suggestion_outside_function() {
+        let ctx = make_context(&["S Point { x: i64 }"], "");
+        let items = suggest_function_body(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_match_arms_default_boolean() {
+        let ctx = make_context(&[], "M x {");
+        let items = suggest_match_arms(&ctx);
+        assert!(!items.is_empty());
+        assert!(items[0].label.contains("Boolean"));
+    }
+
+    #[test]
+    fn test_match_arms_no_brace() {
+        let ctx = make_context(&[], "M x");
+        let items = suggest_match_arms(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_error_handling_suggestion() {
+        let ctx = make_context(&[], "Err(\"something\")");
+        let items = suggest_error_handling(&ctx);
+        assert!(!items.is_empty());
+    }
+
+    #[test]
+    fn test_no_error_handling_for_normal_code() {
+        let ctx = make_context(&[], "x := 42");
+        let items = suggest_error_handling(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_loop_pattern_exact_L() {
+        let ctx = make_context(&[], "L");
+        let items = suggest_loop_patterns(&ctx);
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_loop_pattern_not_matching() {
+        let ctx = make_context(&[], "L i : 0..10 {");
+        let items = suggest_loop_patterns(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_struct_field_suggestion_no_match() {
+        let mut ctx = make_context(&[], "NotAStruct {");
+        ctx.available_structs = vec!["Point".to_string()];
+        let items = suggest_struct_fields(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_struct_field_suggestion_no_brace() {
+        let mut ctx = make_context(&[], "Point");
+        ctx.available_structs = vec!["Point".to_string()];
+        let items = suggest_struct_fields(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_idiom_assign_pattern() {
+        let ctx = make_context(&["F main() -> i64 {"], ":=");
+        let items = suggest_idioms(&ctx);
+        assert!(!items.is_empty());
+    }
+
+    #[test]
+    fn test_idiom_assign_with_space() {
+        let ctx = make_context(&["F main() -> i64 {"], ":= ");
+        let items = suggest_idioms(&ctx);
+        assert!(!items.is_empty());
+    }
+
+    #[test]
+    fn test_ai_completion_format() {
+        let item = ai_completion("test label", "insert text", "detail text", "sort_key");
+        assert!(item.label.contains("test label"));
+        assert_eq!(item.insert_text.unwrap(), "insert text");
+        assert!(item.detail.unwrap().contains("detail text"));
+        assert_eq!(item.kind, Some(CompletionItemKind::SNIPPET));
+        assert_eq!(item.insert_text_format, Some(InsertTextFormat::SNIPPET));
+    }
+
+    #[test]
+    fn test_ai_snippet_format() {
+        let item = ai_snippet("snippet label", "snippet text", "snippet detail", "key");
+        assert!(item.label.contains("snippet label"));
+        assert_eq!(item.insert_text.unwrap(), "snippet text");
+        assert_eq!(item.detail.unwrap(), "snippet detail");
+        assert!(item.sort_text.unwrap().starts_with(AI_SORT_PREFIX));
+    }
+
+    #[test]
+    fn test_completion_context_debug() {
+        let ctx = make_context(&["line1"], "cur");
+        let debug = format!("{:?}", ctx);
+        assert!(debug.contains("line1"));
+        assert!(debug.contains("cur"));
+    }
+
+    #[test]
+    fn test_function_body_i32() {
+        let ctx = make_context(&["F foo() -> i32 {"], "");
+        let items = suggest_function_body(&ctx);
+        assert!(!items.is_empty());
+    }
+
+    #[test]
+    fn test_no_suggestions_with_non_empty_line() {
+        let ctx = make_context(&["F main() -> i64 {"], "R 42");
+        let items = suggest_function_body(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_idiom_no_suggestions_outside_function() {
+        let ctx = make_context(&[], "");
+        let items = suggest_idioms(&ctx);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_match_option_variant_name() {
+        let ctx = make_context(&[], "M opt {");
+        let items = suggest_match_arms(&ctx);
+        assert!(!items.is_empty());
+        // "opt" should trigger Option pattern
+        assert!(items[0].label.contains("Option"));
+    }
+
+    #[test]
+    fn test_match_result_variant_name() {
+        let ctx = make_context(&[], "M res {");
+        let items = suggest_match_arms(&ctx);
+        assert!(!items.is_empty());
+        assert!(items[0].label.contains("Result"));
+    }
 }

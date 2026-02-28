@@ -449,8 +449,10 @@ pub fn generate_host_code(kernels: &[GpuKernel]) -> String {
 mod tests {
     use super::*;
 
+    // ── type_to_opencl tests ──
+
     #[test]
-    fn test_opencl_generator_basic() {
+    fn test_opencl_type_i64() {
         let gen = OpenCLGenerator::new();
         assert_eq!(
             gen.type_to_opencl(&Type::Named {
@@ -459,6 +461,23 @@ mod tests {
             }),
             "long"
         );
+    }
+
+    #[test]
+    fn test_opencl_type_i32() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "i32".to_string(),
+                generics: vec![]
+            }),
+            "int"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_f64() {
+        let gen = OpenCLGenerator::new();
         assert_eq!(
             gen.type_to_opencl(&Type::Named {
                 name: "f64".to_string(),
@@ -466,5 +485,154 @@ mod tests {
             }),
             "double"
         );
+    }
+
+    #[test]
+    fn test_opencl_type_f32() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "f32".to_string(),
+                generics: vec![]
+            }),
+            "float"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_bool() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "bool".to_string(),
+                generics: vec![]
+            }),
+            "bool"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_void() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "unit".to_string(),
+                generics: vec![]
+            }),
+            "void"
+        );
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "()".to_string(),
+                generics: vec![]
+            }),
+            "void"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_custom() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(
+            gen.type_to_opencl(&Type::Named {
+                name: "Vec3".to_string(),
+                generics: vec![]
+            }),
+            "Vec3"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_pointer() {
+        let gen = OpenCLGenerator::new();
+        let inner = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(gen.type_to_opencl(&Type::Pointer(inner)), "float*");
+    }
+
+    #[test]
+    fn test_opencl_type_const_array() {
+        let gen = OpenCLGenerator::new();
+        let elem = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f64".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(
+            gen.type_to_opencl(&Type::ConstArray {
+                element: elem,
+                size: 8
+            }),
+            "double[8]"
+        );
+    }
+
+    #[test]
+    fn test_opencl_type_fallback() {
+        let gen = OpenCLGenerator::new();
+        assert_eq!(gen.type_to_opencl(&Type::Tuple(vec![])), "void");
+    }
+
+    // ── i64 difference: OpenCL "long" vs CUDA "long long" ──
+
+    #[test]
+    fn test_opencl_i64_is_long() {
+        let gen = OpenCLGenerator::new();
+        let ty = Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        };
+        // OpenCL uses "long" (not "long long" like CUDA)
+        assert_eq!(gen.type_to_opencl(&ty), "long");
+    }
+
+    // ── generate_host_code tests ──
+
+    #[test]
+    fn test_opencl_host_code_empty() {
+        let code = generate_host_code(&[]);
+        assert!(code.contains("OpenCL Host Code"));
+        assert!(code.contains("#include <CL/cl.h>"));
+    }
+
+    #[test]
+    fn test_opencl_host_code_single_kernel() {
+        let kernels = vec![GpuKernel {
+            name: "multiply".to_string(),
+            params: vec![("x".to_string(), GpuType::Ptr(Box::new(GpuType::F32)))],
+            shared_memory: 0,
+            block_size: (256, 1, 1),
+        }];
+        let code = generate_host_code(&kernels);
+        assert!(code.contains("Kernel: multiply"));
+        assert!(code.contains("Block size: (256, 1, 1)"));
+    }
+
+    #[test]
+    fn test_opencl_host_code_multiple_kernels() {
+        let kernels = vec![
+            GpuKernel {
+                name: "k1".to_string(),
+                params: vec![],
+                shared_memory: 0,
+                block_size: (128, 1, 1),
+            },
+            GpuKernel {
+                name: "k2".to_string(),
+                params: vec![],
+                shared_memory: 0,
+                block_size: (64, 1, 1),
+            },
+        ];
+        let code = generate_host_code(&kernels);
+        assert!(code.contains("Kernel: k1"));
+        assert!(code.contains("Kernel: k2"));
     }
 }

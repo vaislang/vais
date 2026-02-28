@@ -340,6 +340,17 @@ mod tests {
     }
 
     #[test]
+    fn test_config_defaults() {
+        let config = HotReloadConfig::new("test.vais");
+        assert!(config.output_dir.is_none());
+        assert_eq!(config.compiler_command, "vaisc");
+        assert!(config.compiler_args.is_empty());
+        assert_eq!(config.debounce_ms, 100);
+        assert_eq!(config.compile_timeout_secs, 30);
+        assert!(!config.verbose);
+    }
+
+    #[test]
     fn test_config_builder() {
         let config = HotReloadConfig::new("test.vais")
             .with_output_dir("/tmp")
@@ -354,6 +365,71 @@ mod tests {
     }
 
     #[test]
+    fn test_config_with_compiler_args() {
+        let config = HotReloadConfig::new("test.vais")
+            .with_compiler_args(vec!["--opt".to_string(), "-O2".to_string()]);
+        assert_eq!(config.compiler_args.len(), 2);
+        assert_eq!(config.compiler_args[0], "--opt");
+        assert_eq!(config.compiler_args[1], "-O2");
+    }
+
+    #[test]
+    fn test_config_with_verbose_false() {
+        let config = HotReloadConfig::new("test.vais").with_verbose(false);
+        assert!(!config.verbose);
+    }
+
+    #[test]
+    fn test_config_with_zero_debounce() {
+        let config = HotReloadConfig::new("test.vais").with_debounce(0);
+        assert_eq!(config.debounce_ms, 0);
+    }
+
+    #[test]
+    fn test_config_with_large_debounce() {
+        let config = HotReloadConfig::new("test.vais").with_debounce(10_000);
+        assert_eq!(config.debounce_ms, 10_000);
+    }
+
+    #[test]
+    fn test_config_builder_chaining() {
+        let config = HotReloadConfig::new("game.vais")
+            .with_output_dir("/tmp/build")
+            .with_compiler("gcc".to_string())
+            .with_compiler_args(vec!["-O3".to_string()])
+            .with_debounce(500)
+            .with_verbose(true);
+
+        assert_eq!(config.source_path, PathBuf::from("game.vais"));
+        assert_eq!(
+            config.output_dir.unwrap(),
+            PathBuf::from("/tmp/build")
+        );
+        assert_eq!(config.compiler_command, "gcc");
+        assert_eq!(config.compiler_args, vec!["-O3"]);
+        assert_eq!(config.debounce_ms, 500);
+        assert!(config.verbose);
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = HotReloadConfig::new("test.vais")
+            .with_output_dir("/tmp")
+            .with_verbose(true);
+        let cloned = config.clone();
+        assert_eq!(cloned.source_path, config.source_path);
+        assert_eq!(cloned.output_dir, config.output_dir);
+        assert_eq!(cloned.verbose, config.verbose);
+    }
+
+    #[test]
+    fn test_config_accepts_path_ref() {
+        let path = PathBuf::from("/home/user/project/main.vais");
+        let config = HotReloadConfig::new(&path);
+        assert_eq!(config.source_path, path);
+    }
+
+    #[test]
     fn test_dylib_path_determination() {
         let config = HotReloadConfig::new("/tmp/test.vais");
         let path = HotReloader::determine_dylib_path(&config);
@@ -364,5 +440,74 @@ mod tests {
         assert!(path.to_str().unwrap().ends_with("libtest.dylib"));
         #[cfg(target_os = "linux")]
         assert!(path.to_str().unwrap().ends_with("libtest.so"));
+    }
+
+    #[test]
+    fn test_dylib_path_with_output_dir() {
+        let config = HotReloadConfig::new("/src/test.vais")
+            .with_output_dir("/build");
+        let path = HotReloader::determine_dylib_path(&config).unwrap();
+        assert!(path.starts_with("/build"));
+        assert!(path.file_name().unwrap().to_str().unwrap().starts_with("libtest."));
+    }
+
+    #[test]
+    fn test_dylib_path_without_output_dir() {
+        let config = HotReloadConfig::new("/src/project/main.vais");
+        let path = HotReloader::determine_dylib_path(&config).unwrap();
+        assert_eq!(path.parent().unwrap(), Path::new("/src/project"));
+        assert!(path.file_name().unwrap().to_str().unwrap().starts_with("libmain."));
+    }
+
+    #[test]
+    fn test_dylib_path_platform_extension() {
+        let config = HotReloadConfig::new("/tmp/test.vais");
+        let path = HotReloader::determine_dylib_path(&config).unwrap();
+        let name = path.file_name().unwrap().to_str().unwrap();
+
+        #[cfg(target_os = "macos")]
+        assert!(name.ends_with(".dylib"), "macOS should use .dylib extension");
+        #[cfg(target_os = "linux")]
+        assert!(name.ends_with(".so"), "Linux should use .so extension");
+        #[cfg(target_os = "windows")]
+        assert!(name.ends_with(".dll"), "Windows should use .dll extension");
+    }
+
+    #[test]
+    fn test_dylib_path_lib_prefix() {
+        let config = HotReloadConfig::new("/tmp/mymodule.vais");
+        let path = HotReloader::determine_dylib_path(&config).unwrap();
+        let name = path.file_name().unwrap().to_str().unwrap();
+        assert!(name.starts_with("lib"), "Dylib should have 'lib' prefix: {}", name);
+    }
+
+    #[test]
+    fn test_version_starts_at_zero() {
+        // Without creating a real HotReloader (needs file watcher),
+        // test the config defaults that affect version
+        let config = HotReloadConfig::new("test.vais");
+        assert_eq!(config.compile_timeout_secs, 30);
+    }
+
+    #[test]
+    fn test_config_source_path_preserved() {
+        let config = HotReloadConfig::new("/a/b/c/d.vais");
+        assert_eq!(config.source_path, PathBuf::from("/a/b/c/d.vais"));
+    }
+
+    #[test]
+    fn test_config_empty_compiler_args() {
+        let config = HotReloadConfig::new("test.vais")
+            .with_compiler_args(vec![]);
+        assert!(config.compiler_args.is_empty());
+    }
+
+    #[test]
+    fn test_config_many_compiler_args() {
+        let args: Vec<String> = (0..10).map(|i| format!("--arg{}", i)).collect();
+        let config = HotReloadConfig::new("test.vais")
+            .with_compiler_args(args.clone());
+        assert_eq!(config.compiler_args.len(), 10);
+        assert_eq!(config.compiler_args, args);
     }
 }

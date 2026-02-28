@@ -532,8 +532,10 @@ pub fn generate_host_code(kernels: &[GpuKernel], wgsl_code: &str) -> String {
 mod tests {
     use super::*;
 
+    // ── type_to_wgsl tests ──
+
     #[test]
-    fn test_wgsl_generator_basic() {
+    fn test_wgsl_type_i32() {
         let gen = WgslGenerator::new();
         assert_eq!(
             gen.type_to_wgsl(&Type::Named {
@@ -542,6 +544,36 @@ mod tests {
             }),
             "i32"
         );
+    }
+
+    #[test]
+    fn test_wgsl_type_i64_mapped_to_i32() {
+        let gen = WgslGenerator::new();
+        // WGSL doesn't have i64 widely, maps to i32
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "i64".to_string(),
+                generics: vec![]
+            }),
+            "i32"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_u32() {
+        let gen = WgslGenerator::new();
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "u32".to_string(),
+                generics: vec![]
+            }),
+            "u32"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_f32() {
+        let gen = WgslGenerator::new();
         assert_eq!(
             gen.type_to_wgsl(&Type::Named {
                 name: "f32".to_string(),
@@ -549,5 +581,197 @@ mod tests {
             }),
             "f32"
         );
+    }
+
+    #[test]
+    fn test_wgsl_type_f64_mapped_to_f32() {
+        let gen = WgslGenerator::new();
+        // WGSL f64 is limited, maps to f32
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "f64".to_string(),
+                generics: vec![]
+            }),
+            "f32"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_bool() {
+        let gen = WgslGenerator::new();
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "bool".to_string(),
+                generics: vec![]
+            }),
+            "bool"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_void() {
+        let gen = WgslGenerator::new();
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "unit".to_string(),
+                generics: vec![]
+            }),
+            ""
+        );
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "()".to_string(),
+                generics: vec![]
+            }),
+            ""
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_custom() {
+        let gen = WgslGenerator::new();
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Named {
+                name: "Particle".to_string(),
+                generics: vec![]
+            }),
+            "Particle"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_pointer() {
+        let gen = WgslGenerator::new();
+        let inner = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(
+            gen.type_to_wgsl(&Type::Pointer(inner)),
+            "ptr<storage, f32>"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_const_array() {
+        let gen = WgslGenerator::new();
+        let elem = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(
+            gen.type_to_wgsl(&Type::ConstArray {
+                element: elem,
+                size: 64
+            }),
+            "array<f32, 64>"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_type_fallback() {
+        let gen = WgslGenerator::new();
+        // Tuple type falls back to i32 in WGSL
+        assert_eq!(gen.type_to_wgsl(&Type::Tuple(vec![])), "i32");
+    }
+
+    // ── WgslGenerator initialization ──
+
+    #[test]
+    fn test_wgsl_generator_new() {
+        let gen = WgslGenerator::new();
+        assert_eq!(gen.binding_counter, 0);
+        assert_eq!(gen.indent_level, 0);
+        assert!(gen.output.is_empty());
+    }
+
+    // ── generate_host_code tests ──
+
+    #[test]
+    fn test_wgsl_host_code_empty() {
+        let code = generate_host_code(&[], "");
+        assert!(code.contains("WebGPU Host Code"));
+        assert!(code.contains("async function initGPU"));
+        assert!(code.contains("navigator.gpu.requestAdapter"));
+    }
+
+    #[test]
+    fn test_wgsl_host_code_single_kernel() {
+        let kernels = vec![GpuKernel {
+            name: "compute".to_string(),
+            params: vec![
+                ("input".to_string(), GpuType::Ptr(Box::new(GpuType::F32))),
+                ("output".to_string(), GpuType::Ptr(Box::new(GpuType::F32))),
+            ],
+            shared_memory: 0,
+            block_size: (256, 1, 1),
+        }];
+        let code = generate_host_code(&kernels, "test_shader");
+        assert!(code.contains("run_compute"));
+        assert!(code.contains("inputBuffer"));
+        assert!(code.contains("outputBuffer"));
+        assert!(code.contains("createComputePipeline"));
+        assert!(code.contains("createBindGroup"));
+        assert!(code.contains("dispatchWorkgroups"));
+        assert!(code.contains("entryPoint: 'compute'"));
+    }
+
+    #[test]
+    fn test_wgsl_host_code_embeds_shader() {
+        let code = generate_host_code(&[], "fn main() {}");
+        assert!(code.contains("const shaderCode = `fn main() {}`"));
+    }
+
+    #[test]
+    fn test_wgsl_host_code_escapes_backticks() {
+        let code = generate_host_code(&[], "let x = `test`");
+        assert!(code.contains("\\`test\\`"));
+    }
+
+    #[test]
+    fn test_wgsl_host_code_multiple_kernels() {
+        let kernels = vec![
+            GpuKernel {
+                name: "k1".to_string(),
+                params: vec![("a".to_string(), GpuType::Ptr(Box::new(GpuType::F32)))],
+                shared_memory: 0,
+                block_size: (256, 1, 1),
+            },
+            GpuKernel {
+                name: "k2".to_string(),
+                params: vec![("b".to_string(), GpuType::Ptr(Box::new(GpuType::I32)))],
+                shared_memory: 0,
+                block_size: (128, 1, 1),
+            },
+        ];
+        let code = generate_host_code(&kernels, "");
+        assert!(code.contains("run_k1"));
+        assert!(code.contains("run_k2"));
+    }
+
+    // ── WGSL has different type mappings than CUDA/OpenCL ──
+
+    #[test]
+    fn test_wgsl_type_differences_from_other_backends() {
+        let gen = WgslGenerator::new();
+        // WGSL maps i64 to i32 (limited support)
+        let i64_ty = Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        };
+        assert_eq!(gen.type_to_wgsl(&i64_ty), "i32");
+
+        // WGSL maps f64 to f32 (limited support)
+        let f64_ty = Type::Named {
+            name: "f64".to_string(),
+            generics: vec![],
+        };
+        assert_eq!(gen.type_to_wgsl(&f64_ty), "f32");
     }
 }

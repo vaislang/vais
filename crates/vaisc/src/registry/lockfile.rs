@@ -205,4 +205,260 @@ dependencies = []
         assert!(lock.contains("json-parser"));
         assert!(lock.contains("utils"));
     }
+
+    #[test]
+    fn test_lockfile_new() {
+        let lock = LockFile::new();
+        assert_eq!(lock.version, 1);
+        assert!(lock.packages.is_empty());
+        assert!(lock.is_empty());
+        assert_eq!(lock.len(), 0);
+    }
+
+    #[test]
+    fn test_lockfile_default() {
+        let lock = LockFile::default();
+        assert_eq!(lock.version, 1);
+        assert!(lock.is_empty());
+    }
+
+    #[test]
+    fn test_lockfile_insert_and_get() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "my-pkg".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "abc123".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        assert!(!lock.is_empty());
+        assert_eq!(lock.len(), 1);
+        assert!(lock.contains("my-pkg"));
+        assert!(!lock.contains("other-pkg"));
+
+        let pkg = lock.get("my-pkg").unwrap();
+        assert_eq!(pkg.version.to_string(), "1.0.0");
+        assert_eq!(pkg.checksum, "abc123");
+    }
+
+    #[test]
+    fn test_lockfile_get_nonexistent() {
+        let lock = LockFile::new();
+        assert!(lock.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_lockfile_remove() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "my-pkg".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "abc".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        let removed = lock.remove("my-pkg");
+        assert!(removed.is_some());
+        assert!(lock.is_empty());
+
+        // Removing again returns None
+        assert!(lock.remove("my-pkg").is_none());
+    }
+
+    #[test]
+    fn test_lockfile_iter() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "a".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+        lock.insert(
+            "b".to_string(),
+            LockedPackage {
+                version: Version::new(2, 0, 0),
+                checksum: "b".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        let names: Vec<&String> = lock.iter().map(|(n, _)| n).collect();
+        assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn test_lockfile_merge() {
+        let mut lock1 = LockFile::new();
+        lock1.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "old".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        let mut lock2 = LockFile::new();
+        lock2.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(2, 0, 0),
+                checksum: "new".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+        lock2.insert(
+            "b".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "b".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        lock1.merge(&lock2);
+
+        assert_eq!(lock1.len(), 2);
+        // "a" should be overwritten by lock2's version
+        assert_eq!(lock1.get("a").unwrap().version.to_string(), "2.0.0");
+        assert!(lock1.contains("b"));
+    }
+
+    #[test]
+    fn test_lockfile_is_current_all_present() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+        lock.insert(
+            "b".to_string(),
+            LockedPackage {
+                version: Version::new(2, 0, 0),
+                checksum: "".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        let deps = vec![
+            ("a".to_string(), "^1.0".to_string()),
+            ("b".to_string(), "^2.0".to_string()),
+        ];
+        assert!(lock.is_current(&deps));
+    }
+
+    #[test]
+    fn test_lockfile_is_current_missing_dep() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        let deps = vec![
+            ("a".to_string(), "^1.0".to_string()),
+            ("b".to_string(), "^2.0".to_string()),
+        ];
+        assert!(!lock.is_current(&deps));
+    }
+
+    #[test]
+    fn test_lockfile_is_current_empty() {
+        let lock = LockFile::new();
+        let deps: Vec<(String, String)> = vec![];
+        assert!(lock.is_current(&deps));
+    }
+
+    #[test]
+    fn test_lockfile_insert_overwrites() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "old".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+        lock.insert(
+            "a".to_string(),
+            LockedPackage {
+                version: Version::new(2, 0, 0),
+                checksum: "new".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec![],
+            },
+        );
+
+        assert_eq!(lock.len(), 1);
+        assert_eq!(lock.get("a").unwrap().checksum, "new");
+    }
+
+    #[test]
+    fn test_lockfile_with_dependencies() {
+        let mut lock = LockFile::new();
+        lock.insert(
+            "app".to_string(),
+            LockedPackage {
+                version: Version::new(1, 0, 0),
+                checksum: "abc".to_string(),
+                source: "registry".to_string(),
+                dependencies: vec!["lib-a".to_string(), "lib-b".to_string()],
+            },
+        );
+
+        let pkg = lock.get("app").unwrap();
+        assert_eq!(pkg.dependencies.len(), 2);
+        assert!(pkg.dependencies.contains(&"lib-a".to_string()));
+    }
+
+    #[test]
+    fn test_lockfile_parse_invalid_toml() {
+        let result = LockFile::parse("this is not toml {{{}}}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lockfile_btreemap_ordering() {
+        let mut lock = LockFile::new();
+        let pkg = LockedPackage {
+            version: Version::new(1, 0, 0),
+            checksum: "".to_string(),
+            source: "registry".to_string(),
+            dependencies: vec![],
+        };
+        lock.insert("z-pkg".to_string(), pkg.clone());
+        lock.insert("a-pkg".to_string(), pkg.clone());
+        lock.insert("m-pkg".to_string(), pkg);
+
+        let names: Vec<&String> = lock.iter().map(|(n, _)| n).collect();
+        assert_eq!(names, vec!["a-pkg", "m-pkg", "z-pkg"]);
+    }
 }

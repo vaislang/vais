@@ -245,4 +245,290 @@ mod tests {
         let results = index.search("parser");
         assert_eq!(results.len(), 2);
     }
+
+    #[test]
+    fn test_package_index_new() {
+        let index = PackageIndex::new();
+        assert!(!index.contains("anything"));
+    }
+
+    #[test]
+    fn test_package_index_default() {
+        let index = PackageIndex::default();
+        assert!(!index.contains("anything"));
+    }
+
+    #[test]
+    fn test_package_index_insert_and_get() {
+        let mut index = PackageIndex::new();
+        index.insert(PackageMetadata {
+            name: "my-pkg".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        });
+
+        assert!(index.contains("my-pkg"));
+        let pkg = index.get("my-pkg").unwrap();
+        assert_eq!(pkg.name, "my-pkg");
+    }
+
+    #[test]
+    fn test_package_index_get_nonexistent() {
+        let index = PackageIndex::new();
+        assert!(index.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_package_index_all() {
+        let mut index = PackageIndex::new();
+        index.insert(PackageMetadata {
+            name: "a".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        });
+        index.insert(PackageMetadata {
+            name: "b".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        });
+
+        let all: Vec<_> = index.all().collect();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_package_search_by_keyword() {
+        let mut index = PackageIndex::new();
+        index.insert(PackageMetadata {
+            name: "my-pkg".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec!["serialization".to_string()],
+        });
+
+        let results = index.search("serialization");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_package_search_case_insensitive() {
+        let mut index = PackageIndex::new();
+        index.insert(PackageMetadata {
+            name: "JSON-Parser".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        });
+
+        let results = index.search("json");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_package_search_empty_query() {
+        let mut index = PackageIndex::new();
+        index.insert(PackageMetadata {
+            name: "pkg".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        });
+
+        let results = index.search("");
+        // All packages match empty query (substring match)
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_package_metadata_latest_version() {
+        let pkg = PackageMetadata {
+            name: "test".to_string(),
+            description: None,
+            versions: vec![
+                VersionEntry {
+                    version: Version::new(1, 0, 0),
+                    checksum: "a".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: false,
+                    download_url: None,
+                    size: None,
+                },
+                VersionEntry {
+                    version: Version::new(2, 0, 0),
+                    checksum: "b".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: false,
+                    download_url: None,
+                    size: None,
+                },
+                VersionEntry {
+                    version: Version::new(3, 0, 0).with_pre("alpha"),
+                    checksum: "c".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: false,
+                    download_url: None,
+                    size: None,
+                },
+            ],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        };
+
+        let latest = pkg.latest_version().unwrap();
+        assert_eq!(latest.version, Version::new(2, 0, 0));
+    }
+
+    #[test]
+    fn test_package_metadata_latest_version_skips_yanked() {
+        let pkg = PackageMetadata {
+            name: "test".to_string(),
+            description: None,
+            versions: vec![
+                VersionEntry {
+                    version: Version::new(1, 0, 0),
+                    checksum: "a".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: false,
+                    download_url: None,
+                    size: None,
+                },
+                VersionEntry {
+                    version: Version::new(2, 0, 0),
+                    checksum: "b".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: true,
+                    download_url: None,
+                    size: None,
+                },
+            ],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        };
+
+        let latest = pkg.latest_version().unwrap();
+        assert_eq!(latest.version, Version::new(1, 0, 0));
+    }
+
+    #[test]
+    fn test_package_metadata_get_version() {
+        let pkg = PackageMetadata {
+            name: "test".to_string(),
+            description: None,
+            versions: vec![VersionEntry {
+                version: Version::new(1, 2, 3),
+                checksum: "abc".to_string(),
+                dependencies: HashMap::new(),
+                yanked: false,
+                download_url: None,
+                size: None,
+            }],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        };
+
+        assert!(pkg.get_version(&Version::new(1, 2, 3)).is_some());
+        assert!(pkg.get_version(&Version::new(9, 9, 9)).is_none());
+    }
+
+    #[test]
+    fn test_package_metadata_available_versions() {
+        let pkg = PackageMetadata {
+            name: "test".to_string(),
+            description: None,
+            versions: vec![
+                VersionEntry {
+                    version: Version::new(1, 0, 0),
+                    checksum: "a".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: false,
+                    download_url: None,
+                    size: None,
+                },
+                VersionEntry {
+                    version: Version::new(2, 0, 0),
+                    checksum: "b".to_string(),
+                    dependencies: HashMap::new(),
+                    yanked: true,
+                    download_url: None,
+                    size: None,
+                },
+            ],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        };
+
+        let available = pkg.available_versions();
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].version, Version::new(1, 0, 0));
+    }
+
+    #[test]
+    fn test_package_metadata_no_versions() {
+        let pkg = PackageMetadata {
+            name: "empty".to_string(),
+            description: None,
+            versions: vec![],
+            authors: vec![],
+            homepage: None,
+            repository: None,
+            license: None,
+            keywords: vec![],
+        };
+
+        assert!(pkg.latest_version().is_none());
+        assert!(pkg.available_versions().is_empty());
+    }
+
+    #[test]
+    fn test_version_dependency_serde() {
+        let dep = VersionDependency {
+            req: "^1.0.0".to_string(),
+            features: vec!["json".to_string()],
+            optional: true,
+            target: None,
+        };
+        let json = serde_json::to_string(&dep).unwrap();
+        let parsed: VersionDependency = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.req, "^1.0.0");
+        assert!(parsed.optional);
+    }
 }

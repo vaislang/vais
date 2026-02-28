@@ -334,4 +334,326 @@ F main() -> i64 {
         // Should find parameters 'x' and 'y'
         assert!(param_tokens.len() >= 2, "Should find at least 2 parameters");
     }
+
+    // ========== offset_to_line_col tests ==========
+
+    #[test]
+    fn test_offset_to_line_col_start() {
+        let (line, col) = offset_to_line_col("hello", 0);
+        assert_eq!(line, 0);
+        assert_eq!(col, 0);
+    }
+
+    #[test]
+    fn test_offset_to_line_col_middle() {
+        let (line, col) = offset_to_line_col("hello", 3);
+        assert_eq!(line, 0);
+        assert_eq!(col, 3);
+    }
+
+    #[test]
+    fn test_offset_to_line_col_newline() {
+        let (line, col) = offset_to_line_col("abc\ndef", 4);
+        assert_eq!(line, 1);
+        assert_eq!(col, 0);
+    }
+
+    #[test]
+    fn test_offset_to_line_col_second_line() {
+        let (line, col) = offset_to_line_col("abc\ndef", 6);
+        assert_eq!(line, 1);
+        assert_eq!(col, 2);
+    }
+
+    #[test]
+    fn test_offset_to_line_col_multiple_lines() {
+        let (line, col) = offset_to_line_col("a\nb\nc\nd", 6);
+        assert_eq!(line, 3);
+        assert_eq!(col, 0);
+    }
+
+    #[test]
+    fn test_offset_to_line_col_empty() {
+        let (line, col) = offset_to_line_col("", 0);
+        assert_eq!(line, 0);
+        assert_eq!(col, 0);
+    }
+
+    // ========== Additional semantic token tests ==========
+
+    #[test]
+    fn test_semantic_tokens_empty_source() {
+        let tokens = get_semantic_tokens("");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_semantic_tokens_keyword_only() {
+        let source = "F";
+        let tokens = get_semantic_tokens(source);
+        assert!(!tokens.is_empty());
+        assert_eq!(tokens[0].token_type, TOKEN_KEYWORD);
+    }
+
+    #[test]
+    fn test_semantic_tokens_number_literal() {
+        let source = "F main() -> i64 { 42 }";
+        let tokens = get_semantic_tokens(source);
+        let number_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_NUMBER)
+            .collect();
+        assert!(!number_tokens.is_empty(), "Should find number literal");
+    }
+
+    #[test]
+    fn test_semantic_tokens_string_literal() {
+        let source = r#"F main() -> i64 { puts("hello") }"#;
+        let tokens = get_semantic_tokens(source);
+        let string_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_STRING)
+            .collect();
+        assert!(
+            !string_tokens.is_empty(),
+            "Should find string literal"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_type_annotation() {
+        let source = "F foo(x: i64) -> f64 { 0.0 }";
+        let tokens = get_semantic_tokens(source);
+        let type_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_TYPE)
+            .collect();
+        assert!(
+            type_tokens.len() >= 2,
+            "Should find at least 2 type annotations (i64, f64)"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_variable() {
+        let source = "F main() -> i64 { x := 5\n R x }";
+        let tokens = get_semantic_tokens(source);
+        let var_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_VARIABLE)
+            .collect();
+        assert!(!var_tokens.is_empty(), "Should find variables");
+    }
+
+    #[test]
+    fn test_semantic_tokens_delta_line() {
+        let source = "F main() -> i64 {\n    R 42\n}";
+        let tokens = get_semantic_tokens(source);
+
+        // Tokens should have proper delta_line values
+        let mut has_nonzero_delta = false;
+        for token in &tokens {
+            if token.delta_line > 0 {
+                has_nonzero_delta = true;
+                break;
+            }
+        }
+        assert!(
+            has_nonzero_delta,
+            "Multi-line code should have non-zero delta_line"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_delta_start_same_line() {
+        let source = "F main() -> i64 = 42";
+        let tokens = get_semantic_tokens(source);
+
+        // All tokens on the same line should have delta_line == 0
+        // and delta_start relative to previous token
+        for token in &tokens {
+            assert_eq!(
+                token.delta_line, 0,
+                "Single line source should have delta_line 0"
+            );
+        }
+    }
+
+    #[test]
+    fn test_semantic_tokens_bool_keywords() {
+        let source = "F main() -> bool { true }";
+        let tokens = get_semantic_tokens(source);
+        let keyword_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_KEYWORD)
+            .collect();
+        // Should have F and true as keywords
+        assert!(keyword_tokens.len() >= 2);
+    }
+
+    #[test]
+    fn test_semantic_tokens_all_keywords() {
+        let source = "F I L M R B C W X U A";
+        let tokens = get_semantic_tokens(source);
+        let keyword_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_KEYWORD)
+            .collect();
+        // All single-letter keywords should be detected
+        assert!(
+            keyword_tokens.len() >= 8,
+            "Should detect most single-letter keywords, got {}",
+            keyword_tokens.len()
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_all_types() {
+        let source = "F foo(a: i8, b: i16, c: i32, d: i64, e: f32, f: f64, g: bool, h: str) -> i64 { 0 }";
+        let tokens = get_semantic_tokens(source);
+        let type_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_TYPE)
+            .collect();
+        assert!(
+            type_tokens.len() >= 8,
+            "Should find all type annotations, got {}",
+            type_tokens.len()
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_uppercase_identifier_is_struct() {
+        let source = "F main() -> i64 { x := MyType\n R 0 }";
+        let tokens = get_semantic_tokens(source);
+        let struct_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_STRUCT)
+            .collect();
+        assert!(
+            !struct_tokens.is_empty(),
+            "Uppercase identifier should be classified as struct"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_enum_definition() {
+        let source = "E Color { Red, Green, Blue }";
+        let tokens = get_semantic_tokens(source);
+        let enum_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_ENUM)
+            .collect();
+        assert!(
+            !enum_tokens.is_empty(),
+            "Should find enum name after E keyword"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_modifiers_zero() {
+        let source = "F main() -> i64 { 0 }";
+        let tokens = get_semantic_tokens(source);
+        for token in &tokens {
+            assert_eq!(
+                token.token_modifiers_bitset, 0,
+                "All token modifiers should be 0"
+            );
+        }
+    }
+
+    #[test]
+    fn test_semantic_tokens_invalid_source() {
+        // get_semantic_tokens returns empty Vec on error
+        let source = "!!!@@@###$$$%%%";
+        let tokens = get_semantic_tokens(source);
+        // Should not panic - may return empty or partial
+        let _ = tokens;
+    }
+
+    #[test]
+    fn test_semantic_tokens_nested_calls() {
+        let source = "F main() -> i64 { R foo(bar(1)) }";
+        let tokens = get_semantic_tokens(source);
+        let function_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_FUNCTION)
+            .collect();
+        // Should find 'main', 'foo', 'bar' as functions
+        assert!(
+            function_tokens.len() >= 3,
+            "Should find nested function calls, got {}",
+            function_tokens.len()
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_doc_comment() {
+        let source = "/// A doc comment\nF main() -> i64 { 0 }";
+        let tokens = get_semantic_tokens(source);
+        let comment_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_COMMENT)
+            .collect();
+        assert!(
+            !comment_tokens.is_empty(),
+            "Should find doc comment"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_multiple_functions() {
+        let source = "F foo() -> i64 { 0 }\nF bar() -> i64 { 0 }\nF baz() -> i64 { 0 }";
+        let tokens = get_semantic_tokens(source);
+        let function_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_FUNCTION)
+            .collect();
+        assert!(
+            function_tokens.len() >= 3,
+            "Should find 3 function definitions"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_return_keyword() {
+        let source = "F main() -> i64 { R 42 }";
+        let tokens = get_semantic_tokens(source);
+        let keyword_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_KEYWORD)
+            .collect();
+        // Should have F and R as keywords (at minimum)
+        assert!(
+            keyword_tokens.len() >= 2,
+            "Should find F and R keywords"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_u_types() {
+        let source = "F foo(a: u8, b: u16, c: u32, d: u64, e: u128) -> i64 { 0 }";
+        let tokens = get_semantic_tokens(source);
+        let type_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_TYPE)
+            .collect();
+        // Should find u8, u16, u32, u64, u128, and i64
+        assert!(
+            type_tokens.len() >= 5,
+            "Should find unsigned type annotations, got {}",
+            type_tokens.len()
+        );
+    }
+
+    #[test]
+    fn test_semantic_tokens_float_literal() {
+        let source = "F main() -> f64 { 3.14 }";
+        let tokens = get_semantic_tokens(source);
+        let number_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.token_type == TOKEN_NUMBER)
+            .collect();
+        assert!(!number_tokens.is_empty(), "Should find float literal");
+    }
 }

@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-28 (Phase 58 완료 — tarpaulin→cargo-llvm-cov 전환, Phase 59~62 계획)
+> **최종 업데이트**: 2026-02-28 (Phase 58 완료 — Codecov 57%→66%, Phase 59~62 계획)
 
 ---
 
@@ -228,20 +228,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 55 | 코드 커버리지 개선 — 핵심 크레이트 | codegen 362→699(+337), types 214→412(+198), lsp 40→86(+46), dap 45→103(+58), registry 19→90(+71), 총 +644 단위 테스트, Clippy 0건 | 900 |
 | 56 | 코드 커버리지 개선 — 보조 크레이트 | gc 19→102(밀도32.4), dynload 120→209(밀도42.5), tutorial 63→120(밀도44.4), codegen-js 160→267(밀도43.1), 총 +698 테스트, llvm-cov 87.37%, Clippy 0건 | 900 |
 | 57 | 홈페이지/Docs/Playground 업데이트 | 수치 업데이트 (900 E2E, 5300+ tests, 29 crates, Phase 56), docs-site 경고 21→0건, playground 예제 수 정정, 23파일 +74/-49줄 | 900 |
-| 58 | Codecov 측정 인프라 최적화 | tarpaulin→cargo-llvm-cov 전환, codecov.yml ignore 동기화 (4 크레이트), 컴포넌트 타겟 상향 (project 75%, core 80%), scripts/coverage.sh+.cargo/config.toml 갱신 | 900 |
+| 58 | Codecov 측정 인프라 최적화 | tarpaulin→cargo-llvm-cov 전환, codecov.yml ignore 동기화 (4 크레이트), 컴포넌트 타겟 상향 (project 75%, core 80%), CI 57%→66% (+9%) | 900 |
 
 ### 잔여 기술 부채 (Phase 58 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
 | assert_compiles 4개 잔여 | codegen 근본 한계 | duplicate_fn(clang), struct-by-value(Text IR ABI), slice_len(call-site ABI), where_clause(TC E022) |
-| Codecov (CI) | Phase 58: tarpaulin→cargo-llvm-cov 전환 완료, CI push 후 수치 확인 예정 | macOS llvm-cov 87.37%, Phase 59~62에서 100% 목표 |
+| Codecov (CI) | Phase 58 완료: 57%→66% (+9%), 70% 미달 | CI cargo-llvm-cov 65.6%, Codecov 뱃지 66%, Phase 59에서 70%+ 달성 예정 |
 
 ---
 
 ## 📋 예정 작업
 
-### Phase 58: Codecov 측정 인프라 최적화 (57% → 70-75%)
+### Phase 58: Codecov 측정 인프라 최적화 (57% → 66%) ✅
 
 > **목표**: 코드 변경 없이 Codecov 수치를 정확하게 올리기 — 측정 도구 전환 + ignore 조정
 > **배경**: macOS llvm-cov 87.37% vs CI tarpaulin Codecov 57% 괴리의 근본 원인 해결
@@ -261,34 +261,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. 로컬 검증: scripts/coverage.sh + .cargo/config.toml cargo-llvm-cov 전환
   대상: scripts/coverage.sh (tarpaulin→llvm-cov), .cargo/config.toml alias (tarpaulin→llvm-cov)
   효과: 로컬-CI 동일 도구 사용으로 재현성 확보
-- [ ] 5. CI push & Codecov 수치 확인
+- [x] 5. CI push & Codecov 수치 확인
   대상: git push → CI 실행 → Codecov 대시보드 확인
-  효과: 실제 Codecov 수치 70%+ 달성 검증
+  결과: CI 65.6% (58,407/89,053), Codecov 뱃지 66% — tarpaulin 57% 대비 +9% 개선, 70% 목표는 Phase 59에서 달성 예정
 
-### Phase 59: 저밀도 크레이트 테스트 강화 (70-75% → 82-85%)
+### Phase 59: 저밀도 크레이트 테스트 강화 (66% → 78-82%)
 
 > **목표**: 테스트 밀도가 낮은 4개 크레이트에 단위 테스트 추가
 > **전략**: LOC 대비 테스트 0~15/1K인 크레이트 우선
+> **모드: 자동진행**
 
-- [ ] 1. vais-ast 단위 테스트 신규 추가 — 0→80+ tests (Sonnet)
-  대상: crates/vais-ast/src/ 전체 (3,318 LOC, 현재 0 tests)
-  내용: AST 노드 생성자, Display impl, Clone/PartialEq, 15개 서브모듈 커버
-  효과: +2-3%
-- [ ] 2. vaisc 단위 테스트 강화 — 188→400+ tests (Sonnet)
-  대상: crates/vaisc/src/ (19,695 LOC, 현재 밀도 9.5)
-  내용: registry/, incremental/, imports.rs, repl.rs, commands/ 모듈
-  효과: +3-5%
-- [ ] 3. vais-gpu 단위 테스트 강화 — 54→130+ tests (Sonnet)
-  대상: crates/vais-gpu/src/ (4,034 LOC, 현재 밀도 13.4)
-  내용: CUDA/Metal/OpenCL/WebGPU 백엔드 codegen 경로
-  효과: +1-2%
-- [ ] 4. vais-lsp + vais-hotreload 테스트 보강 (Sonnet)
-  대상: crates/vais-lsp/src/ (6,690 LOC), crates/vais-hotreload/src/ (911 LOC)
-  내용: LSP handler 엣지케이스 +80, hotreload 상태관리 +30
-  효과: +1-2%
-- [ ] 5. 검증: cargo test + Clippy 0건 + llvm-cov 측정 (Sonnet)
+- [x] 1. vais-ast 단위 테스트 신규 추가 — 0→158 tests
+  대상: crates/vais-ast/tests/display_and_formatter_tests.rs (신규)
+  내용: Display impl, Clone/PartialEq, 서브모듈 커버
+- [x] 2. vaisc 단위 테스트 강화 — +308 tests
+  대상: registry/(error/index/lockfile/source/version/vulnerability), incremental/(graph/stats/types), package/(features/types), doc_gen/tests, error_formatter
+- [x] 3. vais-gpu 단위 테스트 강화 — +181 tests
+  대상: cuda, metal, opencl, webgpu, simd, common 6개 모듈
+- [x] 4. vais-lsp + vais-hotreload 테스트 보강 — +174 tests (lsp +122, hotreload +52)
+  대상: backend(+49), diagnostics(+21), semantic(+27), ai_completion(+25), dylib_loader(+11), error(+12), file_watcher(+13), reloader(+16)
+- [ ] 5. 검증: cargo test + Clippy 0건 + CI push + llvm-cov 측정
   대상: 전체 워크스페이스
-  효과: 82-85% 달성 확인
+  효과: 78-82% 달성 확인
 
 ### Phase 60: 에러 경로 & 엣지 케이스 테스트 (85% → 90-93%)
 

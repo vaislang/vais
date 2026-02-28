@@ -516,8 +516,10 @@ pub fn generate_host_code(kernels: &[GpuKernel]) -> String {
 mod tests {
     use super::*;
 
+    // ── type_to_cuda tests ──
+
     #[test]
-    fn test_cuda_generator_basic() {
+    fn test_cuda_type_i64() {
         let gen = CudaGenerator::new();
         assert_eq!(
             gen.type_to_cuda(&Type::Named {
@@ -526,6 +528,35 @@ mod tests {
             }),
             "long long"
         );
+    }
+
+    #[test]
+    fn test_cuda_type_i32() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "i32".to_string(),
+                generics: vec![]
+            }),
+            "int"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_f64() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "f64".to_string(),
+                generics: vec![]
+            }),
+            "double"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_f32() {
+        let gen = CudaGenerator::new();
         assert_eq!(
             gen.type_to_cuda(&Type::Named {
                 name: "f32".to_string(),
@@ -533,5 +564,216 @@ mod tests {
             }),
             "float"
         );
+    }
+
+    #[test]
+    fn test_cuda_type_bool() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "bool".to_string(),
+                generics: vec![]
+            }),
+            "bool"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_void() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "unit".to_string(),
+                generics: vec![]
+            }),
+            "void"
+        );
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "()".to_string(),
+                generics: vec![]
+            }),
+            "void"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_custom() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.type_to_cuda(&Type::Named {
+                name: "MyStruct".to_string(),
+                generics: vec![]
+            }),
+            "MyStruct"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_pointer() {
+        let gen = CudaGenerator::new();
+        let inner = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(gen.type_to_cuda(&Type::Pointer(inner)), "float*");
+    }
+
+    #[test]
+    fn test_cuda_type_const_array() {
+        let gen = CudaGenerator::new();
+        let elem = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "i32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(
+            gen.type_to_cuda(&Type::ConstArray {
+                element: elem,
+                size: 10
+            }),
+            "int[10]"
+        );
+    }
+
+    #[test]
+    fn test_cuda_type_fallback() {
+        let gen = CudaGenerator::new();
+        // Tuple type falls back to void
+        assert_eq!(gen.type_to_cuda(&Type::Tuple(vec![])), "void");
+    }
+
+    // ── vais_type_to_gpu tests ──
+
+    #[test]
+    fn test_vais_type_to_gpu_primitives() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "i32".to_string(),
+                generics: vec![]
+            }),
+            GpuType::I32
+        );
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "i64".to_string(),
+                generics: vec![]
+            }),
+            GpuType::I64
+        );
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "f32".to_string(),
+                generics: vec![]
+            }),
+            GpuType::F32
+        );
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "f64".to_string(),
+                generics: vec![]
+            }),
+            GpuType::F64
+        );
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "bool".to_string(),
+                generics: vec![]
+            }),
+            GpuType::Bool
+        );
+    }
+
+    #[test]
+    fn test_vais_type_to_gpu_unknown_falls_to_void() {
+        let gen = CudaGenerator::new();
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Named {
+                name: "String".to_string(),
+                generics: vec![]
+            }),
+            GpuType::Void
+        );
+    }
+
+    #[test]
+    fn test_vais_type_to_gpu_pointer() {
+        let gen = CudaGenerator::new();
+        let inner = Box::new(vais_ast::Spanned::new(
+            Type::Named {
+                name: "f32".to_string(),
+                generics: vec![],
+            },
+            Default::default(),
+        ));
+        assert_eq!(
+            gen.vais_type_to_gpu(&Type::Pointer(inner)),
+            GpuType::Ptr(Box::new(GpuType::F32))
+        );
+    }
+
+    // ── generate_host_code tests ──
+
+    #[test]
+    fn test_generate_host_code_empty() {
+        let code = generate_host_code(&[]);
+        assert!(code.contains("CUDA Host Code"));
+    }
+
+    #[test]
+    fn test_generate_host_code_single_kernel() {
+        let kernels = vec![GpuKernel {
+            name: "add_vectors".to_string(),
+            params: vec![
+                ("a".to_string(), GpuType::Ptr(Box::new(GpuType::F32))),
+                ("b".to_string(), GpuType::Ptr(Box::new(GpuType::F32))),
+            ],
+            shared_memory: 0,
+            block_size: (256, 1, 1),
+        }];
+        let code = generate_host_code(&kernels);
+        assert!(code.contains("launch_add_vectors"));
+        assert!(code.contains("add_vectors<<<grid, block>>>"));
+        assert!(code.contains("cudaDeviceSynchronize"));
+        assert!(code.contains("a, b"));
+    }
+
+    #[test]
+    fn test_generate_host_code_multiple_kernels() {
+        let kernels = vec![
+            GpuKernel {
+                name: "kernel_a".to_string(),
+                params: vec![],
+                shared_memory: 0,
+                block_size: (128, 1, 1),
+            },
+            GpuKernel {
+                name: "kernel_b".to_string(),
+                params: vec![],
+                shared_memory: 0,
+                block_size: (64, 1, 1),
+            },
+        ];
+        let code = generate_host_code(&kernels);
+        assert!(code.contains("launch_kernel_a"));
+        assert!(code.contains("launch_kernel_b"));
+    }
+
+    #[test]
+    fn test_generate_host_code_param_types() {
+        let kernels = vec![GpuKernel {
+            name: "test".to_string(),
+            params: vec![("data".to_string(), GpuType::Ptr(Box::new(GpuType::I64)))],
+            shared_memory: 0,
+            block_size: (256, 1, 1),
+        }];
+        let code = generate_host_code(&kernels);
+        assert!(code.contains("long long*"));
     }
 }

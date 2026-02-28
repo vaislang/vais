@@ -205,8 +205,20 @@ mod tests {
     }
 
     #[test]
+    fn test_dylib_loader_error_message() {
+        let result = DylibLoader::new("/nonexistent/lib.dylib");
+        assert!(result.is_err());
+        match result {
+            Err(err) => {
+                let msg = format!("{}", err);
+                assert!(msg.contains("Invalid dylib path") || msg.contains("Dylib not found"));
+            }
+            Ok(_) => panic!("Expected error"),
+        }
+    }
+
+    #[test]
     fn test_version_increment() {
-        // This test requires a real dylib, so we just test the version logic
         let mut loader = DylibLoader {
             current_lib: None,
             dylib_path: PathBuf::from("test.dylib"),
@@ -220,6 +232,17 @@ mod tests {
     }
 
     #[test]
+    fn test_version_starts_at_zero() {
+        let loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        assert_eq!(loader.version(), 0);
+    }
+
+    #[test]
     fn test_is_loaded() {
         let loader = DylibLoader {
             current_lib: None,
@@ -229,5 +252,124 @@ mod tests {
         };
 
         assert!(!loader.is_loaded());
+    }
+
+    #[test]
+    fn test_path() {
+        let loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("/tmp/libtest.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        assert_eq!(loader.path(), Path::new("/tmp/libtest.dylib"));
+    }
+
+    #[test]
+    fn test_unload_when_not_loaded() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        // Should not panic when unloading with no library loaded
+        loader.unload();
+        assert!(!loader.is_loaded());
+    }
+
+    #[test]
+    fn test_unload_clears_function_cache() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        loader
+            .function_cache
+            .insert("test_fn".to_string(), std::ptr::null_mut());
+        assert_eq!(loader.function_cache.len(), 1);
+        loader.unload();
+        assert!(loader.function_cache.is_empty());
+    }
+
+    #[test]
+    fn test_get_function_not_initialized() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        let result: crate::error::Result<Symbol<fn()>> = loader.get_function("test");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, HotReloadError::NotInitialized));
+    }
+
+    #[test]
+    fn test_get_function_ptr_not_initialized() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        let result = loader.get_function_ptr("test");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            HotReloadError::NotInitialized
+        ));
+    }
+
+    #[test]
+    fn test_function_cache_starts_empty() {
+        let loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        assert!(loader.function_cache.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_unload_calls() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        loader.unload();
+        loader.unload();
+        loader.unload();
+        assert!(!loader.is_loaded());
+    }
+
+    #[test]
+    fn test_version_preserved_after_unload() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("test.dylib"),
+            version: 5,
+            function_cache: HashMap::new(),
+        };
+        loader.unload();
+        assert_eq!(loader.version(), 5);
+    }
+
+    #[test]
+    fn test_path_preserved_after_unload() {
+        let mut loader = DylibLoader {
+            current_lib: None,
+            dylib_path: PathBuf::from("/tmp/mylib.dylib"),
+            version: 0,
+            function_cache: HashMap::new(),
+        };
+        loader.unload();
+        assert_eq!(loader.path(), Path::new("/tmp/mylib.dylib"));
     }
 }

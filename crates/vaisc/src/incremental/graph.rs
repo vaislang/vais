@@ -507,4 +507,356 @@ mod tests {
         assert!(graph.is_in_cycle(&b));
         assert!(!graph.is_in_cycle(&c));
     }
+
+    // ── DependencyGraph basic operations ──
+
+    #[test]
+    fn test_new_graph_is_empty() {
+        let graph = DependencyGraph::new();
+        assert!(graph.forward_deps.is_empty());
+        assert!(graph.reverse_deps.is_empty());
+        assert!(graph.file_metadata.is_empty());
+    }
+
+    #[test]
+    fn test_default_graph_is_empty() {
+        let graph = DependencyGraph::default();
+        assert!(graph.forward_deps.is_empty());
+    }
+
+    #[test]
+    fn test_add_dependency_creates_forward_and_reverse() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+
+        graph.add_dependency(a.clone(), b.clone());
+
+        assert_eq!(graph.forward_deps[&a], vec![b.clone()]);
+        assert_eq!(graph.reverse_deps[&b], vec![a.clone()]);
+    }
+
+    #[test]
+    fn test_add_multiple_dependencies_same_source() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        graph.add_dependency(a.clone(), b.clone());
+        graph.add_dependency(a.clone(), c.clone());
+
+        assert_eq!(graph.forward_deps[&a].len(), 2);
+    }
+
+    #[test]
+    fn test_get_dependents_empty() {
+        let graph = DependencyGraph::new();
+        let dependents = graph.get_dependents(Path::new("nonexistent.vais"));
+        assert!(dependents.is_empty());
+    }
+
+    #[test]
+    fn test_get_dependents_direct() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+
+        graph.add_dependency(a.clone(), b.clone());
+
+        let deps = graph.get_dependents(&b);
+        assert_eq!(deps.len(), 1);
+        assert!(deps.contains(&a));
+    }
+
+    #[test]
+    fn test_get_dependents_transitive() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        // a -> b -> c
+        graph.add_dependency(a.clone(), b.clone());
+        graph.add_dependency(b.clone(), c.clone());
+
+        let deps = graph.get_dependents(&c);
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&a));
+        assert!(deps.contains(&b));
+    }
+
+    #[test]
+    fn test_get_dependents_diamond() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+        let d = PathBuf::from("d.vais");
+
+        // a -> b -> d
+        // a -> c -> d
+        graph.add_dependency(a.clone(), b.clone());
+        graph.add_dependency(a.clone(), c.clone());
+        graph.add_dependency(b.clone(), d.clone());
+        graph.add_dependency(c.clone(), d.clone());
+
+        let deps = graph.get_dependents(&d);
+        assert_eq!(deps.len(), 3);
+        assert!(deps.contains(&a));
+        assert!(deps.contains(&b));
+        assert!(deps.contains(&c));
+    }
+
+    #[test]
+    fn test_update_file_metadata() {
+        let mut graph = DependencyGraph::new();
+        let file = PathBuf::from("test.vais");
+        let meta = FileMetadata {
+            hash: "abc".to_string(),
+            timestamp: 100,
+            size: 512,
+            functions: HashMap::new(),
+            types: HashMap::new(),
+            signature_hash: None,
+        };
+
+        graph.update_file_metadata(file.clone(), meta);
+        assert!(graph.file_metadata.contains_key(&file));
+        assert_eq!(graph.file_metadata[&file].hash, "abc");
+    }
+
+    #[test]
+    fn test_update_file_metadata_overwrites() {
+        let mut graph = DependencyGraph::new();
+        let file = PathBuf::from("test.vais");
+
+        let meta1 = FileMetadata {
+            hash: "old".to_string(),
+            timestamp: 100,
+            size: 512,
+            functions: HashMap::new(),
+            types: HashMap::new(),
+            signature_hash: None,
+        };
+        graph.update_file_metadata(file.clone(), meta1);
+
+        let meta2 = FileMetadata {
+            hash: "new".to_string(),
+            timestamp: 200,
+            size: 1024,
+            functions: HashMap::new(),
+            types: HashMap::new(),
+            signature_hash: None,
+        };
+        graph.update_file_metadata(file.clone(), meta2);
+
+        assert_eq!(graph.file_metadata[&file].hash, "new");
+        assert_eq!(graph.file_metadata[&file].timestamp, 200);
+    }
+
+    #[test]
+    fn test_clear_file_deps() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        graph.add_dependency(a.clone(), b.clone());
+        graph.add_dependency(a.clone(), c.clone());
+
+        graph.clear_file_deps(&a);
+
+        assert!(!graph.forward_deps.contains_key(&a));
+        // b and c should no longer list a as a reverse dep
+        let b_importers = graph.reverse_deps.get(&b);
+        if let Some(importers) = b_importers {
+            assert!(!importers.contains(&a));
+        }
+    }
+
+    #[test]
+    fn test_clear_file_deps_nonexistent() {
+        let mut graph = DependencyGraph::new();
+        // Should not panic
+        graph.clear_file_deps(Path::new("nonexistent.vais"));
+    }
+
+    #[test]
+    fn test_clear_file_deps_preserves_other_deps() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        graph.add_dependency(a.clone(), c.clone());
+        graph.add_dependency(b.clone(), c.clone());
+
+        graph.clear_file_deps(&a);
+
+        // b -> c should still exist
+        assert!(graph.forward_deps.contains_key(&b));
+        assert!(graph.reverse_deps[&c].contains(&b));
+    }
+
+    // ── Topological sort tests ──
+
+    #[test]
+    fn test_topological_sort_empty() {
+        let graph = DependencyGraph::new();
+        let levels = graph.topological_sort();
+        assert!(levels.is_empty());
+    }
+
+    #[test]
+    fn test_topological_sort_single_file() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        graph.add_dependency(a.clone(), b.clone());
+
+        let levels = graph.topological_sort();
+        assert!(!levels.is_empty());
+
+        // b should be processed before a
+        let b_level = levels.iter().position(|l| l.contains(&b)).unwrap();
+        let a_level = levels.iter().position(|l| l.contains(&a)).unwrap();
+        assert!(b_level <= a_level);
+    }
+
+    #[test]
+    fn test_topological_sort_linear_chain() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        // a -> b -> c
+        graph.add_dependency(a.clone(), b.clone());
+        graph.add_dependency(b.clone(), c.clone());
+
+        let levels = graph.topological_sort();
+
+        let c_level = levels.iter().position(|l| l.contains(&c)).unwrap();
+        let b_level = levels.iter().position(|l| l.contains(&b)).unwrap();
+        let a_level = levels.iter().position(|l| l.contains(&a)).unwrap();
+
+        assert!(c_level <= b_level);
+        assert!(b_level <= a_level);
+    }
+
+    #[test]
+    fn test_topological_sort_parallel_files() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        let c = PathBuf::from("c.vais");
+
+        // Both a and b depend on c
+        graph.add_dependency(a.clone(), c.clone());
+        graph.add_dependency(b.clone(), c.clone());
+
+        let levels = graph.topological_sort();
+
+        let c_level = levels.iter().position(|l| l.contains(&c)).unwrap();
+        let a_level = levels.iter().position(|l| l.contains(&a)).unwrap();
+        let b_level = levels.iter().position(|l| l.contains(&b)).unwrap();
+
+        assert!(c_level < a_level);
+        assert!(c_level < b_level);
+        // a and b could be in the same level
+    }
+
+    // ── SCC tests ──
+
+    #[test]
+    fn test_find_sccs_empty_graph() {
+        let graph = DependencyGraph::new();
+        let sccs = graph.find_sccs();
+        assert!(sccs.is_empty());
+    }
+
+    #[test]
+    fn test_find_sccs_single_node() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        graph.add_dependency(a.clone(), b.clone());
+
+        let sccs = graph.find_sccs();
+        // Each node in its own SCC
+        assert_eq!(sccs.len(), 2);
+    }
+
+    #[test]
+    fn test_find_sccs_self_loop() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        graph.add_dependency(a.clone(), a.clone());
+
+        let sccs = graph.find_sccs();
+        assert_eq!(sccs.len(), 1);
+        assert!(sccs[0].contains(&a));
+    }
+
+    #[test]
+    fn test_is_in_cycle_no_cycle() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        graph.add_dependency(a.clone(), b.clone());
+
+        assert!(!graph.is_in_cycle(&a));
+        assert!(!graph.is_in_cycle(&b));
+    }
+
+    #[test]
+    fn test_is_in_cycle_nonexistent_file() {
+        let graph = DependencyGraph::new();
+        assert!(!graph.is_in_cycle(Path::new("nonexistent.vais")));
+    }
+
+    // ── Parallel levels tests ──
+
+    #[test]
+    fn test_parallel_levels_empty() {
+        let graph = DependencyGraph::new();
+        let levels = graph.parallel_levels();
+        assert!(levels.is_empty());
+    }
+
+    #[test]
+    fn test_parallel_levels_no_deps() {
+        let mut graph = DependencyGraph::new();
+        let a = PathBuf::from("a.vais");
+        let b = PathBuf::from("b.vais");
+        // Add nodes without creating a real dep — just add forward and reverse entries
+        graph.add_dependency(a.clone(), b.clone());
+
+        let levels = graph.parallel_levels();
+        assert!(!levels.is_empty());
+    }
+
+    // ── Serde roundtrip ──
+
+    #[test]
+    fn test_dependency_graph_serde_roundtrip() {
+        let mut graph = DependencyGraph::new();
+        graph.add_dependency(PathBuf::from("a.vais"), PathBuf::from("b.vais"));
+
+        let json = serde_json::to_string(&graph).unwrap();
+        let parsed: DependencyGraph = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.forward_deps.len(), 1);
+        assert!(parsed.forward_deps.contains_key(&PathBuf::from("a.vais")));
+    }
+
+    #[test]
+    fn test_dependency_graph_clone() {
+        let mut graph = DependencyGraph::new();
+        graph.add_dependency(PathBuf::from("a.vais"), PathBuf::from("b.vais"));
+
+        let cloned = graph.clone();
+        assert_eq!(cloned.forward_deps.len(), graph.forward_deps.len());
+    }
 }
