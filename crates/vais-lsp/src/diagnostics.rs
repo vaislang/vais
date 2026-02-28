@@ -144,8 +144,8 @@ mod tests {
     #[test]
     fn test_offset_to_position_vais_code() {
         let source = "F main() -> i64 {\n    R 42\n}";
-        // "R" is at offset 23 (line 1, col 4)
-        let pos = offset_to_position(source, 23);
+        // "R" is at offset 22 (line 1, col 4)
+        let pos = offset_to_position(source, 22);
         assert_eq!(pos.line, 1);
         assert_eq!(pos.character, 4);
     }
