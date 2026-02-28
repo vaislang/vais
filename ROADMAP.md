@@ -3,7 +3,7 @@
 
 > **버전**: 2.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-28 (Phase 58 완료 — Codecov 57%→66%, Phase 59~62 계획)
+> **최종 업데이트**: 2026-02-28 (Phase 59 완료 — Codecov 68%, +821 테스트, Phase 60~62 계획)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 5,396+ (통합 2,700+, 단위 2,721) |
+| 전체 테스트 | 6,200+ (통합 2,700+, 단위 3,542) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
@@ -229,13 +229,14 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 56 | 코드 커버리지 개선 — 보조 크레이트 | gc 19→102(밀도32.4), dynload 120→209(밀도42.5), tutorial 63→120(밀도44.4), codegen-js 160→267(밀도43.1), 총 +698 테스트, llvm-cov 87.37%, Clippy 0건 | 900 |
 | 57 | 홈페이지/Docs/Playground 업데이트 | 수치 업데이트 (900 E2E, 5300+ tests, 29 crates, Phase 56), docs-site 경고 21→0건, playground 예제 수 정정, 23파일 +74/-49줄 | 900 |
 | 58 | Codecov 측정 인프라 최적화 | tarpaulin→cargo-llvm-cov 전환, codecov.yml ignore 동기화 (4 크레이트), 컴포넌트 타겟 상향 (project 75%, core 80%), CI 57%→66% (+9%) | 900 |
+| 59 | 저밀도 크레이트 테스트 강화 | +821 단위 테스트 (ast 158, vaisc 308, gpu 181, lsp 122, hotreload 52), format_const/global 버그 수정, CI 66%→68% (+2%) | 900 |
 
 ### 잔여 기술 부채 (Phase 58 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
 | assert_compiles 4개 잔여 | codegen 근본 한계 | duplicate_fn(clang), struct-by-value(Text IR ABI), slice_len(call-site ABI), where_clause(TC E022) |
-| Codecov (CI) | Phase 58 완료: 57%→66% (+9%), 70% 미달 | CI cargo-llvm-cov 65.6%, Codecov 뱃지 66%, Phase 59에서 70%+ 달성 예정 |
+| Codecov (CI) | Phase 59 완료: 68% (+821 테스트) | CI cargo-llvm-cov 68.3%, Codecov 뱃지 68%, Phase 60에서 78%+ 달성 예정 |
 
 ---
 
@@ -265,26 +266,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   대상: git push → CI 실행 → Codecov 대시보드 확인
   결과: CI 65.6% (58,407/89,053), Codecov 뱃지 66% — tarpaulin 57% 대비 +9% 개선, 70% 목표는 Phase 59에서 달성 예정
 
-### Phase 59: 저밀도 크레이트 테스트 강화 (66% → 78-82%)
+### Phase 59: 저밀도 크레이트 테스트 강화 (66% → 68%) ✅
 
-> **목표**: 테스트 밀도가 낮은 4개 크레이트에 단위 테스트 추가
+> **목표**: 테스트 밀도가 낮은 5개 크레이트에 단위 테스트 추가
 > **전략**: LOC 대비 테스트 0~15/1K인 크레이트 우선
 > **모드: 자동진행**
 
 - [x] 1. vais-ast 단위 테스트 신규 추가 — 0→158 tests
   대상: crates/vais-ast/tests/display_and_formatter_tests.rs (신규)
   내용: Display impl, Clone/PartialEq, 서브모듈 커버
+  부수 수정: format_const/format_global에서 format_expr 반환값 누락 버그 수정
 - [x] 2. vaisc 단위 테스트 강화 — +308 tests
   대상: registry/(error/index/lockfile/source/version/vulnerability), incremental/(graph/stats/types), package/(features/types), doc_gen/tests, error_formatter
 - [x] 3. vais-gpu 단위 테스트 강화 — +181 tests
   대상: cuda, metal, opencl, webgpu, simd, common 6개 모듈
 - [x] 4. vais-lsp + vais-hotreload 테스트 보강 — +174 tests (lsp +122, hotreload +52)
   대상: backend(+49), diagnostics(+21), semantic(+27), ai_completion(+25), dylib_loader(+11), error(+12), file_watcher(+13), reloader(+16)
-- [ ] 5. 검증: cargo test + Clippy 0건 + CI push + llvm-cov 측정
-  대상: 전체 워크스페이스
-  효과: 78-82% 달성 확인
+- [x] 5. 검증: CI 16/16 jobs 성공, Clippy 0건, llvm-cov 68.3%, Codecov 68%
+  결과: 66%→68% (+2%), +821 단위 테스트, 포매터 버그 1건 수정
 
-### Phase 60: 에러 경로 & 엣지 케이스 테스트 (85% → 90-93%)
+### Phase 60: 에러 경로 & 엣지 케이스 테스트 (68% → 78-82%)
 
 > **목표**: 커버리지에 잡히지 않는 에러/recovery/fallback 경로 테스트
 > **전략**: lcov.info에서 미커버 라인 분석 → 에러 경로 위주 테스트 추가
