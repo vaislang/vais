@@ -1077,3 +1077,402 @@ fn test_float_to_int_error() {
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
 }
+
+// ==================== Unification Tests ====================
+// Phase 66: Explicit unify() tests for ConstArray, Vector, Map,
+// ConstGeneric, Associated, Lifetime variants.
+
+#[test]
+fn test_unify_const_array_same_element_same_size() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_const_array_different_size() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(10),
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_const_array_different_element() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::F64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_const_array_element_with_type_var() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(var),
+        size: crate::types::ResolvedConst::Value(3),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I32),
+        size: crate::types::ResolvedConst::Value(3),
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+    // After unification, the type variable should resolve to I32
+    let resolved = checker.apply_substitutions(&a);
+    if let ResolvedType::ConstArray { element, .. } = resolved {
+        assert_eq!(*element, ResolvedType::I32);
+    } else {
+        panic!("Expected ConstArray after substitution");
+    }
+}
+
+#[test]
+fn test_unify_vector_same_element_same_lanes() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    let b = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_vector_different_lanes() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    let b = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 8,
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_vector_different_element() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    let b = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F64),
+        lanes: 4,
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_vector_element_with_type_var() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::Vector {
+        element: Box::new(var),
+        lanes: 4,
+    };
+    let b = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+    let resolved = checker.apply_substitutions(&a);
+    if let ResolvedType::Vector { element, .. } = resolved {
+        assert_eq!(*element, ResolvedType::F32);
+    } else {
+        panic!("Expected Vector after substitution");
+    }
+}
+
+#[test]
+fn test_unify_map_same_key_value() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
+    let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_map_different_key() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
+    let b = ResolvedType::Map(Box::new(ResolvedType::I64), Box::new(ResolvedType::I64));
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_map_different_value() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
+    let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::F64));
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_map_key_with_type_var() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::Map(Box::new(var.clone()), Box::new(ResolvedType::I64));
+    let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
+    assert!(checker.unify(&a, &b).is_ok());
+    let resolved = checker.apply_substitutions(&var);
+    assert_eq!(resolved, ResolvedType::Str);
+}
+
+#[test]
+fn test_unify_map_value_with_type_var() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(var.clone()));
+    let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::Bool));
+    assert!(checker.unify(&a, &b).is_ok());
+    let resolved = checker.apply_substitutions(&var);
+    assert_eq!(resolved, ResolvedType::Bool);
+}
+
+#[test]
+fn test_unify_const_generic_same_name() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstGeneric("N".to_string());
+    let b = ResolvedType::ConstGeneric("N".to_string());
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_const_generic_different_name() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstGeneric("N".to_string());
+    let b = ResolvedType::ConstGeneric("M".to_string());
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_associated_same_structure() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_associated_different_assoc_name() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Error".to_string(),
+        generics: vec![],
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_associated_different_trait() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("IntoIterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_associated_base_with_type_var() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::Associated {
+        base: Box::new(var),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Named {
+            name: "Vec".to_string(),
+            generics: vec![ResolvedType::I64],
+        }),
+        trait_name: Some("Iterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_associated_gat_generics() {
+    let mut checker = TypeChecker::new();
+    let var = checker.fresh_type_var();
+    let a = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("LendingIterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![var.clone()],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("LendingIterator".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![ResolvedType::I64],
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+    let resolved = checker.apply_substitutions(&var);
+    assert_eq!(resolved, ResolvedType::I64);
+}
+
+#[test]
+fn test_unify_associated_generics_len_mismatch() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Trait".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![ResolvedType::I64],
+    };
+    let b = ResolvedType::Associated {
+        base: Box::new(ResolvedType::Generic("T".to_string())),
+        trait_name: Some("Trait".to_string()),
+        assoc_name: "Item".to_string(),
+        generics: vec![],
+    };
+    // Should fall through to Mismatch because ga.len() != gb.len()
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_lifetime_same() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Lifetime("a".to_string());
+    let b = ResolvedType::Lifetime("a".to_string());
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_lifetime_different() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Lifetime("a".to_string());
+    let b = ResolvedType::Lifetime("b".to_string());
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_lifetime_static() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Lifetime("static".to_string());
+    let b = ResolvedType::Lifetime("static".to_string());
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_const_array_vs_non_const_array() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    let b = ResolvedType::Array(Box::new(ResolvedType::I64));
+    // ConstArray and Array are different variants, should not unify
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_vector_vs_array() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::Vector {
+        element: Box::new(ResolvedType::F32),
+        lanes: 4,
+    };
+    let b = ResolvedType::Array(Box::new(ResolvedType::F32));
+    // Vector and Array should not unify
+    assert!(checker.unify(&a, &b).is_err());
+}
+
+#[test]
+fn test_unify_map_both_vars() {
+    // Both key and value are type variables
+    let mut checker = TypeChecker::new();
+    let kvar = checker.fresh_type_var();
+    let vvar = checker.fresh_type_var();
+    let a = ResolvedType::Map(Box::new(kvar.clone()), Box::new(vvar.clone()));
+    let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::Bool));
+    assert!(checker.unify(&a, &b).is_ok());
+    assert_eq!(checker.apply_substitutions(&kvar), ResolvedType::Str);
+    assert_eq!(checker.apply_substitutions(&vvar), ResolvedType::Bool);
+}
+
+#[test]
+fn test_unify_const_array_with_const_param_size() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Param("N".to_string()),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Param("N".to_string()),
+    };
+    assert!(checker.unify(&a, &b).is_ok());
+}
+
+#[test]
+fn test_unify_const_array_param_vs_value_size() {
+    let mut checker = TypeChecker::new();
+    let a = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Param("N".to_string()),
+    };
+    let b = ResolvedType::ConstArray {
+        element: Box::new(ResolvedType::I64),
+        size: crate::types::ResolvedConst::Value(5),
+    };
+    // Param("N") != Value(5) -> should fail
+    assert!(checker.unify(&a, &b).is_err());
+}

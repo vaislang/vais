@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-28 (Phase 65 — Pre-existing 실패 전수 확인, E2E 900 0-fail)
+> **최종 업데이트**: 2026-02-28 (Phase 66 — 타입 Unify 6 variant 완성, E2E 900 0-fail)
 
 ---
 
@@ -238,8 +238,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 63 | 버전 체계 리셋 | 1.0.0→0.0.5 프리릴리스 전환, 버전 정책 수립 (문법 확정 시 v1.0.0), Codecov 100% 비현실성 문서화 | 900 |
 | 64 | EBNF 공식 문법 스펙 | docs/grammar/vais.ebnf (154 rules), grammar_coverage 223개 + roundtrip 10개 테스트, LANGUAGE_SPEC 교체 | 900 |
 | 65 | Pre-existing E2E 실패 검증 | 14개 E2E + 3개 codegen 실패 — 이전 Phase(43,44,50,51)에서 전수 수정 완료 확인, 코드 변경 불필요 | 900 |
+| 66 | 타입 시스템 Unify 완성 | unify() 6개 variant(ConstArray/Vector/Map/ConstGeneric/Associated/Lifetime) + apply_substitutions() 13개 compound type, +29 테스트 | 900 |
 
-### 잔여 기술 부채 (Phase 65 기준)
+### 잔여 기술 부채 (Phase 66 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -362,17 +363,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 66: 타입 시스템 Unify 완성 — 6개 catch-all 제거 📋
+### Phase 66: 타입 시스템 Unify 완성 — 6개 catch-all 제거 ✅
 
 > **목표**: 타입 unification에서 catch-all(`_ =>`)로 처리되는 6개 ResolvedType variant에 명시적 핸들러 추가
-> **근거**: ConstArray, Map, ConstGeneric, Vector, Associated, Lifetime이 catch-all → TypeError::Mismatch
-> **영향**: 동일 타입 비교 시 불필요한 Mismatch 에러 발생 가능
+> **결과**: unify() 6개 variant + apply_substitutions() 13개 variant 추가, +29 테스트
 
-- [ ] 1. ConstArray/Vector unify — 재귀적 element unification 구현 (Opus)
-- [ ] 2. Map unify — key/value 재귀 unification (Opus)
-- [ ] 3. ConstGeneric/Associated/Lifetime unify — 구조적 동등성 비교 (Opus)
-- [ ] 4. 테스트 — 각 variant별 positive/negative unify 테스트 추가 (Sonnet)
-- [ ] 5. 검증 — 전체 타입 체커 테스트 통과, E2E 영향 없음 (Opus)
+- [x] 1. ConstArray/Vector unify — element 재귀 unification + size/lanes 동등성 ✅ 2026-02-28
+  변경: crates/vais-types/src/inference.rs (unify: ConstArray/Vector 분기 추가)
+- [x] 2. Map unify — key/value 재귀 unification ✅ 2026-02-28
+  변경: crates/vais-types/src/inference.rs (unify: Map 분기 추가)
+- [x] 3. ConstGeneric/Associated/Lifetime unify — 구조적 동등성 비교 ✅ 2026-02-28
+  변경: crates/vais-types/src/inference.rs (unify: 3개 분기 + apply_substitutions: 13개 compound type 재귀 치환)
+- [x] 4. 테스트 — 29개 positive/negative unify 테스트 추가 ✅ 2026-02-28
+  변경: crates/vais-types/src/tests.rs (+362줄, ConstArray 7 + Vector 5 + Map 6 + ConstGeneric 2 + Associated 6 + Lifetime 3)
+- [x] 5. 검증 — types 106 passed, E2E 900 passed (0 fail), Clippy 0건 ✅ 2026-02-28
 
 ---
 

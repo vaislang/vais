@@ -268,6 +268,96 @@ impl TypeChecker {
             | (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => {
                 self.unify(inner, other)
             }
+            // ConstArray: element type unification + size equality
+            (
+                ResolvedType::ConstArray {
+                    element: ea,
+                    size: sa,
+                },
+                ResolvedType::ConstArray {
+                    element: eb,
+                    size: sb,
+                },
+            ) => {
+                if sa != sb {
+                    return Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    });
+                }
+                self.unify(ea, eb)
+            }
+            // Vector: element type unification + lanes equality
+            (
+                ResolvedType::Vector {
+                    element: ea,
+                    lanes: la,
+                },
+                ResolvedType::Vector {
+                    element: eb,
+                    lanes: lb,
+                },
+            ) => {
+                if la != lb {
+                    return Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    });
+                }
+                self.unify(ea, eb)
+            }
+            // Map: key and value recursive unification
+            (ResolvedType::Map(ka, va), ResolvedType::Map(kb, vb)) => {
+                self.unify(ka, kb)?;
+                self.unify(va, vb)
+            }
+            // ConstGeneric: structural name equality
+            (ResolvedType::ConstGeneric(na), ResolvedType::ConstGeneric(nb)) => {
+                if na == nb {
+                    Ok(())
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                }
+            }
+            // Associated type: structural equality (base, trait, assoc_name, generics)
+            (
+                ResolvedType::Associated {
+                    base: ba,
+                    trait_name: tna,
+                    assoc_name: ana,
+                    generics: ga,
+                },
+                ResolvedType::Associated {
+                    base: bb,
+                    trait_name: tnb,
+                    assoc_name: anb,
+                    generics: gb,
+                },
+            ) if tna == tnb && ana == anb && ga.len() == gb.len() => {
+                self.unify(ba, bb)?;
+                for (ta, tb) in ga.iter().zip(gb.iter()) {
+                    self.unify(ta, tb)?;
+                }
+                Ok(())
+            }
+            // Lifetime: structural name equality
+            (ResolvedType::Lifetime(na), ResolvedType::Lifetime(nb)) => {
+                if na == nb {
+                    Ok(())
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                }
+            }
             // Lazy type unification
             (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
@@ -400,6 +490,92 @@ impl TypeChecker {
                 },
                 ret: Box::new(self.apply_substitutions(ret)),
                 effects: effects.clone(),
+            },
+            ResolvedType::ConstArray { element, size } => ResolvedType::ConstArray {
+                element: Box::new(self.apply_substitutions(element)),
+                size: size.clone(),
+            },
+            ResolvedType::Vector { element, lanes } => ResolvedType::Vector {
+                element: Box::new(self.apply_substitutions(element)),
+                lanes: *lanes,
+            },
+            ResolvedType::Map(key, value) => ResolvedType::Map(
+                Box::new(self.apply_substitutions(key)),
+                Box::new(self.apply_substitutions(value)),
+            ),
+            ResolvedType::Future(inner) => {
+                ResolvedType::Future(Box::new(self.apply_substitutions(inner)))
+            }
+            ResolvedType::Lazy(inner) => {
+                ResolvedType::Lazy(Box::new(self.apply_substitutions(inner)))
+            }
+            ResolvedType::Named { name, generics } => ResolvedType::Named {
+                name: name.clone(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.apply_substitutions(g))
+                    .collect(),
+            },
+            ResolvedType::FnPtr {
+                params,
+                ret,
+                is_vararg,
+                effects,
+            } => ResolvedType::FnPtr {
+                params: params
+                    .iter()
+                    .map(|p| self.apply_substitutions(p))
+                    .collect(),
+                ret: Box::new(self.apply_substitutions(ret)),
+                is_vararg: *is_vararg,
+                effects: effects.clone(),
+            },
+            ResolvedType::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => ResolvedType::Associated {
+                base: Box::new(self.apply_substitutions(base)),
+                trait_name: trait_name.clone(),
+                assoc_name: assoc_name.clone(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.apply_substitutions(g))
+                    .collect(),
+            },
+            ResolvedType::Linear(inner) => {
+                ResolvedType::Linear(Box::new(self.apply_substitutions(inner)))
+            }
+            ResolvedType::Affine(inner) => {
+                ResolvedType::Affine(Box::new(self.apply_substitutions(inner)))
+            }
+            ResolvedType::RefLifetime { lifetime, inner } => ResolvedType::RefLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.apply_substitutions(inner)),
+            },
+            ResolvedType::RefMutLifetime { lifetime, inner } => ResolvedType::RefMutLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.apply_substitutions(inner)),
+            },
+            ResolvedType::DynTrait {
+                trait_name,
+                generics,
+            } => ResolvedType::DynTrait {
+                trait_name: trait_name.clone(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.apply_substitutions(g))
+                    .collect(),
+            },
+            ResolvedType::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => ResolvedType::Dependent {
+                var_name: var_name.clone(),
+                base: Box::new(self.apply_substitutions(base)),
+                predicate: predicate.clone(),
             },
             _ => ty.clone(),
         }
