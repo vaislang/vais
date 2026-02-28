@@ -276,30 +276,12 @@ mod tests {
             GpuBuiltins::cuda_builtin("thread_idx_z"),
             Some("threadIdx.z")
         );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_idx_x"),
-            Some("blockIdx.x")
-        );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_idx_y"),
-            Some("blockIdx.y")
-        );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_idx_z"),
-            Some("blockIdx.z")
-        );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_dim_x"),
-            Some("blockDim.x")
-        );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_dim_y"),
-            Some("blockDim.y")
-        );
-        assert_eq!(
-            GpuBuiltins::cuda_builtin("block_dim_z"),
-            Some("blockDim.z")
-        );
+        assert_eq!(GpuBuiltins::cuda_builtin("block_idx_x"), Some("blockIdx.x"));
+        assert_eq!(GpuBuiltins::cuda_builtin("block_idx_y"), Some("blockIdx.y"));
+        assert_eq!(GpuBuiltins::cuda_builtin("block_idx_z"), Some("blockIdx.z"));
+        assert_eq!(GpuBuiltins::cuda_builtin("block_dim_x"), Some("blockDim.x"));
+        assert_eq!(GpuBuiltins::cuda_builtin("block_dim_y"), Some("blockDim.y"));
+        assert_eq!(GpuBuiltins::cuda_builtin("block_dim_z"), Some("blockDim.z"));
         assert_eq!(GpuBuiltins::cuda_builtin("grid_dim_x"), Some("gridDim.x"));
         assert_eq!(GpuBuiltins::cuda_builtin("grid_dim_y"), Some("gridDim.y"));
         assert_eq!(GpuBuiltins::cuda_builtin("grid_dim_z"), Some("gridDim.z"));

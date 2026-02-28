@@ -59,7 +59,10 @@ mod tests {
         let mut features = HashMap::new();
         features.insert("json".to_string(), vec![]);
         features.insert("async".to_string(), vec!["json".to_string()]);
-        features.insert("full".to_string(), vec!["json".to_string(), "async".to_string()]);
+        features.insert(
+            "full".to_string(),
+            vec!["json".to_string(), "async".to_string()],
+        );
         FeatureConfig {
             default: vec!["json".to_string()],
             features,
@@ -126,10 +129,7 @@ mod tests {
     #[test]
     fn test_resolve_duplicates() {
         let fc = make_config();
-        let resolved = fc.resolve_features(
-            &["json".to_string(), "json".to_string()],
-            false,
-        );
+        let resolved = fc.resolve_features(&["json".to_string(), "json".to_string()], false);
         assert_eq!(resolved.iter().filter(|f| *f == "json").count(), 1);
     }
 

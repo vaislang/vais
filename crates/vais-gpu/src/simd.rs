@@ -979,14 +979,14 @@ mod tests {
     #[test]
     fn test_simd_target_compiler_flags_all() {
         assert!(SimdTarget::Avx512.compiler_flags().contains("-mavx512f"));
-        assert!(SimdTarget::Avx512
-            .compiler_flags()
-            .contains("-mavx512dq"));
+        assert!(SimdTarget::Avx512.compiler_flags().contains("-mavx512dq"));
         assert!(SimdTarget::Avx2.compiler_flags().contains("-mavx2"));
         assert!(SimdTarget::Avx2.compiler_flags().contains("-mfma"));
         assert!(SimdTarget::Sse4.compiler_flags().contains("-msse4.2"));
         assert!(SimdTarget::Neon.compiler_flags().contains("-mfpu=neon"));
-        assert!(SimdTarget::Sve.compiler_flags().contains("-march=armv8-a+sve"));
+        assert!(SimdTarget::Sve
+            .compiler_flags()
+            .contains("-march=armv8-a+sve"));
     }
 
     // ── SimdTarget::headers tests ──
@@ -1077,10 +1077,7 @@ mod tests {
 
     #[test]
     fn test_simd_vector_type_avx2() {
-        assert_eq!(
-            SimdVectorType::F32(8).type_name(SimdTarget::Avx2),
-            "__m256"
-        );
+        assert_eq!(SimdVectorType::F32(8).type_name(SimdTarget::Avx2), "__m256");
         assert_eq!(
             SimdVectorType::F64(4).type_name(SimdTarget::Avx2),
             "__m256d"
@@ -1097,10 +1094,7 @@ mod tests {
 
     #[test]
     fn test_simd_vector_type_avx2_128() {
-        assert_eq!(
-            SimdVectorType::F32(4).type_name(SimdTarget::Avx2),
-            "__m128"
-        );
+        assert_eq!(SimdVectorType::F32(4).type_name(SimdTarget::Avx2), "__m128");
         assert_eq!(
             SimdVectorType::F64(2).type_name(SimdTarget::Avx2),
             "__m128d"
@@ -1117,10 +1111,7 @@ mod tests {
 
     #[test]
     fn test_simd_vector_type_sse4() {
-        assert_eq!(
-            SimdVectorType::F32(4).type_name(SimdTarget::Sse4),
-            "__m128"
-        );
+        assert_eq!(SimdVectorType::F32(4).type_name(SimdTarget::Sse4), "__m128");
         assert_eq!(
             SimdVectorType::F64(2).type_name(SimdTarget::Sse4),
             "__m128d"
@@ -1304,15 +1295,9 @@ mod tests {
             SimdIntrinsics::add(SimdTarget::Avx2, "f32"),
             "_mm256_add_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::add(SimdTarget::Sse4, "f32"),
-            "_mm_add_ps"
-        );
+        assert_eq!(SimdIntrinsics::add(SimdTarget::Sse4, "f32"), "_mm_add_ps");
         assert_eq!(SimdIntrinsics::add(SimdTarget::Neon, "f32"), "vaddq_f32");
-        assert_eq!(
-            SimdIntrinsics::add(SimdTarget::Sve, "f32"),
-            "svadd_f32_x"
-        );
+        assert_eq!(SimdIntrinsics::add(SimdTarget::Sve, "f32"), "svadd_f32_x");
     }
 
     #[test]
@@ -1325,10 +1310,7 @@ mod tests {
             SimdIntrinsics::sub(SimdTarget::Avx2, "f32"),
             "_mm256_sub_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::sub(SimdTarget::Sse4, "f32"),
-            "_mm_sub_ps"
-        );
+        assert_eq!(SimdIntrinsics::sub(SimdTarget::Sse4, "f32"), "_mm_sub_ps");
         assert_eq!(SimdIntrinsics::sub(SimdTarget::Neon, "f32"), "vsubq_f32");
     }
 
@@ -1342,10 +1324,7 @@ mod tests {
             SimdIntrinsics::mul(SimdTarget::Avx2, "f32"),
             "_mm256_mul_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::mul(SimdTarget::Sse4, "f32"),
-            "_mm_mul_ps"
-        );
+        assert_eq!(SimdIntrinsics::mul(SimdTarget::Sse4, "f32"), "_mm_mul_ps");
         assert_eq!(SimdIntrinsics::mul(SimdTarget::Neon, "f32"), "vmulq_f32");
     }
 
@@ -1359,10 +1338,7 @@ mod tests {
             SimdIntrinsics::div(SimdTarget::Avx2, "f32"),
             "_mm256_div_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::div(SimdTarget::Sse4, "f32"),
-            "_mm_div_ps"
-        );
+        assert_eq!(SimdIntrinsics::div(SimdTarget::Sse4, "f32"), "_mm_div_ps");
         assert_eq!(SimdIntrinsics::div(SimdTarget::Neon, "f32"), "vdivq_f32");
     }
 
@@ -1373,10 +1349,7 @@ mod tests {
             SimdIntrinsics::div(SimdTarget::Avx512, "i32"),
             "unknown_div"
         );
-        assert_eq!(
-            SimdIntrinsics::div(SimdTarget::Sse4, "i32"),
-            "unknown_div"
-        );
+        assert_eq!(SimdIntrinsics::div(SimdTarget::Sse4, "i32"), "unknown_div");
     }
 
     #[test]
@@ -1393,15 +1366,9 @@ mod tests {
             SimdIntrinsics::fma(SimdTarget::Avx2, "f32"),
             "_mm256_fmadd_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::fma(SimdTarget::Sse4, "f32"),
-            "_mm_fmadd_ps"
-        );
+        assert_eq!(SimdIntrinsics::fma(SimdTarget::Sse4, "f32"), "_mm_fmadd_ps");
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Neon, "f32"), "vfmaq_f32");
-        assert_eq!(
-            SimdIntrinsics::fma(SimdTarget::Sve, "f64"),
-            "svmla_f64_x"
-        );
+        assert_eq!(SimdIntrinsics::fma(SimdTarget::Sve, "f64"), "svmla_f64_x");
     }
 
     #[test]
@@ -1422,15 +1389,9 @@ mod tests {
             SimdIntrinsics::sqrt(SimdTarget::Avx2, "f32"),
             "_mm256_sqrt_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::sqrt(SimdTarget::Sse4, "f32"),
-            "_mm_sqrt_ps"
-        );
+        assert_eq!(SimdIntrinsics::sqrt(SimdTarget::Sse4, "f32"), "_mm_sqrt_ps");
         assert_eq!(SimdIntrinsics::sqrt(SimdTarget::Neon, "f32"), "vsqrtq_f32");
-        assert_eq!(
-            SimdIntrinsics::sqrt(SimdTarget::Sve, "f32"),
-            "svsqrt_f32_x"
-        );
+        assert_eq!(SimdIntrinsics::sqrt(SimdTarget::Sve, "f32"), "svsqrt_f32_x");
     }
 
     #[test]
@@ -1508,15 +1469,9 @@ mod tests {
             SimdIntrinsics::min(SimdTarget::Avx2, "f32"),
             "_mm256_min_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::min(SimdTarget::Sse4, "f32"),
-            "_mm_min_ps"
-        );
+        assert_eq!(SimdIntrinsics::min(SimdTarget::Sse4, "f32"), "_mm_min_ps");
         assert_eq!(SimdIntrinsics::min(SimdTarget::Neon, "f32"), "vminq_f32");
-        assert_eq!(
-            SimdIntrinsics::min(SimdTarget::Sve, "f32"),
-            "svmin_f32_x"
-        );
+        assert_eq!(SimdIntrinsics::min(SimdTarget::Sve, "f32"), "svmin_f32_x");
     }
 
     #[test]
@@ -1529,15 +1484,9 @@ mod tests {
             SimdIntrinsics::max(SimdTarget::Avx2, "f32"),
             "_mm256_max_ps"
         );
-        assert_eq!(
-            SimdIntrinsics::max(SimdTarget::Sse4, "f32"),
-            "_mm_max_ps"
-        );
+        assert_eq!(SimdIntrinsics::max(SimdTarget::Sse4, "f32"), "_mm_max_ps");
         assert_eq!(SimdIntrinsics::max(SimdTarget::Neon, "f32"), "vmaxq_f32");
-        assert_eq!(
-            SimdIntrinsics::max(SimdTarget::Sve, "f32"),
-            "svmax_f32_x"
-        );
+        assert_eq!(SimdIntrinsics::max(SimdTarget::Sve, "f32"), "svmax_f32_x");
     }
 
     #[test]
@@ -1567,21 +1516,9 @@ mod tests {
 
     #[test]
     fn test_simd_intrinsics_sve_f64() {
-        assert_eq!(
-            SimdIntrinsics::add(SimdTarget::Sve, "f64"),
-            "svadd_f64_x"
-        );
-        assert_eq!(
-            SimdIntrinsics::sub(SimdTarget::Sve, "f64"),
-            "svsub_f64_x"
-        );
-        assert_eq!(
-            SimdIntrinsics::mul(SimdTarget::Sve, "f64"),
-            "svmul_f64_x"
-        );
-        assert_eq!(
-            SimdIntrinsics::div(SimdTarget::Sve, "f64"),
-            "svdiv_f64_x"
-        );
+        assert_eq!(SimdIntrinsics::add(SimdTarget::Sve, "f64"), "svadd_f64_x");
+        assert_eq!(SimdIntrinsics::sub(SimdTarget::Sve, "f64"), "svsub_f64_x");
+        assert_eq!(SimdIntrinsics::mul(SimdTarget::Sve, "f64"), "svmul_f64_x");
+        assert_eq!(SimdIntrinsics::div(SimdTarget::Sve, "f64"), "svdiv_f64_x");
     }
 }

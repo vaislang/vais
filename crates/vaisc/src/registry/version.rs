@@ -474,7 +474,9 @@ mod tests {
 
     #[test]
     fn test_version_with_pre_and_build() {
-        let v = Version::new(1, 0, 0).with_pre("rc.1").with_build("build.42");
+        let v = Version::new(1, 0, 0)
+            .with_pre("rc.1")
+            .with_build("build.42");
         assert!(v.is_prerelease());
         assert_eq!(v.pre, Some("rc.1".to_string()));
         assert_eq!(v.build, Some("build.42".to_string()));

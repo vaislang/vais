@@ -401,10 +401,7 @@ mod tests {
             .with_verbose(true);
 
         assert_eq!(config.source_path, PathBuf::from("game.vais"));
-        assert_eq!(
-            config.output_dir.unwrap(),
-            PathBuf::from("/tmp/build")
-        );
+        assert_eq!(config.output_dir.unwrap(), PathBuf::from("/tmp/build"));
         assert_eq!(config.compiler_command, "gcc");
         assert_eq!(config.compiler_args, vec!["-O3"]);
         assert_eq!(config.debounce_ms, 500);
@@ -444,11 +441,15 @@ mod tests {
 
     #[test]
     fn test_dylib_path_with_output_dir() {
-        let config = HotReloadConfig::new("/src/test.vais")
-            .with_output_dir("/build");
+        let config = HotReloadConfig::new("/src/test.vais").with_output_dir("/build");
         let path = HotReloader::determine_dylib_path(&config).unwrap();
         assert!(path.starts_with("/build"));
-        assert!(path.file_name().unwrap().to_str().unwrap().starts_with("libtest."));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("libtest."));
     }
 
     #[test]
@@ -456,7 +457,12 @@ mod tests {
         let config = HotReloadConfig::new("/src/project/main.vais");
         let path = HotReloader::determine_dylib_path(&config).unwrap();
         assert_eq!(path.parent().unwrap(), Path::new("/src/project"));
-        assert!(path.file_name().unwrap().to_str().unwrap().starts_with("libmain."));
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("libmain."));
     }
 
     #[test]
@@ -466,7 +472,10 @@ mod tests {
         let name = path.file_name().unwrap().to_str().unwrap();
 
         #[cfg(target_os = "macos")]
-        assert!(name.ends_with(".dylib"), "macOS should use .dylib extension");
+        assert!(
+            name.ends_with(".dylib"),
+            "macOS should use .dylib extension"
+        );
         #[cfg(target_os = "linux")]
         assert!(name.ends_with(".so"), "Linux should use .so extension");
         #[cfg(target_os = "windows")]
@@ -478,7 +487,11 @@ mod tests {
         let config = HotReloadConfig::new("/tmp/mymodule.vais");
         let path = HotReloader::determine_dylib_path(&config).unwrap();
         let name = path.file_name().unwrap().to_str().unwrap();
-        assert!(name.starts_with("lib"), "Dylib should have 'lib' prefix: {}", name);
+        assert!(
+            name.starts_with("lib"),
+            "Dylib should have 'lib' prefix: {}",
+            name
+        );
     }
 
     #[test]
@@ -497,16 +510,14 @@ mod tests {
 
     #[test]
     fn test_config_empty_compiler_args() {
-        let config = HotReloadConfig::new("test.vais")
-            .with_compiler_args(vec![]);
+        let config = HotReloadConfig::new("test.vais").with_compiler_args(vec![]);
         assert!(config.compiler_args.is_empty());
     }
 
     #[test]
     fn test_config_many_compiler_args() {
         let args: Vec<String> = (0..10).map(|i| format!("--arg{}", i)).collect();
-        let config = HotReloadConfig::new("test.vais")
-            .with_compiler_args(args.clone());
+        let config = HotReloadConfig::new("test.vais").with_compiler_args(args.clone());
         assert_eq!(config.compiler_args.len(), 10);
         assert_eq!(config.compiler_args, args);
     }

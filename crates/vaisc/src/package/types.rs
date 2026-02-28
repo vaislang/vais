@@ -257,7 +257,10 @@ mod tests {
             system: None,
             sources: vec![],
         });
-        assert_eq!(dep.include_flag(), Some("-I/usr/include/openssl".to_string()));
+        assert_eq!(
+            dep.include_flag(),
+            Some("-I/usr/include/openssl".to_string())
+        );
     }
 
     #[test]

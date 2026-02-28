@@ -634,12 +634,30 @@ mod tests {
 
     #[test]
     fn test_gpu_type_from_resolved_primitives() {
-        assert_eq!(GpuType::from_resolved(&ResolvedType::I32).unwrap(), GpuType::I32);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::I64).unwrap(), GpuType::I64);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::F32).unwrap(), GpuType::F32);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::F64).unwrap(), GpuType::F64);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::Bool).unwrap(), GpuType::Bool);
-        assert_eq!(GpuType::from_resolved(&ResolvedType::Unit).unwrap(), GpuType::Void);
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::I32).unwrap(),
+            GpuType::I32
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::I64).unwrap(),
+            GpuType::I64
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::F32).unwrap(),
+            GpuType::F32
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::F64).unwrap(),
+            GpuType::F64
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::Bool).unwrap(),
+            GpuType::Bool
+        );
+        assert_eq!(
+            GpuType::from_resolved(&ResolvedType::Unit).unwrap(),
+            GpuType::Void
+        );
     }
 
     #[test]

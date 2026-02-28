@@ -155,6 +155,7 @@ impl DirtySet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     // ── CompilationOptions tests ──
 
@@ -282,7 +283,9 @@ mod tests {
         };
         assert_eq!(meta.functions.len(), 1);
         assert_eq!(meta.functions["main"].line_range, (1, 5));
-        assert!(meta.functions["main"].dependencies.contains(&"helper".to_string()));
+        assert!(meta.functions["main"]
+            .dependencies
+            .contains(&"helper".to_string()));
     }
 
     #[test]
@@ -580,7 +583,9 @@ mod tests {
     #[test]
     fn test_dirty_set_get_dirty_functions_none() {
         let ds = DirtySet::default();
-        assert!(ds.get_dirty_functions(Path::new("nonexistent.vais")).is_none());
+        assert!(ds
+            .get_dirty_functions(Path::new("nonexistent.vais"))
+            .is_none());
     }
 
     #[test]

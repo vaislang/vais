@@ -4,8 +4,8 @@
 //! GenericParam helpers, BinOp::precedence completeness, Formatter::format_module,
 //! and edge cases for patterns, expressions, and statements.
 
-use vais_ast::*;
 use vais_ast::formatter::{FormatConfig, Formatter};
+use vais_ast::*;
 
 // ============================================================================
 // Helper Functions
@@ -28,7 +28,10 @@ fn sp_type(ty: Type) -> Spanned<Type> {
 }
 
 fn named_type(name: &str) -> Spanned<Type> {
-    sp_type(Type::Named { name: name.to_string(), generics: vec![] })
+    sp_type(Type::Named {
+        name: name.to_string(),
+        generics: vec![],
+    })
 }
 
 fn sp_expr(expr: Expr) -> Spanned<Expr> {
@@ -59,7 +62,10 @@ fn format_item(item: Item) -> String {
 
 #[test]
 fn test_display_type_named_no_generics() {
-    let ty = Type::Named { name: "i64".to_string(), generics: vec![] };
+    let ty = Type::Named {
+        name: "i64".to_string(),
+        generics: vec![],
+    };
     assert_eq!(format!("{}", ty), "i64");
 }
 
@@ -430,22 +436,14 @@ fn test_generic_param_new_type() {
 
 #[test]
 fn test_generic_param_new_type_with_variance_covariant() {
-    let param = GenericParam::new_type_with_variance(
-        sp_str("T"),
-        vec![],
-        Variance::Covariant,
-    );
+    let param = GenericParam::new_type_with_variance(sp_str("T"), vec![], Variance::Covariant);
     assert!(param.is_covariant());
     assert!(!param.is_contravariant());
 }
 
 #[test]
 fn test_generic_param_new_type_with_variance_contravariant() {
-    let param = GenericParam::new_type_with_variance(
-        sp_str("T"),
-        vec![],
-        Variance::Contravariant,
-    );
+    let param = GenericParam::new_type_with_variance(sp_str("T"), vec![], Variance::Contravariant);
     assert!(!param.is_covariant());
     assert!(param.is_contravariant());
 }
@@ -534,10 +532,19 @@ fn test_ownership_default_is_regular() {
 
 #[test]
 fn test_ownership_variants_all() {
-    let variants = [Ownership::Regular, Ownership::Linear, Ownership::Affine, Ownership::Move];
+    let variants = [
+        Ownership::Regular,
+        Ownership::Linear,
+        Ownership::Affine,
+        Ownership::Move,
+    ];
     for (i, a) in variants.iter().enumerate() {
         for (j, b) in variants.iter().enumerate() {
-            if i == j { assert_eq!(a, b); } else { assert_ne!(a, b); }
+            if i == j {
+                assert_eq!(a, b);
+            } else {
+                assert_ne!(a, b);
+            }
         }
     }
 }
@@ -587,7 +594,11 @@ fn test_capture_mode_variants() {
     ];
     for (i, a) in modes.iter().enumerate() {
         for (j, b) in modes.iter().enumerate() {
-            if i == j { assert_eq!(a, b); } else { assert_ne!(a, b); }
+            if i == j {
+                assert_eq!(a, b);
+            } else {
+                assert_ne!(a, b);
+            }
         }
     }
 }
@@ -610,7 +621,13 @@ fn test_pattern_range_inclusive() {
         end: Some(Box::new(spanned(Pattern::Literal(Literal::Int(10)), 0, 2))),
         inclusive: true,
     };
-    assert!(matches!(pat, Pattern::Range { inclusive: true, .. }));
+    assert!(matches!(
+        pat,
+        Pattern::Range {
+            inclusive: true,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -620,7 +637,13 @@ fn test_pattern_range_exclusive() {
         end: Some(Box::new(spanned(Pattern::Literal(Literal::Int(5)), 0, 1))),
         inclusive: false,
     };
-    assert!(matches!(pat, Pattern::Range { inclusive: false, .. }));
+    assert!(matches!(
+        pat,
+        Pattern::Range {
+            inclusive: false,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -671,8 +694,14 @@ fn test_literal_equality() {
     assert_ne!(Literal::Int(42), Literal::Int(43));
     assert_eq!(Literal::Bool(true), Literal::Bool(true));
     assert_ne!(Literal::Bool(true), Literal::Bool(false));
-    assert_eq!(Literal::String("hello".to_string()), Literal::String("hello".to_string()));
-    assert_ne!(Literal::String("a".to_string()), Literal::String("b".to_string()));
+    assert_eq!(
+        Literal::String("hello".to_string()),
+        Literal::String("hello".to_string())
+    );
+    assert_ne!(
+        Literal::String("a".to_string()),
+        Literal::String("b".to_string())
+    );
 }
 
 #[test]
@@ -692,7 +721,13 @@ fn test_expr_range() {
         end: Some(Box::new(sp_expr(Expr::Int(10)))),
         inclusive: false,
     };
-    assert!(matches!(expr, Expr::Range { inclusive: false, .. }));
+    assert!(matches!(
+        expr,
+        Expr::Range {
+            inclusive: false,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -702,7 +737,13 @@ fn test_expr_range_inclusive() {
         end: Some(Box::new(sp_expr(Expr::Int(5)))),
         inclusive: true,
     };
-    assert!(matches!(expr, Expr::Range { inclusive: true, .. }));
+    assert!(matches!(
+        expr,
+        Expr::Range {
+            inclusive: true,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -722,9 +763,10 @@ fn test_expr_struct_lit() {
 
 #[test]
 fn test_expr_map_lit() {
-    let expr = Expr::MapLit(vec![
-        (sp_expr(Expr::String("key".to_string())), sp_expr(Expr::Int(42))),
-    ]);
+    let expr = Expr::MapLit(vec![(
+        sp_expr(Expr::String("key".to_string())),
+        sp_expr(Expr::Int(42)),
+    )]);
     if let Expr::MapLit(pairs) = expr {
         assert_eq!(pairs.len(), 1);
     }
@@ -794,7 +836,9 @@ fn test_expr_yield() {
 
 #[test]
 fn test_expr_comptime() {
-    let expr = Expr::Comptime { body: Box::new(sp_expr(Expr::Int(100))) };
+    let expr = Expr::Comptime {
+        body: Box::new(sp_expr(Expr::Int(100))),
+    };
     assert!(matches!(expr, Expr::Comptime { .. }));
 }
 
@@ -824,9 +868,17 @@ fn test_expr_assert_no_message() {
 fn test_expr_assert_with_message() {
     let expr = Expr::Assert {
         condition: Box::new(sp_expr(Expr::Bool(true))),
-        message: Some(Box::new(sp_expr(Expr::String("should be true".to_string())))),
+        message: Some(Box::new(sp_expr(Expr::String(
+            "should be true".to_string(),
+        )))),
     };
-    assert!(matches!(expr, Expr::Assert { message: Some(_), .. }));
+    assert!(matches!(
+        expr,
+        Expr::Assert {
+            message: Some(_),
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -841,7 +893,11 @@ fn test_expr_error() {
         message: "unexpected token".to_string(),
         skipped_tokens: vec!["foo".to_string(), "bar".to_string()],
     };
-    if let Expr::Error { message, skipped_tokens } = expr {
+    if let Expr::Error {
+        message,
+        skipped_tokens,
+    } = expr
+    {
         assert_eq!(message, "unexpected token");
         assert_eq!(skipped_tokens.len(), 2);
     }
@@ -899,7 +955,10 @@ fn test_expr_static_method_call() {
         method: sp_str("new"),
         args: vec![],
     };
-    if let Expr::StaticMethodCall { type_name, method, .. } = expr {
+    if let Expr::StaticMethodCall {
+        type_name, method, ..
+    } = expr
+    {
         assert_eq!(type_name.node, "Vec");
         assert_eq!(method.node, "new");
     }
@@ -1002,7 +1061,11 @@ fn test_stmt_error() {
         message: "parse error".to_string(),
         skipped_tokens: vec!["bad".to_string()],
     };
-    if let Stmt::Error { message, skipped_tokens } = stmt {
+    if let Stmt::Error {
+        message,
+        skipped_tokens,
+    } = stmt
+    {
         assert_eq!(message, "parse error");
         assert_eq!(skipped_tokens.len(), 1);
     }
@@ -1024,7 +1087,10 @@ fn test_macro_token_variants() {
 fn test_macro_literal_variants() {
     assert_eq!(MacroLiteral::Int(1), MacroLiteral::Int(1));
     assert_eq!(MacroLiteral::Float(1.0), MacroLiteral::Float(1.0));
-    assert_eq!(MacroLiteral::String("s".to_string()), MacroLiteral::String("s".to_string()));
+    assert_eq!(
+        MacroLiteral::String("s".to_string()),
+        MacroLiteral::String("s".to_string())
+    );
     assert_eq!(MacroLiteral::Bool(true), MacroLiteral::Bool(true));
     assert_ne!(MacroLiteral::Int(1), MacroLiteral::Bool(true));
 }
@@ -1039,7 +1105,10 @@ fn test_macro_pattern_empty() {
 fn test_macro_pattern_sequence() {
     let pat = MacroPattern::Sequence(vec![
         MacroPatternElement::Token(MacroToken::Ident("let".to_string())),
-        MacroPatternElement::MetaVar { name: "x".to_string(), kind: MetaVarKind::Ident },
+        MacroPatternElement::MetaVar {
+            name: "x".to_string(),
+            kind: MetaVarKind::Ident,
+        },
     ]);
     if let MacroPattern::Sequence(elements) = pat {
         assert_eq!(elements.len(), 2);
@@ -1049,11 +1118,20 @@ fn test_macro_pattern_sequence() {
 #[test]
 fn test_macro_pattern_repetition() {
     let elem = MacroPatternElement::Repetition {
-        patterns: vec![MacroPatternElement::MetaVar { name: "x".to_string(), kind: MetaVarKind::Expr }],
+        patterns: vec![MacroPatternElement::MetaVar {
+            name: "x".to_string(),
+            kind: MetaVarKind::Expr,
+        }],
         separator: Some(MacroToken::Punct(',')),
         kind: RepetitionKind::ZeroOrMore,
     };
-    assert!(matches!(elem, MacroPatternElement::Repetition { kind: RepetitionKind::ZeroOrMore, .. }));
+    assert!(matches!(
+        elem,
+        MacroPatternElement::Repetition {
+            kind: RepetitionKind::ZeroOrMore,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -1062,7 +1140,13 @@ fn test_macro_pattern_group() {
         delimiter: Delimiter::Brace,
         content: vec![],
     };
-    assert!(matches!(elem, MacroPatternElement::Group { delimiter: Delimiter::Brace, .. }));
+    assert!(matches!(
+        elem,
+        MacroPatternElement::Group {
+            delimiter: Delimiter::Brace,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -1089,7 +1173,13 @@ fn test_macro_template_repetition() {
         separator: Some(MacroToken::Punct(',')),
         kind: RepetitionKind::OneOrMore,
     };
-    assert!(matches!(elem, MacroTemplateElement::Repetition { kind: RepetitionKind::OneOrMore, .. }));
+    assert!(matches!(
+        elem,
+        MacroTemplateElement::Repetition {
+            kind: RepetitionKind::OneOrMore,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -1098,15 +1188,29 @@ fn test_macro_template_group() {
         delimiter: Delimiter::Bracket,
         content: vec![],
     };
-    assert!(matches!(elem, MacroTemplateElement::Group { delimiter: Delimiter::Bracket, .. }));
+    assert!(matches!(
+        elem,
+        MacroTemplateElement::Group {
+            delimiter: Delimiter::Bracket,
+            ..
+        }
+    ));
 }
 
 #[test]
 fn test_repetition_kind_variants() {
-    let kinds = [RepetitionKind::ZeroOrMore, RepetitionKind::OneOrMore, RepetitionKind::ZeroOrOne];
+    let kinds = [
+        RepetitionKind::ZeroOrMore,
+        RepetitionKind::OneOrMore,
+        RepetitionKind::ZeroOrOne,
+    ];
     for (i, a) in kinds.iter().enumerate() {
         for (j, b) in kinds.iter().enumerate() {
-            if i == j { assert_eq!(a, b); } else { assert_ne!(a, b); }
+            if i == j {
+                assert_eq!(a, b);
+            } else {
+                assert_ne!(a, b);
+            }
         }
     }
 }
@@ -1253,7 +1357,10 @@ fn test_formatter_default_config() {
 #[test]
 fn test_formatter_format_empty_module() {
     let mut fmt = default_formatter();
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
     let result = fmt.format_module(&module);
     assert_eq!(result, "");
 }
@@ -1329,9 +1436,9 @@ fn test_formatter_format_function_pub_async() {
         generics: vec![],
         params: vec![],
         ret_type: Some(named_type("i64")),
-        body: FunctionBody::Block(vec![
-            sp_stmt(Stmt::Return(Some(Box::new(sp_expr(Expr::Int(0)))))),
-        ]),
+        body: FunctionBody::Block(vec![sp_stmt(Stmt::Return(Some(Box::new(sp_expr(
+            Expr::Int(0),
+        )))))]),
         is_pub: true,
         is_async: true,
         attributes: vec![],
@@ -1346,8 +1453,16 @@ fn test_formatter_format_struct() {
         name: sp_str("Point"),
         generics: vec![],
         fields: vec![
-            Field { name: sp_str("x"), ty: named_type("f64"), is_pub: false },
-            Field { name: sp_str("y"), ty: named_type("f64"), is_pub: false },
+            Field {
+                name: sp_str("x"),
+                ty: named_type("f64"),
+                is_pub: false,
+            },
+            Field {
+                name: sp_str("y"),
+                ty: named_type("f64"),
+                is_pub: false,
+            },
         ],
         methods: vec![],
         is_pub: true,
@@ -1365,9 +1480,18 @@ fn test_formatter_format_enum() {
         name: sp_str("Color"),
         generics: vec![],
         variants: vec![
-            Variant { name: sp_str("Red"), fields: VariantFields::Unit },
-            Variant { name: sp_str("Green"), fields: VariantFields::Unit },
-            Variant { name: sp_str("Blue"), fields: VariantFields::Unit },
+            Variant {
+                name: sp_str("Red"),
+                fields: VariantFields::Unit,
+            },
+            Variant {
+                name: sp_str("Green"),
+                fields: VariantFields::Unit,
+            },
+            Variant {
+                name: sp_str("Blue"),
+                fields: VariantFields::Unit,
+            },
         ],
         is_pub: false,
         attributes: vec![],
@@ -1437,8 +1561,16 @@ fn test_formatter_format_union() {
         name: sp_str("Value"),
         generics: vec![],
         fields: vec![
-            Field { name: sp_str("i"), ty: named_type("i64"), is_pub: false },
-            Field { name: sp_str("f"), ty: named_type("f64"), is_pub: false },
+            Field {
+                name: sp_str("i"),
+                ty: named_type("i64"),
+                is_pub: false,
+            },
+            Field {
+                name: sp_str("f"),
+                ty: named_type("f64"),
+                is_pub: false,
+            },
         ],
         is_pub: false,
     }));
@@ -1452,20 +1584,28 @@ fn test_formatter_format_multiple_items() {
     let mut fmt = default_formatter();
     let module = Module {
         items: vec![
-            spanned(Item::Const(ConstDef {
-                name: sp_str("A"),
-                ty: named_type("i64"),
-                value: sp_expr(Expr::Int(1)),
-                is_pub: false,
-                attributes: vec![],
-            }), 0, 1),
-            spanned(Item::Const(ConstDef {
-                name: sp_str("B"),
-                ty: named_type("i64"),
-                value: sp_expr(Expr::Int(2)),
-                is_pub: false,
-                attributes: vec![],
-            }), 0, 1),
+            spanned(
+                Item::Const(ConstDef {
+                    name: sp_str("A"),
+                    ty: named_type("i64"),
+                    value: sp_expr(Expr::Int(1)),
+                    is_pub: false,
+                    attributes: vec![],
+                }),
+                0,
+                1,
+            ),
+            spanned(
+                Item::Const(ConstDef {
+                    name: sp_str("B"),
+                    ty: named_type("i64"),
+                    value: sp_expr(Expr::Int(2)),
+                    is_pub: false,
+                    attributes: vec![],
+                }),
+                0,
+                1,
+            ),
         ],
         modules_map: None,
     };
@@ -1504,23 +1644,27 @@ fn test_formatter_format_impl() {
         trait_name: None,
         generics: vec![],
         associated_types: vec![],
-        methods: vec![spanned(Function {
-            name: sp_str("new"),
-            generics: vec![],
-            params: vec![],
-            ret_type: Some(named_type("Point")),
-            body: FunctionBody::Expr(Box::new(sp_expr(Expr::StructLit {
-                name: sp_str("Point"),
-                fields: vec![
-                    (sp_str("x"), sp_expr(Expr::Int(0))),
-                    (sp_str("y"), sp_expr(Expr::Int(0))),
-                ],
-            }))),
-            is_pub: false,
-            is_async: false,
-            attributes: vec![],
-            where_clause: vec![],
-        }, 0, 1)],
+        methods: vec![spanned(
+            Function {
+                name: sp_str("new"),
+                generics: vec![],
+                params: vec![],
+                ret_type: Some(named_type("Point")),
+                body: FunctionBody::Expr(Box::new(sp_expr(Expr::StructLit {
+                    name: sp_str("Point"),
+                    fields: vec![
+                        (sp_str("x"), sp_expr(Expr::Int(0))),
+                        (sp_str("y"), sp_expr(Expr::Int(0))),
+                    ],
+                }))),
+                is_pub: false,
+                is_async: false,
+                attributes: vec![],
+                where_clause: vec![],
+            },
+            0,
+            1,
+        )],
     }));
     assert!(result.contains("X Point"));
     assert!(result.contains("F new"));
@@ -1649,9 +1793,30 @@ fn test_module_with_modules_map() {
 
     let module = Module {
         items: vec![
-            spanned(Item::Error { message: "a".to_string(), skipped_tokens: vec![] }, 0, 1),
-            spanned(Item::Error { message: "b".to_string(), skipped_tokens: vec![] }, 0, 1),
-            spanned(Item::Error { message: "c".to_string(), skipped_tokens: vec![] }, 0, 1),
+            spanned(
+                Item::Error {
+                    message: "a".to_string(),
+                    skipped_tokens: vec![],
+                },
+                0,
+                1,
+            ),
+            spanned(
+                Item::Error {
+                    message: "b".to_string(),
+                    skipped_tokens: vec![],
+                },
+                0,
+                1,
+            ),
+            spanned(
+                Item::Error {
+                    message: "c".to_string(),
+                    skipped_tokens: vec![],
+                },
+                0,
+                1,
+            ),
         ],
         modules_map: Some(map),
     };
@@ -1695,8 +1860,16 @@ fn test_struct_clone() {
         name: sp_str("Point"),
         generics: vec![],
         fields: vec![
-            Field { name: sp_str("x"), ty: named_type("f64"), is_pub: true },
-            Field { name: sp_str("y"), ty: named_type("f64"), is_pub: true },
+            Field {
+                name: sp_str("x"),
+                ty: named_type("f64"),
+                is_pub: true,
+            },
+            Field {
+                name: sp_str("y"),
+                ty: named_type("f64"),
+                is_pub: true,
+            },
         ],
         methods: vec![],
         is_pub: true,
@@ -1713,8 +1886,14 @@ fn test_enum_clone() {
         name: sp_str("Option"),
         generics: vec![GenericParam::new_type(sp_str("T"), vec![])],
         variants: vec![
-            Variant { name: sp_str("None"), fields: VariantFields::Unit },
-            Variant { name: sp_str("Some"), fields: VariantFields::Tuple(vec![named_type("T")]) },
+            Variant {
+                name: sp_str("None"),
+                fields: VariantFields::Unit,
+            },
+            Variant {
+                name: sp_str("Some"),
+                fields: VariantFields::Tuple(vec![named_type("T")]),
+            },
         ],
         is_pub: true,
         attributes: vec![],
@@ -1763,9 +1942,9 @@ fn test_function_body_expr() {
 
 #[test]
 fn test_function_body_block() {
-    let body = FunctionBody::Block(vec![
-        sp_stmt(Stmt::Return(Some(Box::new(sp_expr(Expr::Int(0)))))),
-    ]);
+    let body = FunctionBody::Block(vec![sp_stmt(Stmt::Return(Some(Box::new(sp_expr(
+        Expr::Int(0),
+    )))))]);
     if let FunctionBody::Block(stmts) = &body {
         assert_eq!(stmts.len(), 1);
     }
@@ -1836,7 +2015,11 @@ fn test_struct_with_where_clause() {
     let s = Struct {
         name: sp_str("Container"),
         generics: vec![GenericParam::new_type(sp_str("T"), vec![])],
-        fields: vec![Field { name: sp_str("value"), ty: named_type("T"), is_pub: false }],
+        fields: vec![Field {
+            name: sp_str("value"),
+            ty: named_type("T"),
+            is_pub: false,
+        }],
         methods: vec![],
         is_pub: false,
         attributes: vec![Attribute {
@@ -1855,9 +2038,17 @@ fn test_struct_with_where_clause() {
 
 #[test]
 fn test_field_pub() {
-    let f = Field { name: sp_str("x"), ty: named_type("i64"), is_pub: true };
+    let f = Field {
+        name: sp_str("x"),
+        ty: named_type("i64"),
+        is_pub: true,
+    };
     assert!(f.is_pub);
-    let f2 = Field { name: sp_str("y"), ty: named_type("i64"), is_pub: false };
+    let f2 = Field {
+        name: sp_str("y"),
+        ty: named_type("i64"),
+        is_pub: false,
+    };
     assert!(!f2.is_pub);
 }
 
@@ -1868,8 +2059,16 @@ fn test_field_pub() {
 #[test]
 fn test_variant_fields_struct() {
     let vf = VariantFields::Struct(vec![
-        Field { name: sp_str("x"), ty: named_type("i64"), is_pub: false },
-        Field { name: sp_str("y"), ty: named_type("i64"), is_pub: false },
+        Field {
+            name: sp_str("x"),
+            ty: named_type("i64"),
+            is_pub: false,
+        },
+        Field {
+            name: sp_str("y"),
+            ty: named_type("i64"),
+            is_pub: false,
+        },
     ]);
     if let VariantFields::Struct(fields) = &vf {
         assert_eq!(fields.len(), 2);

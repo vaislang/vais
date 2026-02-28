@@ -649,10 +649,7 @@ mod tests {
             },
             Default::default(),
         ));
-        assert_eq!(
-            gen.type_to_wgsl(&Type::Pointer(inner)),
-            "ptr<storage, f32>"
-        );
+        assert_eq!(gen.type_to_wgsl(&Type::Pointer(inner)), "ptr<storage, f32>");
     }
 
     #[test]

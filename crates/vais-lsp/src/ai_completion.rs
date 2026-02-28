@@ -519,11 +519,7 @@ mod tests {
         let ctx = make_context(&["F name() -> str {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
-        assert!(items[0]
-            .insert_text
-            .as_ref()
-            .unwrap()
-            .contains("\"\""));
+        assert!(items[0].insert_text.as_ref().unwrap().contains("\"\""));
     }
 
     #[test]

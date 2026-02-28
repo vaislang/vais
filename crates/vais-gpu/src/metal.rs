@@ -908,10 +908,7 @@ mod tests {
             MetalBuiltins::builtin("global_idx_z"),
             Some("thread_position_in_grid.z")
         );
-        assert_eq!(
-            MetalBuiltins::builtin("lane_id"),
-            Some("simd_lane_id")
-        );
+        assert_eq!(MetalBuiltins::builtin("lane_id"), Some("simd_lane_id"));
     }
 
     #[test]
@@ -923,10 +920,7 @@ mod tests {
             MetalBuiltins::builtin("simd_broadcast"),
             Some("simd_broadcast")
         );
-        assert_eq!(
-            MetalBuiltins::builtin("simd_shuffle"),
-            Some("simd_shuffle")
-        );
+        assert_eq!(MetalBuiltins::builtin("simd_shuffle"), Some("simd_shuffle"));
         assert_eq!(
             MetalBuiltins::builtin("simd_shuffle_down"),
             Some("simd_shuffle_down")
@@ -945,10 +939,7 @@ mod tests {
     fn test_metal_builtins_warp_vote() {
         assert_eq!(MetalBuiltins::builtin("warp_all"), Some("simd_all"));
         assert_eq!(MetalBuiltins::builtin("warp_any"), Some("simd_any"));
-        assert_eq!(
-            MetalBuiltins::builtin("warp_ballot"),
-            Some("simd_ballot")
-        );
+        assert_eq!(MetalBuiltins::builtin("warp_ballot"), Some("simd_ballot"));
     }
 
     #[test]

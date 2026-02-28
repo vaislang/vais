@@ -180,9 +180,7 @@ mod tests {
 
     #[test]
     fn test_unexpected_eof_diagnostic() {
-        let err = ParseError::UnexpectedEof {
-            span: 10..10,
-        };
+        let err = ParseError::UnexpectedEof { span: 10..10 };
         let source = "F main() {";
         let diag = parse_error_to_diagnostic(&err, source);
 
@@ -256,9 +254,7 @@ mod tests {
 
     #[test]
     fn test_unexpected_eof_empty_source() {
-        let err = ParseError::UnexpectedEof {
-            span: 0..0,
-        };
+        let err = ParseError::UnexpectedEof { span: 0..0 };
         let diag = parse_error_to_diagnostic(&err, "");
         assert_eq!(diag.range.start.line, 0);
         assert_eq!(diag.range.start.character, 0);

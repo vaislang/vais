@@ -414,10 +414,7 @@ F main() -> i64 {
             .iter()
             .filter(|t| t.token_type == TOKEN_STRING)
             .collect();
-        assert!(
-            !string_tokens.is_empty(),
-            "Should find string literal"
-        );
+        assert!(!string_tokens.is_empty(), "Should find string literal");
     }
 
     #[test]
@@ -509,7 +506,8 @@ F main() -> i64 {
 
     #[test]
     fn test_semantic_tokens_all_types() {
-        let source = "F foo(a: i8, b: i16, c: i32, d: i64, e: f32, f: f64, g: bool, h: str) -> i64 { 0 }";
+        let source =
+            "F foo(a: i8, b: i16, c: i32, d: i64, e: f32, f: f64, g: bool, h: str) -> i64 { 0 }";
         let tokens = get_semantic_tokens(source);
         let type_tokens: Vec<_> = tokens
             .iter()
@@ -595,10 +593,7 @@ F main() -> i64 {
             .iter()
             .filter(|t| t.token_type == TOKEN_COMMENT)
             .collect();
-        assert!(
-            !comment_tokens.is_empty(),
-            "Should find doc comment"
-        );
+        assert!(!comment_tokens.is_empty(), "Should find doc comment");
     }
 
     #[test]
@@ -624,10 +619,7 @@ F main() -> i64 {
             .filter(|t| t.token_type == TOKEN_KEYWORD)
             .collect();
         // Should have F and R as keywords (at minimum)
-        assert!(
-            keyword_tokens.len() >= 2,
-            "Should find F and R keywords"
-        );
+        assert!(keyword_tokens.len() >= 2, "Should find F and R keywords");
     }
 
     #[test]
