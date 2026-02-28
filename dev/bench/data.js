@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772239367429,
+  "lastUpdate": 1772239814216,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -28727,6 +28727,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1851354,
             "range": "± 18046",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "eed149fbb6b935a4e2af09d987482454f9f2a518",
+          "message": "fix(phase59): ASan 테스트 실패 수정 — 포매터 버그 + assertion 수정\n\n- declarations.rs: format_const/format_global에서 format_expr 반환값 누락 수정\n  (self.format_expr() → let s = self.format_expr(); self.output.push_str(&s))\n- display_and_formatter_tests.rs: 포매터 실제 출력에 맞게 assertion 수정\n  - P → pub (포매터는 전체 단어 사용)\n  - A → async (동일)\n  - std.io → std::io (path는 :: 구분자 사용)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-28T09:43:10+09:00",
+          "tree_id": "d9403a0bff8563aafd23fa9f5500211a5545c9ca",
+          "url": "https://github.com/vaislang/vais/commit/eed149fbb6b935a4e2af09d987482454f9f2a518"
+        },
+        "date": 1772239813841,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2595,
+            "range": "± 146",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5877,
+            "range": "± 92",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6474,
+            "range": "± 43",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11772,
+            "range": "± 47",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19850,
+            "range": "± 182",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36522,
+            "range": "± 333",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32491,
+            "range": "± 236",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70115,
+            "range": "± 458",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 298457,
+            "range": "± 1494",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 448730,
+            "range": "± 1858",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 109787,
+            "range": "± 665",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 761860,
+            "range": "± 4757",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 168852,
+            "range": "± 945",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 197705,
+            "range": "± 2087",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 202891,
+            "range": "± 3653",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 250856,
+            "range": "± 1257",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 554279,
+            "range": "± 1935",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 773161,
+            "range": "± 4403",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 430735,
+            "range": "± 7089",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1209234,
+            "range": "± 19507",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 41603,
+            "range": "± 255",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 200693,
+            "range": "± 1067",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 409143,
+            "range": "± 2353",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 2005652,
+            "range": "± 8482",
             "unit": "ns/iter"
           }
         ]
