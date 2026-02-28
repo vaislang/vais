@@ -138,7 +138,7 @@ Tests are in `crates/<name>/tests/`. Key test suites:
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests
 
-Total: 2,500+ tests across all crates.
+Total: 6,900+ tests across all crates.
 
 ## Dependencies
 

@@ -36,6 +36,18 @@ impl Parser {
             Some(BinOp::Mul)
         } else if self.check(&Token::SlashEq) {
             Some(BinOp::Div)
+        } else if self.check(&Token::PercentEq) {
+            Some(BinOp::Mod)
+        } else if self.check(&Token::AmpEq) {
+            Some(BinOp::BitAnd)
+        } else if self.check(&Token::PipeEq) {
+            Some(BinOp::BitOr)
+        } else if self.check(&Token::CaretEq) {
+            Some(BinOp::BitXor)
+        } else if self.check(&Token::ShlEq) {
+            Some(BinOp::Shl)
+        } else if self.check(&Token::ShrEq) {
+            Some(BinOp::Shr)
         } else {
             None
         };

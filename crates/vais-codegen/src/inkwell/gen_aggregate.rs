@@ -13,6 +13,83 @@ use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Generate a map literal as parallel key/value arrays on the stack.
+    ///
+    /// `{k1: v1, k2: v2}` becomes:
+    /// - `keys:   [K x N]` allocated on the stack with each key stored
+    /// - `values: [V x N]` allocated on the stack with each value stored
+    /// - Returns a pointer to the keys array (consistent with Text IR backend)
+    pub(super) fn generate_map_literal(
+        &mut self,
+        pairs: &[(Spanned<Expr>, Spanned<Expr>)],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if pairs.is_empty() {
+            // Empty map — return null pointer
+            return Ok(self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .const_null()
+                .into());
+        }
+
+        let len = pairs.len() as u32;
+
+        // Generate all key-value pairs first to determine types
+        let mut key_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        let mut val_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        for (k, v) in pairs {
+            key_vals.push(self.generate_expr(&k.node)?);
+            val_vals.push(self.generate_expr(&v.node)?);
+        }
+
+        // Determine key/value types from first pair
+        let key_type = key_vals[0].get_type();
+        let val_type = val_vals[0].get_type();
+
+        let key_arr_type = key_type.array_type(len);
+        let val_arr_type = val_type.array_type(len);
+
+        // Allocate key and value arrays on stack
+        let keys_ptr = self
+            .builder
+            .build_alloca(key_arr_type, "map_keys")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let vals_ptr = self
+            .builder
+            .build_alloca(val_arr_type, "map_vals")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Store each key-value pair
+        let zero = self.context.i64_type().const_int(0, false);
+        for (i, (kv, vv)) in key_vals.iter().zip(val_vals.iter()).enumerate() {
+            let idx = self.context.i64_type().const_int(i as u64, false);
+
+            // Store key
+            let k_elem_ptr = unsafe {
+                self.builder
+                    .build_gep(key_arr_type, keys_ptr, &[zero, idx], &format!("map_k_{}", i))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            self.builder
+                .build_store(k_elem_ptr, *kv)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            // Store value
+            let v_elem_ptr = unsafe {
+                self.builder
+                    .build_gep(val_arr_type, vals_ptr, &[zero, idx], &format!("map_v_{}", i))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            self.builder
+                .build_store(v_elem_ptr, *vv)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
+
+        // Return pointer to keys array (consistent with Text IR backend representation)
+        Ok(keys_ptr.into())
+    }
+
     pub(super) fn generate_array(
         &mut self,
         elements: &[Spanned<Expr>],

@@ -232,6 +232,12 @@ impl Parser {
             Token::MinusEq => MacroToken::Ident("-=".to_string()),
             Token::StarEq => MacroToken::Ident("*=".to_string()),
             Token::SlashEq => MacroToken::Ident("/=".to_string()),
+            Token::PercentEq => MacroToken::Ident("%=".to_string()),
+            Token::AmpEq => MacroToken::Ident("&=".to_string()),
+            Token::PipeEq => MacroToken::Ident("|=".to_string()),
+            Token::CaretEq => MacroToken::Ident("^=".to_string()),
+            Token::ShlEq => MacroToken::Ident("<<=".to_string()),
+            Token::ShrEq => MacroToken::Ident(">>=".to_string()),
             Token::ColonEq => MacroToken::Ident(":=".to_string()),
             Token::PipeArrow => MacroToken::Ident("|>".to_string()),
             // Keywords as identifiers in macro context

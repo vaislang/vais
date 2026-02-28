@@ -85,6 +85,7 @@ impl TypeChecker {
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
                 hkt_params: extract_hkt_params(&f.generics),
+                generic_callees: vec![],
             },
         );
 
@@ -136,6 +137,7 @@ impl TypeChecker {
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
                 hkt_params: HashMap::new(),
+                generic_callees: vec![],
             },
         );
 
@@ -241,6 +243,7 @@ impl TypeChecker {
                     effect_annotation: EffectAnnotation::Infer,
                     inferred_effects: None,
                     hkt_params: extract_hkt_params(&method.node.generics),
+                    generic_callees: vec![],
                 },
             );
         }

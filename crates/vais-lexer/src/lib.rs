@@ -304,6 +304,18 @@ pub enum Token {
     StarEq,
     #[token("/=")]
     SlashEq,
+    #[token("%=")]
+    PercentEq,
+    #[token("&=")]
+    AmpEq,
+    #[token("|=")]
+    PipeEq,
+    #[token("^=")]
+    CaretEq,
+    #[token("<<=")]
+    ShlEq,
+    #[token(">>=")]
+    ShrEq,
 
     #[token("->")]
     Arrow,
@@ -446,6 +458,12 @@ impl fmt::Display for Token {
             Token::MinusEq => write!(f, "-="),
             Token::StarEq => write!(f, "*="),
             Token::SlashEq => write!(f, "/="),
+            Token::PercentEq => write!(f, "%="),
+            Token::AmpEq => write!(f, "&="),
+            Token::PipeEq => write!(f, "|="),
+            Token::CaretEq => write!(f, "^="),
+            Token::ShlEq => write!(f, "<<="),
+            Token::ShrEq => write!(f, ">>="),
             Token::Arrow => write!(f, "->"),
             Token::FatArrow => write!(f, "=>"),
             Token::DotDot => write!(f, ".."),

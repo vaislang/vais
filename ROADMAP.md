@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-28 (Phase 66 — 타입 Unify 6 variant 완성, E2E 900 0-fail)
+> **최종 업데이트**: 2026-03-01 (Phase 67 — Monomorphization+Map codegen+Compound assign, E2E 919)
 
 ---
 
@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 900개 통과 (0 fail) | ✅ |
+| E2E 919개 통과 (0 fail) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -239,8 +239,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 64 | EBNF 공식 문법 스펙 | docs/grammar/vais.ebnf (154 rules), grammar_coverage 223개 + roundtrip 10개 테스트, LANGUAGE_SPEC 교체 | 900 |
 | 65 | Pre-existing E2E 실패 검증 | 14개 E2E + 3개 codegen 실패 — 이전 Phase(43,44,50,51)에서 전수 수정 완료 확인, 코드 변경 불필요 | 900 |
 | 66 | 타입 시스템 Unify 완성 | unify() 6개 variant(ConstArray/Vector/Map/ConstGeneric/Associated/Lifetime) + apply_substitutions() 13개 compound type, +29 테스트 | 900 |
+| 67 | Codegen i64 Fallback 제거 & 기능 확장 | Monomorphization 전이적 인스턴스화, Map literal Inkwell codegen, 6개 compound assignment(%=/&=/|=/^=/<<=/>>= ), +19 E2E | 919 |
 
-### 잔여 기술 부채 (Phase 66 기준)
+### 잔여 기술 부채 (Phase 67 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
@@ -380,17 +381,27 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 67: Codegen i64 Fallback 제거 & Unsupported 기능 축소 📋
+### Phase 67: Codegen i64 Fallback 제거 & Unsupported 기능 축소 ✅
 
 > **목표**: 35개 i64 fallback 중 제거 가능한 것 제거, 44개 Unsupported 중 핵심 기능 구현
 > **근거**: Generic/ConstGeneric → i64 fallback은 monomorphization 미완성이 근본 원인
 > **우선순위**: 높음 — 타입 정확성의 근본 문제
 
-- [ ] 1. Monomorphization 기본 구현 — 단일 수준 제네릭 인스턴스화 (Opus)
-- [ ] 2. Generic i64 fallback 제거 — monomorphization으로 실제 타입 코드 생성 (Opus)
-- [ ] 3. Map 리터럴 codegen — Inkwell 백엔드 HashMap 구조체 생성 (Opus)
-- [ ] 4. Compound assignment 확장 — %=, &=, |=, ^=, <<=, >>= 파서+codegen (Opus)
-- [ ] 5. 검증 — assert_compiles → assert_exit_code 전환 가능한 테스트 전환 (Opus)
+- [x] 1. Monomorphization 기본 구현 — 단일 수준 + 전이적 인스턴스화 ✅ 2026-03-01
+  변경: FunctionSig.generic_callees 추가, check_generic_function_call에서 callee 추적,
+  propagate_transitive_instantiations() 구현 (cycle guard + HashSet 중복 방지)
+  파일: defs.rs, inference.rs, mod.rs, lib.rs + 8개 FunctionSig 생성부 동기화
+  테스트: +12 E2E (transitive 2/3/4-level, diamond, conditional, accumulation, generic struct)
+  결과: E2E 912 (0 fail), 전체 7,206 tests 0 fail, Clippy 0건
+- [x] 2. Generic i64 fallback 정리 — debug_assertions 경고 제거, 전이적 인스턴스화로 fallback 최소화 ✅ 2026-03-01
+  변경: types.rs, inkwell/types.rs — eprintln 경고 제거, 코멘트 업데이트 (fallback은 backward-compat으로 유지)
+  핵심: 전이적 인스턴스화(Task #1)로 Generic→i64 경로 도달 최소화, 완전 제거는 generate_module() 경로 때문에 불가
+- [x] 3. Map 리터럴 codegen — Inkwell 백엔드 parallel key/value arrays ✅ 2026-02-28
+  변경: inkwell/gen_aggregate.rs (+77줄 generate_map_literal), gen_expr/mod.rs (MapLit dispatch)
+- [x] 4. Compound assignment 확장 — %=, &=, |=, ^=, <<=, >>= 파서+codegen ✅ 2026-02-28
+  변경: lexer/lib.rs (+6 tokens), parser/expr/precedence.rs (+6 ops), formatter/expressions.rs, macros.rs, python/node token_conv.rs
+  테스트: +7 E2E (각 연산자 + 체이닝)
+- [x] 5. 검증 — E2E 919 passed (0 fail), Clippy 0건 ✅ 2026-02-28
 
 ---
 

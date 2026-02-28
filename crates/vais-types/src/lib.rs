@@ -59,6 +59,7 @@ pub use types::{
     EnumDef,
     FunctionSig,
     // Monomorphization support
+    GenericCallee,
     GenericInstantiation,
     InstantiationKind,
     // Linear types support

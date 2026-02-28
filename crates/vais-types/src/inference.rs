@@ -14,10 +14,12 @@
 //! - Generic instantiation: Type arguments can be inferred from expected return type
 //! - Better error messages with more precise location information
 
-use crate::types::{FunctionSig, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::types::{
+    FunctionSig, GenericCallee, GenericInstantiation, ResolvedType, TypeError, TypeResult,
+};
 use crate::TypeChecker;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use vais_ast::{Expr, Spanned};
 
@@ -787,59 +789,44 @@ impl TypeChecker {
         let all_concrete = inferred_type_args
             .iter()
             .all(|t| !matches!(t, ResolvedType::Var(_)));
+
+        // Record callee relationship for transitive instantiation propagation.
+        // When we're inside a generic function (current_generics is non-empty) and calling
+        // another generic function, record the callee with its (possibly-generic) type args
+        // so that when the caller is concretely instantiated, we can derive the callee's
+        // concrete instantiation.
+        if !self.current_generics.is_empty() {
+            if let Some(ref caller_name) = self.current_fn_name.clone() {
+                // The inferred_type_args may contain Generic("T") when calling from a
+                // generic context. These will be substituted later during propagation.
+                let callee = GenericCallee {
+                    callee_name: sig.name.clone(),
+                    type_args: inferred_type_args.clone(),
+                };
+                if let Some(caller_sig) = self.functions.get_mut(caller_name) {
+                    // Avoid duplicates
+                    let already_recorded = caller_sig.generic_callees.iter().any(|c| {
+                        c.callee_name == callee.callee_name && c.type_args == callee.type_args
+                    });
+                    if !already_recorded {
+                        caller_sig.generic_callees.push(callee);
+                    }
+                }
+            }
+        }
+
         if all_concrete {
             let inst = GenericInstantiation::function(&sig.name, inferred_type_args.clone());
             self.add_instantiation(inst);
 
-            // NOTE(monomorphization): Transitive instantiation collection is not yet implemented.
-            //
-            // CURRENT LIMITATION
-            // ------------------
-            // Only *direct* call-site instantiations are recorded here.  When a generic
-            // function `foo<T>` calls another generic function `bar<T>` in its body, the
-            // concrete instantiation `bar<i64>` (derived by substituting the caller's
-            // inferred `T = i64`) is NOT recorded.  This means codegen must fall back to
-            // heuristics when resolving `bar`'s mangled name.
-            //
-            // CODEGEN FALLBACK (currently active)
-            // ------------------------------------
-            // `crates/vais-codegen/src/generics_helpers.rs::resolve_generic_call` handles
-            // the missing-instantiation case with a two-step fallback:
-            //   1. Direct mangle: `vais_types::mangle_name(base_name, arg_types)` — succeeds
-            //      when the callee is visible in `self.types.functions`.
-            //   2. Last-resort: use the first (and usually only) pre-recorded instantiation
-            //      for the callee.
-            // For most real-world programs these heuristics are sufficient; transitive
-            // generics only cause silent miscompilation when a callee has *multiple*
-            // distinct instantiations and none matches via mangle.
-            //
-            // IMPLEMENTATION APPROACHES (for a future phase)
-            // -----------------------------------------------
-            // Approach A — Callee recording in FunctionSig (type-checker side)
-            //   • Add `callees: Vec<String>` to `FunctionSig` (crates/vais-types/src/types/defs.rs).
-            //   • During `check_function` / `check_impl_method`, whenever a `Expr::Call` whose
-            //     target resolves to a generic function is encountered, push its name into
-            //     `sig.callees`.
-            //   • Here (after `self.add_instantiation(inst)`), iterate `sig.callees`, look up
-            //     each callee's `FunctionSig` in `self.functions`, apply
-            //     `generic_substitutions` to substitute concrete types, then call
-            //     `self.add_instantiation(GenericInstantiation::function(callee, substituted))`.
-            //   • Guard against cycles: carry a `visiting: HashSet<String>` across the
-            //     transitive walk (a callee already in `visiting` means a recursive call —
-            //     skip it).  `self.instantiations` (already a `HashSet`) deduplicates the
-            //     recorded entries automatically.
-            //
-            // Approach B — On-demand specialization in codegen (codegen side, no TC changes)
-            //   • In `resolve_generic_call`, when the two-step fallback also fails, trigger
-            //     an on-demand specialization: retrieve the function AST from
-            //     `self.generics.function_templates`, apply the inferred `type_args`, and
-            //     emit a fresh specialized function definition inline.
-            //   • This is purely a codegen concern and requires no changes to FunctionSig or
-            //     the type-checker; however it demands a second pass over the AST inside
-            //     codegen and complicates the single-pass IR emission model.
-            //
-            // Approach A is preferred: it keeps codegen a pure emitter and concentrates
-            // type-level reasoning inside the type-checker where it belongs.
+            // Transitive instantiation: when a concrete instantiation is added,
+            // propagate to its generic callees by substituting the concrete type args.
+            self.propagate_transitive_instantiations(
+                &sig.name,
+                &sig.generics,
+                &inferred_type_args,
+                &mut HashSet::new(),
+            );
         }
 
         // Verify trait bounds: each inferred concrete type must implement required traits
@@ -1066,5 +1053,78 @@ impl TypeChecker {
         Ok(ResolvedType::Array(Box::new(
             self.apply_substitutions(&first_type),
         )))
+    }
+
+    /// Propagate transitive instantiations: when `foo<i64>` is instantiated and
+    /// `foo<T>` calls `bar<T>`, derive and add `bar<i64>`.
+    ///
+    /// `caller_name`: the function being instantiated (e.g., "foo")
+    /// `caller_generics`: the generic param names of the caller (e.g., ["T"])
+    /// `caller_type_args`: the concrete type args for this instantiation (e.g., [i64])
+    /// `visiting`: cycle guard set to prevent infinite recursion
+    fn propagate_transitive_instantiations(
+        &mut self,
+        caller_name: &str,
+        caller_generics: &[String],
+        caller_type_args: &[ResolvedType],
+        visiting: &mut HashSet<String>,
+    ) {
+        // Cycle guard: if we're already processing this caller, skip
+        if !visiting.insert(caller_name.to_string()) {
+            return;
+        }
+
+        // Build substitution map: caller's generic param name -> concrete type
+        let substitutions: HashMap<String, ResolvedType> = caller_generics
+            .iter()
+            .zip(caller_type_args.iter())
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .collect();
+
+        // Look up the caller's generic callees (clone to avoid borrow conflict)
+        let callees: Vec<GenericCallee> = self
+            .functions
+            .get(caller_name)
+            .map(|sig| sig.generic_callees.clone())
+            .unwrap_or_default();
+
+        for callee in &callees {
+            // Substitute the caller's generic params with concrete types in the callee's type args
+            let concrete_callee_args: Vec<ResolvedType> = callee
+                .type_args
+                .iter()
+                .map(|ty| crate::types::substitute::substitute_type(ty, &substitutions))
+                .collect();
+
+            // Only create instantiation if all type args are now concrete
+            let all_concrete = concrete_callee_args
+                .iter()
+                .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+
+            if all_concrete {
+                let inst =
+                    GenericInstantiation::function(&callee.callee_name, concrete_callee_args.clone());
+                // add_instantiation deduplicates via HashSet
+                self.add_instantiation(inst);
+
+                // Recursively propagate to the callee's callees
+                let callee_generics: Vec<String> = self
+                    .functions
+                    .get(&callee.callee_name)
+                    .map(|sig| sig.generics.clone())
+                    .unwrap_or_default();
+
+                if !callee_generics.is_empty() {
+                    self.propagate_transitive_instantiations(
+                        &callee.callee_name,
+                        &callee_generics,
+                        &concrete_callee_args,
+                        visiting,
+                    );
+                }
+            }
+        }
+
+        visiting.remove(caller_name);
     }
 }

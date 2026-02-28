@@ -146,12 +146,10 @@ impl<'ctx> TypeMapper<'ctx> {
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // Monomorphization should resolve all generics — warn and fallback.
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "Warning: unresolved generic '{}' in Inkwell codegen, using i64 fallback",
-                        name
-                    );
+                    // Generic parameter without substitution — use i64 fallback.
+                    // With transitive instantiation (Phase 67), this path is now mostly
+                    // reached only for un-specialized fallback versions of generic functions.
+                    let _ = name; // suppress unused warning
                     self.context.i64_type().into()
                 }
             }
@@ -261,12 +259,9 @@ impl<'ctx> TypeMapper<'ctx> {
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // Monomorphization should resolve all const generics — warn and fallback.
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "Warning: unresolved const generic '{}' in Inkwell codegen, using i64 fallback",
-                        name
-                    );
+                    // ConstGeneric parameter without substitution — use i64 fallback.
+                    // Same rationale as Generic above: kept for backward-compatible fallback.
+                    let _ = name; // suppress unused warning
                     self.context.i64_type().into()
                 }
             }

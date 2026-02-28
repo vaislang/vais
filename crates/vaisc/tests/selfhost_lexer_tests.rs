@@ -1810,6 +1810,12 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::MinusEq => 84,
         Token::StarEq => 85,
         Token::SlashEq => 86,
+        Token::PercentEq => 87,
+        Token::AmpEq => 88,
+        Token::PipeEq => 89,
+        Token::CaretEq => 90,
+        Token::ShlEq => -1,  // Not yet in selfhost lexer
+        Token::ShrEq => -1,  // Not yet in selfhost lexer
 
         // Delimiters (91-96)
         Token::LParen => 91,
@@ -1935,6 +1941,10 @@ fn selfhost_id_to_name(id: i64) -> &'static str {
         84 => "TOK_MINUS_EQ",
         85 => "TOK_STAR_EQ",
         86 => "TOK_SLASH_EQ",
+        87 => "TOK_PERCENT_EQ",
+        88 => "TOK_AMP_EQ",
+        89 => "TOK_PIPE_EQ",
+        90 => "TOK_CARET_EQ",
         91 => "TOK_LPAREN",
         92 => "TOK_RPAREN",
         93 => "TOK_LBRACE",

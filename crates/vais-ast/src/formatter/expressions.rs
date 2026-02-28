@@ -292,6 +292,12 @@ impl Formatter {
                     BinOp::Sub => "-=",
                     BinOp::Mul => "*=",
                     BinOp::Div => "/=",
+                    BinOp::Mod => "%=",
+                    BinOp::BitAnd => "&=",
+                    BinOp::BitOr => "|=",
+                    BinOp::BitXor => "^=",
+                    BinOp::Shl => "<<=",
+                    BinOp::Shr => ">>=",
                     _ => "?=",
                 };
                 format!(

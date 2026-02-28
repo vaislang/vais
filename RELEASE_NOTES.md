@@ -1,10 +1,12 @@
-# Vais v1.0.0 Release Notes
+# Vais v1.0.0-alpha Release Notes
+
+> **Note**: This release was originally published as v1.0.0. The version scheme has been reset to 0.x.x to reflect that the language grammar is still evolving. The official v1.0.0 will be released when the grammar is finalized. Current version: **v0.0.5**.
 
 **Release Date:** 2026-02-01
 **Codename:** First Light
 **License:** MIT / Apache-2.0
 
-We are proud to announce Vais v1.0.0, the first stable release of the Vibe AI Language for Systems. Vais is an AI-optimized systems programming language designed for minimal token usage and maximum expressiveness, with an LLVM backend delivering native performance.
+We are proud to announce Vais v1.0.0-alpha (originally v1.0.0), the first feature-complete release of the Vibe AI Language for Systems. Vais is an AI-optimized systems programming language designed for minimal token usage and maximum expressiveness, with an LLVM backend delivering native performance.
 
 ---
 

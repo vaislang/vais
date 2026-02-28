@@ -73,6 +73,7 @@ fn test_vararg_function_signature() {
         effect_annotation: vais_types::EffectAnnotation::Infer,
         inferred_effects: None,
         hkt_params: HashMap::new(),
+        generic_callees: vec![],
     };
 
     assert!(func_sig.is_vararg);

@@ -7,24 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.0.5] - 2026-02-28
+
+### Changed
+- Version scheme reset to 0.x.x (pre-release). v1.0.0 will be released when language grammar is finalized.
+- Codecov target adjusted to realistic 75-80% (100% is infeasible due to LLVM/platform dependencies)
+
+### Added (since v1.0.0-alpha)
 - Thread C runtime (pthread-based spawn/join/detach, TLS, yield/sleep)
 - Sync C runtime (Mutex, RwLock, Condvar, Barrier, Semaphore, Atomics)
-- f64 pointer dereference codegen fix (visit_deref/generate_index_expr type inference)
-- Parser recursion depth safety (parse_unary, parse_else_branch, parse_pattern, parse_block_contents)
-- Stub API explicit marking for GPU/hot/dynload modules
-- Void phi node fix for if-else expressions returning Unit type
-- Query-based incremental compilation (SHA-256 file hash cache)
-- Package manager registry dependency resolution
-- Phase 22 adoption strategy with prototype verification (11 core features, 5 E2E tests)
-- 165 E2E tests (up from 128), all passing
-- Packaging manifests updated to v1.0.0
+- Selective import syntax (`U module.{A, B}`, `U module.Member`)
+- 900+ E2E tests (up from 165), all passing
+- Code coverage infrastructure (cargo-llvm-cov, 68.7%)
+- 135+ codegen soundness fixes (Try/Unwrap, occurs-check, void phi, >> generic split)
+- Pre-existing E2E failures reduced from 14 to 0
+- Spawn/Async codegen completion
+- Generic monomorphization 3-pass pipeline
+- 6,900+ total tests across all crates
 
-## [1.0.0] - 2026-02-01
+## [1.0.0-alpha] - 2026-02-01
 
 ### Highlights
 
-Vais v1.0.0 marks the language as production-ready with a stable API, frozen language specification, and comprehensive toolchain. This release introduces Rust-level memory safety with ownership, lifetimes, and borrow checking.
+Vais v1.0.0-alpha (originally tagged as v1.0.0) was the first feature-complete release. Language grammar is still evolving; renamed to alpha to reflect pre-release status.
 
 ### Added
 
@@ -176,7 +181,8 @@ See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for complete list:
 - JIT compiler (Cranelift)
 - Self-hosting bootstrap (Stage 1+2, 17,397 lines verified)
 
-[Unreleased]: https://github.com/vaislang/vais/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/vaislang/vais/compare/v0.2.0...v1.0.0
+[Unreleased]: https://github.com/vaislang/vais/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/vaislang/vais/compare/v1.0.0...v0.0.5
+[1.0.0-alpha]: https://github.com/vaislang/vais/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/vaislang/vais/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vaislang/vais/releases/tag/v0.1.0

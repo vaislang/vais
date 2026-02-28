@@ -348,15 +348,14 @@ impl CodeGenerator {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
                     // Generic parameter without substitution — use i64 fallback.
+                    //
+                    // With transitive instantiation (Phase 67), this path is now mostly reached
+                    // only for un-specialized fallback versions of generic functions — i.e., when
+                    // generate_module_with_instantiations generates a backward-compatible i64 version
+                    // of a generic function that has no concrete instantiation.
+                    //
                     // NOTE: returning Err here would break nested types like &T → i64 instead of i64*,
                     // because the error short-circuits the wrapper type conversion.
-                    // This fallback is safe when generate_module (not generate_module_with_instantiations)
-                    // is used, where generic functions are codegen'd with i64 as the default type.
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "Warning: unresolved generic parameter '{}' reached codegen, using i64 fallback",
-                        param
-                    );
                     String::from("i64")
                 }
             }
@@ -366,12 +365,8 @@ impl CodeGenerator {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
                     // ConstGeneric parameter without substitution — use i64 fallback.
-                    // Same rationale as Generic above.
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "Warning: unresolved const generic '{}' reached codegen, using i64 fallback",
-                        param
-                    );
+                    // Same rationale as Generic above: kept for backward-compatible fallback.
+                    let _ = param; // suppress unused warning
                     String::from("i64")
                 }
             }

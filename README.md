@@ -1,4 +1,4 @@
-# Vais 1.0.0 (Vibe AI Language for Systems)
+# Vais 0.0.5 (Vibe AI Language for Systems)
 
 **AI-optimized systems programming language with token-efficient syntax.**
 
@@ -98,14 +98,14 @@ playground/        # Web playground frontend
 
 ```bash
 cargo build --release
-cargo test                                     # Run all 5,300+ tests
+cargo test                                     # Run all 6,900+ tests
 cargo test -p vaisc                            # Run vaisc tests (900+ E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
 ## Test Coverage
 
-This project uses **cargo-tarpaulin** to measure test coverage. Coverage reports are generated automatically in the CI pipeline.
+This project uses **cargo-llvm-cov** to measure test coverage. Coverage reports are generated automatically in the CI pipeline.
 
 ### Local Coverage Measurement
 
@@ -265,12 +265,12 @@ brew install vais
 
 ### Pre-built Binaries
 
-Download from [Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows):
+Download from [Releases](https://github.com/vaislang/vais/releases/latest) (Linux, macOS Intel/ARM, Windows):
 
 ```bash
 # macOS ARM
-curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
-tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v0.0.5-aarch64-apple-darwin.tar.gz
 ./vais/vaisc --version
 ```
 
