@@ -1374,7 +1374,7 @@ fn test_formatter_format_const() {
         is_pub: true,
         attributes: vec![],
     }));
-    assert!(result.contains("pub C MAX"));
+    assert!(result.contains("P C MAX"));
     assert!(result.contains("100"));
 }
 
