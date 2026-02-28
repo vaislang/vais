@@ -1,0 +1,637 @@
+(* ============================================================ *)
+(* Vais Language — Formal EBNF Grammar                         *)
+(* Generated from crates/vais-parser/src/ implementation        *)
+(* Notation: ISO/IEC 14977 EBNF with extensions                *)
+(*   { X }   = zero or more X                                  *)
+(*   [ X ]   = optional X                                      *)
+(*   X | Y   = alternative                                     *)
+(*   (* *)   = comment                                         *)
+(*   'x'     = terminal literal                                *)
+(* ============================================================ *)
+
+(* ------------------------------------------------------------ *)
+(* Section 1: Module & Top-Level Items                          *)
+(* Parser: parse_module (lib.rs:364)                            *)
+(* ------------------------------------------------------------ *)
+
+Module       = { Attribute } { Item } ;
+
+(* Parser: parse_item (item/mod.rs:18) *)
+Item         = { Attribute } [ 'P' ] ItemBody ;
+
+ItemBody     = FunctionDef
+             | StructDef
+             | EnumDef
+             | UnionDef
+             | TypeOrTraitAlias
+             | UseDef
+             | TraitDef
+             | ImplDef
+             | MacroDef
+             | ExternBlock
+             | ConstDef
+             | GlobalDef ;
+
+(* ------------------------------------------------------------ *)
+(* Section 2: Declarations                                      *)
+(* ------------------------------------------------------------ *)
+
+(* Parser: parse_function (item/declarations.rs:8) *)
+FunctionDef  = [ 'A' ] 'F' Ident [ Generics ] '(' [ Params ] ')'
+               [ '->' Type ] [ WhereClause ]
+               ( '=' Expr | Block ) ;
+
+(* Parser: parse_struct (item/declarations.rs:66) *)
+StructDef    = 'S' Ident [ Generics ] [ WhereClause ]
+               '{' { Field ',' | Method } '}' ;
+
+(* Parser: parse_enum (item/declarations.rs:128) *)
+EnumDef      = 'E' Ident [ Generics ]
+               '{' [ Variant { ',' Variant } [ ',' ] ] '}' ;
+
+(* Parser: parse_union (item/declarations.rs:194) *)
+UnionDef     = 'O' Ident [ Generics ]
+               '{' [ Field { ',' Field } [ ',' ] ] '}' ;
+
+(* Parser: parse_type_or_trait_alias (item/declarations.rs:221) *)
+TypeOrTraitAlias = 'T' Ident [ Generics ] '=' ( TraitBounds | Type ) ;
+(* Disambiguation: if RHS matches Ident '+' ..., it is TraitAlias; else TypeAlias *)
+
+TypeAlias    = 'T' Ident [ Generics ] '=' Type ;
+TraitAlias   = 'T' Ident [ Generics ] '=' TraitBounds ;
+
+(* Parser: parse_use (item/declarations.rs:265) *)
+UseDef       = 'U' UsePath [ '.' ( '{' IdentList '}' | Ident ) ] [ ';' ] ;
+
+UsePath      = Ident { ( '::' | '/' ) Ident } ;
+
+(* Parser: parse_const_def (item/declarations.rs:316) *)
+ConstDef     = 'C' Ident ':' Type '=' Expr ;
+
+(* Parser: parse_global_def (item/declarations.rs:337) *)
+GlobalDef    = 'G' Ident ':' Type '=' Expr ;
+
+(* ------------------------------------------------------------ *)
+(* Section 3: Trait & Impl                                      *)
+(* ------------------------------------------------------------ *)
+
+(* Parser: parse_trait (item/traits.rs:8) *)
+TraitDef     = 'W' Ident [ Generics ] [ ':' TraitBounds ] [ WhereClause ]
+               '{' { AssociatedType | TraitMethod } '}' ;
+
+(* Parser: parse_associated_type (item/traits.rs:53) *)
+AssociatedType = 'T' Ident [ Generics ] [ ':' TraitBounds ] [ '=' Type ] ;
+
+(* Parser: parse_trait_method (item/traits.rs:84) *)
+TraitMethod  = [ 'C' ] [ 'A' ] 'F' Ident '(' [ Params ] ')'
+               [ '->' Type ] [ '=' Expr | Block ] ;
+
+(* Parser: parse_impl (item/traits.rs:141) *)
+ImplDef      = 'X' [ Generics ] Type [ ':' Ident ] [ WhereClause ]
+               '{' { AssociatedTypeImpl | Method } '}' ;
+
+(* Parser: parse_associated_type_impl (item/traits.rs:196) *)
+AssociatedTypeImpl = 'T' Ident '=' Type ;
+
+Method       = { Attribute } [ 'A' ] 'F' Function ;
+
+(* ------------------------------------------------------------ *)
+(* Section 4: Extern / FFI                                      *)
+(* ------------------------------------------------------------ *)
+
+(* Parser: parse_extern_block (ffi.rs:11) *)
+ExternBlock  = 'N' [ StringLit ] '{' { ExternFunction } '}'
+             | 'X' 'F' ExternFunctionSig ;
+(* 'X' 'F' is the single-extern shorthand: parse_single_extern_function *)
+
+(* Parser: parse_extern_function (ffi.rs:40) *)
+ExternFunction = { Attribute } 'F' Ident
+                 '(' [ ExternParams ] ')' [ '->' Type ] [ ';' ] ;
+
+ExternParams = Param { ',' Param } [ ',' '...' ] | '...' ;
+
+ExternFunctionSig = Ident '(' [ ExternParams ] ')' [ '->' Type ] ;
+
+(* ------------------------------------------------------------ *)
+(* Section 5: Macro System                                      *)
+(* ------------------------------------------------------------ *)
+
+(* Parser: parse_macro_def (item/macros.rs:8) *)
+MacroDef     = 'macro' Ident '!' '{' { MacroRule } '}' ;
+
+MacroRule    = MacroPattern '=>' MacroTemplate ;
+
+(* Parser: parse_macro_pattern (item/macros.rs:41) *)
+MacroPattern = '(' [ MacroPatternElement { [ ',' ] MacroPatternElement } ] ')' ;
+
+MacroPatternElement = '$' Ident ':' MetaVarKind           (* metavariable *)
+                    | '$' '(' MacroPatternElements ')' [ MacroToken ] RepKind  (* repetition *)
+                    | '(' MacroPatternElements ')'       (* group *)
+                    | '[' MacroPatternElements ']'       (* group *)
+                    | '{' MacroPatternElements '}'       (* group *)
+                    | MacroToken ;                        (* literal token *)
+
+MacroPatternElements = MacroPatternElement { [ ',' ] MacroPatternElement } ;
+
+MetaVarKind  = 'expr' | 'ty' | 'ident' | 'pat' | 'stmt'
+             | 'block' | 'item' | 'lit' | 'tt' ;
+
+RepKind      = '*' | '+' | '?' ;
+
+(* Parser: parse_macro_template (item/macros.rs:261) *)
+MacroTemplate = '{' [ MacroTemplateElement { MacroTemplateElement } ] '}' ;
+
+MacroTemplateElement = '$' Ident                          (* metavar substitution *)
+                     | '$' '(' MacroTemplateElements ')' [ MacroToken ] RepKind (* repetition *)
+                     | '(' MacroTemplateElements ')'     (* group *)
+                     | '[' MacroTemplateElements ']'     (* group *)
+                     | '{' MacroTemplateElements '}'     (* group *)
+                     | MacroToken ;                       (* literal token *)
+
+MacroTemplateElements = MacroTemplateElement { MacroTemplateElement } ;
+
+MacroToken   = Ident | IntLit | FloatLit | StringLit | BoolLit
+             | '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>'
+             | '&' | '|' | '!' | ',' | ':' | ';' | '.' | '@'
+             | '^' | '?' | '->' | '=>' | '..' | '..=' | '...'
+             | '::' | '<<' | '>>' | '==' | '!=' | '<=' | '>='
+             | '+=' | '-=' | '*=' | '/=' | ':=' | '|>' ;
+
+(* Parser: parse_macro_invoke (item/macros.rs:405) *)
+MacroInvoke  = Ident '!' ( '(' MacroTokens ')' | '[' MacroTokens ']' | '{' MacroTokens '}' ) ;
+
+MacroTokens  = { MacroToken } ;
+
+(* ------------------------------------------------------------ *)
+(* Section 6: Types                                             *)
+(* Parser: parse_type (types.rs:451), parse_base_type (types.rs:472) *)
+(* ------------------------------------------------------------ *)
+
+Type         = BaseType [ '?' | '!' ] ;
+(* Postfix '?' = Optional, '!' = Result *)
+
+BaseType     = NamedType
+             | TupleType
+             | FnType
+             | ArrayType
+             | ConstArrayType
+             | MapType
+             | PointerType
+             | RefType
+             | SliceType
+             | DynTraitType
+             | LinearType
+             | AffineType
+             | ImplTraitType
+             | DependentType
+             | FnPtrType
+             | UnitType ;
+
+NamedType    = TypeName [ '<' TypeList '>' ] [ '::' Ident [ '<' TypeList '>' ] ] ;
+(* Postfix '::' Ident is Associated type projection *)
+
+UnitType     = '(' ')' ;
+
+TupleType    = '(' Type ',' Type { ',' Type } ')' ;
+
+FnType       = '(' TypeList ')' '->' Type ;
+(* Disambiguation: (T1, T2) -> Ret is FnType; (T1, T2) without -> is TupleType *)
+
+ArrayType    = '[' Type ']' ;
+
+ConstArrayType = '[' Type ';' ConstExpr ']' ;
+
+MapType      = '[' Type ':' Type ']' ;
+
+PointerType  = '*' BaseType ;
+
+RefType      = '&' [ Lifetime ] [ 'mut' | '~' ] BaseType ;
+(* Without lifetime and with '[': slice type *)
+
+SliceType    = '&' [ 'mut' | '~' ] '[' Type ']' ;
+
+DynTraitType = 'dyn' TypeName [ '<' TypeList '>' ] ;
+
+LinearType   = 'linear' BaseType ;
+
+AffineType   = 'affine' BaseType ;
+
+ImplTraitType = 'X' TraitBounds ;
+
+DependentType = '{' Ident ':' Type '|' Expr '}' ;
+
+(* Parser: parse_fn_ptr_type (ffi.rs:122) *)
+FnPtrType    = 'fn' '(' [ TypeList [ ',' '...' ] | '...' ] ')' [ '->' Type ] ;
+
+TypeList     = Type { ',' Type } ;
+
+TypeName     = PrimitiveType | Ident | SingleCharKeyword | SimdType | 'Self' ;
+
+PrimitiveType = 'i8' | 'i16' | 'i32' | 'i64' | 'i128'
+              | 'u8' | 'u16' | 'u32' | 'u64' | 'u128'
+              | 'f32' | 'f64'
+              | 'bool' | 'str' ;
+
+SimdType     = 'Vec2f32' | 'Vec4f32' | 'Vec8f32'
+             | 'Vec2f64' | 'Vec4f64'
+             | 'Vec4i32' | 'Vec8i32'
+             | 'Vec2i64' | 'Vec4i64' ;
+
+(* ------------------------------------------------------------ *)
+(* Section 7: Generics & Where Clauses                          *)
+(* Parser: parse_generics (types.rs:14)                         *)
+(* ------------------------------------------------------------ *)
+
+Generics     = '<' GenericParam { ',' GenericParam } '>' ;
+
+GenericParam = LifetimeParam | ConstParam | TypeParam ;
+
+(* Parser: parse_type_generic_param (types.rs:136) *)
+TypeParam    = [ Variance ] Ident [ HktSuffix ] [ ':' TraitBounds ] ;
+
+Variance     = '+' | '-' ;
+
+HktSuffix    = '<' '_' { ',' '_' } '>' ;
+(* Higher-kinded type: F<_> or F<_, _> *)
+
+ConstParam   = 'const' Ident ':' Type ;
+
+LifetimeParam = Lifetime [ ':' LifetimeBounds ] ;
+
+Lifetime     = "'" Ident ;
+
+LifetimeBounds = Lifetime { '+' Lifetime } ;
+
+(* Parser: parse_trait_bounds (types.rs:266) *)
+TraitBounds  = Ident { '+' Ident } ;
+
+(* Parser: parse_where_clause (types.rs:282) *)
+WhereClause  = 'where' WherePredicate { ',' WherePredicate } ;
+
+WherePredicate = Ident ':' TraitBounds ;
+
+(* ------------------------------------------------------------ *)
+(* Section 8: Statements                                        *)
+(* Parser: parse_stmt (stmt.rs:77)                              *)
+(* ------------------------------------------------------------ *)
+
+Block        = '{' { Stmt } '}' ;
+
+Stmt         = ReturnStmt
+             | BreakStmt
+             | ContinueStmt
+             | DeferStmt
+             | LetStmt
+             | LetDestructureStmt
+             | ExprStmt ;
+
+ReturnStmt   = 'R' [ Expr ] [ ';' ] ;
+
+BreakStmt    = 'B' [ Expr ] [ ';' ] ;
+
+ContinueStmt = 'C' [ ';' ] ;
+
+DeferStmt    = 'D' Expr [ ';' ] ;
+
+(* Parser: parse_let_stmt (stmt.rs:181) *)
+LetStmt      = [ '~' ] Ident ':=' [ Ownership ] [ 'mut' | '~' ] Expr [ ';' ]
+             | [ '~' ] Ident ':' [ Ownership ] [ 'mut' | '~' ] Type '=' Expr [ ';' ] ;
+
+LetDestructureStmt = Pattern ':=' [ 'mut' | '~' ] Expr [ ';' ] ;
+
+ExprStmt     = Expr [ ';' ] ;
+
+Ownership    = 'linear' | 'affine' | 'move' ;
+
+(* ------------------------------------------------------------ *)
+(* Section 9: Expressions — Precedence Levels                   *)
+(* Parser: parse_expr (expr/mod.rs:58)                          *)
+(*                                                              *)
+(* Precedence (lowest to highest):                              *)
+(*  1. Assignment     =, +=, -=, *=, /=                         *)
+(*  2. Pipe           |>                                        *)
+(*  3. Ternary        ? :                                       *)
+(*  4. Logical Or     ||                                        *)
+(*  5. Logical And    &&                                        *)
+(*  6. Bitwise Or     |   (single, not ||)                      *)
+(*  7. Bitwise Xor    ^                                         *)
+(*  8. Bitwise And    &   (single, not &&)                      *)
+(*  9. Equality       ==, !=                                    *)
+(* 10. Range          .., ..=                                   *)
+(* 11. Comparison     <, <=, >, >=                              *)
+(* 12. Shift          <<, >>                                    *)
+(* 13. Term           +, -                                      *)
+(* 14. Factor         *, /, %                                   *)
+(* 15. Unary          -, !, ~, &, *, lazy, force                *)
+(* 16. Postfix        (), ., ::, [], ?, !, as, .await           *)
+(* 17. Primary        literals, ident, if, loop, match, ...     *)
+(* ------------------------------------------------------------ *)
+
+Expr         = Assignment ;
+
+(* Parser: parse_assignment (expr/precedence.rs:14) *)
+Assignment   = Pipe [ ( '=' | '+=' | '-=' | '*=' | '/=' ) Assignment ] ;
+
+(* Parser: parse_pipe (expr/precedence.rs:62) *)
+Pipe         = Ternary { '|>' Ternary } ;
+
+(* Parser: parse_ternary (expr/precedence.rs:85) *)
+Ternary      = LogicalOr [ '?' Ternary ':' Ternary ] ;
+(* See Ambiguity §1: ? as ternary vs postfix try *)
+
+(* Parser: parse_or (expr/precedence.rs:146) *)
+LogicalOr    = LogicalAnd { '||' LogicalAnd } ;
+
+(* Parser: parse_and (expr/precedence.rs:168) *)
+LogicalAnd   = BitwiseOr { '&&' BitwiseOr } ;
+
+(* Parser: parse_bitwise_or (expr/precedence.rs:190) *)
+BitwiseOr    = BitwiseXor { '|' BitwiseXor } ;
+(* Single '|' not followed by '|'; otherwise it is '||' *)
+
+(* Parser: parse_bitwise_xor (expr/precedence.rs:211) *)
+BitwiseXor   = BitwiseAnd { '^' BitwiseAnd } ;
+
+(* Parser: parse_bitwise_and (expr/precedence.rs:232) *)
+BitwiseAnd   = Equality { '&' Equality } ;
+(* Single '&' not followed by '&'; otherwise it is '&&' *)
+
+(* Parser: parse_equality (expr/precedence.rs:253) *)
+Equality     = Range { ( '==' | '!=' ) Range } ;
+
+(* Parser: parse_range (expr/precedence.rs:286) *)
+Range        = [ Comparison ] ( '..' | '..=' ) [ Comparison ]
+             | Comparison ;
+
+(* Parser: parse_comparison (expr/precedence.rs:347) *)
+Comparison   = Shift { ( '<' | '<=' | '>' | '>=' ) Shift } ;
+
+(* Parser: parse_shift (expr/precedence.rs:384) *)
+Shift        = Term { ( '<<' | '>>' ) Term } ;
+
+(* Parser: parse_term (expr/precedence.rs:417) *)
+Term         = Factor { ( '+' | '-' ) Factor } ;
+(* Note: +/- across a newline boundary are NOT treated as binary operators *)
+
+(* Parser: parse_factor (expr/precedence.rs:461) *)
+Factor       = Unary { ( '*' | '/' | '%' ) Unary } ;
+
+(* ------------------------------------------------------------ *)
+(* Section 10: Unary Expressions                                *)
+(* Parser: parse_unary (expr/unary.rs:13)                       *)
+(* ------------------------------------------------------------ *)
+
+Unary        = '-' Unary
+             | '!' Unary
+             | '~' Unary
+             | '&' Unary
+             | '*' Unary
+             | 'lazy' Unary
+             | 'force' Unary
+             | Postfix ;
+
+(* ------------------------------------------------------------ *)
+(* Section 11: Postfix Expressions                              *)
+(* Parser: parse_postfix (expr/postfix.rs:13)                   *)
+(* ------------------------------------------------------------ *)
+
+Postfix      = Primary { PostfixOp } ;
+
+PostfixOp    = '(' [ ArgList ] ')'               (* function call *)
+             | '.' 'Y'                            (* await: .await *)
+             | '.' Ident '(' [ ArgList ] ')'      (* method call *)
+             | '.' Ident                           (* field access *)
+             | '::' Ident '(' [ ArgList ] ')'     (* static method call *)
+             | '[' Expr ']'                        (* index *)
+             | '?'                                 (* try / unwrap Result|Option *)
+             | '!'                                 (* unwrap *)
+             | Ident '!' MacroInvokeDelim          (* macro invocation *)
+             | 'as' Type ;                         (* type cast *)
+
+MacroInvokeDelim = '(' MacroTokens ')' | '[' MacroTokens ']' | '{' MacroTokens '}' ;
+
+ArgList      = Expr { ',' Expr } ;
+
+(* ------------------------------------------------------------ *)
+(* Section 12: Primary Expressions                              *)
+(* Parser: parse_primary (expr/primary.rs:16)                   *)
+(* ------------------------------------------------------------ *)
+
+Primary      = IntLit
+             | FloatLit
+             | BoolLit
+             | StringLit
+             | StringInterp
+             | '@'                                 (* self-recursion *)
+             | 'self'
+             | Ident [ StructLitBody ]             (* ident or struct literal *)
+             | '(' ')'                             (* unit *)
+             | '(' Expr ')'                        (* grouping *)
+             | '(' Expr ',' ExprList ')'           (* tuple *)
+             | ArrayLit
+             | BlockOrMapLit
+             | IfExpr
+             | LoopExpr
+             | MatchExpr
+             | SpawnExpr
+             | YieldExpr
+             | LambdaExpr
+             | ComptimeExpr
+             | OldExpr
+             | AssertExpr
+             | AssumeExpr ;
+
+(* Struct literal — only when Ident starts with uppercase AND allow_struct_literal = true *)
+StructLitBody = '{' [ FieldInit { ',' FieldInit } [ ',' ] ] '}' ;
+
+FieldInit    = Ident ':' Expr ;
+
+(* Parser: parse_primary_inner — Token::LBracket branch *)
+ArrayLit     = '[' [ ArrayElem { ',' ArrayElem } [ ',' ] ] ']' ;
+
+ArrayElem    = '..' Expr              (* spread *)
+             | Expr ;
+
+(* Parser: parse_primary_inner — Token::LBrace branch *)
+BlockOrMapLit = '{' MapEntries '}'    (* map literal: backtracking *)
+              | Block ;               (* block expression *)
+
+MapEntries   = MapEntry { ',' MapEntry } [ ',' ] ;
+
+MapEntry     = Expr ':' Expr ;
+
+(* Parser: parse_if_expr (expr/primary.rs:377) *)
+IfExpr       = 'I' Expr Block [ 'E' ElseBranch ] ;
+
+ElseBranch   = 'I' Expr Block [ 'E' ElseBranch ]    (* else-if *)
+             | Block ;                                (* else *)
+
+(* Parser: parse_loop_expr (expr/primary.rs:447) *)
+LoopExpr     = 'L' Block                              (* infinite loop *)
+             | 'L' Pattern ':' Expr Block              (* for-each loop *)
+             | 'L' Expr Block ;                        (* while loop *)
+
+(* Parser: parse_match_expr (expr/primary.rs:521) *)
+MatchExpr    = 'M' Expr '{' [ MatchArm { ',' MatchArm } [ ',' ] ] '}' ;
+
+MatchArm     = OrPattern [ 'I' Expr ] '=>' Expr ;
+(* 'I' Expr is the guard clause *)
+
+SpawnExpr    = 'spawn' ( Block | Unary ) ;
+
+YieldExpr    = 'yield' Expr ;
+
+LambdaExpr   = '|' [ LambdaCapture ] [ LambdaParams ] '|' Expr
+             | 'move' '|' [ LambdaParams ] '|' Expr ;
+
+LambdaCapture = '&' [ 'mut' ] ;      (* ByRef or ByMutRef capture *)
+
+LambdaParams = LambdaParam { ',' LambdaParam } ;
+
+LambdaParam  = Ident [ ':' Type ] ;
+
+ComptimeExpr = 'comptime' '{' Expr '}' ;
+
+OldExpr      = 'old' '(' Expr ')' ;
+
+AssertExpr   = 'assert' '(' Expr [ ',' Expr ] ')' ;
+
+AssumeExpr   = 'assume' '(' Expr ')' ;
+
+(* ------------------------------------------------------------ *)
+(* Section 13: Patterns                                         *)
+(* Parser: parse_pattern (expr/primary.rs:640)                  *)
+(* ------------------------------------------------------------ *)
+
+OrPattern    = Pattern { '|' Pattern } ;
+
+Pattern      = '_'                                 (* wildcard *)
+             | Ident '@' Pattern                   (* alias *)
+             | Ident '(' [ PatternList ] ')'       (* variant *)
+             | Ident                               (* binding *)
+             | '-' IntLit                          (* negative literal *)
+             | IntLit [ ( '..' | '..=' ) Pattern ] (* literal or range *)
+             | BoolLit
+             | StringLit
+             | '(' [ PatternList ] ')' ;           (* tuple *)
+
+PatternList  = Pattern { ',' Pattern } ;
+
+(* ------------------------------------------------------------ *)
+(* Section 14: Const Expressions                                *)
+(* Parser: parse_const_expr (types.rs:759)                      *)
+(* ------------------------------------------------------------ *)
+
+ConstExpr    = ConstBitwise ;
+
+ConstBitwise = ConstAdditive { ( '&' | '|' | '^' ) ConstAdditive } ;
+
+ConstAdditive = ConstShift { ( '+' | '-' ) ConstShift } ;
+
+ConstShift   = ConstMult { ( '<<' | '>>' ) ConstMult } ;
+
+ConstMult    = ConstPrimary { ( '*' | '/' | '%' ) ConstPrimary } ;
+
+ConstPrimary = '-' ConstPrimary
+             | '(' ConstExpr ')'
+             | IntLit
+             | Ident ;
+
+(* ------------------------------------------------------------ *)
+(* Section 15: Function Parameters & Fields                     *)
+(* Parser: parse_params (types.rs:321), parse_field (types.rs:437) *)
+(* ------------------------------------------------------------ *)
+
+Params       = Param { ',' Param } ;
+
+Param        = [ Ownership ] [ 'mut' | '~' ] ParamBody ;
+
+ParamBody    = '&' [ 'mut' | '~' ] 'self'            (* self-ref param *)
+             | Ident [ ':' Type ] [ '=' Expr ] ;       (* named param *)
+
+Field        = [ 'P' ] Ident ':' Type ;
+
+Function     = Ident [ Generics ] '(' [ Params ] ')'
+               [ '->' Type ] [ WhereClause ]
+               ( '=' Expr | Block ) ;
+
+(* ------------------------------------------------------------ *)
+(* Section 16: Attributes                                       *)
+(* Parser: parse_attributes (item/mod.rs:93)                    *)
+(* ------------------------------------------------------------ *)
+
+Attribute    = '#[' AttrBody ']' ;
+
+AttrBody     = Ident [ '(' AttrArgs ')' ]
+             | ContractAttr ;
+
+AttrArgs     = AttrArg { ',' AttrArg } ;
+
+AttrArg      = Ident [ '=' StringLit ]
+             | Ident '(' AttrArgs ')'              (* nested: not(...) *)
+             | StringLit ;
+
+ContractAttr = ( 'requires' | 'ensures' | 'invariant' | 'decreases' )
+               '(' Expr ')' ;
+
+(* ------------------------------------------------------------ *)
+(* Section 17: Lexical Elements                                 *)
+(* ------------------------------------------------------------ *)
+
+IntLit       = digit { digit } | '0x' hexdigit { hexdigit }
+             | '0b' bindigit { bindigit } | '0o' octdigit { octdigit } ;
+
+FloatLit     = digit { digit } '.' digit { digit } [ ( 'e' | 'E' ) [ '+' | '-' ] digit { digit } ] ;
+
+BoolLit      = 'true' | 'false' ;
+
+StringLit    = '"' { char | EscapeSeq } '"' ;
+
+StringInterp = '"' { char | EscapeSeq | '{' Expr '}' } '"' ;
+(* '{{' and '}}' are escape sequences for literal '{' and '}' *)
+
+EscapeSeq    = '\n' | '\t' | '\r' | '\\' | '\"' | '\0' | '\x' hexdigit hexdigit ;
+
+Ident        = ( letter | '_' ) { letter | digit | '_' }
+             | SingleCharKeyword ;
+(* Single-char keywords can be used as identifiers in non-keyword contexts *)
+
+SingleCharKeyword = 'F' | 'S' | 'E' | 'I' | 'L' | 'M' | 'R' | 'B' | 'C'
+                  | 'T' | 'U' | 'W' | 'X' | 'P' | 'D' | 'A' | 'Y' | 'N' | 'G' | 'O' ;
+
+ExprList     = Expr { ',' Expr } ;
+
+IdentList    = Ident { ',' Ident } [ ',' ] ;
+
+Comment      = '#' { any_char } newline ;
+
+(* ------------------------------------------------------------ *)
+(* Section 18: Operators Quick Reference                        *)
+(* ------------------------------------------------------------ *)
+
+(* Binary operators (BinOp enum, 17 variants):
+     +  -  *  /  %                     arithmetic
+     <  <=  >  >=  ==  !=              comparison
+     &&  ||                            logical
+     &  |  ^  <<  >>                   bitwise
+
+   Unary operators (UnaryOp enum, 3 variants):
+     -  (Neg)  !  (Not)  ~  (BitNot)
+
+   Assignment operators:
+     =  +=  -=  *=  /=
+
+   Special operators:
+     :=     variable binding
+     ->     return type / fn type
+     =>     match arm / macro rule
+     |>     pipe
+     ..     range (exclusive)
+     ..=    range (inclusive)
+     ...    variadic args (extern)
+     @      self-recursion
+     ?      postfix try / ternary
+     !      postfix unwrap / macro invoke
+     as     type cast
+     ::     path separator / static method
+*)

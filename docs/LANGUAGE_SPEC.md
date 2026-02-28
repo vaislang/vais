@@ -1881,68 +1881,51 @@ F main() -> i64 {
 
 ## Grammar Summary
 
+The complete formal EBNF grammar is maintained at [`docs/grammar/vais.ebnf`](grammar/vais.ebnf)
+(~320 productions, generated from the parser source). Ambiguity resolution rules and notation
+conventions are documented in [`docs/grammar/README.md`](grammar/README.md).
+
+Below is a condensed quick-reference:
+
 ```
-Program      ::= Item*
-Item         ::= Function | Struct | Enum | Trait | Impl | Use | Const
+Module       ::= Item*
+Item         ::= Attribute* ['P'] (FunctionDef | StructDef | EnumDef | UnionDef
+                 | TypeAlias | TraitAlias | UseDef | TraitDef | ImplDef
+                 | MacroDef | ExternBlock | ConstDef | GlobalDef)
 
-Function     ::= 'F' Ident TypeParams? '(' Params? ')' '->' Type WhereClause? ('=' Expr | Block)
-               | 'A' 'F' Ident TypeParams? '(' Params? ')' '->' Type WhereClause? Block
-               | 'X' 'F' Ident '(' Params? ')' '->' Type
+FunctionDef  ::= ['A'] 'F' Ident Generics? '(' Params? ')' ['->' Type] WhereClause? ('=' Expr | Block)
+StructDef    ::= 'S' Ident Generics? WhereClause? '{' (Field | Method)* '}'
+EnumDef      ::= 'E' Ident Generics? '{' Variant (',' Variant)* '}'
+UnionDef     ::= 'O' Ident Generics? '{' Field (',' Field)* '}'
+TraitDef     ::= 'W' Ident Generics? [':' TraitBounds] WhereClause? '{' (AssocType | TraitMethod)* '}'
+ImplDef      ::= 'X' Generics? Type [':' Ident] WhereClause? '{' Method* '}'
+ExternBlock  ::= 'N' StringLit? '{' ExternFunc* '}' | 'X' 'F' ExternFuncSig
+UseDef       ::= 'U' Path ['.' ('{' Idents '}' | Ident)] [';']
+ConstDef     ::= 'C' Ident ':' Type '=' Expr
+GlobalDef    ::= 'G' Ident ':' Type '=' Expr
+TypeAlias    ::= 'T' Ident Generics? '=' Type
+TraitAlias   ::= 'T' Ident Generics? '=' TraitBound ('+' TraitBound)*
+MacroDef     ::= 'macro' Ident '!' '{' MacroRule* '}'
 
-Struct       ::= 'S' Ident TypeParams? WhereClause? '{' Fields '}'
-Enum         ::= 'E' Ident TypeParams? '{' Variants '}'
-               | '#[derive(Error)]' 'E' Ident '{' Variants '}'
-Trait        ::= 'W' Ident TypeParams? '{' TraitItems '}'
-Impl         ::= 'X' Ident TypeParams? (':' Trait)? WhereClause? '{' ImplItems '}'
-               # Note: Impl blocks work for both structs and enums
-Use          ::= 'U' Path
-Const        ::= 'C' Ident ':' Type '=' Expr
+Expr         ::= Assignment | Pipe | Ternary | LogicalOr | LogicalAnd
+               | BitwiseOr | BitwiseXor | BitwiseAnd | Equality | Range
+               | Comparison | Shift | Term | Factor | Unary | Postfix | Primary
 
-WhereClause  ::= 'where' TypeBound (',' TypeBound)*
-TypeBound    ::= Ident ':' Trait (',' Trait)*
+Stmt         ::= 'R' Expr? | 'B' Expr? | 'C' | 'D' Expr | LetStmt | Expr
 
-Expr         ::= Literal
-               | Ident
-               | BinaryExpr
-               | UnaryExpr
-               | CallExpr
-               | FieldExpr
-               | IndexExpr
-               | TernaryExpr
-               | IfExpr
-               | LoopExpr
-               | MatchExpr
-               | BlockExpr
-               | '@' '(' Args ')'
-               | Expr '|>' Expr
-               | StringInterp
-               | '..' Expr
-               | Expr '?'          # Try operator (error propagation)
-               | Expr '!'          # Unwrap operator
-               | 'yield' Expr      # Yield expression
+Type         ::= BaseType ['?' | '!']
+BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
+               | PointerType | RefType | SliceType | DynTraitType
+               | LinearType | AffineType | ImplTraitType | DependentType | FnPtrType
 
-Stmt         ::= 'R' Expr?
-               | 'B'
-               | 'C'
-               | Let
-               | Expr
-               | 'yield' Expr
+Pattern      ::= '_' | Ident ['@' Pattern] | Ident '(' Patterns ')' | Literal
+               | '(' Patterns ')' | Pattern '..' Pattern | Pattern '|' Pattern
 
-Type         ::= PrimitiveType
-               | Ident TypeArgs?
-               | '*' Type
-               | '[' Type ']'
-
-Pattern      ::= Literal
-               | Ident
-               | '_'
-               | Ident '(' Patterns ')'
-               | Ident '@' Pattern     # Pattern alias
-               | Pattern 'if' Expr     # Pattern guard
-
-Closure      ::= '|' Params? '|' (Expr | Block)
-               | 'move' '|' Params? '|' (Expr | Block)
+Closure      ::= '|' Params? '|' Expr | 'move' '|' Params? '|' Expr
 ```
+
+See `docs/grammar/vais.ebnf` for the complete grammar with all 18 sections,
+parser function cross-references, and operator precedence levels.
 
 ---
 
