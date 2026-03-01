@@ -300,6 +300,52 @@ docker run -it vaislang/vais:latest
 | **Homebrew Tap** | `vaislang/tap` |
 | **Ecosystem Packages** | https://github.com/vaislang/vais/tree/main/packages (9 packages: vais-aes, vais-base64, vais-crc32, vais-csv, vais-json, vais-lz4, vais-regex, vais-sha256, vais-uuid) |
 
+## What's Next?
+
+After installing Vais and running your first program, here's how to continue:
+
+### 5-Minute Quickstart
+
+```bash
+# 1. Install
+brew tap vaislang/tap && brew install vais
+
+# 2. Write your first program
+echo 'F main() { println("Hello, Vais!") }' > hello.vais
+
+# 3. Run it
+vaisc run hello.vais
+
+# 4. Try the REPL
+vaisc repl
+```
+
+### Recommended Examples
+
+| Example | Description | Concepts |
+|---------|-------------|----------|
+| [fib.vais](examples/fib.vais) | Fibonacci with `@` self-recursion | Functions, `@` operator |
+| [control_flow.vais](examples/control_flow.vais) | If/else, loops, match | `I`/`E`/`L`/`M` keywords |
+| [enum_test.vais](examples/enum_test.vais) | Enum variants + pattern matching | `E`, `M`, `S` |
+| [pipe_operator.vais](examples/pipe_operator.vais) | Pipe `\|>` and closures | Functional patterns |
+| [json_test.vais](examples/json_test.vais) | JSON builder API | Standard library usage |
+
+### Learning Path
+
+Follow the [structured learning path](docs-site/src/learning-path.md) for a guided experience:
+
+- **Stage 1 (2hr)**: Variables, functions, control flow, structs, enums
+- **Stage 2 (4hr)**: Generics, traits, error handling, closures, stdlib
+- **Stage 3 (4hr)**: Macros, async, FFI, WASM, performance
+
+### Tutorials
+
+Step-by-step project tutorials:
+
+- [CLI Tool](docs-site/src/tutorials/cli-tool.md) - Build a word count tool
+- [HTTP Server](docs-site/src/tutorials/http-server.md) - Create a REST API
+- [Data Pipeline](docs-site/src/tutorials/data-pipeline.md) - ETL data processing
+
 ## Community
 
 - [GitHub Discussions](https://github.com/vaislang/vais/discussions) - Questions, ideas, show & tell

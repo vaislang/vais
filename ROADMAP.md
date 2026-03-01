@@ -247,6 +247,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 72 | v0.0.5 릴리스 | Release 빌드, Parser 5건 수정 (field punning/~var/optional semicolons), VaisDB P001=0, GitHub Release | 931 |
 | 73 | ABI 안정성 | TC 중복 함수 검출(E034), assert_compiles 호출 0개 달성, generic 함수 body 스킵, where_clause/slice_len 전환 | 931 |
 | 74 | 표준 라이브러리 확충 | TOML 파서(913줄), YAML 파서(1,177줄), 문자열 19함수(+393줄), +27 E2E | 958 |
+| 75 | 온보딩 개선 | 학습 경로 3단계, 실전 튜토리얼 3개(CLI/HTTP/Data), vais-tutorial 15레슨 Vais 문법 수정, README 확장 | 958 |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -545,24 +546,25 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 외부 개발자가 Vais를 독학할 수 있는 체계적 학습 경로 구축
 > **우선순위**: 중간 — 커뮤니티 성장과 도입 확산의 전제 조건
 > **현황**: docs 71개, 예제 189개, 튜토리얼 15레슨 있으나 연결 경로 없음
+> **결과**: 학습 경로 3단계, 실전 튜토리얼 3개, vais-tutorial 15레슨 Vais 문법 수정, README 확장, 예제 2개 추가
 
-- [ ] 1. 학습 경로 가이드 — `docs-site/src/learning-path.md` 신규 (Sonnet)
+- [x] 1. 학습 경로 가이드 — `docs-site/src/learning-path.md` 신규 (Opus) ✅ 2026-03-01
   내용: 3단계 커리큘럼 (초급 2시간 / 중급 4시간 / 고급 4시간)
   구조: 각 단계별 읽을 문서 → 실습 예제 → 확인 체크리스트
   대상별 분기: 시스템 프로그래머 / 웹 개발자(WASM) / AI·ML 개발자(GPU)
-- [ ] 2. 실전 튜토리얼 프로젝트 3개 (Opus)
-  (a) `docs-site/src/tutorials/cli-tool.md` — Vais로 CLI 도구 만들기 (args 파싱, 파일 처리)
-  (b) `docs-site/src/tutorials/http-server.md` — 간단한 REST API 서버 (http_server + json)
-  (c) `docs-site/src/tutorials/data-pipeline.md` — 데이터 파이프라인 (파일 읽기 → 변환 → 출력)
-  각 ~300줄 가이드, 완성 코드 examples/에 추가
-- [ ] 3. Getting Started 강화 — README.md "다음 단계" 섹션 확장 (Sonnet)
-  내용: "Hello World 다음에 뭐 하지?" → 학습 경로 링크, 추천 예제 5개, 커뮤니티 안내
-  추가: 5분 퀵스타트 요약 (설치 → 첫 프로그램 → 컴파일 → 실행 → 다음 단계)
-- [ ] 4. vais-tutorial 예제 완성 (Sonnet)
-  대상: crates/vais-tutorial/examples/ (현재 비어있음)
-  내용: 각 15레슨별 해답 코드 .vais 파일 추가
-- [ ] 5. SUMMARY.md 업데이트 + 빌드 검증 (Sonnet)
-  내용: 신규 문서 등록, mdbook build 통과 확인
+- [x] 2. 실전 튜토리얼 프로젝트 3개 + 예제 코드 (Opus) ✅ 2026-03-01
+  (a) `docs-site/src/tutorials/cli-tool.md` — Vais로 CLI 도구 만들기 (vwc word count)
+  (b) `docs-site/src/tutorials/http-server.md` — REST API 서버 (TCP + JSON 응답)
+  (c) `docs-site/src/tutorials/data-pipeline.md` — 데이터 파이프라인 (ETL 패턴)
+  예제: `examples/tutorial_wc.vais`, `examples/tutorial_pipeline.vais`
+- [x] 3. Getting Started 강화 — README.md "What's Next?" 섹션 추가 (Opus) ✅ 2026-03-01
+  내용: 5분 퀵스타트, 추천 예제 5개, 학습 경로 링크, 튜토리얼 링크
+- [x] 4. vais-tutorial 문법 수정 — Rust→Vais 전환 (Opus) ✅ 2026-03-01
+  대상: crates/vais-tutorial/src/lessons.rs (15레슨)
+  변환: let→:=, fn→F, struct→S, enum→E, trait→W, impl→X, if→I, match→M, loop→L, i32→i64, //→#
+  테스트: 120개 통과 (93 unit + 19 integration + 8 lesson validation)
+- [x] 5. SUMMARY.md 업데이트 + mdbook build 검증 (Opus) ✅ 2026-03-01
+  변경: 학습 경로 + 실전 튜토리얼 3개 등록, mdbook build 경고 0건 (기존 1건 제외)
 
 ---
 

@@ -1,0 +1,113 @@
+# vwc — Vais Word Count
+# Counts lines, words, and bytes in text
+# Tutorial: docs-site/src/tutorials/cli-tool.md
+
+N "C" {
+    F strlen(s: str) -> i64
+}
+
+# Count result struct
+S WcResult {
+    lines: i64
+    words: i64
+    bytes: i64
+}
+
+X WcResult {
+    F new() -> WcResult {
+        R WcResult { lines: 0, words: 0, bytes: 0 }
+    }
+
+    F print(&self) {
+        puts("Lines: ~{self.lines}")
+        puts("Words: ~{self.words}")
+        puts("Bytes: ~{self.bytes}")
+    }
+}
+
+F is_whitespace(b: i64) -> i64 {
+    I b == 32 { R 1 }
+    I b == 9 { R 1 }
+    I b == 10 { R 1 }
+    I b == 13 { R 1 }
+    0
+}
+
+F count_lines(text: str, len: i64) -> i64 {
+    count := mut 0
+    L i:0..len {
+        byte := load_byte(text, i)
+        I byte == 10 {
+            count = count + 1
+        }
+    }
+    I len > 0 {
+        last := load_byte(text, len - 1)
+        I last != 10 {
+            count = count + 1
+        }
+    }
+    count
+}
+
+F count_words(text: str, len: i64) -> i64 {
+    count := mut 0
+    in_word := mut 0
+
+    L i:0..len {
+        byte := load_byte(text, i)
+        I is_whitespace(byte) == 1 {
+            I in_word == 1 {
+                count = count + 1
+                in_word = 0
+            }
+        } E {
+            in_word = 1
+        }
+    }
+
+    I in_word == 1 {
+        count = count + 1
+    }
+
+    count
+}
+
+F analyze(text: str) -> WcResult {
+    len := strlen(text)
+    R WcResult {
+        lines: count_lines(text, len),
+        words: count_words(text, len),
+        bytes: len
+    }
+}
+
+F add_results(a: WcResult, b: WcResult) -> WcResult {
+    R WcResult {
+        lines: a.lines + b.lines,
+        words: a.words + b.words,
+        bytes: a.bytes + b.bytes
+    }
+}
+
+F main() -> i64 {
+    puts("=== Vais Word Count (vwc) ===")
+
+    text1 := "Hello Vais World\nThis is a test\n"
+    text2 := "Another paragraph\nWith more words here\n"
+
+    r1 := analyze(text1)
+    r2 := analyze(text2)
+    total := add_results(r1, r2)
+
+    puts("\n--- File 1 ---")
+    r1.print()
+
+    puts("\n--- File 2 ---")
+    r2.print()
+
+    puts("\n--- Total ---")
+    total.print()
+
+    0
+}

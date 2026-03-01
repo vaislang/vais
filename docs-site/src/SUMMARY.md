@@ -9,6 +9,13 @@
 - [튜토리얼](./getting-started/tutorial.md)
 - [Getting Started (상세)](./guide/getting-started.md)
 - [에디터 지원](./getting-started/editors.md)
+- [학습 경로](./learning-path.md)
+
+# 실전 튜토리얼
+
+- [CLI Tool 만들기](./tutorials/cli-tool.md)
+- [HTTP Server 만들기](./tutorials/http-server.md)
+- [Data Pipeline 만들기](./tutorials/data-pipeline.md)
 
 # 가이드
 

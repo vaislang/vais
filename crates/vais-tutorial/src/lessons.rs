@@ -21,27 +21,27 @@ fn create_chapter1_basics() -> Chapter {
                 title: "Variables and Bindings".to_string(),
                 description: "Learn how to declare and use variables".to_string(),
                 content: r#"
-In Vais, variables are declared using the 'let' keyword:
+In Vais, variables are declared using the ':=' operator:
 
-    let x = 42;
-    let name = "Vais";
+    x := 42
+    name := "Vais"
 
 Variables are immutable by default. To make them mutable, use 'mut':
 
-    let mut count = 0;
-    count = count + 1;
+    count := mut 0
+    count = count + 1
 
 Type annotations are optional when the type can be inferred:
 
-    let x: i32 = 42;
-    let y = 3.14;  // inferred as f64
+    x: i64 = 42
+    y := 3.14  # inferred as f64
 "#
                 .to_string(),
-                code_template: r#"// Create a variable named 'answer' with value 42
-// Your code here
+                code_template: r#"# Create a variable named 'answer' with value 42
+# Your code here
 "#
                 .to_string(),
-                solution: r#"let answer = 42;
+                solution: r#"answer := 42
 "#
                 .to_string(),
                 test_cases: vec![TestCase {
@@ -51,9 +51,9 @@ Type annotations are optional when the type can be inferred:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use the 'let' keyword to declare a variable".to_string(),
-                    "Variable syntax: let name = value;".to_string(),
-                    "The solution is: let answer = 42;".to_string(),
+                    "Use the ':=' operator to declare a variable".to_string(),
+                    "Variable syntax: name := value".to_string(),
+                    "The solution is: answer := 42".to_string(),
                 ],
             },
             Lesson {
@@ -61,31 +61,35 @@ Type annotations are optional when the type can be inferred:
                 title: "Functions".to_string(),
                 description: "Learn how to define and call functions".to_string(),
                 content: r#"
-Functions are declared using the 'fn' keyword:
+Functions are declared using the 'F' keyword:
 
-    fn greet() {
-        print("Hello, world!");
+    F greet() {
+        puts("Hello, world!")
     }
 
 Functions can take parameters and return values:
 
-    fn add(a: i32, b: i32) -> i32 {
+    F add(a: i64, b: i64) -> i64 {
         a + b
     }
 
 The last expression in a function is automatically returned:
 
-    fn double(x: i32) -> i32 {
-        x * 2  // no semicolon = return value
+    F double(x: i64) -> i64 {
+        x * 2
     }
+
+Single-expression functions use '=':
+
+    F triple(x: i64) -> i64 = x * 3
 "#
                 .to_string(),
                 code_template:
-                    r#"// Write a function named 'square' that takes an i32 and returns its square
-// Your code here
+                    r#"# Write a function named 'square' that takes an i64 and returns its square
+# Your code here
 "#
                     .to_string(),
-                solution: r#"fn square(x: i32) -> i32 {
+                solution: r#"F square(x: i64) -> i64 {
     x * x
 }
 "#
@@ -97,9 +101,9 @@ The last expression in a function is automatically returned:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Function syntax: fn name(params) -> return_type { body }".to_string(),
+                    "Function syntax: F name(params) -> return_type { body }".to_string(),
                     "Multiply x by itself".to_string(),
-                    "The solution is: fn square(x: i32) -> i32 { x * x }".to_string(),
+                    "The solution is: F square(x: i64) -> i64 { x * x }".to_string(),
                 ],
             },
             Lesson {
@@ -110,33 +114,31 @@ The last expression in a function is automatically returned:
 Vais has several primitive types:
 
 Integers: i8, i16, i32, i64, u8, u16, u32, u64
-    let x: i32 = -42;
-    let y: u64 = 100;
+    x: i64 = -42
+    y: u64 = 100
 
 Floating point: f32, f64
-    let pi: f64 = 3.14159;
+    pi: f64 = 3.14159
 
 Boolean: bool
-    let is_active: bool = true;
+    is_active: bool = true
 
-String: str (string slice) and String (owned string)
-    let s: str = "hello";
-    let owned: String = String::from("world");
+String: str
+    s: str = "hello"
 
-Characters: char
-    let c: char = 'A';
+The default integer type is i64.
 "#
                 .to_string(),
-                code_template: r#"// Create variables with different types:
-// - An i32 named 'age' with value 25
-// - A bool named 'is_student' with value true
-// - A str named 'name' with value "Alice"
-// Your code here
+                code_template: r#"# Create variables with different types:
+# - An i64 named 'age' with value 25
+# - A bool named 'is_student' with value true
+# - A str named 'name' with value "Alice"
+# Your code here
 "#
                 .to_string(),
-                solution: r#"let age: i32 = 25;
-let is_student: bool = true;
-let name: str = "Alice";
+                solution: r#"age: i64 = 25
+is_student: bool = true
+name: str = "Alice"
 "#
                 .to_string(),
                 test_cases: vec![TestCase {
@@ -147,7 +149,7 @@ let name: str = "Alice";
                 }],
                 hints: vec![
                     "Declare each variable on a separate line".to_string(),
-                    "Use type annotations: let name: type = value;".to_string(),
+                    "Use type annotations: name: type = value".to_string(),
                     "String literals use double quotes".to_string(),
                 ],
             },
@@ -166,35 +168,35 @@ fn create_chapter2_control_flow() -> Chapter {
                 title: "If Expressions".to_string(),
                 description: "Learn conditional branching".to_string(),
                 content: r#"
-The 'if' expression allows conditional execution:
+In Vais, 'I' is the if keyword and 'E' is else:
 
-    if x > 0 {
-        print("positive");
+    I x > 0 {
+        puts("positive")
     }
 
-You can add 'else' and 'else if' branches:
+You can add else and else-if branches:
 
-    if x > 0 {
-        print("positive");
-    } else if x < 0 {
-        print("negative");
-    } else {
-        print("zero");
+    I x > 0 {
+        puts("positive")
+    } E I x < 0 {
+        puts("negative")
+    } E {
+        puts("zero")
     }
 
-Since 'if' is an expression, it returns a value:
+You can also use the ternary operator:
 
-    let abs = if x >= 0 { x } else { -x };
+    abs := x >= 0 ? x : 0 - x
 "#
                 .to_string(),
                 code_template:
-                    r#"// Write a function 'max' that returns the larger of two i32 values
-// Use an if expression
-// Your code here
+                    r#"# Write a function 'max' that returns the larger of two i64 values
+# Use an I/E expression or ternary operator
+# Your code here
 "#
                     .to_string(),
-                solution: r#"fn max(a: i32, b: i32) -> i32 {
-    if a > b { a } else { b }
+                solution: r#"F max(a: i64, b: i64) -> i64 {
+    I a > b { R a } E { R b }
 }
 "#
                 .to_string(),
@@ -205,7 +207,7 @@ Since 'if' is an expression, it returns a value:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use if-else as an expression to return a value".to_string(),
+                    "Use I/E (if/else) or the ternary operator ? :".to_string(),
                     "Compare a and b with the > operator".to_string(),
                 ],
             },
@@ -214,47 +216,42 @@ Since 'if' is an expression, it returns a value:
                 title: "Loops".to_string(),
                 description: "Understand different loop constructs".to_string(),
                 content: r#"
-Vais has several loop constructs:
+Vais uses 'L' for all loop constructs:
 
 Infinite loop:
-    loop {
-        // runs forever unless broken
-        break;
+    L {
+        # runs forever unless broken
+        B   # break
     }
 
-While loop:
-    while condition {
-        // runs while condition is true
+Conditional loop (while):
+    L condition {
+        # runs while condition is true
     }
 
-For loop with ranges:
-    for i in 0..10 {
-        // i goes from 0 to 9
+Range loop (for):
+    L i:0..10 {
+        # i goes from 0 to 9
     }
 
-For loop with iterators:
-    for item in collection {
-        // process each item
-    }
-
-Use 'break' to exit and 'continue' to skip:
-    for i in 0..10 {
-        if i == 5 { break; }
-        if i % 2 == 0 { continue; }
+Use 'B' to break and 'C' to continue:
+    L i:0..10 {
+        I i == 5 { B }
+        I i % 2 == 0 { C }
     }
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'sum_range' that sums numbers from 1 to n
-// Use a for loop with a range
-// Your code here
+                code_template: r#"# Write a function 'sum_range' that sums numbers from 1 to n
+# Use L (loop) with a range
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn sum_range(n: i32) -> i32 {
-    let mut sum = 0;
-    for i in 1..=n {
-        sum = sum + i;
+                solution: r#"F sum_range(n: i64) -> i64 {
+    sum := mut 0
+    L i:1..n {
+        sum = sum + i
     }
-    sum
+    sum + n
 }
 "#
                 .to_string(),
@@ -265,8 +262,8 @@ Use 'break' to exit and 'continue' to skip:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use 1..=n for an inclusive range (1 to n)".to_string(),
-                    "Accumulate the sum in a mutable variable".to_string(),
+                    "Use L i:1..n for a range loop (1 to n-1)".to_string(),
+                    "Accumulate the sum in a mutable variable (mut)".to_string(),
                     "Return the sum at the end".to_string(),
                 ],
             },
@@ -275,45 +272,44 @@ Use 'break' to exit and 'continue' to skip:
                 title: "Pattern Matching".to_string(),
                 description: "Master the match expression".to_string(),
                 content: r#"
-The 'match' expression is powerful for pattern matching:
+In Vais, 'M' is the match keyword:
 
-    match value {
-        1 => print("one"),
-        2 => print("two"),
-        _ => print("other"),
+    M value {
+        1 => puts("one"),
+        2 => puts("two"),
+        _ => puts("other")
     }
 
 Match must be exhaustive (cover all cases):
 
-    match option {
+    M option {
         Some(x) => x,
-        None => 0,
+        None => 0
     }
 
-You can match ranges and use guards:
+You can use guards with 'I' (if):
 
-    match age {
-        0..=12 => "child",
-        13..=19 => "teen",
-        _ if age >= 65 => "senior",
-        _ => "adult",
+    M age {
+        0 => "baby",
+        x I x > 0 => "positive",
+        _ => "negative"
     }
 "#
                 .to_string(),
                 code_template:
-                    r#"// Write a function 'describe_number' that takes an i32 and returns:
-// - "zero" if 0
-// - "positive" if > 0
-// - "negative" if < 0
-// Use a match expression
-// Your code here
+                    r#"# Write a function 'describe_number' that takes an i64 and returns:
+# - "zero" if 0
+# - "positive" if > 0
+# - "negative" if < 0
+# Use M (match)
+# Your code here
 "#
                     .to_string(),
-                solution: r#"fn describe_number(n: i32) -> str {
-    match n {
+                solution: r#"F describe_number(n: i64) -> str {
+    M n {
         0 => "zero",
-        x if x > 0 => "positive",
-        _ => "negative",
+        x I x > 0 => "positive",
+        _ => "negative"
     }
 }
 "#
@@ -325,7 +321,7 @@ You can match ranges and use guards:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use guards with 'if' to check conditions".to_string(),
+                    "Use guards with 'I' (if) to check conditions".to_string(),
                     "The _ pattern matches anything".to_string(),
                     "Return string literals for each case".to_string(),
                 ],
@@ -338,49 +334,47 @@ fn create_chapter3_collections() -> Chapter {
     Chapter {
         id: 2,
         title: "Chapter 3: Collections".to_string(),
-        description: "Work with vectors, hash maps, and sets".to_string(),
+        description: "Work with arrays and memory in Vais".to_string(),
         lessons: vec![
             Lesson {
                 id: "ch3_vectors".to_string(),
-                title: "Vectors".to_string(),
-                description: "Learn to use dynamic arrays".to_string(),
+                title: "Arrays".to_string(),
+                description: "Learn to use arrays and pointers".to_string(),
                 content: r#"
-Vectors are growable arrays:
+Arrays are fixed-size collections:
 
-Creating vectors:
-    let v = Vec::new();
-    let v = vec![1, 2, 3];
+Creating arrays:
+    arr := [1, 2, 3, 4, 5]
 
-Adding elements:
-    v.push(4);
-    v.push(5);
+Accessing elements by index:
+    first := arr[0]
+    third := arr[2]
 
-Accessing elements:
-    let first = v[0];
-    let maybe = v.get(10);  // returns Option
+Using pointer arithmetic:
+    buf: *i64 = [10, 20, 30]
+    val := load_byte(buf, 0)
 
-Iterating:
-    for item in v {
-        print(item);
+Array with explicit size:
+    F sum(arr: [i64; 5]) -> i64 {
+        result := mut 0
+        L i:0..5 {
+            result = result + arr[i]
+        }
+        result
     }
-
-Common operations:
-    v.len()     // length
-    v.is_empty() // check if empty
-    v.pop()     // remove and return last element
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'create_range_vec' that creates a vector
-// containing numbers from 1 to n
-// Your code here
+                code_template: r#"# Write a function 'sum_array' that takes an array of 5 i64
+# and returns their sum using a loop
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn create_range_vec(n: i32) -> Vec<i32> {
-    let mut v = Vec::new();
-    for i in 1..=n {
-        v.push(i);
+                solution: r#"F sum_array(arr: [i64; 5]) -> i64 {
+    result := mut 0
+    L i:0..5 {
+        result = result + arr[i]
     }
-    v
+    result
 }
 "#
                 .to_string(),
@@ -391,51 +385,46 @@ Common operations:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Create an empty vector with Vec::new()".to_string(),
-                    "Use a for loop to add elements".to_string(),
-                    "Return the vector at the end".to_string(),
+                    "Use [i64; 5] for an array of 5 elements".to_string(),
+                    "Use L i:0..5 to loop over indices".to_string(),
+                    "Return the accumulated result".to_string(),
                 ],
             },
             Lesson {
                 id: "ch3_hashmaps".to_string(),
-                title: "Hash Maps".to_string(),
+                title: "HashMap".to_string(),
                 description: "Store key-value pairs".to_string(),
                 content: r#"
-Hash maps store key-value pairs:
+Vais supports HashMap<K,V> for key-value storage:
 
 Creating a hash map:
-    let mut scores = HashMap::new();
+    scores := HashMap<str, i64>::new()
 
 Inserting values:
-    scores.insert("Blue", 10);
-    scores.insert("Red", 50);
+    scores.insert("Blue", 10)
+    scores.insert("Red", 50)
 
 Accessing values:
-    let score = scores.get("Blue");  // returns Option
-    let score = scores["Blue"];      // panics if not found
+    score := scores.get("Blue")
 
-Iterating:
-    for (key, value) in scores {
-        print(key, value);
-    }
+Common operations:
+    scores.len()       # number of entries
+    scores.contains_key("Blue")
 
-Updating values:
-    scores.insert("Blue", 25);  // overwrites
-    scores.entry("Yellow").or_insert(50);
+Note: HashMap requires 'U std/hashmap' import in
+real Vais programs.
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'word_count' that takes a vector of strings
-// and returns a HashMap with word counts
-// Your code here
+                code_template: r#"# Write a function that creates a HashMap and inserts
+# two key-value pairs, then returns the map
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn word_count(words: Vec<str>) -> HashMap<str, i32> {
-    let mut counts = HashMap::new();
-    for word in words {
-        let count = counts.entry(word).or_insert(0);
-        *count = *count + 1;
-    }
-    counts
+                solution: r#"F create_scores() -> HashMap<str, i64> {
+    scores := HashMap<str, i64>::new()
+    scores.insert("Alice", 95)
+    scores.insert("Bob", 87)
+    scores
 }
 "#
                 .to_string(),
@@ -446,51 +435,53 @@ Updating values:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use HashMap::new() to create a new map".to_string(),
-                    "Use entry().or_insert() to initialize counts".to_string(),
-                    "Increment the count for each word".to_string(),
+                    "Use HashMap<str, i64>::new() to create a map".to_string(),
+                    "Use .insert(key, value) to add entries".to_string(),
+                    "Return the map at the end".to_string(),
                 ],
             },
             Lesson {
                 id: "ch3_sets".to_string(),
-                title: "Hash Sets".to_string(),
-                description: "Work with unique collections".to_string(),
+                title: "Memory and Pointers".to_string(),
+                description: "Work with manual memory management".to_string(),
                 content: r#"
-Hash sets store unique values:
+Vais provides low-level memory operations:
 
-Creating a set:
-    let mut set = HashSet::new();
+Allocating memory:
+    N "C" { F malloc(size: i64) -> i64 }
+    buf := malloc(64)
 
-Adding values:
-    set.insert(1);
-    set.insert(2);
-    set.insert(2);  // ignored, already exists
+Storing and loading bytes:
+    store_byte(buf, 0, 65)   # store 'A' at offset 0
+    val := load_byte(buf, 0) # read byte at offset 0
 
-Checking membership:
-    if set.contains(&1) {
-        print("found");
-    }
+Freeing memory:
+    N "C" { F free(ptr: i64) -> i64 }
+    free(buf)
 
-Set operations:
-    let a = hashset![1, 2, 3];
-    let b = hashset![2, 3, 4];
-
-    a.union(&b)         // {1, 2, 3, 4}
-    a.intersection(&b)  // {2, 3}
-    a.difference(&b)    // {1}
+String interpolation with ~{}:
+    x := 42
+    puts("Value: ~{x}")
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'unique_elements' that takes a Vec<i32>
-// and returns a HashSet with unique elements
-// Your code here
+                code_template: r#"# Write a function that allocates a buffer, stores 3 bytes,
+# reads them back, and frees the buffer
+# Return the sum of the 3 bytes
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn unique_elements(nums: Vec<i32>) -> HashSet<i32> {
-    let mut set = HashSet::new();
-    for num in nums {
-        set.insert(num);
-    }
-    set
+                solution: r#"F store_and_read() -> i64 {
+    N "C" { F malloc(size: i64) -> i64 }
+    N "C" { F free(ptr: i64) -> i64 }
+    buf := malloc(8)
+    store_byte(buf, 0, 10)
+    store_byte(buf, 1, 20)
+    store_byte(buf, 2, 30)
+    a := load_byte(buf, 0)
+    b := load_byte(buf, 1)
+    c := load_byte(buf, 2)
+    free(buf)
+    a + b + c
 }
 "#
                 .to_string(),
@@ -501,9 +492,9 @@ Set operations:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Create an empty HashSet".to_string(),
-                    "Insert each element from the vector".to_string(),
-                    "Duplicates are automatically handled".to_string(),
+                    "Use malloc to allocate memory".to_string(),
+                    "Use store_byte and load_byte for byte operations".to_string(),
+                    "Always free allocated memory".to_string(),
                 ],
             },
         ],
@@ -514,7 +505,7 @@ fn create_chapter4_error_handling() -> Chapter {
     Chapter {
         id: 3,
         title: "Chapter 4: Error Handling".to_string(),
-        description: "Handle errors with Option and Result".to_string(),
+        description: "Handle errors with Option, Result, and the ? operator".to_string(),
         lessons: vec![
             Lesson {
                 id: "ch4_option".to_string(),
@@ -523,40 +514,35 @@ fn create_chapter4_error_handling() -> Chapter {
                 content: r#"
 The Option type represents an optional value:
 
-    enum Option<T> {
+    E Option<T> {
         Some(T),
-        None,
+        None
     }
 
 Creating Options:
-    let some_number = Some(5);
-    let no_number: Option<i32> = None;
+    some_number := Some(5)
+    no_number: Option<i64> = None
 
-Pattern matching:
-    match some_number {
-        Some(x) => print(x),
-        None => print("no value"),
+Pattern matching with M:
+    M some_number {
+        Some(x) => puts("~{x}"),
+        None => puts("no value")
     }
 
-Useful methods:
-    option.is_some()           // true if Some
-    option.is_none()           // true if None
-    option.unwrap()            // get value or panic
-    option.unwrap_or(default)  // get value or default
-    option.map(|x| x * 2)      // transform if Some
+The ! operator unwraps an Option (returns value or panics):
+    val := some_number!   # unwraps to 5
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'safe_divide' that returns Option<i32>
-// Return Some(a/b) if b != 0, None otherwise
-// Your code here
+                code_template: r#"# Write a function 'safe_divide' that returns i64
+# Return a/b if b != 0, -1 otherwise (error sentinel)
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn safe_divide(a: i32, b: i32) -> Option<i32> {
-    if b == 0 {
-        None
-    } else {
-        Some(a / b)
+                solution: r#"F safe_divide(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R -1
     }
+    R a / b
 }
 "#
                 .to_string(),
@@ -567,9 +553,9 @@ Useful methods:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Check if b is zero first".to_string(),
-                    "Return None for division by zero".to_string(),
-                    "Return Some(result) for valid division".to_string(),
+                    "Check if b is zero first with I (if)".to_string(),
+                    "Return -1 for division by zero".to_string(),
+                    "Return a / b for valid division".to_string(),
                 ],
             },
             Lesson {
@@ -579,46 +565,41 @@ Useful methods:
                 content: r#"
 The Result type represents success or error:
 
-    enum Result<T, E> {
+    E Result<T, E> {
         Ok(T),
-        Err(E),
+        Err(E)
     }
 
 Creating Results:
-    let success: Result<i32, str> = Ok(10);
-    let failure: Result<i32, str> = Err("error");
+    success: Result<i64, str> = Ok(10)
+    failure: Result<i64, str> = Err("error")
 
 Pattern matching:
-    match result {
-        Ok(value) => print("Success:", value),
-        Err(e) => print("Error:", e),
+    M result {
+        Ok(value) => puts("Success: ~{value}"),
+        Err(e) => puts("Error")
     }
 
 The ? operator propagates errors:
-    fn try_operation() -> Result<i32, str> {
-        let x = might_fail()?;  // returns early if Err
+    F try_operation() -> Result<i64, str> {
+        x := might_fail()?   # returns early if Err
         Ok(x * 2)
     }
 
-Useful methods:
-    result.is_ok()
-    result.is_err()
-    result.unwrap()
-    result.unwrap_or(default)
+The ! operator unwraps (panics on Err):
+    val := result!
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'parse_positive' that parses a string to i32
-// Return Ok(number) if positive, Err("not positive") otherwise
-// Assume parse() works and returns a valid i32
-// Your code here
+                code_template: r#"# Write a function 'check_positive' that takes i64
+# Return the number if positive, or -1 if not
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn parse_positive(s: str) -> Result<i32, str> {
-    let num = parse_int(s);
-    if num > 0 {
-        Ok(num)
-    } else {
-        Err("not positive")
+                solution: r#"F check_positive(n: i64) -> i64 {
+    I n > 0 {
+        R n
+    } E {
+        R -1
     }
 }
 "#
@@ -630,50 +611,43 @@ Useful methods:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Parse the string first".to_string(),
-                    "Check if the parsed number is positive".to_string(),
-                    "Return Ok or Err based on the check".to_string(),
+                    "Use I (if) to check if n is positive".to_string(),
+                    "Return n for positive numbers".to_string(),
+                    "Return -1 for non-positive numbers".to_string(),
                 ],
             },
             Lesson {
                 id: "ch4_combinators".to_string(),
-                title: "Error Combinators".to_string(),
-                description: "Chain error handling operations".to_string(),
+                title: "Closures and Pipe Operator".to_string(),
+                description: "Chain operations with closures and pipes".to_string(),
                 content: r#"
-Combinators allow chaining operations:
+Closures (lambdas) use |params| syntax:
 
-map - transform the success value:
-    Some(5).map(|x| x * 2)  // Some(10)
-    None.map(|x| x * 2)     // None
+    double := |x| x * 2
+    add := |a, b| a + b
 
-and_then (flatMap) - chain operations:
-    Some(5).and_then(|x| Some(x * 2))  // Some(10)
-    Some(5).and_then(|x| None)         // None
+The pipe operator |> chains function calls:
 
-or_else - provide alternative:
-    None.or_else(|| Some(0))  // Some(0)
+    result := 5 |> |x| x * 2 |> |x| x + 1
+    # result = 11
 
-unwrap_or_else - compute default:
-    result.unwrap_or_else(|e| {
-        print("Error:", e);
-        0
-    })
+Multi-step pipeline:
+    F process(x: i64) -> i64 {
+        x |> |n| n * 3 |> |n| n + 10
+    }
+
+Closures can capture outer variables:
+    multiplier := 3
+    scale := |x| x * multiplier
 "#
                 .to_string(),
-                code_template: r#"// Write a function 'double_if_positive' that takes Option<i32>
-// Returns Some(x*2) if x > 0, None otherwise
-// Use map and filter-like logic
-// Your code here
+                code_template: r#"# Write a function that uses closures and |> pipe
+# to double a number, then add 10
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn double_if_positive(opt: Option<i32>) -> Option<i32> {
-    opt.and_then(|x| {
-        if x > 0 {
-            Some(x * 2)
-        } else {
-            None
-        }
-    })
+                solution: r#"F double_and_add(x: i64) -> i64 {
+    x |> |n| n * 2 |> |n| n + 10
 }
 "#
                 .to_string(),
@@ -684,9 +658,9 @@ unwrap_or_else - compute default:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use and_then to handle the Option".to_string(),
-                    "Check if the value is positive inside".to_string(),
-                    "Return Some or None based on the check".to_string(),
+                    "Use |> to pipe the value through closures".to_string(),
+                    "First closure: |n| n * 2 (double)".to_string(),
+                    "Second closure: |n| n + 10 (add 10)".to_string(),
                 ],
             },
         ],
@@ -704,43 +678,42 @@ fn create_chapter5_structs_traits() -> Chapter {
                 title: "Structures".to_string(),
                 description: "Create custom data types".to_string(),
                 content: r#"
-Structs group related data:
+Structs group related data using 'S':
 
-    struct Point {
-        x: i32,
-        y: i32,
+    S Point {
+        x: i64
+        y: i64
     }
 
 Creating instances:
-    let p = Point { x: 10, y: 20 };
+    p := Point { x: 10, y: 20 }
 
 Accessing fields:
-    let x_coord = p.x;
+    x_coord := p.x
 
-Tuple structs:
-    struct Color(i32, i32, i32);
-    let black = Color(0, 0, 0);
-
-Methods are defined in impl blocks:
-    impl Point {
-        fn distance(&self) -> f64 {
-            ((self.x * self.x + self.y * self.y) as f64).sqrt()
+Methods are defined in 'X' (impl) blocks:
+    X Point {
+        F sum(&self) -> i64 {
+            self.x + self.y
         }
     }
+
+Method call:
+    result := p.sum()
 "#
                 .to_string(),
-                code_template: r#"// Define a struct 'Rectangle' with width and height (both i32)
-// Add a method 'area' that returns i32
-// Your code here
+                code_template: r#"# Define a struct 'Rectangle' with width and height (both i64)
+# Add a method 'area' that returns i64
+# Your code here
 "#
                 .to_string(),
-                solution: r#"struct Rectangle {
-    width: i32,
-    height: i32,
+                solution: r#"S Rectangle {
+    width: i64
+    height: i64
 }
 
-impl Rectangle {
-    fn area(&self) -> i32 {
+X Rectangle {
+    F area(&self) -> i64 {
         self.width * self.height
     }
 }
@@ -753,8 +726,8 @@ impl Rectangle {
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Define the struct with two fields".to_string(),
-                    "Use impl Rectangle to add methods".to_string(),
+                    "Use S to define the struct with two fields".to_string(),
+                    "Use X Rectangle to add methods".to_string(),
                     "Multiply width and height for area".to_string(),
                 ],
             },
@@ -763,50 +736,42 @@ impl Rectangle {
                 title: "Traits".to_string(),
                 description: "Define shared behavior".to_string(),
                 content: r#"
-Traits define shared behavior:
+Traits define shared behavior using 'W':
 
-    trait Printable {
-        fn print(&self);
+    W Printable {
+        F show(&self) -> i64
     }
 
-Implementing traits:
-    impl Printable for Point {
-        fn print(&self) {
-            print("Point(", self.x, ",", self.y, ")");
-        }
-    }
-
-Traits can have default implementations:
-    trait Describable {
-        fn description(&self) -> str {
-            "A describable object"
+Implementing traits with 'X ... : Trait':
+    X Point: Printable {
+        F show(&self) -> i64 {
+            puts("Point: ~{self.x}, ~{self.y}")
+            0
         }
     }
 
 Trait bounds constrain generics:
-    fn print_all<T: Printable>(items: Vec<T>) {
-        for item in items {
-            item.print();
-        }
+    F print_item<T: Printable>(item: T) -> i64 {
+        item.show()
     }
 "#
                 .to_string(),
-                code_template: r#"// Define a trait 'Shape' with a method 'area' that returns f64
-// Implement it for a struct 'Circle' with radius: f64
-// Your code here
+                code_template: r#"# Define a trait 'Shape' with a method 'area' that returns i64
+# Implement it for a struct 'Circle' with radius: i64
+# Your code here
 "#
                 .to_string(),
-                solution: r#"trait Shape {
-    fn area(&self) -> f64;
+                solution: r#"W Shape {
+    F area(&self) -> i64
 }
 
-struct Circle {
-    radius: f64,
+S Circle {
+    radius: i64
 }
 
-impl Shape for Circle {
-    fn area(&self) -> f64 {
-        3.14159 * self.radius * self.radius
+X Circle: Shape {
+    F area(&self) -> i64 {
+        self.radius * self.radius * 3
     }
 }
 "#
@@ -818,9 +783,9 @@ impl Shape for Circle {
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Define the trait with one method".to_string(),
-                    "Create a Circle struct with radius field".to_string(),
-                    "Calculate area using pi * r^2".to_string(),
+                    "Use W to define the trait".to_string(),
+                    "Use S to create the Circle struct".to_string(),
+                    "Use X Circle: Shape to implement the trait".to_string(),
                 ],
             },
             Lesson {
@@ -831,40 +796,37 @@ impl Shape for Circle {
 Generics allow code reuse across types:
 
 Generic functions:
-    fn first<T>(list: Vec<T>) -> Option<T> {
-        if list.is_empty() {
-            None
-        } else {
-            Some(list[0])
-        }
+    F identity<T>(x: T) -> T = x
+
+    F max<T>(a: T, b: T) -> T {
+        I a > b { R a } E { R b }
     }
 
 Generic structs:
-    struct Pair<T, U> {
-        first: T,
-        second: U,
+    S Pair<T, U> {
+        first: T
+        second: U
     }
 
-    let pair = Pair { first: 1, second: "hello" };
+    pair := Pair<i64, str> { first: 1, second: "hello" }
 
 Generic implementations:
-    impl<T> Pair<T, T> {
-        fn new(first: T, second: T) -> Self {
-            Pair { first, second }
-        }
+    X Pair<T, U> {
+        F get_first(&self) -> T = self.first
     }
+
+Self-recursion with generics:
+    F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 "#
                 .to_string(),
-                code_template: r#"// Write a generic function 'swap' that takes Pair<T, U>
-// and returns Pair<U, T>
-// Your code here
+                code_template: r#"# Write a generic function 'first_or_second' that takes
+# two values of the same type and a boolean flag,
+# returns the first if flag is true, second otherwise
+# Your code here
 "#
                 .to_string(),
-                solution: r#"fn swap<T, U>(pair: Pair<T, U>) -> Pair<U, T> {
-    Pair {
-        first: pair.second,
-        second: pair.first,
-    }
+                solution: r#"F first_or_second<T>(a: T, b: T, flag: bool) -> T {
+    I flag { R a } E { R b }
 }
 "#
                 .to_string(),
@@ -875,9 +837,9 @@ Generic implementations:
                     validation_fn: None,
                 }],
                 hints: vec![
-                    "Use type parameters <T, U>".to_string(),
-                    "Swap the first and second fields".to_string(),
-                    "Return a new Pair with swapped types".to_string(),
+                    "Use type parameter <T> for both arguments".to_string(),
+                    "Use I/E (if/else) to select which value to return".to_string(),
+                    "Return a or b based on the flag".to_string(),
                 ],
             },
         ],

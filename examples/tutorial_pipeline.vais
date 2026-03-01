@@ -1,0 +1,177 @@
+# Data Pipeline — ETL pattern in Vais
+# Reads records, applies transformations, computes statistics
+# Tutorial: docs-site/src/tutorials/data-pipeline.md
+
+N "C" {
+    F malloc(size: i64) -> i64
+    F free(ptr: i64) -> i64
+}
+
+# Student score record
+S Record {
+    id: i64
+    score: i64
+}
+
+# Aggregation statistics
+S Stats {
+    count: i64
+    total: i64
+    max_val: i64
+    min_val: i64
+}
+
+X Stats {
+    F average(&self) -> i64 {
+        I self.count == 0 { R 0 }
+        R self.total / self.count
+    }
+
+    F print(&self) {
+        puts("Records: ~{self.count}")
+        puts("Total score: ~{self.total}")
+        puts("Average: ~{self.average()}")
+        puts("Max: ~{self.max_val}")
+        puts("Min: ~{self.min_val}")
+    }
+}
+
+# Store a 64-bit integer at buf+offset (little-endian)
+F store_i64(buf: i64, offset: i64, value: i64) {
+    L i:0..8 {
+        byte := (value >> (i * 8)) & 255
+        store_byte(buf + offset, i, byte)
+    }
+}
+
+# Load a 64-bit integer from buf+offset (little-endian)
+F load_i64_at(buf: i64, offset: i64) -> i64 {
+    result := mut 0
+    L i:0..8 {
+        byte := load_byte(buf + offset, i)
+        result = result | (byte << (i * 8))
+    }
+    result
+}
+
+# Create 5 test records in buffer
+F create_dataset(buf: i64) -> i64 {
+    store_i64(buf, 0, 1)
+    store_i64(buf, 8, 85)
+    store_i64(buf, 16, 2)
+    store_i64(buf, 24, 92)
+    store_i64(buf, 32, 3)
+    store_i64(buf, 40, 78)
+    store_i64(buf, 48, 4)
+    store_i64(buf, 56, 98)
+    store_i64(buf, 64, 5)
+    store_i64(buf, 72, 72)
+    R 5
+}
+
+# Read a record from buffer by index
+F read_record(buf: i64, index: i64) -> Record {
+    offset := index * 16
+    R Record {
+        id: load_i64_at(buf, offset),
+        score: load_i64_at(buf, offset + 8)
+    }
+}
+
+# Apply curve: 10% bonus, cap at 100
+F apply_curve(score: i64) -> i64 {
+    curved := score + score / 10
+    I curved > 100 { R 100 }
+    curved
+}
+
+# Filter: check if score meets minimum
+F passes_filter(score: i64, min_score: i64) -> i64 {
+    I score >= min_score { R 1 }
+    0
+}
+
+# Compute statistics over all records
+F compute_stats(buf: i64, count: i64) -> Stats {
+    total := mut 0
+    max_v := mut 0
+    min_v := mut 999999
+
+    L i:0..count {
+        rec := read_record(buf, i)
+        score := apply_curve(rec.score)
+
+        total = total + score
+
+        I score > max_v { max_v = score }
+        I score < min_v { min_v = score }
+    }
+
+    R Stats {
+        count: count,
+        total: total,
+        max_val: max_v,
+        min_val: min_v
+    }
+}
+
+# Compute statistics with filter
+F compute_filtered_stats(buf: i64, count: i64, min_score: i64) -> Stats {
+    total := mut 0
+    max_v := mut 0
+    min_v := mut 999999
+    passed := mut 0
+
+    L i:0..count {
+        rec := read_record(buf, i)
+        score := apply_curve(rec.score)
+
+        I passes_filter(score, min_score) == 1 {
+            total = total + score
+            passed = passed + 1
+            I score > max_v { max_v = score }
+            I score < min_v { min_v = score }
+        }
+    }
+
+    I passed == 0 { min_v = 0 }
+
+    R Stats {
+        count: passed,
+        total: total,
+        max_val: max_v,
+        min_val: min_v
+    }
+}
+
+F main() -> i64 {
+    puts("=== Data Pipeline ===")
+
+    # 1. Create dataset
+    buf := malloc(256)
+    count := create_dataset(buf)
+
+    # 2. All records stats
+    puts("\n--- All Records (with curve) ---")
+    all_stats := compute_stats(buf, count)
+    all_stats.print()
+
+    # 3. Filtered stats (min 85)
+    puts("\n--- Filtered (min 85, with curve) ---")
+    filtered := compute_filtered_stats(buf, count, 85)
+    filtered.print()
+
+    # 4. Raw data dump
+    puts("\n--- Raw Data ---")
+    L i:0..count {
+        rec := read_record(buf, i)
+        curved := apply_curve(rec.score)
+        puts("  ID ~{rec.id}: ~{rec.score} -> ~{curved}")
+    }
+
+    # 5. Cleanup
+    free(buf)
+
+    puts("\nPipeline complete.")
+    0
+}
