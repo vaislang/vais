@@ -1,4 +1,4 @@
-# Vais 0.0.5 (Vibe AI Language for Systems)
+# Vais 0.1.0 (Vibe AI Language for Systems)
 
 **AI-optimized systems programming language with token-efficient syntax.**
 
@@ -98,8 +98,8 @@ playground/        # Web playground frontend
 
 ```bash
 cargo build --release
-cargo test                                     # Run all 6,900+ tests
-cargo test -p vaisc                            # Run vaisc tests (900+ E2E tests)
+cargo test                                     # Run all 7,000+ tests
+cargo test -p vaisc                            # Run vaisc tests (967 E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -269,8 +269,8 @@ Download from [Releases](https://github.com/vaislang/vais/releases/latest) (Linu
 
 ```bash
 # macOS ARM
-curl -LO https://github.com/vaislang/vais/releases/download/v0.0.5/vais-v0.0.5-aarch64-apple-darwin.tar.gz
-tar -xzf vais-v0.0.5-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/vaislang/vais/releases/download/v0.1.0/vais-v0.1.0-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v0.1.0-aarch64-apple-darwin.tar.gz
 ./vais/vaisc --version
 ```
 

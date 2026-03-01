@@ -241,7 +241,8 @@ impl CodeGenerator {
         for p in params {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let llvm_ty = self.type_to_llvm(&ty);
-            param_strs.push(format!("{} %{}", llvm_ty, p.name.node));
+            let llvm_name = if p.name.node == "entry" { "entry.param".to_string() } else { p.name.node.clone() };
+            param_strs.push(format!("{} %{}", llvm_ty, llvm_name));
             param_types.push(llvm_ty);
         }
 
@@ -268,9 +269,10 @@ impl CodeGenerator {
 
         for p in params {
             let ty = self.ast_type_to_resolved(&p.ty.node);
+            let llvm_name = if p.name.node == "entry" { "entry.param".to_string() } else { p.name.node.clone() };
             self.fn_ctx.locals.insert(
                 p.name.node.clone(),
-                LocalVar::param(ty, p.name.node.clone()),
+                LocalVar::param(ty, llvm_name),
             );
         }
 

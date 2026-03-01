@@ -58,13 +58,18 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(&ty);
 
                 // Register parameter as local (SSA value, not alloca)
-                // For params, llvm_name matches the source name
+                // Rename parameter if it collides with the "entry" block label
+                let llvm_name = if p.name.node == "entry" {
+                    "entry.param".to_string()
+                } else {
+                    p.name.node.to_string()
+                };
                 self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
-                    LocalVar::param(ty.clone(), p.name.node.to_string()),
+                    LocalVar::param(ty.clone(), llvm_name.clone()),
                 );
 
-                format!("{} %{}", llvm_ty, p.name.node)
+                format!("{} %{}", llvm_ty, llvm_name)
             })
             .collect();
 
@@ -112,12 +117,13 @@ impl CodeGenerator {
             };
             if matches!(ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(&ty);
+                let src_llvm_name = if p.name.node == "entry" { "entry.param" } else { &p.name.node };
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
                 ir.push_str(&format!(
                     "  store {} %{}, {}* {}\n",
-                    llvm_ty, p.name.node, llvm_ty, param_ptr
+                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
                 ));
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
@@ -309,12 +315,18 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let llvm_ty = self.type_to_llvm(&ty);
 
+            // Rename parameter if it collides with the "entry" block label
+            let llvm_name = if p.name.node == "entry" {
+                "entry.param".to_string()
+            } else {
+                p.name.node.to_string()
+            };
             self.fn_ctx.locals.insert(
                 p.name.node.to_string(),
-                LocalVar::param(ty.clone(), p.name.node.to_string()),
+                LocalVar::param(ty.clone(), llvm_name.clone()),
             );
 
-            params.push(format!("{} %{}", llvm_ty, p.name.node));
+            params.push(format!("{} %{}", llvm_ty, llvm_name));
         }
 
         let ret_type = self.resolve_fn_return_type(f, &f.name.node);
@@ -350,12 +362,13 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             if matches!(ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(&ty);
+                let src_llvm_name = if p.name.node == "entry" { "entry.param" } else { &p.name.node };
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
                 ir.push_str(&format!(
                     "  store {} %{}, {}* {}\n",
-                    llvm_ty, p.name.node, llvm_ty, param_ptr
+                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
                 ));
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer

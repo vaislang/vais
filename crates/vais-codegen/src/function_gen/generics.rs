@@ -157,12 +157,18 @@ impl CodeGenerator {
             .iter()
             .map(|(name, concrete_ty)| {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
+                // Rename parameter if it collides with the "entry" block label
+                let llvm_name = if name == "entry" {
+                    "entry.param".to_string()
+                } else {
+                    name.to_string()
+                };
                 // Register parameter as local initially (may be updated below for struct params)
                 self.fn_ctx.locals.insert(
                     name.to_string(),
-                    LocalVar::param(concrete_ty.clone(), name.to_string()),
+                    LocalVar::param(concrete_ty.clone(), llvm_name.clone()),
                 );
-                format!("{} %{}", llvm_ty, name)
+                format!("{} %{}", llvm_ty, llvm_name)
             })
             .collect();
 
@@ -204,11 +210,12 @@ impl CodeGenerator {
         for (name, concrete_ty) in &param_infos {
             if matches!(concrete_ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
+                let src_llvm_name = if name == "entry" { "entry.param" } else { name.as_str() };
                 let param_ptr = format!("__{}_ptr", name);
                 ir.push_str(&format!("  %{} = alloca {}\n", param_ptr, llvm_ty));
                 ir.push_str(&format!(
                     "  store {} %{}, {}* %{}\n",
-                    llvm_ty, name, llvm_ty, param_ptr
+                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
                 ));
                 // Update locals to use the alloca pointer as an SSA value so field access works
                 self.fn_ctx.locals.insert(
