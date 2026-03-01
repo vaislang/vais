@@ -1,0 +1,638 @@
+# Protobuf - Protocol Buffers binary wire format
+# Implements encoding/decoding of the Protobuf wire format
+# Spec: https://protobuf.dev/programming-guides/encoding/
+#
+# Wire types:
+# 0 = Varint (int32, int64, uint32, uint64, sint32, sint64, bool, enum)
+# 1 = 64-bit (fixed64, sfixed64, double)
+# 2 = Length-delimited (string, bytes, embedded messages, packed repeated fields)
+# 5 = 32-bit (fixed32, sfixed32, float)
+#
+# This library provides a message builder/parser approach:
+# - Build messages by adding fields with field numbers
+# - Parse messages by iterating over fields
+#
+# Value representation for parsed fields:
+# [wire_type: i64, field_number: i64, data: i64, extra: i64]
+#   wire_type 0: data = varint value
+#   wire_type 1: data = 64-bit value
+#   wire_type 2: data = pointer to bytes, extra = length
+#   wire_type 5: data = 32-bit value
+
+# =====================================================
+# Buffer — growable byte buffer for encoding
+# [data_ptr, len, cap]
+# =====================================================
+
+F pb_buf_new() -> i64 {
+    cap := 256
+    data := malloc(cap)
+    buf := malloc(24)
+    store_i64(buf, data)
+    store_i64(buf + 8, 0)
+    store_i64(buf + 16, cap)
+    buf
+}
+
+F pb_buf_ensure(buf: i64, needed: i64) -> i64 {
+    len := load_i64(buf + 8)
+    cap := load_i64(buf + 16)
+    I len + needed <= cap { 0 } E {
+        new_cap := cap * 2
+        I new_cap < len + needed { new_cap = len + needed + 256 }
+        new_data := malloc(new_cap)
+        memcpy(new_data, load_i64(buf), len)
+        free(load_i64(buf))
+        store_i64(buf, new_data)
+        store_i64(buf + 16, new_cap)
+        0
+    }
+}
+
+F pb_buf_write_byte(buf: i64, b: i64) -> i64 {
+    pb_buf_ensure(buf, 1)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    store_byte(data + len, b & 255)
+    store_i64(buf + 8, len + 1)
+    1
+}
+
+F pb_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
+    pb_buf_ensure(buf, count)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    memcpy(data + len, src, count)
+    store_i64(buf + 8, len + count)
+    count
+}
+
+F pb_buf_data(buf: i64) -> i64 { load_i64(buf) }
+F pb_buf_len(buf: i64) -> i64 { load_i64(buf + 8) }
+
+F pb_buf_free(buf: i64) -> i64 {
+    data := load_i64(buf)
+    I data != 0 { free(data) }
+    free(buf)
+    0
+}
+
+# =====================================================
+# Varint encoding/decoding (unsigned LEB128)
+# =====================================================
+
+# Encode unsigned varint to buffer
+F pb_encode_varint(buf: i64, value: i64) -> i64 {
+    pb_encode_varint_rec(buf, value, 0)
+}
+
+F pb_encode_varint_rec(buf: i64, v: i64, count: i64) -> i64 {
+    # Handle the case where v has upper bits set (treat as unsigned)
+    byte := v & 127
+    # Logical right shift: clear the sign bit after arithmetic shift
+    next := (v >> 7) & 576460752303423487  # 0x07FFFFFFFFFFFFFF
+    I v >= 0 && v < 128 {
+        # Last byte
+        pb_buf_write_byte(buf, byte)
+        count + 1
+    }
+    E I next == 0 && byte == (v & 127) {
+        # Positive number, final byte
+        pb_buf_write_byte(buf, byte)
+        count + 1
+    }
+    E {
+        pb_buf_write_byte(buf, byte | 128)
+        pb_encode_varint_rec(buf, next, count + 1)
+    }
+}
+
+# Decode unsigned varint from reader
+# Reader: [data_ptr, pos, len]
+F pb_decode_varint(r: i64) -> i64 {
+    pb_decode_varint_rec(r, 0, 0)
+}
+
+F pb_decode_varint_rec(r: i64, result: i64, shift: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos >= len { 0 - 1 } E {
+        data := load_i64(r)
+        byte := load_byte(data + pos)
+        store_i64(r + 8, pos + 1)
+        new_result := result | ((byte & 127) << shift)
+        I (byte & 128) == 0 {
+            new_result
+        } E {
+            I shift >= 63 { new_result }
+            E { pb_decode_varint_rec(r, new_result, shift + 7) }
+        }
+    }
+}
+
+# =====================================================
+# ZigZag encoding for signed integers
+# sint32/sint64 use zigzag to efficiently encode negative values
+# =====================================================
+
+F pb_zigzag_encode(n: i64) -> i64 {
+    # (n << 1) ^ (n >> 63)
+    I n >= 0 { n * 2 }
+    E { (0 - n) * 2 - 1 }
+}
+
+F pb_zigzag_decode(n: i64) -> i64 {
+    # (n >>> 1) ^ -(n & 1)
+    half := (n >> 1) & 4611686018427387903  # logical right shift
+    I (n & 1) == 0 { half }
+    E { 0 - half - 1 }
+}
+
+# =====================================================
+# Field tag encoding
+# tag = (field_number << 3) | wire_type
+# =====================================================
+
+F pb_make_tag(field_number: i64, wire_type: i64) -> i64 {
+    (field_number << 3) | (wire_type & 7)
+}
+
+F pb_tag_field_number(tag: i64) -> i64 {
+    (tag >> 3) & 536870911  # mask to avoid sign issues
+}
+
+F pb_tag_wire_type(tag: i64) -> i64 {
+    tag & 7
+}
+
+# =====================================================
+# Message builder — encode fields to buffer
+# =====================================================
+
+# Write a varint field (wire type 0)
+F pb_write_varint_field(buf: i64, field_num: i64, value: i64) -> i64 {
+    tag := pb_make_tag(field_num, 0)
+    pb_encode_varint(buf, tag)
+    pb_encode_varint(buf, value)
+}
+
+# Write a signed varint field using zigzag encoding
+F pb_write_sint_field(buf: i64, field_num: i64, value: i64) -> i64 {
+    tag := pb_make_tag(field_num, 0)
+    pb_encode_varint(buf, tag)
+    pb_encode_varint(buf, pb_zigzag_encode(value))
+}
+
+# Write a boolean field (wire type 0, value 0 or 1)
+F pb_write_bool_field(buf: i64, field_num: i64, value: i64) -> i64 {
+    tag := pb_make_tag(field_num, 0)
+    pb_encode_varint(buf, tag)
+    pb_encode_varint(buf, I value != 0 { 1 } E { 0 })
+}
+
+# Write a 64-bit fixed field (wire type 1)
+F pb_write_fixed64_field(buf: i64, field_num: i64, value: i64) -> i64 {
+    tag := pb_make_tag(field_num, 1)
+    pb_encode_varint(buf, tag)
+    # Write 8 bytes little-endian
+    pb_buf_ensure(buf, 8)
+    data := load_i64(buf)
+    pos := load_i64(buf + 8)
+    store_byte(data + pos, value & 255)
+    store_byte(data + pos + 1, (value >> 8) & 255)
+    store_byte(data + pos + 2, (value >> 16) & 255)
+    store_byte(data + pos + 3, (value >> 24) & 255)
+    store_byte(data + pos + 4, (value >> 32) & 255)
+    store_byte(data + pos + 5, (value >> 40) & 255)
+    store_byte(data + pos + 6, (value >> 48) & 255)
+    store_byte(data + pos + 7, (value >> 56) & 255)
+    store_i64(buf + 8, pos + 8)
+    8
+}
+
+# Write a 32-bit fixed field (wire type 5)
+F pb_write_fixed32_field(buf: i64, field_num: i64, value: i64) -> i64 {
+    tag := pb_make_tag(field_num, 5)
+    pb_encode_varint(buf, tag)
+    # Write 4 bytes little-endian
+    pb_buf_ensure(buf, 4)
+    data := load_i64(buf)
+    pos := load_i64(buf + 8)
+    store_byte(data + pos, value & 255)
+    store_byte(data + pos + 1, (value >> 8) & 255)
+    store_byte(data + pos + 2, (value >> 16) & 255)
+    store_byte(data + pos + 3, (value >> 24) & 255)
+    store_i64(buf + 8, pos + 4)
+    4
+}
+
+# Write a length-delimited field (wire type 2) — bytes
+F pb_write_bytes_field(buf: i64, field_num: i64, data_ptr: i64, data_len: i64) -> i64 {
+    tag := pb_make_tag(field_num, 2)
+    pb_encode_varint(buf, tag)
+    pb_encode_varint(buf, data_len)
+    pb_buf_write_bytes(buf, data_ptr, data_len)
+}
+
+# Write a string field (wire type 2)
+F pb_write_string_field(buf: i64, field_num: i64, s: str) -> i64 {
+    p := str_to_ptr(s)
+    slen := strlen(s)
+    pb_write_bytes_field(buf, field_num, p, slen)
+}
+
+# Write an embedded message field (wire type 2)
+# sub_buf is a pb_buf containing the already-encoded sub-message
+F pb_write_message_field(buf: i64, field_num: i64, sub_buf: i64) -> i64 {
+    sub_data := pb_buf_data(sub_buf)
+    sub_len := pb_buf_len(sub_buf)
+    pb_write_bytes_field(buf, field_num, sub_data, sub_len)
+}
+
+# Write packed repeated varint field (wire type 2)
+# values: i64 pointer to array of i64 values
+# count: number of values
+F pb_write_packed_varint_field(buf: i64, field_num: i64, values: i64, count: i64) -> i64 {
+    # First encode all varints to a temp buffer to get total length
+    tmp := pb_buf_new()
+    pb_encode_packed_varints_rec(tmp, values, count, 0)
+    tmp_data := pb_buf_data(tmp)
+    tmp_len := pb_buf_len(tmp)
+
+    # Write as length-delimited field
+    tag := pb_make_tag(field_num, 2)
+    pb_encode_varint(buf, tag)
+    pb_encode_varint(buf, tmp_len)
+    pb_buf_write_bytes(buf, tmp_data, tmp_len)
+    pb_buf_free(tmp)
+    tmp_len
+}
+
+F pb_encode_packed_varints_rec(buf: i64, values: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        v := load_i64(values + idx * 8)
+        pb_encode_varint(buf, v)
+        pb_encode_packed_varints_rec(buf, values, count, idx + 1)
+    }
+}
+
+# =====================================================
+# Message parser — decode fields from binary data
+# =====================================================
+
+# Field struct: [wire_type, field_number, data, extra]
+# For wire_type 0 (varint): data = value
+# For wire_type 1 (64-bit): data = value
+# For wire_type 2 (length-delimited): data = ptr to bytes, extra = length
+# For wire_type 5 (32-bit): data = value
+
+F pb_reader_new(data: i64, len: i64) -> i64 {
+    r := malloc(24)
+    store_i64(r, data)
+    store_i64(r + 8, 0)
+    store_i64(r + 16, len)
+    r
+}
+
+F pb_reader_remaining(r: i64) -> i64 {
+    load_i64(r + 16) - load_i64(r + 8)
+}
+
+F pb_reader_pos(r: i64) -> i64 {
+    load_i64(r + 8)
+}
+
+# Read a single byte from reader
+F pb_reader_read_byte(r: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos >= len { 0 - 1 } E {
+        data := load_i64(r)
+        b := load_byte(data + pos)
+        store_i64(r + 8, pos + 1)
+        b
+    }
+}
+
+# Read next field from reader
+# Returns field struct pointer, or 0 if no more fields
+F pb_read_field(r: i64) -> i64 {
+    I pb_reader_remaining(r) <= 0 { 0 } E {
+        tag := pb_decode_varint(r)
+        I tag < 0 { 0 } E {
+            wire_type := pb_tag_wire_type(tag)
+            field_num := pb_tag_field_number(tag)
+
+            field := malloc(32)
+            store_i64(field, wire_type)
+            store_i64(field + 8, field_num)
+            store_i64(field + 16, 0)
+            store_i64(field + 24, 0)
+
+            I wire_type == 0 {
+                # Varint
+                val := pb_decode_varint(r)
+                store_i64(field + 16, val)
+            }
+            E I wire_type == 1 {
+                # 64-bit
+                val := pb_read_fixed64(r)
+                store_i64(field + 16, val)
+            }
+            E I wire_type == 2 {
+                # Length-delimited
+                len := pb_decode_varint(r)
+                I len > 0 {
+                    buf := malloc(len)
+                    pos := load_i64(r + 8)
+                    data := load_i64(r)
+                    memcpy(buf, data + pos, len)
+                    store_i64(r + 8, pos + len)
+                    store_i64(field + 16, buf)
+                    store_i64(field + 24, len)
+                }
+            }
+            E I wire_type == 5 {
+                # 32-bit
+                val := pb_read_fixed32(r)
+                store_i64(field + 16, val)
+            }
+            E {
+                # Unknown wire type - skip
+                free(field)
+                R 0
+            }
+            field
+        }
+    }
+}
+
+F pb_read_fixed64(r: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos + 8 > len { 0 } E {
+        data := load_i64(r)
+        b0 := load_byte(data + pos)
+        b1 := load_byte(data + pos + 1)
+        b2 := load_byte(data + pos + 2)
+        b3 := load_byte(data + pos + 3)
+        b4 := load_byte(data + pos + 4)
+        b5 := load_byte(data + pos + 5)
+        b6 := load_byte(data + pos + 6)
+        b7 := load_byte(data + pos + 7)
+        store_i64(r + 8, pos + 8)
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    }
+}
+
+F pb_read_fixed32(r: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos + 4 > len { 0 } E {
+        data := load_i64(r)
+        b0 := load_byte(data + pos)
+        b1 := load_byte(data + pos + 1)
+        b2 := load_byte(data + pos + 2)
+        b3 := load_byte(data + pos + 3)
+        store_i64(r + 8, pos + 4)
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+}
+
+# =====================================================
+# Field accessors
+# =====================================================
+
+F pb_field_wire_type(field: i64) -> i64 {
+    I field == 0 { 0 - 1 } E { load_i64(field) }
+}
+
+F pb_field_number(field: i64) -> i64 {
+    I field == 0 { 0 } E { load_i64(field + 8) }
+}
+
+F pb_field_varint(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 0 { 0 }
+    E { load_i64(field + 16) }
+}
+
+F pb_field_fixed64(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 1 { 0 }
+    E { load_i64(field + 16) }
+}
+
+F pb_field_fixed32(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 5 { 0 }
+    E { load_i64(field + 16) }
+}
+
+F pb_field_bytes(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 2 { 0 }
+    E { load_i64(field + 16) }
+}
+
+F pb_field_bytes_len(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 2 { 0 }
+    E { load_i64(field + 24) }
+}
+
+# Get string from a length-delimited field (returns null-terminated string ptr)
+F pb_field_string(field: i64) -> i64 {
+    I field == 0 { 0 }
+    E I load_i64(field) != 2 { 0 }
+    E {
+        src := load_i64(field + 16)
+        len := load_i64(field + 24)
+        I src == 0 || len == 0 { 0 } E {
+            buf := malloc(len + 1)
+            memcpy(buf, src, len)
+            store_byte(buf + len, 0)
+            buf
+        }
+    }
+}
+
+# Get a signed integer from a varint field (zigzag-decoded)
+F pb_field_sint(field: i64) -> i64 {
+    pb_zigzag_decode(pb_field_varint(field))
+}
+
+# Get a boolean from a varint field
+F pb_field_bool(field: i64) -> i64 {
+    I pb_field_varint(field) != 0 { 1 } E { 0 }
+}
+
+# Free a field (frees bytes data if wire type 2)
+F pb_field_free(field: i64) -> i64 {
+    I field != 0 {
+        I load_i64(field) == 2 {
+            data := load_i64(field + 16)
+            I data != 0 { free(data) }
+        }
+        free(field)
+    }
+    0
+}
+
+# =====================================================
+# Convenience: Parse all fields into a field list
+# Returns a list struct: [fields_array_ptr, count, cap]
+# =====================================================
+
+F pb_parse_all(data: i64, len: i64) -> i64 {
+    r := pb_reader_new(data, len)
+    fields := malloc(24)
+    fields_data := malloc(64)
+    store_i64(fields, fields_data)
+    store_i64(fields + 8, 0)   # count
+    store_i64(fields + 16, 8)  # cap (in entries)
+    pb_parse_all_rec(r, fields)
+    free(r)
+    fields
+}
+
+F pb_parse_all_rec(r: i64, fields: i64) -> i64 {
+    I pb_reader_remaining(r) <= 0 { 0 } E {
+        field := pb_read_field(r)
+        I field == 0 { 0 } E {
+            count := load_i64(fields + 8)
+            cap := load_i64(fields + 16)
+
+            # Grow if needed
+            I count >= cap {
+                old_data := load_i64(fields)
+                new_cap := cap * 2
+                new_data := malloc(new_cap * 8)
+                memcpy(new_data, old_data, count * 8)
+                free(old_data)
+                store_i64(fields, new_data)
+                store_i64(fields + 16, new_cap)
+            }
+
+            fields_data := load_i64(fields)
+            store_i64(fields_data + count * 8, field)
+            store_i64(fields + 8, count + 1)
+            pb_parse_all_rec(r, fields)
+        }
+    }
+}
+
+# Get number of parsed fields
+F pb_fields_count(fields: i64) -> i64 {
+    I fields == 0 { 0 } E { load_i64(fields + 8) }
+}
+
+# Get field by index
+F pb_fields_get(fields: i64, index: i64) -> i64 {
+    I fields == 0 { 0 } E {
+        count := load_i64(fields + 8)
+        I index < 0 || index >= count { 0 } E {
+            data := load_i64(fields)
+            load_i64(data + index * 8)
+        }
+    }
+}
+
+# Find first field with given field number
+F pb_fields_find(fields: i64, field_num: i64) -> i64 {
+    pb_fields_find_rec(fields, field_num, 0)
+}
+
+F pb_fields_find_rec(fields: i64, field_num: i64, idx: i64) -> i64 {
+    count := pb_fields_count(fields)
+    I idx >= count { 0 } E {
+        f := pb_fields_get(fields, idx)
+        I f != 0 && pb_field_number(f) == field_num { f }
+        E { pb_fields_find_rec(fields, field_num, idx + 1) }
+    }
+}
+
+# Free all fields and the list
+F pb_fields_free(fields: i64) -> i64 {
+    I fields != 0 {
+        pb_fields_free_rec(fields, 0)
+        data := load_i64(fields)
+        I data != 0 { free(data) }
+        free(fields)
+    }
+    0
+}
+
+F pb_fields_free_rec(fields: i64, idx: i64) -> i64 {
+    count := load_i64(fields + 8)
+    I idx >= count { 0 } E {
+        data := load_i64(fields)
+        field := load_i64(data + idx * 8)
+        pb_field_free(field)
+        pb_fields_free_rec(fields, idx + 1)
+    }
+}
+
+# =====================================================
+# Decode packed repeated varint field
+# Returns: [values_ptr, count]
+# =====================================================
+
+F pb_decode_packed_varints(data: i64, len: i64) -> i64 {
+    r := pb_reader_new(data, len)
+    result := malloc(16)
+    values := malloc(64)
+    store_i64(result, values)
+    store_i64(result + 8, 0)
+    pb_decode_packed_rec(r, result, 8, 0)
+    free(r)
+    result
+}
+
+F pb_decode_packed_rec(r: i64, result: i64, cap: i64, count: i64) -> i64 {
+    I pb_reader_remaining(r) <= 0 { 0 } E {
+        val := pb_decode_varint(r)
+        # Grow if needed
+        I count >= cap {
+            old := load_i64(result)
+            new_cap := cap * 2
+            new_vals := malloc(new_cap * 8)
+            memcpy(new_vals, old, count * 8)
+            free(old)
+            store_i64(result, new_vals)
+            pb_decode_packed_rec(r, result, new_cap, count)
+        } E {
+            values := load_i64(result)
+            store_i64(values + count * 8, val)
+            store_i64(result + 8, count + 1)
+            pb_decode_packed_rec(r, result, cap, count + 1)
+        }
+    }
+}
+
+F pb_packed_values(packed: i64) -> i64 {
+    I packed == 0 { 0 } E { load_i64(packed) }
+}
+
+F pb_packed_count(packed: i64) -> i64 {
+    I packed == 0 { 0 } E { load_i64(packed + 8) }
+}
+
+F pb_packed_get(packed: i64, idx: i64) -> i64 {
+    I packed == 0 { 0 } E {
+        count := load_i64(packed + 8)
+        I idx < 0 || idx >= count { 0 } E {
+            values := load_i64(packed)
+            load_i64(values + idx * 8)
+        }
+    }
+}
+
+F pb_packed_free(packed: i64) -> i64 {
+    I packed != 0 {
+        values := load_i64(packed)
+        I values != 0 { free(values) }
+        free(packed)
+    }
+    0
+}

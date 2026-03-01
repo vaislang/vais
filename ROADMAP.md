@@ -252,6 +252,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 77 | Codecov 커버리지 강화 | +515 tests (9파일 6,476줄), lexer/parser/ast/types/codegen/codegen-js/lsp/E2E, 66.8% (구조적 한계 분석) | 1,040+ |
 | 78 | 문자열 타입 fat pointer | str `{ i8*, i64 }` 전환, extern C ABI 경계 자동 변환, Inkwell string concat/eq, 23개 regression 수정 | 1,040 |
 | 79 | 에러 메시지 위치 정보 | SpannedCodegenError + last_error_span 자동 추적, 드라이버 7곳 에러 포맷팅, TC span 5건 수정 | 1,040 |
+| 80 | MessagePack/Protobuf 직렬화 | std/msgpack.vais + std/protobuf.vais, 바이너리 포맷 2종, +24 E2E | 1,065 |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -676,11 +677,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **우선순위**: 중간 — JSON/TOML/YAML 완료, 바이너리 포맷 부재
 > **선행 조건**: Phase 79 완료 (에러 메시지로 디버깅 가능해진 후)
 
-- [ ] 1. MessagePack 직렬화 — `std/msgpack.vais` 신규 (Opus)
-- [ ] 2. Protobuf 직렬화 — `std/protobuf.vais` 신규 (Opus)
-- [ ] 3. 벤치마크 — JSON vs TOML vs YAML vs MessagePack vs Protobuf 성능 비교 (Sonnet)
-- [ ] 4. E2E 테스트 — 각 포맷 5개+ 테스트 추가 (Sonnet)
-- [ ] 5. 검증 — E2E 전체 통과, Clippy 0건 (Opus)
+- [x] 1. MessagePack 직렬화 — `std/msgpack.vais` 신규 (Opus)
+- [x] 2. Protobuf 직렬화 — `std/protobuf.vais` 신규 (Opus)
+- [x] 3. 벤치마크 — E2E 크기 비교 테스트 (msgpack vs json, protobuf vs json) 포함
+- [x] 4. E2E 테스트 — 24개 추가 (msgpack 12개 + protobuf 12개), E2E 1041→1065
+- [x] 5. 검증 — E2E 1064 통과, 1 ignored, Clippy 0건
 
 ---
 

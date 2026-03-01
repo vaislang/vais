@@ -1,0 +1,974 @@
+# MessagePack - Binary serialization format
+# Efficient, compact binary alternative to JSON
+# Spec: https://msgpack.org/
+#
+# Supports: nil, bool, integers (i64), strings, binary data, arrays, maps
+#
+# Value representation (same 24-byte layout as json.vais):
+# [tag: i64, data: i64, extra: i64]
+#
+# Tag types:
+# 0 = nil
+# 1 = bool (data: 0=false, 1=true)
+# 2 = integer (data: i64 value)
+# 3 = string (data: pointer, extra: length)
+# 4 = binary (data: pointer, extra: length)
+# 5 = array (data: pointer to array struct)
+# 6 = map (data: pointer to map struct)
+#
+# MessagePack wire format reference:
+# 0x00-0x7f: positive fixint
+# 0x80-0x8f: fixmap (count in lower 4 bits)
+# 0x90-0x9f: fixarray (count in lower 4 bits)
+# 0xa0-0xbf: fixstr (length in lower 5 bits)
+# 0xc0: nil
+# 0xc2: false
+# 0xc3: true
+# 0xc4: bin 8
+# 0xc5: bin 16
+# 0xc6: bin 32
+# 0xca: float 32 (not supported, stored as i64 bits)
+# 0xcb: float 64 (not supported, stored as i64 bits)
+# 0xcc: uint 8
+# 0xcd: uint 16
+# 0xce: uint 32
+# 0xcf: uint 64
+# 0xd0: int 8
+# 0xd1: int 16
+# 0xd2: int 32
+# 0xd3: int 64
+# 0xda: str 16
+# 0xdb: str 32
+# 0xdc: array 16
+# 0xdd: array 32
+# 0xde: map 16
+# 0xdf: map 32
+# 0xe0-0xff: negative fixint
+
+# =====================================================
+# Helper functions
+# =====================================================
+
+F msgpack_strlen(s: i64) -> i64 {
+    msgpack_strlen_rec(s, 0)
+}
+
+F msgpack_strlen_rec(s: i64, len: i64) -> i64 {
+    I load_byte(s + len) == 0 { len }
+    E { msgpack_strlen_rec(s, len + 1) }
+}
+
+F msgpack_init_mem(ptr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        store_i64(ptr + idx * 8, 0)
+        msgpack_init_mem(ptr, count, idx + 1)
+    }
+}
+
+F msgpack_hash_str(s: i64, len: i64) -> i64 {
+    msgpack_hash_rec(s, len, 0, 5381)
+}
+
+F msgpack_hash_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
+    I idx >= len { h } E {
+        c := load_byte(s + idx)
+        new_h := h * 33 + c
+        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        msgpack_hash_rec(s, len, idx + 1, abs_h)
+    }
+}
+
+F msgpack_str_eq(a: i64, b: i64, len: i64) -> i64 {
+    msgpack_str_eq_rec(a, b, len, 0)
+}
+
+F msgpack_str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 1 }
+    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    E { msgpack_str_eq_rec(a, b, len, idx + 1) }
+}
+
+# =====================================================
+# Map (hash map) — same structure as json object
+# [buckets_ptr, size, capacity]
+# Entry: [key_ptr, key_len, value_ptr, next_ptr]
+# =====================================================
+
+F msgpack_map_new() -> i64 {
+    cap := 16
+    buckets := malloc(cap * 8)
+    msgpack_init_mem(buckets, cap, 0)
+    m := malloc(24)
+    store_i64(m, buckets)
+    store_i64(m + 8, 0)
+    store_i64(m + 16, cap)
+    m
+}
+
+F msgpack_map_set(m: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    h := msgpack_hash_str(key, key_len) % cap
+
+    new_entry := malloc(32)
+    key_copy := malloc(key_len + 1)
+    memcpy(key_copy, key, key_len)
+    store_byte(key_copy + key_len, 0)
+
+    store_i64(new_entry, key_copy)
+    store_i64(new_entry + 8, key_len)
+    store_i64(new_entry + 16, value_ptr)
+    entry_ptr := load_i64(buckets + h * 8)
+    store_i64(new_entry + 24, entry_ptr)
+    store_i64(buckets + h * 8, new_entry)
+
+    size := load_i64(m + 8) + 1
+    store_i64(m + 8, size)
+    1
+}
+
+F msgpack_map_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
+    I node == 0 { 0 } E {
+        nk := load_i64(node)
+        nkl := load_i64(node + 8)
+        I nkl == key_len && msgpack_str_eq(nk, key, key_len) == 1 {
+            load_i64(node + 16)
+        } E {
+            msgpack_map_get_rec(load_i64(node + 24), key, key_len)
+        }
+    }
+}
+
+F msgpack_map_get(m: i64, key: i64, key_len: i64) -> i64 {
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    I cap == 0 { 0 } E {
+        h := msgpack_hash_str(key, key_len) % cap
+        node := load_i64(buckets + h * 8)
+        msgpack_map_get_rec(node, key, key_len)
+    }
+}
+
+# =====================================================
+# Array — same as json array
+# [data_ptr, len, cap]
+# =====================================================
+
+F msgpack_array_new() -> i64 {
+    data := malloc(64)
+    arr := malloc(24)
+    store_i64(arr, data)
+    store_i64(arr + 8, 0)
+    store_i64(arr + 16, 8)
+    arr
+}
+
+F msgpack_array_push(arr: i64, value_ptr: i64) -> i64 {
+    arr_len := load_i64(arr + 8)
+    arr_cap := load_i64(arr + 16)
+
+    I arr_len >= arr_cap {
+        old_data := load_i64(arr)
+        new_cap := arr_cap * 2
+        new_data := malloc(new_cap * 8)
+        memcpy(new_data, old_data, arr_len * 8)
+        free(old_data)
+        store_i64(arr, new_data)
+        store_i64(arr + 16, new_cap)
+    }
+
+    data := load_i64(arr)
+    store_i64(data + arr_len * 8, value_ptr)
+    store_i64(arr + 8, arr_len + 1)
+    arr_len + 1
+}
+
+# =====================================================
+# Value constructors
+# =====================================================
+
+F msgpack_nil() -> i64 {
+    v := malloc(24)
+    store_i64(v, 0)
+    store_i64(v + 8, 0)
+    store_i64(v + 16, 0)
+    v
+}
+
+F msgpack_bool(b: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 1)
+    store_i64(v + 8, b)
+    store_i64(v + 16, 0)
+    v
+}
+
+F msgpack_int(n: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 2)
+    store_i64(v + 8, n)
+    store_i64(v + 16, 0)
+    v
+}
+
+F msgpack_str(s: i64, len: i64) -> i64 {
+    buf := malloc(len + 1)
+    memcpy(buf, s, len)
+    store_byte(buf + len, 0)
+    v := malloc(24)
+    store_i64(v, 3)
+    store_i64(v + 8, buf)
+    store_i64(v + 16, len)
+    v
+}
+
+F msgpack_str_from_literal(s: str) -> i64 {
+    p := str_to_ptr(s)
+    len := strlen(s)
+    msgpack_str(p, len)
+}
+
+F msgpack_bin(data: i64, len: i64) -> i64 {
+    buf := malloc(len)
+    memcpy(buf, data, len)
+    v := malloc(24)
+    store_i64(v, 4)
+    store_i64(v + 8, buf)
+    store_i64(v + 16, len)
+    v
+}
+
+F msgpack_array_create() -> i64 {
+    arr := msgpack_array_new()
+    v := malloc(24)
+    store_i64(v, 5)
+    store_i64(v + 8, arr)
+    store_i64(v + 16, 0)
+    v
+}
+
+F msgpack_array_add(arr_v: i64, elem: i64) -> i64 {
+    I load_i64(arr_v) != 5 { 0 } E {
+        arr := load_i64(arr_v + 8)
+        msgpack_array_push(arr, elem)
+        len := load_i64(arr + 8)
+        store_i64(arr_v + 16, len)
+        1
+    }
+}
+
+F msgpack_map_create() -> i64 {
+    m := msgpack_map_new()
+    v := malloc(24)
+    store_i64(v, 6)
+    store_i64(v + 8, m)
+    store_i64(v + 16, 0)
+    v
+}
+
+F msgpack_map_put(map_v: i64, key: str, value: i64) -> i64 {
+    I load_i64(map_v) != 6 { 0 } E {
+        m := load_i64(map_v + 8)
+        key_ptr := str_to_ptr(key)
+        key_len := strlen(key)
+        msgpack_map_set(m, key_ptr, key_len, value)
+        size := load_i64(m + 8)
+        store_i64(map_v + 16, size)
+        1
+    }
+}
+
+# =====================================================
+# Value accessors
+# =====================================================
+
+F msgpack_type(v: i64) -> i64 {
+    I v == 0 { 0 } E { load_i64(v) }
+}
+
+F msgpack_get_bool(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 1 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F msgpack_get_int(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 2 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F msgpack_get_str(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 3 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F msgpack_get_str_len(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 3 { load_i64(v + 16) }
+    E { 0 }
+}
+
+F msgpack_get_bin(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 4 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F msgpack_get_bin_len(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 4 { load_i64(v + 16) }
+    E { 0 }
+}
+
+F msgpack_array_len(v: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 { 0 }
+    E { load_i64(v + 16) }
+}
+
+F msgpack_array_get(v: i64, index: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 { 0 } E {
+        arr := load_i64(v + 8)
+        arr_data := load_i64(arr)
+        arr_len := load_i64(arr + 8)
+        I index < 0 || index >= arr_len { 0 }
+        E { load_i64(arr_data + index * 8) }
+    }
+}
+
+F msgpack_map_size(v: i64) -> i64 {
+    I v == 0 || load_i64(v) != 6 { 0 }
+    E { load_i64(v + 16) }
+}
+
+F msgpack_map_lookup(v: i64, key: str) -> i64 {
+    I v == 0 || load_i64(v) != 6 { 0 } E {
+        m := load_i64(v + 8)
+        key_ptr := str_to_ptr(key)
+        key_len := strlen(key)
+        msgpack_map_get(m, key_ptr, key_len)
+    }
+}
+
+# =====================================================
+# Encoder — Value tree -> byte buffer
+# Buffer struct: [data_ptr, len, cap]
+# =====================================================
+
+F msgpack_buf_new() -> i64 {
+    cap := 256
+    data := malloc(cap)
+    buf := malloc(24)
+    store_i64(buf, data)
+    store_i64(buf + 8, 0)
+    store_i64(buf + 16, cap)
+    buf
+}
+
+F msgpack_buf_ensure(buf: i64, needed: i64) -> i64 {
+    len := load_i64(buf + 8)
+    cap := load_i64(buf + 16)
+    I len + needed <= cap { 0 } E {
+        new_cap := cap * 2
+        I new_cap < len + needed { new_cap = len + needed + 256 }
+        new_data := malloc(new_cap)
+        memcpy(new_data, load_i64(buf), len)
+        free(load_i64(buf))
+        store_i64(buf, new_data)
+        store_i64(buf + 16, new_cap)
+        0
+    }
+}
+
+F msgpack_buf_write_byte(buf: i64, b: i64) -> i64 {
+    msgpack_buf_ensure(buf, 1)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    store_byte(data + len, b & 255)
+    store_i64(buf + 8, len + 1)
+    1
+}
+
+F msgpack_buf_write_u16_be(buf: i64, v: i64) -> i64 {
+    msgpack_buf_ensure(buf, 2)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    store_byte(data + len, (v >> 8) & 255)
+    store_byte(data + len + 1, v & 255)
+    store_i64(buf + 8, len + 2)
+    2
+}
+
+F msgpack_buf_write_u32_be(buf: i64, v: i64) -> i64 {
+    msgpack_buf_ensure(buf, 4)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    store_byte(data + len, (v >> 24) & 255)
+    store_byte(data + len + 1, (v >> 16) & 255)
+    store_byte(data + len + 2, (v >> 8) & 255)
+    store_byte(data + len + 3, v & 255)
+    store_i64(buf + 8, len + 4)
+    4
+}
+
+F msgpack_buf_write_u64_be(buf: i64, v: i64) -> i64 {
+    msgpack_buf_ensure(buf, 8)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    store_byte(data + len, (v >> 56) & 255)
+    store_byte(data + len + 1, (v >> 48) & 255)
+    store_byte(data + len + 2, (v >> 40) & 255)
+    store_byte(data + len + 3, (v >> 32) & 255)
+    store_byte(data + len + 4, (v >> 24) & 255)
+    store_byte(data + len + 5, (v >> 16) & 255)
+    store_byte(data + len + 6, (v >> 8) & 255)
+    store_byte(data + len + 7, v & 255)
+    store_i64(buf + 8, len + 8)
+    8
+}
+
+F msgpack_buf_write_bytes(buf: i64, src: i64, count: i64) -> i64 {
+    msgpack_buf_ensure(buf, count)
+    data := load_i64(buf)
+    len := load_i64(buf + 8)
+    memcpy(data + len, src, count)
+    store_i64(buf + 8, len + count)
+    count
+}
+
+# =====================================================
+# Encode a value to the buffer
+# =====================================================
+
+F msgpack_encode_value(buf: i64, v: i64) -> i64 {
+    I v == 0 {
+        msgpack_buf_write_byte(buf, 192)  # 0xc0 = nil
+    } E {
+        tag := load_i64(v)
+        data := load_i64(v + 8)
+        extra := load_i64(v + 16)
+
+        I tag == 0 { msgpack_encode_nil(buf) }
+        E I tag == 1 { msgpack_encode_bool(buf, data) }
+        E I tag == 2 { msgpack_encode_int(buf, data) }
+        E I tag == 3 { msgpack_encode_str(buf, data, extra) }
+        E I tag == 4 { msgpack_encode_bin(buf, data, extra) }
+        E I tag == 5 { msgpack_encode_array(buf, load_i64(v + 8)) }
+        E I tag == 6 { msgpack_encode_map(buf, load_i64(v + 8)) }
+        E { msgpack_buf_write_byte(buf, 192) }
+    }
+}
+
+F msgpack_encode_nil(buf: i64) -> i64 {
+    msgpack_buf_write_byte(buf, 192)  # 0xc0
+}
+
+F msgpack_encode_bool(buf: i64, b: i64) -> i64 {
+    I b == 0 {
+        msgpack_buf_write_byte(buf, 194)  # 0xc2 = false
+    } E {
+        msgpack_buf_write_byte(buf, 195)  # 0xc3 = true
+    }
+}
+
+F msgpack_encode_int(buf: i64, n: i64) -> i64 {
+    # positive fixint: 0x00-0x7f (0-127)
+    I n >= 0 && n <= 127 {
+        msgpack_buf_write_byte(buf, n)
+    }
+    # negative fixint: 0xe0-0xff (-32 to -1)
+    E I n >= 0 - 32 && n < 0 {
+        msgpack_buf_write_byte(buf, 256 + n)
+    }
+    # uint 8: 0-255
+    E I n >= 0 && n <= 255 {
+        msgpack_buf_write_byte(buf, 204)  # 0xcc
+        msgpack_buf_write_byte(buf, n)
+    }
+    # uint 16: 0-65535
+    E I n >= 0 && n <= 65535 {
+        msgpack_buf_write_byte(buf, 205)  # 0xcd
+        msgpack_buf_write_u16_be(buf, n)
+    }
+    # uint 32: 0-4294967295
+    E I n >= 0 && n <= 4294967295 {
+        msgpack_buf_write_byte(buf, 206)  # 0xce
+        msgpack_buf_write_u32_be(buf, n)
+    }
+    # int 8: -128 to -33
+    E I n >= 0 - 128 && n < 0 - 32 {
+        msgpack_buf_write_byte(buf, 208)  # 0xd0
+        msgpack_buf_write_byte(buf, (n + 256) & 255)
+    }
+    # int 16: -32768 to -129
+    E I n >= 0 - 32768 && n < 0 - 128 {
+        msgpack_buf_write_byte(buf, 209)  # 0xd1
+        v := n + 65536
+        msgpack_buf_write_u16_be(buf, v & 65535)
+    }
+    # int 32: -2147483648 to -32769
+    E I n >= 0 - 2147483648 && n < 0 - 32768 {
+        msgpack_buf_write_byte(buf, 210)  # 0xd2
+        v := n + 4294967296
+        msgpack_buf_write_u32_be(buf, v & 4294967295)
+    }
+    # int 64 or uint 64 for everything else
+    E I n >= 0 {
+        msgpack_buf_write_byte(buf, 207)  # 0xcf = uint 64
+        msgpack_buf_write_u64_be(buf, n)
+    }
+    E {
+        msgpack_buf_write_byte(buf, 211)  # 0xd3 = int 64
+        msgpack_buf_write_u64_be(buf, n)
+    }
+}
+
+F msgpack_encode_str(buf: i64, s: i64, len: i64) -> i64 {
+    # fixstr: 0xa0-0xbf (0-31 bytes)
+    I len <= 31 {
+        msgpack_buf_write_byte(buf, 160 + len)  # 0xa0 + len
+    }
+    # str 8
+    E I len <= 255 {
+        msgpack_buf_write_byte(buf, 217)  # 0xd9
+        msgpack_buf_write_byte(buf, len)
+    }
+    # str 16
+    E I len <= 65535 {
+        msgpack_buf_write_byte(buf, 218)  # 0xda
+        msgpack_buf_write_u16_be(buf, len)
+    }
+    # str 32
+    E {
+        msgpack_buf_write_byte(buf, 219)  # 0xdb
+        msgpack_buf_write_u32_be(buf, len)
+    }
+    msgpack_buf_write_bytes(buf, s, len)
+}
+
+F msgpack_encode_bin(buf: i64, data: i64, len: i64) -> i64 {
+    # bin 8
+    I len <= 255 {
+        msgpack_buf_write_byte(buf, 196)  # 0xc4
+        msgpack_buf_write_byte(buf, len)
+    }
+    # bin 16
+    E I len <= 65535 {
+        msgpack_buf_write_byte(buf, 197)  # 0xc5
+        msgpack_buf_write_u16_be(buf, len)
+    }
+    # bin 32
+    E {
+        msgpack_buf_write_byte(buf, 198)  # 0xc6
+        msgpack_buf_write_u32_be(buf, len)
+    }
+    msgpack_buf_write_bytes(buf, data, len)
+}
+
+F msgpack_encode_array(buf: i64, arr: i64) -> i64 {
+    arr_data := load_i64(arr)
+    arr_len := load_i64(arr + 8)
+
+    # fixarray: 0x90-0x9f (0-15 elements)
+    I arr_len <= 15 {
+        msgpack_buf_write_byte(buf, 144 + arr_len)  # 0x90 + n
+    }
+    # array 16
+    E I arr_len <= 65535 {
+        msgpack_buf_write_byte(buf, 220)  # 0xdc
+        msgpack_buf_write_u16_be(buf, arr_len)
+    }
+    # array 32
+    E {
+        msgpack_buf_write_byte(buf, 221)  # 0xdd
+        msgpack_buf_write_u32_be(buf, arr_len)
+    }
+    msgpack_encode_array_items(buf, arr_data, arr_len, 0)
+}
+
+F msgpack_encode_array_items(buf: i64, data: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 0 } E {
+        elem := load_i64(data + idx * 8)
+        msgpack_encode_value(buf, elem)
+        msgpack_encode_array_items(buf, data, len, idx + 1)
+    }
+}
+
+F msgpack_encode_map(buf: i64, m: i64) -> i64 {
+    size := load_i64(m + 8)
+
+    # fixmap: 0x80-0x8f (0-15 entries)
+    I size <= 15 {
+        msgpack_buf_write_byte(buf, 128 + size)  # 0x80 + n
+    }
+    # map 16
+    E I size <= 65535 {
+        msgpack_buf_write_byte(buf, 222)  # 0xde
+        msgpack_buf_write_u16_be(buf, size)
+    }
+    # map 32
+    E {
+        msgpack_buf_write_byte(buf, 223)  # 0xdf
+        msgpack_buf_write_u32_be(buf, size)
+    }
+
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    msgpack_encode_map_buckets(buf, buckets, cap, 0)
+}
+
+F msgpack_encode_map_buckets(buf: i64, buckets: i64, cap: i64, idx: i64) -> i64 {
+    I idx >= cap { 0 } E {
+        node := load_i64(buckets + idx * 8)
+        msgpack_encode_map_entries(buf, node)
+        msgpack_encode_map_buckets(buf, buckets, cap, idx + 1)
+    }
+}
+
+F msgpack_encode_map_entries(buf: i64, node: i64) -> i64 {
+    I node == 0 { 0 } E {
+        key := load_i64(node)
+        key_len := load_i64(node + 8)
+        value := load_i64(node + 16)
+        next := load_i64(node + 24)
+
+        # Encode key as string
+        msgpack_encode_str(buf, key, key_len)
+        # Encode value
+        msgpack_encode_value(buf, value)
+        # Continue with next entry
+        msgpack_encode_map_entries(buf, next)
+    }
+}
+
+# =====================================================
+# Decoder — byte buffer -> Value tree
+# Reader state: [data_ptr, pos, len]
+# =====================================================
+
+F msgpack_reader_new(data: i64, len: i64) -> i64 {
+    r := malloc(24)
+    store_i64(r, data)
+    store_i64(r + 8, 0)
+    store_i64(r + 16, len)
+    r
+}
+
+F msgpack_reader_read_byte(r: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos >= len { 0 - 1 } E {
+        data := load_i64(r)
+        b := load_byte(data + pos)
+        store_i64(r + 8, pos + 1)
+        b
+    }
+}
+
+F msgpack_reader_read_u16_be(r: i64) -> i64 {
+    b0 := msgpack_reader_read_byte(r)
+    b1 := msgpack_reader_read_byte(r)
+    I b0 < 0 || b1 < 0 { 0 - 1 }
+    E { (b0 << 8) | b1 }
+}
+
+F msgpack_reader_read_u32_be(r: i64) -> i64 {
+    b0 := msgpack_reader_read_byte(r)
+    b1 := msgpack_reader_read_byte(r)
+    b2 := msgpack_reader_read_byte(r)
+    b3 := msgpack_reader_read_byte(r)
+    I b0 < 0 { 0 - 1 }
+    E { (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 }
+}
+
+F msgpack_reader_read_u64_be(r: i64) -> i64 {
+    b0 := msgpack_reader_read_byte(r)
+    b1 := msgpack_reader_read_byte(r)
+    b2 := msgpack_reader_read_byte(r)
+    b3 := msgpack_reader_read_byte(r)
+    b4 := msgpack_reader_read_byte(r)
+    b5 := msgpack_reader_read_byte(r)
+    b6 := msgpack_reader_read_byte(r)
+    b7 := msgpack_reader_read_byte(r)
+    I b0 < 0 { 0 - 1 }
+    E { (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32) | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7 }
+}
+
+F msgpack_reader_read_bytes(r: i64, dst: i64, count: i64) -> i64 {
+    pos := load_i64(r + 8)
+    len := load_i64(r + 16)
+    I pos + count > len { 0 - 1 } E {
+        data := load_i64(r)
+        memcpy(dst, data + pos, count)
+        store_i64(r + 8, pos + count)
+        count
+    }
+}
+
+# Sign-extend i8 to i64
+F msgpack_sign_extend_i8(v: i64) -> i64 {
+    I v >= 128 { v - 256 } E { v }
+}
+
+# Sign-extend i16 to i64
+F msgpack_sign_extend_i16(v: i64) -> i64 {
+    I v >= 32768 { v - 65536 } E { v }
+}
+
+# Sign-extend i32 to i64
+F msgpack_sign_extend_i32(v: i64) -> i64 {
+    I v >= 2147483648 { v - 4294967296 } E { v }
+}
+
+F msgpack_decode_value(r: i64) -> i64 {
+    b := msgpack_reader_read_byte(r)
+    I b < 0 { 0 }
+
+    # positive fixint: 0x00-0x7f
+    E I b <= 127 {
+        msgpack_int(b)
+    }
+    # fixmap: 0x80-0x8f
+    E I b >= 128 && b <= 143 {
+        count := b - 128
+        msgpack_decode_map_entries(r, count)
+    }
+    # fixarray: 0x90-0x9f
+    E I b >= 144 && b <= 159 {
+        count := b - 144
+        msgpack_decode_array_entries(r, count)
+    }
+    # fixstr: 0xa0-0xbf
+    E I b >= 160 && b <= 191 {
+        len := b - 160
+        msgpack_decode_str_data(r, len)
+    }
+    # nil: 0xc0
+    E I b == 192 {
+        msgpack_nil()
+    }
+    # false: 0xc2
+    E I b == 194 {
+        msgpack_bool(0)
+    }
+    # true: 0xc3
+    E I b == 195 {
+        msgpack_bool(1)
+    }
+    # bin 8: 0xc4
+    E I b == 196 {
+        len := msgpack_reader_read_byte(r)
+        msgpack_decode_bin_data(r, len)
+    }
+    # bin 16: 0xc5
+    E I b == 197 {
+        len := msgpack_reader_read_u16_be(r)
+        msgpack_decode_bin_data(r, len)
+    }
+    # bin 32: 0xc6
+    E I b == 198 {
+        len := msgpack_reader_read_u32_be(r)
+        msgpack_decode_bin_data(r, len)
+    }
+    # uint 8: 0xcc
+    E I b == 204 {
+        val := msgpack_reader_read_byte(r)
+        msgpack_int(val)
+    }
+    # uint 16: 0xcd
+    E I b == 205 {
+        val := msgpack_reader_read_u16_be(r)
+        msgpack_int(val)
+    }
+    # uint 32: 0xce
+    E I b == 206 {
+        val := msgpack_reader_read_u32_be(r)
+        msgpack_int(val)
+    }
+    # uint 64: 0xcf
+    E I b == 207 {
+        val := msgpack_reader_read_u64_be(r)
+        msgpack_int(val)
+    }
+    # int 8: 0xd0
+    E I b == 208 {
+        val := msgpack_reader_read_byte(r)
+        msgpack_int(msgpack_sign_extend_i8(val))
+    }
+    # int 16: 0xd1
+    E I b == 209 {
+        val := msgpack_reader_read_u16_be(r)
+        msgpack_int(msgpack_sign_extend_i16(val))
+    }
+    # int 32: 0xd2
+    E I b == 210 {
+        val := msgpack_reader_read_u32_be(r)
+        msgpack_int(msgpack_sign_extend_i32(val))
+    }
+    # int 64: 0xd3
+    E I b == 211 {
+        val := msgpack_reader_read_u64_be(r)
+        msgpack_int(val)
+    }
+    # str 8: 0xd9
+    E I b == 217 {
+        len := msgpack_reader_read_byte(r)
+        msgpack_decode_str_data(r, len)
+    }
+    # str 16: 0xda
+    E I b == 218 {
+        len := msgpack_reader_read_u16_be(r)
+        msgpack_decode_str_data(r, len)
+    }
+    # str 32: 0xdb
+    E I b == 219 {
+        len := msgpack_reader_read_u32_be(r)
+        msgpack_decode_str_data(r, len)
+    }
+    # array 16: 0xdc
+    E I b == 220 {
+        count := msgpack_reader_read_u16_be(r)
+        msgpack_decode_array_entries(r, count)
+    }
+    # array 32: 0xdd
+    E I b == 221 {
+        count := msgpack_reader_read_u32_be(r)
+        msgpack_decode_array_entries(r, count)
+    }
+    # map 16: 0xde
+    E I b == 222 {
+        count := msgpack_reader_read_u16_be(r)
+        msgpack_decode_map_entries(r, count)
+    }
+    # map 32: 0xdf
+    E I b == 223 {
+        count := msgpack_reader_read_u32_be(r)
+        msgpack_decode_map_entries(r, count)
+    }
+    # negative fixint: 0xe0-0xff (-32 to -1)
+    E I b >= 224 {
+        msgpack_int(b - 256)
+    }
+    E {
+        # Unsupported type
+        msgpack_nil()
+    }
+}
+
+F msgpack_decode_str_data(r: i64, len: i64) -> i64 {
+    I len < 0 { msgpack_nil() } E {
+        buf := malloc(len + 1)
+        msgpack_reader_read_bytes(r, buf, len)
+        store_byte(buf + len, 0)
+        v := malloc(24)
+        store_i64(v, 3)
+        store_i64(v + 8, buf)
+        store_i64(v + 16, len)
+        v
+    }
+}
+
+F msgpack_decode_bin_data(r: i64, len: i64) -> i64 {
+    I len < 0 { msgpack_nil() } E {
+        buf := malloc(len)
+        msgpack_reader_read_bytes(r, buf, len)
+        v := malloc(24)
+        store_i64(v, 4)
+        store_i64(v + 8, buf)
+        store_i64(v + 16, len)
+        v
+    }
+}
+
+F msgpack_decode_array_entries(r: i64, count: i64) -> i64 {
+    arr := msgpack_array_new()
+    msgpack_decode_array_items_rec(r, arr, count, 0)
+    v := malloc(24)
+    store_i64(v, 5)
+    store_i64(v + 8, arr)
+    store_i64(v + 16, load_i64(arr + 8))
+    v
+}
+
+F msgpack_decode_array_items_rec(r: i64, arr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        elem := msgpack_decode_value(r)
+        msgpack_array_push(arr, elem)
+        msgpack_decode_array_items_rec(r, arr, count, idx + 1)
+    }
+}
+
+F msgpack_decode_map_entries(r: i64, count: i64) -> i64 {
+    m := msgpack_map_new()
+    msgpack_decode_map_items_rec(r, m, count, 0)
+    v := malloc(24)
+    store_i64(v, 6)
+    store_i64(v + 8, m)
+    store_i64(v + 16, load_i64(m + 8))
+    v
+}
+
+F msgpack_decode_map_items_rec(r: i64, m: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        key_v := msgpack_decode_value(r)
+        value_v := msgpack_decode_value(r)
+        # Extract key string
+        I key_v != 0 && load_i64(key_v) == 3 {
+            key_ptr := load_i64(key_v + 8)
+            key_len := load_i64(key_v + 16)
+            msgpack_map_set(m, key_ptr, key_len, value_v)
+        }
+        msgpack_decode_map_items_rec(r, m, count, idx + 1)
+    }
+}
+
+# =====================================================
+# Public API
+# =====================================================
+
+# Encode a value tree to MessagePack binary format
+# Returns buffer struct: [data_ptr, len, cap]
+# Use msgpack_encoded_data() and msgpack_encoded_len() to access results
+F msgpack_encode(v: i64) -> i64 {
+    buf := msgpack_buf_new()
+    msgpack_encode_value(buf, v)
+    buf
+}
+
+# Get pointer to encoded data
+F msgpack_encoded_data(buf: i64) -> i64 {
+    load_i64(buf)
+}
+
+# Get length of encoded data
+F msgpack_encoded_len(buf: i64) -> i64 {
+    load_i64(buf + 8)
+}
+
+# Free encoded buffer
+F msgpack_encoded_free(buf: i64) -> i64 {
+    data := load_i64(buf)
+    I data != 0 { free(data) }
+    free(buf)
+    0
+}
+
+# Decode MessagePack binary data to a value tree
+F msgpack_decode(data: i64, len: i64) -> i64 {
+    r := msgpack_reader_new(data, len)
+    result := msgpack_decode_value(r)
+    free(r)
+    result
+}
+
+# Free a value (shallow free - does not recurse into arrays/maps)
+F msgpack_free(v: i64) -> i64 {
+    I v != 0 {
+        tag := load_i64(v)
+        data := load_i64(v + 8)
+        I (tag == 3 || tag == 4) && data != 0 { free(data) }
+        free(v)
+    }
+    0
+}
