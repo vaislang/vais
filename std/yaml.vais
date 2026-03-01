@@ -1,0 +1,1177 @@
+# YAML - Minimal YAML parser and generator
+# Supports: scalars (string, integer, boolean, null), sequences (- items),
+# mappings (key: value), nested structures via indentation
+# Uses recursive approach with explicit parser state passing
+#
+# YAML value types (discriminant):
+# 0 = null
+# 1 = bool (data: 0=false, 1=true)
+# 2 = integer (data: i64 value)
+# 3 = string (data: pointer, extra: length)
+# 4 = sequence (data: pointer to array struct)
+# 5 = mapping (data: pointer to table struct)
+
+# =====================================================
+# Helper functions
+# =====================================================
+
+F yaml_strlen_ptr(s: i64) -> i64 {
+    yaml_strlen_rec(s, 0)
+}
+
+F yaml_strlen_rec(s: i64, len: i64) -> i64 {
+    I load_byte(s + len) == 0 { len }
+    E { yaml_strlen_rec(s, len + 1) }
+}
+
+F yaml_init_mem(ptr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        store_i64(ptr + idx * 8, 0)
+        yaml_init_mem(ptr, count, idx + 1)
+    }
+}
+
+F yaml_hash_str(s: i64, len: i64) -> i64 {
+    yaml_hash_rec(s, len, 0, 5381)
+}
+
+F yaml_hash_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
+    I idx >= len { h } E {
+        c := load_byte(s + idx)
+        new_h := h * 33 + c
+        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        yaml_hash_rec(s, len, idx + 1, abs_h)
+    }
+}
+
+F yaml_str_eq(a: i64, b: i64, len: i64) -> i64 {
+    yaml_str_eq_rec(a, b, len, 0)
+}
+
+F yaml_str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 1 }
+    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    E { yaml_str_eq_rec(a, b, len, idx + 1) }
+}
+
+# =====================================================
+# Mapping (ordered hash map)
+# =====================================================
+
+F yaml_mapping_new() -> i64 {
+    cap := 16
+    buckets := malloc(cap * 8)
+    yaml_init_mem(buckets, cap, 0)
+    m := malloc(24)
+    store_i64(m, buckets)
+    store_i64(m + 8, 0)     # size
+    store_i64(m + 16, cap)
+    m
+}
+
+F yaml_mapping_set(m: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    h := yaml_hash_str(key, key_len) % cap
+
+    new_entry := malloc(32)
+    key_copy := malloc(key_len + 1)
+    memcpy(key_copy, key, key_len)
+    store_byte(key_copy + key_len, 0)
+
+    store_i64(new_entry, key_copy)
+    store_i64(new_entry + 8, key_len)
+    store_i64(new_entry + 16, value_ptr)
+    entry_ptr := load_i64(buckets + h * 8)
+    store_i64(new_entry + 24, entry_ptr)
+    store_i64(buckets + h * 8, new_entry)
+
+    size := load_i64(m + 8) + 1
+    store_i64(m + 8, size)
+    1
+}
+
+F yaml_mapping_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
+    I node == 0 { 0 } E {
+        nk := load_i64(node)
+        nkl := load_i64(node + 8)
+        I nkl == key_len && yaml_str_eq(nk, key, key_len) == 1 {
+            load_i64(node + 16)
+        } E {
+            yaml_mapping_get_rec(load_i64(node + 24), key, key_len)
+        }
+    }
+}
+
+F yaml_mapping_get(m: i64, key: i64, key_len: i64) -> i64 {
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    I cap == 0 { R 0 }
+    h := yaml_hash_str(key, key_len) % cap
+    node := load_i64(buckets + h * 8)
+    yaml_mapping_get_rec(node, key, key_len)
+}
+
+# =====================================================
+# Sequence (dynamic array)
+# =====================================================
+
+F yaml_seq_new() -> i64 {
+    data := malloc(64)
+    seq := malloc(24)
+    store_i64(seq, data)
+    store_i64(seq + 8, 0)   # len
+    store_i64(seq + 16, 8)  # cap
+    seq
+}
+
+F yaml_seq_push(seq: i64, value_ptr: i64) -> i64 {
+    seq_len := load_i64(seq + 8)
+    seq_cap := load_i64(seq + 16)
+    I seq_len >= seq_cap {
+        old_data := load_i64(seq)
+        new_cap := seq_cap * 2
+        new_data := malloc(new_cap * 8)
+        memcpy(new_data, old_data, seq_len * 8)
+        free(old_data)
+        store_i64(seq, new_data)
+        store_i64(seq + 16, new_cap)
+    }
+    data := load_i64(seq)
+    store_i64(data + seq_len * 8, value_ptr)
+    store_i64(seq + 8, seq_len + 1)
+    seq_len + 1
+}
+
+# =====================================================
+# Value constructors
+# =====================================================
+
+F yaml_null() -> i64 {
+    v := malloc(24)
+    store_i64(v, 0)
+    store_i64(v + 8, 0)
+    store_i64(v + 16, 0)
+    v
+}
+
+F yaml_bool(b: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 1)
+    store_i64(v + 8, b)
+    store_i64(v + 16, 0)
+    v
+}
+
+F yaml_int(n: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 2)
+    store_i64(v + 8, n)
+    store_i64(v + 16, 0)
+    v
+}
+
+F yaml_string(s: i64, len: i64) -> i64 {
+    buf := malloc(len + 1)
+    memcpy(buf, s, len)
+    store_byte(buf + len, 0)
+    v := malloc(24)
+    store_i64(v, 3)
+    store_i64(v + 8, buf)
+    store_i64(v + 16, len)
+    v
+}
+
+F yaml_seq_value(seq: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 4)
+    store_i64(v + 8, seq)
+    store_i64(v + 16, load_i64(seq + 8))
+    v
+}
+
+F yaml_mapping_value(m: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 5)
+    store_i64(v + 8, m)
+    store_i64(v + 16, load_i64(m + 8))
+    v
+}
+
+# =====================================================
+# Parser state: [input_ptr, pos, len]
+# =====================================================
+
+F yaml_parser_new(input: i64, len: i64) -> i64 {
+    p := malloc(24)
+    store_i64(p, input)
+    store_i64(p + 8, 0)
+    store_i64(p + 16, len)
+    p
+}
+
+F yaml_peek(p: i64) -> i64 {
+    pos := load_i64(p + 8)
+    len := load_i64(p + 16)
+    I pos >= len { 0 } E {
+        input := load_i64(p)
+        load_byte(input + pos)
+    }
+}
+
+F yaml_advance(p: i64) -> i64 {
+    pos := load_i64(p + 8)
+    len := load_i64(p + 16)
+    I pos < len {
+        input := load_i64(p)
+        c := load_byte(input + pos)
+        store_i64(p + 8, pos + 1)
+        c
+    } E { 0 }
+}
+
+F yaml_pos(p: i64) -> i64 {
+    load_i64(p + 8)
+}
+
+# Count leading spaces at current position
+F yaml_count_indent(p: i64) -> i64 {
+    yaml_count_indent_rec(p, 0)
+}
+
+F yaml_count_indent_rec(p: i64, count: i64) -> i64 {
+    pos := load_i64(p + 8) + count
+    len := load_i64(p + 16)
+    I pos >= len { count } E {
+        input := load_i64(p)
+        c := load_byte(input + pos)
+        I c == 32 { yaml_count_indent_rec(p, count + 1) }
+        E { count }
+    }
+}
+
+# Skip spaces only
+F yaml_skip_spaces(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 32 {
+        yaml_advance(p)
+        yaml_skip_spaces(p)
+    }
+    0
+}
+
+# Skip to end of line
+F yaml_skip_to_eol(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 0 || c == 10 { 0 }
+    E {
+        yaml_advance(p)
+        yaml_skip_to_eol(p)
+    }
+}
+
+# Skip comment (# to end of line)
+F yaml_skip_comment(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 35 { yaml_skip_to_eol(p) }
+    0
+}
+
+# Skip empty lines and comment lines
+F yaml_skip_blank_lines(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 10 {
+        yaml_advance(p)
+        yaml_skip_blank_lines(p)
+    } E I c == 13 {
+        yaml_advance(p)
+        yaml_skip_blank_lines(p)
+    } E I c == 35 {
+        yaml_skip_to_eol(p)
+        yaml_skip_blank_lines(p)
+    }
+    0
+}
+
+# =====================================================
+# Parse scalar values
+# =====================================================
+
+# Check if a string matches "null", "true", "false", or is a number
+F yaml_is_digit(c: i64) -> i64 {
+    I c >= 48 && c <= 57 { 1 } E { 0 }
+}
+
+# Read an unquoted scalar until end of line or special chars
+F yaml_parse_unquoted_scalar(p: i64) -> i64 {
+    buf := malloc(256)
+    len := yaml_read_scalar_chars(p, buf, 0)
+    # Trim trailing whitespace
+    len = yaml_rtrim(buf, len)
+    store_byte(buf + len, 0)
+
+    # Check for special values
+    I len == 4 && load_byte(buf) == 116 && load_byte(buf+1) == 114 &&
+      load_byte(buf+2) == 117 && load_byte(buf+3) == 101 {
+        free(buf)
+        R yaml_bool(1)   # "true"
+    }
+    I len == 5 && load_byte(buf) == 102 && load_byte(buf+1) == 97 &&
+      load_byte(buf+2) == 108 && load_byte(buf+3) == 115 && load_byte(buf+4) == 101 {
+        free(buf)
+        R yaml_bool(0)   # "false"
+    }
+    I len == 4 && load_byte(buf) == 110 && load_byte(buf+1) == 117 &&
+      load_byte(buf+2) == 108 && load_byte(buf+3) == 108 {
+        free(buf)
+        R yaml_null()    # "null"
+    }
+    I len == 1 && load_byte(buf) == 126 {
+        free(buf)
+        R yaml_null()    # "~" (YAML null)
+    }
+
+    # Try to parse as integer
+    first := load_byte(buf)
+    is_number := 1
+    start := 0
+    I first == 45 || first == 43 {
+        I len == 1 { is_number = 0 }
+        E { start = 1 }
+    }
+    I is_number == 1 {
+        i := start
+        L {
+            I i >= len { B 0 }
+            c := load_byte(buf + i)
+            I yaml_is_digit(c) == 0 {
+                is_number = 0
+                B 0
+            }
+            i = i + 1
+        }
+    }
+    I is_number == 1 && len > 0 {
+        val := yaml_parse_int_from_buf(buf, len)
+        free(buf)
+        R yaml_int(val)
+    }
+
+    # It's a string
+    yaml_string(buf, len)
+}
+
+F yaml_read_scalar_chars(p: i64, buf: i64, len: i64) -> i64 {
+    c := yaml_peek(p)
+    # Stop at end of input, newline, or comment (space + #)
+    I c == 0 || c == 10 || c == 13 { len }
+    E I c == 35 && len > 0 && load_byte(buf + len - 1) == 32 { len }
+    E {
+        yaml_advance(p)
+        store_byte(buf + len, c)
+        yaml_read_scalar_chars(p, buf, len + 1)
+    }
+}
+
+F yaml_rtrim(buf: i64, len: i64) -> i64 {
+    I len <= 0 { 0 }
+    E {
+        c := load_byte(buf + len - 1)
+        I c == 32 || c == 9 { yaml_rtrim(buf, len - 1) }
+        E { len }
+    }
+}
+
+F yaml_parse_int_from_buf(buf: i64, len: i64) -> i64 {
+    first := load_byte(buf)
+    is_neg := I first == 45 { 1 } E { 0 }
+    start := I first == 45 || first == 43 { 1 } E { 0 }
+    val := yaml_parse_buf_digits(buf, start, len, 0)
+    I is_neg == 1 { 0 - val } E { val }
+}
+
+F yaml_parse_buf_digits(buf: i64, idx: i64, len: i64, acc: i64) -> i64 {
+    I idx >= len { acc }
+    E {
+        c := load_byte(buf + idx)
+        yaml_parse_buf_digits(buf, idx + 1, len, acc * 10 + (c - 48))
+    }
+}
+
+# Parse a quoted string
+F yaml_parse_quoted_string(p: i64) -> i64 {
+    quote_char := yaml_advance(p)  # skip opening quote
+    buf := malloc(256)
+    len := yaml_read_quoted_chars(p, buf, 0, quote_char)
+    store_byte(buf + len, 0)
+    yaml_string(buf, len)
+}
+
+F yaml_read_quoted_chars(p: i64, buf: i64, len: i64, quote: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 0 { len }
+    E I c == quote {
+        yaml_advance(p)
+        len
+    } E I c == 92 && quote == 34 {   # backslash escape in double-quoted
+        yaml_advance(p)
+        esc := yaml_advance(p)
+        ch := I esc == 110 { 10 }     # \n
+            E I esc == 116 { 9 }       # \t
+            E I esc == 114 { 13 }      # \r
+            E I esc == 92 { 92 }       # \\
+            E I esc == 34 { 34 }       # \"
+            E { esc }
+        store_byte(buf + len, ch)
+        yaml_read_quoted_chars(p, buf, len + 1, quote)
+    } E {
+        yaml_advance(p)
+        store_byte(buf + len, c)
+        yaml_read_quoted_chars(p, buf, len + 1, quote)
+    }
+}
+
+# =====================================================
+# Main parser — indentation-based
+# =====================================================
+
+# Parse a value at the current position, given the expected indent level
+F yaml_parse_value(p: i64, indent: i64) -> i64 {
+    yaml_skip_blank_lines(p)
+    c := yaml_peek(p)
+    I c == 0 { R yaml_null() }
+
+    # Check if this is a flow sequence [...]
+    I c == 91 { R yaml_parse_flow_seq(p) }
+    # Check if this is a flow mapping {...}
+    I c == 123 { R yaml_parse_flow_mapping(p) }
+    # Quoted string
+    I c == 34 || c == 39 { R yaml_parse_quoted_string(p) }
+
+    # Check if this is a block sequence (- item)
+    cur_indent := yaml_count_indent(p)
+    # Peek ahead past indent to check for '-'
+    save_pos := yaml_pos(p)
+    yaml_skip_spaces(p)
+    c = yaml_peek(p)
+
+    I c == 45 {
+        # Check next char: if space or newline, it's a sequence item
+        next_pos := load_i64(p + 8) + 1
+        next_len := load_i64(p + 16)
+        next_c := I next_pos < next_len {
+            input := load_i64(p)
+            load_byte(input + next_pos)
+        } E { 0 }
+        I next_c == 32 || next_c == 10 || next_c == 0 {
+            store_i64(p + 8, save_pos)
+            R yaml_parse_block_seq(p, cur_indent)
+        }
+    }
+
+    # Check if this is a block mapping (key: value)
+    store_i64(p + 8, save_pos)
+    yaml_skip_spaces(p)
+    # Look for key: pattern (scan for colon followed by space or newline)
+    is_mapping := yaml_check_mapping_line(p)
+    store_i64(p + 8, save_pos)
+
+    I is_mapping == 1 {
+        yaml_parse_block_mapping(p, cur_indent)
+    } E {
+        yaml_skip_spaces(p)
+        yaml_parse_unquoted_scalar(p)
+    }
+}
+
+# Check if current line contains a "key:" pattern
+F yaml_check_mapping_line(p: i64) -> i64 {
+    save := yaml_pos(p)
+    result := yaml_scan_for_colon(p)
+    store_i64(p + 8, save)
+    result
+}
+
+F yaml_scan_for_colon(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 0 || c == 10 || c == 13 { 0 }
+    E I c == 58 {   # ':'
+        yaml_advance(p)
+        next := yaml_peek(p)
+        I next == 32 || next == 10 || next == 0 { 1 }
+        E { yaml_scan_for_colon(p) }
+    }
+    E I c == 34 || c == 39 {
+        # Skip quoted string
+        yaml_parse_quoted_string(p)
+        yaml_scan_for_colon(p)
+    }
+    E {
+        yaml_advance(p)
+        yaml_scan_for_colon(p)
+    }
+}
+
+# =====================================================
+# Block sequence parser
+# =====================================================
+
+F yaml_parse_block_seq(p: i64, base_indent: i64) -> i64 {
+    seq := yaml_seq_new()
+    yaml_parse_seq_items(p, seq, base_indent)
+    yaml_seq_value(seq)
+}
+
+F yaml_parse_seq_items(p: i64, seq: i64, base_indent: i64) -> i64 {
+    yaml_skip_blank_lines(p)
+    c := yaml_peek(p)
+    I c == 0 { R 0 }
+
+    cur_indent := yaml_count_indent(p)
+    I cur_indent != base_indent { R 0 }   # different indent = end of sequence
+
+    # Skip indent spaces
+    yaml_skip_spaces(p)
+    c = yaml_peek(p)
+    I c != 45 { R 0 }   # not a '-'
+
+    yaml_advance(p)  # skip '-'
+    c = yaml_peek(p)
+    I c == 32 { yaml_advance(p) }  # skip space after '-'
+
+    # Parse the value (could be on same line or next line with deeper indent)
+    c = yaml_peek(p)
+    I c == 10 || c == 13 || c == 0 {
+        # Value is on next line(s) with deeper indent
+        yaml_skip_blank_lines(p)
+        value := yaml_parse_value(p, base_indent + 2)
+        yaml_seq_push(seq, value)
+    } E {
+        value := yaml_parse_value(p, base_indent + 2)
+        yaml_seq_push(seq, value)
+    }
+
+    # Skip to end of line
+    yaml_skip_spaces(p)
+    yaml_skip_comment(p)
+    c = yaml_peek(p)
+    I c == 10 { yaml_advance(p) }
+
+    # Try next item
+    yaml_parse_seq_items(p, seq, base_indent)
+}
+
+# =====================================================
+# Block mapping parser
+# =====================================================
+
+F yaml_parse_block_mapping(p: i64, base_indent: i64) -> i64 {
+    m := yaml_mapping_new()
+    yaml_parse_mapping_pairs(p, m, base_indent)
+    yaml_mapping_value(m)
+}
+
+F yaml_parse_mapping_pairs(p: i64, m: i64, base_indent: i64) -> i64 {
+    yaml_skip_blank_lines(p)
+    c := yaml_peek(p)
+    I c == 0 { R 0 }
+
+    cur_indent := yaml_count_indent(p)
+    I cur_indent != base_indent { R 0 }   # different indent = end of mapping
+
+    yaml_skip_spaces(p)
+
+    # Parse key
+    c = yaml_peek(p)
+    key_buf := malloc(256)
+    key_len := 0
+
+    I c == 34 || c == 39 {
+        # Quoted key
+        v := yaml_parse_quoted_string(p)
+        key_data := load_i64(v + 8)
+        key_len = load_i64(v + 16)
+        memcpy(key_buf, key_data, key_len)
+        store_byte(key_buf + key_len, 0)
+    } E {
+        # Bare key: read until ':'
+        key_len = yaml_read_key_chars(p, key_buf, 0)
+        key_len = yaml_rtrim(key_buf, key_len)
+        store_byte(key_buf + key_len, 0)
+    }
+
+    # Expect ':'
+    yaml_advance(p)  # skip ':'
+    yaml_skip_spaces(p)
+
+    # Parse value
+    c = yaml_peek(p)
+    I c == 10 || c == 13 || c == 0 {
+        # Value on next line(s)
+        I c == 10 { yaml_advance(p) }
+        yaml_skip_blank_lines(p)
+        value := yaml_parse_value(p, base_indent + 2)
+        yaml_mapping_set(m, key_buf, key_len, value)
+    } E {
+        value := yaml_parse_value(p, base_indent + 2)
+        yaml_mapping_set(m, key_buf, key_len, value)
+    }
+
+    free(key_buf)
+
+    # Skip rest of line
+    yaml_skip_spaces(p)
+    yaml_skip_comment(p)
+    c = yaml_peek(p)
+    I c == 10 { yaml_advance(p) }
+
+    # Try next pair
+    yaml_parse_mapping_pairs(p, m, base_indent)
+}
+
+F yaml_read_key_chars(p: i64, buf: i64, len: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 0 || c == 10 || c == 58 { len }   # stop at newline or ':'
+    E {
+        yaml_advance(p)
+        store_byte(buf + len, c)
+        yaml_read_key_chars(p, buf, len + 1)
+    }
+}
+
+# =====================================================
+# Flow sequence [...] and flow mapping {...}
+# =====================================================
+
+F yaml_parse_flow_seq(p: i64) -> i64 {
+    yaml_advance(p)  # '['
+    yaml_skip_flow_ws(p)
+    seq := yaml_seq_new()
+    I yaml_peek(p) == 93 {   # ']'
+        yaml_advance(p)
+    } E {
+        yaml_parse_flow_seq_items(p, seq)
+    }
+    yaml_seq_value(seq)
+}
+
+F yaml_parse_flow_seq_items(p: i64, seq: i64) -> i64 {
+    yaml_skip_flow_ws(p)
+    value := yaml_parse_flow_value(p)
+    yaml_seq_push(seq, value)
+    yaml_skip_flow_ws(p)
+    c := yaml_peek(p)
+    I c == 44 {    # ','
+        yaml_advance(p)
+        yaml_skip_flow_ws(p)
+        I yaml_peek(p) == 93 {
+            yaml_advance(p)
+        } E {
+            yaml_parse_flow_seq_items(p, seq)
+        }
+    } E I c == 93 {
+        yaml_advance(p)
+    }
+    0
+}
+
+F yaml_parse_flow_mapping(p: i64) -> i64 {
+    yaml_advance(p)  # '{'
+    yaml_skip_flow_ws(p)
+    m := yaml_mapping_new()
+    I yaml_peek(p) == 125 {   # '}'
+        yaml_advance(p)
+    } E {
+        yaml_parse_flow_mapping_items(p, m)
+    }
+    yaml_mapping_value(m)
+}
+
+F yaml_parse_flow_mapping_items(p: i64, m: i64) -> i64 {
+    yaml_skip_flow_ws(p)
+    # Parse key
+    key_buf := malloc(256)
+    key_len := 0
+    c := yaml_peek(p)
+    I c == 34 || c == 39 {
+        v := yaml_parse_quoted_string(p)
+        key_data := load_i64(v + 8)
+        key_len = load_i64(v + 16)
+        memcpy(key_buf, key_data, key_len)
+        store_byte(key_buf + key_len, 0)
+    } E {
+        key_len = yaml_read_flow_key(p, key_buf, 0)
+        key_len = yaml_rtrim(key_buf, key_len)
+        store_byte(key_buf + key_len, 0)
+    }
+
+    yaml_skip_flow_ws(p)
+    yaml_advance(p)  # ':'
+    yaml_skip_flow_ws(p)
+
+    value := yaml_parse_flow_value(p)
+    yaml_mapping_set(m, key_buf, key_len, value)
+    free(key_buf)
+
+    yaml_skip_flow_ws(p)
+    c = yaml_peek(p)
+    I c == 44 {
+        yaml_advance(p)
+        yaml_skip_flow_ws(p)
+        I yaml_peek(p) == 125 {
+            yaml_advance(p)
+        } E {
+            yaml_parse_flow_mapping_items(p, m)
+        }
+    } E I c == 125 {
+        yaml_advance(p)
+    }
+    0
+}
+
+F yaml_read_flow_key(p: i64, buf: i64, len: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 0 || c == 58 || c == 125 || c == 44 { len }
+    E {
+        yaml_advance(p)
+        store_byte(buf + len, c)
+        yaml_read_flow_key(p, buf, len + 1)
+    }
+}
+
+F yaml_parse_flow_value(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 91 { yaml_parse_flow_seq(p) }
+    E I c == 123 { yaml_parse_flow_mapping(p) }
+    E I c == 34 || c == 39 { yaml_parse_quoted_string(p) }
+    E { yaml_parse_flow_scalar(p) }
+}
+
+F yaml_parse_flow_scalar(p: i64) -> i64 {
+    buf := malloc(256)
+    len := yaml_read_flow_scalar_chars(p, buf, 0)
+    len = yaml_rtrim(buf, len)
+    store_byte(buf + len, 0)
+
+    # Check special values
+    I len == 4 && load_byte(buf) == 116 && load_byte(buf+1) == 114 &&
+      load_byte(buf+2) == 117 && load_byte(buf+3) == 101 {
+        free(buf)
+        R yaml_bool(1)
+    }
+    I len == 5 && load_byte(buf) == 102 && load_byte(buf+1) == 97 &&
+      load_byte(buf+2) == 108 && load_byte(buf+3) == 115 && load_byte(buf+4) == 101 {
+        free(buf)
+        R yaml_bool(0)
+    }
+    I len == 4 && load_byte(buf) == 110 && load_byte(buf+1) == 117 &&
+      load_byte(buf+2) == 108 && load_byte(buf+3) == 108 {
+        free(buf)
+        R yaml_null()
+    }
+
+    # Try integer
+    first := load_byte(buf)
+    is_number := 1
+    start := 0
+    I first == 45 || first == 43 {
+        I len == 1 { is_number = 0 }
+        E { start = 1 }
+    }
+    I is_number == 1 {
+        i := start
+        L {
+            I i >= len { B 0 }
+            I yaml_is_digit(load_byte(buf + i)) == 0 {
+                is_number = 0
+                B 0
+            }
+            i = i + 1
+        }
+    }
+    I is_number == 1 && len > 0 {
+        val := yaml_parse_int_from_buf(buf, len)
+        free(buf)
+        R yaml_int(val)
+    }
+
+    yaml_string(buf, len)
+}
+
+F yaml_read_flow_scalar_chars(p: i64, buf: i64, len: i64) -> i64 {
+    c := yaml_peek(p)
+    # Stop at flow indicators: , ] }
+    I c == 0 || c == 44 || c == 93 || c == 125 || c == 10 { len }
+    E {
+        yaml_advance(p)
+        store_byte(buf + len, c)
+        yaml_read_flow_scalar_chars(p, buf, len + 1)
+    }
+}
+
+# Skip whitespace including newlines (for flow collections)
+F yaml_skip_flow_ws(p: i64) -> i64 {
+    c := yaml_peek(p)
+    I c == 32 || c == 9 || c == 10 || c == 13 {
+        yaml_advance(p)
+        yaml_skip_flow_ws(p)
+    }
+    0
+}
+
+# =====================================================
+# Stringify functions
+# =====================================================
+
+F yaml_stringify(v: i64) -> i64 {
+    yaml_stringify_rec(v, 0)
+}
+
+F yaml_stringify_rec(v: i64, indent: i64) -> i64 {
+    I v == 0 { R yaml_make_str_null() }
+    tag := load_i64(v)
+    data := load_i64(v + 8)
+    extra := load_i64(v + 16)
+
+    I tag == 0 { yaml_make_str_null() }
+    E I tag == 1 {
+        I data == 0 { yaml_make_str_false() }
+        E { yaml_make_str_true() }
+    }
+    E I tag == 2 { yaml_stringify_int(data) }
+    E I tag == 3 { yaml_stringify_str(data, extra) }
+    E I tag == 4 { yaml_stringify_seq(data, indent) }
+    E I tag == 5 { yaml_stringify_mapping(data, indent) }
+    E { yaml_make_str_null() }
+}
+
+F yaml_make_str_null() -> i64 {
+    buf := malloc(5)
+    store_byte(buf, 110)
+    store_byte(buf + 1, 117)
+    store_byte(buf + 2, 108)
+    store_byte(buf + 3, 108)
+    store_byte(buf + 4, 0)
+    buf
+}
+
+F yaml_make_str_true() -> i64 {
+    buf := malloc(5)
+    store_byte(buf, 116)
+    store_byte(buf + 1, 114)
+    store_byte(buf + 2, 117)
+    store_byte(buf + 3, 101)
+    store_byte(buf + 4, 0)
+    buf
+}
+
+F yaml_make_str_false() -> i64 {
+    buf := malloc(6)
+    store_byte(buf, 102)
+    store_byte(buf + 1, 97)
+    store_byte(buf + 2, 108)
+    store_byte(buf + 3, 115)
+    store_byte(buf + 4, 101)
+    store_byte(buf + 5, 0)
+    buf
+}
+
+F yaml_stringify_int(n: i64) -> i64 {
+    I n == 0 {
+        buf := malloc(2)
+        store_byte(buf, 48)
+        store_byte(buf + 1, 0)
+        R buf
+    }
+    buf := malloc(32)
+    val := I n < 0 { 0 - n } E { n }
+    pos := yaml_write_digits(buf, val, 0)
+    final_pos := I n < 0 {
+        yaml_shift_right(buf, pos)
+        store_byte(buf, 45)
+        pos + 1
+    } E { pos }
+    store_byte(buf + final_pos, 0)
+    buf
+}
+
+F yaml_write_digits(buf: i64, n: i64, pos: i64) -> i64 {
+    I n == 0 { pos } E {
+        new_pos := yaml_write_digits(buf, n / 10, pos)
+        store_byte(buf + new_pos, 48 + (n % 10))
+        new_pos + 1
+    }
+}
+
+F yaml_shift_right(buf: i64, len: i64) -> i64 {
+    I len <= 0 { 0 } E {
+        store_byte(buf + len, load_byte(buf + len - 1))
+        yaml_shift_right(buf, len - 1)
+    }
+}
+
+F yaml_stringify_str(s: i64, len: i64) -> i64 {
+    # Check if quoting is needed (contains special chars)
+    needs_quote := yaml_needs_quoting(s, len)
+    I needs_quote == 1 {
+        buf := malloc(len * 2 + 3)
+        store_byte(buf, 34)   # '"'
+        pos := yaml_write_quoted_chars(buf, s, len, 0, 1)
+        store_byte(buf + pos, 34)
+        store_byte(buf + pos + 1, 0)
+        buf
+    } E {
+        buf := malloc(len + 1)
+        memcpy(buf, s, len)
+        store_byte(buf + len, 0)
+        buf
+    }
+}
+
+F yaml_needs_quoting(s: i64, len: i64) -> i64 {
+    I len == 0 { R 1 }
+    # Check first char for special chars
+    first := load_byte(s)
+    I first == 45 || first == 91 || first == 123 || first == 42 ||
+      first == 38 || first == 33 || first == 124 || first == 62 ||
+      first == 39 || first == 34 || first == 37 || first == 64 { R 1 }
+    # Check for colons followed by space
+    yaml_check_special_chars(s, len, 0)
+}
+
+F yaml_check_special_chars(s: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 0 }
+    E {
+        c := load_byte(s + idx)
+        I c == 58 && idx + 1 < len && load_byte(s + idx + 1) == 32 { 1 }
+        E I c == 10 || c == 13 || c == 9 { 1 }
+        E { yaml_check_special_chars(s, len, idx + 1) }
+    }
+}
+
+F yaml_write_quoted_chars(buf: i64, s: i64, len: i64, idx: i64, pos: i64) -> i64 {
+    I idx >= len { pos } E {
+        c := load_byte(s + idx)
+        I c == 34 || c == 92 {
+            store_byte(buf + pos, 92)
+            store_byte(buf + pos + 1, c)
+            yaml_write_quoted_chars(buf, s, len, idx + 1, pos + 2)
+        } E I c == 10 {
+            store_byte(buf + pos, 92)
+            store_byte(buf + pos + 1, 110)
+            yaml_write_quoted_chars(buf, s, len, idx + 1, pos + 2)
+        } E {
+            store_byte(buf + pos, c)
+            yaml_write_quoted_chars(buf, s, len, idx + 1, pos + 1)
+        }
+    }
+}
+
+F yaml_stringify_seq(seq: i64, indent: i64) -> i64 {
+    seq_data := load_i64(seq)
+    seq_len := load_i64(seq + 8)
+    I seq_len == 0 {
+        buf := malloc(3)
+        store_byte(buf, 91)   # [
+        store_byte(buf + 1, 93)  # ]
+        store_byte(buf + 2, 0)
+        R buf
+    }
+    buf := malloc(8192)
+    pos := yaml_write_seq_items(buf, seq_data, seq_len, 0, 0, indent)
+    store_byte(buf + pos, 0)
+    buf
+}
+
+F yaml_write_seq_items(buf: i64, data: i64, len: i64, idx: i64, pos: i64, indent: i64) -> i64 {
+    I idx >= len { pos } E {
+        # Write newline + indent + "- "
+        new_pos := I idx > 0 {
+            store_byte(buf + pos, 10)
+            pos + 1
+        } E { pos }
+        new_pos = yaml_write_indent(buf, new_pos, indent)
+        store_byte(buf + new_pos, 45)      # '-'
+        store_byte(buf + new_pos + 1, 32)  # ' '
+        new_pos = new_pos + 2
+
+        elem := load_i64(data + idx * 8)
+        elem_str := yaml_stringify_rec(elem, indent + 2)
+        elem_len := yaml_strlen_ptr(elem_str)
+        memcpy(buf + new_pos, elem_str, elem_len)
+        free(elem_str)
+
+        yaml_write_seq_items(buf, data, len, idx + 1, new_pos + elem_len, indent)
+    }
+}
+
+F yaml_write_indent(buf: i64, pos: i64, indent: i64) -> i64 {
+    yaml_write_indent_rec(buf, pos, 0, indent)
+}
+
+F yaml_write_indent_rec(buf: i64, pos: i64, i: i64, indent: i64) -> i64 {
+    I i >= indent { pos } E {
+        store_byte(buf + pos, 32)
+        yaml_write_indent_rec(buf, pos + 1, i + 1, indent)
+    }
+}
+
+F yaml_stringify_mapping(m: i64, indent: i64) -> i64 {
+    buckets := load_i64(m)
+    cap := load_i64(m + 16)
+    size := load_i64(m + 8)
+    I size == 0 {
+        buf := malloc(3)
+        store_byte(buf, 123)
+        store_byte(buf + 1, 125)
+        store_byte(buf + 2, 0)
+        R buf
+    }
+    buf := malloc(8192)
+    result := yaml_write_map_buckets(buf, buckets, cap, 0, 0, indent, 1)
+    pos := load_i64(result)
+    free(result)
+    store_byte(buf + pos, 0)
+    buf
+}
+
+F yaml_write_map_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64, indent: i64, first: i64) -> i64 {
+    result := malloc(16)
+    I idx >= cap {
+        store_i64(result, pos)
+        store_i64(result + 8, first)
+        result
+    } E {
+        node := load_i64(buckets + idx * 8)
+        inner := yaml_write_map_entries(buf, node, pos, indent, first)
+        inner_pos := load_i64(inner)
+        inner_first := load_i64(inner + 8)
+        free(inner)
+        free(result)
+        yaml_write_map_buckets(buf, buckets, cap, idx + 1, inner_pos, indent, inner_first)
+    }
+}
+
+F yaml_write_map_entries(buf: i64, node: i64, pos: i64, indent: i64, first: i64) -> i64 {
+    result := malloc(16)
+    I node == 0 {
+        store_i64(result, pos)
+        store_i64(result + 8, first)
+        result
+    } E {
+        new_pos := I first == 0 {
+            store_byte(buf + pos, 10)
+            pos + 1
+        } E { pos }
+        new_pos = yaml_write_indent(buf, new_pos, indent)
+
+        key := load_i64(node)
+        key_len := load_i64(node + 8)
+        memcpy(buf + new_pos, key, key_len)
+        new_pos = new_pos + key_len
+        store_byte(buf + new_pos, 58)      # ':'
+        store_byte(buf + new_pos + 1, 32)  # ' '
+        new_pos = new_pos + 2
+
+        val := load_i64(node + 16)
+        val_str := yaml_stringify_rec(val, indent + 2)
+        val_len := yaml_strlen_ptr(val_str)
+        memcpy(buf + new_pos, val_str, val_len)
+        free(val_str)
+
+        next := load_i64(node + 24)
+        free(result)
+        yaml_write_map_entries(buf, next, new_pos + val_len, indent, 0)
+    }
+}
+
+# =====================================================
+# Public API
+# =====================================================
+
+# Parse YAML string, returns value pointer
+F yaml_parse(input: i64) -> i64 {
+    len := yaml_strlen_ptr(input)
+    p := yaml_parser_new(input, len)
+    result := yaml_parse_value(p, 0)
+    free(p)
+    result
+}
+
+# Convert YAML value to string
+F yaml_to_string(v: i64) -> i64 {
+    yaml_stringify(v)
+}
+
+# Get type tag (0=null, 1=bool, 2=int, 3=string, 4=seq, 5=mapping)
+F yaml_type(v: i64) -> i64 {
+    I v == 0 { 0 } E { load_i64(v) }
+}
+
+# Get integer value
+F yaml_get_int(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 2 { load_i64(v + 8) }
+    E { 0 }
+}
+
+# Get boolean value
+F yaml_get_bool(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 1 { load_i64(v + 8) }
+    E { 0 }
+}
+
+# Get string data pointer
+F yaml_get_string(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 3 { load_i64(v + 8) }
+    E { 0 }
+}
+
+# Get string length
+F yaml_get_string_len(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 3 { load_i64(v + 16) }
+    E { 0 }
+}
+
+# Get sequence length
+F yaml_seq_len(v: i64) -> i64 {
+    I v == 0 || load_i64(v) != 4 { 0 }
+    E { load_i64(load_i64(v + 8) + 8) }
+}
+
+# Get sequence element at index
+F yaml_seq_get(v: i64, index: i64) -> i64 {
+    I v == 0 || load_i64(v) != 4 { R 0 }
+    seq := load_i64(v + 8)
+    seq_data := load_i64(seq)
+    seq_len := load_i64(seq + 8)
+    I index < 0 || index >= seq_len { 0 }
+    E { load_i64(seq_data + index * 8) }
+}
+
+# Get mapping value by key
+F yaml_mapping_get_by_key(v: i64, key: i64, key_len: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 { R 0 }
+    m := load_i64(v + 8)
+    yaml_mapping_get(m, key, key_len)
+}
+
+# Get mapping size
+F yaml_mapping_size(v: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 { 0 }
+    E { load_i64(load_i64(v + 8) + 8) }
+}
+
+# Free a YAML value (shallow)
+F yaml_free(v: i64) -> i64 {
+    I v != 0 {
+        tag := load_i64(v)
+        data := load_i64(v + 8)
+        I tag == 3 && data != 0 { free(data) }
+        free(v)
+    }
+    0
+}

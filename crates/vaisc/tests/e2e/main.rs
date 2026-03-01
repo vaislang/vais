@@ -46,3 +46,4 @@ mod phase47_struct_enum;
 mod phase47_trait_impl;
 mod phase67_monomorphization;
 mod phase71_type_system;
+mod phase74_stdlib;

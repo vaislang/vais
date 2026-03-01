@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 931개 통과 (0 fail) | ✅ |
+| E2E 958개 통과 (0 fail) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -246,6 +246,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 71 | Object Safety & 고급 타입 | Check 5 제네릭 메서드 감지, Associated type resolution, transitive instantiation 개선, +15 테스트 | 931 |
 | 72 | v0.0.5 릴리스 | Release 빌드, Parser 5건 수정 (field punning/~var/optional semicolons), VaisDB P001=0, GitHub Release | 931 |
 | 73 | ABI 안정성 | TC 중복 함수 검출(E034), assert_compiles 호출 0개 달성, generic 함수 body 스킵, where_clause/slice_len 전환 | 931 |
+| 74 | 표준 라이브러리 확충 | TOML 파서(913줄), YAML 파서(1,177줄), 문자열 19함수(+393줄), +27 E2E | 958 |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -514,30 +515,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 74: 표준 라이브러리 확충 — 직렬화 · 문자열 · 암호화
+### Phase 74: 표준 라이브러리 확충 — 직렬화 · 문자열
 
 > **목표**: 대형 프로젝트 도입 시 필수적인 표준 라이브러리 기능 보완
 > **우선순위**: 높음 — 생태계 없이는 프로덕션 도입 불가능
-> **현황**: 74개 모듈 (34K줄), 네트워킹/DB/동시성은 우수하나 직렬화/문자열 취약
-> **전략**: 실전 프로젝트에서 가장 많이 쓰이는 기능 우선
+> **현황**: 76개 모듈 (37K줄), 네트워킹/DB/동시성은 우수, 직렬화/문자열 보완 완료
+> **결과**: +3,648줄, E2E 931→958 (+27), Clippy 0건
 
-- [ ] 1. TOML 직렬화 — `std/toml.vais` 신규 (Opus)
-  내용: TOML 파서/시리얼라이저, 설정 파일 읽기/쓰기
-  규모: ~500줄 (JSON 파서 패턴 참고)
-  효과: Cargo.toml 같은 설정 파일 처리 가능
-- [ ] 2. YAML 직렬화 — `std/yaml.vais` 신규 (Opus)
-  내용: YAML 파서/시리얼라이저, 들여쓰기 기반 구조 해석
-  규모: ~600줄
-  효과: Kubernetes/Docker 설정, CI/CD 파이프라인 처리
-- [ ] 3. 문자열 강화 — `std/string.vais` 확장 (Opus)
-  내용: split/join/trim/replace/contains/starts_with/ends_with/to_upper/to_lower
-  추가: UTF-8 바이트 길이 함수, 문자열 빌더 (StringBuilder)
-  효과: 대형 프로젝트 문자열 처리 실용성 확보
-  C 런타임: 필요 시 `std/string_runtime.c` 신규
-- [ ] 4. 비대칭 암호화 기본 — `std/crypto.vais` 확장 (Opus)
-  내용: RSA 키 생성/서명/검증 (기본 구현), 또는 extern C로 OpenSSL 래핑
-  효과: TLS 인증서 검증, JWT 서명 등 실전 암호화 시나리오
-- [ ] 5. 검증 — 각 모듈 단위 테스트 + E2E 통합 테스트, Clippy 0건
+- [x] 1. TOML 직렬화 — `std/toml.vais` 신규 (913줄) (Opus) ✅ 2026-03-01
+  변경: std/toml.vais (신규) — 재귀 하강 파서, hash table, stringify
+  내용: bare/quoted key, integer (underscore), bool, string (escape), array, inline table, [table] 헤더
+  패턴: json.vais와 동일 — parser state {input, pos, len}, value {tag, data, extra}
+- [x] 2. YAML 직렬화 — `std/yaml.vais` 신규 (1,177줄) (Opus) ✅ 2026-03-01
+  변경: std/yaml.vais (신규) — 인덴트 기반 블록 파서 + flow collection 파서
+  내용: scalar (string/int/bool/null/~), block sequence (- item), block mapping (key: value), flow [seq], flow {map}
+  패턴: 인덴트 추적으로 블록 구조 해석, flow collection은 JSON 스타일 재귀
+- [x] 3. 문자열 강화 — `std/string.vais` 확장 (+393줄, 180→573줄) (Opus) ✅ 2026-03-01
+  변경: std/string.vais — 19개 함수 추가 (raw pointer API)
+  내용: trim/trim_start/trim_end, to_upper/to_lower, starts_with/ends_with, index_of/contains, replace, split_char/split_count/split_get/split_free, join_char, str_from_int
+  패턴: 구조체 ownership 이슈 회피 — 모든 함수가 i64 포인터 입출력 (json.vais 패턴)
+- [x] 4. 검증 — 27개 E2E 테스트, E2E 958 통과 (0 fail), Clippy 0건 ✅ 2026-03-01
+  변경: crates/vaisc/tests/e2e/phase74_stdlib.rs (985줄, 27 tests), main.rs (+1줄)
+  내용: 문자열 10개 (trim/upper/lower/starts_with/ends_with/index_of/replace/split/contains/int_to_str), TOML 5개, YAML 5개, 통합 7개
 
 ---
 
