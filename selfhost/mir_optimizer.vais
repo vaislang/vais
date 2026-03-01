@@ -35,9 +35,11 @@ F mir_optimize_module(mod_ptr: i64) -> i64 {
 F mir_optimize_body(body_ptr: i64) -> i64 {
     mir_constant_propagation(body_ptr)
     mir_constant_folding(body_ptr)
+    mir_copy_propagation(body_ptr)
     mir_loop_invariant_code_motion(body_ptr)
     mir_strength_reduction(body_ptr)
     mir_dead_code_elimination(body_ptr)
+    mir_block_merging(body_ptr)
     mir_remove_unreachable_blocks(body_ptr)
     1
 }
@@ -1094,6 +1096,380 @@ F sr_log2(val: i64) -> i64 {
         result = result + 1
     }
     result
+}
+
+# ============================================================================
+# Block Merging
+# ============================================================================
+# Merges a block B into its sole predecessor A when:
+#   - A has a single successor (goto B)
+#   - B has a single predecessor (A)
+# After merging, A gets B's statements appended and B's terminator.
+
+F mir_block_merging(body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    I blocks_len < 2 { R 0 }
+
+    # Count predecessors for each block
+    pred_count := malloc(8 * blocks_len)
+    pred_from := malloc(8 * blocks_len)
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        store_i64(pred_count + bi * 8, 0)
+        store_i64(pred_from + bi * 8, 0 - 1)
+        bi = bi + 1
+    }
+
+    # Scan terminators to count predecessors
+    bi = 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            kind := load_i64(term_ptr)
+            I kind == TERM_GOTO() {
+                target := load_i64(term_ptr + 8)
+                I target < blocks_len {
+                    cnt := load_i64(pred_count + target * 8)
+                    store_i64(pred_count + target * 8, cnt + 1)
+                    store_i64(pred_from + target * 8, bi)
+                    0
+                } E { 0 }
+            } E {
+                # For non-goto terminators, mark all successors
+                bm_count_successors(term_ptr, pred_count, pred_from, bi, blocks_len)
+            }
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    # Merge single-predecessor blocks into their predecessor
+    merged := mut 0
+    bi = 1  # Skip bb0 (entry block is never merged into another)
+    L {
+        I bi >= blocks_len { B } E { 0 }
+
+        cnt := load_i64(pred_count + bi * 8)
+        pred := load_i64(pred_from + bi * 8)
+
+        # Only merge if single predecessor whose terminator is a goto to bi
+        I cnt == 1 && pred >= 0 && pred < blocks_len {
+            pred_bb := load_i64(blocks_ptr + pred * 8)
+            pred_term := load_i64(pred_bb + 16)
+            I pred_term != 0 {
+                pred_term_kind := load_i64(pred_term)
+                I pred_term_kind == TERM_GOTO() {
+                    pred_target := load_i64(pred_term + 8)
+                    I pred_target == bi {
+                        # Merge: append B's statements to A, take B's terminator
+                        target_bb := load_i64(blocks_ptr + bi * 8)
+                        bm_merge_blocks(pred_bb, target_bb)
+                        # Clear the merged block
+                        store_i64(target_bb + 8, 0)
+                        store_i64(target_bb + 16, term_unreachable())
+                        merged = merged + 1
+                        0
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+        } E { 0 }
+
+        bi = bi + 1
+    }
+
+    free(pred_count)
+    free(pred_from)
+    merged
+}
+
+# Count successors of non-goto terminators for predecessor tracking
+F bm_count_successors(term_ptr: i64, pred_count: i64, pred_from: i64, from_bb: i64, blocks_len: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_SWITCH_INT() {
+        targets_ptr := load_i64(term_ptr + 24)
+        targets_len := load_i64(term_ptr + 32)
+        otherwise := load_i64(term_ptr + 40)
+
+        j := mut 0
+        L {
+            I j >= targets_len { B } E { 0 }
+            target_bb := load_i64(targets_ptr + j * 16 + 8)
+            I target_bb < blocks_len {
+                cnt := load_i64(pred_count + target_bb * 8)
+                store_i64(pred_count + target_bb * 8, cnt + 1)
+                # Multiple preds → mark as -1
+                I cnt > 0 { store_i64(pred_from + target_bb * 8, 0 - 1); 0 } E { 0 }
+                0
+            } E { 0 }
+            j = j + 1
+        }
+        I otherwise < blocks_len {
+            cnt := load_i64(pred_count + otherwise * 8)
+            store_i64(pred_count + otherwise * 8, cnt + 1)
+            I cnt > 0 { store_i64(pred_from + otherwise * 8, 0 - 1); 0 } E { 0 }
+            0
+        } E { 0 }
+    }
+    E I kind == TERM_CALL() {
+        target := load_i64(term_ptr + 8)
+        I target < blocks_len {
+            cnt := load_i64(pred_count + target * 8)
+            store_i64(pred_count + target * 8, cnt + 1)
+            I cnt > 0 { store_i64(pred_from + target * 8, 0 - 1); 0 } E { 0 }
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Merge block B into block A: append B's statements, take B's terminator
+F bm_merge_blocks(pred_bb: i64, succ_bb: i64) -> i64 {
+    # pred_bb gets succ_bb's statements appended
+    pred_stmts := load_i64(pred_bb)
+    pred_len := load_i64(pred_bb + 8)
+    succ_stmts := load_i64(succ_bb)
+    succ_len := load_i64(succ_bb + 8)
+
+    # Append succ_bb's statements to pred_bb
+    j := mut 0
+    L {
+        I j >= succ_len { B } E { 0 }
+        store_i64(pred_stmts + (pred_len + j) * 8, load_i64(succ_stmts + j * 8))
+        j = j + 1
+    }
+    store_i64(pred_bb + 8, pred_len + succ_len)
+
+    # Take succ_bb's terminator
+    store_i64(pred_bb + 16, load_i64(succ_bb + 16))
+    1
+}
+
+# ============================================================================
+# Copy Propagation
+# ============================================================================
+# If a local L is assigned exactly once as L := Copy(M) or L := Move(M),
+# and M is not reassigned after L's definition, then replace all uses of L
+# with M directly.
+
+F mir_copy_propagation(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Phase 1: Find single-assignment copies (L := Copy(M))
+    # copy_source[L] = M if L is assigned exactly once as Use(Copy(M))
+    copy_source := malloc(8 * locals_len)
+    assign_count := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        store_i64(copy_source + i * 8, 0 - 1)
+        store_i64(assign_count + i * 8, 0)
+        i = i + 1
+    }
+
+    # Scan for copy assignments
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                local_idx := load_i64(place_ptr)
+                proj_len := load_i64(place_ptr + 16)
+
+                I proj_len == 0 && local_idx < locals_len {
+                    cnt := load_i64(assign_count + local_idx * 8)
+                    store_i64(assign_count + local_idx * 8, cnt + 1)
+
+                    rv_kind := load_i64(rvalue_ptr)
+                    I rv_kind == RVALUE_USE() && cnt == 0 {
+                        operand := load_i64(rvalue_ptr + 8)
+                        op_kind := load_i64(operand)
+                        I op_kind == OPERAND_COPY() || op_kind == OPERAND_MOVE() {
+                            src_local := load_i64(operand + 8)
+                            store_i64(copy_source + local_idx * 8, src_local)
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    # Clear multi-assigned locals
+    i = 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        cnt := load_i64(assign_count + i * 8)
+        I cnt > 1 {
+            store_i64(copy_source + i * 8, 0 - 1)
+            0
+        } E { 0 }
+        # Don't propagate _0 (return place) or params
+        I i == 0 { store_i64(copy_source + i * 8, 0 - 1); 0 } E { 0 }
+        i = i + 1
+    }
+
+    # Also exclude sources that are themselves reassigned
+    i = 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        src := load_i64(copy_source + i * 8)
+        I src >= 0 && src < locals_len {
+            src_cnt := load_i64(assign_count + src * 8)
+            I src_cnt > 1 {
+                store_i64(copy_source + i * 8, 0 - 1)
+                0
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Phase 2: Replace operands referencing copy targets
+    propagated := mut 0
+    bi = 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                propagated = propagated + cprop_replace_rvalue(rvalue_ptr, copy_source, locals_len)
+            } E { 0 }
+            si = si + 1
+        }
+
+        # Also propagate in terminator
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            propagated = propagated + cprop_replace_terminator(term_ptr, copy_source, locals_len)
+            0
+        } E { 0 }
+
+        bi = bi + 1
+    }
+
+    free(copy_source)
+    free(assign_count)
+    propagated
+}
+
+# Replace operand references with their copy source
+F cprop_replace_operand(op_ptr: i64, copy_source: i64, locals_len: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+    I op_kind == OPERAND_COPY() || op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            src := load_i64(copy_source + local_idx * 8)
+            I src >= 0 {
+                store_i64(op_ptr + 8, src)
+                R 1
+            } E { 0 }
+        } E { 0 }
+    } E { 0 }
+    R 0
+}
+
+# Replace operands in rvalue
+F cprop_replace_rvalue(rvalue_ptr: i64, copy_source: i64, locals_len: i64) -> i64 {
+    kind := load_i64(rvalue_ptr)
+    replaced := mut 0
+
+    I kind == RVALUE_USE() {
+        operand := load_i64(rvalue_ptr + 8)
+        replaced = replaced + cprop_replace_operand(operand, copy_source, locals_len)
+    }
+    E I kind == RVALUE_BINOP() {
+        lhs := load_i64(rvalue_ptr + 24)
+        rhs := load_i64(rvalue_ptr + 32)
+        replaced = replaced + cprop_replace_operand(lhs, copy_source, locals_len)
+        replaced = replaced + cprop_replace_operand(rhs, copy_source, locals_len)
+    }
+    E I kind == RVALUE_UNOP() {
+        operand := load_i64(rvalue_ptr + 8)
+        replaced = replaced + cprop_replace_operand(operand, copy_source, locals_len)
+    }
+    E I kind == RVALUE_CAST() {
+        operand := load_i64(rvalue_ptr + 8)
+        replaced = replaced + cprop_replace_operand(operand, copy_source, locals_len)
+    }
+    E I kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { B } E { 0 }
+            op := load_i64(agg_ops + j * 8)
+            replaced = replaced + cprop_replace_operand(op, copy_source, locals_len)
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+    replaced
+}
+
+# Replace operands in terminator
+F cprop_replace_terminator(term_ptr: i64, copy_source: i64, locals_len: i64) -> i64 {
+    kind := load_i64(term_ptr)
+    replaced := mut 0
+
+    I kind == TERM_SWITCH_INT() {
+        disc_ptr := load_i64(term_ptr + 16)
+        replaced = replaced + cprop_replace_operand(disc_ptr, copy_source, locals_len)
+    }
+    E I kind == TERM_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { B } E { 0 }
+            arg := load_i64(args_ptr + j * 8)
+            replaced = replaced + cprop_replace_operand(arg, copy_source, locals_len)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { B } E { 0 }
+            arg := load_i64(args_ptr + j * 8)
+            replaced = replaced + cprop_replace_operand(arg, copy_source, locals_len)
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+    replaced
 }
 
 # ============================================================================

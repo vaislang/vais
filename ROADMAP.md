@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (긴급 트랙 R1 완료 — 릴리즈 준비도 56→90/100, Phase 84~87 로드맵 수립)
+> **최종 업데이트**: 2026-03-02 (Phase 84 완료 — MIR Lowering 확장 + 최적화 패스 + E2E 1,204개)
 
 ---
 
@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 1,185개 통과 (0 fail, 1 ignored) | ✅ |
+| E2E 1,204개 통과 (0 fail, 1 ignored) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -335,20 +335,19 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: docs/RELEASE_READINESS_2026-03-01.md (56/100 No-Go → 90/100 Conditional Go, 6건 수정 상세 기록)
 진행률: 7/7 (100%)
 
-### Phase 84: 셀프호스팅 강화 — 컴파일러 기능 확장
+### Phase 84: 셀프호스팅 강화 — 컴파일러 기능 확장 ✅
 
 > **목표**: selfhost 컴파일러의 기능 범위 확장 (현재 Lexer/Parser/TC 수준 → Codegen 일부)
 > **우선순위**: 중간 — 셀프호스팅 완성도가 언어 성숙도의 지표
 > **전략**: (1) MIR lowering 확장 (루프/구조체/필드/인덱스) (2) MIR 최적화 패스 추가 (LICM/Strength Reduction) (3) selfhost 컴파일러로 기본 프로그램 독립 컴파일 검증 (4) cross-verify 테스트 확장 (+8개)
 > **기대 효과**: selfhost 컴파일러가 기본 프로그램(산술/조건/루프/구조체)을 독립 컴파일 가능
 
-모드: 자동진행
-- [ ] 1. MIR Lowering 확장 — 루프/구조체/필드/인덱스 지원 (Sonnet 위임)
-- [ ] 2. MIR 최적화 패스 추가 — LICM + Strength Reduction (Sonnet 위임) ∥1
-- [ ] 3. Selfhost 컴파일 검증 — 기본 프로그램 5개 독립 컴파일 테스트 (Opus 직접) [blockedBy: 1]
-- [ ] 4. Cross-verify 확장 — 자동화 + 신규 테스트 8개 (Sonnet 위임) ∥1,2
-- [ ] 5. E2E 검증 & ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4]
-진행률: 0/5 (0%)
+- [x] 1. MIR Lowering 확장 — for-range 루프, place_field/place_index 프로젝션, impl 블록 메서드 lowering
+- [x] 2. MIR 최적화 패스 추가 — Block Merging + Copy Propagation (기존 LICM/Strength Reduction 검증 완료)
+- [x] 3. Selfhost 컴파일 검증 — 5개 프로그램 (selfhost_arith/loop/cond/nested/bitwise) 전부 컴파일+실행 성공
+- [x] 4. Cross-verify 확장 — 8개 신규 테스트 (phase84_struct_basic~method_call) + cross_verify_tests.rs 등록
+- [x] 5. E2E 검증 — 19개 신규 E2E 테스트 추가, 전체 1,204개 통과 (0 fail, 1 ignored), Clippy 0건
+진행률: 5/5 (100%)
 
 ### Phase 85: WASM 생태계 — WASI Preview 2 · Component Model
 

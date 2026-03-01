@@ -1,0 +1,9 @@
+# Phase 84: String basic operations
+F main() -> i64 {
+    puts("hello from vais")
+    puts("string operations test")
+    a := 42
+    putchar(48 + a % 10)
+    putchar(10)
+    0
+}

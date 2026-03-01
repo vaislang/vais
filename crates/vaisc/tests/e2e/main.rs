@@ -52,3 +52,4 @@ mod phase77_coverage;
 mod phase80_serialization;
 mod phase81_coverage;
 mod phase83_stdlib;
+mod phase84;

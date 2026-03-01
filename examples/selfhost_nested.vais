@@ -1,0 +1,44 @@
+# Selfhost nested function call verification
+# Tests function composition, higher-order patterns via indirection
+
+F inc(x: i64) -> i64 = x + 1
+F dec(x: i64) -> i64 = x - 1
+F double(x: i64) -> i64 = x * 2
+F triple(x: i64) -> i64 = x * 3
+F square(x: i64) -> i64 = x * x
+
+# Composition chain: square(triple(double(inc(x))))
+F compose4(x: i64) -> i64 {
+    a := inc(x)
+    b := double(a)
+    c := triple(b)
+    d := square(c)
+    d
+}
+
+# Fibonacci with accumulator (iterative-like recursion)
+F fib_acc(n: i64, a: i64, b: i64) -> i64 {
+    I n <= 0 { R a }
+    @(n - 1, b, a + b)
+}
+
+F fib(n: i64) -> i64 = fib_acc(n, 0, 1)
+
+# Ackermann function (bounded for testing)
+F ack(m: i64, n: i64) -> i64 {
+    I m == 0 { R n + 1 }
+    E I n == 0 { R @(m - 1, 1) }
+    E { R @(m - 1, @(m, n - 1)) }
+}
+
+F main() -> i64 {
+    # compose4(2) = square(triple(double(inc(2)))) = square(triple(double(3))) = square(triple(6)) = square(18) = 324
+    # We reduce it to fit in exit code: compose4(1) = square(triple(double(2))) = square(triple(4)) = square(12) = 144
+    c := compose4(1)
+    # fib(10) = 55
+    f := fib(10)
+    # ack(2,3) = 9
+    a := ack(2, 3)
+    # Reduce: (144 + 55 + 9) % 256 = 208 % 256 = 208
+    (c + f + a) % 256
+}

@@ -1,0 +1,23 @@
+# Phase 84: Enum matching
+E Shape {
+    Circle,
+    Square,
+    Triangle
+}
+
+F classify(s: i64) -> i64 {
+    M s {
+        0 => 10,
+        1 => 20,
+        2 => 30,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    a := classify(0)
+    b := classify(1)
+    c := classify(2)
+    puts("enum matching done")
+    a + b + c
+}
