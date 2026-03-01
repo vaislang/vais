@@ -35,27 +35,32 @@ impl CodeGenerator {
         self.fn_ctx.async_poll_context = None;
     }
 
+    /// Map a type to LLVM for extern C ABI declarations.
+    /// Str maps to i8* (C-compatible) instead of { i8*, i64 } (Vais fat pointer).
+    pub(crate) fn type_to_llvm_extern(&self, ty: &ResolvedType) -> String {
+        match ty {
+            ResolvedType::Str => String::from("i8*"),
+            _ => self.type_to_llvm(ty),
+        }
+    }
+
     pub(crate) fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
         let params: Vec<_> = info
             .signature
             .params
             .iter()
-            .map(|(_, ty, _)| self.type_to_llvm(ty))
+            .map(|(_, ty, _)| self.type_to_llvm_extern(ty))
             .collect();
 
-        let ret = self.type_to_llvm(&info.signature.ret);
+        let ret = self.type_to_llvm_extern(&info.signature.ret);
 
         // Special handling for fopen_ptr: generate wrapper that calls fopen
         if info.signature.name == "fopen_ptr" {
-            // Generate a wrapper function that forwards to fopen
-            // Both path and mode are i8* (strings) to match fopen's declaration
-            let str_ty = self.type_to_llvm(&ResolvedType::Str);
+            // fopen uses i8* (C strings) for both path and mode
             return format!(
-                "define {} @fopen_ptr({} %path, {} %mode) {{\nentry:\n  %0 = call {} @fopen({} %path, {} %mode)\n  ret {} %0\n}}",
+                "define {} @fopen_ptr(i8* %path, i8* %mode) {{\nentry:\n  %0 = call {} @fopen(i8* %path, i8* %mode)\n  ret {} %0\n}}",
                 ret,
-                str_ty, str_ty,
                 ret,
-                str_ty, str_ty,
                 ret
             );
         }

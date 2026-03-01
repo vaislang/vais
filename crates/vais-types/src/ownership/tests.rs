@@ -195,7 +195,8 @@ mod tests {
             Box::new(ResolvedType::I64)
         )));
 
-        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Str));
+        // Str is Copy — it's a fat pointer { ptr, len }, a borrowed view not owning data
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Str));
         assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Array(
             Box::new(ResolvedType::I64)
         )));

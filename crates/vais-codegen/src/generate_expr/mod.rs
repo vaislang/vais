@@ -39,16 +39,24 @@ impl CodeGenerator {
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
-                // Create a global string constant
+                // Create a global string constant and wrap in fat pointer { i8*, i64 }
                 let name = self.make_string_name();
                 self.strings.counter += 1;
-                let len = s.len() + 1;
+                let byte_len = s.len() + 1; // includes null terminator for global
+                let str_len = s.len() as i64; // actual string length (no null)
                 let gep = format!(
                     "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
-                    len, len, name
+                    byte_len, byte_len, name
                 );
                 self.strings.constants.push((name, s.clone()));
-                Ok((gep, String::new()))
+                // Build fat pointer: { i8* ptr, i64 len }
+                let t0 = self.next_temp(counter);
+                let t1 = self.next_temp(counter);
+                let ir = format!(
+                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
+                    t0, gep, t1, t0, str_len
+                );
+                Ok((t1, ir))
             }
             Expr::StringInterp(parts) => {
                 // Desugar string interpolation into a format() call.

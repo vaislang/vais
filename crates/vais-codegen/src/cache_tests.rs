@@ -62,7 +62,7 @@ mod tests {
             (ResolvedType::F32, "float"),
             (ResolvedType::F64, "double"),
             (ResolvedType::Bool, "i1"),
-            (ResolvedType::Str, "i8*"),
+            (ResolvedType::Str, "{ i8*, i64 }"),
             (ResolvedType::Unit, "void"),
         ];
 

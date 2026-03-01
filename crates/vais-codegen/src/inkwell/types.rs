@@ -61,11 +61,14 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::F32 => self.context.f32_type().into(),
             ResolvedType::F64 => self.context.f64_type().into(),
             ResolvedType::Bool => self.context.bool_type().into(),
-            ResolvedType::Str => self
-                .context
-                .i8_type()
-                .ptr_type(AddressSpace::default())
-                .into(),
+            ResolvedType::Str => {
+                // String is a fat pointer: { i8* ptr, i64 len }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let len_type = self.context.i64_type();
+                self.context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false)
+                    .into()
+            }
             ResolvedType::Unit => {
                 // Unit type represented as empty struct
                 self.context.struct_type(&[], false).into()

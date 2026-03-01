@@ -272,7 +272,7 @@ impl CodeGenerator {
             ResolvedType::F32 => String::from("float"),
             ResolvedType::F64 => String::from("double"),
             ResolvedType::Bool => String::from("i1"),
-            ResolvedType::Str => String::from("i8*"),
+            ResolvedType::Str => String::from("{ i8*, i64 }"),
             ResolvedType::Unit => String::from("void"),
             ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
             ResolvedType::ConstArray { element, size } => {
@@ -820,6 +820,18 @@ impl CodeGenerator {
                 }
                 8 // fallback
             }
+            s if s.starts_with('{') => {
+                // Struct type: { T1, T2, ... }
+                // Sum the sizes of the fields
+                let inner = s
+                    .strip_prefix("{ ")
+                    .and_then(|s| s.strip_suffix(" }"))
+                    .unwrap_or(s);
+                inner
+                    .split(", ")
+                    .map(|field| self.estimate_type_size(field.trim()))
+                    .sum()
+            }
             s if s.starts_with('%') => 8, // Named types default to 8
             _ => 8,                       // Default fallback
         }
@@ -834,7 +846,7 @@ impl CodeGenerator {
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
             ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str => 8, // pointer
+            ResolvedType::Str => 16, // fat pointer { i8*, i64 }
             ResolvedType::Unit => 0,
             ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
             ResolvedType::Array(_) => 8,     // pointer to heap
@@ -1100,7 +1112,7 @@ mod sizeof_alignof_tests {
     #[test]
     fn test_sizeof_str() {
         let gen = CodeGenerator::new("test");
-        assert_eq!(gen.compute_sizeof(&ResolvedType::Str), 8); // pointer
+        assert_eq!(gen.compute_sizeof(&ResolvedType::Str), 16); // fat pointer { i8*, i64 }
     }
 
     #[test]
@@ -1211,7 +1223,7 @@ mod sizeof_alignof_tests {
         assert_eq!(gen.type_to_llvm(&ResolvedType::F32), "float");
         assert_eq!(gen.type_to_llvm(&ResolvedType::F64), "double");
         assert_eq!(gen.type_to_llvm(&ResolvedType::Bool), "i1");
-        assert_eq!(gen.type_to_llvm(&ResolvedType::Str), "i8*");
+        assert_eq!(gen.type_to_llvm(&ResolvedType::Str), "{ i8*, i64 }");
         assert_eq!(gen.type_to_llvm(&ResolvedType::Unit), "void");
     }
 

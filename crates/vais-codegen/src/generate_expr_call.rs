@@ -51,7 +51,7 @@ impl CodeGenerator {
                 return self.generate_format_call(args, counter, span);
             }
 
-            // Handle str_to_ptr builtin: convert string pointer to i64
+            // Handle str_to_ptr builtin: extract i8* pointer from string fat pointer, convert to i64
             if name == "str_to_ptr" {
                 if args.len() != 1 {
                     return Err(CodegenError::TypeError(
@@ -60,13 +60,14 @@ impl CodeGenerator {
                 }
                 let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
                 let mut ir = str_ir;
+                // Extract raw i8* from fat pointer { i8*, i64 }
+                let raw_ptr = self.extract_str_ptr(&str_val, counter, &mut ir);
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, str_val));
+                ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, raw_ptr));
                 return Ok((result, ir));
             }
 
-            // Handle ptr_to_str builtin: convert i64 to string pointer (i8*)
-            // If value is already a pointer type, pass through directly
+            // Handle ptr_to_str builtin: convert i64 to string fat pointer { i8*, i64 }
             if name == "ptr_to_str" {
                 if args.len() != 1 {
                     return Err(CodegenError::TypeError(
@@ -75,16 +76,23 @@ impl CodeGenerator {
                 }
                 let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
                 let mut ir = ptr_ir;
-                // Only do inttoptr if the arg is actually an integer (i64)
-                // If it's already a pointer (str, malloc result, etc.), pass through
                 let arg_type = self.infer_expr_type(&args[0]);
-                if matches!(arg_type, vais_types::ResolvedType::I64) {
-                    let result = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", result, ptr_val));
-                    return Ok((result, ir));
-                }
-                // Already a pointer/str, no conversion needed
-                return Ok((ptr_val, ir));
+                let raw_ptr = if matches!(arg_type, vais_types::ResolvedType::I64) {
+                    let tmp = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", tmp, ptr_val));
+                    tmp
+                } else if matches!(arg_type, vais_types::ResolvedType::Str) {
+                    // Already a str fat pointer — extract the raw pointer
+                    self.extract_str_ptr(&ptr_val, counter, &mut ir)
+                } else {
+                    // Assume it's already an i8* pointer
+                    ptr_val
+                };
+                // Compute length with strlen and build fat pointer
+                let len = self.next_temp(counter);
+                ir.push_str(&format!("  {} = call i64 @strlen(i8* {})\n", len, raw_ptr));
+                let result = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
+                return Ok((result, ir));
             }
 
             // sizeof(expr) — compile-time constant size query
@@ -423,6 +431,9 @@ impl CodeGenerator {
         let mut ir = String::new();
         let mut arg_vals = Vec::new();
 
+        // Check if this is an extern C function (needs Str→i8* extraction at call boundary)
+        let is_extern_c = fn_info.as_ref().map(|f| f.is_extern).unwrap_or(false);
+
         for (i, arg) in args.iter().enumerate() {
             let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
@@ -432,6 +443,17 @@ impl CodeGenerator {
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i))
                 .map(|(_, ty, _)| ty.clone());
+
+            // For extern C functions with Str parameters, extract the raw i8* pointer
+            // from the fat pointer { i8*, i64 } and use i8* as the argument type
+            if is_extern_c {
+                if let Some(ResolvedType::Str) = &param_ty {
+                    let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
+                    val = raw_ptr;
+                    arg_vals.push(format!("i8* {}", val));
+                    continue;
+                }
+            }
 
             let arg_ty = if let Some(ref ty) = param_ty {
                 self.type_to_llvm(ty)
@@ -562,14 +584,19 @@ impl CodeGenerator {
                 }
             }
 
-            // Convert i64 to i8* when parameter expects str/i8* but arg is i64
+            // Convert i64 to str fat pointer { i8*, i64 } when parameter expects str but arg is i64
             if let Some(ref param_type) = param_ty {
                 if matches!(param_type, ResolvedType::Str) {
                     let actual_ty = self.infer_expr_type(arg);
                     if matches!(actual_ty, ResolvedType::I64) {
-                        let ptr_tmp = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr_tmp, val));
-                        val = ptr_tmp;
+                        let raw_ptr = self.next_temp(counter);
+                        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", raw_ptr, val));
+                        let len = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = call i64 @strlen(i8* {})\n",
+                            len, raw_ptr
+                        ));
+                        val = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
                     }
                 }
             }
@@ -609,11 +636,14 @@ impl CodeGenerator {
         // Get return type and actual function name (may differ for builtins)
         // Async functions always return i64 (state pointer) from their create function,
         // regardless of declared return type. The value is extracted via poll function.
+        // Extern C functions use C ABI types (Str→i8* instead of { i8*, i64 }).
         let ret_ty = fn_info
             .as_ref()
             .map(|f| {
                 if f.signature.is_async {
                     "i64".to_string()
+                } else if is_extern_c {
+                    self.type_to_llvm_extern(&f.signature.ret)
                 } else {
                     self.type_to_llvm(&f.signature.ret)
                 }
@@ -740,17 +770,26 @@ impl CodeGenerator {
             ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
             Ok((result, ir))
         } else if fn_name == "free" {
-            // Special handling for free: convert i64 to i8*
-            let ptr_tmp = self.next_temp(counter);
-            // Extract the i64 value from arg_vals
-            let arg_val = arg_vals
-                .first()
-                .map(|s| s.split_whitespace().last().unwrap_or("0"))
-                .unwrap_or("0");
-            ir.push_str(&format!(
-                "  {} = inttoptr i64 {} to i8*\n",
-                ptr_tmp, arg_val
-            ));
+            // Special handling for free: handle str fat pointer, i8*, or i64
+            let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
+            let ptr_tmp = if arg_full.starts_with("{ i8*, i64 }") {
+                let val = arg_full
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    ptr, val
+                ));
+                ptr
+            } else if arg_full.starts_with("i8*") {
+                arg_full.split_whitespace().last().unwrap_or("null").to_string()
+            } else {
+                let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, arg_val));
+                ptr
+            };
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
             ir.push_str(&format!("  call void @free(i8* {}){}\n", ptr_tmp, dbg_info));
             Ok(("void".to_string(), ir))
@@ -763,9 +802,18 @@ impl CodeGenerator {
                 .map(|s| s.split_whitespace().last().unwrap_or("0"))
                 .unwrap_or("0");
 
-            // Handle dest pointer
-            let dest_ptr = if dest_full.starts_with("i8*") {
-                // Use everything after "i8* " to preserve complex expressions
+            // Handle dest pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
+            let dest_ptr = if dest_full.starts_with("{ i8*, i64 }") {
+                let val = dest_full
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    ptr, val
+                ));
+                ptr
+            } else if dest_full.starts_with("i8*") {
                 dest_full
                     .strip_prefix("i8* ")
                     .unwrap_or(dest_full.split_whitespace().last().unwrap_or("null"))
@@ -777,9 +825,18 @@ impl CodeGenerator {
                 ptr
             };
 
-            // Handle src pointer (can be i64 or i8* for memcpy_str)
-            let src_ptr = if src_full.starts_with("i8*") {
-                // Use everything after "i8* " to preserve complex expressions
+            // Handle src pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
+            let src_ptr = if src_full.starts_with("{ i8*, i64 }") {
+                let val = src_full
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    ptr, val
+                ));
+                ptr
+            } else if src_full.starts_with("i8*") {
                 src_full
                     .strip_prefix("i8* ")
                     .unwrap_or(src_full.split_whitespace().last().unwrap_or("null"))
@@ -805,15 +862,28 @@ impl CodeGenerator {
             ));
             Ok((result_i64, ir))
         } else if fn_name == "strlen" {
-            // Special handling for strlen: convert i64 to i8* if needed
+            // Special handling for strlen: extract i8* from various argument types
             let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
             let result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
 
-            // Check if the argument is already i8* (str type) or i64 (pointer as integer)
-            if arg_full.starts_with("i8*") {
+            // Handle different argument types: str fat pointer { i8*, i64 }, raw i8*, or i64
+            if arg_full.starts_with("{ i8*, i64 }") {
+                // String fat pointer — extract the raw i8* pointer
+                let val = arg_full
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
+                let ptr_tmp = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    ptr_tmp, val
+                ));
+                ir.push_str(&format!(
+                    "  {} = call i64 @strlen(i8* {}){}\n",
+                    result, ptr_tmp, dbg_info
+                ));
+            } else if arg_full.starts_with("i8*") {
                 // Already a pointer, use directly
-                // Use everything after "i8* " to preserve complex expressions like getelementptr
                 let ptr_val = arg_full
                     .strip_prefix("i8* ")
                     .unwrap_or(arg_full.split_whitespace().last().unwrap_or("null"));
@@ -836,16 +906,26 @@ impl CodeGenerator {
             }
             Ok((result, ir))
         } else if fn_name == "puts_ptr" {
-            // Special handling for puts_ptr: convert i64 to i8*
-            let arg_val = arg_vals
-                .first()
-                .map(|s| s.split_whitespace().last().unwrap_or("0"))
-                .unwrap_or("0");
-            let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = inttoptr i64 {} to i8*\n",
-                ptr_tmp, arg_val
-            ));
+            // Special handling for puts_ptr: handle str fat pointer, i8*, or i64
+            let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
+            let ptr_tmp = if arg_full.starts_with("{ i8*, i64 }") {
+                let val = arg_full
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    ptr, val
+                ));
+                ptr
+            } else if arg_full.starts_with("i8*") {
+                arg_full.split_whitespace().last().unwrap_or("null").to_string()
+            } else {
+                let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
+                let ptr = self.next_temp(counter);
+                ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, arg_val));
+                ptr
+            };
             let i32_result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
             ir.push_str(&format!(
@@ -872,7 +952,13 @@ impl CodeGenerator {
                         f.signature
                             .params
                             .iter()
-                            .map(|(_, ty, _)| self.type_to_llvm(ty))
+                            .map(|(_, ty, _)| {
+                                if is_extern_c {
+                                    self.type_to_llvm_extern(ty)
+                                } else {
+                                    self.type_to_llvm(ty)
+                                }
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -911,7 +997,13 @@ impl CodeGenerator {
                         f.signature
                             .params
                             .iter()
-                            .map(|(_, ty, _)| self.type_to_llvm(ty))
+                            .map(|(_, ty, _)| {
+                                if is_extern_c {
+                                    self.type_to_llvm_extern(ty)
+                                } else {
+                                    self.type_to_llvm(ty)
+                                }
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -953,7 +1045,13 @@ impl CodeGenerator {
                         f.signature
                             .params
                             .iter()
-                            .map(|(_, ty, _)| self.type_to_llvm(ty))
+                            .map(|(_, ty, _)| {
+                                if is_extern_c {
+                                    self.type_to_llvm_extern(ty)
+                                } else {
+                                    self.type_to_llvm(ty)
+                                }
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -976,6 +1074,25 @@ impl CodeGenerator {
                     dbg_info
                 ));
             }
+
+            // For extern C functions returning str, the C function returns i8*
+            // but Vais expects { i8*, i64 } fat pointer. Wrap the result.
+            if is_extern_c {
+                let actual_ret = fn_info
+                    .as_ref()
+                    .map(|f| f.signature.ret.clone())
+                    .unwrap_or(ResolvedType::I64);
+                if matches!(actual_ret, ResolvedType::Str) {
+                    let len = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i64 @strlen(i8* {})\n",
+                        len, tmp
+                    ));
+                    let fat_ptr = self.build_str_fat_ptr(&tmp, &len, counter, &mut ir);
+                    return Ok((fat_ptr, ir));
+                }
+            }
+
             Ok((tmp, ir))
         }
     }

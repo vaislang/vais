@@ -442,7 +442,8 @@ mod tests {
         gen.builder.position_at_end(entry);
 
         let result = gen.generate_string_literal("hello").unwrap();
-        assert!(result.is_pointer_value());
+        // String literals return a fat pointer struct { ptr, i64 }
+        assert!(result.is_struct_value());
     }
 
     #[test]

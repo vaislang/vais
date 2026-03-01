@@ -1,7 +1,7 @@
 //! Binary operation generation.
 
-use inkwell::values::{BasicValueEnum, FunctionValue, IntValue};
-use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
 use vais_ast::BinOp;
 
@@ -157,5 +157,163 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         };
         result.map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    /// Handle binary operations on string fat pointers { ptr, i64 }.
+    /// Supports: Add (concatenation), Eq, Neq (comparison via strcmp).
+    pub(crate) fn generate_string_binary(
+        &mut self,
+        op: BinOp,
+        lhs: BasicValueEnum<'ctx>,
+        rhs: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let lhs_ptr = self.extract_str_raw_ptr(lhs)?;
+        let rhs_ptr = self.extract_str_raw_ptr(rhs)?;
+
+        match op {
+            BinOp::Add => {
+                // String concatenation: call strlen on both, malloc, memcpy both, build fat ptr
+                let strlen_fn = self
+                    .module
+                    .get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let malloc_fn = self
+                    .module
+                    .get_function("malloc")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("malloc".to_string()))?;
+                let memcpy_fn = self
+                    .module
+                    .get_function("memcpy")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("memcpy".to_string()))?;
+
+                let i64_type = self.context.i64_type();
+
+                // Get lengths
+                let len1 = self
+                    .builder
+                    .build_call(strlen_fn, &[lhs_ptr.into()], "len1")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| i64_type.const_int(0, false).into())
+                    .into_int_value();
+                let len2 = self
+                    .builder
+                    .build_call(strlen_fn, &[rhs_ptr.into()], "len2")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| i64_type.const_int(0, false).into())
+                    .into_int_value();
+
+                // Total length (including null terminator)
+                let total_len = self
+                    .builder
+                    .build_int_add(len1, len2, "total_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let alloc_len = self
+                    .builder
+                    .build_int_add(total_len, i64_type.const_int(1, false), "alloc_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Allocate buffer
+                let buf = self
+                    .builder
+                    .build_call(malloc_fn, &[alloc_len.into()], "str_buf")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| {
+                        self.context
+                            .i8_type()
+                            .ptr_type(AddressSpace::default())
+                            .const_null()
+                            .into()
+                    })
+                    .into_pointer_value();
+
+                // Copy first string
+                let args1: Vec<BasicMetadataValueEnum> =
+                    vec![buf.into(), lhs_ptr.into(), len1.into()];
+                self.builder
+                    .build_call(memcpy_fn, &args1, "cpy1")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Offset for second string
+                let buf2 = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        self.context.i8_type(),
+                        buf,
+                        &[len1],
+                        "buf2",
+                    )
+                }
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Copy second string (including null terminator)
+                let len2_plus1 = self
+                    .builder
+                    .build_int_add(len2, i64_type.const_int(1, false), "len2_plus1")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let args2: Vec<BasicMetadataValueEnum> =
+                    vec![buf2.into(), rhs_ptr.into(), len2_plus1.into()];
+                self.builder
+                    .build_call(memcpy_fn, &args2, "cpy2")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Build fat pointer { ptr, i64 }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let str_struct_type =
+                    self.context
+                        .struct_type(&[ptr_type.into(), i64_type.into()], false);
+                let undef = str_struct_type.get_undef();
+                let with_ptr = self
+                    .builder
+                    .build_insert_value(undef, buf, 0, "concat_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                let fat_ptr = self
+                    .builder
+                    .build_insert_value(with_ptr, total_len, 1, "concat_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                Ok(fat_ptr.into())
+            }
+            BinOp::Eq | BinOp::Neq => {
+                // String comparison via strcmp
+                let strcmp_fn = self
+                    .module
+                    .get_function("strcmp")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strcmp".to_string()))?;
+                let cmp = self
+                    .builder
+                    .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp_result")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i32_type().const_int(0, false).into())
+                    .into_int_value();
+                let zero = cmp.get_type().const_zero();
+                let pred = if op == BinOp::Eq {
+                    IntPredicate::EQ
+                } else {
+                    IntPredicate::NE
+                };
+                let result = self
+                    .builder
+                    .build_int_compare(pred, cmp, zero, "str_cmp")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Extend bool to i64 for Vais convention
+                let extended = self
+                    .builder
+                    .build_int_z_extend(result, self.context.i64_type(), "str_cmp_ext")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                Ok(extended.into())
+            }
+            _ => Err(CodegenError::Unsupported(format!(
+                "String binary op: {:?}",
+                op
+            ))),
+        }
     }
 }

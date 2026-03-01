@@ -39,8 +39,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     } else if val.is_pointer_value() {
                         format_str.push_str("%s");
                         args.push(val.into());
+                    } else if val.is_struct_value() {
+                        // Could be a string fat pointer { ptr, i64 } — extract the raw ptr
+                        let raw_ptr = self.extract_str_raw_ptr(val)?;
+                        format_str.push_str("%s");
+                        args.push(raw_ptr.into());
                     } else {
-                        // Struct or vector values cannot be passed to printf directly.
+                        // Vector or other values cannot be passed to printf directly.
                         // Emit a placeholder string instead of misinterpreting the bits.
                         format_str.push_str("<struct>");
                         // Do not push the value — no corresponding printf argument.
@@ -49,9 +54,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Generate printf call
+        // Generate printf call — extract raw ptr from fat pointer for C ABI
         let fmt_val = self.generate_string_literal(&format_str)?;
-        let mut all_args: Vec<BasicMetadataValueEnum> = vec![fmt_val.into()];
+        let fmt_ptr = self.extract_str_raw_ptr(fmt_val)?;
+        let mut all_args: Vec<BasicMetadataValueEnum> = vec![fmt_ptr.into()];
         all_args.extend(args);
 
         if let Some(printf_fn) = self.module.get_function("printf") {
@@ -559,8 +565,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if args.is_empty() {
             // Just print newline
             let newline = self.generate_string_literal("\n")?;
+            let nl_ptr = self.extract_str_raw_ptr(newline)?;
             self.builder
-                .build_call(printf_fn, &[newline.into()], "println_call")
+                .build_call(printf_fn, &[nl_ptr.into()], "println_call")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         } else {
             // Check if first arg is a string interpolation - handle it specially
@@ -571,32 +578,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Just evaluate it (which prints), then print newline
                 let _ = self.generate_expr(&args[0].node)?;
                 let newline = self.generate_string_literal("\n")?;
+                let nl_ptr = self.extract_str_raw_ptr(newline)?;
                 self.builder
-                    .build_call(printf_fn, &[newline.into()], "println_nl")
+                    .build_call(printf_fn, &[nl_ptr.into()], "println_nl")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             } else {
                 // First arg is format string - append \n
                 let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
                 let first_val = self.generate_expr(&args[0].node)?;
-                if first_val.is_pointer_value() {
-                    arg_values.push(first_val.into());
-                    for arg in &args[1..] {
-                        let val = self.generate_expr(&arg.node)?;
+                // Extract raw ptr from string fat pointer for printf C ABI
+                let first_ptr = self.extract_str_raw_ptr(first_val)?;
+                arg_values.push(first_ptr.into());
+                for arg in &args[1..] {
+                    let val = self.generate_expr(&arg.node)?;
+                    // If arg is a string fat pointer, extract raw ptr for %s
+                    if val.is_struct_value() {
+                        let raw_ptr = self.extract_str_raw_ptr(val)?;
+                        arg_values.push(raw_ptr.into());
+                    } else {
                         arg_values.push(val.into());
                     }
-                    self.builder
-                        .build_call(printf_fn, &arg_values, "println_fmt")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    let newline = self.generate_string_literal("\n")?;
-                    self.builder
-                        .build_call(printf_fn, &[newline.into()], "println_nl")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                } else {
-                    arg_values.push(first_val.into());
-                    self.builder
-                        .build_call(printf_fn, &arg_values, "println_call")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 }
+                self.builder
+                    .build_call(printf_fn, &arg_values, "println_fmt")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let newline = self.generate_string_literal("\n")?;
+                let nl_ptr = self.extract_str_raw_ptr(newline)?;
+                self.builder
+                    .build_call(printf_fn, &[nl_ptr.into()], "println_nl")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             }
         }
         Ok(self.context.struct_type(&[], false).const_zero().into())
@@ -612,10 +622,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .get_function("printf")
             .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
 
-        let arg_values: Vec<BasicMetadataValueEnum> = args
-            .iter()
-            .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
-            .collect::<CodegenResult<Vec<_>>>()?;
+        let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
+        for arg in args {
+            let val = self.generate_expr(&arg.node)?;
+            // Extract raw ptr from string fat pointers for printf C ABI
+            if val.is_struct_value() {
+                let raw_ptr = self.extract_str_raw_ptr(val)?;
+                arg_values.push(raw_ptr.into());
+            } else {
+                arg_values.push(val.into());
+            }
+        }
 
         self.builder
             .build_call(printf_fn, &arg_values, "print_call")

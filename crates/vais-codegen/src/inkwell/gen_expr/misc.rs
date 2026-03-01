@@ -1,6 +1,6 @@
 //! Miscellaneous expression generation (cast, deref, coerce, etc.).
 
-use inkwell::values::{BasicValueEnum, IntValue};
+use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
 use vais_ast::{Expr, Type};
 
@@ -8,6 +8,34 @@ use super::super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    /// Extract the raw i8* pointer from a string fat pointer `{ ptr, i64 }`.
+    /// If the value is already a pointer, returns it as-is.
+    /// If the value is a struct (fat pointer), extracts field 0 (the raw ptr).
+    pub(crate) fn extract_str_raw_ptr(
+        &self,
+        val: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<PointerValue<'ctx>> {
+        if val.is_pointer_value() {
+            Ok(val.into_pointer_value())
+        } else if val.is_struct_value() {
+            let struct_val = val.into_struct_value();
+            let ptr = self
+                .builder
+                .build_extract_value(struct_val, 0, "str_raw_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(ptr.into_pointer_value())
+        } else {
+            // Fallback: inttoptr
+            let i8_ptr_type = self
+                .context
+                .i8_type()
+                .ptr_type(inkwell::AddressSpace::default());
+            self.builder
+                .build_int_to_ptr(val.into_int_value(), i8_ptr_type, "str_raw_ptr_cast")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))
+        }
+    }
+
     /// Coerce any BasicValueEnum to an i64 IntValue.
     /// - IntValue: widen/truncate to i64
     /// - FloatValue: bitcast f64 to i64

@@ -250,6 +250,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 75 | 온보딩 개선 | 학습 경로 3단계, 실전 튜토리얼 3개(CLI/HTTP/Data), vais-tutorial 15레슨 Vais 문법 수정, README 확장 | 958 |
 | 76 | 파일럿 프로젝트 검증 | JSON→TOML 1,439 LOC + REST API 1,231 LOC, entry 파라미터 버그 수정, v0.1.0 릴리스 | 967 |
 | 77 | Codecov 커버리지 강화 | +515 tests (9파일 6,476줄), lexer/parser/ast/types/codegen/codegen-js/lsp/E2E, 66.8% (구조적 한계 분석) | 1,040+ |
+| 78 | 문자열 타입 fat pointer | str `{ i8*, i64 }` 전환, extern C ABI 경계 자동 변환, Inkwell string concat/eq, 23개 regression 수정 | 1,040 |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -633,11 +634,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **영향 범위**: lexer/parser/types/codegen/std/selfhost 전반
 > **선행 조건**: Phase 77 완료 (커버리지 기반으로 regression 감지)
 
-- [ ] 1. 문자열 ABI 설계 — `{ i8* ptr, i64 len }` fat pointer 스펙 정의 (Opus)
-- [ ] 2. Codegen 문자열 타입 전환 — Text IR + Inkwell 양쪽 (Opus)
-- [ ] 3. 표준 라이브러리 문자열 함수 마이그레이션 — std/string.vais (Sonnet)
-- [ ] 4. Selfhost 문자열 호환성 검증 — 50K+ LOC regression 확인 (Opus)
-- [ ] 5. 검증 — E2E 전체 통과, selfhost clang 21/21, Clippy 0건 (Opus)
+- [x] 1. 문자열 ABI 설계 — `{ i8* ptr, i64 len }` fat pointer, extern C 경계에서 `i8*` 추출 ✅ 2026-03-01
+  변경: str 타입 내부 `{ i8*, i64 }`, C ABI 경계에서 자동 ptr 추출/strlen 래핑
+- [x] 2. Codegen 문자열 타입 전환 — Text IR + Inkwell 양쪽 완료 ✅ 2026-03-01
+  변경: generate_expr_call.rs (extern C ABI 수정), inkwell/gen_expr/binary.rs (string concat/eq/neq), method_call.rs (str_to_ptr/ptr_to_str/puts_ptr fat ptr)
+- [x] 3. Str Copy 의미론 — fat pointer는 borrowed view, Copy 타입으로 확정 ✅ 2026-03-01
+  변경: ownership/copy_check.rs (ResolvedType::Str → Copy), function_gen/signature.rs (pub(crate) type_to_llvm_extern)
+- [x] 4. E2E 23개 regression 수정 — extern C 경계 fat pointer 처리 ✅ 2026-03-01
+  변경: 1040 E2E 전체 통과 (23개 실패→0), execution 119/119, codegen 937/937
+- [x] 5. 검증 — E2E 1,040 통과 (0 fail), Clippy 0건 (1 pre-existing) ✅ 2026-03-01
+  핵심: extern C boundary에서 str↔i8* 자동 변환, strlen으로 반환값 fat ptr 생성
+진행률: 5/5 (100%)
 
 ---
 

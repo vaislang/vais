@@ -54,12 +54,14 @@ impl CodeGenerator {
                 // Non-literal first arg: treat as simple string output
                 let (val, val_ir) = self.generate_expr(&args[0], counter)?;
                 ir.push_str(&val_ir);
+                // Extract raw i8* pointer from string fat pointer for C interop
+                let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                 if fn_name == "println" {
                     // For println with non-literal, use puts
                     let i32_result = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = call i32 @puts(i8* {}){}\n",
-                        i32_result, val, dbg_info
+                        i32_result, raw_ptr, dbg_info
                     ));
                 } else {
                     // For print with non-literal, use printf with %s
@@ -76,7 +78,7 @@ impl CodeGenerator {
                     let _result = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = call i32 (i8*, ...) @printf(i8* {}, i8* {}){}\n",
-                        _result, fmt_ptr, val, dbg_info
+                        _result, fmt_ptr, raw_ptr, dbg_info
                     ));
                 }
                 return Ok(("void".to_string(), ir));
@@ -161,22 +163,26 @@ impl CodeGenerator {
             let (val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
 
-            let llvm_ty = match &arg_types[i] {
-                ResolvedType::I32 => "i32",
-                ResolvedType::F32 => "float",
-                ResolvedType::F64 => "double",
-                ResolvedType::Str => "i8*",
-                // Char type not yet in Vais
-                _ => "i64", // i64, bool, etc.
-            };
-
-            // For i32 params, we may need to truncate from i64
-            if llvm_ty == "i32" {
-                let trunc_tmp = self.next_temp(counter);
-                ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
-                printf_args.push(format!("i32 {}", trunc_tmp));
-            } else {
-                printf_args.push(format!("{} {}", llvm_ty, val));
+            match &arg_types[i] {
+                ResolvedType::I32 => {
+                    let trunc_tmp = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
+                    printf_args.push(format!("i32 {}", trunc_tmp));
+                }
+                ResolvedType::F32 => {
+                    printf_args.push(format!("float {}", val));
+                }
+                ResolvedType::F64 => {
+                    printf_args.push(format!("double {}", val));
+                }
+                ResolvedType::Str => {
+                    // Extract raw i8* pointer from string fat pointer for printf
+                    let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
+                    printf_args.push(format!("i8* {}", raw_ptr));
+                }
+                _ => {
+                    printf_args.push(format!("i64 {}", val));
+                }
             }
         }
 
@@ -315,20 +321,26 @@ impl CodeGenerator {
             let (val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
 
-            let llvm_ty = match &arg_types[i] {
-                ResolvedType::I32 => "i32",
-                ResolvedType::F32 => "float",
-                ResolvedType::F64 => "double",
-                ResolvedType::Str => "i8*",
-                _ => "i64",
-            };
-
-            if llvm_ty == "i32" {
-                let trunc_tmp = self.next_temp(counter);
-                ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
-                arg_vals.push(format!("i32 {}", trunc_tmp));
-            } else {
-                arg_vals.push(format!("{} {}", llvm_ty, val));
+            match &arg_types[i] {
+                ResolvedType::I32 => {
+                    let trunc_tmp = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
+                    arg_vals.push(format!("i32 {}", trunc_tmp));
+                }
+                ResolvedType::F32 => {
+                    arg_vals.push(format!("float {}", val));
+                }
+                ResolvedType::F64 => {
+                    arg_vals.push(format!("double {}", val));
+                }
+                ResolvedType::Str => {
+                    // Extract raw i8* pointer from string fat pointer for snprintf
+                    let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
+                    arg_vals.push(format!("i8* {}", raw_ptr));
+                }
+                _ => {
+                    arg_vals.push(format!("i64 {}", val));
+                }
             }
         }
 
@@ -336,7 +348,7 @@ impl CodeGenerator {
             snprintf_args = format!(", {}", arg_vals.join(", "));
         }
 
-        // If no extra args, just return the format string directly
+        // If no extra args, just return the format string directly as fat pointer
         if extra_args.is_empty() {
             let str_name = format!(".str.{}", self.strings.counter - 1);
             // Already pushed the constant above, reuse it
@@ -344,7 +356,10 @@ impl CodeGenerator {
                 "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
                 fmt_len, fmt_len, str_name
             );
-            return Ok((ptr, ir));
+            // Build fat pointer with the format string (minus null terminator)
+            let str_len = format!("{}", c_format.len());
+            let result = self.build_str_fat_ptr(&ptr, &str_len, counter, &mut ir);
+            return Ok((result, ir));
         }
 
         // Step 1: snprintf(NULL, 0, fmt, ...) to get required length
@@ -378,7 +393,9 @@ impl CodeGenerator {
         // Mark that we need snprintf declaration
         self.needs_string_helpers = true;
 
-        Ok((buf_ptr, ir))
+        // Build fat pointer { i8*, i64 } with the formatted string
+        let result = self.build_str_fat_ptr(&buf_ptr, &len_i64, counter, &mut ir);
+        Ok((result, ir))
     }
 
     /// Generate await expression

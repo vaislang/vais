@@ -36,8 +36,11 @@ impl OwnershipChecker {
             // Const arrays are Copy if element type is Copy
             ResolvedType::ConstArray { element, .. } => Self::is_copy_type(element),
 
-            // Dynamic arrays, strings, maps, and other heap-allocated types are NOT Copy
-            ResolvedType::Array(_) | ResolvedType::Str | ResolvedType::Map(_, _) => false,
+            // Strings are Copy (fat pointer { ptr, len } — a borrowed view, not owning data)
+            ResolvedType::Str => true,
+
+            // Dynamic arrays, maps, and other heap-allocated types are NOT Copy
+            ResolvedType::Array(_) | ResolvedType::Map(_, _) => false,
 
             // Named structs/enums: not Copy by default
             // (In a full implementation, we'd check for Copy trait impl)

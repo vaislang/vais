@@ -244,6 +244,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let lhs_val = self.generate_expr(lhs)?;
         let rhs_val = self.generate_expr(rhs)?;
 
+        // String operations: if either operand is a struct value (string fat pointer),
+        // dispatch to string-specific binary operation handling
+        if lhs_val.is_struct_value() || rhs_val.is_struct_value() {
+            return self.generate_string_binary(op, lhs_val, rhs_val);
+        }
+
         // Determine if we're dealing with integers or floats
         let is_float = lhs_val.is_float_value();
 

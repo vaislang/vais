@@ -166,8 +166,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .get_function("printf")
                 .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
             let newline = self.generate_string_literal("\n")?;
+            let nl_ptr = self.extract_str_raw_ptr(newline)?;
             self.builder
-                .build_call(printf_fn, &[newline.into()], "puts_nl")
+                .build_call(printf_fn, &[nl_ptr.into()], "puts_nl")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             return Ok(self.context.struct_type(&[], false).const_zero().into());
         }
@@ -312,7 +313,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
             }
             "str_to_ptr" => {
-                // str_to_ptr(ptr) -> i64: convert ptr to i64
+                // str_to_ptr(str_fat_ptr) -> i64: extract raw ptr from fat pointer, convert to i64
                 if args.is_empty() {
                     return Err(CodegenError::InternalError(format!(
                         "builtin 'str_to_ptr' requires 1 argument(s), got {}",
@@ -320,23 +321,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
-                if arg.is_pointer_value() {
-                    let result = self
-                        .builder
-                        .build_ptr_to_int(
-                            arg.into_pointer_value(),
-                            self.context.i64_type(),
-                            "str_to_ptr_result",
-                        )
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    return Ok(result.into());
-                } else {
-                    // Already an integer
-                    return Ok(arg);
-                }
+                // Extract raw pointer from string fat pointer { ptr, i64 }
+                let raw_ptr = self.extract_str_raw_ptr(arg)?;
+                let result = self
+                    .builder
+                    .build_ptr_to_int(
+                        raw_ptr,
+                        self.context.i64_type(),
+                        "str_to_ptr_result",
+                    )
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(result.into());
             }
             "ptr_to_str" => {
-                // ptr_to_str(i64) -> ptr: convert i64 to i8*
+                // ptr_to_str(i64) -> { ptr, i64 }: convert i64 to string fat pointer
                 if args.is_empty() {
                     return Err(CodegenError::InternalError(format!(
                         "builtin 'ptr_to_str' requires 1 argument(s), got {}",
@@ -344,20 +342,52 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     )));
                 }
                 let arg = self.generate_expr(&args[0].node)?;
-                if arg.is_int_value() {
+                let raw_ptr = if arg.is_int_value() {
                     let i8_ptr_type = self
                         .context
                         .i8_type()
                         .ptr_type(inkwell::AddressSpace::default());
-                    let result = self
-                        .builder
-                        .build_int_to_ptr(arg.into_int_value(), i8_ptr_type, "ptr_to_str_result")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    return Ok(result.into());
+                    self.builder
+                        .build_int_to_ptr(arg.into_int_value(), i8_ptr_type, "ptr_to_str_ptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else if arg.is_pointer_value() {
+                    arg.into_pointer_value()
                 } else {
-                    // Already a pointer
-                    return Ok(arg);
-                }
+                    // String fat pointer — extract the raw ptr
+                    self.extract_str_raw_ptr(arg)?
+                };
+                // Call strlen to get the length, then build fat pointer
+                let strlen_fn = self
+                    .module
+                    .get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let len_call = self
+                    .builder
+                    .build_call(strlen_fn, &[raw_ptr.into()], "ptr_to_str_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let len = len_call
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into())
+                    .into_int_value();
+                // Build fat pointer { ptr, i64 }
+                let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let len_type = self.context.i64_type();
+                let str_struct_type =
+                    self.context
+                        .struct_type(&[ptr_type.into(), len_type.into()], false);
+                let undef = str_struct_type.get_undef();
+                let with_ptr = self
+                    .builder
+                    .build_insert_value(undef, raw_ptr, 0, "str_fat_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                let fat_ptr = self
+                    .builder
+                    .build_insert_value(with_ptr, len, 1, "str_fat_ptr_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value();
+                return Ok(fat_ptr.into());
             }
             "strlen_ptr" => {
                 // strlen_ptr(i64) -> i64: convert i64 to ptr then call strlen

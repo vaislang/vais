@@ -116,6 +116,9 @@ impl CodeGenerator {
         let mut ir = String::new();
         let mut arg_vals = Vec::with_capacity(args.len());
 
+        // Check if this is an extern C function (needs Str→i8* extraction)
+        let is_extern_c = fn_info.as_ref().map(|f| f.is_extern).unwrap_or(false);
+
         for (i, arg) in args.iter().enumerate() {
             let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
@@ -125,11 +128,20 @@ impl CodeGenerator {
                 .and_then(|f| f.signature.params.get(i))
                 .map(|(_, ty, _)| ty.clone());
 
+            let inferred_ty = self.infer_expr_type(arg);
+
+            // For extern C functions, extract i8* from string fat pointer { i8*, i64 }
+            if is_extern_c && matches!(inferred_ty, ResolvedType::Str) {
+                let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
+                val = raw_ptr;
+                arg_vals.push(format!("i8* {}", val));
+                continue;
+            }
+
             // Determine argument LLVM type - use parameter type if available, otherwise infer from expression
             let arg_ty = if let Some(ref pt) = param_ty {
                 self.type_to_llvm(pt)
             } else {
-                let inferred_ty = self.infer_expr_type(arg);
                 self.type_to_llvm(&inferred_ty)
             };
 
@@ -163,7 +175,7 @@ impl CodeGenerator {
             // This applies whether we have function info or not
             let type_to_check = match &param_ty {
                 Some(ty) => ty.clone(),
-                None => self.infer_expr_type(arg),
+                None => inferred_ty,
             };
             let is_named = matches!(type_to_check, ResolvedType::Named { .. });
             let is_value = self.is_expr_value(arg);
