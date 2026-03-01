@@ -7,3 +7,7 @@ repository.workspace = true
 description = "Abstract Syntax Tree definitions for the Vais programming language"
 
 [dependencies]
+
+[dev-dependencies]
+vais-parser = { path = "../vais-parser" }
+vais-lexer = { path = "../vais-lexer" }

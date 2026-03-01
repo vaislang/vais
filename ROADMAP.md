@@ -248,6 +248,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 73 | ABI 안정성 | TC 중복 함수 검출(E034), assert_compiles 호출 0개 달성, generic 함수 body 스킵, where_clause/slice_len 전환 | 931 |
 | 74 | 표준 라이브러리 확충 | TOML 파서(913줄), YAML 파서(1,177줄), 문자열 19함수(+393줄), +27 E2E | 958 |
 | 75 | 온보딩 개선 | 학습 경로 3단계, 실전 튜토리얼 3개(CLI/HTTP/Data), vais-tutorial 15레슨 Vais 문법 수정, README 확장 | 958 |
+| 76 | 파일럿 프로젝트 검증 | JSON→TOML 1,439 LOC + REST API 1,231 LOC, entry 파라미터 버그 수정, v0.1.0 릴리스 | 967 |
+| 77 | Codecov 커버리지 강화 | +515 tests (9파일 6,476줄), lexer/parser/ast/types/codegen/codegen-js/lsp/E2E, 66.8% (구조적 한계 분석) | 1,040+ |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -596,6 +598,89 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. v0.1.0 릴리스 — Phase 73~76 성과 기반 `0.0.5` → `0.1.0` 업그레이드 ✅ 2026-03-01
   근거: E2E 967개, 파일럿 2,670 LOC 검증, 컴파일러 버그 1건 수정, selfhost 50K+ LOC
   변경: `Cargo.toml` workspace.package.version `0.0.5` → `0.1.0`
+
+---
+
+## 📋 예정 작업
+
+모드: 자동진행
+
+### Phase 77: Codecov 75% 달성 — 커버리지 테스트 강화
+
+> **목표**: CI 기준 Codecov 68.7% → 75% 달성
+> **전략**: lcov 미커버 라인 재분석 → 테스트 가능 경로 단위 테스트 추가, core 크레이트(codegen/types/parser) 우선
+> **현황**: 68.7% (Phase 62 기준), 목표 75% (LLVM/OS 의존성으로 100%는 비현실적)
+
+- [x] 1. lcov.info 미커버 라인 재분석 — 96,975줄 중 64,827 커버 (66.8%) ✅ 2026-03-01
+  변경: cargo-llvm-cov 분석, Inkwell 5,224줄(22.3%), vaisc CLI 7,560줄(48.1%), LSP 3,016줄(43.1%) 미커버 확인
+- [x] 2. vais-codegen 커버리지 강화 — +76 tests (codegen_coverage_tests.rs 1,005줄) ✅ 2026-03-01
+  변경: crates/vais-codegen/tests/codegen_coverage_tests.rs (신규), expr_visitor/control_flow/lambda/generics/helpers/stmt 커버
+- [x] 3. vais-types 커버리지 강화 — +84 tests (scope 42 + inference 42) ✅ 2026-03-01
+  변경: crates/vais-types/tests/scope_coverage_tests.rs (619줄), inference_coverage_tests.rs (562줄) 신규
+- [x] 4. vais-parser + ast + lexer + codegen-js + lsp + E2E 강화 — +355 tests ✅ 2026-03-01
+  변경: parser(100), ast(73), lexer(37), codegen-js(60), lsp(12), E2E phase77(73) — 9개 테스트 파일 신규 (6,476줄)
+- [x] 5. 검증 — 전체 테스트 통과, +515 tests, Clippy 0건 ✅ 2026-03-01
+  결과: 66.8% (75% 미달 — Inkwell/CLI/LSP 구조적 한계), E2E 1,040+ 통과
+  발견: 75%는 단위 테스트만으로 달성 불가 (Inkwell LLVM 의존성, CLI integration 필요)
+진행률: 5/5 (100%)
+
+---
+
+### Phase 78: 문자열 타입 설계 개선 — Unicode · 길이 정보
+
+> **목표**: 현재 i64 포인터 기반 str → `{ i8* ptr, i64 len }` fat pointer 구조체로 전환
+> **우선순위**: 높음 — 대형 프로젝트 문자열 처리의 근본 제약
+> **영향 범위**: lexer/parser/types/codegen/std/selfhost 전반
+> **선행 조건**: Phase 77 완료 (커버리지 기반으로 regression 감지)
+
+- [ ] 1. 문자열 ABI 설계 — `{ i8* ptr, i64 len }` fat pointer 스펙 정의 (Opus)
+- [ ] 2. Codegen 문자열 타입 전환 — Text IR + Inkwell 양쪽 (Opus)
+- [ ] 3. 표준 라이브러리 문자열 함수 마이그레이션 — std/string.vais (Sonnet)
+- [ ] 4. Selfhost 문자열 호환성 검증 — 50K+ LOC regression 확인 (Opus)
+- [ ] 5. 검증 — E2E 전체 통과, selfhost clang 21/21, Clippy 0건 (Opus)
+
+---
+
+### Phase 79: 에러 메시지 위치 정보 — Span · 소스 맵
+
+> **목표**: 컴파일 에러에 파일명:줄:칼럼 위치 정보 포함
+> **우선순위**: 중간 — Phase 76 파일럿에서 "위치 정보 미포함" 발견
+> **현황**: ariadne 진단 프레임워크 이미 도입, Span 구조 있으나 codegen 에러에 미전파
+> **선행 조건**: Phase 78 완료 (문자열 ABI 안정화 후)
+
+- [ ] 1. Codegen 에러에 Span 전파 — CodegenError에 span 필드 추가 (Opus)
+- [ ] 2. ariadne 진단 통합 — codegen 에러를 ariadne Report로 출력 (Sonnet)
+- [ ] 3. 타입 체커 에러 위치 정확도 개선 — 미전파 Span 5건+ 수정 (Sonnet)
+- [ ] 4. 파일럿 프로젝트 재검증 — JSON→TOML, REST API 에러 메시지 확인 (Opus)
+- [ ] 5. 검증 — E2E 전체 통과, Clippy 0건 (Opus)
+
+---
+
+### Phase 80: 표준 라이브러리 확충 — MessagePack · Protobuf
+
+> **목표**: 바이너리 직렬화 포맷 2종 추가로 실전 프로젝트 병목 해소
+> **우선순위**: 중간 — JSON/TOML/YAML 완료, 바이너리 포맷 부재
+> **선행 조건**: Phase 79 완료 (에러 메시지로 디버깅 가능해진 후)
+
+- [ ] 1. MessagePack 직렬화 — `std/msgpack.vais` 신규 (Opus)
+- [ ] 2. Protobuf 직렬화 — `std/protobuf.vais` 신규 (Opus)
+- [ ] 3. 벤치마크 — JSON vs TOML vs YAML vs MessagePack vs Protobuf 성능 비교 (Sonnet)
+- [ ] 4. E2E 테스트 — 각 포맷 5개+ 테스트 추가 (Sonnet)
+- [ ] 5. 검증 — E2E 전체 통과, Clippy 0건 (Opus)
+
+---
+
+### Phase 81: E2E 1,000개 달성 — 잔여 기능 커버리지 확장
+
+> **목표**: E2E 967 → 1,000+ 달성 (Phase 80까지의 신규 기능 포함)
+> **우선순위**: 중간 — 마일스톤 달성 + 잔여 미커버 기능 검증
+> **선행 조건**: Phase 80 완료 (신규 std 기능 테스트 포함)
+
+- [ ] 1. 미커버 기능 분석 — E2E에 없는 언어 기능/std 함수 식별 (Opus)
+- [ ] 2. 고급 타입 시스템 E2E — GAT/HKT/dependent/linear 실행 테스트 (Sonnet)
+- [ ] 3. Std 라이브러리 E2E — 직렬화/문자열/네트워킹 통합 테스트 (Sonnet)
+- [ ] 4. 에러 복구 E2E — 의도적 에러 시나리오 + 진단 메시지 검증 (Sonnet)
+- [ ] 5. 검증 — E2E 1,000+ 달성, Clippy 0건 (Opus)
 
 ---
 

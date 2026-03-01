@@ -48,3 +48,4 @@ mod phase67_monomorphization;
 mod phase71_type_system;
 mod phase74_stdlib;
 mod phase76_pilot;
+mod phase77_coverage;
