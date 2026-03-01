@@ -241,7 +241,7 @@ impl CodeGenerator {
         for p in params {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let llvm_ty = self.type_to_llvm(&ty);
-            let llvm_name = if p.name.node == "entry" { "entry.param".to_string() } else { p.name.node.clone() };
+            let llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
             param_strs.push(format!("{} %{}", llvm_ty, llvm_name));
             param_types.push(llvm_ty);
         }
@@ -269,10 +269,10 @@ impl CodeGenerator {
 
         for p in params {
             let ty = self.ast_type_to_resolved(&p.ty.node);
-            let llvm_name = if p.name.node == "entry" { "entry.param".to_string() } else { p.name.node.clone() };
+            let llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
             self.fn_ctx.locals.insert(
                 p.name.node.clone(),
-                LocalVar::param(ty, llvm_name),
+                LocalVar::param(ty, llvm_name.into_owned()),
             );
         }
 

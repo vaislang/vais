@@ -1,6 +1,22 @@
 //! Miscellaneous code generation helper methods
 
+use std::borrow::Cow;
+
 use super::*;
+
+/// Block labels that are hardcoded in codegen (not generated via `next_label`).
+/// Parameter names matching these must be renamed to avoid LLVM IR collisions.
+const RESERVED_BLOCK_LABELS: &[&str] = &["entry"];
+
+/// Sanitize a parameter name to avoid collision with LLVM block labels.
+/// Returns `Cow::Borrowed` when no rename is needed (zero allocation).
+pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
+    if RESERVED_BLOCK_LABELS.contains(&name) {
+        Cow::Owned(format!("{}.param", name))
+    } else {
+        Cow::Borrowed(name)
+    }
+}
 
 impl CodeGenerator {
     /// Generate a unique string constant name, with optional module prefix
