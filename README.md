@@ -99,7 +99,7 @@ playground/        # Web playground frontend
 ```bash
 cargo build --release
 cargo test                                     # Run all 7,000+ tests
-cargo test -p vaisc                            # Run vaisc tests (967 E2E tests)
+cargo test -p vaisc                            # Run vaisc tests (1,150 E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
