@@ -7,6 +7,14 @@ impl TypeChecker {
     pub(crate) fn register_function(&mut self, f: &Function) -> TypeResult<()> {
         let name = f.name.node.clone();
 
+        // Check for duplicate user-defined function definitions.
+        // Builtins are NOT in user_defined_functions, so user code can override builtins.
+        // But defining the same function twice in user code is an error.
+        if self.user_defined_functions.contains(&name) {
+            return Err(TypeError::Duplicate(name, Some(f.name.span)));
+        }
+        self.user_defined_functions.insert(name.clone());
+
         // Set current generics for type resolution
         let saved = self.set_generics(&f.generics);
 

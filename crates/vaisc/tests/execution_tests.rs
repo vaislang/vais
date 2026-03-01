@@ -221,11 +221,6 @@ fn assert_no_crash(source: &str) {
     }
 }
 
-/// Assert that source compiles successfully (IR generation only)
-fn assert_compiles(source: &str) {
-    compile_to_ir(source).expect("Should compile successfully");
-}
-
 // ==================== Stage 0: Basic Execution Tests ====================
 
 #[test]
@@ -1847,10 +1842,9 @@ F slice_len(s: &[i64]) -> i64 = s.len()
 
 F main() -> i64 = slice_len(&[1, 2, 3, 4, 5])
 "#;
-    // NOTE: .len() on slice generates `call @len` but len is not defined as a function.
-    // Need to implement .len() as extractvalue from fat pointer { i8*, i64 } field 1.
-    // Keep as assert_compiles until slice method codegen is implemented.
-    assert_compiles(source);
+    // Phase 73: Slice .len() uses extractvalue on { i8*, i64 } fat pointer field 1.
+    // The fat pointer is correctly constructed at the call site with insertvalue.
+    assert_exit_code(source, 5);
 }
 
 // --- Where Clause Tests (Phase 32) ---
@@ -1891,10 +1885,9 @@ where T: Trait1, T: Trait2 {
 
 F main() -> i64 = 0
 "#;
-    // NOTE: Where clause generic function emits unresolved @method1/@method2 in IR.
-    // Even without being called, the function definition references undefined symbols.
-    // Keep as assert_compiles until dead-code elimination or lazy monomorphization.
-    assert_compiles(source);
+    // Phase 73: Generic function use_both is declared but not defined (no concrete
+    // instantiation). Since main() doesn't call it, clang links successfully.
+    assert_exit_code(source, 0);
 }
 
 // --- Trait Alias Tests (Phase 37) ---

@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.0.5 (프리릴리스)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-01 (Phase 71 — Object Safety+Associated type, E2E 931)
+> **최종 업데이트**: 2026-03-01 (Phase 73~76 프로덕션 준비 로드맵 수립)
 
 ---
 
@@ -244,13 +244,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 69 | Grammar Coverage 갭 해소 | grammar_coverage 223→275 (+52), DependentType/Contract/ConstParam/Variance/Map-Block 5섹션 | 919 |
 | 70 | Runtime Panic 제거 | 프로덕션 panic/unreachable 0개 달성, TypeError::InternalError(E033), codegen 12건 전환, +9 테스트 | 919 |
 | 71 | Object Safety & 고급 타입 | Check 5 제네릭 메서드 감지, Associated type resolution, transitive instantiation 개선, +15 테스트 | 931 |
+| 72 | v0.0.5 릴리스 | Release 빌드, Parser 5건 수정 (field punning/~var/optional semicolons), VaisDB P001=0, GitHub Release | 931 |
+| 73 | ABI 안정성 | TC 중복 함수 검출(E034), assert_compiles 호출 0개 달성, generic 함수 body 스킵, where_clause/slice_len 전환 | 931 |
 
-### 잔여 기술 부채 (Phase 71 기준)
+### 잔여 기술 부채 (Phase 72 기준)
 
 | 항목 | 원인 | 비고 |
 |------|------|------|
-| assert_compiles 4개 잔여 | codegen 근본 한계 | duplicate_fn(clang), struct-by-value(Text IR ABI), slice_len(call-site ABI), where_clause(TC E022) |
+| ~~assert_compiles 3개 잔여~~ | ✅ Phase 73에서 해결 | TC 중복 검출(E034), where_clause generic body 스킵, slice_len 전환 — 호출 0개 달성 |
 | Codecov 68.7% | LLVM/OS 의존성 | **100%는 비현실적** — 플랫폼별 #[cfg], unreachable!() 450개, GPU SDK 필요. 현실적 목표: 75-80% |
+| 표준 라이브러리 직렬화 | JSON만 구현 | TOML/YAML/MessagePack/Protobuf 부재 — 실전 프로젝트 도입 시 병목 |
+| 문자열 타입 설계 | i64 포인터 기반 str | Unicode 지원 미흡, 런타임 길이 정보 부재 — 대형 프로젝트 문자열 처리 제약 |
+| 온보딩 학습 경로 | 문서 71개 있으나 연결 부재 | Getting Started → 중급 → 고급 체계적 경로 없음 |
 
 ---
 
@@ -476,16 +481,114 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-### Phase 72: v0.0.5 릴리스 — 빌드 & 배포 📋
+### Phase 72: v0.0.5 릴리스 — 빌드 & 배포 ✅
 
 > **목표**: 모든 코드 변경 완료 후 v0.0.5 릴리스 배포
 > **배경**: Phase 63에서 버전 다운그레이드(Cargo.toml, README, CHANGELOG) + 버전 정책 문서화 완료. 나머지 빌드/테스트/태깅 작업.
 > **선행 조건**: Phase 65~71 코드 작업 완료 후 진행
+
+- [x] 1. cargo build --release & 로컬 설치 — /opt/homebrew/bin/vaisc 교체 (Opus) ✅ 2026-03-01
+  변경: cargo build --release (37.5s), /opt/homebrew/bin/vaisc v0.0.5 설치
+- [x] 2. VaisDB 빌드 테스트 — vaisc build src/main.vais 파서 에러 0 확인 (Opus) ✅ 2026-03-01
+  변경: parser 5개 수정 (field punning, ~var=expr, optional semicolons, keyword-as-ident), VaisDB P001 에러 0
+  파일: declarations.rs, stmt.rs, primary.rs (+57/-4줄)
+- [x] 3. git tag v0.0.5 & GitHub Release (Opus) ✅ 2026-03-01
+  변경: commit b441022, tag v0.0.5, https://github.com/vaislang/vais/releases/tag/v0.0.5
+
+---
+
+### Phase 73: ABI 안정성 — 잔여 assert_compiles 해결 + TC 중복 함수 검출
+
+> **목표**: 프로덕션 도입 전 codegen ABI 이슈 3개 전수 해결
+> **우선순위**: 높음 — 컴파일러 신뢰성의 기본 전제
+> **근거**: clang 링킹 실패/거부가 사용자에게 노출되면 프로덕션 신뢰도 치명적
 > **모드: 자동진행**
 
-- [ ] 1. cargo build --release & 로컬 설치 — /opt/homebrew/bin/vaisc 교체 (Opus)
-- [ ] 2. VaisDB 빌드 테스트 — vaisc build src/main.vais 파서 에러 0 확인 (Opus)
-- [ ] 3. git tag v0.0.5 & GitHub Release (Opus)
+- [x] 1. TC 중복 함수 검출 — `error_duplicate_function_definition` (Opus) ✅ 2026-03-01
+  변경: vais-types/src/lib.rs (user_defined_functions HashSet 추가), checker_module/registration.rs (중복 검사), error_scenario_tests.rs (assert_compiles→assert_error_contains 전환)
+- [x] 2. struct-by-value ABI 수정 — 이전 Phase(68)에서 해결 완료 확인 (Opus) ✅ 2026-03-01
+  변경: 없음 (E2E 931개 전체 통과, struct-by-value 테스트 포함)
+- [x] 3. slice_len / where_clause 잔여 정리 (Opus) ✅ 2026-03-01
+  변경: execution_tests.rs (exec_slice_len_method→assert_exit_code(5), exec_where_clause_multiple_bounds→assert_exit_code(0)), module_gen/mod.rs (generate_module에서 generic 함수 body 생성 스킵)
+- [x] 4. 검증 — E2E 931 통과 (0 fail), assert_compiles 호출 0개, Clippy 0건 ✅ 2026-03-01
+
+---
+
+### Phase 74: 표준 라이브러리 확충 — 직렬화 · 문자열 · 암호화
+
+> **목표**: 대형 프로젝트 도입 시 필수적인 표준 라이브러리 기능 보완
+> **우선순위**: 높음 — 생태계 없이는 프로덕션 도입 불가능
+> **현황**: 74개 모듈 (34K줄), 네트워킹/DB/동시성은 우수하나 직렬화/문자열 취약
+> **전략**: 실전 프로젝트에서 가장 많이 쓰이는 기능 우선
+
+- [ ] 1. TOML 직렬화 — `std/toml.vais` 신규 (Opus)
+  내용: TOML 파서/시리얼라이저, 설정 파일 읽기/쓰기
+  규모: ~500줄 (JSON 파서 패턴 참고)
+  효과: Cargo.toml 같은 설정 파일 처리 가능
+- [ ] 2. YAML 직렬화 — `std/yaml.vais` 신규 (Opus)
+  내용: YAML 파서/시리얼라이저, 들여쓰기 기반 구조 해석
+  규모: ~600줄
+  효과: Kubernetes/Docker 설정, CI/CD 파이프라인 처리
+- [ ] 3. 문자열 강화 — `std/string.vais` 확장 (Opus)
+  내용: split/join/trim/replace/contains/starts_with/ends_with/to_upper/to_lower
+  추가: UTF-8 바이트 길이 함수, 문자열 빌더 (StringBuilder)
+  효과: 대형 프로젝트 문자열 처리 실용성 확보
+  C 런타임: 필요 시 `std/string_runtime.c` 신규
+- [ ] 4. 비대칭 암호화 기본 — `std/crypto.vais` 확장 (Opus)
+  내용: RSA 키 생성/서명/검증 (기본 구현), 또는 extern C로 OpenSSL 래핑
+  효과: TLS 인증서 검증, JWT 서명 등 실전 암호화 시나리오
+- [ ] 5. 검증 — 각 모듈 단위 테스트 + E2E 통합 테스트, Clippy 0건
+
+---
+
+### Phase 75: 온보딩 개선 — 학습 경로 · 실전 튜토리얼 · Getting Started
+
+> **목표**: 외부 개발자가 Vais를 독학할 수 있는 체계적 학습 경로 구축
+> **우선순위**: 중간 — 커뮤니티 성장과 도입 확산의 전제 조건
+> **현황**: docs 71개, 예제 189개, 튜토리얼 15레슨 있으나 연결 경로 없음
+
+- [ ] 1. 학습 경로 가이드 — `docs-site/src/learning-path.md` 신규 (Sonnet)
+  내용: 3단계 커리큘럼 (초급 2시간 / 중급 4시간 / 고급 4시간)
+  구조: 각 단계별 읽을 문서 → 실습 예제 → 확인 체크리스트
+  대상별 분기: 시스템 프로그래머 / 웹 개발자(WASM) / AI·ML 개발자(GPU)
+- [ ] 2. 실전 튜토리얼 프로젝트 3개 (Opus)
+  (a) `docs-site/src/tutorials/cli-tool.md` — Vais로 CLI 도구 만들기 (args 파싱, 파일 처리)
+  (b) `docs-site/src/tutorials/http-server.md` — 간단한 REST API 서버 (http_server + json)
+  (c) `docs-site/src/tutorials/data-pipeline.md` — 데이터 파이프라인 (파일 읽기 → 변환 → 출력)
+  각 ~300줄 가이드, 완성 코드 examples/에 추가
+- [ ] 3. Getting Started 강화 — README.md "다음 단계" 섹션 확장 (Sonnet)
+  내용: "Hello World 다음에 뭐 하지?" → 학습 경로 링크, 추천 예제 5개, 커뮤니티 안내
+  추가: 5분 퀵스타트 요약 (설치 → 첫 프로그램 → 컴파일 → 실행 → 다음 단계)
+- [ ] 4. vais-tutorial 예제 완성 (Sonnet)
+  대상: crates/vais-tutorial/examples/ (현재 비어있음)
+  내용: 각 15레슨별 해답 코드 .vais 파일 추가
+- [ ] 5. SUMMARY.md 업데이트 + 빌드 검증 (Sonnet)
+  내용: 신규 문서 등록, mdbook build 통과 확인
+
+---
+
+### Phase 76: 파일럿 프로젝트 — 실전 도메인 검증
+
+> **목표**: Phase 73~75 결과물을 실전 규모 프로젝트로 검증
+> **우선순위**: 높음 — 대형 프로젝트 도입의 최종 관문
+> **선행 조건**: Phase 73 (ABI 안정성) + Phase 74 (표준 라이브러리) 완료 필수
+> **전략**: VaisDB 외 2개 추가 프로젝트로 다양한 도메인 커버
+
+- [ ] 1. 파일럿 프로젝트 A: CLI 도구 — 1,000+ LOC (Opus)
+  후보: (a) vais-fmt (코드 포매터 CLI), (b) vais-bench (벤치마크 러너), (c) JSON→TOML 변환기
+  검증 항목: args 파싱, 파일 I/O, 에러 처리, 문자열 처리, exit code
+  성공 기준: clang 컴파일 100%, 정상 실행, 에러 케이스 처리
+- [ ] 2. 파일럿 프로젝트 B: 웹 서비스 — 2,000+ LOC (Opus)
+  후보: (a) REST API 서버 (http_server + json + sqlite), (b) 정적 사이트 생성기
+  검증 항목: 네트워킹, 직렬화, 동시성, DB 연동, 에러 전파
+  성공 기준: HTTP 요청/응답 정상 처리, 동시 접속 테스트 통과
+- [ ] 3. 발견된 이슈 수집 + 수정 (Opus)
+  내용: 파일럿 중 발견된 컴파일러/표준라이브러리 버그 즉시 수정
+  추적: 이슈별 원인 분류 (codegen / TC / parser / stdlib)
+- [ ] 4. 프로덕션 준비도 보고서 작성 (Sonnet)
+  내용: 파일럿 프로젝트 결과 종합, 잔여 이슈, v1.0.0 릴리스 가능 여부 판단
+  기준: (a) 컴파일 성공률 100%, (b) 런타임 크래시 0건, (c) 에러 메시지 품질 확인
+- [ ] 5. v0.1.0 릴리스 판단 — Phase 73~76 성과 기반 버전 업그레이드 결정
 
 ---
 

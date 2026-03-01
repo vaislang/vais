@@ -56,14 +56,6 @@ fn assert_error_contains(source: &str, expected_fragment: &str) {
     }
 }
 
-/// Assert that compilation succeeds
-fn assert_compiles(source: &str) {
-    match compile_to_ir(source) {
-        Ok(_) => (),
-        Err(e) => panic!("Expected compilation to succeed, but it failed: {}", e),
-    }
-}
-
 /// Assert that source compiles, runs via clang, and returns the expected exit code.
 /// Note: This duplicates logic from e2e/helpers.rs but is necessary because
 /// this file is a separate integration test binary that cannot import e2e modules,
@@ -157,15 +149,12 @@ F main() -> i64 = add(1)
 
 #[test]
 fn error_duplicate_function_definition() {
-    // Note: Current implementation allows duplicate function definitions
-    // This test verifies the current behavior - may change in future
+    // Phase 73: TC now detects duplicate function definitions (E034/Duplicate)
     let source = r#"
 F main() -> i64 = 0
 F main() -> i64 = 1
 "#;
-    // Currently this compiles in IR (later definition overrides earlier one)
-    // NOTE: clang rejects duplicate function definitions — keep as assert_compiles
-    assert_compiles(source);
+    assert_error_contains(source, "Duplicate");
 }
 
 #[test]

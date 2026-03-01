@@ -152,6 +152,10 @@ pub struct TypeChecker {
     // Number of items imported from other modules (skip ownership checking for these)
     pub(crate) imported_item_count: usize,
 
+    // Track user-defined function names (for duplicate detection)
+    // Builtins are registered before check_module and are NOT in this set.
+    pub(crate) user_defined_functions: HashSet<String>,
+
     // Multi-error collection mode: when true, errors are collected instead of returning immediately
     pub multi_error_mode: bool,
     pub collected_errors: Vec<TypeError>,
@@ -190,6 +194,7 @@ impl TypeChecker {
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
             ownership_check_mode: Some(false), // warn-only by default
             imported_item_count: 0,
+            user_defined_functions: HashSet::new(),
             multi_error_mode: false,
             collected_errors: Vec::new(),
             dependent_predicates: RefCell::new(HashMap::new()),

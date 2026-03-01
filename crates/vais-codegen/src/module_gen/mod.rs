@@ -134,6 +134,13 @@ impl CodeGenerator {
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => {
+                    // Skip generic functions — they need monomorphization to resolve
+                    // trait method calls (e.g., x.method1() on generic T).
+                    // Without concrete type args, we'd emit undefined symbols.
+                    // Use generate_module_with_instantiations() for generic codegen.
+                    if !f.generics.is_empty() {
+                        continue;
+                    }
                     body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                     body_ir.push('\n');
                 }
