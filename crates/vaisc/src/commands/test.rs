@@ -2,6 +2,7 @@
 
 use crate::commands::build::cmd_build;
 use crate::configure_type_checker;
+use crate::error_formatter;
 use crate::utils::walkdir;
 use colored::Colorize;
 use std::fs;
@@ -751,12 +752,18 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     codegen.set_type_aliases(checker.get_type_aliases().clone());
 
     let instantiations = checker.get_generic_instantiations();
-    let ir = if instantiations.is_empty() {
+    let result = if instantiations.is_empty() {
         codegen.generate_module(&ast)
     } else {
         codegen.generate_module_with_instantiations(&ast, &instantiations)
-    }
-    .map_err(|e| format!("codegen error: {}", e))?;
+    };
+    let ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(&spanned, &source, path)
+    })?;
 
     Ok(ir)
 }

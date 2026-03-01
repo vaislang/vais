@@ -95,6 +95,7 @@ impl CodeGenerator {
             type_recursion_depth: std::cell::Cell::new(0),
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
+            last_error_span: None,
         };
 
         // Register built-in extern functions
@@ -171,5 +172,14 @@ impl CodeGenerator {
     /// Set current source file for error messages
     pub fn set_source_file(&mut self, file: &str) {
         self.fn_ctx.current_file = Some(file.to_string());
+    }
+
+    /// Get the last expression span recorded during code generation.
+    ///
+    /// When a `CodegenError` occurs, this span points to the AST expression
+    /// that was being processed at the time.  The compiler driver can use it
+    /// to construct a [`SpannedCodegenError`] for rich diagnostics.
+    pub fn last_error_span(&self) -> Option<Span> {
+        self.last_error_span
     }
 }

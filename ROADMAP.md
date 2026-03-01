@@ -251,6 +251,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 76 | 파일럿 프로젝트 검증 | JSON→TOML 1,439 LOC + REST API 1,231 LOC, entry 파라미터 버그 수정, v0.1.0 릴리스 | 967 |
 | 77 | Codecov 커버리지 강화 | +515 tests (9파일 6,476줄), lexer/parser/ast/types/codegen/codegen-js/lsp/E2E, 66.8% (구조적 한계 분석) | 1,040+ |
 | 78 | 문자열 타입 fat pointer | str `{ i8*, i64 }` 전환, extern C ABI 경계 자동 변환, Inkwell string concat/eq, 23개 regression 수정 | 1,040 |
+| 79 | 에러 메시지 위치 정보 | SpannedCodegenError + last_error_span 자동 추적, 드라이버 7곳 에러 포맷팅, TC span 5건 수정 | 1,040 |
 
 ### 잔여 기술 부채 (Phase 72 기준)
 
@@ -655,11 +656,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **현황**: ariadne 진단 프레임워크 이미 도입, Span 구조 있으나 codegen 에러에 미전파
 > **선행 조건**: Phase 78 완료 (문자열 ABI 안정화 후)
 
-- [ ] 1. Codegen 에러에 Span 전파 — CodegenError에 span 필드 추가 (Opus)
-- [ ] 2. ariadne 진단 통합 — codegen 에러를 ariadne Report로 출력 (Sonnet)
-- [ ] 3. 타입 체커 에러 위치 정확도 개선 — 미전파 Span 5건+ 수정 (Sonnet)
-- [ ] 4. 파일럿 프로젝트 재검증 — JSON→TOML, REST API 에러 메시지 확인 (Opus)
-- [ ] 5. 검증 — E2E 전체 통과, Clippy 0건 (Opus)
+- [x] 1. Codegen 에러에 Span 전파 — SpannedCodegenError + last_error_span 추적 ✅ 2026-03-01
+  변경: error.rs (SpannedCodegenError, WithSpan trait), init.rs (last_error_span), generate_expr/mod.rs + stmt.rs (span 자동 추적)
+- [x] 2. 드라이버 에러 포맷팅 — format_spanned_codegen_error + ErrorReporter 통합 ✅ 2026-03-01
+  변경: error_formatter.rs (+2 함수), build/backend.rs, build/core.rs, compile/per_module.rs, test.rs, repl.rs — 7개 에러 출력 사이트
+- [x] 3. 타입 체커 에러 Span 정확도 개선 — 5건 수정 ✅ 2026-03-01
+  변경: traits.rs (call_span 파라미터 추가), checker_module/traits.rs (span: None→Some 2건), inference.rs (ArgCount span + verify_trait_bounds call_span)
+- [x] 4. Ownership 테스트 수정 — Str Copy 전환에 따른 3개 테스트 타입 변경 ✅ 2026-03-01
+  변경: ownership/tests.rs (ResolvedType::Str→Named 3건, Str은 이제 Copy)
+- [x] 5. 검증 — vais-types 320 통과 (0 fail), E2E 119 통과, Clippy 0건 (1 pre-existing) ✅ 2026-03-01
+  핵심: boundary wrapping 패턴 — 567개 내부 사이트 수정 없이 last_error_span으로 자동 추적
+진행률: 5/5 (100%)
 
 ---
 

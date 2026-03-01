@@ -1,5 +1,6 @@
 //! Compilation functions for different targets.
 
+use crate::error_formatter;
 use crate::incremental;
 use crate::package;
 use crate::runtime::{

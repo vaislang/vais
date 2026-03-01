@@ -83,7 +83,7 @@ pub use visitor::{ExprVisitor, ItemVisitor, StmtVisitor};
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
 // Re-export error types
-pub use error::{CodegenError, CodegenResult};
+pub use error::{CodegenError, CodegenResult, SpannedCodegenError, WithSpan};
 
 // Re-export state types
 pub use state::DecreasesInfo;
@@ -203,6 +203,11 @@ pub struct CodeGenerator {
 
     // WASM export metadata: function_name -> export_name
     pub(crate) wasm_exports: HashMap<String, String>,
+
+    // Last expression span for error reporting.
+    // Updated at the top of generate_expr, used to decorate CodegenError
+    // with source location when it propagates up to generate_module.
+    pub(crate) last_error_span: Option<Span>,
 }
 
 #[cfg(test)]

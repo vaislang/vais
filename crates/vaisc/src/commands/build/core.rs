@@ -654,9 +654,23 @@ pub(crate) fn cmd_build(
                             }
 
                             // Generate IR for this module's subset
-                            let raw_ir = codegen
-                                .generate_module_subset(&final_ast, item_indices, is_main)
-                                .map_err(|e| format!("Codegen error for {}: {}", module_stem, e))?;
+                            let result = codegen
+                                .generate_module_subset(&final_ast, item_indices, is_main);
+                            let raw_ir = result.map_err(|e| {
+                                let spanned = vais_codegen::SpannedCodegenError {
+                                    span: codegen.last_error_span(),
+                                    error: e,
+                                };
+                                format!(
+                                    "Codegen error for {}:\n{}",
+                                    module_stem,
+                                    error_formatter::format_spanned_codegen_error(
+                                        &spanned,
+                                        &main_source,
+                                        input,
+                                    )
+                                )
+                            })?;
 
                             // Apply optimizations
                             let opt = match effective_opt_level {
@@ -777,10 +791,14 @@ pub(crate) fn cmd_build(
         let instantiations = checker.get_generic_instantiations();
         if instantiations.is_empty() {
             gen.generate_module(&final_ast)
-                .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+                .map_err(|e| {
+                    error_formatter::format_codegen_error(&e, &main_source, input)
+                })?;
         } else {
             gen.generate_module_with_instantiations(&final_ast, &instantiations)
-                .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+                .map_err(|e| {
+                    error_formatter::format_codegen_error(&e, &main_source, input)
+                })?;
         }
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();

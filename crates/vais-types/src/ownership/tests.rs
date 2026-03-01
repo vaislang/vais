@@ -24,9 +24,14 @@ mod tests {
     #[test]
     fn test_non_copy_type_moved_on_use() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("s", ResolvedType::Str, false, Some(make_span()));
+        // Use a Named type which is non-Copy (Str is Copy as a fat pointer)
+        let non_copy = ResolvedType::Named {
+            name: "MyStruct".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("s", non_copy, false, Some(make_span()));
 
-        // First use moves the string
+        // First use moves the value
         assert!(checker.use_var("s", Some(make_span())).is_ok());
         // Second use should fail - value was moved
         assert!(checker.use_var("s", Some(make_span())).is_err());
@@ -127,7 +132,11 @@ mod tests {
     #[test]
     fn test_cannot_borrow_moved_value() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("s", ResolvedType::Str, false, Some(make_span()));
+        let non_copy = ResolvedType::Named {
+            name: "MyStruct".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("s", non_copy, false, Some(make_span()));
 
         // Move the value
         assert!(checker.use_var("s", Some(make_span())).is_ok());
@@ -212,8 +221,16 @@ mod tests {
     #[test]
     fn test_collecting_mode() {
         let mut checker = OwnershipChecker::new_collecting();
-        checker.define_var("s1", ResolvedType::Str, false, Some(make_span()));
-        checker.define_var("s2", ResolvedType::Str, false, Some(make_span()));
+        let non_copy1 = ResolvedType::Named {
+            name: "MyStruct".to_string(),
+            generics: vec![],
+        };
+        let non_copy2 = ResolvedType::Named {
+            name: "MyStruct".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("s1", non_copy1, false, Some(make_span()));
+        checker.define_var("s2", non_copy2, false, Some(make_span()));
 
         // Move s1
         assert!(checker.use_var("s1", Some(make_span())).is_ok());

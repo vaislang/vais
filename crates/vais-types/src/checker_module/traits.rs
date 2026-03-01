@@ -92,7 +92,7 @@ impl TypeChecker {
                                 assoc_name, trait_name_str
                             ),
                             found: "missing".to_string(),
-                            span: None, // No span available for associated type validation
+                            span: Some(trait_name.span),
                         });
                     }
                 }
@@ -114,7 +114,7 @@ impl TypeChecker {
                                 method_name, trait_name_str
                             ),
                             found: "missing".to_string(),
-                            span: None, // No span available for trait method validation
+                            span: Some(trait_name.span),
                         });
                     }
                 }

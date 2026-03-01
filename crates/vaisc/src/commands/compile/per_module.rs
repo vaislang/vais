@@ -85,9 +85,23 @@ pub(crate) fn compile_per_module(
             }
 
             // Generate IR for this module's subset
-            let raw_ir = codegen
-                .generate_module_subset(final_ast, item_indices, is_main)
-                .map_err(|e| format!("Codegen error for {}: {}", module_stem, e))?;
+            let result = codegen
+                .generate_module_subset(final_ast, item_indices, is_main);
+            let raw_ir = result.map_err(|e| {
+                let spanned = vais_codegen::SpannedCodegenError {
+                    span: codegen.last_error_span(),
+                    error: e,
+                };
+                format!(
+                    "Codegen error for {}:\n{}",
+                    module_stem,
+                    error_formatter::format_spanned_codegen_error(
+                        &spanned,
+                        main_source,
+                        input,
+                    )
+                )
+            })?;
 
             // Apply optimizations
             let opt = match effective_opt_level {

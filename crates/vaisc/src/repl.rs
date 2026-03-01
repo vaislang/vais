@@ -19,6 +19,8 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(not(feature = "jit"))]
+use crate::error_formatter;
+#[cfg(not(feature = "jit"))]
 use vais_codegen::CodeGenerator;
 use vais_parser::parse;
 use vais_types::TypeChecker;
@@ -476,7 +478,18 @@ fn handle_disasm_command(expr: &str, definitions: &[String]) {
                             }
                         }
                         Err(e) => {
-                            println!("{} {}", "Codegen error:".red().bold(), e);
+                            let spanned = vais_codegen::SpannedCodegenError {
+                                span: codegen.last_error_span(),
+                                error: e,
+                            };
+                            println!(
+                                "{}",
+                                error_formatter::format_spanned_codegen_error(
+                                    &spanned,
+                                    &source,
+                                    &std::path::PathBuf::from("<repl>"),
+                                )
+                            );
                         }
                     }
                 }
@@ -641,9 +654,18 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
 
     // Generate IR
     let mut codegen = CodeGenerator::new("repl");
-    let ir = codegen
-        .generate_module(&ast)
-        .map_err(|e| format!("Codegen error: {}", e))?;
+    let result = codegen.generate_module(&ast);
+    let ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(
+            &spanned,
+            source,
+            &std::path::PathBuf::from("<repl>"),
+        )
+    })?;
 
     // Write to temp file (atomic counter + PID for uniqueness, TOCTOU mitigation)
     let counter = REPL_COUNTER.fetch_add(1, Ordering::Relaxed);

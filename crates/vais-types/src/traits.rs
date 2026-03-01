@@ -4,6 +4,7 @@
 
 use crate::{ResolvedType, TypeChecker, TypeError, TypeResult};
 use std::collections::{HashMap, HashSet};
+use vais_ast::Span;
 
 /// Trait method signature
 #[derive(Debug, Clone)]
@@ -178,6 +179,7 @@ impl TypeChecker {
         generic_names: &[String],
         concrete_types: &[ResolvedType],
         bounds: &HashMap<String, Vec<String>>,
+        call_span: Option<Span>,
     ) -> TypeResult<()> {
         for (generic_name, concrete_type) in generic_names.iter().zip(concrete_types) {
             if let Some(required_traits) = bounds.get(generic_name) {
@@ -189,7 +191,7 @@ impl TypeChecker {
                                 "type '{}' which does not implement '{}'",
                                 concrete_type, trait_name
                             ),
-                            span: None,
+                            span: call_span,
                         });
                     }
                 }

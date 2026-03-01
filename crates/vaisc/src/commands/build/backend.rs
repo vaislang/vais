@@ -1,5 +1,6 @@
 //! Backend code generation functions.
 
+use crate::error_formatter;
 use colored::Colorize;
 use std::path::Path;
 use vais_codegen::{CodeGenerator, TargetTriple};
@@ -60,12 +61,18 @@ pub(crate) fn generate_with_text_backend(
 
     let codegen_start = std::time::Instant::now();
     let instantiations = checker.get_generic_instantiations();
-    let raw_ir = if instantiations.is_empty() {
+    let result = if instantiations.is_empty() {
         codegen.generate_module(final_ast)
     } else {
         codegen.generate_module_with_instantiations(final_ast, &instantiations)
-    }
-    .map_err(|e| format!("Codegen error: {}", e))?;
+    };
+    let raw_ir = result.map_err(|e| {
+        let spanned = vais_codegen::SpannedCodegenError {
+            span: codegen.last_error_span(),
+            error: e,
+        };
+        error_formatter::format_spanned_codegen_error(&spanned, main_source, input)
+    })?;
     let codegen_time = codegen_start.elapsed();
 
     if verbose {

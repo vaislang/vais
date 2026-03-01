@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use vais_ast::Span;
+use vais_codegen::{CodegenError, SpannedCodegenError};
 use vais_parser::ParseError;
 use vais_types::{error_report::ErrorReporter, TypeError};
 
@@ -50,6 +51,47 @@ pub fn format_type_error(error: &TypeError, source: &str, path: &Path) -> String
         &message,
         help.as_deref(),
         &error.secondary_spans(),
+    )
+}
+
+/// Format a codegen error with source context.
+///
+/// If the error has a span, renders it with source underlines via `ErrorReporter`.
+/// Otherwise, falls back to a simple `note:` style message.
+pub fn format_codegen_error(error: &CodegenError, source: &str, path: &Path) -> String {
+    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
+    let reporter = context.reporter();
+
+    reporter.format_error(
+        error.error_code(),
+        error.title(),
+        None,
+        &error.to_string(),
+        error.help().as_deref(),
+        &[],
+    )
+}
+
+/// Format a spanned codegen error with source context.
+///
+/// Uses the span carried by [`SpannedCodegenError`] to render a precise
+/// source-location diagnostic.
+#[allow(dead_code)]
+pub fn format_spanned_codegen_error(
+    error: &SpannedCodegenError,
+    source: &str,
+    path: &Path,
+) -> String {
+    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
+    let reporter = context.reporter();
+
+    reporter.format_error(
+        error.error_code(),
+        error.title(),
+        error.span,
+        &error.to_string(),
+        error.help().as_deref(),
+        &[],
     )
 }
 
@@ -164,5 +206,81 @@ mod tests {
         let path = PathBuf::from("unicode_파일.vais");
         let context = ErrorFormatContext::new(source, path);
         assert_eq!(context.filename(), "unicode_파일.vais");
+    }
+
+    // ========== Codegen error formatting ==========
+
+    #[test]
+    fn test_format_codegen_error_undefined_var() {
+        let err = CodegenError::UndefinedVar("x".to_string());
+        let source = "F main() { R x }";
+        let path = PathBuf::from("test.vais");
+        let output = format_codegen_error(&err, source, &path);
+        assert!(output.contains("C001"));
+        assert!(output.contains("Undefined variable"));
+    }
+
+    #[test]
+    fn test_format_codegen_error_undefined_function() {
+        let err = CodegenError::UndefinedFunction("foo".to_string());
+        let source = "F main() { foo() }";
+        let path = PathBuf::from("test.vais");
+        let output = format_codegen_error(&err, source, &path);
+        assert!(output.contains("C002"));
+        assert!(output.contains("Undefined function"));
+    }
+
+    #[test]
+    fn test_format_codegen_error_type_error() {
+        let err = CodegenError::TypeError("mismatch".to_string());
+        let source = "F main() { R 1 + true }";
+        let path = PathBuf::from("test.vais");
+        let output = format_codegen_error(&err, source, &path);
+        assert!(output.contains("C003"));
+        assert!(output.contains("Type error"));
+    }
+
+    #[test]
+    fn test_format_spanned_codegen_error_with_span() {
+        let err = SpannedCodegenError::new(
+            CodegenError::UndefinedVar("x".to_string()),
+            Span::new(14, 15), // points to "x" in "F main() { R x }"
+        );
+        let source = "F main() { R x }";
+        let path = PathBuf::from("test.vais");
+        let output = format_spanned_codegen_error(&err, source, &path);
+        assert!(output.contains("C001"));
+        assert!(output.contains("Undefined variable"));
+        assert!(output.contains("test.vais:1:15")); // line 1, column 15
+    }
+
+    #[test]
+    fn test_format_spanned_codegen_error_without_span() {
+        let err = SpannedCodegenError::without_span(CodegenError::LlvmError("oops".to_string()));
+        let source = "F main() { R 0 }";
+        let path = PathBuf::from("test.vais");
+        let output = format_spanned_codegen_error(&err, source, &path);
+        assert!(output.contains("C004"));
+        assert!(output.contains("LLVM error"));
+    }
+
+    #[test]
+    fn test_format_codegen_error_with_help() {
+        let err = CodegenError::Unsupported("async generators".to_string());
+        let source = "F main() { }";
+        let path = PathBuf::from("test.vais");
+        let output = format_codegen_error(&err, source, &path);
+        assert!(output.contains("C005"));
+        assert!(output.contains("help:"));
+    }
+
+    #[test]
+    fn test_format_codegen_error_ice() {
+        let err = CodegenError::InternalError("unresolved generic".to_string());
+        let source = "F main() { }";
+        let path = PathBuf::from("test.vais");
+        let output = format_codegen_error(&err, source, &path);
+        assert!(output.contains("C007"));
+        assert!(output.contains("compiler bug"));
     }
 }

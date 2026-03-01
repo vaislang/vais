@@ -754,7 +754,7 @@ impl TypeChecker {
             return Err(TypeError::ArgCount {
                 expected: sig.params.len(),
                 got: args.len(),
-                span: None, // No span available in generic call helper
+                span: args.first().map(|a| a.span),
             });
         }
 
@@ -831,7 +831,8 @@ impl TypeChecker {
 
         // Verify trait bounds: each inferred concrete type must implement required traits
         if all_concrete && !sig.generic_bounds.is_empty() {
-            self.verify_trait_bounds(&sig.generics, &inferred_type_args, &sig.generic_bounds)?;
+            let call_span = args.first().map(|a| a.span);
+            self.verify_trait_bounds(&sig.generics, &inferred_type_args, &sig.generic_bounds, call_span)?;
         }
 
         // Verify HKT arity: when an HKT param is substituted with a concrete type,

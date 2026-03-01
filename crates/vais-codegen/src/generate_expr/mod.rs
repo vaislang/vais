@@ -34,6 +34,11 @@ impl CodeGenerator {
         expr: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Track the current expression span for error diagnostics.
+        // When an error propagates up, the driver can read `last_error_span`
+        // to construct a SpannedCodegenError with source location.
+        self.last_error_span = Some(expr.span);
+
         match &expr.node {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),

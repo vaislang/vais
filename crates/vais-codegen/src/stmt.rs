@@ -32,6 +32,9 @@ impl CodeGenerator {
         stmt: &Spanned<Stmt>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Track the current statement span for error diagnostics
+        self.last_error_span = Some(stmt.span);
+
         match &stmt.node {
             Stmt::Let {
                 name,
