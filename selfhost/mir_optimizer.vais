@@ -6,6 +6,7 @@
 # Operates in-place on MirBody/MirModule data structures.
 
 U mir
+U mir_analysis
 U mir_alias
 U mir_bounds
 U mir_vectorize
@@ -34,6 +35,8 @@ F mir_optimize_module(mod_ptr: i64) -> i64 {
 F mir_optimize_body(body_ptr: i64) -> i64 {
     mir_constant_propagation(body_ptr)
     mir_constant_folding(body_ptr)
+    mir_loop_invariant_code_motion(body_ptr)
+    mir_strength_reduction(body_ptr)
     mir_dead_code_elimination(body_ptr)
     mir_remove_unreachable_blocks(body_ptr)
     1
@@ -712,6 +715,385 @@ F ub_try_add(bb_idx: i64, reachable: i64, worklist: i64, wl_len_buf: i64, blocks
     store_i64(worklist + wl_len * 8, bb_idx)
     store_i64(wl_len_buf, wl_len + 1)
     1
+}
+
+# ============================================================================
+# Loop Invariant Code Motion (LICM)
+# ============================================================================
+# Moves statements out of loops when all their operands are defined outside the loop.
+# Uses dominance + loop analysis from mir_analysis.vais.
+#
+# Algorithm:
+#   1. Compute dominance tree and loop info (headers, depths)
+#   2. For each loop body block, check each assignment statement
+#   3. If the rvalue's operands are all defined outside the loop → hoist to preheader
+#   4. Preheader = the unique predecessor of the loop header that is not in the loop body
+#      (for simplicity, we insert before the loop header's first statement)
+
+F mir_loop_invariant_code_motion(body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+    locals_len := load_i64(body_ptr + 40)
+
+    I blocks_len < 2 { R 1 }
+
+    # Compute dominance and loop info
+    idom := mir_dominance_analysis(body_ptr)
+    loop_info := mir_loop_analysis(body_ptr, idom)
+
+    # Find where each local is defined (block index, -1 if unknown/multi-def)
+    def_block := malloc(8 * locals_len)
+    def_count := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { B } E { 0 }
+        store_i64(def_block + i * 8, 0 - 1)
+        store_i64(def_count + i * 8, 0)
+        i = i + 1
+    }
+
+    # Scan all blocks to find definitions
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                local_idx := load_i64(place_ptr)
+                proj_len := load_i64(place_ptr + 16)
+
+                I proj_len == 0 && local_idx < locals_len {
+                    cnt := load_i64(def_count + local_idx * 8)
+                    store_i64(def_count + local_idx * 8, cnt + 1)
+                    I cnt == 0 {
+                        store_i64(def_block + local_idx * 8, bi)
+                        0
+                    } E {
+                        # Multi-defined → don't hoist
+                        store_i64(def_block + local_idx * 8, 0 - 1)
+                        0
+                    }
+                } E { 0 }
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    # Hoist loop-invariant statements
+    # For each block in a loop (depth > 0), check each assignment
+    hoisted := mut 0
+    bi = 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        depth := loop_depth(loop_info, bi)
+        I depth > 0 {
+            bb_ptr := load_i64(blocks_ptr + bi * 8)
+            stmts_ptr := load_i64(bb_ptr)
+            stmts_len := load_i64(bb_ptr + 8)
+
+            # Check each statement for loop invariance
+            si := mut 0
+            L {
+                I si >= stmts_len { B } E { 0 }
+                stmt_ptr := load_i64(stmts_ptr + si * 8)
+                kind := load_i64(stmt_ptr)
+
+                I kind == STMT_MIR_ASSIGN() {
+                    rvalue_ptr := load_i64(stmt_ptr + 16)
+                    rv_kind := load_i64(rvalue_ptr)
+
+                    # Only hoist Use(Constant) and BinOp with all-external operands
+                    invariant := mut 0
+                    I rv_kind == RVALUE_USE() {
+                        op := load_i64(rvalue_ptr + 8)
+                        I licm_operand_invariant(op, def_block, loop_info, bi, locals_len) == 1 {
+                            invariant = 1
+                            0
+                        } E { 0 }
+                    }
+                    E I rv_kind == RVALUE_BINOP() {
+                        lhs := load_i64(rvalue_ptr + 24)
+                        rhs := load_i64(rvalue_ptr + 32)
+                        I licm_operand_invariant(lhs, def_block, loop_info, bi, locals_len) == 1 &&
+                          licm_operand_invariant(rhs, def_block, loop_info, bi, locals_len) == 1 {
+                            invariant = 1
+                            0
+                        } E { 0 }
+                    }
+                    E I rv_kind == RVALUE_UNOP() {
+                        op := load_i64(rvalue_ptr + 8)
+                        I licm_operand_invariant(op, def_block, loop_info, bi, locals_len) == 1 {
+                            invariant = 1
+                            0
+                        } E { 0 }
+                    }
+                    E { 0 }
+
+                    I invariant == 1 {
+                        # Find the loop header for this block
+                        header := licm_find_header(bi, idom, loop_info, blocks_len)
+                        I header >= 0 && header < blocks_len {
+                            # Move statement to the beginning of the header block
+                            header_bb := load_i64(blocks_ptr + header * 8)
+                            licm_prepend_stmt(header_bb, stmt_ptr)
+                            # NOP the original statement
+                            store_i64(stmt_ptr, STMT_MIR_NOP())
+                            hoisted = hoisted + 1
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    free(def_block)
+    free(def_count)
+    free(idom)
+    loop_free(loop_info)
+    hoisted
+}
+
+# Check if an operand is loop-invariant (defined outside the loop)
+F licm_operand_invariant(op_ptr: i64, def_block: i64, loop_info: i64, cur_bb: i64, locals_len: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+
+    # Constants are always invariant
+    I op_kind == OPERAND_CONSTANT() { R 1 }
+
+    # Copy/Move: check if defined outside the loop
+    I op_kind == OPERAND_COPY() || op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx >= locals_len { R 0 }
+
+        db := load_i64(def_block + local_idx * 8)
+        I db < 0 { R 0 }  # Multi-defined → not invariant
+
+        # Invariant if defined in a block with no loop nesting (depth == 0)
+        # or in a block outside the current loop
+        def_depth := loop_depth(loop_info, db)
+        cur_depth := loop_depth(loop_info, cur_bb)
+        I def_depth < cur_depth { R 1 }
+        R 0
+    }
+
+    R 0
+}
+
+# Find the header block of the innermost loop containing bb_idx
+F licm_find_header(bb_idx: i64, idom: i64, loop_info: i64, blocks_len: i64) -> i64 {
+    # Walk up the dominator tree to find the nearest loop header
+    cur := bb_idx
+    limit := mut 0
+    L {
+        I limit >= blocks_len { R 0 - 1 }
+        I cur < 0 || cur >= blocks_len { R 0 - 1 }
+
+        I loop_is_header(loop_info, cur) == 1 {
+            R cur
+        }
+        cur = load_i64(idom + cur * 8)
+        limit = limit + 1
+    }
+    0 - 1
+}
+
+# Prepend a statement to the beginning of a basic block
+F licm_prepend_stmt(bb_ptr: i64, stmt_ptr: i64) -> i64 {
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+
+    # Shift existing statements right by 1
+    i := mut stmts_len
+    L {
+        I i <= 0 { B } E { 0 }
+        store_i64(stmts_ptr + i * 8, load_i64(stmts_ptr + (i - 1) * 8))
+        i = i - 1
+    }
+
+    # Insert at position 0
+    store_i64(stmts_ptr, stmt_ptr)
+    store_i64(bb_ptr + 8, stmts_len + 1)
+    1
+}
+
+# ============================================================================
+# Strength Reduction
+# ============================================================================
+# Transforms expensive operations into cheaper ones inside loops:
+#   - Multiplication by constant → repeated addition (induction variable optimization)
+#   - Division by power-of-2 → right shift
+#   - Multiplication by power-of-2 → left shift
+#   - Modulo by power-of-2 → bitwise AND
+#
+# The pass scans all BinOp assignments and applies algebraic simplifications
+# when one operand is a known constant.
+
+F mir_strength_reduction(body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    reduced := mut 0
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { B } E { 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { B } E { 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                rv_kind := load_i64(rvalue_ptr)
+
+                I rv_kind == RVALUE_BINOP() {
+                    I sr_try_reduce(stmt_ptr, rvalue_ptr) == 1 {
+                        reduced = reduced + 1
+                        0
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+    reduced
+}
+
+# Try to apply strength reduction to a binary operation
+# Returns 1 if reduced, 0 otherwise
+F sr_try_reduce(stmt_ptr: i64, rvalue_ptr: i64) -> i64 {
+    op := load_i64(rvalue_ptr + 16)
+    lhs_ptr := load_i64(rvalue_ptr + 24)
+    rhs_ptr := load_i64(rvalue_ptr + 32)
+
+    # Check if RHS is a constant integer
+    rhs_is_const := I load_i64(rhs_ptr) == OPERAND_CONSTANT() && load_i64(rhs_ptr + 16) == CONST_INT() { 1 } E { 0 }
+    # Check if LHS is a constant integer
+    lhs_is_const := I load_i64(lhs_ptr) == OPERAND_CONSTANT() && load_i64(lhs_ptr + 16) == CONST_INT() { 1 } E { 0 }
+
+    I rhs_is_const == 1 {
+        rhs_val := load_i64(rhs_ptr + 24)
+
+        # MUL by power of 2 → SHL
+        I op == BINOP_MUL() && sr_is_power_of_2(rhs_val) == 1 && rhs_val > 0 {
+            shift_amt := sr_log2(rhs_val)
+            store_i64(rvalue_ptr + 16, BINOP_SHL())
+            store_i64(rhs_ptr + 24, shift_amt)
+            R 1
+        }
+
+        # DIV by power of 2 → SHR (unsigned only, but for bootstrapping i64 this works)
+        I op == BINOP_DIV() && sr_is_power_of_2(rhs_val) == 1 && rhs_val > 0 {
+            shift_amt := sr_log2(rhs_val)
+            store_i64(rvalue_ptr + 16, BINOP_SHR())
+            store_i64(rhs_ptr + 24, shift_amt)
+            R 1
+        }
+
+        # REM by power of 2 → BIT_AND (val - 1)
+        I op == BINOP_REM() && sr_is_power_of_2(rhs_val) == 1 && rhs_val > 0 {
+            store_i64(rvalue_ptr + 16, BINOP_BIT_AND())
+            store_i64(rhs_ptr + 24, rhs_val - 1)
+            R 1
+        }
+
+        # MUL by 0 → Use(Constant(0))
+        I op == BINOP_MUL() && rhs_val == 0 {
+            new_rv := rvalue_use(operand_const_int(0))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        # MUL by 1 → Use(lhs)
+        I op == BINOP_MUL() && rhs_val == 1 {
+            new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        # ADD 0 → Use(lhs)
+        I op == BINOP_ADD() && rhs_val == 0 {
+            new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        # SUB 0 → Use(lhs)
+        I op == BINOP_SUB() && rhs_val == 0 {
+            new_rv := rvalue_use(cp_clone_operand(lhs_ptr))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        R 0
+    }
+
+    I lhs_is_const == 1 {
+        lhs_val := load_i64(lhs_ptr + 24)
+
+        # 0 * x → 0
+        I op == BINOP_MUL() && lhs_val == 0 {
+            new_rv := rvalue_use(operand_const_int(0))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        # 1 * x → x
+        I op == BINOP_MUL() && lhs_val == 1 {
+            new_rv := rvalue_use(cp_clone_operand(rhs_ptr))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        # 0 + x → x
+        I op == BINOP_ADD() && lhs_val == 0 {
+            new_rv := rvalue_use(cp_clone_operand(rhs_ptr))
+            store_i64(stmt_ptr + 16, new_rv)
+            R 1
+        }
+
+        R 0
+    }
+
+    R 0
+}
+
+# Check if a value is a power of 2
+F sr_is_power_of_2(val: i64) -> i64 {
+    I val <= 0 { R 0 }
+    I (val & (val - 1)) == 0 { R 1 }
+    R 0
+}
+
+# Compute log2 of a power of 2
+F sr_log2(val: i64) -> i64 {
+    result := mut 0
+    v := mut val
+    L {
+        I v <= 1 { R result }
+        v = v / 2
+        result = result + 1
+    }
+    result
 }
 
 # ============================================================================

@@ -166,11 +166,8 @@ impl Parser {
                             self.parse_expr()?
                         } else {
                             // Field punning: value = ident with same name
-                            let fn_span = field_name.span.clone();
-                            Spanned::new(
-                                Expr::Ident(field_name.node.clone()),
-                                fn_span,
-                            )
+                            let fn_span = field_name.span;
+                            Spanned::new(Expr::Ident(field_name.node.clone()), fn_span)
                         };
                         fields.push((field_name, value));
                         if !self.check(&Token::RBrace) {

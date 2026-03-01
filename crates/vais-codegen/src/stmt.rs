@@ -14,8 +14,8 @@ impl CodeGenerator {
         stmts: &[Spanned<Stmt>],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let mut ir = String::new();
-        let mut last_value = "void".to_string();
+        let mut ir = String::with_capacity(stmts.len() * 64); // ~64 bytes per stmt average
+        let mut last_value = String::from("void");
 
         for stmt in stmts {
             let (value, stmt_ir) = self.generate_stmt(stmt, counter)?;

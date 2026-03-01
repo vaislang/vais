@@ -1218,6 +1218,410 @@ F http_patch(url: str, json_body: str) -> HttpResponse {
 }
 
 # ============================================
+# Chunked Transfer-Encoding Response Parsing
+# ============================================
+
+# Convert a single hex digit character (ASCII) to its integer value.
+# Returns -1 for invalid characters.
+F hex_digit_value(c: i64) -> i64 {
+    I c >= 48 & c <= 57 {
+        # '0'..'9'
+        R c - 48
+    }
+    I c >= 65 & c <= 70 {
+        # 'A'..'F'
+        R c - 55
+    }
+    I c >= 97 & c <= 102 {
+        # 'a'..'f'
+        R c - 87
+    }
+    -1
+}
+
+# Parse a hexadecimal chunk size from buffer starting at pos.
+# Reads until \r\n and returns the decoded size, or -1 on error.
+# The caller should advance past the \r\n (2 bytes) after the returned header.
+F parse_chunk_size(buffer: i64, pos: i64) -> i64 {
+    size := 0
+    i := pos
+    L true {
+        c := load_byte(buffer + i)
+        # Check for \r (end of hex digits line)
+        I c == 13 {
+            B
+        }
+        digit := hex_digit_value(c)
+        I digit < 0 {
+            # Hit a non-hex character (could be ';' for chunk extensions)
+            B
+        }
+        size = size * 16 + digit
+        i = i + 1
+    }
+    size
+}
+
+# Parse a chunked Transfer-Encoding body from buffer.
+# buffer: pointer to the start of the chunked body data (after headers)
+# start:  offset within buffer where chunked data begins
+# total_len: total bytes available in buffer from start
+# Returns a newly malloc'd buffer containing the decoded body (null-terminated),
+# or 0 on error. Caller must free the returned pointer.
+F parse_chunked_body(buffer: i64, start: i64, total_len: i64) -> i64 {
+    # Allocate output buffer (worst case: same size as input)
+    out_buf := __malloc(total_len + 1)
+    out_pos := 0
+    pos := start
+
+    L true {
+        # Guard: ensure we haven't overrun the buffer
+        I pos >= start + total_len {
+            B
+        }
+
+        # Parse the chunk size line (hex digits followed by \r\n)
+        chunk_size := parse_chunk_size(buffer, pos)
+
+        # Advance past the hex size digits to the \r\n
+        L pos < start + total_len {
+            c := load_byte(buffer + pos)
+            # Stop at \r
+            I c == 13 {
+                B
+            }
+            pos = pos + 1
+        }
+
+        # Skip \r\n after chunk size
+        I pos + 1 < start + total_len {
+            pos = pos + 2
+        } E {
+            B
+        }
+
+        # chunk_size == 0 means last chunk
+        I chunk_size == 0 {
+            B
+        }
+
+        # Copy chunk data to output buffer
+        bytes_left := chunk_size
+        I pos + bytes_left > start + total_len {
+            bytes_left = start + total_len - pos
+        }
+        __memcpy(out_buf + out_pos, buffer + pos, bytes_left)
+        out_pos = out_pos + bytes_left
+        pos = pos + chunk_size
+
+        # Skip the trailing \r\n after chunk data
+        I pos + 1 < start + total_len {
+            pos = pos + 2
+        } E {
+            B
+        }
+    }
+
+    # Null-terminate the decoded body
+    __store_byte(out_buf + out_pos, 0)
+    out_buf
+}
+
+# ============================================
+# Query String Builder
+# ============================================
+
+# Percent-encode a single character into buf at pos.
+# Unreserved characters (A-Z a-z 0-9 - _ . ~) pass through unchanged.
+# All other characters are encoded as %XX.
+# Returns the new position after writing.
+F url_encode_char(c: i64, buf: i64, pos: i64) -> i64 {
+    # Unreserved: A-Z
+    I c >= 65 & c <= 90 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: a-z
+    I c >= 97 & c <= 122 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: 0-9
+    I c >= 48 & c <= 57 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: '-'
+    I c == 45 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: '_'
+    I c == 95 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: '.'
+    I c == 46 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Unreserved: '~'
+    I c == 126 {
+        __store_byte(buf + pos, c)
+        R pos + 1
+    }
+    # Percent-encode: %XX
+    high := (c >> 4) & 15
+    low := c & 15
+    __store_byte(buf + pos, 37)           # '%'
+    __store_byte(buf + pos + 1, hex_nibble(high))
+    __store_byte(buf + pos + 2, hex_nibble(low))
+    pos + 3
+}
+
+# Convert a 0-15 value to its ASCII hex digit (0-9 -> 48-57, A-F -> 65-70)
+F hex_nibble(n: i64) -> i64 {
+    I n < 10 { n + 48 }
+    E { n - 10 + 65 }
+}
+
+# URL-encode a string (percent-encoding).
+# input:     pointer to the source string (i64)
+# input_len: number of bytes to encode
+# Returns a newly malloc'd null-terminated string. Caller must free.
+F url_encode(input: i64, input_len: i64) -> i64 {
+    # Worst case: every byte expands to 3 characters (%XX)
+    out_buf := __malloc(input_len * 3 + 1)
+    out_pos := 0
+    i := 0
+    L i < input_len {
+        c := load_byte(input + i)
+        I c == 0 {
+            B
+        }
+        out_pos = url_encode_char(c, out_buf, out_pos)
+        i = i + 1
+    }
+    __store_byte(out_buf + out_pos, 0)  # null terminate
+    out_buf
+}
+
+# QueryBuilder layout (malloc'd block):
+#   [0..8)   = i64: pointer to data buffer
+#   [8..16)  = i64: current used length in data buffer
+#   [16..24) = i64: capacity of data buffer
+#   [24..32) = i64: number of key=value pairs added
+
+C QB_BUF_PTR: i64 = 0
+C QB_BUF_LEN: i64 = 8
+C QB_BUF_CAP: i64 = 16
+C QB_COUNT: i64 = 24
+C QB_HEADER_SIZE: i64 = 32
+
+# Create a new query builder.
+# Returns a pointer to the QueryBuilder header block. Caller must free with query_builder_free.
+F query_builder_new() -> i64 {
+    initial_cap := 512
+    data_buf := __malloc(initial_cap)
+    __store_byte(data_buf, 0)   # ensure empty string
+
+    qb := __malloc(QB_HEADER_SIZE)
+    __store_i64(qb + QB_BUF_PTR, data_buf)
+    __store_i64(qb + QB_BUF_LEN, 0)
+    __store_i64(qb + QB_BUF_CAP, initial_cap)
+    __store_i64(qb + QB_COUNT, 0)
+    qb
+}
+
+# Add a key=value pair to the query builder.
+# key and value are null-terminated strings (passed as i64 pointers).
+# Percent-encodes both key and value. Inserts '&' separator between pairs.
+# Returns the query builder pointer (for chaining).
+F query_builder_add(qb: i64, key: i64, value: i64) -> i64 {
+    key_len := 0
+    L load_byte(key + key_len) != 0 {
+        key_len = key_len + 1
+    }
+    val_len := 0
+    L load_byte(value + val_len) != 0 {
+        val_len = val_len + 1
+    }
+
+    # Encode key and value
+    enc_key := url_encode(key, key_len)
+    enc_val := url_encode(value, val_len)
+    enc_key_len := 0
+    L load_byte(enc_key + enc_key_len) != 0 {
+        enc_key_len = enc_key_len + 1
+    }
+    enc_val_len := 0
+    L load_byte(enc_val + enc_val_len) != 0 {
+        enc_val_len = enc_val_len + 1
+    }
+
+    # Space needed: [&]key=value
+    count := __load_i64(qb + QB_COUNT)
+    separator_len := 0
+    I count > 0 {
+        separator_len = 1
+    }
+    needed := separator_len + enc_key_len + 1 + enc_val_len  # key=value
+
+    # Grow buffer if necessary
+    buf_ptr := __load_i64(qb + QB_BUF_PTR)
+    buf_len := __load_i64(qb + QB_BUF_LEN)
+    buf_cap := __load_i64(qb + QB_BUF_CAP)
+    I buf_len + needed + 1 > buf_cap {
+        new_cap := (buf_cap + needed + 1) * 2
+        new_buf := __malloc(new_cap)
+        __memcpy(new_buf, buf_ptr, buf_len)
+        __free(buf_ptr)
+        buf_ptr = new_buf
+        buf_cap = new_cap
+        __store_i64(qb + QB_BUF_PTR, buf_ptr)
+        __store_i64(qb + QB_BUF_CAP, buf_cap)
+    }
+
+    # Append separator
+    I count > 0 {
+        __store_byte(buf_ptr + buf_len, 38)  # '&'
+        buf_len = buf_len + 1
+    }
+
+    # Append encoded key
+    __memcpy(buf_ptr + buf_len, enc_key, enc_key_len)
+    buf_len = buf_len + enc_key_len
+
+    # Append '='
+    __store_byte(buf_ptr + buf_len, 61)  # '='
+    buf_len = buf_len + 1
+
+    # Append encoded value
+    __memcpy(buf_ptr + buf_len, enc_val, enc_val_len)
+    buf_len = buf_len + enc_val_len
+
+    # Null-terminate
+    __store_byte(buf_ptr + buf_len, 0)
+
+    __store_i64(qb + QB_BUF_LEN, buf_len)
+    __store_i64(qb + QB_COUNT, count + 1)
+
+    # Free encoded temporaries
+    __free(enc_key)
+    __free(enc_val)
+
+    qb
+}
+
+# Return the final query string pointer from the builder.
+# The returned pointer is valid until query_builder_free is called.
+# Do NOT free the returned pointer directly.
+F query_builder_build(qb: i64) -> i64 {
+    __load_i64(qb + QB_BUF_PTR)
+}
+
+# Free all resources held by the query builder.
+# Returns 0.
+F query_builder_free(qb: i64) -> i64 {
+    buf_ptr := __load_i64(qb + QB_BUF_PTR)
+    I buf_ptr != 0 {
+        __free(buf_ptr)
+    }
+    __free(qb)
+    0
+}
+
+# ============================================
+# Header Iteration API (HttpResponse)
+# ============================================
+
+# Return the number of headers in an HttpResponse.
+F response_header_count(resp: &HttpResponse) -> i64 {
+    resp.header_count
+}
+
+# Return the header line at the given index as a "Name: Value" string.
+# Returns an empty string if index is out of bounds.
+# The returned string is valid as long as the HttpResponse is alive.
+F response_header_at(resp: &HttpResponse, index: i64) -> str {
+    I index < 0 | index >= resp.header_count {
+        R ""
+    }
+    offset := index * 16
+    name := __load_ptr(resp.headers + offset) as str
+    value := __load_ptr(resp.headers + offset + 8) as str
+
+    name_len := __strlen(name)
+    val_len := __strlen(value)
+    # "Name: Value\0"
+    buf := __malloc(name_len + val_len + 3)
+    pos := __str_copy_to(buf, name)
+    __store_byte(buf + pos, 58)   # ':'
+    pos = pos + 1
+    __store_byte(buf + pos, 32)   # ' '
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, value)
+    __store_byte(buf + pos, 0)    # null terminate
+    buf as str
+}
+
+# ============================================
+# Status Code Convenience Functions
+# ============================================
+
+# Returns 1 if the HTTP status code is in the 2xx success range.
+F response_is_success(status: i64) -> i64 {
+    I status >= 200 & status < 300 {
+        1
+    } E {
+        0
+    }
+}
+
+# Returns 1 if the HTTP status code is in the 3xx redirect range.
+F response_is_redirect(status: i64) -> i64 {
+    I status >= 300 & status < 400 {
+        1
+    } E {
+        0
+    }
+}
+
+# Returns 1 if the HTTP status code is in the 4xx client-error range.
+F response_is_client_error(status: i64) -> i64 {
+    I status >= 400 & status < 500 {
+        1
+    } E {
+        0
+    }
+}
+
+# Returns 1 if the HTTP status code is in the 5xx server-error range.
+F response_is_server_error(status: i64) -> i64 {
+    I status >= 500 & status < 600 {
+        1
+    } E {
+        0
+    }
+}
+
+# Convert an HTTP method constant (CLIENT_GET etc.) to its string name.
+# Returns "GET" for unknown values (safe default).
+F method_to_str(method: i64) -> str {
+    M method {
+        1 => "GET",
+        2 => "POST",
+        3 => "PUT",
+        4 => "DELETE",
+        5 => "PATCH",
+        6 => "HEAD",
+        7 => "OPTIONS",
+        _ => "GET"
+    }
+}
+
+# ============================================
 # External Functions (Runtime Bindings)
 # ============================================
 

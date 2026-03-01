@@ -198,7 +198,10 @@ fn test_eval_float() {
 #[test]
 fn test_eval_bool() {
     let mut eval = ComptimeEvaluator::new();
-    assert_eq!(eval.eval(&bool_expr(true)).unwrap(), ComptimeValue::Bool(true));
+    assert_eq!(
+        eval.eval(&bool_expr(true)).unwrap(),
+        ComptimeValue::Bool(true)
+    );
 }
 
 #[test]
@@ -218,7 +221,9 @@ fn test_eval_unit() {
 #[test]
 fn test_eval_array() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&array_expr(vec![int_expr(1), int_expr(2)])).unwrap();
+    let result = eval
+        .eval(&array_expr(vec![int_expr(1), int_expr(2)]))
+        .unwrap();
     assert_eq!(
         result,
         ComptimeValue::Array(vec![ComptimeValue::Int(1), ComptimeValue::Int(2)])
@@ -232,28 +237,36 @@ fn test_eval_array() {
 #[test]
 fn test_eval_add_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Add, int_expr(3), int_expr(4))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Add, int_expr(3), int_expr(4)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(7));
 }
 
 #[test]
 fn test_eval_sub_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Sub, int_expr(10), int_expr(3))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Sub, int_expr(10), int_expr(3)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(7));
 }
 
 #[test]
 fn test_eval_mul_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Mul, int_expr(6), int_expr(7))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Mul, int_expr(6), int_expr(7)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(42));
 }
 
 #[test]
 fn test_eval_div_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Div, int_expr(15), int_expr(3))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Div, int_expr(15), int_expr(3)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(5));
 }
 
@@ -267,7 +280,9 @@ fn test_eval_div_by_zero() {
 #[test]
 fn test_eval_mod_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Mod, int_expr(10), int_expr(3))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Mod, int_expr(10), int_expr(3)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(1));
 }
 
@@ -306,28 +321,36 @@ fn test_eval_overflow_mul() {
 #[test]
 fn test_eval_add_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Add, float_expr(1.5), float_expr(2.5))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Add, float_expr(1.5), float_expr(2.5)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(4.0));
 }
 
 #[test]
 fn test_eval_sub_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Sub, float_expr(5.0), float_expr(2.0))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Sub, float_expr(5.0), float_expr(2.0)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(3.0));
 }
 
 #[test]
 fn test_eval_mul_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Mul, float_expr(3.0), float_expr(4.0))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Mul, float_expr(3.0), float_expr(4.0)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(12.0));
 }
 
 #[test]
 fn test_eval_div_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Div, float_expr(10.0), float_expr(4.0))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Div, float_expr(10.0), float_expr(4.0)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(2.5));
 }
 
@@ -339,11 +362,13 @@ fn test_eval_div_float() {
 fn test_eval_lt() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Lt, int_expr(1), int_expr(2))).unwrap(),
+        eval.eval(&binary(BinOp::Lt, int_expr(1), int_expr(2)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
     assert_eq!(
-        eval.eval(&binary(BinOp::Lt, int_expr(2), int_expr(1))).unwrap(),
+        eval.eval(&binary(BinOp::Lt, int_expr(2), int_expr(1)))
+            .unwrap(),
         ComptimeValue::Bool(false)
     );
 }
@@ -352,7 +377,8 @@ fn test_eval_lt() {
 fn test_eval_lte() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Lte, int_expr(2), int_expr(2))).unwrap(),
+        eval.eval(&binary(BinOp::Lte, int_expr(2), int_expr(2)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -361,7 +387,8 @@ fn test_eval_lte() {
 fn test_eval_gt() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Gt, int_expr(3), int_expr(2))).unwrap(),
+        eval.eval(&binary(BinOp::Gt, int_expr(3), int_expr(2)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -370,7 +397,8 @@ fn test_eval_gt() {
 fn test_eval_gte() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Gte, int_expr(2), int_expr(2))).unwrap(),
+        eval.eval(&binary(BinOp::Gte, int_expr(2), int_expr(2)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -379,7 +407,8 @@ fn test_eval_gte() {
 fn test_eval_eq_int() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Eq, int_expr(5), int_expr(5))).unwrap(),
+        eval.eval(&binary(BinOp::Eq, int_expr(5), int_expr(5)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -388,7 +417,8 @@ fn test_eval_eq_int() {
 fn test_eval_neq_int() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Neq, int_expr(5), int_expr(3))).unwrap(),
+        eval.eval(&binary(BinOp::Neq, int_expr(5), int_expr(3)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -400,7 +430,9 @@ fn test_eval_neq_int() {
 #[test]
 fn test_eval_string_concat() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Add, str_expr("hello"), str_expr(" world"))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Add, str_expr("hello"), str_expr(" world")))
+        .unwrap();
     assert_eq!(result, ComptimeValue::String("hello world".into()));
 }
 
@@ -408,7 +440,8 @@ fn test_eval_string_concat() {
 fn test_eval_string_eq() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Eq, str_expr("abc"), str_expr("abc"))).unwrap(),
+        eval.eval(&binary(BinOp::Eq, str_expr("abc"), str_expr("abc")))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -417,7 +450,8 @@ fn test_eval_string_eq() {
 fn test_eval_string_neq() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Neq, str_expr("abc"), str_expr("def"))).unwrap(),
+        eval.eval(&binary(BinOp::Neq, str_expr("abc"), str_expr("def")))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -430,7 +464,8 @@ fn test_eval_string_neq() {
 fn test_eval_and() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::And, bool_expr(true), bool_expr(false))).unwrap(),
+        eval.eval(&binary(BinOp::And, bool_expr(true), bool_expr(false)))
+            .unwrap(),
         ComptimeValue::Bool(false)
     );
 }
@@ -439,7 +474,8 @@ fn test_eval_and() {
 fn test_eval_or() {
     let mut eval = ComptimeEvaluator::new();
     assert_eq!(
-        eval.eval(&binary(BinOp::Or, bool_expr(false), bool_expr(true))).unwrap(),
+        eval.eval(&binary(BinOp::Or, bool_expr(false), bool_expr(true)))
+            .unwrap(),
         ComptimeValue::Bool(true)
     );
 }
@@ -451,35 +487,45 @@ fn test_eval_or() {
 #[test]
 fn test_eval_bit_and() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::BitAnd, int_expr(0xFF), int_expr(0x0F))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::BitAnd, int_expr(0xFF), int_expr(0x0F)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(0x0F));
 }
 
 #[test]
 fn test_eval_bit_or() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::BitOr, int_expr(0xF0), int_expr(0x0F))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::BitOr, int_expr(0xF0), int_expr(0x0F)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(0xFF));
 }
 
 #[test]
 fn test_eval_bit_xor() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::BitXor, int_expr(0xFF), int_expr(0x0F))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::BitXor, int_expr(0xFF), int_expr(0x0F)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(0xF0));
 }
 
 #[test]
 fn test_eval_shl() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Shl, int_expr(1), int_expr(4))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Shl, int_expr(1), int_expr(4)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(16));
 }
 
 #[test]
 fn test_eval_shr() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&binary(BinOp::Shr, int_expr(16), int_expr(4))).unwrap();
+    let result = eval
+        .eval(&binary(BinOp::Shr, int_expr(16), int_expr(4)))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(1));
 }
 
@@ -563,7 +609,9 @@ fn test_eval_abs_int_negative() {
 #[test]
 fn test_eval_abs_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("abs", vec![float_expr(-3.14)])).unwrap();
+    let result = eval
+        .eval(&call_expr("abs", vec![float_expr(-3.14)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(3.14));
 }
 
@@ -584,14 +632,18 @@ fn test_eval_abs_wrong_type() {
 #[test]
 fn test_eval_min_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("min", vec![int_expr(3), int_expr(7)])).unwrap();
+    let result = eval
+        .eval(&call_expr("min", vec![int_expr(3), int_expr(7)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(3));
 }
 
 #[test]
 fn test_eval_min_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("min", vec![float_expr(1.5), float_expr(2.5)])).unwrap();
+    let result = eval
+        .eval(&call_expr("min", vec![float_expr(1.5), float_expr(2.5)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(1.5));
 }
 
@@ -604,20 +656,26 @@ fn test_eval_min_wrong_args() {
 #[test]
 fn test_eval_min_wrong_type() {
     let mut eval = ComptimeEvaluator::new();
-    assert!(eval.eval(&call_expr("min", vec![bool_expr(true), int_expr(1)])).is_err());
+    assert!(eval
+        .eval(&call_expr("min", vec![bool_expr(true), int_expr(1)]))
+        .is_err());
 }
 
 #[test]
 fn test_eval_max_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("max", vec![int_expr(3), int_expr(7)])).unwrap();
+    let result = eval
+        .eval(&call_expr("max", vec![int_expr(3), int_expr(7)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(7));
 }
 
 #[test]
 fn test_eval_max_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("max", vec![float_expr(1.5), float_expr(2.5)])).unwrap();
+    let result = eval
+        .eval(&call_expr("max", vec![float_expr(1.5), float_expr(2.5)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(2.5));
 }
 
@@ -630,20 +688,26 @@ fn test_eval_max_wrong_args() {
 #[test]
 fn test_eval_max_wrong_type() {
     let mut eval = ComptimeEvaluator::new();
-    assert!(eval.eval(&call_expr("max", vec![str_expr("a"), str_expr("b")])).is_err());
+    assert!(eval
+        .eval(&call_expr("max", vec![str_expr("a"), str_expr("b")]))
+        .is_err());
 }
 
 #[test]
 fn test_eval_pow_int() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("pow", vec![int_expr(2), int_expr(10)])).unwrap();
+    let result = eval
+        .eval(&call_expr("pow", vec![int_expr(2), int_expr(10)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(1024));
 }
 
 #[test]
 fn test_eval_pow_float() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("pow", vec![float_expr(2.0), float_expr(3.0)])).unwrap();
+    let result = eval
+        .eval(&call_expr("pow", vec![float_expr(2.0), float_expr(3.0)]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Float(8.0));
 }
 
@@ -663,13 +727,17 @@ fn test_eval_pow_wrong_args() {
 #[test]
 fn test_eval_pow_wrong_type() {
     let mut eval = ComptimeEvaluator::new();
-    assert!(eval.eval(&call_expr("pow", vec![str_expr("a"), str_expr("b")])).is_err());
+    assert!(eval
+        .eval(&call_expr("pow", vec![str_expr("a"), str_expr("b")]))
+        .is_err());
 }
 
 #[test]
 fn test_eval_len_string() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&call_expr("len", vec![str_expr("hello")])).unwrap();
+    let result = eval
+        .eval(&call_expr("len", vec![str_expr("hello")]))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(5));
 }
 
@@ -677,7 +745,10 @@ fn test_eval_len_string() {
 fn test_eval_len_array() {
     let mut eval = ComptimeEvaluator::new();
     let result = eval
-        .eval(&call_expr("len", vec![array_expr(vec![int_expr(1), int_expr(2), int_expr(3)])]))
+        .eval(&call_expr(
+            "len",
+            vec![array_expr(vec![int_expr(1), int_expr(2), int_expr(3)])],
+        ))
         .unwrap();
     assert_eq!(result, ComptimeValue::Int(3));
 }
@@ -720,10 +791,12 @@ fn test_eval_indirect_call_error() {
 fn test_eval_index_array() {
     let mut eval = ComptimeEvaluator::new();
     let arr = array_expr(vec![int_expr(10), int_expr(20), int_expr(30)]);
-    let result = eval.eval(&spanned(Expr::Index {
-        expr: Box::new(arr),
-        index: Box::new(int_expr(1)),
-    })).unwrap();
+    let result = eval
+        .eval(&spanned(Expr::Index {
+            expr: Box::new(arr),
+            index: Box::new(int_expr(1)),
+        }))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(20));
 }
 
@@ -752,10 +825,12 @@ fn test_eval_index_array_negative() {
 #[test]
 fn test_eval_index_string() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&spanned(Expr::Index {
-        expr: Box::new(str_expr("abc")),
-        index: Box::new(int_expr(1)),
-    })).unwrap();
+    let result = eval
+        .eval(&spanned(Expr::Index {
+            expr: Box::new(str_expr("abc")),
+            index: Box::new(int_expr(1)),
+        }))
+        .unwrap();
     assert_eq!(result, ComptimeValue::String("b".into()));
 }
 
@@ -786,22 +861,26 @@ fn test_eval_index_non_indexable() {
 #[test]
 fn test_eval_ternary_true() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&spanned(Expr::Ternary {
-        cond: Box::new(bool_expr(true)),
-        then: Box::new(int_expr(1)),
-        else_: Box::new(int_expr(2)),
-    })).unwrap();
+    let result = eval
+        .eval(&spanned(Expr::Ternary {
+            cond: Box::new(bool_expr(true)),
+            then: Box::new(int_expr(1)),
+            else_: Box::new(int_expr(2)),
+        }))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(1));
 }
 
 #[test]
 fn test_eval_ternary_false() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&spanned(Expr::Ternary {
-        cond: Box::new(bool_expr(false)),
-        then: Box::new(int_expr(1)),
-        else_: Box::new(int_expr(2)),
-    })).unwrap();
+    let result = eval
+        .eval(&spanned(Expr::Ternary {
+            cond: Box::new(bool_expr(false)),
+            then: Box::new(int_expr(1)),
+            else_: Box::new(int_expr(2)),
+        }))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(2));
 }
 
@@ -812,9 +891,11 @@ fn test_eval_ternary_false() {
 #[test]
 fn test_eval_comptime_nested() {
     let mut eval = ComptimeEvaluator::new();
-    let result = eval.eval(&spanned(Expr::Comptime {
-        body: Box::new(int_expr(99)),
-    })).unwrap();
+    let result = eval
+        .eval(&spanned(Expr::Comptime {
+            body: Box::new(int_expr(99)),
+        }))
+        .unwrap();
     assert_eq!(result, ComptimeValue::Int(99));
 }
 

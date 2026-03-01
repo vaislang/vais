@@ -229,6 +229,7 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
             false,
             false,
             536870912,
+            None, // profile_out
         );
 
         match compile_result {

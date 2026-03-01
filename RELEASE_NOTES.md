@@ -1,6 +1,6 @@
 # Vais v1.0.0-alpha Release Notes
 
-> **Note**: This release was originally published as v1.0.0. The version scheme has been reset to 0.x.x to reflect that the language grammar is still evolving. The official v1.0.0 will be released when the grammar is finalized. Current version: **v0.0.5**.
+> **Note**: This release was originally published as v1.0.0. The version scheme has been reset to 0.x.x to reflect that the language grammar is still evolving. The official v1.0.0 will be released when the grammar is finalized. Last published version: **v0.0.5**. Current development version: **v0.1.0** (see `Cargo.toml`).
 
 **Release Date:** 2026-02-01
 **Codename:** First Light

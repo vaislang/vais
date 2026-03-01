@@ -295,6 +295,10 @@ enum Commands {
         /// Optional value: output directory for coverage data (default: ./coverage)
         #[arg(long, value_name = "DIR", default_missing_value = "./coverage", num_args = 0..=1)]
         coverage: Option<String>,
+
+        /// Show detailed per-phase compilation profile (lexer/parser/TC/codegen/clang)
+        #[arg(long)]
+        profile: bool,
     },
 
     /// Run a Vais source file
@@ -560,6 +564,7 @@ fn main() {
             clear_cache,
             cache_stats,
             coverage,
+            profile,
         }) => {
             // Resolve directory input to entry point file
             let (resolved_input, dir_dep_paths) = if input.is_dir() {
@@ -793,6 +798,7 @@ fn main() {
                     debug,
                     cli.verbose,
                     cli.time,
+                    profile,
                     &plugins,
                     target_triple,
                     force_rebuild || no_cache,
@@ -902,6 +908,7 @@ fn main() {
                     false,
                     cli.verbose,
                     cli.time,
+                    false, // profile
                     &plugins,
                     TargetTriple::Native,
                     false,

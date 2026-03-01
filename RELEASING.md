@@ -252,7 +252,7 @@ vais/
 **Trigger:** Push tag matching `v*` or manual workflow dispatch
 
 **Steps:**
-1. **Validate:** Extract version, check `vais.toml` exists and matches tag
+1. **Validate:** Extract version, check `Cargo.toml` workspace version matches tag
 2. **Build:** Compile release binary, run tests, package tarball
 3. **Publish:** Upload to Vais registry (when available)
 

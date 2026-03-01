@@ -43,6 +43,7 @@ pub(crate) fn cmd_run(
         false,     // use_inkwell
         false,     // per_module
         536870912, // cache_limit (512MB default)
+        None,      // profile_out
     )?;
 
     // Run the binary

@@ -21,9 +21,9 @@ impl CodeGenerator {
 
         // Handle dest pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
         let dest_ptr = if dest_full.starts_with("{ i8*, i64 }") {
-            let val = dest_full.strip_prefix("{ i8*, i64 } ").unwrap_or(
-                dest_full.split_whitespace().last().unwrap_or("undef"),
-            );
+            let val = dest_full
+                .strip_prefix("{ i8*, i64 } ")
+                .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
             let ptr = self.next_temp(counter);
             ir.push_str(&format!(
                 "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
@@ -44,9 +44,9 @@ impl CodeGenerator {
 
         // Handle src pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
         let src_ptr = if src_full.starts_with("{ i8*, i64 }") {
-            let val = src_full.strip_prefix("{ i8*, i64 } ").unwrap_or(
-                src_full.split_whitespace().last().unwrap_or("undef"),
-            );
+            let val = src_full
+                .strip_prefix("{ i8*, i64 } ")
+                .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
             let ptr = self.next_temp(counter);
             ir.push_str(&format!(
                 "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
@@ -151,7 +151,11 @@ impl CodeGenerator {
             ));
             ptr
         } else if arg_full.starts_with("i8*") {
-            arg_full.split_whitespace().last().unwrap_or("null").to_string()
+            arg_full
+                .split_whitespace()
+                .last()
+                .unwrap_or("null")
+                .to_string()
         } else {
             let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
             let ptr = self.next_temp(counter);

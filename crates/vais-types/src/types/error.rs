@@ -219,10 +219,7 @@ pub enum TypeError {
     },
 
     #[error("ICE: {message}")]
-    InternalError {
-        message: String,
-        span: Option<Span>,
-    },
+    InternalError { message: String, span: Option<Span> },
 }
 
 impl TypeError {

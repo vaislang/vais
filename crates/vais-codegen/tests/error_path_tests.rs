@@ -31,7 +31,11 @@ fn gen_ok(source: &str) -> String {
 #[test]
 fn test_undefined_var_simple() {
     let err = gen_err("F test()->i64{R x}");
-    assert!(err.contains("x"), "Error should mention undefined var: {}", err);
+    assert!(
+        err.contains("x"),
+        "Error should mention undefined var: {}",
+        err
+    );
 }
 
 #[test]
@@ -131,14 +135,21 @@ fn test_undefined_function_in_conditional() {
 #[test]
 fn test_type_error_indexing_non_array() {
     let err = gen_err("F test()->i64{x:=42;R x[0]}");
-    assert!(err.contains("Cannot index") || err.contains("index") || err.contains("rror"),
-        "Error: {}", err);
+    assert!(
+        err.contains("Cannot index") || err.contains("index") || err.contains("rror"),
+        "Error: {}",
+        err
+    );
 }
 
 #[test]
 fn test_field_access_non_struct() {
     let err = gen_err("F test()->i64{x:=42;R x.y}");
-    assert!(!err.is_empty(), "Expected error for field access on non-struct: {}", err);
+    assert!(
+        !err.is_empty(),
+        "Expected error for field access on non-struct: {}",
+        err
+    );
 }
 
 #[test]
@@ -448,13 +459,21 @@ fn test_enum_with_many_variants() {
 #[test]
 fn test_error_message_contains_variable_name() {
     let err = gen_err("F test()->i64{R missing_value}");
-    assert!(err.contains("missing_value"), "Error should contain variable name: {}", err);
+    assert!(
+        err.contains("missing_value"),
+        "Error should contain variable name: {}",
+        err
+    );
 }
 
 #[test]
 fn test_error_message_contains_function_name() {
     let err = gen_err("F main()->i64=absent_func()");
-    assert!(err.contains("absent_func"), "Error should contain function name: {}", err);
+    assert!(
+        err.contains("absent_func"),
+        "Error should contain function name: {}",
+        err
+    );
 }
 
 #[test]
@@ -821,9 +840,18 @@ fn test_multiple_returns() {
 #[test]
 fn test_abi_calling_convention_parse() {
     use vais_codegen::abi::CallingConvention;
-    assert_eq!(CallingConvention::parse_abi("C"), Some(CallingConvention::C));
-    assert_eq!(CallingConvention::parse_abi("stdcall"), Some(CallingConvention::StdCall));
-    assert_eq!(CallingConvention::parse_abi("fastcall"), Some(CallingConvention::FastCall));
+    assert_eq!(
+        CallingConvention::parse_abi("C"),
+        Some(CallingConvention::C)
+    );
+    assert_eq!(
+        CallingConvention::parse_abi("stdcall"),
+        Some(CallingConvention::StdCall)
+    );
+    assert_eq!(
+        CallingConvention::parse_abi("fastcall"),
+        Some(CallingConvention::FastCall)
+    );
 }
 
 #[test]
@@ -835,19 +863,28 @@ fn test_abi_calling_convention_unknown() {
 #[test]
 fn test_abi_calling_convention_system() {
     use vais_codegen::abi::CallingConvention;
-    assert_eq!(CallingConvention::parse_abi("system"), Some(CallingConvention::System));
+    assert_eq!(
+        CallingConvention::parse_abi("system"),
+        Some(CallingConvention::System)
+    );
 }
 
 #[test]
 fn test_abi_calling_convention_vais() {
     use vais_codegen::abi::CallingConvention;
-    assert_eq!(CallingConvention::parse_abi("Vais"), Some(CallingConvention::Vais));
+    assert_eq!(
+        CallingConvention::parse_abi("Vais"),
+        Some(CallingConvention::Vais)
+    );
 }
 
 #[test]
 fn test_abi_calling_convention_fast() {
     use vais_codegen::abi::CallingConvention;
-    assert_eq!(CallingConvention::parse_abi("Fast"), Some(CallingConvention::Fast));
+    assert_eq!(
+        CallingConvention::parse_abi("Fast"),
+        Some(CallingConvention::Fast)
+    );
 }
 
 #[test]

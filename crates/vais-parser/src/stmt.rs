@@ -296,5 +296,4 @@ impl Parser {
             ownership,
         })
     }
-
 }

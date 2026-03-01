@@ -96,7 +96,10 @@ fn test_literal_display() {
     assert_token_display(&Token::Float(0.0), "0");
     assert_token_display(&Token::String("hello".to_string()), "\"hello\"");
     assert_token_display(&Token::Ident("foo".to_string()), "foo");
-    assert_token_display(&Token::DocComment("a doc comment".to_string()), "/// a doc comment");
+    assert_token_display(
+        &Token::DocComment("a doc comment".to_string()),
+        "/// a doc comment",
+    );
 }
 
 #[test]
@@ -236,7 +239,9 @@ fn test_tokenize_simd_types() {
 fn test_tokenize_doc_comment() {
     let source = "/// This is a doc comment\nF test() -> i64 = 0";
     let tokens = tokenize(source).unwrap();
-    assert!(tokens.iter().any(|t| matches!(&t.token, Token::DocComment(_))));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(&t.token, Token::DocComment(_))));
 }
 
 #[test]
@@ -250,14 +255,19 @@ fn test_tokenize_string_with_escapes() {
 fn test_tokenize_attribute() {
     let source = "#[cfg(target_os = \"linux\")]";
     let tokens = tokenize(source).unwrap();
-    assert!(tokens.iter().any(|t| matches!(&t.token, Token::HashBracket)));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(&t.token, Token::HashBracket)));
 }
 
 #[test]
 fn test_tokenize_lifetime() {
     let source = "'a 'static 'b";
     let tokens = tokenize(source).unwrap();
-    let lifetimes: Vec<_> = tokens.iter().filter(|t| matches!(&t.token, Token::Lifetime(_))).collect();
+    let lifetimes: Vec<_> = tokens
+        .iter()
+        .filter(|t| matches!(&t.token, Token::Lifetime(_)))
+        .collect();
     assert_eq!(lifetimes.len(), 3);
 }
 
@@ -295,7 +305,10 @@ fn test_tokenize_generics() {
 fn test_tokenize_match_arrow() {
     let source = "0 => 100, 1 => 200, _ => 0";
     let tokens = tokenize(source).unwrap();
-    let fat_arrows: Vec<_> = tokens.iter().filter(|t| t.token == Token::FatArrow).collect();
+    let fat_arrows: Vec<_> = tokens
+        .iter()
+        .filter(|t| t.token == Token::FatArrow)
+        .collect();
     assert_eq!(fat_arrows.len(), 3);
 }
 
@@ -348,7 +361,10 @@ fn test_tokenize_nested_braces() {
 fn test_tokenize_float_variants() {
     let source = "3.14 0.5 1.0 999.999";
     let tokens = tokenize(source).unwrap();
-    let floats: Vec<_> = tokens.iter().filter(|t| matches!(&t.token, Token::Float(_))).collect();
+    let floats: Vec<_> = tokens
+        .iter()
+        .filter(|t| matches!(&t.token, Token::Float(_)))
+        .collect();
     assert_eq!(floats.len(), 4);
 }
 

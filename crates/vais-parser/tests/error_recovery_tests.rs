@@ -17,7 +17,12 @@ fn parse_err(source: &str) -> String {
 
 fn parse_ok(source: &str) {
     let result = parse(source);
-    assert!(result.is_ok(), "Expected parse success for: {}\nErr: {:?}", source, result.err());
+    assert!(
+        result.is_ok(),
+        "Expected parse success for: {}\nErr: {:?}",
+        source,
+        result.err()
+    );
 }
 
 // ============================================================================
@@ -420,7 +425,10 @@ fn test_error_localized_message() {
 fn test_recovery_mode_single_error() {
     let (module, errors) = parse_with_recovery("F (x: i64) -> i64 = x");
     // Should recover with at least one error
-    assert!(!errors.is_empty() || module.items.is_empty(), "Should have errors or empty items");
+    assert!(
+        !errors.is_empty() || module.items.is_empty(),
+        "Should have errors or empty items"
+    );
 }
 
 #[test]
@@ -432,7 +440,11 @@ fn test_recovery_mode_multiple_errors() {
 #[test]
 fn test_recovery_mode_valid_code() {
     let (module, errors) = parse_with_recovery("F test()->i64=42");
-    assert!(errors.is_empty(), "Valid code should have no errors: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Valid code should have no errors: {:?}",
+        errors
+    );
     assert!(!module.items.is_empty(), "Should have one item");
 }
 
@@ -655,7 +667,10 @@ fn test_struct_enum_function_combo() {
 
 #[test]
 fn test_many_functions() {
-    let src = (0..10).map(|i| format!("F f{}()->i64={}", i, i)).collect::<Vec<_>>().join(" ");
+    let src = (0..10)
+        .map(|i| format!("F f{}()->i64={}", i, i))
+        .collect::<Vec<_>>()
+        .join(" ");
     parse_ok(&src);
 }
 

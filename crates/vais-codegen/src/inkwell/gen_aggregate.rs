@@ -68,7 +68,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Store key
             let k_elem_ptr = unsafe {
                 self.builder
-                    .build_gep(key_arr_type, keys_ptr, &[zero, idx], &format!("map_k_{}", i))
+                    .build_gep(
+                        key_arr_type,
+                        keys_ptr,
+                        &[zero, idx],
+                        &format!("map_k_{}", i),
+                    )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             };
             self.builder
@@ -78,7 +83,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Store value
             let v_elem_ptr = unsafe {
                 self.builder
-                    .build_gep(val_arr_type, vals_ptr, &[zero, idx], &format!("map_v_{}", i))
+                    .build_gep(
+                        val_arr_type,
+                        vals_ptr,
+                        &[zero, idx],
+                        &format!("map_v_{}", i),
+                    )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             };
             self.builder

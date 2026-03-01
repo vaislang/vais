@@ -412,10 +412,8 @@ mod tests {
 
     #[test]
     fn test_with_span_preserves_existing_span() {
-        let err = SpannedCodegenError::new(
-            CodegenError::TypeError("t".to_string()),
-            Span::new(10, 20),
-        );
+        let err =
+            SpannedCodegenError::new(CodegenError::TypeError("t".to_string()), Span::new(10, 20));
         let result: Result<(), SpannedCodegenError> = Err(err);
         let spanned_result = result.with_span(Span::new(0, 5));
         let err = spanned_result.unwrap_err();

@@ -11,7 +11,11 @@ fn parse_ok(source: &str) -> Module {
 }
 
 fn _parse_err(source: &str) {
-    assert!(parse(source).is_err(), "Expected parse error for: {}", source);
+    assert!(
+        parse(source).is_err(),
+        "Expected parse error for: {}",
+        source
+    );
 }
 
 // ============================================================================

@@ -117,7 +117,8 @@ fn test_format_ternary() {
 
 #[test]
 fn test_format_if_else() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             I x > 0 {
                 R x
@@ -125,14 +126,16 @@ fn test_format_if_else() {
                 R 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("I "));
     assert!(output.contains("E {"));
 }
 
 #[test]
 fn test_format_if_elseif_else() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             I x > 0 {
                 R 1
@@ -142,26 +145,30 @@ fn test_format_if_elseif_else() {
                 R 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("E I"));
 }
 
 #[test]
 fn test_format_for_loop() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             L i:0..10 {
                 C
             }
             R 0
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("L "));
 }
 
 #[test]
 fn test_format_while_loop() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := mut 0
             L x < 10 {
@@ -169,13 +176,15 @@ fn test_format_while_loop() {
             }
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("L "));
 }
 
 #[test]
 fn test_format_match() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             M x {
                 0 => 100,
@@ -183,51 +192,60 @@ fn test_format_match() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("M "));
     assert!(output.contains("=>"));
 }
 
 #[test]
 fn test_format_function_call() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F add(x: i64, y: i64) -> i64 = x + y
         F test() -> i64 = add(1, 2)
-    "#);
+    "#,
+    );
     assert!(output.contains("add("));
 }
 
 #[test]
 fn test_format_method_call() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         S Foo { value: i64 }
         X Foo {
             F get(self) -> i64 = self.value
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("self.value"));
 }
 
 #[test]
 fn test_format_field_access() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         S Point { x: i64, y: i64 }
         F test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("p.x"));
 }
 
 #[test]
 fn test_format_index_access() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             arr := [1, 2, 3]
             arr[0]
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("[0]"));
 }
 
@@ -245,13 +263,15 @@ fn test_format_tuple_literal() {
 
 #[test]
 fn test_format_struct_literal() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         S Point { x: i64, y: i64 }
         F test() -> i64 {
             p := Point { x: 1, y: 2 }
             R 0
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("Point {") || output.contains("Point{"));
 }
 
@@ -269,7 +289,8 @@ fn test_format_inclusive_range() {
 
 #[test]
 fn test_format_block() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := {
                 a := 10
@@ -277,7 +298,8 @@ fn test_format_block() {
             }
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("{"));
 }
 
@@ -289,19 +311,22 @@ fn test_format_cast() {
 
 #[test]
 fn test_format_assign() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := mut 0
             x = 42
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("= 42") || output.contains("=42"));
 }
 
 #[test]
 fn test_format_assign_op() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := mut 10
             x += 5
@@ -311,13 +336,15 @@ fn test_format_assign_op() {
             x %= 4
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("+="));
 }
 
 #[test]
 fn test_format_assign_op_bitwise() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := mut 255
             x &= 15
@@ -327,7 +354,8 @@ fn test_format_assign_op_bitwise() {
             x >>= 1
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("&=") || output.contains("|="));
 }
 
@@ -345,22 +373,26 @@ fn test_format_self_recursion() {
 
 #[test]
 fn test_format_try() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             v := x + 1
             v
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("v"));
 }
 
 #[test]
 fn test_format_unwrap() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("x"));
 }
 
@@ -372,12 +404,14 @@ fn test_format_ref_deref() {
 
 #[test]
 fn test_format_lazy_force() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test() -> i64 {
             x := lazy 42
             force x
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("lazy"));
     assert!(output.contains("force"));
 }
@@ -464,24 +498,28 @@ fn test_format_trait_declaration() {
 
 #[test]
 fn test_format_impl_block() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         S Foo { value: i64 }
         X Foo {
             F new() -> Foo = Foo { value: 0 }
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("X Foo"));
 }
 
 #[test]
 fn test_format_trait_impl() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         W Show { F show(self) -> str }
         S Foo { value: i64 }
         X Foo: Show {
             F show(self) -> str = "foo"
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("X Foo") || output.contains("Show"));
 }
 
@@ -505,11 +543,13 @@ fn test_format_const_declaration() {
 
 #[test]
 fn test_format_extern_function() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         N "C" {
             F malloc(size: i64) -> i64
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("malloc") && output.contains("i64"));
 }
 
@@ -601,19 +641,22 @@ fn test_format_macro_invocation() {
 
 #[test]
 fn test_format_fibonacci() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F fib(n: i64) -> i64 {
             I n <= 1 { R n }
             R @(n - 1) + @(n - 2)
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("fib"));
     assert!(output.contains("@"));
 }
 
 #[test]
 fn test_format_complete_program() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         S Point { x: i64, y: i64 }
         X Point {
             F new(x: i64, y: i64) -> Point = Point { x: x, y: y }
@@ -623,7 +666,8 @@ fn test_format_complete_program() {
             p := Point::new(3, 4)
             p.distance()
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("S Point"));
     assert!(output.contains("X Point"));
     assert!(output.contains("F main"));
@@ -658,24 +702,28 @@ fn test_format_with_tabs() {
 
 #[test]
 fn test_format_match_with_guard() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F test(x: i64) -> i64 {
             M x {
                 n I n > 0 => n,
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("=>"));
 }
 
 #[test]
 fn test_format_multiple_items() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         F foo() -> i64 = 1
         F bar() -> i64 = 2
         F baz() -> i64 = 3
-    "#);
+    "#,
+    );
     assert!(output.contains("foo"));
     assert!(output.contains("bar"));
     assert!(output.contains("baz"));
@@ -683,20 +731,24 @@ fn test_format_multiple_items() {
 
 #[test]
 fn test_format_where_clause() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         W Show { F show(self) -> str }
         F display<T>(x: T) -> str where T: Show = x.show()
-    "#);
+    "#,
+    );
     assert!(output.contains("where") || output.contains("Show"));
 }
 
 #[test]
 fn test_format_union() {
-    let output = format_source(r#"
+    let output = format_source(
+        r#"
         O Value {
             int_val: i64,
             float_val: f64
         }
-    "#);
+    "#,
+    );
     assert!(output.contains("O Value") || output.contains("Value"));
 }

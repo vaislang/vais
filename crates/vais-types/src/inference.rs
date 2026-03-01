@@ -102,6 +102,11 @@ impl TypeChecker {
         expected: &ResolvedType,
         found: &ResolvedType,
     ) -> TypeResult<()> {
+        // Fast path: pointer identity means same type object, skip everything
+        if std::ptr::eq(expected, found) {
+            return Ok(());
+        }
+
         let expected = self.apply_substitutions(expected);
         let found = self.apply_substitutions(found);
 
@@ -407,15 +412,13 @@ impl TypeChecker {
         )
     }
 
-    /// Apply substitutions to a type
+    /// Check if a type contains any type variables (Var).
+    /// Types without Var nodes cannot be affected by apply_substitutions.
     #[inline]
-    pub(crate) fn apply_substitutions(&self, ty: &ResolvedType) -> ResolvedType {
-        // Fast path: no substitutions means no transformation needed
-        if self.substitutions.is_empty() {
-            return ty.clone();
-        }
-        // Fast path: primitive/leaf types have no type variables to substitute
+    fn contains_var(ty: &ResolvedType) -> bool {
         match ty {
+            ResolvedType::Var(_) => true,
+            // Leaf types: no type variables
             ResolvedType::I8
             | ResolvedType::I16
             | ResolvedType::I32
@@ -432,8 +435,56 @@ impl TypeChecker {
             | ResolvedType::Str
             | ResolvedType::Unit
             | ResolvedType::Never
-            | ResolvedType::Unknown => return ty.clone(),
-            _ => {}
+            | ResolvedType::Unknown
+            | ResolvedType::Generic(_)
+            | ResolvedType::HigherKinded { .. }
+            | ResolvedType::Lifetime(_)
+            | ResolvedType::ImplTrait { .. } => false,
+            // Wrapper types with one inner
+            ResolvedType::Array(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Pointer(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Lazy(inner) => Self::contains_var(inner),
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::contains_var(ok) || Self::contains_var(err)
+            }
+            ResolvedType::Tuple(types) => types.iter().any(Self::contains_var),
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params.iter().any(Self::contains_var) || Self::contains_var(ret)
+            }
+            ResolvedType::Named { generics, .. } | ResolvedType::DynTrait { generics, .. } => {
+                generics.iter().any(Self::contains_var)
+            }
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => Self::contains_var(inner),
+            ResolvedType::Dependent { base, .. } => Self::contains_var(base),
+            ResolvedType::ConstArray { element, .. } | ResolvedType::Vector { element, .. } => {
+                Self::contains_var(element)
+            }
+            ResolvedType::Associated { base, generics, .. } => {
+                Self::contains_var(base) || generics.iter().any(Self::contains_var)
+            }
+            // ConstGeneric and other types without nesting
+            _ => false,
+        }
+    }
+
+    pub(crate) fn apply_substitutions(&self, ty: &ResolvedType) -> ResolvedType {
+        // Fast path: no substitutions means no transformation needed
+        if self.substitutions.is_empty() {
+            return ty.clone();
+        }
+        // Fast path: types without Var nodes cannot be affected by substitutions
+        if !Self::contains_var(ty) {
+            return ty.clone();
         }
         match ty {
             ResolvedType::Var(id) => {
@@ -524,10 +575,7 @@ impl TypeChecker {
                 is_vararg,
                 effects,
             } => ResolvedType::FnPtr {
-                params: params
-                    .iter()
-                    .map(|p| self.apply_substitutions(p))
-                    .collect(),
+                params: params.iter().map(|p| self.apply_substitutions(p)).collect(),
                 ret: Box::new(self.apply_substitutions(ret)),
                 is_vararg: *is_vararg,
                 effects: effects.clone(),
@@ -832,7 +880,12 @@ impl TypeChecker {
         // Verify trait bounds: each inferred concrete type must implement required traits
         if all_concrete && !sig.generic_bounds.is_empty() {
             let call_span = args.first().map(|a| a.span);
-            self.verify_trait_bounds(&sig.generics, &inferred_type_args, &sig.generic_bounds, call_span)?;
+            self.verify_trait_bounds(
+                &sig.generics,
+                &inferred_type_args,
+                &sig.generic_bounds,
+                call_span,
+            )?;
         }
 
         // Verify HKT arity: when an HKT param is substituted with a concrete type,
@@ -1103,8 +1156,10 @@ impl TypeChecker {
                 .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
             if all_concrete {
-                let inst =
-                    GenericInstantiation::function(&callee.callee_name, concrete_callee_args.clone());
+                let inst = GenericInstantiation::function(
+                    &callee.callee_name,
+                    concrete_callee_args.clone(),
+                );
                 // add_instantiation deduplicates via HashSet
                 self.add_instantiation(inst);
 

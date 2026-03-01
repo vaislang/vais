@@ -5,9 +5,7 @@
 //! free variable analysis, and generic instantiation helpers
 
 use vais_parser::parse;
-use vais_types::{
-    GenericInstantiation, InstantiationKind, Linearity, ResolvedType, TypeChecker,
-};
+use vais_types::{GenericInstantiation, InstantiationKind, Linearity, ResolvedType, TypeChecker};
 
 // ============================================================================
 // Linearity tests (types/defs.rs lines 145-161)
@@ -124,10 +122,19 @@ fn test_generic_instantiation_eq() {
 fn test_generic_instantiation_hash() {
     use std::collections::HashSet;
     let mut set = HashSet::new();
-    set.insert(GenericInstantiation::function("foo", vec![ResolvedType::I64]));
-    set.insert(GenericInstantiation::function("foo", vec![ResolvedType::I64]));
+    set.insert(GenericInstantiation::function(
+        "foo",
+        vec![ResolvedType::I64],
+    ));
+    set.insert(GenericInstantiation::function(
+        "foo",
+        vec![ResolvedType::I64],
+    ));
     assert_eq!(set.len(), 1);
-    set.insert(GenericInstantiation::function("foo", vec![ResolvedType::F64]));
+    set.insert(GenericInstantiation::function(
+        "foo",
+        vec![ResolvedType::F64],
+    ));
     assert_eq!(set.len(), 2);
 }
 
@@ -143,7 +150,9 @@ fn test_unused_variable_warning() {
     let _ = tc.check_module(&module);
     let warnings = tc.get_warnings();
     assert!(
-        warnings.iter().any(|w| w.contains("unused variable") && w.contains("x")),
+        warnings
+            .iter()
+            .any(|w| w.contains("unused variable") && w.contains("x")),
         "Expected unused variable warning for x, got: {:?}",
         warnings
     );
@@ -171,7 +180,9 @@ fn test_variable_used_no_warning() {
     let _ = tc.check_module(&module);
     let warnings = tc.get_warnings();
     assert!(
-        !warnings.iter().any(|w| w.contains("unused variable") && w.contains("`x`")),
+        !warnings
+            .iter()
+            .any(|w| w.contains("unused variable") && w.contains("`x`")),
         "Should not warn about used variable x, got: {:?}",
         warnings
     );
@@ -611,8 +622,7 @@ fn test_collected_errors() {
     // Either error is returned or collected
     if result.is_err() {
         // Error was returned directly
-        assert!(format!("{:?}", result.unwrap_err()).contains("undefined_var")
-            || true);
+        assert!(format!("{:?}", result.unwrap_err()).contains("undefined_var") || true);
     }
     // get_collected_errors also works
     let _ = tc.get_collected_errors();

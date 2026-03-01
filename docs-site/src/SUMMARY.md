@@ -65,6 +65,7 @@
 # 컴파일러
 
 - [아키텍처](./compiler/architecture.md)
+- [구조/동작 한눈에 보기](./compiler/at-a-glance.md)
 - [기술 사양](./compiler/tech-spec.md)
 - [JIT 컴파일](./compiler/jit-compilation.md)
 - [GPU 코드 생성](./compiler/gpu-codegen.md)

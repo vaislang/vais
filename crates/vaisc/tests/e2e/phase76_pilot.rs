@@ -12,7 +12,11 @@ use super::helpers::*;
 fn e2e_p76_pilot_json2toml_full() {
     // Resolve path relative to workspace root
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let source = std::fs::read_to_string(workspace_root.join("examples/pilot_json2toml.vais"))
         .expect("pilot_json2toml.vais should exist");
     assert_exit_code(&source, 34);
@@ -443,7 +447,11 @@ F main() -> i64 {
 #[test]
 fn e2e_p76_pilot_rest_api_full() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let source = std::fs::read_to_string(workspace_root.join("examples/pilot_rest_api.vais"))
         .expect("pilot_rest_api.vais should exist");
     assert_exit_code(&source, 28);
@@ -454,10 +462,17 @@ fn e2e_p76_pilot_rest_api_full() {
 #[ignore]
 fn e2e_p76_debug_dump_pilot_ir() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let workspace_root = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let source = std::fs::read_to_string(workspace_root.join("examples/pilot_json2toml.vais"))
         .expect("pilot_json2toml.vais should exist");
     let ir = compile_to_ir(&source).expect("should compile");
     std::fs::write("/tmp/pilot_text_ir.ll", &ir).expect("should write");
-    eprintln!("Text IR written to /tmp/pilot_text_ir.ll ({} bytes)", ir.len());
+    eprintln!(
+        "Text IR written to /tmp/pilot_text_ir.ll ({} bytes)",
+        ir.len()
+    );
 }

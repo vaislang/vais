@@ -56,7 +56,8 @@ fn test_codegen_binary_logical() {
 
 #[test]
 fn test_codegen_binary_bitwise() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             a := 255
             b := a & 15
@@ -66,8 +67,15 @@ fn test_codegen_binary_bitwise() {
             f := e >> 1
             f
         }
-    "#);
-    assert!(ir.contains("and") || ir.contains("or") || ir.contains("xor") || ir.contains("shl") || ir.contains("shr"));
+    "#,
+    );
+    assert!(
+        ir.contains("and")
+            || ir.contains("or")
+            || ir.contains("xor")
+            || ir.contains("shl")
+            || ir.contains("shr")
+    );
 }
 
 #[test]
@@ -108,42 +116,49 @@ fn test_codegen_tuple_literal() {
 
 #[test]
 fn test_codegen_struct_literal() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Point { x: i64, y: i64 }
         F test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("1") || ir.contains("2"));
 }
 
 #[test]
 fn test_codegen_field_access() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Pair { first: i64, second: i64 }
         F test() -> i64 {
             p := Pair { first: 10, second: 20 }
             p.first + p.second
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add"));
 }
 
 #[test]
 fn test_codegen_index_access() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             arr := [10, 20, 30]
             arr[1]
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("getelementptr") || ir.contains("load") || ir.contains("20"));
 }
 
 #[test]
 fn test_codegen_method_call() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Counter { value: i64 }
         X Counter {
             F get(self) -> i64 = self.value
@@ -152,18 +167,21 @@ fn test_codegen_method_call() {
             c := Counter { value: 42 }
             c.get()
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("Counter") || ir.contains("get") || ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_self_recursion() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F factorial(n: i64) -> i64 {
             I n <= 1 { R 1 }
             R n * @(n - 1)
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("factorial") || ir.contains("call"));
 }
 
@@ -185,7 +203,8 @@ fn test_codegen_ref_deref() {
 
 #[test]
 fn test_codegen_if_else() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             I x > 0 {
                 R x
@@ -193,13 +212,15 @@ fn test_codegen_if_else() {
                 R 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br") || ir.contains("icmp"));
 }
 
 #[test]
 fn test_codegen_if_elseif_else() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F classify(x: i64) -> i64 {
             I x > 0 {
                 R 1
@@ -209,13 +230,15 @@ fn test_codegen_if_elseif_else() {
                 R 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_for_loop() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             sum := mut 0
             L i:0..10 {
@@ -223,13 +246,15 @@ fn test_codegen_for_loop() {
             }
             sum
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br") || ir.contains("phi"));
 }
 
 #[test]
 fn test_codegen_while_loop() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := mut 0
             L x < 100 {
@@ -237,13 +262,15 @@ fn test_codegen_while_loop() {
             }
             x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_infinite_loop_break() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := mut 0
             L {
@@ -252,13 +279,15 @@ fn test_codegen_infinite_loop_break() {
             }
             x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_match_int() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             M x {
                 0 => 100,
@@ -267,26 +296,30 @@ fn test_codegen_match_int() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("switch") || ir.contains("icmp"));
 }
 
 #[test]
 fn test_codegen_match_with_guard() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             M x {
                 n I n > 0 => n * 2,
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp") || ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_match_tuple() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             t := (1, 2)
             M t {
@@ -294,13 +327,15 @@ fn test_codegen_match_tuple() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add"));
 }
 
 #[test]
 fn test_codegen_nested_if() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64, y: i64) -> i64 {
             I x > 0 {
                 I y > 0 {
@@ -312,7 +347,8 @@ fn test_codegen_nested_if() {
                 R 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br"));
 }
 
@@ -334,20 +370,23 @@ fn test_codegen_mut_binding() {
 
 #[test]
 fn test_codegen_multiple_bindings() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             a := 1
             b := 2
             c := 3
             a + b + c
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add"));
 }
 
 #[test]
 fn test_codegen_assign_ops() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := mut 10
             x += 5
@@ -355,7 +394,8 @@ fn test_codegen_assign_ops() {
             x *= 2
             x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("sub") || ir.contains("mul"));
 }
 
@@ -367,12 +407,14 @@ fn test_codegen_return_void() {
 
 #[test]
 fn test_codegen_early_return() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             I x < 0 { R 0 }
             R x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("ret"));
 }
 
@@ -394,10 +436,12 @@ fn test_codegen_lambda_multi_param() {
 
 #[test]
 fn test_codegen_lambda_as_param() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
         F test() -> i64 = apply(|x: i64| x * 2, 21)
-    "#);
+    "#,
+    );
     assert!(ir.contains("apply") || ir.contains("mul"));
 }
 
@@ -407,34 +451,40 @@ fn test_codegen_lambda_as_param() {
 
 #[test]
 fn test_codegen_generic_function() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F id<T>(x: T) -> T = x
         F test() -> i64 = id(42)
-    "#);
+    "#,
+    );
     assert!(ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_generic_struct() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Box<T> { value: T }
         F test() -> i64 {
             b := Box { value: 42 }
             b.value
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_generic_multiple_instantiation() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F first<T>(x: T, y: T) -> T = x
         F test() -> i64 {
             a := first(1, 2)
             a
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("1"));
 }
 
@@ -444,14 +494,16 @@ fn test_codegen_generic_multiple_instantiation() {
 
 #[test]
 fn test_codegen_inferred_types() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := 42
             y := x + 1
             z := y * 2
             z
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("mul"));
 }
 
@@ -473,11 +525,13 @@ fn test_codegen_print_call() {
 
 #[test]
 fn test_codegen_multiple_functions() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F add(x: i64, y: i64) -> i64 = x + y
         F sub(x: i64, y: i64) -> i64 = x - y
         F test() -> i64 = add(10, sub(5, 3))
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("sub"));
 }
 
@@ -487,7 +541,8 @@ fn test_codegen_multiple_functions() {
 
 #[test]
 fn test_codegen_enum_variant() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         E Color { Red, Green, Blue }
         F test() -> i64 {
             c := Red
@@ -498,13 +553,15 @@ fn test_codegen_enum_variant() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("1") || ir.contains("switch") || ir.contains("icmp"));
 }
 
 #[test]
 fn test_codegen_enum_with_data() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         E Shape {
             Circle(i64),
             Rect(i64, i64)
@@ -516,7 +573,8 @@ fn test_codegen_enum_with_data() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("mul"));
 }
 
@@ -526,7 +584,8 @@ fn test_codegen_enum_with_data() {
 
 #[test]
 fn test_codegen_trait_impl() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         W Describable {
             F name(self) -> str
         }
@@ -538,13 +597,15 @@ fn test_codegen_trait_impl() {
             d := Dog { breed: "lab" }
             d.name()
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("dog") || ir.contains("name"));
 }
 
 #[test]
 fn test_codegen_impl_methods() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Stack { top: i64 }
         X Stack {
             F new() -> Stack = Stack { top: 0 }
@@ -554,7 +615,8 @@ fn test_codegen_impl_methods() {
             s := Stack::new()
             s.peek()
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("Stack") || ir.contains("new") || ir.contains("peek"));
 }
 
@@ -581,43 +643,50 @@ fn test_codegen_error_undefined_function() {
 
 #[test]
 fn test_codegen_fibonacci() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F fib(n: i64) -> i64 {
             I n <= 1 { R n }
             R @(n - 1) + @(n - 2)
         }
         F main() -> i64 = fib(10)
-    "#);
+    "#,
+    );
     assert!(ir.contains("fib") || ir.contains("call"));
 }
 
 #[test]
 fn test_codegen_gcd() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F gcd(a: i64, b: i64) -> i64 {
             I b == 0 { R a }
             R @(b, a % b)
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("gcd") || ir.contains("srem"));
 }
 
 #[test]
 fn test_codegen_nested_structs() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Inner { x: i64 }
         S Outer { inner: Inner, extra: i64 }
         F test() -> i64 {
             o := Outer { inner: Inner { x: 42 }, extra: 10 }
             o.inner.x + o.extra
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("42") || ir.contains("10"));
 }
 
 #[test]
 fn test_codegen_complex_control_flow() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F classify(x: i64) -> i64 {
             I x > 100 {
                 I x > 1000 { R 3 }
@@ -630,13 +699,15 @@ fn test_codegen_complex_control_flow() {
                 R -1
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br") || ir.contains("ret"));
 }
 
 #[test]
 fn test_codegen_accumulator_loop() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F sum_to(n: i64) -> i64 {
             total := mut 0
             L i:0..n {
@@ -644,7 +715,8 @@ fn test_codegen_accumulator_loop() {
             }
             total
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("phi"));
 }
 
@@ -654,11 +726,13 @@ fn test_codegen_accumulator_loop() {
 
 #[test]
 fn test_codegen_type_alias() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         T Num = i64
         F double(x: Num) -> Num = x * 2
         F test() -> i64 = double(21)
-    "#);
+    "#,
+    );
     assert!(ir.contains("mul") || ir.contains("21"));
 }
 
@@ -668,10 +742,12 @@ fn test_codegen_type_alias() {
 
 #[test]
 fn test_codegen_const() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         C MAX: i64 = 100
         F test() -> i64 = MAX
-    "#);
+    "#,
+    );
     assert!(ir.contains("100"));
 }
 
@@ -681,7 +757,8 @@ fn test_codegen_const() {
 
 #[test]
 fn test_codegen_block_expression() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := {
                 a := 10
@@ -690,7 +767,8 @@ fn test_codegen_block_expression() {
             }
             x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("10"));
 }
 
@@ -700,7 +778,8 @@ fn test_codegen_block_expression() {
 
 #[test]
 fn test_codegen_break_continue() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             sum := mut 0
             L i:0..20 {
@@ -710,7 +789,8 @@ fn test_codegen_break_continue() {
             }
             sum
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("br"));
 }
 
@@ -720,37 +800,43 @@ fn test_codegen_break_continue() {
 
 #[test]
 fn test_codegen_lambda_closure_capture() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := 10
             f := |y: i64| x + y
             f(32)
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("10") || ir.contains("32"));
 }
 
 #[test]
 fn test_codegen_lambda_no_params() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             f := || 42
             f()
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("42"));
 }
 
 #[test]
 fn test_codegen_lambda_multi_capture() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             a := 10
             b := 20
             f := |c: i64| a + b + c
             f(12)
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") || ir.contains("12"));
 }
 
@@ -760,22 +846,26 @@ fn test_codegen_lambda_multi_capture() {
 
 #[test]
 fn test_codegen_generic_wrapper() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Wrapper<T> { value: T }
         F test() -> i64 {
             w := Wrapper { value: 42 }
             w.value
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("42") || ir.contains("Wrapper"));
 }
 
 #[test]
 fn test_codegen_generic_pair() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F first<T>(a: T, b: T) -> T = a
         F test() -> i64 = first(42, 0)
-    "#);
+    "#,
+    );
     assert!(ir.contains("42") || ir.contains("first"));
 }
 
@@ -785,7 +875,8 @@ fn test_codegen_generic_pair() {
 
 #[test]
 fn test_codegen_match_many_cases() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             M x {
                 0 => 100,
@@ -794,13 +885,15 @@ fn test_codegen_match_many_cases() {
                 _ => 0
             }
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp") || ir.contains("switch") || ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_deeply_nested_if() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(x: i64) -> i64 {
             I x > 0 {
                 I x > 10 {
@@ -813,13 +906,15 @@ fn test_codegen_deeply_nested_if() {
             }
             R 0
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp") || ir.contains("br"));
 }
 
 #[test]
 fn test_codegen_loop_accumulator() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             result := mut 1
             L i:1..11 {
@@ -827,7 +922,8 @@ fn test_codegen_loop_accumulator() {
             }
             result
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("mul") || ir.contains("phi") || ir.contains("br"));
 }
 
@@ -837,9 +933,11 @@ fn test_codegen_loop_accumulator() {
 
 #[test]
 fn test_codegen_string_return() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> str = "hello world"
-    "#);
+    "#,
+    );
     assert!(ir.contains("hello world") || ir.contains("global") || ir.contains("constant"));
 }
 
@@ -849,7 +947,8 @@ fn test_codegen_string_return() {
 
 #[test]
 fn test_codegen_multiple_returns() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F classify(n: i64) -> i64 {
             I n < 0 { R -1 }
             I n == 0 { R 0 }
@@ -857,7 +956,8 @@ fn test_codegen_multiple_returns() {
             I n < 100 { R 2 }
             R 3
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("ret"));
 }
 
@@ -867,7 +967,8 @@ fn test_codegen_multiple_returns() {
 
 #[test]
 fn test_codegen_all_comparisons() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             a := 1 < 2
             b := 2 > 1
@@ -878,7 +979,8 @@ fn test_codegen_all_comparisons() {
             I a && b && c && d && e && f { R 1 }
             R 0
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp slt") || ir.contains("icmp sgt") || ir.contains("icmp eq"));
 }
 
@@ -888,15 +990,22 @@ fn test_codegen_all_comparisons() {
 
 #[test]
 fn test_codegen_nested_struct_construction() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         S Inner { x: i64 }
         S Outer { inner: Inner, y: i64 }
         F test() -> i64 {
             o := Outer { inner: Inner { x: 40 }, y: 2 }
             o.inner.x + o.y
         }
-    "#);
-    assert!(ir.contains("insertvalue") || ir.contains("extractvalue") || ir.contains("Inner") || ir.contains("Outer"));
+    "#,
+    );
+    assert!(
+        ir.contains("insertvalue")
+            || ir.contains("extractvalue")
+            || ir.contains("Inner")
+            || ir.contains("Outer")
+    );
 }
 
 // ============================================================================
@@ -905,11 +1014,13 @@ fn test_codegen_nested_struct_construction() {
 
 #[test]
 fn test_codegen_call_chain() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F inc(x: i64) -> i64 = x + 1
         F dbl(x: i64) -> i64 = x * 2
         F test() -> i64 = inc(dbl(inc(dbl(5))))
-    "#);
+    "#,
+    );
     assert!(ir.contains("call") || ir.contains("inc") || ir.contains("dbl"));
 }
 
@@ -919,7 +1030,8 @@ fn test_codegen_call_chain() {
 
 #[test]
 fn test_codegen_enum_wildcard_match() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         E Animal { Cat, Dog, Fish, Bird }
         F score(a: Animal) -> i64 {
             M a {
@@ -929,7 +1041,8 @@ fn test_codegen_enum_wildcard_match() {
             }
         }
         F test() -> i64 = score(Fish)
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp") || ir.contains("br"));
 }
 
@@ -939,17 +1052,21 @@ fn test_codegen_enum_wildcard_match() {
 
 #[test]
 fn test_codegen_expression_body_complex() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test(a: i64, b: i64) -> i64 = (a + b) * (a - b)
-    "#);
+    "#,
+    );
     assert!(ir.contains("add") && ir.contains("sub") && ir.contains("mul"));
 }
 
 #[test]
 fn test_codegen_expression_body_ternary() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F max(a: i64, b: i64) -> i64 = a > b ? a : b
-    "#);
+    "#,
+    );
     assert!(ir.contains("icmp") || ir.contains("select") || ir.contains("br"));
 }
 
@@ -959,7 +1076,8 @@ fn test_codegen_expression_body_ternary() {
 
 #[test]
 fn test_codegen_mutual_recursion() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F is_even(n: i64) -> i64 {
             I n == 0 { R 1 }
             is_odd(n - 1)
@@ -968,7 +1086,8 @@ fn test_codegen_mutual_recursion() {
             I n == 0 { R 0 }
             is_even(n - 1)
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("is_even") && ir.contains("is_odd"));
 }
 
@@ -978,14 +1097,16 @@ fn test_codegen_mutual_recursion() {
 
 #[test]
 fn test_codegen_defer() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         F test() -> i64 {
             x := mut 0
             D { x = x + 1 }
             x = 41
             x
         }
-    "#);
+    "#,
+    );
     assert!(ir.contains("store") || ir.contains("41"));
 }
 
@@ -995,11 +1116,13 @@ fn test_codegen_defer() {
 
 #[test]
 fn test_codegen_extern_declaration() {
-    let ir = gen_ok(r#"
+    let ir = gen_ok(
+        r#"
         N "C" {
             F puts(s: i64) -> i64
         }
         F test() -> i64 = 42
-    "#);
+    "#,
+    );
     assert!(ir.contains("declare") || ir.contains("puts") || ir.contains("42"));
 }

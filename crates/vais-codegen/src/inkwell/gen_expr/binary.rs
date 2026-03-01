@@ -241,12 +241,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 // Offset for second string
                 let buf2 = unsafe {
-                    self.builder.build_in_bounds_gep(
-                        self.context.i8_type(),
-                        buf,
-                        &[len1],
-                        "buf2",
-                    )
+                    self.builder
+                        .build_in_bounds_gep(self.context.i8_type(), buf, &[len1], "buf2")
                 }
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
@@ -263,9 +259,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 // Build fat pointer { ptr, i64 }
                 let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
-                let str_struct_type =
-                    self.context
-                        .struct_type(&[ptr_type.into(), i64_type.into()], false);
+                let str_struct_type = self
+                    .context
+                    .struct_type(&[ptr_type.into(), i64_type.into()], false);
                 let undef = str_struct_type.get_undef();
                 let with_ptr = self
                     .builder
@@ -287,7 +283,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .ok_or_else(|| CodegenError::UndefinedFunction("strcmp".to_string()))?;
                 let cmp = self
                     .builder
-                    .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp_result")
+                    .build_call(
+                        strcmp_fn,
+                        &[lhs_ptr.into(), rhs_ptr.into()],
+                        "strcmp_result",
+                    )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .try_as_basic_value()
                     .left()

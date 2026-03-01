@@ -19,7 +19,11 @@ impl CodeGenerator {
                 end,
                 inclusive,
             } => (start.as_deref(), end.as_deref(), *inclusive),
-            _ => return Err(CodegenError::InternalError("generate_range_for_loop called with non-range iter".to_string())),
+            _ => {
+                return Err(CodegenError::InternalError(
+                    "generate_range_for_loop called with non-range iter".to_string(),
+                ))
+            }
         };
 
         let mut ir = String::new();

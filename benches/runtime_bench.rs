@@ -301,12 +301,129 @@ fn bench_fibonacci_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+//
+// Additional Rust reference implementations
+//
+
+fn rust_matrix_multiply(n: usize) -> i64 {
+    let mut a = vec![0i64; n * n];
+    let mut b = vec![0i64; n * n];
+    let mut c = vec![0i64; n * n];
+
+    // Initialize
+    for i in 0..n {
+        for j in 0..n {
+            a[i * n + j] = (i + j) as i64;
+            b[i * n + j] = (i * j + 1) as i64;
+        }
+    }
+
+    // Multiply
+    for i in 0..n {
+        for j in 0..n {
+            let mut sum = 0i64;
+            for k in 0..n {
+                sum += a[i * n + k] * b[k * n + j];
+            }
+            c[i * n + j] = sum;
+        }
+    }
+
+    // Checksum: diagonal sum
+    let mut checksum = 0i64;
+    for i in 0..n {
+        checksum += c[i * n + i];
+    }
+    checksum % 256
+}
+
+fn rust_build_tree(
+    depth: u32,
+    val: i64,
+) -> Option<
+    Box<(
+        i64,
+        Option<
+            Box<(
+                i64,
+                Option<
+                    Box<(
+                        i64,
+                        Option<Box<dyn std::any::Any>>,
+                        Option<Box<dyn std::any::Any>>,
+                    )>,
+                >,
+                Option<Box<dyn std::any::Any>>,
+            )>,
+        >,
+        Option<Box<dyn std::any::Any>>,
+    )>,
+> {
+    // Simplified: just count nodes via recursion
+    None // placeholder
+}
+
+fn rust_tree_sum(depth: u32, val: i64) -> i64 {
+    if depth == 0 {
+        return 0;
+    }
+    val + rust_tree_sum(depth - 1, val * 2 + 1) + rust_tree_sum(depth - 1, val * 2 + 2)
+}
+
+/// Benchmark: Matrix multiplication (50x50)
+fn bench_matrix(c: &mut Criterion) {
+    let mut group = c.benchmark_group("compute/matrix");
+
+    // Rust baseline
+    group.bench_function("rust_matmul_50x50", |b| {
+        b.iter(|| rust_matrix_multiply(black_box(50)))
+    });
+
+    // Vais compiled binary
+    if let Some(binary) = compile_vais_to_binary(Path::new("examples/bench_matrix.vais")) {
+        group.bench_function("vais_matmul_50x50", |b| {
+            b.iter(|| {
+                execute_binary(&binary);
+            })
+        });
+    } else {
+        eprintln!("Skipping Vais matrix benchmark: compilation failed");
+    }
+
+    group.finish();
+}
+
+/// Benchmark: Binary tree DFS (depth 15)
+fn bench_tree(c: &mut Criterion) {
+    let mut group = c.benchmark_group("compute/tree");
+
+    // Rust baseline (recursive sum matching the Vais benchmark)
+    group.bench_function("rust_tree_sum_d15", |b| {
+        b.iter(|| rust_tree_sum(black_box(15), black_box(1)))
+    });
+
+    // Vais compiled binary
+    if let Some(binary) = compile_vais_to_binary(Path::new("examples/bench_tree.vais")) {
+        group.bench_function("vais_tree_sum_d15", |b| {
+            b.iter(|| {
+                execute_binary(&binary);
+            })
+        });
+    } else {
+        eprintln!("Skipping Vais tree benchmark: compilation failed");
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_fibonacci,
     bench_primes,
     bench_sorting,
     bench_fibonacci_scaling,
+    bench_matrix,
+    bench_tree,
 );
 
 criterion_main!(benches);

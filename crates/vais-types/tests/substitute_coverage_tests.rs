@@ -38,12 +38,30 @@ fn test_substitute_generic_not_found() {
 #[test]
 fn test_substitute_primitive_unchanged() {
     let subs = make_sub("T", ResolvedType::I64);
-    assert_eq!(substitute_type(&ResolvedType::I32, &subs), ResolvedType::I32);
-    assert_eq!(substitute_type(&ResolvedType::F64, &subs), ResolvedType::F64);
-    assert_eq!(substitute_type(&ResolvedType::Bool, &subs), ResolvedType::Bool);
-    assert_eq!(substitute_type(&ResolvedType::Str, &subs), ResolvedType::Str);
-    assert_eq!(substitute_type(&ResolvedType::Unit, &subs), ResolvedType::Unit);
-    assert_eq!(substitute_type(&ResolvedType::Never, &subs), ResolvedType::Never);
+    assert_eq!(
+        substitute_type(&ResolvedType::I32, &subs),
+        ResolvedType::I32
+    );
+    assert_eq!(
+        substitute_type(&ResolvedType::F64, &subs),
+        ResolvedType::F64
+    );
+    assert_eq!(
+        substitute_type(&ResolvedType::Bool, &subs),
+        ResolvedType::Bool
+    );
+    assert_eq!(
+        substitute_type(&ResolvedType::Str, &subs),
+        ResolvedType::Str
+    );
+    assert_eq!(
+        substitute_type(&ResolvedType::Unit, &subs),
+        ResolvedType::Unit
+    );
+    assert_eq!(
+        substitute_type(&ResolvedType::Never, &subs),
+        ResolvedType::Never
+    );
 }
 
 // ============================================================================
@@ -187,10 +205,13 @@ fn test_substitute_const_generic_not_found() {
 
 #[test]
 fn test_substitute_higher_kinded() {
-    let subs = make_sub("F", ResolvedType::Named {
-        name: "Vec".to_string(),
-        generics: vec![],
-    });
+    let subs = make_sub(
+        "F",
+        ResolvedType::Named {
+            name: "Vec".to_string(),
+            generics: vec![],
+        },
+    );
     let ty = ResolvedType::HigherKinded {
         name: "F".to_string(),
         arity: 1,
@@ -232,10 +253,7 @@ fn test_substitute_map() {
 #[test]
 fn test_substitute_map_no_change() {
     let subs = make_sub("T", ResolvedType::I64);
-    let ty = ResolvedType::Map(
-        Box::new(ResolvedType::Str),
-        Box::new(ResolvedType::Bool),
-    );
+    let ty = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::Bool));
     assert_eq!(substitute_type(&ty, &subs), ty);
 }
 
@@ -573,7 +591,9 @@ fn test_substitute_nested() {
     let result = substitute_type(&ty, &subs);
     assert_eq!(
         result,
-        ResolvedType::Array(Box::new(ResolvedType::Optional(Box::new(ResolvedType::I64))))
+        ResolvedType::Array(Box::new(ResolvedType::Optional(Box::new(
+            ResolvedType::I64
+        ))))
     );
 }
 

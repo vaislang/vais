@@ -157,7 +157,9 @@ impl<'ctx> TypeMapper<'ctx> {
                 }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                eprintln!("[ICE] unresolved type variable reached Inkwell codegen — using i64 fallback");
+                eprintln!(
+                    "[ICE] unresolved type variable reached Inkwell codegen — using i64 fallback"
+                );
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
@@ -274,7 +276,9 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.context.i64_type().into()
             }
             ResolvedType::Associated { .. } => {
-                eprintln!("[ICE] unresolved associated type in Inkwell codegen — using i64 fallback");
+                eprintln!(
+                    "[ICE] unresolved associated type in Inkwell codegen — using i64 fallback"
+                );
                 self.context.i64_type().into()
             }
             ResolvedType::Dependent { base, .. } => {
@@ -291,5 +295,4 @@ impl<'ctx> TypeMapper<'ctx> {
             }
         }
     }
-
 }

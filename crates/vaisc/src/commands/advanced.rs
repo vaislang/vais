@@ -100,6 +100,7 @@ pub(crate) fn cmd_pgo(
             false,     // use_inkwell
             false,     // per_module
             536870912, // cache_limit (512MB default)
+            None,      // profile_out
         )?;
 
         println!(
@@ -204,6 +205,7 @@ pub(crate) fn cmd_pgo(
         false,     // use_inkwell
         false,     // per_module
         536870912, // cache_limit (512MB default)
+        None,      // profile_out
     )?;
 
     println!(
@@ -306,6 +308,7 @@ pub(crate) fn cmd_watch(
         false,     // use_inkwell
         false,     // per_module
         536870912, // cache_limit (512MB default)
+        None,      // profile_out
     )?;
 
     // Execute initial run if requested
@@ -398,6 +401,7 @@ pub(crate) fn cmd_watch(
                         false,     // use_inkwell
                         false,     // per_module
                         536870912, // cache_limit (512MB default)
+                        None,      // profile_out
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());

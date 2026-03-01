@@ -592,10 +592,7 @@ impl CodeGenerator {
                         let raw_ptr = self.next_temp(counter);
                         ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", raw_ptr, val));
                         let len = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = call i64 @strlen(i8* {})\n",
-                            len, raw_ptr
-                        ));
+                        ir.push_str(&format!("  {} = call i64 @strlen(i8* {})\n", len, raw_ptr));
                         val = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
                     }
                 }
@@ -783,7 +780,11 @@ impl CodeGenerator {
                 ));
                 ptr
             } else if arg_full.starts_with("i8*") {
-                arg_full.split_whitespace().last().unwrap_or("null").to_string()
+                arg_full
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or("null")
+                    .to_string()
             } else {
                 let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
                 let ptr = self.next_temp(counter);
@@ -919,7 +920,11 @@ impl CodeGenerator {
                 ));
                 ptr
             } else if arg_full.starts_with("i8*") {
-                arg_full.split_whitespace().last().unwrap_or("null").to_string()
+                arg_full
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or("null")
+                    .to_string()
             } else {
                 let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
                 let ptr = self.next_temp(counter);
@@ -1084,10 +1089,7 @@ impl CodeGenerator {
                     .unwrap_or(ResolvedType::I64);
                 if matches!(actual_ret, ResolvedType::Str) {
                     let len = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = call i64 @strlen(i8* {})\n",
-                        len, tmp
-                    ));
+                    ir.push_str(&format!("  {} = call i64 @strlen(i8* {})\n", len, tmp));
                     let fat_ptr = self.build_str_fat_ptr(&tmp, &len, counter, &mut ir);
                     return Ok((fat_ptr, ir));
                 }

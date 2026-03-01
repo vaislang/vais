@@ -20,29 +20,39 @@ pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
 
 impl CodeGenerator {
     /// Generate a unique string constant name, with optional module prefix
+    #[inline]
     pub(crate) fn make_string_name(&self) -> String {
+        use std::fmt::Write;
+        let mut name = String::with_capacity(16);
         if let Some(ref prefix) = self.strings.prefix {
-            format!("{}.str.{}", prefix, self.strings.counter)
+            let _ = write!(name, "{}.str.{}", prefix, self.strings.counter);
         } else {
-            format!(".str.{}", self.strings.counter)
+            let _ = write!(name, ".str.{}", self.strings.counter);
         }
+        name
     }
 
     /// Generate a unique label with the given prefix
+    #[inline]
     pub(crate) fn next_label(&mut self, prefix: &str) -> String {
         debug_assert!(
             !prefix.is_empty() && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_'),
             "Invalid label prefix: '{}'. Must be non-empty and contain only alphanumeric, '.', or '_' characters.",
             prefix
         );
-        let label = format!("{}{}", prefix, self.fn_ctx.label_counter);
+        use std::fmt::Write;
+        let mut label = String::with_capacity(prefix.len() + 6);
+        let _ = write!(label, "{}{}", prefix, self.fn_ctx.label_counter);
         self.fn_ctx.label_counter += 1;
         label
     }
 
     /// Generate a unique temporary register name
+    #[inline]
     pub(crate) fn next_temp(&self, counter: &mut usize) -> String {
-        let tmp = format!("%t{}", counter);
+        use std::fmt::Write;
+        let mut tmp = String::with_capacity(8); // "%t" + up to 6 digits
+        let _ = write!(tmp, "%t{}", counter);
         *counter += 1;
         tmp
     }

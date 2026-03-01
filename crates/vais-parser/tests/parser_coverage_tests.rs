@@ -53,9 +53,10 @@ fn test_parse_with_cfg_windows_excluded() {
     cfg.insert("target_os".to_string(), "linux".to_string());
     let module = parse_with_cfg(source, cfg).unwrap();
     // windows_only should be excluded, only always should remain
-    assert!(module.items.iter().any(|item| {
-        matches!(&item.node, Item::Function(f) if f.name.node == "always")
-    }));
+    assert!(module
+        .items
+        .iter()
+        .any(|item| { matches!(&item.node, Item::Function(f) if f.name.node == "always") }));
 }
 
 #[test]
@@ -83,9 +84,10 @@ fn test_parse_with_recovery_broken_function() {
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty());
     // Should still parse the valid struct
-    assert!(module.items.iter().any(|item| {
-        matches!(&item.node, Item::Struct(s) if s.name.node == "Valid")
-    }));
+    assert!(module
+        .items
+        .iter()
+        .any(|item| { matches!(&item.node, Item::Struct(s) if s.name.node == "Valid") }));
 }
 
 #[test]
@@ -98,9 +100,10 @@ fn test_parse_with_recovery_multiple_errors() {
     let (module, errors) = parse_with_recovery(source);
     assert!(!errors.is_empty());
     // valid function should be present
-    assert!(module.items.iter().any(|item| {
-        matches!(&item.node, Item::Function(f) if f.name.node == "valid")
-    }));
+    assert!(module
+        .items
+        .iter()
+        .any(|item| { matches!(&item.node, Item::Function(f) if f.name.node == "valid") }));
 }
 
 #[test]

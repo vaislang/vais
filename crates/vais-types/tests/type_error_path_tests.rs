@@ -20,7 +20,12 @@ fn check_ok(source: &str) {
     let ast = parse(source).unwrap_or_else(|e| panic!("Parse failed for: {}\nErr: {}", source, e));
     let mut checker = TypeChecker::new();
     let result = checker.check_module(&ast);
-    assert!(result.is_ok(), "Type check failed for: {}\nErr: {:?}", source, result.err());
+    assert!(
+        result.is_ok(),
+        "Type check failed for: {}\nErr: {:?}",
+        source,
+        result.err()
+    );
 }
 
 fn check_err(source: &str) -> TypeError {
@@ -81,8 +86,11 @@ fn test_undefined_var_with_suggestion() {
         let help = err.help();
         assert!(help.is_some(), "Should have help with suggestion");
         let help_msg = help.unwrap();
-        assert!(help_msg.contains("count") || help_msg.contains("cont"),
-            "Help should suggest similar name: {}", help_msg);
+        assert!(
+            help_msg.contains("count") || help_msg.contains("cont"),
+            "Help should suggest similar name: {}",
+            help_msg
+        );
     }
 }
 
@@ -166,7 +174,11 @@ fn test_arg_count_too_few() {
     if let Some(err) = check_error("F add(a:i64,b:i64)->i64=a+b F main()->i64=add(1)") {
         assert_eq!(err.error_code(), "E006");
         let msg = format!("{}", err);
-        assert!(msg.contains("2") && msg.contains("1"), "Should mention expected/got: {}", msg);
+        assert!(
+            msg.contains("2") && msg.contains("1"),
+            "Should mention expected/got: {}",
+            msg
+        );
     }
 }
 
@@ -204,8 +216,11 @@ fn test_duplicate_function() {
     if let Some(err) = check_error("F test()->i64=1 F test()->i64=2") {
         assert_eq!(err.error_code(), "E008");
         let help = err.help().unwrap();
-        assert!(help.contains("already defined") || help.contains("renaming"),
-            "Help: {}", help);
+        assert!(
+            help.contains("already defined") || help.contains("renaming"),
+            "Help: {}",
+            help
+        );
     }
 }
 
@@ -316,12 +331,32 @@ fn test_valid_lambda() {
 #[test]
 fn test_all_error_codes_are_unique() {
     let errors: Vec<TypeError> = vec![
-        TypeError::Mismatch { expected: String::new(), found: String::new(), span: None },
-        TypeError::UndefinedVar { name: String::new(), span: None, suggestion: None },
-        TypeError::UndefinedType { name: String::new(), span: None, suggestion: None },
-        TypeError::UndefinedFunction { name: String::new(), span: None, suggestion: None },
+        TypeError::Mismatch {
+            expected: String::new(),
+            found: String::new(),
+            span: None,
+        },
+        TypeError::UndefinedVar {
+            name: String::new(),
+            span: None,
+            suggestion: None,
+        },
+        TypeError::UndefinedType {
+            name: String::new(),
+            span: None,
+            suggestion: None,
+        },
+        TypeError::UndefinedFunction {
+            name: String::new(),
+            span: None,
+            suggestion: None,
+        },
         TypeError::NotCallable(String::new(), None),
-        TypeError::ArgCount { expected: 0, got: 0, span: None },
+        TypeError::ArgCount {
+            expected: 0,
+            got: 0,
+            span: None,
+        },
         TypeError::CannotInfer,
         TypeError::Duplicate(String::new(), None),
         TypeError::ImmutableAssign(String::new(), None),
@@ -679,7 +714,11 @@ fn test_help_use_after_move() {
         use_at: None,
     };
     let help = err.help().unwrap();
-    assert!(help.contains("moved"), "Help should mention moved: {}", help);
+    assert!(
+        help.contains("moved"),
+        "Help should mention moved: {}",
+        help
+    );
 }
 
 #[test]
@@ -823,7 +862,11 @@ fn test_help_no_such_field_no_suggestion() {
         span: None,
     };
     let help = err.help().unwrap();
-    assert!(help.contains("Point") && help.contains("z"), "Help: {}", help);
+    assert!(
+        help.contains("Point") && help.contains("z"),
+        "Help: {}",
+        help
+    );
 }
 
 #[test]
@@ -874,7 +917,11 @@ fn test_help_not_callable() {
 fn test_help_non_exhaustive_match() {
     let err = TypeError::NonExhaustiveMatch("Red, Blue".to_string(), None);
     let help = err.help().unwrap();
-    assert!(help.contains("Red, Blue") || help.contains("wildcard"), "Help: {}", help);
+    assert!(
+        help.contains("Red, Blue") || help.contains("wildcard"),
+        "Help: {}",
+        help
+    );
 }
 
 #[test]

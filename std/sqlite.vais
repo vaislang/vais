@@ -64,6 +64,7 @@ X F __sqlite_column_count(stmt: i64) -> i64
 X F __sqlite_column_name(stmt: i64, index: i64) -> str
 X F __sqlite_finalize(stmt: i64) -> i64
 X F __sqlite_reset(stmt: i64) -> i64
+X F __sqlite_clear_bindings(stmt: i64) -> i64
 X F __sqlite_errmsg(handle: i64) -> str
 X F __sqlite_last_insert_rowid(handle: i64) -> i64
 X F __sqlite_changes(handle: i64) -> i64
@@ -364,6 +365,15 @@ X Statement {
         __sqlite_reset(self.handle)
     }
 
+    # Clear all parameter bindings (set every parameter to NULL)
+    # Useful when reusing a statement with different parameters after reset()
+    F clear_bindings(&self) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_clear_bindings(self.handle)
+    }
+
     # Finalize (destroy) the prepared statement
     F finalize(&self) -> i64 {
         I self.handle != 0 {
@@ -481,6 +491,59 @@ X Row {
 #       # ... process row ...
 #   }
 #   stmt.finalize()
+
+# ============================================
+# Table Utility Functions
+# ============================================
+
+# Check if a table exists in the database.
+# Returns 1 if the table exists, 0 otherwise.
+# Uses sqlite_master to query schema metadata.
+F table_exists(db: &Database, name: str) -> i64 {
+    stmt := db.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?")
+    I stmt.is_valid() == 0 {
+        R 0
+    }
+    stmt.bind_text(1, name)
+    rc := stmt.step()
+    result := 0
+    I rc == SQLITE_ROW {
+        result = stmt.column_int(0)
+    }
+    stmt.finalize()
+    I result > 0 { 1 } E { 0 }
+}
+
+# Count the number of rows in a table.
+# Returns -1 if the statement could not be prepared (e.g., table does not exist).
+# NOTE: The table name is concatenated directly — only use trusted, validated names.
+F table_count(db: &Database, table: str) -> i64 {
+    # Build "SELECT count(*) FROM <table>" using a fixed-size buffer
+    buf := __malloc(512)
+    pos := 0
+    pos = pos + __str_copy_to(buf + pos, "SELECT count(*) FROM ")
+    pos = pos + __str_copy_to(buf + pos, table)
+    __store_byte(buf + pos, 0)
+    stmt := db.prepare(buf as str)
+    __free(buf)
+    I stmt.is_valid() == 0 {
+        R -1
+    }
+    rc := stmt.step()
+    result := -1
+    I rc == SQLITE_ROW {
+        result = stmt.column_int(0)
+    }
+    stmt.finalize()
+    result
+}
+
+# Execute multiple semicolon-separated SQL statements.
+# SQLite's sqlite3_exec already handles multiple statements natively,
+# so this is a thin alias for db.exec(sql) with an explanatory name.
+F exec_many(db: &Database, sql: str) -> i64 {
+    db.exec(sql)
+}
 
 # ============================================
 # Convenience Functions

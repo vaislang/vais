@@ -70,7 +70,10 @@ mod breakpoint_tests {
 
     #[test]
     fn test_parse_hit_condition_equal_whitespace() {
-        assert_eq!(parse_hit_condition("  =  10  "), Some(HitConditionOp::Equal(10)));
+        assert_eq!(
+            parse_hit_condition("  =  10  "),
+            Some(HitConditionOp::Equal(10))
+        );
     }
 
     #[test]
@@ -81,13 +84,22 @@ mod breakpoint_tests {
 
     #[test]
     fn test_parse_hit_condition_greater_equal() {
-        assert_eq!(parse_hit_condition(">= 3"), Some(HitConditionOp::GreaterEqual(3)));
-        assert_eq!(parse_hit_condition(">=10"), Some(HitConditionOp::GreaterEqual(10)));
+        assert_eq!(
+            parse_hit_condition(">= 3"),
+            Some(HitConditionOp::GreaterEqual(3))
+        );
+        assert_eq!(
+            parse_hit_condition(">=10"),
+            Some(HitConditionOp::GreaterEqual(10))
+        );
     }
 
     #[test]
     fn test_parse_hit_condition_multiple() {
-        assert_eq!(parse_hit_condition("% 10"), Some(HitConditionOp::Multiple(10)));
+        assert_eq!(
+            parse_hit_condition("% 10"),
+            Some(HitConditionOp::Multiple(10))
+        );
         assert_eq!(parse_hit_condition("%5"), Some(HitConditionOp::Multiple(5)));
     }
 
@@ -148,10 +160,25 @@ mod breakpoint_tests {
     #[test]
     fn test_set_source_breakpoints() {
         let mut manager = BreakpointManager::new();
-        let source = Source { path: Some("/test.vais".to_string()), ..Default::default() };
+        let source = Source {
+            path: Some("/test.vais".to_string()),
+            ..Default::default()
+        };
         let bps = vec![
-            SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None },
-            SourceBreakpoint { line: 20, column: Some(5), condition: Some("x > 0".to_string()), hit_condition: None, log_message: None },
+            SourceBreakpoint {
+                line: 10,
+                column: None,
+                condition: None,
+                hit_condition: None,
+                log_message: None,
+            },
+            SourceBreakpoint {
+                line: 20,
+                column: Some(5),
+                condition: Some("x > 0".to_string()),
+                hit_condition: None,
+                log_message: None,
+            },
         ];
         let managed = manager.set_source_breakpoints(&source, &bps);
         assert_eq!(managed.len(), 2);
@@ -165,8 +192,16 @@ mod breakpoint_tests {
     fn test_set_function_breakpoints() {
         let mut manager = BreakpointManager::new();
         let bps = vec![
-            FunctionBreakpoint { name: "main".to_string(), condition: None, hit_condition: None },
-            FunctionBreakpoint { name: "foo".to_string(), condition: Some("true".to_string()), hit_condition: None },
+            FunctionBreakpoint {
+                name: "main".to_string(),
+                condition: None,
+                hit_condition: None,
+            },
+            FunctionBreakpoint {
+                name: "foo".to_string(),
+                condition: Some("true".to_string()),
+                hit_condition: None,
+            },
         ];
         let managed = manager.set_function_breakpoints(&bps);
         assert_eq!(managed.len(), 2);
@@ -185,8 +220,17 @@ mod breakpoint_tests {
     #[test]
     fn test_verify_breakpoint_source() {
         let mut manager = BreakpointManager::new();
-        let source = Source { path: Some("/test.vais".to_string()), ..Default::default() };
-        let bps = vec![SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None }];
+        let source = Source {
+            path: Some("/test.vais".to_string()),
+            ..Default::default()
+        };
+        let bps = vec![SourceBreakpoint {
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+        }];
         let managed = manager.set_source_breakpoints(&source, &bps);
         let id = managed[0].id;
         manager.verify_breakpoint(id, 0xABCD, Some(11));
@@ -199,7 +243,11 @@ mod breakpoint_tests {
     #[test]
     fn test_verify_breakpoint_function() {
         let mut manager = BreakpointManager::new();
-        let bps = vec![FunctionBreakpoint { name: "main".to_string(), condition: None, hit_condition: None }];
+        let bps = vec![FunctionBreakpoint {
+            name: "main".to_string(),
+            condition: None,
+            hit_condition: None,
+        }];
         let managed = manager.set_function_breakpoints(&bps);
         let id = managed[0].id;
         manager.verify_breakpoint(id, 0x1234, None);
@@ -211,8 +259,17 @@ mod breakpoint_tests {
     #[test]
     fn test_find_by_address() {
         let mut manager = BreakpointManager::new();
-        let source = Source { path: Some("/test.vais".to_string()), ..Default::default() };
-        let bps = vec![SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None }];
+        let source = Source {
+            path: Some("/test.vais".to_string()),
+            ..Default::default()
+        };
+        let bps = vec![SourceBreakpoint {
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+        }];
         let managed = manager.set_source_breakpoints(&source, &bps);
         let id = managed[0].id;
         manager.verify_breakpoint(id, 0x5678, None);
@@ -226,9 +283,15 @@ mod breakpoint_tests {
     fn test_to_dap_breakpoint_verified() {
         let manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: None,
-            address: Some(0x1000), function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: Some(0x1000),
+            function_name: None,
         };
         let dap_bp = manager.to_dap_breakpoint(&bp, None);
         assert_eq!(dap_bp.id, Some(1));
@@ -241,9 +304,15 @@ mod breakpoint_tests {
     fn test_to_dap_breakpoint_unverified() {
         let manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 2, verified: false, line: 20, column: Some(5),
-            condition: None, hit_condition: None, log_message: None,
-            address: None, function_name: None,
+            id: 2,
+            verified: false,
+            line: 20,
+            column: Some(5),
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         let dap_bp = manager.to_dap_breakpoint(&bp, None);
         assert!(!dap_bp.verified);
@@ -254,9 +323,15 @@ mod breakpoint_tests {
     fn test_should_break_no_condition() {
         let manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: None,
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         assert!(manager.should_break(&bp, 1));
     }
@@ -265,9 +340,15 @@ mod breakpoint_tests {
     fn test_should_break_with_hit_condition() {
         let manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: Some("5".to_string()), log_message: None,
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: Some("5".to_string()),
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         assert!(!manager.should_break(&bp, 3));
         assert!(manager.should_break(&bp, 5));
@@ -278,16 +359,28 @@ mod breakpoint_tests {
     fn test_get_log_message() {
         let manager = BreakpointManager::new();
         let bp_no_log = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: None,
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         assert!(manager.get_log_message(&bp_no_log).is_none());
 
         let bp_with_log = ManagedBreakpoint {
-            id: 2, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: Some("log msg".to_string()),
-            address: None, function_name: None,
+            id: 2,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: Some("log msg".to_string()),
+            address: None,
+            function_name: None,
         };
         assert_eq!(manager.get_log_message(&bp_with_log), Some("log msg"));
     }
@@ -295,10 +388,23 @@ mod breakpoint_tests {
     #[test]
     fn test_clear_all() {
         let mut manager = BreakpointManager::new();
-        let source = Source { path: Some("/test.vais".to_string()), ..Default::default() };
-        let bps = vec![SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None }];
+        let source = Source {
+            path: Some("/test.vais".to_string()),
+            ..Default::default()
+        };
+        let bps = vec![SourceBreakpoint {
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+        }];
         manager.set_source_breakpoints(&source, &bps);
-        manager.set_function_breakpoints(&[FunctionBreakpoint { name: "main".to_string(), condition: None, hit_condition: None }]);
+        manager.set_function_breakpoints(&[FunctionBreakpoint {
+            name: "main".to_string(),
+            condition: None,
+            hit_condition: None,
+        }]);
         manager.set_exception_filters(vec!["all".to_string()]);
         manager.clear_all();
         assert!(manager.get_source_breakpoints("/test.vais").is_none());
@@ -309,9 +415,15 @@ mod breakpoint_tests {
     fn test_record_hit_break() {
         let mut manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: None,
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         assert_eq!(manager.record_hit(&bp), HitResult::Break);
         assert_eq!(manager.get_hit_count(1), 1);
@@ -321,9 +433,15 @@ mod breakpoint_tests {
     fn test_record_hit_skip() {
         let mut manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: Some(">= 3".to_string()), log_message: None,
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: Some(">= 3".to_string()),
+            log_message: None,
+            address: None,
+            function_name: None,
         };
         assert_eq!(manager.record_hit(&bp), HitResult::Skip);
         assert_eq!(manager.record_hit(&bp), HitResult::Skip);
@@ -334,9 +452,15 @@ mod breakpoint_tests {
     fn test_record_hit_logpoint() {
         let mut manager = BreakpointManager::new();
         let bp = ManagedBreakpoint {
-            id: 1, verified: true, line: 10, column: None,
-            condition: None, hit_condition: None, log_message: Some("hello".to_string()),
-            address: None, function_name: None,
+            id: 1,
+            verified: true,
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: Some("hello".to_string()),
+            address: None,
+            function_name: None,
         };
         assert_eq!(manager.record_hit(&bp), HitResult::Log("hello".to_string()));
     }
@@ -381,7 +505,9 @@ mod variable_tests {
         assert_eq!(scopes[1].name, "Arguments");
         assert_eq!(scopes[2].name, "Registers");
         // Verify ref info was stored
-        assert!(manager.get_ref_info(scopes[0].variables_reference).is_some());
+        assert!(manager
+            .get_ref_info(scopes[0].variables_reference)
+            .is_some());
     }
 
     #[test]
@@ -418,7 +544,9 @@ mod variable_tests {
         let mut manager = VariableManager::new();
         let scopes = manager.create_scopes(1);
         // Scope references don't have evaluation paths
-        assert!(manager.get_evaluation_path(scopes[0].variables_reference).is_none());
+        assert!(manager
+            .get_evaluation_path(scopes[0].variables_reference)
+            .is_none());
     }
 }
 
@@ -443,13 +571,17 @@ mod stack_tests {
             RawFrame {
                 function_name: "main".to_string(),
                 source_path: Some("/test.vais".to_string()),
-                line: 10, column: 1, instruction_pointer: 0x1000,
+                line: 10,
+                column: 1,
+                instruction_pointer: 0x1000,
                 module_name: Some("test".to_string()),
             },
             RawFrame {
                 function_name: "foo".to_string(),
                 source_path: None,
-                line: 20, column: 5, instruction_pointer: 0x2000,
+                line: 20,
+                column: 5,
+                instruction_pointer: 0x2000,
                 module_name: None,
             },
         ];
@@ -465,7 +597,10 @@ mod stack_tests {
         let mut manager = StackManager::new();
         let raw_frames = vec![RawFrame {
             function_name: "main".to_string(),
-            source_path: None, line: 1, column: 1, instruction_pointer: 0x1000,
+            source_path: None,
+            line: 1,
+            column: 1,
+            instruction_pointer: 0x1000,
             module_name: None,
         }];
         let dap_frames = manager.cache_frames(1, raw_frames);
@@ -480,7 +615,9 @@ mod stack_tests {
         let raw_frames = vec![RawFrame {
             function_name: "main".to_string(),
             source_path: Some("/test.vais".to_string()),
-            line: 10, column: 1, instruction_pointer: 0x1000,
+            line: 10,
+            column: 1,
+            instruction_pointer: 0x1000,
             module_name: None,
         }];
         let dap_frames = manager.cache_frames(1, raw_frames);
@@ -493,8 +630,22 @@ mod stack_tests {
     fn test_get_top_frame() {
         let mut manager = StackManager::new();
         let raw_frames = vec![
-            RawFrame { function_name: "main".to_string(), source_path: None, line: 1, column: 1, instruction_pointer: 0x1000, module_name: None },
-            RawFrame { function_name: "foo".to_string(), source_path: None, line: 2, column: 1, instruction_pointer: 0x2000, module_name: None },
+            RawFrame {
+                function_name: "main".to_string(),
+                source_path: None,
+                line: 1,
+                column: 1,
+                instruction_pointer: 0x1000,
+                module_name: None,
+            },
+            RawFrame {
+                function_name: "foo".to_string(),
+                source_path: None,
+                line: 2,
+                column: 1,
+                instruction_pointer: 0x2000,
+                module_name: None,
+            },
         ];
         manager.cache_frames(1, raw_frames);
         let top = manager.get_top_frame(1).unwrap();
@@ -512,7 +663,10 @@ mod stack_tests {
         let mut manager = StackManager::new();
         let raw_frames = vec![RawFrame {
             function_name: "main".to_string(),
-            source_path: None, line: 1, column: 1, instruction_pointer: 0x1000,
+            source_path: None,
+            line: 1,
+            column: 1,
+            instruction_pointer: 0x1000,
             module_name: None,
         }];
         let dap_frames = manager.cache_frames(1, raw_frames);
@@ -557,7 +711,15 @@ mod stack_tests {
     #[test]
     fn test_step_in_no_target() {
         let mut controller = StepController::new();
-        controller.start_step(StepMode::In { target_function: None }, StepGranularity::Statement, 1, 10, 1);
+        controller.start_step(
+            StepMode::In {
+                target_function: None,
+            },
+            StepGranularity::Statement,
+            1,
+            10,
+            1,
+        );
         // Same line = don't stop
         assert!(!controller.should_stop(1, 10, Some("main"), 1));
         // Deeper = stop (entered function)
@@ -568,8 +730,13 @@ mod stack_tests {
     fn test_step_in_with_target() {
         let mut controller = StepController::new();
         controller.start_step(
-            StepMode::In { target_function: Some("target".to_string()) },
-            StepGranularity::Statement, 1, 10, 1,
+            StepMode::In {
+                target_function: Some("target".to_string()),
+            },
+            StepGranularity::Statement,
+            1,
+            10,
+            1,
         );
         assert!(!controller.should_stop(2, 20, Some("other"), 1));
         assert!(controller.should_stop(2, 30, Some("target"), 1));
@@ -634,20 +801,45 @@ mod error_tests {
 
     #[test]
     fn test_error_display_all_variants() {
-        assert!(DapError::Protocol("bad".to_string()).to_string().contains("bad"));
-        assert!(DapError::InvalidRequest("missing".to_string()).to_string().contains("missing"));
-        assert_eq!(DapError::NotInitialized.to_string(), "Session not initialized");
-        assert_eq!(DapError::NoActiveSession.to_string(), "No active debug session");
-        assert_eq!(DapError::ProcessNotRunning.to_string(), "Process not running");
+        assert!(DapError::Protocol("bad".to_string())
+            .to_string()
+            .contains("bad"));
+        assert!(DapError::InvalidRequest("missing".to_string())
+            .to_string()
+            .contains("missing"));
+        assert_eq!(
+            DapError::NotInitialized.to_string(),
+            "Session not initialized"
+        );
+        assert_eq!(
+            DapError::NoActiveSession.to_string(),
+            "No active debug session"
+        );
+        assert_eq!(
+            DapError::ProcessNotRunning.to_string(),
+            "Process not running"
+        );
         assert!(DapError::ThreadNotFound(42).to_string().contains("42"));
         assert!(DapError::FrameNotFound(7).to_string().contains("7"));
         assert!(DapError::VariableNotFound(99).to_string().contains("99"));
-        assert!(DapError::DwarfParsing("corrupt".to_string()).to_string().contains("corrupt"));
-        assert!(DapError::Unsupported("feature".to_string()).to_string().contains("feature"));
-        assert!(DapError::Timeout("response".to_string()).to_string().contains("response"));
-        assert!(DapError::Debugger("crash".to_string()).to_string().contains("crash"));
-        assert!(DapError::Breakpoint("invalid".to_string()).to_string().contains("invalid"));
-        assert!(DapError::SourceMapping("missing".to_string()).to_string().contains("missing"));
+        assert!(DapError::DwarfParsing("corrupt".to_string())
+            .to_string()
+            .contains("corrupt"));
+        assert!(DapError::Unsupported("feature".to_string())
+            .to_string()
+            .contains("feature"));
+        assert!(DapError::Timeout("response".to_string())
+            .to_string()
+            .contains("response"));
+        assert!(DapError::Debugger("crash".to_string())
+            .to_string()
+            .contains("crash"));
+        assert!(DapError::Breakpoint("invalid".to_string())
+            .to_string()
+            .contains("invalid"));
+        assert!(DapError::SourceMapping("missing".to_string())
+            .to_string()
+            .contains("missing"));
     }
 
     #[test]

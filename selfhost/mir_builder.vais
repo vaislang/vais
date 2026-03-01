@@ -246,6 +246,14 @@ F mir_builder_call(builder: i64, func_idx: i64, args_ptr: i64, args_len: i64, de
     mir_builder_terminate(builder, term_call(func_idx, args_ptr, args_len, dest, next_bb))
 }
 
+# Convenience: conditional branch (switch_int on cond, true→then_bb, false→else_bb)
+F mir_builder_cond_br(builder: i64, cond_local: i64, then_bb: i64, else_bb: i64) -> i64 {
+    targets := malloc(16)
+    store_i64(targets, 1)            # value = 1 (true)
+    store_i64(targets + 8, then_bb)  # target block
+    mir_builder_terminate(builder, term_switch_int(operand_copy(cond_local), targets, 1, else_bb))
+}
+
 # ============================================================================
 # Build — finalize the builder into a MirBody
 # ============================================================================

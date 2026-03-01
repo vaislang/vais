@@ -15,9 +15,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
         let len_type = self.context.i64_type();
-        let str_struct_type =
-            self.context
-                .struct_type(&[ptr_type.into(), len_type.into()], false);
+        let str_struct_type = self
+            .context
+            .struct_type(&[ptr_type.into(), len_type.into()], false);
 
         // Build { ptr, i64 } struct: insertvalue undef, ptr, 0; insertvalue ..., i64 len, 1
         let undef = str_struct_type.get_undef();

@@ -86,7 +86,11 @@ fn test_alloc_builtins() {
     let inferrer = EffectInferrer::new();
     for name in &["malloc", "calloc", "realloc", "free", "alloc", "dealloc"] {
         let effects = inferrer.get_builtin_effects(name).unwrap();
-        assert!(effects.contains(Effect::Alloc), "Expected Alloc for {}", name);
+        assert!(
+            effects.contains(Effect::Alloc),
+            "Expected Alloc for {}",
+            name
+        );
     }
 }
 
@@ -94,8 +98,8 @@ fn test_alloc_builtins() {
 fn test_pure_math_builtins() {
     let inferrer = EffectInferrer::new();
     for name in &[
-        "abs", "min", "max", "sqrt", "sin", "cos", "pow", "floor", "ceil", "round",
-        "fabs", "clamp", "tan", "asin", "acos", "atan", "atan2", "exp", "log", "log2", "log10",
+        "abs", "min", "max", "sqrt", "sin", "cos", "pow", "floor", "ceil", "round", "fabs",
+        "clamp", "tan", "asin", "acos", "atan", "atan2", "exp", "log", "log2", "log10",
     ] {
         let effects = inferrer.get_builtin_effects(name).unwrap();
         assert!(effects.is_pure(), "Expected pure for {}", name);
@@ -109,7 +113,11 @@ fn test_unsafe_builtins() {
         "memcpy", "memmove", "memset", "memcmp", "strlen", "strcpy", "strcat", "strcmp",
     ] {
         let effects = inferrer.get_builtin_effects(name).unwrap();
-        assert!(effects.contains(Effect::Unsafe), "Expected Unsafe for {}", name);
+        assert!(
+            effects.contains(Effect::Unsafe),
+            "Expected Unsafe for {}",
+            name
+        );
     }
 }
 
@@ -118,7 +126,11 @@ fn test_panic_builtins() {
     let inferrer = EffectInferrer::new();
     for name in &["panic", "abort", "exit", "assert", "__panic"] {
         let effects = inferrer.get_builtin_effects(name).unwrap();
-        assert!(effects.contains(Effect::Panic), "Expected Panic for {}", name);
+        assert!(
+            effects.contains(Effect::Panic),
+            "Expected Panic for {}",
+            name
+        );
     }
 }
 
@@ -156,9 +168,15 @@ fn test_infer_literal_effects() {
     let fns = empty_fns();
 
     assert!(inferrer.infer_expr_effects(&Expr::Int(42), &fns).is_pure());
-    assert!(inferrer.infer_expr_effects(&Expr::Float(3.14), &fns).is_pure());
-    assert!(inferrer.infer_expr_effects(&Expr::Bool(true), &fns).is_pure());
-    assert!(inferrer.infer_expr_effects(&Expr::String("hi".into()), &fns).is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::Float(3.14), &fns)
+        .is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::Bool(true), &fns)
+        .is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::String("hi".into()), &fns)
+        .is_pure());
     assert!(inferrer.infer_expr_effects(&Expr::Unit, &fns).is_pure());
     // Char is not a separate Expr variant in this AST
 }
@@ -167,7 +185,9 @@ fn test_infer_literal_effects() {
 fn test_infer_ident_effects() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    assert!(inferrer.infer_expr_effects(&Expr::Ident("x".into()), &fns).is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::Ident("x".into()), &fns)
+        .is_pure());
 }
 
 #[test]
@@ -355,7 +375,9 @@ fn test_infer_assign() {
         target: Box::new(ident_expr("x")),
         value: Box::new(int_expr(42)),
     };
-    assert!(inferrer.infer_expr_effects(&assign, &fns).contains(Effect::Write));
+    assert!(inferrer
+        .infer_expr_effects(&assign, &fns)
+        .contains(Effect::Write));
 }
 
 #[test]
@@ -367,7 +389,9 @@ fn test_infer_assign_op() {
         target: Box::new(ident_expr("x")),
         value: Box::new(int_expr(1)),
     };
-    assert!(inferrer.infer_expr_effects(&assign_op, &fns).contains(Effect::Write));
+    assert!(inferrer
+        .infer_expr_effects(&assign_op, &fns)
+        .contains(Effect::Write));
 }
 
 #[test]
@@ -382,7 +406,9 @@ fn test_infer_if_with_io() {
         }))))],
         else_: None,
     };
-    assert!(inferrer.infer_expr_effects(&if_expr, &fns).contains(Effect::IO));
+    assert!(inferrer
+        .infer_expr_effects(&if_expr, &fns)
+        .contains(Effect::IO));
 }
 
 #[test]
@@ -392,14 +418,16 @@ fn test_infer_if_else() {
     let if_expr = Expr::If {
         cond: Box::new(spanned(Expr::Bool(true))),
         then: vec![spanned(Stmt::Expr(Box::new(int_expr(1))))],
-        else_: Some(IfElse::Else(vec![spanned(Stmt::Expr(
-            Box::new(spanned(Expr::Call {
+        else_: Some(IfElse::Else(vec![spanned(Stmt::Expr(Box::new(spanned(
+            Expr::Call {
                 func: Box::new(ident_expr("malloc")),
                 args: vec![int_expr(100)],
-            })),
-        ))])),
+            },
+        ))))])),
     };
-    assert!(inferrer.infer_expr_effects(&if_expr, &fns).contains(Effect::Alloc));
+    assert!(inferrer
+        .infer_expr_effects(&if_expr, &fns)
+        .contains(Effect::Alloc));
 }
 
 #[test]
@@ -418,7 +446,9 @@ fn test_infer_if_elseif() {
             None,
         )),
     };
-    assert!(inferrer.infer_expr_effects(&if_expr, &fns).contains(Effect::Panic));
+    assert!(inferrer
+        .infer_expr_effects(&if_expr, &fns)
+        .contains(Effect::Panic));
 }
 
 #[test]
@@ -432,7 +462,9 @@ fn test_infer_block() {
         })))),
         spanned(Stmt::Expr(Box::new(int_expr(42)))),
     ]);
-    assert!(inferrer.infer_expr_effects(&block, &fns).contains(Effect::IO));
+    assert!(inferrer
+        .infer_expr_effects(&block, &fns)
+        .contains(Effect::IO));
 }
 
 #[test]
@@ -505,18 +537,19 @@ fn test_infer_macro_invoke() {
 fn test_infer_lazy_force() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    assert!(inferrer.infer_expr_effects(&Expr::Lazy(Box::new(int_expr(42))), &fns).is_pure());
-    assert!(inferrer.infer_expr_effects(&Expr::Force(Box::new(ident_expr("x"))), &fns).is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::Lazy(Box::new(int_expr(42))), &fns)
+        .is_pure());
+    assert!(inferrer
+        .infer_expr_effects(&Expr::Force(Box::new(ident_expr("x"))), &fns)
+        .is_pure());
 }
 
 #[test]
 fn test_infer_map_literal() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    let map = Expr::MapLit(vec![(
-        spanned(Expr::String("key".into())),
-        int_expr(1),
-    )]);
+    let map = Expr::MapLit(vec![(spanned(Expr::String("key".into())), int_expr(1))]);
     assert!(inferrer.infer_expr_effects(&map, &fns).is_pure());
 }
 
@@ -549,7 +582,9 @@ fn test_infer_let_stmt() {
         is_mut: false,
         ownership: Ownership::Regular,
     };
-    assert!(inferrer.infer_stmt_effects(&stmt, &fns).contains(Effect::Alloc));
+    assert!(inferrer
+        .infer_stmt_effects(&stmt, &fns)
+        .contains(Effect::Alloc));
 }
 
 #[test]
@@ -560,7 +595,9 @@ fn test_infer_expr_stmt() {
         func: Box::new(ident_expr("println")),
         args: vec![],
     })));
-    assert!(inferrer.infer_stmt_effects(&stmt, &fns).contains(Effect::IO));
+    assert!(inferrer
+        .infer_stmt_effects(&stmt, &fns)
+        .contains(Effect::IO));
 }
 
 #[test]
@@ -571,28 +608,36 @@ fn test_infer_return_with_expr() {
         func: Box::new(ident_expr("panic")),
         args: vec![],
     }))));
-    assert!(inferrer.infer_stmt_effects(&stmt, &fns).contains(Effect::Panic));
+    assert!(inferrer
+        .infer_stmt_effects(&stmt, &fns)
+        .contains(Effect::Panic));
 }
 
 #[test]
 fn test_infer_return_void() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    assert!(inferrer.infer_stmt_effects(&Stmt::Return(None), &fns).is_pure());
+    assert!(inferrer
+        .infer_stmt_effects(&Stmt::Return(None), &fns)
+        .is_pure());
 }
 
 #[test]
 fn test_infer_break_with_value() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    assert!(inferrer.infer_stmt_effects(&Stmt::Break(Some(Box::new(int_expr(42)))), &fns).is_pure());
+    assert!(inferrer
+        .infer_stmt_effects(&Stmt::Break(Some(Box::new(int_expr(42)))), &fns)
+        .is_pure());
 }
 
 #[test]
 fn test_infer_break_no_value() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();
-    assert!(inferrer.infer_stmt_effects(&Stmt::Break(None), &fns).is_pure());
+    assert!(inferrer
+        .infer_stmt_effects(&Stmt::Break(None), &fns)
+        .is_pure());
 }
 
 #[test]
@@ -610,7 +655,9 @@ fn test_infer_defer_stmt() {
         func: Box::new(ident_expr("free")),
         args: vec![ident_expr("ptr")],
     })));
-    assert!(inferrer.infer_stmt_effects(&stmt, &fns).contains(Effect::Alloc));
+    assert!(inferrer
+        .infer_stmt_effects(&stmt, &fns)
+        .contains(Effect::Alloc));
 }
 
 #[test]

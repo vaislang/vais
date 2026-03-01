@@ -1813,8 +1813,8 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::AmpEq => 88,
         Token::PipeEq => 89,
         Token::CaretEq => 90,
-        Token::ShlEq => -1,  // Not yet in selfhost lexer
-        Token::ShrEq => -1,  // Not yet in selfhost lexer
+        Token::ShlEq => -1, // Not yet in selfhost lexer
+        Token::ShrEq => -1, // Not yet in selfhost lexer
 
         // Delimiters (91-96)
         Token::LParen => 91,

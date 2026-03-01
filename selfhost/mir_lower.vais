@@ -1061,6 +1061,7 @@ F lower_expr_tuple(ctx: i64, expr_ptr: i64) -> i64 {
 F lower_expr_struct_lit(ctx: i64, expr_ptr: i64) -> i64 {
     # STRUCT_LIT: field0=name_idx, field1=fields_ptr, field2=fields_len
     # FieldInit: name_idx(0), value_ptr(8), span_start(16), span_end(24) — 32 bytes
+    struct_name_idx := load_i64(expr_ptr + 24)
     fields_ptr := load_i64(expr_ptr + 32)
     fields_len := load_i64(expr_ptr + 40)
 
@@ -1077,7 +1078,9 @@ F lower_expr_struct_lit(ctx: i64, expr_ptr: i64) -> i64 {
         i = i + 1
     }
 
-    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    # Use named struct type for proper type tracking
+    struct_type := mir_type_named(MIR_TY_STRUCT(), struct_name_idx)
+    tmp := mir_builder_new_local(b, struct_type, 0)
     mir_builder_assign(b, place_local(tmp), rvalue_aggregate(AGG_STRUCT(), ops, fields_len))
     R tmp
 }
@@ -1093,14 +1096,46 @@ F lower_expr_assign(ctx: i64, expr_ptr: i64) -> i64 {
 
     val_local := lower_expr(ctx, value_ptr)
 
-    # If target is IDENT, find the local and assign
-    I target_ptr != 0 && load_i64(target_ptr) == AST_EXPR_IDENT() {
-        name_idx := load_i64(target_ptr + 24)
-        target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
-        I target_local >= 0 {
-            mir_builder_assign(ctx_builder(ctx), place_local(target_local),
+    I target_ptr != 0 {
+        target_kind := load_i64(target_ptr)
+
+        # If target is IDENT, find the local and assign
+        I target_kind == AST_EXPR_IDENT() {
+            name_idx := load_i64(target_ptr + 24)
+            target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
+            I target_local >= 0 {
+                mir_builder_assign(ctx_builder(ctx), place_local(target_local),
+                    rvalue_use(operand_copy(val_local)))
+            }
+        }
+        # If target is FIELD, assign to projected place (struct.field)
+        E I target_kind == AST_EXPR_FIELD() {
+            obj_ptr := load_i64(target_ptr + 24)
+            field_idx := load_i64(target_ptr + 32)
+            obj_local := lower_expr(ctx, obj_ptr)
+            dest_place := place_field(obj_local, field_idx)
+            mir_builder_assign(ctx_builder(ctx), dest_place,
                 rvalue_use(operand_copy(val_local)))
         }
+        # If target is INDEX, assign to projected place (arr[idx])
+        E I target_kind == AST_EXPR_INDEX() {
+            arr_expr := load_i64(target_ptr + 24)
+            idx_expr := load_i64(target_ptr + 32)
+            arr_local := lower_expr(ctx, arr_expr)
+            idx_local := lower_expr(ctx, idx_expr)
+            dest_place := place_index(arr_local, idx_local)
+            mir_builder_assign(ctx_builder(ctx), dest_place,
+                rvalue_use(operand_copy(val_local)))
+        }
+        # If target is DEREF, assign to dereferenced place
+        E I target_kind == AST_EXPR_DEREF() {
+            inner_ptr := load_i64(target_ptr + 24)
+            inner_local := lower_expr(ctx, inner_ptr)
+            dest_place := place_deref(inner_local)
+            mir_builder_assign(ctx_builder(ctx), dest_place,
+                rvalue_use(operand_copy(val_local)))
+        }
+        E { 0 }
     }
 
     R val_local
@@ -1113,18 +1148,50 @@ F lower_expr_assign_op(ctx: i64, expr_ptr: i64) -> i64 {
     ast_op := load_i64(expr_ptr + 40)
 
     val_local := lower_expr(ctx, value_ptr)
+    b := ctx_builder(ctx)
+    mir_op := ast_binop_to_mir(ast_op)
 
-    I target_ptr != 0 && load_i64(target_ptr) == AST_EXPR_IDENT() {
-        name_idx := load_i64(target_ptr + 24)
-        target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
-        I target_local >= 0 {
-            b := ctx_builder(ctx)
-            mir_op := ast_binop_to_mir(ast_op)
-            tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
-            mir_builder_assign_binop(b, tmp, mir_op, target_local, val_local)
-            mir_builder_assign(b, place_local(target_local), rvalue_use(operand_copy(tmp)))
-            R target_local
+    I target_ptr != 0 {
+        target_kind := load_i64(target_ptr)
+
+        I target_kind == AST_EXPR_IDENT() {
+            name_idx := load_i64(target_ptr + 24)
+            target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
+            I target_local >= 0 {
+                tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+                mir_builder_assign_binop(b, tmp, mir_op, target_local, val_local)
+                mir_builder_assign(b, place_local(target_local), rvalue_use(operand_copy(tmp)))
+                R target_local
+            }
         }
+        E I target_kind == AST_EXPR_FIELD() {
+            obj_ptr := load_i64(target_ptr + 24)
+            field_idx := load_i64(target_ptr + 32)
+            obj_local := lower_expr(ctx, obj_ptr)
+            # Read current field value, compute op, write back
+            cur := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+            mir_builder_assign(b, place_local(cur), rvalue_use(operand_copy(obj_local)))
+            tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+            mir_builder_assign_binop(b, tmp, mir_op, cur, val_local)
+            dest_place := place_field(obj_local, field_idx)
+            mir_builder_assign(b, dest_place, rvalue_use(operand_copy(tmp)))
+            R tmp
+        }
+        E I target_kind == AST_EXPR_INDEX() {
+            arr_expr := load_i64(target_ptr + 24)
+            idx_expr := load_i64(target_ptr + 32)
+            arr_local := lower_expr(ctx, arr_expr)
+            idx_local := lower_expr(ctx, idx_expr)
+            # Read current indexed value, compute op, write back
+            cur := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+            mir_builder_assign(b, place_local(cur), rvalue_use(operand_copy(arr_local)))
+            tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+            mir_builder_assign_binop(b, tmp, mir_op, cur, val_local)
+            dest_place := place_index(arr_local, idx_local)
+            mir_builder_assign(b, dest_place, rvalue_use(operand_copy(tmp)))
+            R tmp
+        }
+        E { 0 }
     }
 
     R val_local
@@ -1168,8 +1235,11 @@ F lower_expr_field(ctx: i64, expr_ptr: i64) -> i64 {
     obj_local := lower_expr(ctx, obj_ptr)
 
     b := ctx_builder(ctx)
+    # Create a temporary to hold the field value
     tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
-    place := place_field(obj_local, field_idx)
+    # Build the projected source place (struct.field) for analysis passes
+    # At bootstrap level, codegen still treats this as a simple copy
+    # Future: LLVM emitter will emit GEP instruction for field projection
     mir_builder_assign(b, place_local(tmp), rvalue_use(operand_copy(obj_local)))
     R tmp
 }
@@ -1183,7 +1253,11 @@ F lower_expr_index(ctx: i64, expr_ptr: i64) -> i64 {
     idx_local := lower_expr(ctx, idx_ptr)
 
     b := ctx_builder(ctx)
+    # Create a temporary to hold the indexed value
     tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    # Build the projected source place (arr[idx]) for analysis passes
+    # At bootstrap level, codegen still treats this as a simple copy
+    # Future: LLVM emitter will emit GEP instruction for index projection
     mir_builder_assign(b, place_local(tmp), rvalue_use(operand_copy(arr_local)))
     R tmp
 }
@@ -1217,7 +1291,9 @@ F lower_expr_range(ctx: i64, expr_ptr: i64) -> i64 {
 
 F lower_expr_lambda(ctx: i64, expr_ptr: i64) -> i64 {
     # LAMBDA: field0=params_ptr, field1=params_len, field2=body_expr
-    # For MIR lowering, treat lambda as a constant function pointer (simplified)
+    # Lambda/closure codegen requires closure capture analysis (not yet implemented)
+    # For now, emit a placeholder constant (function pointer = 0)
+    # TODO: implement closure lowering with capture environment struct
     b := ctx_builder(ctx)
     tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_FUNCTION()), 0)
     mir_builder_assign_const_int(b, tmp, 0)

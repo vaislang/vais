@@ -37,10 +37,7 @@ fn test_display_special() {
 
 #[test]
 fn test_display_generic() {
-    assert_eq!(
-        format!("{}", ResolvedType::Generic("T".to_string())),
-        "T"
-    );
+    assert_eq!(format!("{}", ResolvedType::Generic("T".to_string())), "T");
 }
 
 #[test]
@@ -100,10 +97,7 @@ fn test_display_optional() {
 
 #[test]
 fn test_display_result() {
-    let ty = ResolvedType::Result(
-        Box::new(ResolvedType::I64),
-        Box::new(ResolvedType::Str),
-    );
+    let ty = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
     assert_eq!(format!("{}", ty), "Result<i64, str>");
 }
 

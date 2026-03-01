@@ -195,10 +195,7 @@ mod items {
         match &m.items[0].node {
             Item::Enum(e) => {
                 assert_eq!(e.generics.len(), 1);
-                assert!(matches!(
-                    e.variants[0].fields,
-                    VariantFields::Tuple(_)
-                ));
+                assert!(matches!(e.variants[0].fields, VariantFields::Tuple(_)));
                 assert!(matches!(e.variants[1].fields, VariantFields::Unit));
             }
             other => panic!("Expected Enum, got {:?}", other),
@@ -1861,7 +1858,8 @@ mod contract_attributes {
 
     #[test]
     fn grammar_contract_ensures_basic() {
-        let m = parse_ok("#[ensures(result >= 0)]\nF abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
+        let m =
+            parse_ok("#[ensures(result >= 0)]\nF abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
         match &m.items[0].node {
             Item::Function(f) => {
                 assert_eq!(f.attributes[0].name, "ensures");
@@ -1878,7 +1876,9 @@ mod contract_attributes {
 
     #[test]
     fn grammar_contract_decreases() {
-        assert_parses("#[decreases(n)]\nF fib(n: i64) -> i64 = I n <= 1 { n } E { @(n - 1) + @(n - 2) }");
+        assert_parses(
+            "#[decreases(n)]\nF fib(n: i64) -> i64 = I n <= 1 { n } E { @(n - 1) + @(n - 2) }",
+        );
     }
 
     #[test]

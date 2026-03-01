@@ -2,8 +2,8 @@
 //!
 //! Targets uncovered lines in types/mangle.rs (124 uncovered)
 
-use vais_types::{mangle_name, mangle_type, ResolvedType};
 use vais_types::types::mangle_name_with_consts;
+use vais_types::{mangle_name, mangle_type, ResolvedType};
 
 // ============================================================================
 // mangle_name
@@ -30,7 +30,10 @@ fn test_mangle_name_two_args() {
 #[test]
 fn test_mangle_name_three_args() {
     assert_eq!(
-        mangle_name("bar", &[ResolvedType::F32, ResolvedType::Str, ResolvedType::U8]),
+        mangle_name(
+            "bar",
+            &[ResolvedType::F32, ResolvedType::Str, ResolvedType::U8]
+        ),
         "bar$f32_str_u8"
     );
 }
@@ -63,11 +66,7 @@ fn test_mangle_name_with_consts_consts_only() {
 #[test]
 fn test_mangle_name_with_consts_both() {
     assert_eq!(
-        mangle_name_with_consts(
-            "foo",
-            &[ResolvedType::I64],
-            &[("N".to_string(), 10)]
-        ),
+        mangle_name_with_consts("foo", &[ResolvedType::I64], &[("N".to_string(), 10)]),
         "foo$i64_c10"
     );
 }
@@ -75,11 +74,7 @@ fn test_mangle_name_with_consts_both() {
 #[test]
 fn test_mangle_name_with_consts_multiple_consts() {
     assert_eq!(
-        mangle_name_with_consts(
-            "bar",
-            &[],
-            &[("A".to_string(), 1), ("B".to_string(), 2)]
-        ),
+        mangle_name_with_consts("bar", &[], &[("A".to_string(), 1), ("B".to_string(), 2)]),
         "bar$c1_c2"
     );
 }
@@ -311,10 +306,7 @@ fn test_mangle_type_fn_no_params() {
 
 #[test]
 fn test_mangle_type_generic() {
-    assert_eq!(
-        mangle_type(&ResolvedType::Generic("T".to_string())),
-        "T"
-    );
+    assert_eq!(mangle_type(&ResolvedType::Generic("T".to_string())), "T");
 }
 
 #[test]
@@ -382,9 +374,9 @@ fn test_mangle_type_result_of_generics() {
 #[test]
 fn test_mangle_name_nested_types() {
     let ty = ResolvedType::Fn {
-        params: vec![ResolvedType::Ref(Box::new(ResolvedType::Array(
-            Box::new(ResolvedType::I64),
-        )))],
+        params: vec![ResolvedType::Ref(Box::new(ResolvedType::Array(Box::new(
+            ResolvedType::I64,
+        ))))],
         ret: Box::new(ResolvedType::Optional(Box::new(ResolvedType::Bool))),
         effects: None,
     };

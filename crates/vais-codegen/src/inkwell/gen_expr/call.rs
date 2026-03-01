@@ -325,11 +325,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let raw_ptr = self.extract_str_raw_ptr(arg)?;
                 let result = self
                     .builder
-                    .build_ptr_to_int(
-                        raw_ptr,
-                        self.context.i64_type(),
-                        "str_to_ptr_result",
-                    )
+                    .build_ptr_to_int(raw_ptr, self.context.i64_type(), "str_to_ptr_result")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 return Ok(result.into());
             }
@@ -371,11 +367,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into())
                     .into_int_value();
                 // Build fat pointer { ptr, i64 }
-                let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::default());
                 let len_type = self.context.i64_type();
-                let str_struct_type =
-                    self.context
-                        .struct_type(&[ptr_type.into(), len_type.into()], false);
+                let str_struct_type = self
+                    .context
+                    .struct_type(&[ptr_type.into(), len_type.into()], false);
                 let undef = str_struct_type.get_undef();
                 let with_ptr = self
                     .builder

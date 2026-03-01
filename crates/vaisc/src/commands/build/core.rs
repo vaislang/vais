@@ -21,6 +21,65 @@ use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_query::QueryDatabase;
 use vais_types::TypeChecker;
 
+/// Per-phase compilation timing profile.
+/// Used by `--profile` flag to display detailed pipeline breakdown.
+#[derive(Debug, Clone, Default)]
+pub struct CompileProfile {
+    pub parse_ms: f64,
+    pub macro_ms: f64,
+    pub typecheck_ms: f64,
+    pub codegen_ms: f64,
+    pub optimize_ms: f64,
+    pub clang_ms: f64,
+    pub total_ms: f64,
+}
+
+impl CompileProfile {
+    /// Print a detailed profile table with percentages.
+    pub fn print(&self) {
+        let total = self.total_ms.max(0.001); // avoid division by zero
+        println!("\n{}", "=== Compilation Profile ===".cyan().bold());
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "Parse + Import",
+            self.parse_ms,
+            self.parse_ms / total * 100.0
+        );
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "Macro Expand",
+            self.macro_ms,
+            self.macro_ms / total * 100.0
+        );
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "Type Check",
+            self.typecheck_ms,
+            self.typecheck_ms / total * 100.0
+        );
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "Codegen",
+            self.codegen_ms,
+            self.codegen_ms / total * 100.0
+        );
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "IR Optimize",
+            self.optimize_ms,
+            self.optimize_ms / total * 100.0
+        );
+        println!(
+            "  {:<16} {:>8.1}ms  ({:>5.1}%)",
+            "Clang Link",
+            self.clang_ms,
+            self.clang_ms / total * 100.0
+        );
+        println!("  {}", "─".repeat(40));
+        println!("  {:<16} {:>8.1}ms", "Total", self.total_ms);
+    }
+}
+
 /// Wrapper around cmd_build that optionally prints timing information
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn cmd_build_with_timing(
@@ -31,6 +90,7 @@ pub(crate) fn cmd_build_with_timing(
     debug: bool,
     verbose: bool,
     time: bool,
+    profile: bool,
     plugins: &PluginRegistry,
     target: TargetTriple,
     force_rebuild: bool,
@@ -49,6 +109,7 @@ pub(crate) fn cmd_build_with_timing(
     use std::time::Instant;
 
     let start = Instant::now();
+    let mut compile_profile = CompileProfile::default();
     let result = cmd_build(
         input,
         output,
@@ -70,6 +131,11 @@ pub(crate) fn cmd_build_with_timing(
         use_inkwell,
         per_module,
         cache_limit,
+        if profile {
+            Some(&mut compile_profile)
+        } else {
+            None
+        },
     );
     let elapsed = start.elapsed();
 
@@ -79,6 +145,11 @@ pub(crate) fn cmd_build_with_timing(
             "⏱".cyan().bold(),
             elapsed.as_secs_f64()
         );
+    }
+
+    if profile {
+        compile_profile.total_ms = elapsed.as_secs_f64() * 1000.0;
+        compile_profile.print();
     }
 
     result
@@ -106,6 +177,7 @@ pub(crate) fn cmd_build(
     use_inkwell: bool,
     per_module: bool,
     cache_limit: u64,
+    mut profile_out: Option<&mut CompileProfile>,
 ) -> Result<(), String> {
     use incremental::{get_cache_dir, CompilationOptions, IncrementalCache};
 
@@ -288,6 +360,9 @@ pub(crate) fn cmd_build(
         )?
     };
     let parse_time = parse_start.elapsed();
+    if let Some(ref mut p) = profile_out {
+        p.parse_ms = parse_time.as_secs_f64() * 1000.0;
+    }
 
     if verbose {
         println!(
@@ -327,6 +402,7 @@ pub(crate) fn cmd_build(
     };
 
     // Macro expansion phase
+    let macro_start = std::time::Instant::now();
     // 1. Collect macro definitions from the AST
     let mut macro_registry = MacroRegistry::new();
     collect_macros(&transformed_ast, &mut macro_registry);
@@ -338,6 +414,10 @@ pub(crate) fn cmd_build(
     // 3. Process #[derive(...)] attributes
     let mut final_ast = macro_expanded_ast;
     process_derives(&mut final_ast).map_err(|e| format!("Derive macro error: {}", e))?;
+    let macro_time = macro_start.elapsed();
+    if let Some(ref mut p) = profile_out {
+        p.macro_ms = macro_time.as_secs_f64() * 1000.0;
+    }
 
     if verbose {
         let macro_count = macro_registry.macros_count();
@@ -538,6 +618,9 @@ pub(crate) fn cmd_build(
         }
     }
     let typecheck_time = typecheck_start.elapsed();
+    if let Some(ref mut p) = profile_out {
+        p.typecheck_ms = typecheck_time.as_secs_f64() * 1000.0;
+    }
 
     // Print ownership warnings if any
     let ownership_warnings: Vec<_> = checker
@@ -654,8 +737,8 @@ pub(crate) fn cmd_build(
                             }
 
                             // Generate IR for this module's subset
-                            let result = codegen
-                                .generate_module_subset(&final_ast, item_indices, is_main);
+                            let result =
+                                codegen.generate_module_subset(&final_ast, item_indices, is_main);
                             let raw_ir = result.map_err(|e| {
                                 let spanned = vais_codegen::SpannedCodegenError {
                                     span: codegen.last_error_span(),
@@ -752,6 +835,7 @@ pub(crate) fn cmd_build(
     }
 
     // Generate LLVM IR
+    let codegen_start = std::time::Instant::now();
     let module_name = input.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
 
     if verbose && !matches!(target, TargetTriple::Native) {
@@ -791,14 +875,10 @@ pub(crate) fn cmd_build(
         let instantiations = checker.get_generic_instantiations();
         if instantiations.is_empty() {
             gen.generate_module(&final_ast)
-                .map_err(|e| {
-                    error_formatter::format_codegen_error(&e, &main_source, input)
-                })?;
+                .map_err(|e| error_formatter::format_codegen_error(&e, &main_source, input))?;
         } else {
             gen.generate_module_with_instantiations(&final_ast, &instantiations)
-                .map_err(|e| {
-                    error_formatter::format_codegen_error(&e, &main_source, input)
-                })?;
+                .map_err(|e| error_formatter::format_codegen_error(&e, &main_source, input))?;
         }
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();
@@ -849,8 +929,14 @@ pub(crate) fn cmd_build(
         )?
     };
 
+    let codegen_time = codegen_start.elapsed();
+    if let Some(ref mut p) = profile_out {
+        p.codegen_ms = codegen_time.as_secs_f64() * 1000.0;
+    }
+
     // Apply optimization passes before emitting IR
     // When debug is enabled, disable optimizations to preserve debuggability
+    let opt_start = std::time::Instant::now();
     let effective_opt_level = if debug { 0 } else { opt_level };
     let opt = match effective_opt_level {
         0 => OptLevel::O0,
@@ -893,6 +979,11 @@ pub(crate) fn cmd_build(
             "{} Optimizations disabled for debug build",
             "Note".yellow().bold()
         );
+    }
+
+    let opt_time = opt_start.elapsed();
+    if let Some(ref mut p) = profile_out {
+        p.optimize_ms = opt_time.as_secs_f64() * 1000.0;
     }
 
     // Determine output paths
@@ -993,6 +1084,7 @@ pub(crate) fn cmd_build(
             }
         });
 
+        let clang_start = std::time::Instant::now();
         compile_ir_to_binary(
             &ir_path,
             &bin_path,
@@ -1008,6 +1100,10 @@ pub(crate) fn cmd_build(
             &native_deps,
             cache.as_ref().map(|c| c.cache_dir()),
         )?;
+        let clang_time = clang_start.elapsed();
+        if let Some(ref mut p) = profile_out {
+            p.clang_ms = clang_time.as_secs_f64() * 1000.0;
+        }
     }
 
     // Update incremental compilation cache after successful build

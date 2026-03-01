@@ -4,6 +4,10 @@
 **Last Updated**: 2026-01-21
 **Status**: Production-Ready
 
+## Quick Start
+
+- Fast overview (with structure + runtime flow diagrams): `docs/ARCHITECTURE_AT_A_GLANCE.md`
+
 ## Table of Contents
 
 1. [Overview](#overview)

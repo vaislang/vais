@@ -9,7 +9,7 @@ mod tests {
     fn test_type_to_llvm_cache_basic_types() {
         let codegen = CodeGenerator::new("test");
 
-        // Test basic types work correctly (they use cache)
+        // Test basic types work correctly (fast-path, no cache needed)
         let i32_1 = codegen.type_to_llvm(&ResolvedType::I32);
         let i32_2 = codegen.type_to_llvm(&ResolvedType::I32);
 
@@ -17,11 +17,12 @@ mod tests {
         assert_eq!(i32_2, "i32");
         assert_eq!(i32_1, i32_2);
 
-        // Primitive types should be cached after first call
+        // Primitive types use the fast-path and bypass the cache entirely.
+        // The cache is only used for complex/composite types.
         let cache_size = codegen.type_to_llvm_cache.borrow().len();
-        assert!(
-            cache_size > 0,
-            "Primitive types should be cached after first call"
+        assert_eq!(
+            cache_size, 0,
+            "Primitive types use fast-path, not the cache"
         );
     }
 
@@ -75,9 +76,10 @@ mod tests {
             );
         }
 
-        // All primitive types should be cached
-        let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(!cache.is_empty(), "Primitive types should be cached");
+        // Primitive types use the fast-path and bypass the cache.
+        // Only complex types (Str with struct representation) go through the cache.
+        // Str is { i8*, i64 } which is handled by the fast-path too, so cache may be empty.
+        // This is intentional: fast-path avoids format!("{:?}") + HashMap overhead for primitives.
     }
 
     #[test]
@@ -189,9 +191,9 @@ mod tests {
         let codegen2 = CodeGenerator::new("test2");
 
         // Each CodeGenerator should have its own cache
-        // Use primitive types to verify cache isolation
-        let type1 = ResolvedType::I32;
-        let type2 = ResolvedType::I64;
+        // Use composite types (not primitives) so they go through the cache
+        let type1 = ResolvedType::Pointer(Box::new(ResolvedType::I32));
+        let type2 = ResolvedType::Pointer(Box::new(ResolvedType::I64));
 
         let _result1 = codegen1.type_to_llvm(&type1);
         let _result2 = codegen2.type_to_llvm(&type2);
