@@ -253,7 +253,25 @@ F str_trim(data: i64, len: i64) -> i64 {
     buf
 }
 
-# Convert to uppercase (ASCII only: a-z -> A-Z)
+# Count UTF-8 characters in a byte buffer.
+# Multi-byte characters: continuation bytes (10xxxxxx, 0x80-0xBF) are not counted.
+# This gives the number of Unicode code points, not the byte length.
+F str_char_count(data: i64, len: i64) -> i64 {
+    str_char_count_rec(data, len, 0, 0)
+}
+
+F str_char_count_rec(data: i64, len: i64, idx: i64, count: i64) -> i64 {
+    I idx >= len { count }
+    E {
+        byte := load_byte(data + idx)
+        # Count only leading bytes (not continuation bytes 10xxxxxx)
+        # A continuation byte has bit pattern 10xxxxxx (0x80 <= byte <= 0xBF)
+        is_continuation := I byte >= 128 && byte < 192 { 1 } E { 0 }
+        str_char_count_rec(data, len, idx + 1, count + 1 - is_continuation)
+    }
+}
+
+# Convert to uppercase (ASCII a-z + Latin-1 Supplement U+00E0-U+00FE)
 # Returns pointer to new null-terminated string
 F str_to_upper(data: i64, len: i64) -> i64 {
     buf := malloc(len + 1)
@@ -266,13 +284,17 @@ F str_to_upper_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
     I idx >= len { 0 }
     E {
         c := load_byte(data + idx)
-        out_c := I c >= 97 && c <= 122 { c - 32 } E { c }
+        # ASCII lowercase a-z (0x61-0x7A)
+        out_c := I c >= 97 && c <= 122 { c - 32 }
+        # Latin-1 Supplement lowercase (0xE0-0xFE, excluding 0xF7 which is division sign)
+        E I c >= 224 && c <= 254 && c != 247 { c - 32 }
+        E { c }
         store_byte(buf + idx, out_c)
         str_to_upper_rec(data, len, idx + 1, buf)
     }
 }
 
-# Convert to lowercase (ASCII only: A-Z -> a-z)
+# Convert to lowercase (ASCII A-Z + Latin-1 Supplement U+00C0-U+00DE)
 # Returns pointer to new null-terminated string
 F str_to_lower(data: i64, len: i64) -> i64 {
     buf := malloc(len + 1)
@@ -285,7 +307,11 @@ F str_to_lower_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
     I idx >= len { 0 }
     E {
         c := load_byte(data + idx)
-        out_c := I c >= 65 && c <= 90 { c + 32 } E { c }
+        # ASCII uppercase A-Z (0x41-0x5A)
+        out_c := I c >= 65 && c <= 90 { c + 32 }
+        # Latin-1 Supplement uppercase (0xC0-0xDE, excluding 0xD7 which is multiplication sign)
+        E I c >= 192 && c <= 222 && c != 215 { c + 32 }
+        E { c }
         store_byte(buf + idx, out_c)
         str_to_lower_rec(data, len, idx + 1, buf)
     }

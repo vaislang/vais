@@ -745,6 +745,26 @@ impl CodeGenerator {
             Type::SliceMut(inner) => {
                 ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
+            Type::Linear(inner) => {
+                ResolvedType::Linear(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            Type::Affine(inner) => {
+                ResolvedType::Affine(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
+                let resolved_base = self.ast_type_to_resolved_impl(&base.node);
+                // Store predicate as Debug string (consistent with type checker)
+                let predicate_str = format!("{:?}", predicate.node);
+                ResolvedType::Dependent {
+                    var_name: var_name.clone(),
+                    base: Box::new(resolved_base),
+                    predicate: predicate_str,
+                }
+            }
             _ => ResolvedType::Unknown,
         }
     }

@@ -34,11 +34,30 @@ impl TypeChecker {
                     // Validate dependent type predicate at compile time for literal values
                     if let Type::Dependent {
                         var_name,
-                        base: _,
+                        base,
                         predicate,
                     } = &ty.node
                     {
-                        if let Some(lit_val) = Self::extract_integer_literal_from_expr(&value.node)
+                        let resolved_base = self.resolve_type(&base.node);
+                        if resolved_base.is_float() {
+                            // f64/f32 dependent type: check float literals
+                            if let Some(lit_val) =
+                                Self::extract_float_literal_from_expr(&value.node)
+                            {
+                                let predicate_str = format!("{:?}", predicate.node);
+                                if let Some(false) = Self::try_evaluate_predicate_f64(
+                                    &predicate.node,
+                                    var_name,
+                                    lit_val,
+                                ) {
+                                    return Err(TypeError::RefinementViolation {
+                                        predicate: predicate_str,
+                                        span: Some(value.span),
+                                    });
+                                }
+                            }
+                        } else if let Some(lit_val) =
+                            Self::extract_integer_literal_from_expr(&value.node)
                         {
                             let predicate_str = format!("{:?}", predicate.node);
                             self.check_refinement(

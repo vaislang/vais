@@ -223,6 +223,34 @@ pub enum Token {
                                 result.push(code as char);
                             }
                         }
+                        'u' => {
+                            // Unicode escape: \u{XXXX} (1-6 hex digits)
+                            if chars.peek() == Some(&'{') {
+                                chars.next(); // consume '{'
+                                let mut hex = std::string::String::new();
+                                while let Some(&h) = chars.peek() {
+                                    if h == '}' {
+                                        chars.next(); // consume '}'
+                                        break;
+                                    }
+                                    if h.is_ascii_hexdigit() && hex.len() < 6 {
+                                        hex.push(h);
+                                        chars.next();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                                    if let Some(ch) = char::from_u32(code) {
+                                        result.push(ch);
+                                    }
+                                }
+                            } else {
+                                // Not followed by '{', keep as-is
+                                result.push('\\');
+                                result.push('u');
+                            }
+                        }
                         _ => {
                             // Unknown escape, keep as-is
                             result.push('\\');

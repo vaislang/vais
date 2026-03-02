@@ -4,7 +4,7 @@ use crate::CodeGenerator;
 use std::fmt::Write;
 
 impl CodeGenerator {
-    pub(super) fn get_or_create_contract_string(&mut self, s: &str) -> String {
+    pub(crate) fn get_or_create_contract_string(&mut self, s: &str) -> String {
         // Check if we already have this string
         if let Some(name) = self.contracts.contract_constants.get(s) {
             return format!(
@@ -35,7 +35,7 @@ impl CodeGenerator {
 }
 
 /// Escape a string for LLVM IR constant
-pub(super) fn escape_string_for_llvm(s: &str) -> String {
+pub(crate) fn escape_string_for_llvm(s: &str) -> String {
     let mut result = String::new();
     for c in s.chars() {
         match c {

@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (Phase 88 완료 — 리포지토리 위생·타입 안전성)
+> **최종 업데이트**: 2026-03-02 (Phase 89 완료 — 기술 부채 해소: Codecov/DT Runtime/Unicode)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 6,900+ (통합 2,700+, 단위 3,542+) |
+| 전체 테스트 | 7,100+ (통합 2,700+, 단위 3,745+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.6ms (812K lines/s) |
@@ -92,8 +92,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 항목 | 상태 |
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
-| 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 1,266개 통과 (0 fail, 1 ignored) | ✅ |
+| 테스트 전체 통과 (7,100+) | ✅ |
+| E2E 1,291개 통과 (0 fail, 1 ignored) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -231,20 +231,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 86 | IDE 개선 | LSP 타입추론/GoToDef, DAP 프리티프린터, IntelliJ 재구축, +590 테스트 | 1,250 |
 | 87 | 문서 · 커뮤니티 | API Ref +16모듈, 블로그 3편, 예제 갤러리 15카테고리, README 강화 | 1,250 |
 | 88 | 리포지토리 위생 · 타입 안전성 | gitignore profraw/ll, CI 핀, 문서 갱신, Dependent Types 검증 +16 E2E | 1,266 |
-
-### 잔여 기술 부채 (Phase 88 기준)
-
-| 항목 | 상태 | 비고 |
-|------|------|------|
-| Codecov 68.7% | ⏳ 구조적 한계 | Inkwell/CLI/LSP LLVM 의존성으로 75% 이상 어려움 |
-| Dependent types 검증 | ⏳ 파싱만 구현 | `{x: T \| pred}` 런타임 검증 미구현 |
-| Unicode 완전 지원 | ⏳ 미구현 | str fat pointer는 바이트 기반, grapheme cluster 미지원 |
+| 89 | 기술 부채 해소 | Codecov +203 tests, DT 런타임 assert/f64, Unicode \u{}/char_count | 1,291 |
 
 ---
 
 ## 📋 예정 작업
 
 모드: 자동진행
+
+### Phase 89: 기술 부채 해소 — Codecov/Dependent Types/Unicode
+
+> **목표**: 잔여 기술 부채 3건 체계적 해소 — 커버리지 72%+, DT 런타임 검증, Unicode 문자 인식
+> **기대 효과**: 커버리지 +3.3%p, 타입 안전성 강화, Unicode 사용성 개선
+
+- [x] 1. Codecov 강화 — LSP/CLI/Registry 단위 테스트 +203 (Sonnet) ✅ 2026-03-02
+  변경: vais-lsp/type_resolve.rs (+151 tests), vais-registry-server/handlers/packages.rs (+35), storage.rs (+17)
+- [x] 2. Dependent Types 런타임 검증 — assert 삽입 + f64 지원 + 리턴타입 (Opus) ✅ 2026-03-02
+  변경: function_gen/dependent_checks.rs (신규, 런타임 assert 삽입), resolve.rs (f64 predicate 평가), types.rs (Dependent/Linear/Affine 핸들링), lib.rs (escape_llvm_string UTF-8 수정), +15 E2E
+- [x] 3. Unicode 지원 강화 — \u{XXXX} 이스케이프 + char_count() + case 확장 (Sonnet) ✅ 2026-03-02
+  변경: vais-lexer/lib.rs (\u{XXXX} 파싱), std/string.vais (char_count/Latin-1 case), +10 E2E
+진행률: 3/3 (100%)
 
 ### Phase 87: 문서 · 커뮤니티 — API Reference · 블로그
 

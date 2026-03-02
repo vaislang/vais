@@ -610,4 +610,262 @@ mod tests {
         let data = storage.read_archive("pkg", "1.0.0").unwrap();
         assert_eq!(data, b"new data");
     }
+
+    // ========== PackageManifest serde tests ==========
+
+    #[test]
+    fn test_manifest_minimal() {
+        let toml = r#"
+            [package]
+            name = "my-pkg"
+            version = "1.0.0"
+        "#;
+        let manifest: PackageManifest = toml::from_str(toml).unwrap();
+        assert_eq!(manifest.package.name, "my-pkg");
+        assert_eq!(manifest.package.version, "1.0.0");
+        assert!(manifest.package.description.is_none());
+        assert!(manifest.package.authors.is_empty());
+        assert!(manifest.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_manifest_full() {
+        let toml = r#"
+            [package]
+            name = "my-pkg"
+            version = "2.0.0"
+            description = "A test package"
+            authors = ["alice", "bob"]
+            license = "MIT"
+            homepage = "https://example.com"
+            repository = "https://github.com/example/pkg"
+            documentation = "https://docs.example.com"
+            keywords = ["test", "vais"]
+            categories = ["web"]
+
+            [dependencies]
+            foo = "^1.0"
+        "#;
+        let manifest: PackageManifest = toml::from_str(toml).unwrap();
+        assert_eq!(manifest.package.name, "my-pkg");
+        assert_eq!(manifest.package.version, "2.0.0");
+        assert_eq!(manifest.package.description, Some("A test package".to_string()));
+        assert_eq!(manifest.package.authors, vec!["alice", "bob"]);
+        assert_eq!(manifest.package.license, Some("MIT".to_string()));
+        assert_eq!(manifest.package.homepage, Some("https://example.com".to_string()));
+        assert_eq!(manifest.package.keywords, vec!["test", "vais"]);
+        assert_eq!(manifest.package.categories, vec!["web"]);
+        assert_eq!(manifest.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_manifest_with_dev_dependencies() {
+        let toml = r#"
+            [package]
+            name = "my-pkg"
+            version = "1.0.0"
+
+            [dev_dependencies]
+            test-helper = "^0.1"
+        "#;
+        let manifest: PackageManifest = toml::from_str(toml).unwrap();
+        assert!(manifest.dependencies.is_empty());
+        assert_eq!(manifest.dev_dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_manifest_empty_package_name() {
+        let toml = r#"
+            [package]
+            name = ""
+            version = "1.0.0"
+        "#;
+        let manifest: PackageManifest = toml::from_str(toml).unwrap();
+        assert_eq!(manifest.package.name, "");
+    }
+
+    // ========== validate_path_component tests ==========
+
+    #[test]
+    fn test_validate_path_component_valid() {
+        assert!(PackageStorage::validate_path_component("my-pkg").is_ok());
+        assert!(PackageStorage::validate_path_component("1.0.0").is_ok());
+        assert!(PackageStorage::validate_path_component("a").is_ok());
+    }
+
+    #[test]
+    fn test_validate_path_component_dotdot() {
+        assert!(PackageStorage::validate_path_component("..").is_err());
+        assert!(PackageStorage::validate_path_component("a..b").is_err());
+    }
+
+    #[test]
+    fn test_validate_path_component_slash() {
+        assert!(PackageStorage::validate_path_component("a/b").is_err());
+    }
+
+    #[test]
+    fn test_validate_path_component_backslash() {
+        assert!(PackageStorage::validate_path_component("a\\b").is_err());
+    }
+
+    #[test]
+    fn test_validate_path_component_null() {
+        assert!(PackageStorage::validate_path_component("a\0b").is_err());
+    }
+
+    // ========== sha256_hex additional tests ==========
+
+    #[test]
+    fn test_sha256_different_inputs() {
+        let h1 = sha256_hex(b"hello");
+        let h2 = sha256_hex(b"world");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn test_sha256_length() {
+        let hash = sha256_hex(b"test");
+        assert_eq!(hash.len(), 64); // SHA-256 = 32 bytes = 64 hex chars
+    }
+
+    #[test]
+    fn test_sha256_hex_chars() {
+        let hash = sha256_hex(b"test");
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    // ========== create_archive tests ==========
+
+    #[test]
+    fn test_create_archive_basic() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("hello.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+
+        let archive_data = create_archive(temp_dir.path()).unwrap();
+        assert!(!archive_data.is_empty());
+    }
+
+    #[test]
+    fn test_create_archive_empty_dir() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let archive_data = create_archive(temp_dir.path()).unwrap();
+        // Should succeed even for empty directory
+        assert!(!archive_data.is_empty());
+    }
+
+    #[test]
+    fn test_create_archive_skips_hidden() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp_dir.path().join(".hidden"), "secret").unwrap();
+        std::fs::write(temp_dir.path().join("visible.txt"), "hello").unwrap();
+
+        let archive_data = create_archive(temp_dir.path()).unwrap();
+        // Verify archive doesn't contain .hidden
+        let decoder = GzDecoder::new(&archive_data[..]);
+        let mut archive = Archive::new(decoder);
+        let paths: Vec<String> = archive
+            .entries()
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(paths.iter().any(|p| p.contains("visible")));
+        assert!(!paths.iter().any(|p| p.contains(".hidden")));
+    }
+
+    #[test]
+    fn test_create_archive_skips_target() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let target_dir = temp_dir.path().join("target");
+        std::fs::create_dir_all(&target_dir).unwrap();
+        std::fs::write(target_dir.join("build.o"), "binary").unwrap();
+        std::fs::write(temp_dir.path().join("src.vais"), "code").unwrap();
+
+        let archive_data = create_archive(temp_dir.path()).unwrap();
+        let decoder = GzDecoder::new(&archive_data[..]);
+        let mut archive = Archive::new(decoder);
+        let paths: Vec<String> = archive
+            .entries()
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(!paths.iter().any(|p| p.contains("target")));
+    }
+
+    // ========== extract_to_temp and validate_archive tests ==========
+
+    #[test]
+    fn test_validate_archive_with_manifest() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().join("storage")).unwrap();
+
+        // Create a valid package directory
+        let pkg_dir = temp_dir.path().join("pkg");
+        std::fs::create_dir_all(&pkg_dir).unwrap();
+        std::fs::write(
+            pkg_dir.join("vais.toml"),
+            r#"
+[package]
+name = "my-pkg"
+version = "1.0.0"
+"#,
+        )
+        .unwrap();
+
+        let archive_data = create_archive(&pkg_dir).unwrap();
+        let manifest = storage.validate_archive(&archive_data).unwrap();
+        assert_eq!(manifest.package.name, "my-pkg");
+        assert_eq!(manifest.package.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_validate_archive_missing_manifest() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().join("storage")).unwrap();
+
+        let pkg_dir = temp_dir.path().join("pkg");
+        std::fs::create_dir_all(&pkg_dir).unwrap();
+        std::fs::write(pkg_dir.join("lib.vais"), "F main() -> i64 { 0 }").unwrap();
+
+        let archive_data = create_archive(&pkg_dir).unwrap();
+        let result = storage.validate_archive(&archive_data);
+        assert!(result.is_err());
+    }
+
+    // ========== Multiple packages storage tests ==========
+
+    #[test]
+    fn test_multiple_packages() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        storage.store_archive("alpha", "1.0.0", b"a1").unwrap();
+        storage.store_archive("beta", "1.0.0", b"b1").unwrap();
+        storage.store_archive("alpha", "2.0.0", b"a2").unwrap();
+
+        assert!(storage.archive_exists("alpha", "1.0.0"));
+        assert!(storage.archive_exists("alpha", "2.0.0"));
+        assert!(storage.archive_exists("beta", "1.0.0"));
+        assert!(!storage.archive_exists("beta", "2.0.0"));
+
+        let alpha_versions = storage.list_versions("alpha").unwrap();
+        assert_eq!(alpha_versions.len(), 2);
+
+        let beta_versions = storage.list_versions("beta").unwrap();
+        assert_eq!(beta_versions.len(), 1);
+    }
+
+    #[test]
+    fn test_checksum_consistency() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let storage = PackageStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let data = b"deterministic content";
+        let checksum1 = storage.store_archive("pkg", "1.0.0", data).unwrap();
+        let checksum2 = sha256_hex(data);
+        assert_eq!(checksum1, checksum2);
+    }
 }

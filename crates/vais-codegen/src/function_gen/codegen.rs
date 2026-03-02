@@ -132,6 +132,11 @@ impl CodeGenerator {
         // Generate body
         let mut counter = 0;
 
+        // Generate runtime dependent type assertions for parameters
+        let dep_assert_ir =
+            self.generate_dependent_type_assertions(&f.params, &registered_param_types, &mut counter)?;
+        ir.push_str(&dep_assert_ir);
+
         // Generate requires (precondition) checks
         let requires_ir = self.generate_requires_checks(f, &mut counter)?;
         ir.push_str(&requires_ir);

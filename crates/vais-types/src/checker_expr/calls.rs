@@ -105,10 +105,23 @@ impl TypeChecker {
                         if let ResolvedType::Dependent {
                             var_name,
                             predicate,
+                            base,
                             ..
                         } = &sig.params[i].1
                         {
-                            if let Some(lit_val) =
+                            if base.is_float() {
+                                // f64/f32 dependent type: check float literals
+                                if let Some(lit_val) =
+                                    Self::extract_float_literal_from_expr(&arg.node)
+                                {
+                                    self.check_refinement_from_string_f64(
+                                        var_name,
+                                        predicate,
+                                        lit_val,
+                                        Some(arg.span),
+                                    )?;
+                                }
+                            } else if let Some(lit_val) =
                                 Self::extract_integer_literal_from_expr(&arg.node)
                             {
                                 self.check_refinement_from_string(

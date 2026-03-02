@@ -114,7 +114,7 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
             b'\r' => result.push_str("\\0D"),
             b'\t' => result.push_str("\\09"),
             b'\0' => result.push_str("\\00"),
-            0x01..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
+            0x01..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F..=0xFF => {
                 const HEX: &[u8; 16] = b"0123456789ABCDEF";
                 result.push('\\');
                 result.push(HEX[(byte >> 4) as usize] as char);

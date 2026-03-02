@@ -469,6 +469,132 @@ impl TypeChecker {
         }
     }
 
+    /// Try to evaluate a dependent type predicate at compile time with an f64 value.
+    ///
+    /// Given a predicate expression and the f64 value of the bound variable,
+    /// attempts to evaluate the predicate to a boolean result.
+    /// Returns `Some(true)` if the predicate is satisfied, `Some(false)` if violated,
+    /// or `None` if the predicate cannot be statically evaluated.
+    pub(crate) fn try_evaluate_predicate_f64(
+        predicate: &Expr,
+        var_name: &str,
+        value: f64,
+    ) -> Option<bool> {
+        Self::try_evaluate_predicate_f64_inner(predicate, var_name, value, 0)
+    }
+
+    fn try_evaluate_predicate_f64_inner(
+        predicate: &Expr,
+        var_name: &str,
+        value: f64,
+        depth: usize,
+    ) -> Option<bool> {
+        if depth > Self::MAX_PREDICATE_DEPTH {
+            return None;
+        }
+        match predicate {
+            Expr::Binary { op, left, right } => {
+                // Handle logical operators first
+                match op {
+                    BinOp::And => {
+                        let l = Self::try_evaluate_predicate_f64_inner(
+                            &left.node, var_name, value, depth + 1,
+                        )?;
+                        let r = Self::try_evaluate_predicate_f64_inner(
+                            &right.node, var_name, value, depth + 1,
+                        )?;
+                        return Some(l && r);
+                    }
+                    BinOp::Or => {
+                        let l = Self::try_evaluate_predicate_f64_inner(
+                            &left.node, var_name, value, depth + 1,
+                        )?;
+                        let r = Self::try_evaluate_predicate_f64_inner(
+                            &right.node, var_name, value, depth + 1,
+                        )?;
+                        return Some(l || r);
+                    }
+                    _ => {}
+                }
+                // Comparison operators
+                let left_val =
+                    Self::try_eval_const_expr_f64_inner(&left.node, var_name, value, depth + 1)?;
+                let right_val =
+                    Self::try_eval_const_expr_f64_inner(&right.node, var_name, value, depth + 1)?;
+                match op {
+                    BinOp::Gt => Some(left_val > right_val),
+                    BinOp::Gte => Some(left_val >= right_val),
+                    BinOp::Lt => Some(left_val < right_val),
+                    BinOp::Lte => Some(left_val <= right_val),
+                    BinOp::Eq => Some(left_val == right_val),
+                    BinOp::Neq => Some(left_val != right_val),
+                    _ => None,
+                }
+            }
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+            } => {
+                let inner =
+                    Self::try_evaluate_predicate_f64_inner(&expr.node, var_name, value, depth + 1)?;
+                Some(!inner)
+            }
+            _ => None,
+        }
+    }
+
+    /// Try to evaluate a simple arithmetic expression at compile time with f64 values.
+    /// Supports: variable reference, float/integer literals, basic arithmetic.
+    fn try_eval_const_expr_f64_inner(
+        expr: &Expr,
+        var_name: &str,
+        var_value: f64,
+        depth: usize,
+    ) -> Option<f64> {
+        if depth > Self::MAX_PREDICATE_DEPTH {
+            return None;
+        }
+        match expr {
+            Expr::Ident(name) if name == var_name => Some(var_value),
+            Expr::Float(f) => Some(*f),
+            Expr::Int(n) => Some(*n as f64),
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+            } => Self::try_eval_const_expr_f64_inner(&expr.node, var_name, var_value, depth + 1)
+                .map(|v| -v),
+            Expr::Binary { op, left, right } => {
+                let l = Self::try_eval_const_expr_f64_inner(
+                    &left.node, var_name, var_value, depth + 1,
+                )?;
+                let r = Self::try_eval_const_expr_f64_inner(
+                    &right.node, var_name, var_value, depth + 1,
+                )?;
+                match op {
+                    BinOp::Add => Some(l + r),
+                    BinOp::Sub => Some(l - r),
+                    BinOp::Mul => Some(l * r),
+                    BinOp::Div => {
+                        if r != 0.0 {
+                            Some(l / r)
+                        } else {
+                            None
+                        }
+                    }
+                    BinOp::Mod => {
+                        if r != 0.0 {
+                            Some(l % r)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// Check if a value satisfies a dependent type's predicate.
     /// Returns Err(RefinementViolation) if the predicate is definitely violated.
     pub(crate) fn check_refinement(
@@ -534,6 +660,45 @@ impl TypeChecker {
             }
             _ => None,
         }
+    }
+
+    /// Extract a float literal value from an expression.
+    /// Handles `Expr::Float(f)`, `Expr::Int(n)` (promoted to f64),
+    /// and `Expr::Unary { op: Neg, expr: Float(f) | Int(n) }`.
+    pub(crate) fn extract_float_literal_from_expr(expr: &Expr) -> Option<f64> {
+        match expr {
+            Expr::Float(f) => Some(*f),
+            Expr::Int(n) => Some(*n as f64),
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+            } => match &expr.node {
+                Expr::Float(f) => Some(-f),
+                Expr::Int(n) => Some(-(*n as f64)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Check a dependent type refinement for f64 values using the cached predicate expression.
+    pub(crate) fn check_refinement_from_string_f64(
+        &self,
+        var_name: &str,
+        predicate_str: &str,
+        value: f64,
+        span: Option<Span>,
+    ) -> TypeResult<()> {
+        let predicates = self.dependent_predicates.borrow();
+        if let Some(pred_expr) = predicates.get(predicate_str) {
+            if let Some(false) = Self::try_evaluate_predicate_f64(pred_expr, var_name, value) {
+                return Err(TypeError::RefinementViolation {
+                    predicate: predicate_str.to_string(),
+                    span,
+                });
+            }
+        }
+        Ok(())
     }
 
     /// Resolve a const expression from AST to internal representation

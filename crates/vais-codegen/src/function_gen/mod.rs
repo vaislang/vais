@@ -5,6 +5,7 @@
 
 pub(crate) mod async_gen;
 pub(crate) mod codegen;
+pub(crate) mod dependent_checks;
 pub(crate) mod generics;
 pub(crate) mod runtime;
 pub(crate) mod signature;
