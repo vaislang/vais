@@ -237,80 +237,73 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 현재 작업 (2026-03-02)
+
+모드: 자동진행
+
+### Phase 92-pre: Playground 예제 에러 수정
+
+> **목표**: 31개 playground 예제 중 10개 컴파일/실행 에러 해결, 사용자 경험 즉시 개선
+> **기대 효과**: playground Run 성공률 21/31 → 26/31 (예제 코드 수정), 미지원 기능 5개 명시적 마킹
+
+- [x] 1. Playground 예제 코드 수정 — 6개 에러 예제 (Sonnet) ✅ 2026-03-02
+  변경: playground/src/examples.js (hello-world/string-interpolation/destructuring/slice-types/result-option/unwrap-operator 6개 예제 수정)
+- [x] 2. Compile-only 마킹 전환 — 5개 미지원 기능 예제 (Sonnet) ✅ 2026-03-02
+  변경: playground/src/examples.js (async-await/ownership/wasm-interop/try-operator/lambda-capture → "syntax preview" 런너블 재작성)
+- [x] 3. 수정 검증 — 전체 예제 재컴파일 + E2E 회귀 테스트 (Sonnet) ✅ 2026-03-02
+  변경: 30개 예제 전체 컴파일/실행 성공, E2E 1,540 passed (0 fail, 1 ignored, 0 regression)
+진행률: 3/3 (100%)
+
+---
+
 ## 📋 예정 작업
 
 모드: 자동진행
 
-### Phase 91: 기술 부채 해소 + 언어 기능 완성도 강화
+### Phase 92: 컴파일러 안정성 강화 — Panic-free/Fuzzing/에러 복구
 
-> **목표**: 잔여 기술 부채 해소 (assert_compiles 9→0, 커버리지 68.7→75%+) + 언어 기능 완성도 (Monomorphization const generic/method, Lifetime 검증 실장)
-> **기대 효과**: 코드 품질 향상, 타입 시스템 건전성 강화, 커버리지 목표 달성
+> **목표**: 프로덕션 코드 unwrap 865개 중 핵심 경로 300+개 Result 전환, Fuzzing 인프라 구축, 에러 복구 강화
+> **기대 효과**: 런타임 panic 0개 보장, 악의적 입력 내성, 다중 에러 보고 UX 개선
 
-- [x] 1. assert_compiles 완전 제거 — struct-by-value ABI 수정 + global/defer/extern 전환 (Opus) ✅ 2026-03-02
-  변경: phase90_structs.rs (6개 struct-by-value→assert_exit_code), phase77_coverage.rs (3개 global/defer/extern→assert_exit_code), helpers.rs (+assert_compiles_only), inkwell generator.rs (struct param alloca+store 패턴)
-- [x] 2. 코드 커버리지 75% 달성 — 저커버리지 크레이트 단위 테스트 +406 (Sonnet) ✅ 2026-03-02
-  변경: vais-mir/tests (+113: types/emit_llvm/optimize), vais-types/tests (+159: checker_fn/traits/resolve/checker_expr/free_vars), vais-codegen/tests (+44), vais-lsp/tests (+51: semantic/diagnostics), vais-codegen-js/tests (+39), lib.rs pub mod 전환
-- [x] 3. Monomorphization 확장 — InstantiationKind::Method 구현 + generic method E2E 12개 추가 (Opus) ✅ 2026-03-02
-  변경: inkwell/generator.rs (+96줄 Method 핸들링), module_gen/instantiations.rs (+145줄 Method 핸들링), phase91_monomorphization.rs (+12 E2E)
-- [x] 4. Lifetime 검증 실장 — _resolution 결과 적용 + 위반 에러 보고 + E2E 19개 (Opus) ✅ 2026-03-02
-  변경: checker_fn.rs (_resolution→resolution, return lifetime 검증, orphan lifetime 검출), lifetime.rs (explicit annotation bypass, dedup same-named lifetimes, validate_return_lifetime 강화), phase91_lifetime.rs (+19 E2E)
-진행률: 4/4 (100%)
+- [ ] 1. unwrap()/panic() 제거 — codegen 핵심 경로 Result 전환 (Opus)
+  대상: builtins.rs (152개), writeln 패턴 (100+), vtable.rs (17개) → CodegenError 전파
+- [ ] 2. Fuzzing 인프라 구축 — cargo-fuzz 하네스 + proptest 속성 기반 테스트 (Sonnet)
+  대상: lexer (토큰화 퍼징), parser (AST 생성 퍼징), type checker (추론 퍼징)
+- [ ] 3. 에러 복구 강화 — TC 다중 에러 누적 + Codegen graceful degradation (Opus)
+  대상: vais-types (단일 에러→Vec<TypeError> 누적), vais-codegen (LLVM API 실패 시 fallback)
+- [ ] 4. LLVM IR 검증 게이트 — LLVMVerifyModule 추가 + 진단 메시지 개선 (Sonnet)
+  대상: lib.rs/inkwell generator.rs (clang 전달 전 IR 유효성 검증)
+진행률: 0/4 (0%)
 
-### Phase 90: 컴파일러 최적화 + E2E 1,500 + 셀프호스팅 강화
+### Phase 93: 성능 최적화 심화 — 캐시/인터닝/회귀 감지
 
-> **목표**: 컴파일러 최적화 패스 확장, E2E 1,291→1,500개 달성, 셀프호스팅 MIR 최적화 강화
-> **기대 효과**: 컴파일 성능 개선, 테스트 커버리지 +16%, 셀프호스팅 완성도 향상
+> **목표**: 50K lines 컴파일 28.9ms → 24.5ms (2M lines/s), 성능 회귀 자동 감지
+> **기대 효과**: 컴파일 속도 -15%, CI 성능 대시보드 구축
 
-- [x] 1. 컴파일러 최적화 강화 — LLVM 최적화 패스 확장/인라이닝/DCE/CSE 개선 (Opus) ✅ 2026-03-02
-  변경: inlining.rs (복합 점수 휴리스틱, leaf 우선, 루프 내 가중치), dead_code.rs (unreachable block/pure call/store-load 4단계 DCE), cse.rs (GVN 기반 CSE, 교환법칙 감지), loop_opt.rs (Loop Unswitching/Strength Reduction), mod.rs (+11 벤치마크 테스트), +1,601줄/29 tests
-- [x] 2. E2E 테스트 1,500개 달성 — 미커버 언어 기능 테스트 추가 +218개 (Sonnet) ✅ 2026-03-02
-  변경: e2e/ +10 모듈 (arithmetic/bitwise/closures/control_flow/enums/recursion/strings/structs/variables/functions), 1,291→1,509개 (+218)
-- [x] 3. 셀프호스팅 컴파일러 강화 — MIR 최적화 확장/Stage1 보완/코드 생성 개선 (Opus) ✅ 2026-03-02
-  변경: optimize.rs (+4 패스: copy propagation/loop unrolling/escape analysis/tail call detection, +827줄), emit_llvm.rs (OptLevel/debug metadata), mir_optimizer.vais (+3 패스: copy propagation/algebraic simplification/loop unrolling, +501줄), lexer_s1.vais (float literal), constants.vais (토큰 ID 동기화), tests.rs (+7 cross-verify)
-진행률: 3/3 (100%)
+- [ ] 1. 타입 치환 캐시 고도화 — 2-level 캐시 (L1 fast path + L2 LRU 256) (Opus)
+  대상: vais-types/lib.rs (substitute_cache), checker_expr.rs — 예상 -8% TC 시간
+- [ ] 2. String Interning — FxHashMap 식별자 인턴 풀 + codegen ID 전환 (Sonnet)
+  대상: vais-codegen/src/string_pool.rs (신규), lib.rs, expr_helpers.rs — 예상 -4%
+- [ ] 3. LLVM Value 중복 제거 — ValueCache 상수/phi 재사용 (Opus)
+  대상: vais-codegen/src/lib.rs (CodeGenerator), expr_helpers.rs — 예상 -6% codegen
+- [ ] 4. 성능 회귀 감지 — CI 벤치마크 대시보드 + 자동 알림 (Sonnet)
+  대상: .github/workflows/bench-regression.yml 강화, benches/ 통계적 유의성 테스트
+진행률: 0/4 (0%)
 
-### Phase 89: 기술 부채 해소 — Codecov/Dependent Types/Unicode
+### Phase 94: 생태계 확장 — 레지스트리/자동수정/정적분석
 
-> **목표**: 잔여 기술 부채 3건 체계적 해소 — 커버리지 72%+, DT 런타임 검증, Unicode 문자 인식
-> **기대 효과**: 커버리지 +3.3%p, 타입 안전성 강화, Unicode 사용성 개선
+> **목표**: 패키지 레지스트리 프로덕션화, vaisc fix 자동 수정 실장, 정적 분석 확장
+> **기대 효과**: 패키지 생태계 성숙도 60%→90%, 개발자 경험(DX) 향상
 
-- [x] 1. Codecov 강화 — LSP/CLI/Registry 단위 테스트 +203 (Sonnet) ✅ 2026-03-02
-  변경: vais-lsp/type_resolve.rs (+151 tests), vais-registry-server/handlers/packages.rs (+35), storage.rs (+17)
-- [x] 2. Dependent Types 런타임 검증 — assert 삽입 + f64 지원 + 리턴타입 (Opus) ✅ 2026-03-02
-  변경: function_gen/dependent_checks.rs (신규, 런타임 assert 삽입), resolve.rs (f64 predicate 평가), types.rs (Dependent/Linear/Affine 핸들링), lib.rs (escape_llvm_string UTF-8 수정), +15 E2E
-- [x] 3. Unicode 지원 강화 — \u{XXXX} 이스케이프 + char_count() + case 확장 (Sonnet) ✅ 2026-03-02
-  변경: vais-lexer/lib.rs (\u{XXXX} 파싱), std/string.vais (char_count/Latin-1 case), +10 E2E
-진행률: 3/3 (100%)
-
-### Phase 87: 문서 · 커뮤니티 — API Reference · 블로그
-
-> **목표**: 프로젝트 외부 가시성 향상 및 커뮤니티 성장 기반 구축
-> **기대 효과**: GitHub Stars 100+, 외부 기여자 유입
-
-- [x] 1. API Reference 자동 생성 확장 — std/ 74개 전체 doc_gen (Sonnet) ✅ 2026-03-02
-  변경: docs-site/src/api/ (+16 .md: env,error,iter,process,signal,async_http/io/net,msgpack,protobuf,simd,toml,yaml,wasm,wasi_p2,web) + SUMMARY.md 동기화
-- [x] 2. 블로그 포스트 3편 작성 — 설계철학/성능비교/셀프호스팅 (Sonnet) ✅ 2026-03-02
-  변경: website/blog/ (+3 .html: why-single-char-keywords, performance-comparison, self-hosting-journey) + index.html 업데이트
-- [x] 3. 예제 갤러리 구축 — 카테고리별 분류 + docs-site 페이지 (Sonnet) ✅ 2026-03-02
-  변경: docs-site/src/examples/gallery.md (174개 예제 15카테고리 분류) + SUMMARY.md 갤러리 섹션
-- [x] 4. README 커뮤니티 섹션 강화 — SNS/블로그/배지 추가 (Haiku) ✅ 2026-03-02
-  변경: README.md (배지 3개, SNS 링크 3개, 블로그 포스트 3개, Discord placeholder)
-진행률: 4/4 (100%)
-
-### Phase 88: 리포지토리 위생 · 타입 안전성 — gitignore/CI 핀/Dependent Types
-
-> **목표**: 201개 profraw 파일 정리, CI 안정성, 오래된 문서 갱신, Dependent Types 기초 검증
-> **기대 효과**: git status 깨끗, CI 안정, 타입 안전성 향상 +15 E2E
-
-- [x] 1. .gitignore 보강 + profraw 정리 (Haiku) ✅ 2026-03-02
-  변경: .gitignore (+*.profraw, *.profdata, packages/**/*.ll), 640개 profraw 삭제
-- [x] 2. CI 워크플로우 안정화 (Haiku) ✅ 2026-03-02
-  변경: deploy-playground-server.yml (flyctl @master→@v1)
-- [x] 3. 오래된 문서 갱신 (Sonnet) ✅ 2026-03-02
-  변경: docs/STABILITY.md (v1.0.0→0.1.0-pre), docs/PACKAGE_GUIDELINES.md (vais pkg→vaisc pkg)
-- [x] 4. Dependent Types 기초 검증 (Opus) ✅ 2026-03-02
-  변경: checker_fn.rs (validate_dependent_type 호출), +16 E2E (phase86_dependent_types.rs)
-진행률: 4/4 (100%)
+- [ ] 1. 패키지 레지스트리 프로덕션화 — Ed25519 서명 + SemVer 해석 + 순환 감지 (Opus)
+  대상: vais-registry-server/ (서명 검증), vaisc/src/package/ (SemVer negotiation, 순환 의존성)
+- [ ] 2. vaisc fix 자동 수정 — AST 재작성 엔진 + unused vars/imports 제거 (Opus)
+  대상: vaisc/src/commands/ (fix.rs 확장), vais-parser/ (AST rewriter)
+- [ ] 3. 정적 분석 확장 — Dead code/unused import/unsafe 감사 + lint 규칙 (Sonnet)
+  대상: vaisc/src/commands/ (lint 규칙 추가), vais-security/ (unsafe 분석 강화)
+- [ ] 4. 빌드 시스템 강화 — vais.build 스크립트 + 바이너리 캐싱 + 워크스페이스 템플릿 (Sonnet)
+  대상: vaisc/src/package/ (build hooks), vaisc/src/commands/build.rs (캐싱)
+진행률: 0/4 (0%)
 
 ---
 

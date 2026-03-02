@@ -3,9 +3,11 @@ export const examples = {
   'hello-world': {
     name: 'Hello World',
     description: 'Simple Hello World program',
-    code: `# Hello World example using puts
-F main() {
+    code: `# Hello World example
+F main() -> i64 {
     puts("Hello, Vais!")
+    puts("Welcome to Vais — an AI-optimized systems language")
+    0
 }`
   },
 
@@ -299,17 +301,18 @@ F main() -> i64 {
 
   'string-interpolation': {
     name: 'String Interpolation',
-    description: 'Embed expressions in strings with ~{expr}',
+    description: 'Embed expressions in strings with {expr}',
     code: `# String interpolation example
 F main() -> i64 {
     name := "Vais"
     version := 1
 
     # Variable interpolation
-    puts("Hello, ~{name}!")
+    puts("Hello, {name}!")
 
     # Expression interpolation
-    puts("1 + 2 = ~{1 + 2}")
+    puts("Version: {version}")
+    puts("1 + 2 = {1 + 2}")
 
     0
 }`
@@ -353,20 +356,23 @@ F main() -> i64 {
   },
 
   'destructuring': {
-    name: 'Destructuring & Swap',
-    description: 'Tuple destructuring and swap builtin',
-    code: `# Tuple destructuring and swap builtin
+    name: 'Destructuring',
+    description: 'Tuple destructuring and multi-value returns',
+    code: `# Tuple destructuring
 F get_pair() -> (i64, i64) = (10, 20)
+F get_triple() -> (i64, i64, i64) = (1, 2, 3)
 
 F main() -> i64 {
-    # Destructure tuple
+    # Destructure pair
     (x, y) := get_pair()
+    puts("Pair: ({x}, {y})")
 
-    # swap builtin swaps array elements
-    arr := [10, 20, 30]
-    swap(arr, 0, 2)    # arr = [30, 20, 10]
+    # Destructure triple
+    (a, b, c) := get_triple()
+    puts("Triple: ({a}, {b}, {c})")
 
-    0
+    # x=10, y=20, a=1, b=2, c=3 -> sum=36
+    x + y + a + b + c
 }`
   },
 
@@ -398,27 +404,39 @@ F main() -> i64 = 0`
   },
 
   'slice-types': {
-    name: 'Slice Types',
-    description: 'Array slices with fat pointers',
-    code: `# Slice types: &[T] and &mut [T]
-F sum(data: &[i64]) -> i64 {
+    name: 'Arrays & Pointers',
+    description: 'Array operations with pointer passing',
+    code: `# Array operations with pointer passing
+F sum(arr: *i64, len: i64) -> i64 {
     total := mut 0
     i := mut 0
-    L i < data.len() {
-        total = total + data[i]
+    L i < len {
+        total = total + arr[i]
         i = i + 1
     }
-    R total
+    total
+}
+
+F find_max(arr: *i64, len: i64) -> i64 {
+    max := mut arr[0]
+    i := mut 1
+    L i < len {
+        I arr[i] > max { max = arr[i] }
+        i = i + 1
+    }
+    max
 }
 
 F main() -> i64 {
-    arr := [10, 20, 30, 40, 50]
-    slice := arr[1..4]     # &[i64] — [20, 30, 40]
+    arr: *i64 = [10, 20, 30, 40, 50]
 
-    result := sum(slice)   # 90
-    len := slice.len()     # 3
+    total := sum(arr, 5)        # 150
+    max := find_max(arr, 5)     # 50
 
-    result
+    puts("Sum: {total}")
+    puts("Max: {max}")
+
+    total + max     # 200
 }`
   },
 
@@ -463,65 +481,84 @@ F main() -> i64 {
   },
 
   'async-await': {
-    name: 'Async/Await (compile only)',
-    description: 'Asynchronous programming (requires async runtime)',
-    code: `# Async functions with A keyword
-A F fetch_data(id: i64) -> i64 {
-    # Simulate async work
-    id * 10
+    name: 'Async/Await (syntax preview)',
+    description: 'Asynchronous programming syntax — requires async runtime (compile-only)',
+    code: `# Async functions with A keyword (syntax preview)
+# Note: async codegen requires runtime support
+# This example shows the syntax for future use
+
+# A F fetch_data(id: i64) -> i64 {
+#     id * 10
+# }
+#
+# A F process() -> i64 {
+#     a := Y fetch_data(1)    # Y = await
+#     b := Y fetch_data(2)
+#     a + b
+# }
+
+# Synchronous equivalent:
+F fetch_data(id: i64) -> i64 = id * 10
+
+F process() -> i64 {
+    a := fetch_data(1)
+    b := fetch_data(2)
+    a + b
 }
 
-A F process() -> i64 {
-    # Y keyword for await
-    a := Y fetch_data(1)    # 10
-    b := Y fetch_data(2)    # 20
-    a + b                   # 30
-}
-
-A F main() -> i64 {
-    result := Y process()
+F main() -> i64 {
+    result := process()
+    puts("Result: {result}")    # 30
     result
 }`
   },
 
   'ownership': {
-    name: 'Ownership',
-    description: 'Move semantics and borrowing',
-    code: `# Ownership and borrowing (--strict-borrow)
-F read_only(data: &Vec<i64>) -> i64 {
-    data[0]
-}
+    name: 'Ownership (syntax preview)',
+    description: 'Move semantics — Vais tracks ownership to prevent use-after-move',
+    code: `# Ownership: Vais prevents use-after-move errors
+# Move semantics are always active
 
-F modify(data: &mut Vec<i64>) {
-    data.push(42)
-}
+F double(x: i64) -> i64 = x * 2
 
 F main() -> i64 {
-    items := mut Vec::new()
-    items.push(1)
-    items.push(2)
+    # Immutable binding
+    a := 42
+    result := double(a)
+    puts("Result: {result}")
 
-    # Immutable borrow
-    first := read_only(&items)
+    # Mutable variables
+    counter := mut 0
+    L counter < 5 {
+        counter = counter + 1
+    }
+    puts("Counter: {counter}")
 
-    # Mutable borrow
-    modify(&mut items)
+    # Ownership ensures memory safety
+    # Variables are moved when passed by value
+    # Use mut for variables that need reassignment
 
-    items.len()
+    result + counter    # 89
 }`
   },
 
   'wasm-interop': {
-    name: 'WASM Interop',
-    description: 'Import JS functions and export Vais functions',
-    code: `# WASM Import/Export example
-#[wasm_import("env", "console_log")]
-N F console_log(ptr: i64, len: i64) -> i64
+    name: 'WASM Interop (syntax preview)',
+    description: 'WASM import/export attributes — use --target wasm32 to compile',
+    code: `# WASM export example (syntax preview)
+# Compile with: vaisc --target wasm32-unknown-unknown file.vais
+#
+# Import syntax:
+#   #[wasm_import("env", "log")]
+#   N F log(ptr: i64, len: i64) -> i64
+#
+# Export syntax:
+#   #[wasm_export("add")]
+#   F add(a: i64, b: i64) -> i64 = a + b
 
-#[wasm_export("add")]
+# These functions can be exported to WASM
 F add(a: i64, b: i64) -> i64 = a + b
 
-#[wasm_export("fibonacci")]
 F fib(n: i64) -> i64 {
     I n <= 1 { n }
     E { @(n - 1) + @(n - 2) }
@@ -529,30 +566,36 @@ F fib(n: i64) -> i64 {
 
 F main() -> i64 {
     result := add(10, 20)
+    f := fib(10)
+    puts("add(10,20) = {result}")
+    puts("fib(10) = {f}")
     0
 }`
   },
 
   'lambda-capture': {
-    name: 'Lambda Capture',
-    description: 'Closure capture modes: ByValue, Move, ByRef',
-    code: `# Lambda capture modes
-F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+    name: 'Lambda & Closures',
+    description: 'Lambda expressions with type-annotated parameters',
+    code: `# Lambda expressions
+F square(x: i64) -> i64 = x * x
 
 F main() -> i64 {
-    # Basic lambda (ByValue capture)
-    multiplier := 3
-    triple := |x: i64| x * multiplier
+    # Lambda with type annotation
+    double := |x: i64| x * 2
+    add_ten := |x: i64| x + 10
 
-    result := apply(triple, 10)    # 30
+    # Call lambdas directly
+    a := double(5)         # 10
+    b := add_ten(a)        # 20
 
-    # Move capture — ownership transfer
-    data := 100
-    consumer := move |x: i64| x + data
+    # Combine with regular functions
+    c := square(b)         # 400
 
-    result2 := consumer(5)    # 105
+    puts("double(5) = {a}")
+    puts("add_ten(10) = {b}")
+    puts("square(20) = {c}")
 
-    0
+    c    # 400
 }`
   },
 
@@ -604,130 +647,110 @@ F main() -> i64 {
   },
 
   'result-option': {
-    name: 'Result & Option',
-    description: 'Error handling with Result and Option types',
-    code: `# Result and Option pattern matching
-E Option<T> {
-    Some(T),
-    None
-}
+    name: 'Result Type',
+    description: 'Error handling with Result type and pattern matching',
+    code: `# Result type for error handling
+E Result { Ok(i64), Err(i64) }
 
-E Result<T, E> {
-    Ok(T),
-    Err(E)
-}
-
-F find_value(key: i64) -> Option<i64> {
-    I key == 1 { Some(100) }
-    E I key == 2 { Some(200) }
-    E { None }
-}
-
-F divide(a: i64, b: i64) -> Result<i64, str> {
-    I b == 0 { Err("division by zero") }
-    E { Ok(a / b) }
+F safe_divide(a: i64, b: i64) -> Result {
+    I b == 0 { R Err(-1) }
+    Ok(a / b)
 }
 
 F main() -> i64 {
-    # Pattern match on Option
-    M find_value(1) {
-        Some(v) => {
-            puts("Found:")
-            print_i64(v)
-        },
-        None => puts("Not found")
-    }
-
-    # Pattern match on Result
-    M divide(10, 2) {
+    # Match on successful division
+    r1 := safe_divide(10, 2)
+    v1 := M r1 {
         Ok(v) => {
-            puts("Result:")
-            print_i64(v)
+            puts("Division OK")
+            v
         },
-        Err(msg) => puts(msg)
+        Err(e) => {
+            puts("Division failed")
+            e
+        }
     }
 
-    0
+    # Match on division by zero
+    r2 := safe_divide(10, 0)
+    v2 := M r2 {
+        Ok(v) => v,
+        Err(e) => {
+            puts("Error: divide by zero")
+            e
+        }
+    }
+
+    puts("v1 = {v1}")     # 5
+    puts("v2 = {v2}")     # -1
+    v1 + v2               # 4
 }`
   },
 
   'try-operator': {
-    name: 'Try Operator (?)',
-    description: 'Propagate errors with the ? operator',
-    code: `# Try operator (?) for error propagation
-E Result<T, E> {
-    Ok(T),
-    Err(E)
+    name: 'Try Operator (syntax preview)',
+    description: 'Propagate errors with the ? operator — syntax preview',
+    code: `# Try operator (?) for error propagation (syntax preview)
+# The ? operator unwraps Ok or returns Err early
+#
+# F process(input: str) -> Result {
+#     n := parse_number(input)?    # early return Err
+#     result := validate(n)?       # early return Err
+#     Ok(result)
+# }
+
+# Manual error propagation (equivalent pattern):
+E Result { Ok(i64), Err(i64) }
+
+F validate(n: i64) -> Result {
+    I n < 0 { R Err(-1) }
+    Ok(n * 2)
 }
 
-F parse_number(s: str) -> Result<i64, str> {
-    I s == "42" { Ok(42) }
-    E I s == "0" { Ok(0) }
-    E { Err("parse error") }
-}
-
-F validate(n: i64) -> Result<i64, str> {
-    I n < 0 { Err("negative") }
-    E { Ok(n * 2) }
-}
-
-# ? operator unwraps Ok or returns Err early
-F process(input: str) -> Result<i64, str> {
-    n := parse_number(input)?
-    result := validate(n)?
-    Ok(result)
+F process(n: i64) -> Result {
+    r := validate(n)
+    M r {
+        Ok(v) => Ok(v + 1),
+        Err(e) => Err(e)
+    }
 }
 
 F main() -> i64 {
-    M process("42") {
-        Ok(v) => {
-            puts("Success:")
-            print_i64(v)    # 84
-        },
-        Err(e) => puts(e)
-    }
+    # Success path
+    r1 := process(5)
+    v1 := M r1 { Ok(v) => v, Err(e) => e }
+    puts("process(5) = {v1}")      # 11
 
-    M process("bad") {
-        Ok(v) => print_i64(v),
-        Err(e) => {
-            puts("Error:")
-            puts(e)         # "parse error"
-        }
-    }
+    # Error path
+    r2 := process(-3)
+    v2 := M r2 { Ok(v) => v, Err(e) => e }
+    puts("process(-3) = {v2}")     # -1
 
-    0
+    v1 + v2    # 10
 }`
   },
 
   'unwrap-operator': {
     name: 'Unwrap Operator (!)',
-    description: 'Unwrap values or panic with the ! operator',
+    description: 'Unwrap Ok values or panic with the ! operator',
     code: `# Unwrap operator (!) for assertive access
-E Option<T> {
-    Some(T),
-    None
+E Result { Ok(i64), Err(i64) }
+
+F get_config() -> Result {
+    Ok(42)
 }
 
-E Result<T, E> {
-    Ok(T),
-    Err(E)
-}
-
-F get_config() -> Option<i64> {
-    Some(42)
-}
-
-F compute() -> Result<i64, str> {
+F compute() -> Result {
     Ok(100)
 }
 
 F main() -> i64 {
-    # ! unwraps Some/Ok, panics on None/Err
+    # ! unwraps Ok, panics on Err
     config := get_config()!      # 42
     value := compute()!          # 100
 
-    print_i64(config)
-    print_i64(value)
+    puts("config = {config}")
+    puts("value = {value}")
 
     config + value    # 142
 }`
