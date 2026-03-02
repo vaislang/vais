@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (Phase 89 완료 — 기술 부채 해소: Codecov/DT Runtime/Unicode)
+> **최종 업데이트**: 2026-03-02 (Phase 90 완료 — 컴파일러 최적화/E2E 1,509/셀프호스팅 강화)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 7,100+ (통합 2,700+, 단위 3,745+) |
+| 전체 테스트 | 7,400+ (통합 2,700+, 단위 3,900+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.6ms (812K lines/s) |
@@ -92,8 +92,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 항목 | 상태 |
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
-| 테스트 전체 통과 (7,100+) | ✅ |
-| E2E 1,291개 통과 (0 fail, 1 ignored) | ✅ |
+| 테스트 전체 통과 (7,400+) | ✅ |
+| E2E 1,509개 통과 (0 fail, 1 ignored) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -232,12 +232,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 87 | 문서 · 커뮤니티 | API Ref +16모듈, 블로그 3편, 예제 갤러리 15카테고리, README 강화 | 1,250 |
 | 88 | 리포지토리 위생 · 타입 안전성 | gitignore profraw/ll, CI 핀, 문서 갱신, Dependent Types 검증 +16 E2E | 1,266 |
 | 89 | 기술 부채 해소 | Codecov +203 tests, DT 런타임 assert/f64, Unicode \u{}/char_count | 1,291 |
+| 90 | 컴파일러 최적화 · E2E 1,500 · 셀프호스팅 | GVN-CSE/DCE 4단계/Loop Unswitch, +218 E2E, MIR 4패스 추가 | 1,509 |
 
 ---
 
 ## 📋 예정 작업
 
 모드: 자동진행
+
+### Phase 90: 컴파일러 최적화 + E2E 1,500 + 셀프호스팅 강화
+
+> **목표**: 컴파일러 최적화 패스 확장, E2E 1,291→1,500개 달성, 셀프호스팅 MIR 최적화 강화
+> **기대 효과**: 컴파일 성능 개선, 테스트 커버리지 +16%, 셀프호스팅 완성도 향상
+
+- [x] 1. 컴파일러 최적화 강화 — LLVM 최적화 패스 확장/인라이닝/DCE/CSE 개선 (Opus) ✅ 2026-03-02
+  변경: inlining.rs (복합 점수 휴리스틱, leaf 우선, 루프 내 가중치), dead_code.rs (unreachable block/pure call/store-load 4단계 DCE), cse.rs (GVN 기반 CSE, 교환법칙 감지), loop_opt.rs (Loop Unswitching/Strength Reduction), mod.rs (+11 벤치마크 테스트), +1,601줄/29 tests
+- [x] 2. E2E 테스트 1,500개 달성 — 미커버 언어 기능 테스트 추가 +218개 (Sonnet) ✅ 2026-03-02
+  변경: e2e/ +10 모듈 (arithmetic/bitwise/closures/control_flow/enums/recursion/strings/structs/variables/functions), 1,291→1,509개 (+218)
+- [x] 3. 셀프호스팅 컴파일러 강화 — MIR 최적화 확장/Stage1 보완/코드 생성 개선 (Opus) ✅ 2026-03-02
+  변경: optimize.rs (+4 패스: copy propagation/loop unrolling/escape analysis/tail call detection, +827줄), emit_llvm.rs (OptLevel/debug metadata), mir_optimizer.vais (+3 패스: copy propagation/algebraic simplification/loop unrolling, +501줄), lexer_s1.vais (float literal), constants.vais (토큰 ID 동기화), tests.rs (+7 cross-verify)
+진행률: 3/3 (100%)
 
 ### Phase 89: 기술 부채 해소 — Codecov/Dependent Types/Unicode
 

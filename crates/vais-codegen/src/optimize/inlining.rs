@@ -2,6 +2,10 @@
 
 use std::collections::HashMap;
 
+/// Maximum inline cost threshold.
+/// Functions with a composite cost exceeding this value are never inlined.
+const MAX_INLINE_COST: i64 = 150;
+
 /// Parsed LLVM IR function for inlining
 #[derive(Debug, Clone)]
 struct InlinableFunction {
@@ -11,6 +15,7 @@ struct InlinableFunction {
     body: Vec<String>,
     has_side_effects: bool,
     has_external_calls: bool,
+    is_leaf: bool,
 }
 
 /// Count how many times each function is called in the IR
@@ -32,11 +37,83 @@ fn count_call_sites(ir: &str) -> HashMap<String, usize> {
     counts
 }
 
+/// Detect which call sites occur inside loop bodies.
+/// Returns a set of function names (with @) that are called inside a loop.
+fn detect_loop_call_sites(ir: &str) -> HashMap<String, usize> {
+    let mut loop_calls: HashMap<String, usize> = HashMap::new();
+    let mut loop_depth: usize = 0;
+
+    for line in ir.lines() {
+        let trimmed = line.trim();
+
+        // Detect loop header labels
+        if trimmed.ends_with(':')
+            && (trimmed.contains("loop.start") || trimmed.contains("while"))
+        {
+            loop_depth += 1;
+            continue;
+        }
+
+        // Detect loop end labels
+        if trimmed.ends_with(':') && trimmed.contains("loop.end") {
+            loop_depth = loop_depth.saturating_sub(1);
+            continue;
+        }
+
+        // Track calls inside loops
+        if loop_depth > 0 && trimmed.contains("call ") {
+            if let Some(at_pos) = trimmed.find("@") {
+                let after_at = &trimmed[at_pos..];
+                if let Some(paren_pos) = after_at.find('(') {
+                    let func_name = &after_at[..paren_pos];
+                    *loop_calls.entry(func_name.to_string()).or_insert(0) += loop_depth;
+                }
+            }
+        }
+    }
+
+    loop_calls
+}
+
+/// Compute composite inline cost for a function.
+///
+/// The cost balances code size increase against potential speedup from inlining.
+/// Lower cost = better candidate for inlining.
+///
+/// Formula:
+///   cost = body_size * caller_count
+///   bonus = -20 if leaf function (no outgoing calls)
+///   bonus += -30 * loop_call_weight (called in loops => big benefit)
+///   Final: cost + bonus
+fn compute_inline_cost(
+    func: &InlinableFunction,
+    caller_count: usize,
+    loop_weight: usize,
+) -> i64 {
+    let body_size = func.body.len() as i64;
+    let callers = caller_count.max(1) as i64;
+
+    // Base cost: code size expansion per caller
+    let base_cost = body_size * callers;
+
+    // Leaf function bonus: no outgoing calls means the inlined code
+    // won't have further call overhead
+    let leaf_bonus: i64 = if func.is_leaf { -20 } else { 0 };
+
+    // Loop call bonus: inlining inside loops eliminates per-iteration call overhead
+    let loop_bonus: i64 = -(loop_weight.min(5) as i64) * 30;
+
+    // Small function bonus: very small functions almost always benefit from inlining
+    let size_bonus: i64 = if body_size <= 5 { -40 } else if body_size <= 10 { -20 } else { 0 };
+
+    base_cost + leaf_bonus + loop_bonus + size_bonus
+}
+
 /// Aggressive inlining for small functions
 ///
-/// Prioritizes functions by call frequency (hot functions first) and supports
-/// larger function bodies (up to 50 instructions). Functions called more
-/// frequently are inlined first for maximum benefit.
+/// Uses composite cost heuristic: caller_count * code_size with bonuses
+/// for leaf functions and loop call sites. Functions are prioritized by
+/// cost (lowest cost first) and filtered by MAX_INLINE_COST threshold.
 pub(crate) fn aggressive_inline(ir: &str) -> String {
     // Parse all small functions that are candidates for inlining
     let mut inline_candidates = find_inline_candidates(ir);
@@ -45,13 +122,34 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
         return ir.to_string();
     }
 
-    // Count call sites and sort candidates by frequency (most called first)
+    // Count call sites and loop call sites
     let call_counts = count_call_sites(ir);
+    let loop_calls = detect_loop_call_sites(ir);
+
+    // Sort candidates by composite cost (lowest cost first = best candidates)
     inline_candidates.sort_by(|a, b| {
-        let count_a = call_counts.get(&a.name).copied().unwrap_or(0);
-        let count_b = call_counts.get(&b.name).copied().unwrap_or(0);
-        // Primary: higher call count first; Secondary: smaller body first
-        count_b.cmp(&count_a).then(a.body.len().cmp(&b.body.len()))
+        let cost_a = compute_inline_cost(
+            a,
+            call_counts.get(&a.name).copied().unwrap_or(0),
+            loop_calls.get(&a.name).copied().unwrap_or(0),
+        );
+        let cost_b = compute_inline_cost(
+            b,
+            call_counts.get(&b.name).copied().unwrap_or(0),
+            loop_calls.get(&b.name).copied().unwrap_or(0),
+        );
+        // Primary: lower cost first; Secondary: smaller body first
+        cost_a.cmp(&cost_b).then(a.body.len().cmp(&b.body.len()))
+    });
+
+    // Filter candidates by MAX_INLINE_COST threshold
+    inline_candidates.retain(|func| {
+        let cost = compute_inline_cost(
+            func,
+            call_counts.get(&func.name).copied().unwrap_or(0),
+            loop_calls.get(&func.name).copied().unwrap_or(0),
+        );
+        cost <= MAX_INLINE_COST
     });
 
     // Inline function calls
@@ -67,9 +165,10 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
 
 /// Find functions that are good candidates for inlining
 ///
-/// Uses a tiered threshold:
-/// - Functions ≤ 10 instructions: always inline (even with internal side effects like stores)
-/// - Functions ≤ 50 instructions: inline if no external call side effects
+/// Uses a tiered threshold with leaf function preference:
+/// - Leaf functions (no outgoing calls): always considered up to body_size 50
+/// - Functions <= 10 instructions: always inline (even with internal side effects like stores)
+/// - Functions <= 50 instructions: inline if no external call side effects
 /// - Functions > 50 instructions: never inline at text level (rely on LLVM's inliner)
 fn find_inline_candidates(ir: &str) -> Vec<InlinableFunction> {
     let mut candidates = Vec::new();
@@ -98,10 +197,11 @@ fn find_inline_candidates(ir: &str) -> Vec<InlinableFunction> {
                     continue;
                 }
 
-                // Tiered inlining:
-                // - Small functions (≤10 instructions): inline even with store side effects
-                // - Medium functions (≤50): inline only if no side effects
-                let eligible = if body_size <= small_threshold {
+                // Tiered inlining with leaf function preference:
+                let eligible = if func.is_leaf {
+                    // Leaf functions: inline up to large_threshold (no outgoing call overhead)
+                    body_size <= large_threshold
+                } else if body_size <= small_threshold {
                     // Small functions: allow store side effects but not external calls
                     !func.has_external_calls
                 } else if body_size <= large_threshold {
@@ -156,6 +256,7 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
     let mut body = Vec::new();
     let mut has_side_effects = false;
     let mut has_external_calls = false;
+    let mut is_leaf = true; // assume leaf until we find a call
 
     for line in lines.iter().skip(start_idx + 1) {
         let trimmed = line.trim();
@@ -179,6 +280,7 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
         if trimmed.contains("call ") {
             has_side_effects = true;
             has_external_calls = true;
+            is_leaf = false;
         }
 
         body.push(trimmed.to_string());
@@ -191,6 +293,7 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
         body,
         has_side_effects,
         has_external_calls,
+        is_leaf,
     })
 }
 
@@ -449,6 +552,104 @@ entry:
             result.contains("INLINE") || !result.contains("call i64 @square"),
             "Expected inlining to occur or call to be removed. Result:\n{}",
             result
+        );
+    }
+
+    #[test]
+    fn test_leaf_function_detection() {
+        let ir = r#"define i64 @leaf(i64 %x) {
+entry:
+  %0 = mul i64 %x, %x
+  %1 = add i64 %0, 1
+  ret i64 %1
+}
+
+define i64 @non_leaf(i64 %x) {
+entry:
+  %0 = call i64 @leaf(i64 %x)
+  ret i64 %0
+}
+"#;
+        let candidates = find_inline_candidates(ir);
+        let leaf_func = candidates.iter().find(|f| f.name == "@leaf");
+        assert!(leaf_func.is_some(), "leaf should be a candidate");
+        assert!(leaf_func.unwrap().is_leaf, "leaf should be detected as leaf function");
+    }
+
+    #[test]
+    fn test_loop_call_detection() {
+        let ir = r#"define i64 @helper(i64 %x) {
+entry:
+  %0 = add i64 %x, 1
+  ret i64 %0
+}
+
+define i64 @main() {
+entry:
+  br label %loop.start.0
+loop.start.0:
+  %i = phi i64 [0, %entry], [%next, %loop.body.0]
+  %cond = icmp slt i64 %i, 10
+  br i1 %cond, label %loop.body.0, label %loop.end.0
+loop.body.0:
+  %r = call i64 @helper(i64 %i)
+  %next = add i64 %i, 1
+  br label %loop.start.0
+loop.end.0:
+  ret i64 %i
+}
+"#;
+        let loop_calls = detect_loop_call_sites(ir);
+        assert!(
+            loop_calls.get("@helper").copied().unwrap_or(0) > 0,
+            "helper should be detected as called inside a loop"
+        );
+    }
+
+    #[test]
+    fn test_inline_cost_computation() {
+        let small_leaf = InlinableFunction {
+            name: String::from("@small_leaf"),
+            params: vec![],
+            return_type: String::from("i64"),
+            body: vec![String::from("%0 = add i64 1, 2")],
+            has_side_effects: false,
+            has_external_calls: false,
+            is_leaf: true,
+        };
+
+        // Small leaf called once: very low cost
+        let cost = compute_inline_cost(&small_leaf, 1, 0);
+        assert!(cost < 0, "Small leaf function should have negative cost (bonus), got {}", cost);
+
+        // Same function called in a loop: even lower cost
+        let loop_cost = compute_inline_cost(&small_leaf, 1, 1);
+        assert!(
+            loop_cost < cost,
+            "Loop call should reduce cost further: loop_cost={}, normal={}",
+            loop_cost, cost
+        );
+    }
+
+    #[test]
+    fn test_max_inline_cost_filtering() {
+        // Large function should be filtered out by MAX_INLINE_COST
+        let large_func = InlinableFunction {
+            name: String::from("@large"),
+            params: vec![],
+            return_type: String::from("i64"),
+            body: (0..50).map(|i| format!("%{} = add i64 0, {}", i, i)).collect(),
+            has_side_effects: false,
+            has_external_calls: false,
+            is_leaf: true,
+        };
+
+        // Called 5 times: cost = 50 * 5 - 20 (leaf) = 230 > MAX_INLINE_COST
+        let cost = compute_inline_cost(&large_func, 5, 0);
+        assert!(
+            cost > MAX_INLINE_COST,
+            "Large function with many callers should exceed MAX_INLINE_COST: cost={}",
+            cost
         );
     }
 }

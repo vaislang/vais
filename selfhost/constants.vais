@@ -30,6 +30,22 @@ F TOK_KW_O() -> i64 = 21       # union
 F TOK_KW_N() -> i64 = 22       # extern
 F TOK_KW_G() -> i64 = 23       # global
 F TOK_KW_Y() -> i64 = 24       # await (also "await" keyword)
+F TOK_KW_SELF() -> i64 = 25    # self
+F TOK_KW_SELF_UPPER() -> i64 = 26 # Self
+F TOK_KW_AS() -> i64 = 27      # as
+F TOK_KW_CONST() -> i64 = 28   # const
+F TOK_KW_SPAWN() -> i64 = 29   # spawn
+F TOK_KW_MACRO() -> i64 = 30   # macro
+
+# Additional keywords (121-140)
+F TOK_KW_COMPTIME() -> i64 = 121  # comptime
+F TOK_KW_DYN() -> i64 = 122       # dyn
+F TOK_KW_LINEAR() -> i64 = 123    # linear
+F TOK_KW_AFFINE() -> i64 = 124    # affine
+F TOK_KW_MOVE() -> i64 = 125      # move
+F TOK_KW_CONSUME() -> i64 = 126   # consume
+F TOK_KW_LAZY() -> i64 = 127      # lazy
+F TOK_KW_FORCE() -> i64 = 128     # force
 
 # Type keyword tokens (31-50)
 F TOK_TY_I8() -> i64 = 31
@@ -105,6 +121,11 @@ F TOK_COLON_COLON() -> i64 = 109 # ::
 F TOK_QUESTION() -> i64 = 110  # ?
 F TOK_AT() -> i64 = 111        # @
 F TOK_HASH() -> i64 = 112      # #
+F TOK_PIPE_ARROW() -> i64 = 113  # |>
+F TOK_ELLIPSIS() -> i64 = 114    # ...
+F TOK_DOLLAR() -> i64 = 115      # $
+F TOK_HASH_BRACKET() -> i64 = 116 # #[
+F TOK_LIFETIME() -> i64 = 117    # 'a, 'static, etc.
 
 # Special tokens
 F TOK_EOF() -> i64 = 200
@@ -172,6 +193,11 @@ F BINOP_EQ() -> i64 = 10
 F BINOP_NEQ() -> i64 = 11
 F BINOP_AND() -> i64 = 12
 F BINOP_OR() -> i64 = 13
+F BINOP_BIT_AND() -> i64 = 14
+F BINOP_BIT_OR() -> i64 = 15
+F BINOP_BIT_XOR() -> i64 = 16
+F BINOP_SHL() -> i64 = 17
+F BINOP_SHR() -> i64 = 18
 
 # Unary operators
 F UNOP_NEG() -> i64 = 1

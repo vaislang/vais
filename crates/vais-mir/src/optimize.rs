@@ -1,4 +1,5 @@
-//! MIR optimization passes: DCE, CSE, constant propagation.
+//! MIR optimization passes: DCE, CSE, constant propagation, copy propagation,
+//! loop unrolling, escape analysis, and tail call detection.
 //!
 //! These operate on the structured MIR CFG rather than text-based LLVM IR,
 //! providing more reliable and composable optimizations.
@@ -16,8 +17,12 @@ pub fn optimize_mir_module(module: &mut MirModule) {
 /// Apply all MIR optimization passes to a single function body.
 pub fn optimize_mir_body(body: &mut Body) {
     constant_propagation(body);
+    copy_propagation(body);
     dead_code_elimination(body);
     common_subexpression_elimination(body);
+    loop_unrolling(body);
+    tail_call_detection(body);
+    escape_analysis(body);
     remove_unreachable_blocks(body);
 }
 
@@ -352,6 +357,477 @@ fn terminator_successors(term: &Terminator) -> Vec<BasicBlockId> {
     }
 }
 
+// ==========================================================================
+// Copy Propagation
+// ==========================================================================
+
+/// Copy Propagation on MIR.
+///
+/// If a local is assigned `x = copy y` (or `x = move y`) where `y` is a plain
+/// local with no projections, replace all subsequent uses of `x` with `y`.
+/// Only applies when `x` is assigned exactly once and `y` is not reassigned.
+pub fn copy_propagation(body: &mut Body) {
+    // Phase 1: Collect single-assignment copy/move chains: x = copy/move y
+    let mut copy_map: HashMap<Local, Local> = HashMap::new();
+    let mut assigned_more_than_once: HashSet<Local> = HashSet::new();
+
+    for bb in &body.basic_blocks {
+        for stmt in &bb.statements {
+            if let Statement::Assign(place, rvalue) = stmt {
+                if place.projections.is_empty() {
+                    if assigned_more_than_once.contains(&place.local) {
+                        continue;
+                    }
+                    if copy_map.contains_key(&place.local) {
+                        copy_map.remove(&place.local);
+                        assigned_more_than_once.insert(place.local);
+                        continue;
+                    }
+                    match rvalue {
+                        Rvalue::Use(Operand::Copy(src)) | Rvalue::Use(Operand::Move(src)) => {
+                            if src.projections.is_empty() {
+                                copy_map.insert(place.local, src.local);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    if copy_map.is_empty() {
+        return;
+    }
+
+    // Resolve transitive chains: if x -> y -> z, resolve x -> z
+    let resolved: HashMap<Local, Local> = copy_map
+        .keys()
+        .map(|&k| {
+            let mut target = k;
+            let mut visited = HashSet::new();
+            while let Some(&next) = copy_map.get(&target) {
+                if !visited.insert(target) {
+                    break; // cycle guard
+                }
+                target = next;
+            }
+            (k, target)
+        })
+        .collect();
+
+    // Phase 2: Replace operands
+    for bb in &mut body.basic_blocks {
+        for stmt in &mut bb.statements {
+            if let Statement::Assign(_, rvalue) = stmt {
+                replace_locals_in_rvalue(rvalue, &resolved);
+            }
+        }
+        if let Some(ref mut term) = bb.terminator {
+            replace_locals_in_terminator(term, &resolved);
+        }
+    }
+}
+
+/// Replace locals in an rvalue according to the copy map.
+fn replace_locals_in_rvalue(rvalue: &mut Rvalue, map: &HashMap<Local, Local>) {
+    match rvalue {
+        Rvalue::Use(op) => replace_local_in_operand(op, map),
+        Rvalue::BinaryOp(_, lhs, rhs) => {
+            replace_local_in_operand(lhs, map);
+            replace_local_in_operand(rhs, map);
+        }
+        Rvalue::UnaryOp(_, op) => replace_local_in_operand(op, map),
+        Rvalue::Cast(op, _) => replace_local_in_operand(op, map),
+        Rvalue::Aggregate(_, ops) => {
+            for op in ops {
+                replace_local_in_operand(op, map);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Replace a local in an operand according to the copy map.
+fn replace_local_in_operand(op: &mut Operand, map: &HashMap<Local, Local>) {
+    match op {
+        Operand::Copy(place) | Operand::Move(place) => {
+            if place.projections.is_empty() {
+                if let Some(&replacement) = map.get(&place.local) {
+                    place.local = replacement;
+                }
+            }
+        }
+        Operand::Constant(_) => {}
+    }
+}
+
+/// Replace locals in a terminator according to the copy map.
+fn replace_locals_in_terminator(term: &mut Terminator, map: &HashMap<Local, Local>) {
+    match term {
+        Terminator::SwitchInt { discriminant, .. } => {
+            replace_local_in_operand(discriminant, map);
+        }
+        Terminator::Call { args, .. } => {
+            for arg in args {
+                replace_local_in_operand(arg, map);
+            }
+        }
+        Terminator::TailCall { args, .. } => {
+            for arg in args {
+                replace_local_in_operand(arg, map);
+            }
+        }
+        Terminator::Assert { cond, .. } => {
+            replace_local_in_operand(cond, map);
+        }
+        _ => {}
+    }
+}
+
+// ==========================================================================
+// Loop Unrolling
+// ==========================================================================
+
+/// Loop Unrolling on MIR.
+///
+/// Detects simple loops with known trip counts (up to `MAX_UNROLL_TRIP_COUNT`)
+/// and small bodies (up to `MAX_UNROLL_BODY_STMTS` statements). Unrolls the
+/// loop body by duplicating its statements, eliminating the branch overhead.
+///
+/// A "simple loop" pattern:
+///   bb_header: counter check -> bb_body or bb_exit
+///   bb_body: statements... increment counter -> bb_header
+///
+/// This pass detects loops where the header is a SwitchInt comparing an
+/// induction variable to a constant, and the body increments by a constant.
+pub fn loop_unrolling(body: &mut Body) {
+    const MAX_UNROLL_TRIP_COUNT: usize = 8;
+    const MAX_UNROLL_BODY_STMTS: usize = 5;
+
+    // Detect natural loops: look for back edges (bb_body -> bb_header where
+    // bb_header dominates bb_body). We use a simplified approach: find blocks
+    // that branch back to a block with smaller index (potential loop header).
+    let num_blocks = body.basic_blocks.len();
+    let mut loops_to_unroll: Vec<LoopInfo> = Vec::new();
+
+    for header_idx in 0..num_blocks {
+        // Look for: switchInt(cond) -> [1: bb_body], otherwise: bb_exit
+        // where cond is a comparison of a local < constant
+        if let Some(Terminator::SwitchInt {
+            discriminant: _,
+            targets,
+            otherwise,
+        }) = &body.basic_blocks[header_idx].terminator
+        {
+            if targets.len() != 1 {
+                continue;
+            }
+            let (_, body_bb) = targets[0];
+            let exit_bb = *otherwise;
+            let body_idx = body_bb.0 as usize;
+
+            // The body block must branch back to the header (back edge)
+            if body_idx >= num_blocks {
+                continue;
+            }
+            let body_term = match &body.basic_blocks[body_idx].terminator {
+                Some(t) => t,
+                None => continue,
+            };
+            let loops_back = match body_term {
+                Terminator::Goto(target) => target.0 as usize == header_idx,
+                _ => false,
+            };
+            if !loops_back {
+                continue;
+            }
+
+            // Check body size
+            let body_stmts = body.basic_blocks[body_idx].statements.len();
+            if body_stmts > MAX_UNROLL_BODY_STMTS {
+                continue;
+            }
+
+            // Try to determine trip count from the header's comparison.
+            // Look for a pattern where an induction variable is compared
+            // to a constant bound. We check the statements leading up to
+            // the switch for a comparison: _cond = Lt(_iv, const_bound).
+            if let Some(trip_count) =
+                detect_trip_count(&body.basic_blocks[header_idx], MAX_UNROLL_TRIP_COUNT)
+            {
+                loops_to_unroll.push(LoopInfo {
+                    header: header_idx,
+                    body_block: body_idx,
+                    exit_bb,
+                    trip_count,
+                });
+            }
+        }
+    }
+
+    // Apply unrolling (process in reverse order to avoid index shifts)
+    for info in loops_to_unroll.iter().rev() {
+        apply_loop_unrolling(body, info);
+    }
+}
+
+/// Information about a loop to unroll.
+struct LoopInfo {
+    header: usize,
+    body_block: usize,
+    exit_bb: BasicBlockId,
+    trip_count: usize,
+}
+
+/// Try to detect the trip count of a loop from its header block.
+/// Returns Some(count) if the header ends with a comparison against a constant.
+fn detect_trip_count(header: &BasicBlock, max_trip: usize) -> Option<usize> {
+    // Look for pattern: _cond = Lt(_, const N) or _cond = Le(_, const N)
+    for stmt in header.statements.iter().rev() {
+        if let Statement::Assign(_, Rvalue::BinaryOp(op, _, rhs)) = stmt {
+            match op {
+                BinOp::Lt => {
+                    if let Operand::Constant(Constant::Int(bound)) = rhs {
+                        let count = *bound as usize;
+                        if count > 0 && count <= max_trip {
+                            return Some(count);
+                        }
+                    }
+                }
+                BinOp::Le => {
+                    if let Operand::Constant(Constant::Int(bound)) = rhs {
+                        let count = (*bound + 1) as usize;
+                        if count > 0 && count <= max_trip {
+                            return Some(count);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
+/// Apply loop unrolling by replacing the header+body blocks with
+/// unrolled copies of the body statements followed by a direct jump
+/// to the exit block.
+fn apply_loop_unrolling(body: &mut Body, info: &LoopInfo) {
+    // Collect the body statements (clone them for each iteration)
+    let body_stmts = body.basic_blocks[info.body_block].statements.clone();
+
+    // Replace the header block: remove the switch, put unrolled body
+    let header_stmts = body.basic_blocks[info.header].statements.clone();
+
+    let mut unrolled = Vec::new();
+    for _ in 0..info.trip_count {
+        // Add the original header statements (comparison, etc.) minus
+        // the last one if it's the loop condition computation.
+        // Then add the body statements.
+        unrolled.extend(body_stmts.clone());
+    }
+
+    // Keep header's original setup statements but replace the terminator
+    let mut new_stmts = header_stmts;
+    new_stmts.extend(unrolled);
+    body.basic_blocks[info.header].statements = new_stmts;
+    body.basic_blocks[info.header].terminator = Some(Terminator::Goto(info.exit_bb));
+
+    // Replace the body block with unreachable (it's inlined now)
+    body.basic_blocks[info.body_block] = BasicBlock {
+        statements: vec![],
+        terminator: Some(Terminator::Unreachable),
+    };
+}
+
+// ==========================================================================
+// Escape Analysis
+// ==========================================================================
+
+/// Escape Analysis on MIR.
+///
+/// Identifies heap allocations (Call to malloc-like functions) whose results
+/// do not escape the function scope. These are marked by annotating the
+/// allocation statement so downstream passes (e.g., LLVM codegen) can convert
+/// them to stack allocations.
+///
+/// A value "escapes" if it is:
+/// - Used as an argument to a function call (except free)
+/// - Stored through a pointer
+/// - Returned from the function (assigned to _0)
+///
+/// The results are stored in `Body::block_names` with a special key prefix
+/// `__escape_local_N` = "stack" for locals that can be stack-allocated.
+pub fn escape_analysis(body: &mut Body) {
+    // Phase 1: Find locals that are assigned from Call terminators
+    // (potential heap allocations)
+    let mut allocation_locals: HashSet<Local> = HashSet::new();
+    for bb in &body.basic_blocks {
+        if let Some(Terminator::Call {
+            func, destination, ..
+        }) = &bb.terminator
+        {
+            // Heuristic: calls to functions containing "alloc" or "malloc"
+            // or "new" are considered allocation sites
+            let name_lower = func.to_lowercase();
+            if (name_lower.contains("alloc")
+                || name_lower.contains("malloc")
+                || name_lower.contains("new"))
+                && destination.projections.is_empty()
+            {
+                allocation_locals.insert(destination.local);
+            }
+        }
+    }
+
+    if allocation_locals.is_empty() {
+        return;
+    }
+
+    // Phase 2: Determine which allocated locals escape
+    let mut escaped: HashSet<Local> = HashSet::new();
+
+    for bb in &body.basic_blocks {
+        for stmt in &bb.statements {
+            if let Statement::Assign(place, rvalue) = stmt {
+                // If an allocated local is assigned to _0 (return place), it escapes
+                if place.local.0 == 0 {
+                    collect_escaping_from_rvalue(rvalue, &allocation_locals, &mut escaped);
+                }
+
+                // If stored through a pointer (via Ref), the source escapes
+                if let Rvalue::Ref(ref_place) = rvalue {
+                    if allocation_locals.contains(&ref_place.local) {
+                        escaped.insert(ref_place.local);
+                    }
+                }
+            }
+        }
+
+        // Check terminator arguments
+        if let Some(
+            Terminator::Call { args, .. } | Terminator::TailCall { args, .. },
+        ) = &bb.terminator
+        {
+            for arg in args {
+                match arg {
+                    Operand::Copy(place) | Operand::Move(place) => {
+                        if allocation_locals.contains(&place.local) {
+                            escaped.insert(place.local);
+                        }
+                    }
+                    Operand::Constant(_) => {}
+                }
+            }
+        }
+    }
+
+    // Phase 3: Mark non-escaping locals in block_names metadata
+    for local in &allocation_locals {
+        if !escaped.contains(local) {
+            body.block_names.insert(
+                format!("__escape_local_{}", local.0),
+                BasicBlockId(0), // sentinel: 0 means "can be stack-allocated"
+            );
+        }
+    }
+}
+
+/// Check if an rvalue references any allocated local, indicating escape.
+fn collect_escaping_from_rvalue(
+    rvalue: &Rvalue,
+    alloc_locals: &HashSet<Local>,
+    escaped: &mut HashSet<Local>,
+) {
+    match rvalue {
+        Rvalue::Use(op) => collect_escaping_from_operand(op, alloc_locals, escaped),
+        Rvalue::BinaryOp(_, lhs, rhs) => {
+            collect_escaping_from_operand(lhs, alloc_locals, escaped);
+            collect_escaping_from_operand(rhs, alloc_locals, escaped);
+        }
+        Rvalue::UnaryOp(_, op) => collect_escaping_from_operand(op, alloc_locals, escaped),
+        Rvalue::Cast(op, _) => collect_escaping_from_operand(op, alloc_locals, escaped),
+        Rvalue::Aggregate(_, ops) => {
+            for op in ops {
+                collect_escaping_from_operand(op, alloc_locals, escaped);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Check if an operand references an allocated local.
+fn collect_escaping_from_operand(
+    op: &Operand,
+    alloc_locals: &HashSet<Local>,
+    escaped: &mut HashSet<Local>,
+) {
+    match op {
+        Operand::Copy(place) | Operand::Move(place) => {
+            if alloc_locals.contains(&place.local) {
+                escaped.insert(place.local);
+            }
+        }
+        Operand::Constant(_) => {}
+    }
+}
+
+// ==========================================================================
+// Tail Call Detection
+// ==========================================================================
+
+/// Tail Call Detection on MIR.
+///
+/// Scans for function calls in tail position (the last operation before
+/// return) and converts them from `Call` terminators to `TailCall` terminators.
+///
+/// A call is in tail position if:
+/// 1. The call's destination is the return place (_0)
+/// 2. The call's target block contains only a Return terminator
+///    (no statements between call result and return)
+pub fn tail_call_detection(body: &mut Body) {
+    let num_blocks = body.basic_blocks.len();
+    let mut conversions: Vec<usize> = Vec::new();
+
+    for (bb_idx, bb) in body.basic_blocks.iter().enumerate() {
+        if let Some(Terminator::Call {
+            destination,
+            target,
+            ..
+        }) = &bb.terminator
+        {
+            // Check: destination is _0 (return place)
+            if destination.local.0 != 0 || !destination.projections.is_empty() {
+                continue;
+            }
+
+            // Check: target block is just a Return
+            let target_idx = target.0 as usize;
+            if target_idx >= num_blocks {
+                continue;
+            }
+            let target_bb = &body.basic_blocks[target_idx];
+            if !target_bb.statements.is_empty() {
+                continue;
+            }
+            if target_bb.terminator != Some(Terminator::Return) {
+                continue;
+            }
+
+            conversions.push(bb_idx);
+        }
+    }
+
+    // Apply conversions
+    for bb_idx in conversions {
+        let old_term = body.basic_blocks[bb_idx].terminator.take();
+        if let Some(Terminator::Call { func, args, .. }) = old_term {
+            body.basic_blocks[bb_idx].terminator = Some(Terminator::TailCall { func, args });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,5 +1131,354 @@ mod tests {
         for bb in &body.basic_blocks {
             assert_ne!(bb.terminator, Some(Terminator::Unreachable));
         }
+    }
+
+    // ======================================================================
+    // Copy Propagation Tests
+    // ======================================================================
+
+    #[test]
+    fn test_copy_propagation_simple() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let param0 = builder.param(0);
+        let x = builder.new_local(MirType::I64, Some("x".into()));
+        let y = builder.new_local(MirType::I64, Some("y".into()));
+
+        // x = copy param0
+        builder.assign(
+            Place::local(x),
+            Rvalue::Use(Operand::Copy(Place::local(param0))),
+        );
+        // y = copy x  (should be propagated to: y = copy param0)
+        builder.assign(
+            Place::local(y),
+            Rvalue::Use(Operand::Copy(Place::local(x))),
+        );
+        // _0 = copy y
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(y))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        copy_propagation(&mut body);
+
+        // After copy propagation, y's assignment should reference param0
+        // and return should reference param0 (through y -> x -> param0 chain)
+        if let Statement::Assign(_, Rvalue::Use(Operand::Copy(place))) =
+            &body.basic_blocks[0].statements[2]
+        {
+            // _0 should now reference param0 (Local(1))
+            assert_eq!(place.local, param0);
+        } else {
+            panic!("Expected copy propagation to resolve chain");
+        }
+    }
+
+    #[test]
+    fn test_copy_propagation_no_multi_assign() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let x = builder.new_local(MirType::I64, Some("x".into()));
+
+        // x = copy param0
+        builder.assign(
+            Place::local(x),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        // x = const 42 (reassigned -- should not be propagated)
+        builder.assign_const(x, Constant::Int(42));
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(x))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        copy_propagation(&mut body);
+
+        // x should NOT be propagated since it's assigned more than once
+        if let Statement::Assign(_, Rvalue::Use(Operand::Copy(place))) =
+            &body.basic_blocks[0].statements[2]
+        {
+            assert_eq!(place.local, x); // Still x, not param0
+        } else {
+            panic!("Expected x to remain (multi-assign prevents propagation)");
+        }
+    }
+
+    // ======================================================================
+    // Tail Call Detection Tests
+    // ======================================================================
+
+    #[test]
+    fn test_tail_call_detection() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let bb_ret = builder.new_block();
+
+        // bb0: call foo(param0), result -> _0, then goto bb_ret
+        builder.call(
+            "foo",
+            vec![Operand::Copy(Place::local(builder.param(0)))],
+            Place::local(Local(0)), // destination = _0
+            bb_ret,
+        );
+
+        // bb_ret: just return
+        builder.switch_to_block(bb_ret);
+        builder.return_();
+
+        let mut body = builder.build();
+        tail_call_detection(&mut body);
+
+        // The call should be converted to a TailCall
+        assert!(matches!(
+            body.basic_blocks[0].terminator,
+            Some(Terminator::TailCall { .. })
+        ));
+    }
+
+    #[test]
+    fn test_tail_call_not_applied_when_not_tail() {
+        let mut builder = MirBuilder::new("test", vec![MirType::I64], MirType::I64);
+
+        let result = builder.new_local(MirType::I64, None);
+        let bb_after = builder.new_block();
+
+        // bb0: call foo(param0), result -> _3 (NOT _0), then goto bb_after
+        builder.call(
+            "foo",
+            vec![Operand::Copy(Place::local(builder.param(0)))],
+            Place::local(result), // NOT return place
+            bb_after,
+        );
+
+        // bb_after: use result, then return
+        builder.switch_to_block(bb_after);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(result))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        tail_call_detection(&mut body);
+
+        // The call should NOT be converted (destination is not _0)
+        assert!(matches!(
+            body.basic_blocks[0].terminator,
+            Some(Terminator::Call { .. })
+        ));
+    }
+
+    // ======================================================================
+    // Escape Analysis Tests
+    // ======================================================================
+
+    #[test]
+    fn test_escape_analysis_non_escaping() {
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let alloc_result = builder.new_local(MirType::I64, None);
+        let bb_after = builder.new_block();
+
+        // Call malloc (heap allocation)
+        builder.call(
+            "malloc",
+            vec![Operand::Constant(Constant::Int(64))],
+            Place::local(alloc_result),
+            bb_after,
+        );
+
+        // bb_after: just return a constant (alloc_result doesn't escape)
+        builder.switch_to_block(bb_after);
+        builder.assign_const(Local(0), Constant::Int(42));
+        builder.return_();
+
+        let mut body = builder.build();
+        escape_analysis(&mut body);
+
+        // alloc_result should be marked as non-escaping
+        let key = format!("__escape_local_{}", alloc_result.0);
+        assert!(
+            body.block_names.contains_key(&key),
+            "Expected non-escaping allocation to be marked"
+        );
+    }
+
+    #[test]
+    fn test_escape_analysis_escaping_via_return() {
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let alloc_result = builder.new_local(MirType::I64, None);
+        let bb_after = builder.new_block();
+
+        // Call malloc
+        builder.call(
+            "malloc",
+            vec![Operand::Constant(Constant::Int(64))],
+            Place::local(alloc_result),
+            bb_after,
+        );
+
+        // bb_after: return the allocated pointer (escapes!)
+        builder.switch_to_block(bb_after);
+        builder.assign(
+            Place::local(Local(0)),
+            Rvalue::Use(Operand::Copy(Place::local(alloc_result))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        escape_analysis(&mut body);
+
+        // alloc_result should NOT be marked (it escapes via return)
+        let key = format!("__escape_local_{}", alloc_result.0);
+        assert!(
+            !body.block_names.contains_key(&key),
+            "Expected escaping allocation to NOT be marked"
+        );
+    }
+
+    // ======================================================================
+    // Loop Unrolling Tests
+    // ======================================================================
+
+    #[test]
+    fn test_loop_unrolling_simple() {
+        // Build: loop header checks i < 4, body increments i
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let i_var = builder.new_local(MirType::I64, Some("i".into()));
+        let cond = builder.new_local(MirType::Bool, Some("cond".into()));
+        let sum = builder.new_local(MirType::I64, Some("sum".into()));
+
+        let bb_header = builder.new_block();
+        let bb_body = builder.new_block();
+        let bb_exit = builder.new_block();
+
+        // bb0: init i=0, sum=0, goto header
+        builder.assign_const(i_var, Constant::Int(0));
+        builder.assign_const(sum, Constant::Int(0));
+        builder.goto(bb_header);
+
+        // bb_header: cond = i < 4; switchInt(cond) -> [1: bb_body], otherwise: bb_exit
+        builder.switch_to_block(bb_header);
+        builder.assign(
+            Place::local(cond),
+            Rvalue::BinaryOp(
+                BinOp::Lt,
+                Operand::Copy(Place::local(i_var)),
+                Operand::Constant(Constant::Int(4)),
+            ),
+        );
+        builder.switch_int(
+            Operand::Copy(Place::local(cond)),
+            vec![(1, bb_body)],
+            bb_exit,
+        );
+
+        // bb_body: sum = sum + 1; i = i + 1; goto header
+        builder.switch_to_block(bb_body);
+        builder.assign(
+            Place::local(sum),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::Copy(Place::local(sum)),
+                Operand::Constant(Constant::Int(1)),
+            ),
+        );
+        builder.assign(
+            Place::local(i_var),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::Copy(Place::local(i_var)),
+                Operand::Constant(Constant::Int(1)),
+            ),
+        );
+        builder.goto(bb_header);
+
+        // bb_exit: return sum
+        builder.switch_to_block(bb_exit);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(sum))),
+        );
+        builder.return_();
+
+        let mut body = builder.build();
+        let before_body_stmts = body.basic_blocks[bb_body.0 as usize].statements.len();
+        assert_eq!(before_body_stmts, 2); // sum += 1, i += 1
+
+        loop_unrolling(&mut body);
+
+        // After unrolling with trip count 4, the header block should contain
+        // the original header stmts + 4 copies of the body stmts (2 each = 8)
+        // and the body block should be replaced with unreachable
+        let header_stmts = body.basic_blocks[bb_header.0 as usize].statements.len();
+        // 1 (original cond) + 4*2 (unrolled body) = 9
+        assert_eq!(header_stmts, 9);
+        assert_eq!(
+            body.basic_blocks[bb_body.0 as usize].terminator,
+            Some(Terminator::Unreachable)
+        );
+    }
+
+    #[test]
+    fn test_loop_unrolling_too_large_trip_count() {
+        // Loop with trip count > 8 should NOT be unrolled
+        let mut builder = MirBuilder::new("test", vec![], MirType::I64);
+
+        let i_var = builder.new_local(MirType::I64, None);
+        let cond = builder.new_local(MirType::Bool, None);
+
+        let bb_header = builder.new_block();
+        let bb_body = builder.new_block();
+        let bb_exit = builder.new_block();
+
+        builder.assign_const(i_var, Constant::Int(0));
+        builder.goto(bb_header);
+
+        builder.switch_to_block(bb_header);
+        builder.assign(
+            Place::local(cond),
+            Rvalue::BinaryOp(
+                BinOp::Lt,
+                Operand::Copy(Place::local(i_var)),
+                Operand::Constant(Constant::Int(100)), // too large
+            ),
+        );
+        builder.switch_int(
+            Operand::Copy(Place::local(cond)),
+            vec![(1, bb_body)],
+            bb_exit,
+        );
+
+        builder.switch_to_block(bb_body);
+        builder.assign(
+            Place::local(i_var),
+            Rvalue::BinaryOp(
+                BinOp::Add,
+                Operand::Copy(Place::local(i_var)),
+                Operand::Constant(Constant::Int(1)),
+            ),
+        );
+        builder.goto(bb_header);
+
+        builder.switch_to_block(bb_exit);
+        builder.assign_const(Local(0), Constant::Int(0));
+        builder.return_();
+
+        let mut body = builder.build();
+        loop_unrolling(&mut body);
+
+        // Body block should still have its original terminator (not unreachable)
+        assert!(matches!(
+            body.basic_blocks[bb_body.0 as usize].terminator,
+            Some(Terminator::Goto(_))
+        ));
     }
 }

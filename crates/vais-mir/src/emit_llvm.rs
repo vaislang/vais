@@ -7,9 +7,35 @@
 use crate::types::*;
 use std::collections::HashMap;
 
+/// Optimization level for emitting LLVM IR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptLevel {
+    /// No optimizations (O0). Functions get `optnone` attribute.
+    None,
+    /// Default optimization (O2). No special attributes.
+    Default,
+    /// Size optimization (Os). Functions get `optsize` attribute.
+    Size,
+    /// Aggressive size optimization (Oz). Functions get `minsize` attribute.
+    MinSize,
+}
+
 /// Emit a MIR module as LLVM IR text.
 pub fn emit_llvm_ir(module: &MirModule, target_triple: &str) -> String {
     let mut emitter = LlvmEmitter::new(target_triple);
+    emitter.emit_module(module)
+}
+
+/// Emit a MIR module as LLVM IR text with optimization level and debug info.
+pub fn emit_llvm_ir_with_options(
+    module: &MirModule,
+    target_triple: &str,
+    opt_level: OptLevel,
+    emit_debug: bool,
+) -> String {
+    let mut emitter = LlvmEmitter::new(target_triple);
+    emitter.opt_level = opt_level;
+    emitter.emit_debug = emit_debug;
     emitter.emit_module(module)
 }
 
@@ -18,6 +44,10 @@ struct LlvmEmitter {
     output: String,
     local_names: HashMap<Local, String>,
     next_unnamed: u32,
+    opt_level: OptLevel,
+    emit_debug: bool,
+    /// Counter for debug metadata node IDs.
+    next_dbg_id: u32,
 }
 
 impl LlvmEmitter {
@@ -27,6 +57,9 @@ impl LlvmEmitter {
             output: String::new(),
             local_names: HashMap::new(),
             next_unnamed: 0,
+            opt_level: OptLevel::Default,
+            emit_debug: false,
+            next_dbg_id: 0,
         }
     }
 
@@ -62,6 +95,11 @@ impl LlvmEmitter {
             self.output.push('\n');
         }
 
+        // Debug info metadata (if enabled)
+        if self.emit_debug {
+            self.emit_debug_metadata(&module.name);
+        }
+
         self.output.clone()
     }
 
@@ -94,7 +132,23 @@ impl LlvmEmitter {
             self.output.push_str(&format!("{} {}", llvm_ty, name));
         }
 
-        self.output.push_str(") {\n");
+        self.output.push(')');
+
+        // Add function attributes based on optimization level
+        match self.opt_level {
+            OptLevel::None => {
+                self.output.push_str(" #0"); // optnone + noinline
+            }
+            OptLevel::Size => {
+                self.output.push_str(" #1"); // optsize
+            }
+            OptLevel::MinSize => {
+                self.output.push_str(" #2"); // minsize
+            }
+            OptLevel::Default => {} // no special attributes
+        }
+
+        self.output.push_str(" {\n");
 
         // Allocate local variables (alloca for return place and temporaries)
         for (i, local_decl) in body.locals.iter().enumerate() {
@@ -474,6 +528,48 @@ impl LlvmEmitter {
         }
     }
 
+    /// Emit LLVM debug metadata for the module.
+    fn emit_debug_metadata(&mut self, module_name: &str) {
+        self.output.push_str("\n; Debug metadata\n");
+
+        // Compile unit
+        let cu_id = self.next_dbg_id();
+        self.output.push_str(&format!(
+            "!{} = distinct !DICompileUnit(language: DW_LANG_C99, file: !{}, producer: \"vaisc\", isOptimized: true, emissionKind: FullDebug)\n",
+            cu_id,
+            cu_id + 1
+        ));
+
+        // File
+        let file_id = self.next_dbg_id();
+        self.output.push_str(&format!(
+            "!{} = !DIFile(filename: \"{}.vais\", directory: \".\")\n",
+            file_id, module_name
+        ));
+
+        // Named metadata
+        self.output
+            .push_str(&format!("!llvm.dbg.cu = !{{!{}}}\n", cu_id));
+        self.output
+            .push_str("!llvm.module.flags = !{!9999}\n");
+        self.output
+            .push_str("!9999 = !{i32 2, !\"Debug Info Version\", i32 3}\n");
+
+        // Attribute groups (for optimization level)
+        self.output.push_str("\n; Attribute groups\n");
+        self.output
+            .push_str("attributes #0 = { noinline optnone }\n");
+        self.output.push_str("attributes #1 = { optsize }\n");
+        self.output.push_str("attributes #2 = { minsize }\n");
+    }
+
+    /// Get the next debug metadata ID.
+    fn next_dbg_id(&mut self) -> u32 {
+        let id = self.next_dbg_id;
+        self.next_dbg_id += 1;
+        id
+    }
+
     fn binop_to_llvm(&self, op: &BinOp, ty: &MirType) -> &'static str {
         let is_float = matches!(ty, MirType::F32 | MirType::F64);
         match op {
@@ -756,5 +852,118 @@ mod tests {
         let ir = emit_llvm_ir(&module, "x86_64-unknown-linux-gnu");
         // Comparison ops emit "icmp slt" instruction
         assert!(ir.contains("icmp slt"));
+    }
+
+    #[test]
+    fn test_emit_with_debug_info() {
+        let mut builder = MirBuilder::new("dbg_test", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test_mod");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir_with_options(
+            &module,
+            "x86_64-unknown-linux-gnu",
+            OptLevel::Default,
+            true,
+        );
+        assert!(ir.contains("DICompileUnit"));
+        assert!(ir.contains("DIFile"));
+        assert!(ir.contains("test_mod.vais"));
+        assert!(ir.contains("llvm.dbg.cu"));
+        assert!(ir.contains("Debug Info Version"));
+    }
+
+    #[test]
+    fn test_emit_with_optnone() {
+        let mut builder = MirBuilder::new("no_opt", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::None, true);
+        assert!(ir.contains("#0")); // function has attribute group reference
+        assert!(ir.contains("noinline optnone")); // attribute group defined
+    }
+
+    #[test]
+    fn test_emit_with_optsize() {
+        let mut builder = MirBuilder::new("small_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::Size, true);
+        assert!(ir.contains("#1"));
+        assert!(ir.contains("optsize"));
+    }
+
+    #[test]
+    fn test_emit_with_minsize() {
+        let mut builder = MirBuilder::new("tiny_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        let ir = emit_llvm_ir_with_options(
+            &module,
+            "x86_64-unknown-linux-gnu",
+            OptLevel::MinSize,
+            true,
+        );
+        assert!(ir.contains("#2"));
+        assert!(ir.contains("minsize"));
+    }
+
+    #[test]
+    fn test_emit_default_no_attr() {
+        let mut builder = MirBuilder::new("default_fn", vec![MirType::I64], MirType::I64);
+        builder.assign(
+            builder.return_place(),
+            Rvalue::Use(Operand::Copy(Place::local(builder.param(0)))),
+        );
+        builder.return_();
+
+        let body = builder.build();
+        let mut module = MirModule::new("test");
+        module.bodies.push(body);
+
+        // Default optimization without debug info
+        let ir = emit_llvm_ir_with_options(
+            &module,
+            "x86_64-unknown-linux-gnu",
+            OptLevel::Default,
+            false,
+        );
+        // Should not contain attribute group references on the function
+        assert!(!ir.contains("define i64 @default_fn(i64 %_1) #"));
+        // Should not contain debug metadata
+        assert!(!ir.contains("DICompileUnit"));
     }
 }

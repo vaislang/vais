@@ -129,6 +129,38 @@ F lexer_scan_number(lex: i64, tokens: i64, count: i64) -> i64 {
         value = value * 10 + (c - 48)
         lexer_advance(lex)
     }
+
+    # Check for float literal: integer part followed by '.' and digits
+    # (but not '..' range operator)
+    I lexer_is_eof(lex) == 0 && lexer_peek(lex) == 46 {
+        # Check next char is a digit (not '..' operator)
+        saved_pos := lexer_get_pos(lex)
+        lexer_advance(lex)  # consume '.'
+
+        I lexer_is_eof(lex) == 0 && is_digit(lexer_peek(lex)) == 1 {
+            # This is a float literal: parse fractional part
+            frac_digits := mut 0
+            frac_value := mut 0
+            L {
+                I lexer_is_eof(lex) == 1 { B } E { 0 }
+                c := lexer_peek(lex)
+                I is_digit(c) == 0 { B } E { 0 }
+                frac_value = frac_value * 10 + (c - 48)
+                frac_digits = frac_digits + 1
+                lexer_advance(lex)
+            }
+            # Store integer part in value field, fractional info in str_ptr/str_len
+            # Convention: str_ptr = fractional digits value, str_len = number of frac digits
+            end := lexer_get_pos(lex)
+            token_store(tokens, count, TOK_FLOAT(), value, frac_value, frac_digits, start, end)
+            R 0
+        } E {
+            # Not a float, restore position (put back the '.')
+            lexer_set_pos(lex, saved_pos)
+            0
+        }
+    } E { 0 }
+
     end := lexer_get_pos(lex)
     token_store(tokens, count, TOK_INT(), value, 0, 0, start, end)
 }
