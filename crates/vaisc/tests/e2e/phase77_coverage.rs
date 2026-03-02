@@ -3,7 +3,7 @@
 //! These tests specifically target uncovered codegen, parser, and type checker paths
 //! to increase overall coverage from ~68% toward 75%.
 
-use super::helpers::{compile_and_run, compile_to_ir};
+use super::helpers::compile_and_run;
 
 fn assert_exit_code(source: &str, expected: i32) {
     let result = compile_and_run(source).unwrap_or_else(|e| panic!("Compile/run failed: {}", e));
@@ -12,10 +12,6 @@ fn assert_exit_code(source: &str, expected: i32) {
         "Exit code mismatch. stdout: {}, stderr: {}",
         result.stdout, result.stderr
     );
-}
-
-fn assert_compiles(source: &str) {
-    compile_to_ir(source).unwrap_or_else(|e| panic!("Compile failed: {}", e));
 }
 
 // ============================================================================
@@ -660,11 +656,12 @@ fn e2e_p77_const_in_expression() {
 
 #[test]
 fn e2e_p77_global_variable() {
-    assert_compiles(
+    assert_exit_code(
         r#"
         G counter: i64 = 42
         F main() -> i64 = 42
     "#,
+        42,
     );
 }
 
@@ -848,7 +845,7 @@ fn e2e_p77_comparison_chain() {
 
 #[test]
 fn e2e_p77_defer_basic() {
-    assert_compiles(
+    assert_exit_code(
         r#"
         F main() -> i64 {
             x := mut 0
@@ -857,6 +854,7 @@ fn e2e_p77_defer_basic() {
             x
         }
     "#,
+        41,
     );
 }
 
@@ -1054,13 +1052,14 @@ fn e2e_p77_early_return() {
 
 #[test]
 fn e2e_p77_extern_function() {
-    assert_compiles(
+    assert_exit_code(
         r#"
         N "C" {
             F puts(s: i64) -> i64
         }
         F main() -> i64 = 42
     "#,
+        42,
     );
 }
 

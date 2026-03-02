@@ -291,8 +291,16 @@ impl LifetimeInferencer {
                 // No input lifetimes - output gets 'static
                 Some(Lifetime::Static)
             } else {
-                // Multiple input lifetimes, no self - cannot elide
-                None
+                // Check if all input lifetimes are the same named lifetime
+                // (e.g., both params annotated with &'a → only one distinct lifetime)
+                let unique_named: std::collections::HashSet<&Lifetime> =
+                    input_lifetimes.iter().map(|(_, lt)| lt).collect();
+                if unique_named.len() == 1 {
+                    Some(input_lifetimes[0].1.clone())
+                } else {
+                    // Multiple distinct input lifetimes, no self - cannot elide
+                    None
+                }
             }
         } else {
             None // No reference in return type, no elision needed
@@ -307,7 +315,7 @@ impl LifetimeInferencer {
     }
 
     /// Extract the lifetime from a reference type, if explicitly annotated
-    fn extract_reference_lifetime(&self, ty: &ResolvedType) -> Option<Lifetime> {
+    pub fn extract_reference_lifetime(&self, ty: &ResolvedType) -> Option<Lifetime> {
         match ty {
             ResolvedType::RefLifetime { lifetime, .. }
             | ResolvedType::RefMutLifetime { lifetime, .. } => {
@@ -387,7 +395,17 @@ impl LifetimeInferencer {
         // Apply elision rules if no explicit lifetime annotations on return
         let elision = self.apply_elision_rules(params, ret);
 
-        if !elision.elision_successful && self.has_reference_in_return(ret) {
+        // Check if the return type already has an explicit lifetime annotation.
+        // If so, elision is not needed — the user provided the answer.
+        let ret_has_explicit_lifetime = matches!(
+            ret,
+            ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. }
+        );
+
+        if !elision.elision_successful
+            && self.has_reference_in_return(ret)
+            && !ret_has_explicit_lifetime
+        {
             return Err(TypeError::LifetimeElisionFailed {
                 function_name: func_name.to_string(),
                 input_count: elision.input_lifetimes.len(),
@@ -683,8 +701,19 @@ impl LifetimeInferencer {
             }
         }
 
-        // If no parameter covers the return lifetime, it might be dangling
-        // (This is caught more precisely by elision rules, so we're conservative here)
+        // If no parameter covers the return lifetime, the reference could dangle.
+        // Report an error when the return lifetime is a named lifetime that should
+        // be tied to a parameter but isn't.
+        if !param_lifetimes.is_empty() {
+            if let Lifetime::Named(lt_name) = return_lifetime {
+                return Err(TypeError::LifetimeTooShort {
+                    reference_lifetime: format!("'{}", lt_name),
+                    referent_lifetime: "function parameters".to_string(),
+                    span: None,
+                });
+            }
+        }
+
         Ok(())
     }
 

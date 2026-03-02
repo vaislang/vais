@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (Phase 90 완료 — 컴파일러 최적화/E2E 1,509/셀프호스팅 강화)
+> **최종 업데이트**: 2026-03-02 (Phase 91 완료 — 기술 부채 해소/커버리지 75%+/Monomorphization Method/Lifetime 검증)
 
 ---
 
@@ -155,7 +155,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | `'a`, `&'a T` (라이프타임) | ✅ 완전 |
 | `dyn Trait`, `X Trait` (impl Trait) | ✅ 완전 |
 | `linear T`, `affine T` | ✅ 완전 |
-| Dependent types `{x: T \| pred}` | ⚠️ 파싱만, 검증 미구현 |
+| Dependent types `{x: T \| pred}` | ✅ 완전 (컴파일타임+런타임 검증) |
 | SIMD `Vec4f32` 등 | ✅ 완전 |
 
 ### 패턴 매칭 (확정)
@@ -233,12 +233,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 88 | 리포지토리 위생 · 타입 안전성 | gitignore profraw/ll, CI 핀, 문서 갱신, Dependent Types 검증 +16 E2E | 1,266 |
 | 89 | 기술 부채 해소 | Codecov +203 tests, DT 런타임 assert/f64, Unicode \u{}/char_count | 1,291 |
 | 90 | 컴파일러 최적화 · E2E 1,500 · 셀프호스팅 | GVN-CSE/DCE 4단계/Loop Unswitch, +218 E2E, MIR 4패스 추가 | 1,509 |
+| 91 | 기술 부채 해소 · 언어 기능 완성도 | assert_compiles 0개, +406 단위 테스트, Method monomorphization, Lifetime 검증 실장 | 1,540 |
 
 ---
 
 ## 📋 예정 작업
 
 모드: 자동진행
+
+### Phase 91: 기술 부채 해소 + 언어 기능 완성도 강화
+
+> **목표**: 잔여 기술 부채 해소 (assert_compiles 9→0, 커버리지 68.7→75%+) + 언어 기능 완성도 (Monomorphization const generic/method, Lifetime 검증 실장)
+> **기대 효과**: 코드 품질 향상, 타입 시스템 건전성 강화, 커버리지 목표 달성
+
+- [x] 1. assert_compiles 완전 제거 — struct-by-value ABI 수정 + global/defer/extern 전환 (Opus) ✅ 2026-03-02
+  변경: phase90_structs.rs (6개 struct-by-value→assert_exit_code), phase77_coverage.rs (3개 global/defer/extern→assert_exit_code), helpers.rs (+assert_compiles_only), inkwell generator.rs (struct param alloca+store 패턴)
+- [x] 2. 코드 커버리지 75% 달성 — 저커버리지 크레이트 단위 테스트 +406 (Sonnet) ✅ 2026-03-02
+  변경: vais-mir/tests (+113: types/emit_llvm/optimize), vais-types/tests (+159: checker_fn/traits/resolve/checker_expr/free_vars), vais-codegen/tests (+44), vais-lsp/tests (+51: semantic/diagnostics), vais-codegen-js/tests (+39), lib.rs pub mod 전환
+- [x] 3. Monomorphization 확장 — InstantiationKind::Method 구현 + generic method E2E 12개 추가 (Opus) ✅ 2026-03-02
+  변경: inkwell/generator.rs (+96줄 Method 핸들링), module_gen/instantiations.rs (+145줄 Method 핸들링), phase91_monomorphization.rs (+12 E2E)
+- [x] 4. Lifetime 검증 실장 — _resolution 결과 적용 + 위반 에러 보고 + E2E 19개 (Opus) ✅ 2026-03-02
+  변경: checker_fn.rs (_resolution→resolution, return lifetime 검증, orphan lifetime 검출), lifetime.rs (explicit annotation bypass, dedup same-named lifetimes, validate_return_lifetime 강화), phase91_lifetime.rs (+19 E2E)
+진행률: 4/4 (100%)
 
 ### Phase 90: 컴파일러 최적화 + E2E 1,500 + 셀프호스팅 강화
 

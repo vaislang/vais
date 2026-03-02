@@ -334,13 +334,60 @@ impl TypeChecker {
         let lifetime_bounds = lifetime::LifetimeInferencer::extract_lifetime_bounds(&f.generics);
 
         // Run lifetime inference
-        let _resolution = self.lifetime_inferencer.infer_function_lifetimes(
+        let resolution = self.lifetime_inferencer.infer_function_lifetimes(
             &f.name.node,
             &params,
             &ret_type,
             &lifetime_params,
             &lifetime_bounds,
         )?;
+
+        // If the function returns a reference, validate that the return lifetime
+        // is tied to a parameter lifetime (not a dangling local reference).
+        if has_ref_return {
+            let return_lt = self
+                .lifetime_inferencer
+                .extract_reference_lifetime(&ret_type)
+                .unwrap_or(lifetime::Lifetime::Static);
+
+            // Collect parameter lifetimes
+            let param_lifetimes: Vec<(String, lifetime::Lifetime)> = params
+                .iter()
+                .filter_map(|(name, ty, _)| {
+                    self.lifetime_inferencer
+                        .extract_reference_lifetime(ty)
+                        .map(|lt| (name.clone(), lt))
+                })
+                .collect();
+
+            self.lifetime_inferencer
+                .validate_return_lifetime(&return_lt, &param_lifetimes)?;
+
+            // Additionally check: if return type has a named lifetime that doesn't
+            // appear in any parameter, it could be dangling (referencing a local).
+            if let lifetime::Lifetime::Named(ref lt_name) = return_lt {
+                let param_has_lifetime = param_lifetimes.iter().any(|(_, plt)| {
+                    matches!(plt, lifetime::Lifetime::Named(n) if n == lt_name)
+                });
+                let is_explicit_param = lifetime_params.contains(lt_name);
+
+                // If the return lifetime is an explicit parameter but no input has it,
+                // the function would need to create a reference with that lifetime from
+                // nothing (dangling). However, this is currently too strict for elided
+                // lifetimes, so only flag it when there are explicit lifetime params
+                // and the return references one not present in any input.
+                if !param_has_lifetime && is_explicit_param && !param_lifetimes.is_empty() {
+                    return Err(TypeError::LifetimeTooShort {
+                        reference_lifetime: format!("'{}", lt_name),
+                        referent_lifetime: "function scope".to_string(),
+                        span: f.ret_type.as_ref().map(|t| t.span),
+                    });
+                }
+            }
+        }
+
+        // Store the resolution for potential use in later phases
+        let _ = resolution;
 
         Ok(())
     }

@@ -99,7 +99,7 @@ F main() -> i64 {
     sum_pair(p)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -112,7 +112,7 @@ F main() -> i64 {
     p.a + p.b
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Nested Structs ====================
@@ -127,7 +127,7 @@ F main() -> i64 {
     o.inner.val + o.extra
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Struct with Boolean Fields ====================
@@ -181,7 +181,7 @@ F main() -> i64 {
     area(r)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Struct Computation Patterns ====================
@@ -201,7 +201,7 @@ F main() -> i64 {
     dist_sq(a, b)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 25);
 }
 
 #[test]
@@ -214,7 +214,7 @@ F main() -> i64 {
     c.a + c.b + c.c
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]

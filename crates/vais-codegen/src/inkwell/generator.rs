@@ -286,6 +286,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             })
             .collect();
 
+        // Pre-build method template lookup: (struct_name, method_name) -> Function AST
+        // This collects methods from both impl blocks and struct inline methods.
+        let mut method_templates: HashMap<(String, String), ast::Function> = HashMap::new();
+        for item in &vais_module.items {
+            match &item.node {
+                ast::Item::Impl(impl_block) => {
+                    if let Some(type_name) =
+                        Self::get_impl_type_name(&impl_block.target_type.node)
+                    {
+                        for method in &impl_block.methods {
+                            if !method.node.generics.is_empty() {
+                                method_templates.insert(
+                                    (type_name.clone(), method.node.name.node.clone()),
+                                    method.node.clone(),
+                                );
+                            }
+                        }
+                    }
+                }
+                ast::Item::Struct(s) => {
+                    for method in &s.methods {
+                        if !method.node.generics.is_empty() {
+                            method_templates.insert(
+                                (s.name.node.clone(), method.node.name.node.clone()),
+                                method.node.clone(),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         for inst in instantiations {
             match &inst.kind {
                 vais_types::InstantiationKind::Struct => {
@@ -354,8 +387,67 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         )?;
                     }
                 }
-                vais_types::InstantiationKind::Method { .. } => {
-                    // Method specialization is handled via impl blocks — skip for now.
+                vais_types::InstantiationKind::Method { ref struct_name } => {
+                    // Method specialization: find the method template in impl blocks or
+                    // struct inline methods, then generate a specialized version.
+                    // The mangled name follows the pattern: StructName_methodName$type_args
+                    let key = (struct_name.clone(), inst.base_name.clone());
+                    if let Some(method_fn) = method_templates.get(&key).cloned() {
+                        // Skip non-concrete instantiations
+                        if inst
+                            .type_args
+                            .iter()
+                            .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                        {
+                            continue;
+                        }
+
+                        // Build param/return types from the method's AST
+                        let param_types: Vec<ResolvedType> = method_fn
+                            .params
+                            .iter()
+                            .map(|p| {
+                                if p.name.node == "self" {
+                                    // self parameter: use pointer type
+                                    ResolvedType::Ref(Box::new(ResolvedType::Named {
+                                        name: struct_name.clone(),
+                                        generics: vec![],
+                                    }))
+                                } else {
+                                    self.ast_type_to_resolved(&p.ty.node)
+                                }
+                            })
+                            .collect();
+                        let return_type = if let Some(ret) = method_fn.ret_type.as_ref() {
+                            self.ast_type_to_resolved(&ret.node)
+                        } else {
+                            ResolvedType::Unit
+                        };
+                        let generic_names: Vec<String> = method_fn
+                            .generics
+                            .iter()
+                            .filter(|g| {
+                                !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                            })
+                            .map(|g| g.name.node.clone())
+                            .collect();
+
+                        // Declare the specialized method function
+                        self.declare_specialized_function(
+                            &format!("{}_{}", struct_name, inst.base_name),
+                            &inst.type_args,
+                            &param_types,
+                            &return_type,
+                            &generic_names,
+                        )?;
+
+                        // Generate the specialized body
+                        self.generate_specialized_function_body(
+                            &method_fn,
+                            &inst.mangled_name,
+                            &inst.type_args,
+                        )?;
+                    }
                 }
             }
         }

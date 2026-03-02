@@ -174,6 +174,7 @@ pub fn assert_stdout_contains(source: &str, expected: &str) {
 }
 
 /// Assert that source compiles to IR successfully (doesn't require clang/execution)
+#[allow(dead_code)]
 pub fn assert_compiles(source: &str) {
     match compile_to_ir(source) {
         Ok(_) => {}
