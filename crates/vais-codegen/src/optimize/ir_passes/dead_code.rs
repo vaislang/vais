@@ -464,9 +464,25 @@ pub(super) fn extract_definition(line: &str) -> Option<String> {
     None
 }
 
-/// Check if an instruction has no side effects
+/// Check if an instruction has no side effects.
+///
+/// Conservative by default: function calls are treated as having side effects
+/// unless they are known LLVM intrinsics in the `PURE_FUNCTION_PREFIXES` list.
+/// This prevents incorrect removal of calls to external/user-defined functions
+/// that may have observable effects (I/O, global state mutation, etc.).
 fn is_side_effect_free(line: &str) -> bool {
     let trimmed = line.trim();
+
+    // Calls are side-effectful by default — only known-pure intrinsics are safe.
+    // This must be checked BEFORE the pure_ops list below, because patterns like
+    // "add " could match inside a call instruction's argument list.
+    if trimmed.contains("call ") {
+        // Only known-pure LLVM intrinsics are side-effect-free
+        return PURE_FUNCTION_PREFIXES
+            .iter()
+            .any(|prefix| trimmed.contains(prefix));
+    }
+
     // Pure operations that can be eliminated if unused
     let pure_ops = [
         "add ",

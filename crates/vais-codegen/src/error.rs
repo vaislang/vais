@@ -2,6 +2,23 @@
 //!
 //! Defines error types for code generation failures.
 //!
+//! # Error type architecture
+//!
+//! This module provides two error types with a clear separation of concerns:
+//!
+//! - **[`CodegenError`]**: The "inner" error type used throughout the codegen
+//!   pipeline. It carries the error variant and message but no source location.
+//!   All internal codegen functions return `CodegenResult<T> = Result<T, CodegenError>`.
+//!
+//! - **[`SpannedCodegenError`]**: The "outer" error type used at the boundary
+//!   between codegen and the compiler driver. It wraps a `CodegenError` with
+//!   an optional [`Span`] for source-location diagnostics.
+//!
+//! This two-layer design avoids threading `Span` through every internal codegen
+//! function (which would be pervasive and noisy), while still providing precise
+//! error locations when reporting to users. The [`WithSpan`] extension trait
+//! makes span attachment ergonomic at boundary call sites.
+//!
 //! # Span support
 //!
 //! `CodegenError` can be paired with source location information via

@@ -384,6 +384,36 @@ impl TypeChecker {
                     });
                 }
             }
+
+            // Warn about cross-function lifetime tracking limitations.
+            // If a function returns a reference and has &self parameters alongside
+            // other reference parameters, the returned reference's lifetime might be
+            // incorrectly tied to the wrong input. Current lifetime inference is
+            // intra-function only.
+            if param_lifetimes.len() > 1 {
+                let has_self_ref = params.iter().any(|(name, ty, _)| {
+                    name == "self"
+                        && matches!(
+                            ty,
+                            ResolvedType::Ref(_)
+                                | ResolvedType::RefMut(_)
+                                | ResolvedType::RefLifetime { .. }
+                                | ResolvedType::RefMutLifetime { .. }
+                        )
+                });
+                if has_self_ref {
+                    // Emit a warning: cross-function lifetime tracking for self
+                    // references is not fully verified. The returned reference may
+                    // outlive self's borrow.
+                    self.warnings.push(format!(
+                        "warning: function '{}' returns a reference and borrows \
+                         `self` alongside other reference parameters; cross-function \
+                         lifetime tracking is limited and may not catch all dangling \
+                         reference cases",
+                        f.name.node
+                    ));
+                }
+            }
         }
 
         // Store the resolution for potential use in later phases

@@ -2,6 +2,11 @@
 # Supports: strings, integers, booleans, arrays, tables (standard + inline)
 # Uses recursive approach with explicit parser state passing (same as json.vais)
 #
+# NOTE (review #17): This parser shares common patterns (skip_whitespace,
+# parse_string, peek/advance) with yaml.vais, msgpack.vais, and protobuf.vais.
+# A future refactor could extract these into a shared parser_combinators.vais
+# module to reduce duplication and improve consistency.
+#
 # TOML value types (discriminant):
 # 0 = null/invalid
 # 1 = bool (data: 0=false, 1=true)

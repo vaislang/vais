@@ -5,13 +5,74 @@ use std::collections::HashMap;
 /// Value number for GVN-based CSE
 type ValueNumber = u32;
 
-/// GVN table entry: canonical expression representation
+/// Interned operation identifier to avoid per-expression String allocation.
+/// Maps 1:1 with the LLVM IR binary operation names.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+enum GvnOp {
+    Add,
+    Sub,
+    Mul,
+    Sdiv,
+    And,
+    Or,
+    Xor,
+    Shl,
+    Ashr,
+    Lshr,
+}
+
+impl GvnOp {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "add" => Some(Self::Add),
+            "sub" => Some(Self::Sub),
+            "mul" => Some(Self::Mul),
+            "sdiv" => Some(Self::Sdiv),
+            "and" => Some(Self::And),
+            "or" => Some(Self::Or),
+            "xor" => Some(Self::Xor),
+            "shl" => Some(Self::Shl),
+            "ashr" => Some(Self::Ashr),
+            "lshr" => Some(Self::Lshr),
+            _ => None,
+        }
+    }
+}
+
+/// Interned type identifier to avoid per-expression String allocation.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+enum GvnTy {
+    I64,
+    I32,
+    I16,
+    I8,
+    I1,
+}
+
+impl GvnTy {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "i64" => Some(Self::I64),
+            "i32" => Some(Self::I32),
+            "i16" => Some(Self::I16),
+            "i8" => Some(Self::I8),
+            "i1" => Some(Self::I1),
+            _ => None,
+        }
+    }
+}
+
+/// GVN table entry: canonical expression representation.
+///
+/// Uses interned enums for `op` and `ty` fields instead of String to avoid
+/// heap allocation on every expression lookup (review #7: GvnExpr String
+/// allocation overhead).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 enum GvnExpr {
     /// Binary operation with value numbers for operands
     BinOp {
-        op: String,
-        ty: String,
+        op: GvnOp,
+        ty: GvnTy,
         lhs: ValueNumber,
         rhs: ValueNumber,
     },
@@ -90,8 +151,8 @@ impl GvnState {
     /// Returns (value_number, Option<existing_var_name>)
     fn lookup_binop(
         &mut self,
-        op: &str,
-        ty: &str,
+        op: GvnOp,
+        ty: GvnTy,
         lhs: &str,
         rhs: &str,
     ) -> (ValueNumber, Option<String>) {
@@ -99,7 +160,7 @@ impl GvnState {
         let rhs_vn = self.operand_vn(rhs);
 
         // Normalize commutative operations: put smaller VN first
-        let is_commutative = matches!(op, "add" | "mul" | "and" | "or" | "xor");
+        let is_commutative = matches!(op, GvnOp::Add | GvnOp::Mul | GvnOp::And | GvnOp::Or | GvnOp::Xor);
         let (norm_lhs, norm_rhs) = if is_commutative && lhs_vn > rhs_vn {
             (rhs_vn, lhs_vn)
         } else {
@@ -107,8 +168,8 @@ impl GvnState {
         };
 
         let expr = GvnExpr::BinOp {
-            op: op.to_string(),
-            ty: ty.to_string(),
+            op,
+            ty,
             lhs: norm_lhs,
             rhs: norm_rhs,
         };
@@ -162,14 +223,14 @@ pub(crate) fn common_subexpression_elimination(ir: &str) -> String {
         }
 
         // Pattern: %N = BINOP TYPE A, B
-        if let Some((dest, op, ty, lhs, rhs)) = extract_binop_components(trimmed) {
-            let (vn, existing) = gvn.lookup_binop(&op, &ty, &lhs, &rhs);
+        if let Some((dest, op, ty, ty_str, lhs, rhs)) = extract_binop_components(trimmed) {
+            let (vn, existing) = gvn.lookup_binop(op, ty, &lhs, &rhs);
 
             if let Some(existing_var) = existing {
                 // This expression was computed before - reuse it
                 result.push_str(&format!(
-                    "  {} = add {} 0, {}  ; GVN-CSE: reusing {} {} {}, {}\n",
-                    dest, ty, existing_var, op, ty, lhs, rhs
+                    "  {} = add {} 0, {}  ; GVN-CSE: reusing binop {}, {}\n",
+                    dest, ty_str, existing_var, lhs, rhs
                 ));
                 gvn.register_var(&dest, vn);
                 continue;
@@ -187,24 +248,36 @@ pub(crate) fn common_subexpression_elimination(ir: &str) -> String {
 }
 
 /// Extract binary operation components for GVN.
-/// Returns (dest, op, type, lhs_operand, rhs_operand) if the line matches.
-fn extract_binop_components(line: &str) -> Option<(String, String, String, String, String)> {
-    let ops = ["add", "sub", "mul", "sdiv", "and", "or", "xor", "shl", "ashr", "lshr"];
-    let types = ["i64", "i32", "i16", "i8", "i1"];
+/// Returns (dest, interned_op, interned_ty, ty_str, lhs_operand, rhs_operand) if the line matches.
+/// Uses interned GvnOp/GvnTy to avoid String allocation on the hot path.
+fn extract_binop_components(line: &str) -> Option<(String, GvnOp, GvnTy, &'static str, String, String)> {
+    let ops: &[&str] = &["add", "sub", "mul", "sdiv", "and", "or", "xor", "shl", "ashr", "lshr"];
+    let types: &[&str] = &["i64", "i32", "i16", "i8", "i1"];
 
-    for op in &ops {
-        for ty in &types {
-            let pattern = format!(" = {} {} ", op, ty);
+    for op_str in ops {
+        for ty_str in types {
+            let pattern = format!(" = {} {} ", op_str, ty_str);
             if line.contains(&pattern) {
                 let parts: Vec<&str> = line.split(&pattern).collect();
                 if parts.len() == 2 {
                     let dest = parts[0].trim().to_string();
                     let operands: Vec<&str> = parts[1].split(',').map(|s| s.trim()).collect();
                     if operands.len() == 2 {
+                        let op = GvnOp::from_str(op_str)?;
+                        let ty = GvnTy::from_str(ty_str)?;
+                        // Return the static str for the type name to use in IR output
+                        let static_ty: &'static str = match ty {
+                            GvnTy::I64 => "i64",
+                            GvnTy::I32 => "i32",
+                            GvnTy::I16 => "i16",
+                            GvnTy::I8 => "i8",
+                            GvnTy::I1 => "i1",
+                        };
                         return Some((
                             dest,
-                            op.to_string(),
-                            ty.to_string(),
+                            op,
+                            ty,
+                            static_ty,
                             operands[0].to_string(),
                             operands[1].to_string(),
                         ));

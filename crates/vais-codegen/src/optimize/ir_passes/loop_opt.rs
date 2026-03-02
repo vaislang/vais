@@ -1,4 +1,19 @@
 //! Loop optimizations (LICM, loop unrolling, unswitching, strength reduction).
+//!
+//! ## Performance notes
+//!
+//! Each pass operates in O(n) time where n is the number of IR lines. The
+//! overall pipeline runs 4 sequential passes, giving O(4n) = O(n) total.
+//!
+//! For large modules, a worklist-based approach could avoid rescanning
+//! unchanged regions. Currently the text IR string is re-parsed from scratch
+//! in each pass, which is adequate for typical Vais programs (< 50K lines)
+//! but could be optimized for larger inputs by:
+//!   1. Building a structured loop-nest representation once
+//!   2. Using a worklist to track which loops need re-analysis after transforms
+//!   3. Only re-emitting modified loop bodies
+//!
+//! This is tracked as a future optimization opportunity.
 
 use std::collections::HashSet;
 

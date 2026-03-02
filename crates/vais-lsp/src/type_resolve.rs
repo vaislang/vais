@@ -2,6 +2,13 @@
 //!
 //! Resolves expression types from AST without full type checking.
 //! Used for type-aware completion, hover, and inlay hints.
+//!
+//! # Architecture note
+//!
+//! This module is 2,200+ lines and would benefit from splitting into 3-4
+//! submodules (e.g., `type_resolve/types.rs`, `type_resolve/expr.rs`,
+//! `type_resolve/scope.rs`, `type_resolve/resolution.rs`). This is tracked
+//! as a Phase 94+ refactoring task (review finding #15).
 
 use std::collections::HashMap;
 use vais_ast::{Expr, FunctionBody, IfElse, Item, Module, Spanned, Stmt, Type};

@@ -263,12 +263,38 @@ impl CodeGenerator {
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
-        // Infer the actual return type of the method from function info
+        // Infer the actual return type of the method from function info.
+        //
+        // When the method is not found in `self.types.functions`, this falls back to
+        // "i64". This can happen when multiple trait implementations provide the same
+        // method name for a type and the codegen-level resolution hasn't registered
+        // the correct mangled name. The type checker is responsible for detecting
+        // ambiguous trait method dispatch (E039); here we emit a best-effort fallback.
         let ret_type = {
             let fn_info = self.types.functions.get(&full_method_name);
             if let Some(info) = fn_info {
                 self.type_to_llvm(&info.signature.ret)
             } else {
+                // Fallback: check if any trait impl provides this method for the receiver type
+                if let ResolvedType::Named { name, .. } = &recv_type {
+                    let mut candidate_count = 0usize;
+                    for ((impl_type, _trait_name), methods) in &self.types.trait_impl_methods {
+                        if impl_type == name && methods.contains_key(method_name) {
+                            candidate_count += 1;
+                        }
+                    }
+                    if candidate_count > 1 {
+                        // Multiple trait impls provide this method — ambiguous dispatch.
+                        // The type checker should have caught this, but emit an ICE-level
+                        // warning for defense-in-depth.
+                        #[cfg(debug_assertions)]
+                        eprintln!(
+                            "Warning: ambiguous trait method dispatch for {}.{}() — \
+                             {} trait impls provide this method. Using i64 fallback.",
+                            name, method_name, candidate_count
+                        );
+                    }
+                }
                 "i64".to_string()
             }
         };

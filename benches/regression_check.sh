@@ -70,9 +70,9 @@ print(f'Captured {len(results)} benchmark results')
 }
 
 # Compare against baseline if it exists
-if [ -f "$BASELINE_FILE" ]; then
+if [ -f "${BASELINE_FILE}" ]; then
     echo ""
-    echo "Comparing against baseline: $BASELINE_FILE"
+    echo "Comparing against baseline: ${BASELINE_FILE}"
     echo ""
 
     python3 -c "
@@ -165,9 +165,9 @@ else:
 " 2>/dev/null || echo "Note: Comparison requires Python 3"
 else
     echo ""
-    echo "No baseline found at $BASELINE_FILE"
+    echo "No baseline found at ${BASELINE_FILE}"
     echo "Creating baseline from current results..."
-    cp "$RESULTS_FILE" "$BASELINE_FILE" 2>/dev/null || true
+    cp "${RESULTS_FILE}" "${BASELINE_FILE}" 2>/dev/null || true
     echo "Run this script again after changes to compare."
 fi
 

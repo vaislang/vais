@@ -6,6 +6,26 @@
 //!
 //! The predicate is evaluated by temporarily binding the predicate's bound variable
 //! to the parameter value, then using `generate_expr` to compile the boolean predicate.
+//!
+//! ## Release mode behavior
+//!
+//! When `release_mode` is enabled (e.g., `vaisc --release`), all dependent type
+//! assertions are **completely omitted** from the generated IR, just like contract
+//! checks (`#[requires]`, `#[ensures]`, `#[invariant]`). This is intentional for
+//! performance but means refinement type safety is **not enforced at runtime** in
+//! release builds. Users relying on dependent types for safety-critical invariants
+//! should be aware of this trade-off.
+//!
+//! ## Interaction with LLVM optimizations
+//!
+//! The generated assertion pattern (`br i1 %cond, label %ok, label %fail` where
+//! `%fail` calls `@__panic` + `unreachable`) is generally preserved by LLVM
+//! optimizations because `@__panic` is an external call with observable side effects,
+//! and `unreachable` signals that the fail path is a noreturn. However, if the LLVM
+//! optimizer can statically prove the predicate is always true (e.g., constant
+//! propagation), it may legally remove the branch — which is correct behavior.
+//! The `@__panic` call acts as an optimization barrier for non-trivially-provable
+//! predicates.
 
 use crate::types::LocalVar;
 use crate::{CodeGenerator, CodegenResult};
@@ -35,7 +55,8 @@ impl CodeGenerator {
         registered_param_types: &[ResolvedType],
         counter: &mut usize,
     ) -> CodegenResult<String> {
-        // Skip in release mode (like contract checks)
+        // In release mode, skip all dependent type assertions for performance.
+        // See module-level documentation for the safety implications of this behavior.
         if self.release_mode {
             return Ok(String::new());
         }

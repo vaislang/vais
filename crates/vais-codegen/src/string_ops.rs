@@ -312,8 +312,11 @@ impl CodeGenerator {
     /// Generate LLVM IR for string helper functions.
     /// String helpers accept raw i8* pointers (extracted at call site).
     /// Functions that return strings return { i8*, i64 } fat pointers.
+    ///
+    /// Pre-allocates a buffer large enough for all helper functions to avoid
+    /// intermediate reallocations during the push_str chain (~3.5KB total).
     pub(crate) fn generate_string_helper_functions(&self) -> String {
-        let mut ir = String::with_capacity(2048);
+        let mut ir = String::with_capacity(4096);
 
         // __vais_str_concat: concatenate two strings -> { i8*, i64 }
         ir.push_str("\n; String helper: concatenate two strings\n");

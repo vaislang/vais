@@ -8,6 +8,14 @@ use super::*;
 /// Parameter names matching these must be renamed to avoid LLVM IR collisions.
 const RESERVED_BLOCK_LABELS: &[&str] = &["entry"];
 
+/// Characters that are invalid in LLVM IR identifiers and must be replaced.
+/// LLVM allows alphanumeric, '.', '_', and '$' in identifiers.
+#[allow(dead_code)] // Used by sanitize_llvm_name below; callers will migrate incrementally
+const LLVM_INVALID_CHARS: &[char] = &[
+    '<', '>', ',', ' ', ':', ';', '(', ')', '{', '}', '[', ']', '!', '@', '#', '%', '^', '&',
+    '*', '+', '=', '|', '\\', '/', '?', '~', '`', '"', '\'',
+];
+
 /// Sanitize a parameter name to avoid collision with LLVM block labels.
 /// Returns `Cow::Borrowed` when no rename is needed (zero allocation).
 pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
@@ -16,6 +24,37 @@ pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
     } else {
         Cow::Borrowed(name)
     }
+}
+
+/// Sanitize an arbitrary identifier for use as an LLVM IR name.
+///
+/// Replaces characters that are invalid in LLVM identifiers with underscores,
+/// and appends a disambiguating suffix counter to prevent collisions when
+/// two different source names sanitize to the same LLVM name.
+///
+/// # Arguments
+/// * `name` - The source identifier to sanitize
+/// * `disambiguation_suffix` - Optional numeric suffix to append for uniqueness
+///
+/// # Returns
+/// A valid LLVM IR identifier string.
+#[allow(dead_code)] // Review #10: available for callers that generate LLVM names from user identifiers
+pub(crate) fn sanitize_llvm_name(name: &str, disambiguation_suffix: Option<usize>) -> String {
+    let mut result = String::with_capacity(name.len() + 8);
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '$' {
+            result.push(ch);
+        } else if LLVM_INVALID_CHARS.contains(&ch) {
+            result.push('_');
+        } else {
+            // Non-ASCII or other chars: encode as _uXXXX
+            result.push_str(&format!("_u{:04X}", ch as u32));
+        }
+    }
+    if let Some(suffix) = disambiguation_suffix {
+        result.push_str(&format!("__{}", suffix));
+    }
+    result
 }
 
 impl CodeGenerator {

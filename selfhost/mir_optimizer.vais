@@ -4,6 +4,12 @@
 #
 # Mirrors crates/vais-mir/src/optimize.rs using selfhost patterns.
 # Operates in-place on MirBody/MirModule data structures.
+#
+# IMPORTANT (review #19): This selfhost implementation and the Rust
+# implementation in crates/vais-mir/src/optimize.rs may diverge over time.
+# When modifying optimization passes, update both implementations and verify
+# consistent behavior using the cross-verify tests in
+# crates/vais-mir/tests/cross_verify*.rs.
 
 U mir
 U mir_alias
