@@ -316,4 +316,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 리뷰 발견사항 (2026-03-02)
+> 출처: /team-review (Phase 73-92, origin/main..HEAD, 229 files, +48,742/-1,718)
+
+- [ ] 1. [보안] registry packages.rs: SQL 쿼리 문자열 보간 — 파라미터 바인딩으로 전환 (Warning) — 대상: crates/vais-registry-server/src/handlers/packages.rs
+- [ ] 2. [보안] regression_check.sh: 미인용 변수 확장 — 모든 변수 이중 인용 (Warning) — 대상: benches/regression_check.sh
+- [ ] 3. [보안] publish.yml: GitHub Actions 해시 핀닝 미사용 (Warning) — 대상: .github/workflows/publish.yml
+- [ ] 4. [보안] storage.rs: 패키지 파일 경로 traversal 검증 부재 (Warning) — 대상: crates/vais-registry-server/src/storage.rs
+- [ ] 5. [보안] http_client.vais: 리다이렉트 횟수 제한 미설정 (Warning) — 대상: std/http_client.vais
+- [ ] 6. [성능] optimizer loop_opt.rs: 중첩 루프 O(n*m) 복잡도 — 워크리스트 알고리즘 도입 (Warning) — 대상: crates/vais-codegen/src/optimize/ir_passes/loop_opt.rs
+- [ ] 7. [성능] CSE cse.rs: 해시맵 키 String 할당 과다 — Cow<str> 또는 인턴닝 (Warning) — 대상: crates/vais-codegen/src/optimize/ir_passes/cse.rs
+- [ ] 8. [성능] string_ops.rs: 문자열 연결 시 매번 새 버퍼 할당 — pre-alloc 패턴 (Warning) — 대상: crates/vais-codegen/src/string_ops.rs
+- [ ] 9. [성능] dead_code.rs: 부작용 분석 불완전 — 외부 함수 호출 보수적 처리 필요 (Warning) — 대상: crates/vais-codegen/src/optimize/ir_passes/dead_code.rs
+- [ ] 10. [정확성] generator.rs: sanitize_llvm_name 충돌 가능성 — 접미사 카운터 추가 (Warning, 교차검증: 보안팀 downgrade) — 대상: crates/vais-codegen/src/inkwell/generator.rs
+- [ ] 11. [정확성] instantiations.rs: 제네릭 모노모피제이션 무한 재귀 방지 depth guard 필요 (Warning) — 대상: crates/vais-codegen/src/module_gen/instantiations.rs
+- [ ] 12. [정확성] checker_fn.rs: lifetime 검증에서 self 참조 교차 함수 검증 누락 (Warning) — 대상: crates/vais-types/src/checker_fn.rs
+- [ ] 13. [정확성] method_call.rs: trait dispatch에서 다중 impl 우선순위 미결정 (Warning) — 대상: crates/vais-codegen/src/expr_helpers_call/method_call.rs
+- [ ] 14. [정확성] dependent_checks.rs: 런타임 검증 코드 최적화 시 제거 가능성 (Warning) — 대상: crates/vais-codegen/src/function_gen/dependent_checks.rs
+- [ ] 15. [아키텍처] type_resolve.rs 2,218줄: 단일 파일 과대 — 최소 3-4개 모듈로 분할 권장 (Warning) — 대상: crates/vais-lsp/src/type_resolve.rs
+- [ ] 16. [아키텍처] error.rs vs CodegenError: 이중 에러 타입 시스템 — 통합 또는 명확한 경계 정의 (Warning) — 대상: crates/vais-codegen/src/error.rs
+- [ ] 17. [아키텍처] std library: msgpack/yaml/toml/protobuf 파서 간 중복 패턴 — 공통 파서 컴비네이터 추출 (Warning) — 대상: std/msgpack.vais, std/yaml.vais, std/toml.vais, std/protobuf.vais
+- [ ] 18. [아키텍처] wasm.rs: 하드코딩된 WASM 페이지 크기/스택 크기 — 설정 가능하게 변경 (Warning) — 대상: crates/vaisc/src/commands/compile/wasm.rs
+- [ ] 19. [아키텍처] mir_optimizer.vais: selfhost 최적화 패스와 Rust 구현 간 동작 불일치 가능성 (Warning) — 대상: selfhost/mir_optimizer.vais
+진행률: 0/19 (0%)
+
+---
+
 **메인테이너**: Steve
