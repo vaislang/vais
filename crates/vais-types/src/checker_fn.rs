@@ -33,6 +33,17 @@ impl TypeChecker {
             };
             self.validate_dyn_trait_object_safety(&ty);
             self.define_var(&param.name.node, ty, param.is_mut);
+
+            // Validate dependent type predicates evaluate to bool
+            if let Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } = &param.ty.node
+            {
+                let resolved_base = self.resolve_type(&base.node);
+                self.validate_dependent_type(var_name, &resolved_base, predicate)?;
+            }
         }
 
         // Set current function context

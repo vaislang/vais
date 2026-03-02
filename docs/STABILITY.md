@@ -1,28 +1,30 @@
 # Vais Language Stability Declaration
 
-**Version:** 1.0.0
+**Version:** 0.1.0-pre
 **Effective Date:** February 2026
-**Status:** STABLE
+**Status:** PRE-RELEASE (not yet stable)
 
 ---
 
 ## Introduction
 
-This document defines the stability guarantees, backward compatibility policy, and support timeline for the Vais programming language. As of version 1.0.0, Vais transitions from experimental development to a production-ready language with formal stability commitments.
+This document defines the planned stability guarantees, backward compatibility policy, and support timeline for the Vais programming language. Vais is currently in pre-release (0.1.0) development and has not yet reached a stable 1.0 release. The policies below describe the intended guarantees once 1.0 is released.
 
-The goal of this policy is to provide users with confidence that:
+The goal of this policy is to provide users with confidence that once 1.0 is released:
 1. Code written for Vais 1.x will continue to work in future 1.x releases
 2. Breaking changes are limited to major version bumps
 3. Deprecation follows a predictable timeline
 4. The language specification is frozen for the 1.x series
 
+> **Note:** During the 0.x pre-release phase, breaking changes may occur in any release. The policies below apply only after the 1.0 stable release.
+
 ---
 
 ## Language Specification
 
-### 1.0 Specification Status: FROZEN
+### 1.0 Specification Status: DRAFT
 
-The Vais language specification version 1.0 is **frozen** as of this release. This includes:
+The Vais language specification is still under development during the 0.x pre-release phase. Once 1.0 is released, the specification will be **frozen** and include:
 
 - **Syntax** - All keyword meanings, operators, and expression forms
 - **Semantics** - Type system rules, ownership semantics, lifetime rules
@@ -297,9 +299,9 @@ Vais provides long-term support for major releases:
 
 | Version | Release Date | End of Support | Support Type |
 |---------|--------------|----------------|--------------|
-| 1.0.x   | Feb 2026     | Feb 2028       | Security patches, critical bugs |
-| 1.x     | Feb 2026+    | Next major release | Active development |
-| 2.0.x   | ~2027        | TBD            | TBD |
+| 0.1.x   | Feb 2026     | Until 1.0      | Pre-release, breaking changes possible |
+| 1.0.x   | TBD          | TBD            | Security patches, critical bugs (planned) |
+| 1.x     | TBD          | TBD            | Active development (planned) |
 
 ### Support Levels
 
@@ -473,14 +475,14 @@ Changes to this policy will be:
 
 ## Conclusion
 
-Vais 1.0 represents a commitment to stability and predictability. Users can confidently build production systems knowing that:
+Vais is currently in pre-release development (0.1.0). Once 1.0 is released, this document will represent a formal commitment to stability and predictability. At that point, users can confidently build production systems knowing that:
 
 - **Code written today will work tomorrow** (within 1.x)
 - **Breaking changes are rare and planned** (major versions only)
 - **Deprecations follow a predictable process** (6+ month notice)
 - **Security and critical bugs are promptly addressed**
 
-We value backward compatibility and will prioritize it in all decisions. When breaking changes are necessary, they will be well-justified, clearly communicated, and supported with migration tooling.
+During the 0.x pre-release phase, we appreciate early adopters and value your feedback. Breaking changes may occur but will be documented in release notes.
 
 Thank you for choosing Vais for your projects.
 
@@ -491,5 +493,5 @@ Thank you for choosing Vais for your projects.
 - **Email**: team@vaislang.dev
 - **Discord**: https://discord.gg/vais
 
-**Document Version**: 1.0.0
-**Last Updated**: February 2026
+**Document Version**: 0.1.0
+**Last Updated**: March 2026

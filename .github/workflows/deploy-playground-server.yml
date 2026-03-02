@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Fly.io CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@v1
 
       - name: Deploy to Fly.io
         run: flyctl deploy --config fly.playground.toml --remote-only

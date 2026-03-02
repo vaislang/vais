@@ -160,3 +160,10 @@ main_output.ll
 
 # Package statistics
 packages/*/STATS.txt
+
+# Profiling data
+*.profraw
+*.profdata
+
+# Generated LLVM IR in packages
+packages/**/*.ll

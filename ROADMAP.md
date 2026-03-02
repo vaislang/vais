@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (Phase 87 완료 — 문서·커뮤니티)
+> **최종 업데이트**: 2026-03-02 (Phase 88 완료 — 리포지토리 위생·타입 안전성)
 
 ---
 
@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (6,900+) | ✅ |
-| E2E 1,250개 통과 (0 fail, 1 ignored) | ✅ |
+| E2E 1,266개 통과 (0 fail, 1 ignored) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -230,8 +230,9 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 85 | WASM 생태계 | WASI P2, Component Model, wasm-tools | 1,250 |
 | 86 | IDE 개선 | LSP 타입추론/GoToDef, DAP 프리티프린터, IntelliJ 재구축, +590 테스트 | 1,250 |
 | 87 | 문서 · 커뮤니티 | API Ref +16모듈, 블로그 3편, 예제 갤러리 15카테고리, README 강화 | 1,250 |
+| 88 | 리포지토리 위생 · 타입 안전성 | gitignore profraw/ll, CI 핀, 문서 갱신, Dependent Types 검증 +16 E2E | 1,266 |
 
-### 잔여 기술 부채 (Phase 87 기준)
+### 잔여 기술 부채 (Phase 88 기준)
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
@@ -258,6 +259,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: docs-site/src/examples/gallery.md (174개 예제 15카테고리 분류) + SUMMARY.md 갤러리 섹션
 - [x] 4. README 커뮤니티 섹션 강화 — SNS/블로그/배지 추가 (Haiku) ✅ 2026-03-02
   변경: README.md (배지 3개, SNS 링크 3개, 블로그 포스트 3개, Discord placeholder)
+진행률: 4/4 (100%)
+
+### Phase 88: 리포지토리 위생 · 타입 안전성 — gitignore/CI 핀/Dependent Types
+
+> **목표**: 201개 profraw 파일 정리, CI 안정성, 오래된 문서 갱신, Dependent Types 기초 검증
+> **기대 효과**: git status 깨끗, CI 안정, 타입 안전성 향상 +15 E2E
+
+- [x] 1. .gitignore 보강 + profraw 정리 (Haiku) ✅ 2026-03-02
+  변경: .gitignore (+*.profraw, *.profdata, packages/**/*.ll), 640개 profraw 삭제
+- [x] 2. CI 워크플로우 안정화 (Haiku) ✅ 2026-03-02
+  변경: deploy-playground-server.yml (flyctl @master→@v1)
+- [x] 3. 오래된 문서 갱신 (Sonnet) ✅ 2026-03-02
+  변경: docs/STABILITY.md (v1.0.0→0.1.0-pre), docs/PACKAGE_GUIDELINES.md (vais pkg→vaisc pkg)
+- [x] 4. Dependent Types 기초 검증 (Opus) ✅ 2026-03-02
+  변경: checker_fn.rs (validate_dependent_type 호출), +16 E2E (phase86_dependent_types.rs)
 진행률: 4/4 (100%)
 
 ---
