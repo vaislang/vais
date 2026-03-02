@@ -25,7 +25,7 @@ mod wasm;
 // Re-export public functions
 pub(crate) use native::compile_to_native;
 pub(crate) use per_module::compile_per_module;
-pub(crate) use wasm::{compile_to_wasi, compile_to_wasm32};
+pub(crate) use wasm::{compile_to_wasi, compile_to_wasi_p2, compile_to_wasm32};
 
 /// Route IR compilation to the appropriate backend based on target triple.
 #[allow(clippy::too_many_arguments)]
@@ -46,9 +46,8 @@ pub(crate) fn compile_ir_to_binary(
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
-        TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => {
-            compile_to_wasi(ir_path, bin_path, opt_level, verbose)
-        }
+        TargetTriple::WasiPreview1 => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
+        TargetTriple::WasiPreview2 => compile_to_wasi_p2(ir_path, bin_path, opt_level, verbose),
         _ => compile_to_native(
             ir_path,
             bin_path,

@@ -119,6 +119,10 @@
 - [임포트 경로 보안](./security/import-path-security.md)
 - [보안 강화](./security/security-enhancement.md)
 
+# Examples Gallery
+
+- [Examples Gallery](./examples/gallery.md)
+
 ---
 
 # API Reference
@@ -153,12 +157,18 @@
 - [DateTime](./api/datetime.md)
 - [Channel](./api/channel.md)
 - [Args](./api/args.md)
+- [Env](./api/env.md)
+- [Error](./api/error.md)
+- [Iter](./api/iter.md)
+- [Process](./api/process.md)
+- [Signal](./api/signal.md)
 
 ## I/O and Filesystem
 
 - [IO](./api/io.md)
 - [File](./api/file.md)
 - [Filesystem](./api/filesystem.md)
+- [Async I/O](./api/async_io.md)
 
 ## Networking and Web
 
@@ -169,6 +179,8 @@
 - [WebSocket](./api/websocket.md)
 - [TLS](./api/tls.md)
 - [URL](./api/url.md)
+- [Async HTTP](./api/async_http.md)
+- [Async Net](./api/async_net.md)
 
 ## Concurrency
 
@@ -186,6 +198,10 @@
 - [Base64](./api/base64.md)
 - [Template](./api/template.md)
 - [Compress](./api/compress.md)
+- [TOML](./api/toml.md)
+- [YAML](./api/yaml.md)
+- [MessagePack](./api/msgpack.md)
+- [Protobuf](./api/protobuf.md)
 
 ## Databases
 
@@ -200,6 +216,7 @@
 - [Random](./api/random.md)
 - [UUID](./api/uuid.md)
 - [CRC32](./api/crc32.md)
+- [SIMD](./api/simd.md)
 
 ## Security and Crypto
 
@@ -223,6 +240,12 @@
 - [GPU](./api/gpu.md)
 - [Hot Reload](./api/hot.md)
 - [DynLoad](./api/dynload.md)
+
+## WebAssembly
+
+- [WASM](./api/wasm.md)
+- [WASI Preview 2](./api/wasi_p2.md)
+- [Web](./api/web.md)
 
 ---
 

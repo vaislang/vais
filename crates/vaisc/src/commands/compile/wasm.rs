@@ -260,3 +260,247 @@ pub(crate) fn compile_to_wasi(
         ),
     }
 }
+
+/// Compile to WASI Preview 2 (wasm32-wasip2) with Component Model support
+///
+/// Unlike Preview 1, this compilation path:
+/// 1. Uses `wasm32-wasip2` as the target triple
+/// 2. Generates a core WASM module first, then optionally converts to a Component
+/// 3. Supports Component Model adapter modules (wasi_snapshot_preview1.reactor.wasm)
+/// 4. Can invoke `wasm-tools component new` for core-to-component conversion
+pub(crate) fn compile_to_wasi_p2(
+    ir_path: &Path,
+    bin_path: &Path,
+    opt_level: u8,
+    verbose: bool,
+) -> Result<(), String> {
+    let opt_flag = format!("-O{}", opt_level.min(3));
+
+    let ir_str = ir_path
+        .to_str()
+        .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?;
+    let bin_str = bin_path
+        .to_str()
+        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
+
+    // Build WASI Preview 2 compilation args with wasm32-wasip2 target
+    let mut args: Vec<String> = vec![
+        "--target=wasm32-wasip2".to_string(),
+        opt_flag,
+        "-o".to_string(),
+        bin_str.to_string(),
+        ir_str.to_string(),
+    ];
+
+    // Auto-detect WASI sysroot (shared with Preview 1)
+    if let Some(sysroot) = detect_wasi_sysroot() {
+        args.insert(1, format!("--sysroot={}", sysroot));
+        if verbose {
+            println!("  {} WASI P2 sysroot: {}", "info:".blue().bold(), sysroot);
+        }
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let status = Command::new("clang").args(&args_refs).status();
+
+    match status {
+        Ok(s) if s.success() => {
+            // Run wasm-opt if available
+            if opt_level > 0 {
+                run_wasm_opt(bin_path, opt_level, verbose);
+            }
+
+            // Attempt component conversion with wasm-tools if available
+            if let Some(wasm_tools) = detect_wasm_tools() {
+                let component_path = bin_path.with_extension("component.wasm");
+                match run_wasm_tools_component(&wasm_tools, bin_path, &component_path, verbose) {
+                    Ok(()) => {
+                        // Validate the generated component
+                        run_wasm_tools_validate(&wasm_tools, &component_path, verbose);
+                        if verbose {
+                            println!(
+                                "  {} component: {}",
+                                "generated".blue().bold(),
+                                component_path.display()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if verbose {
+                            println!(
+                                "  {} component conversion skipped: {}",
+                                "note:".yellow().bold(),
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+
+            if verbose {
+                println!(
+                    "{} {} (wasm32-wasip2)",
+                    "Compiled".green().bold(),
+                    bin_path.display()
+                );
+            } else {
+                println!("{}", bin_path.display());
+            }
+            Ok(())
+        }
+        Ok(s) => Err(format!(
+            "clang wasi-preview2 compilation failed with code {}. \
+             Ensure wasi-sdk >= 21 is installed with wasm32-wasip2 support \
+             (set WASI_SDK_PATH env var).",
+            s.code().unwrap_or(-1)
+        )),
+        Err(_) => Err(
+            "clang not found. Install LLVM/clang with wasi-sdk or use --emit-ir to output LLVM IR only."
+                .to_string(),
+        ),
+    }
+}
+
+/// Detect wasm-tools binary path
+///
+/// Checks in order:
+/// 1. WASM_TOOLS_PATH environment variable
+/// 2. PATH lookup via `which wasm-tools`
+fn detect_wasm_tools() -> Option<PathBuf> {
+    // Check WASM_TOOLS_PATH environment variable first
+    if let Ok(path) = std::env::var("WASM_TOOLS_PATH") {
+        let p = PathBuf::from(&path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    // Try to find wasm-tools in PATH
+    if let Ok(output) = Command::new("which").arg("wasm-tools").output() {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path_str.is_empty() {
+                return Some(PathBuf::from(path_str));
+            }
+        }
+    }
+
+    None
+}
+
+/// Convert a core WASM module to a Component Model component using wasm-tools
+///
+/// Runs: `wasm-tools component new <core.wasm> -o <component.wasm> [--adapt <adapter>]`
+fn run_wasm_tools_component(
+    wasm_tools: &Path,
+    core_wasm: &Path,
+    output: &Path,
+    verbose: bool,
+) -> Result<(), String> {
+    let core_str = core_wasm
+        .to_str()
+        .ok_or_else(|| "Invalid UTF-8 in core WASM path".to_string())?;
+    let out_str = output
+        .to_str()
+        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
+
+    let mut cmd = Command::new(wasm_tools);
+    cmd.args(["component", "new", core_str, "-o", out_str]);
+
+    // Look for WASI adapter module
+    if let Some(adapter) = detect_wasi_adapter() {
+        cmd.arg("--adapt").arg(&adapter);
+        if verbose {
+            println!("  {} adapter: {}", "info:".blue().bold(), adapter);
+        }
+    }
+
+    let status = cmd
+        .status()
+        .map_err(|e| format!("Failed to run wasm-tools: {}", e))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "wasm-tools component new failed with code {}",
+            status.code().unwrap_or(-1)
+        ))
+    }
+}
+
+/// Validate a WASM component using wasm-tools validate
+fn run_wasm_tools_validate(wasm_tools: &Path, wasm_path: &Path, verbose: bool) {
+    let wasm_str = match wasm_path.to_str() {
+        Some(s) => s,
+        None => return,
+    };
+
+    if let Ok(status) = Command::new(wasm_tools)
+        .args(["validate", "--features", "component-model", wasm_str])
+        .status()
+    {
+        if verbose {
+            if status.success() {
+                println!("  {} component validated", "ok:".green().bold());
+            } else {
+                println!("  {} component validation failed", "warn:".yellow().bold());
+            }
+        }
+    }
+}
+
+/// Detect WASI Preview 1 adapter module for component conversion
+///
+/// The adapter (wasi_snapshot_preview1.reactor.wasm or command.wasm)
+/// bridges Preview 1 imports to Preview 2 interfaces.
+fn detect_wasi_adapter() -> Option<String> {
+    // Check WASI_ADAPTER_PATH environment variable
+    if let Ok(path) = std::env::var("WASI_ADAPTER_PATH") {
+        if Path::new(&path).exists() {
+            return Some(path);
+        }
+    }
+
+    // Check common locations relative to WASI SDK
+    if let Ok(sdk) = std::env::var("WASI_SDK_PATH") {
+        let candidates = [
+            PathBuf::from(&sdk)
+                .join("share")
+                .join("wasi-sysroot")
+                .join("lib")
+                .join("wasm32-wasip2")
+                .join("wasi_snapshot_preview1.reactor.wasm"),
+            PathBuf::from(&sdk)
+                .join("share")
+                .join("wasi-sysroot")
+                .join("lib")
+                .join("wasm32-wasip2")
+                .join("wasi_snapshot_preview1.command.wasm"),
+            PathBuf::from(&sdk)
+                .join("lib")
+                .join("wasi_snapshot_preview1.reactor.wasm"),
+            PathBuf::from(&sdk)
+                .join("lib")
+                .join("wasi_snapshot_preview1.command.wasm"),
+        ];
+        for candidate in &candidates {
+            if candidate.exists() {
+                return candidate.to_str().map(|s| s.to_string());
+            }
+        }
+    }
+
+    // Check common system paths
+    let system_paths = [
+        "/usr/local/lib/wasi/wasi_snapshot_preview1.reactor.wasm",
+        "/usr/local/share/wasi-adapters/wasi_snapshot_preview1.reactor.wasm",
+    ];
+    for path in &system_paths {
+        if Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+
+    None
+}

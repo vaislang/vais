@@ -8,6 +8,7 @@ use tower_lsp::lsp_types::*;
 use vais_ast::{Expr, FunctionBody, IfElse, Item, Module, Spanned, Stmt, Type};
 
 use crate::backend::{InlayHintInfo, VaisBackend};
+use crate::type_resolve::TypeContext;
 
 impl VaisBackend {
     fn build_function_map(&self, ast: &Module) -> HashMap<String, (Vec<String>, Option<String>)> {
@@ -256,12 +257,40 @@ impl VaisBackend {
         }
     }
 
+    /// Enhanced type hint using TypeContext for better inference
+    fn infer_expr_type_hint_enhanced(
+        &self,
+        expr: &Spanned<Expr>,
+        func_map: &HashMap<String, (Vec<String>, Option<String>)>,
+        type_ctx: &TypeContext,
+    ) -> Option<String> {
+        // Try basic inference first
+        let basic = self.infer_expr_type_hint(expr, func_map);
+        if let Some(ref hint) = basic {
+            if hint != "_" {
+                return basic;
+            }
+        }
+
+        // Fall back to TypeContext for better resolution
+        let resolved = type_ctx.infer_expr_type(expr);
+        let display = resolved.display_name();
+        if display != "_" {
+            Some(display)
+        } else {
+            basic
+        }
+    }
+
     /// Collect inlay hints from AST
     pub(crate) fn collect_inlay_hints(&self, ast: &Module, rope: &Rope) -> Vec<InlayHintInfo> {
         let mut hints = Vec::new();
 
         // Build function signature map
         let func_map = self.build_function_map(ast);
+
+        // Build type context for enhanced inference
+        let type_ctx = TypeContext::from_module(ast);
 
         // Collect hints from all items
         for item in &ast.items {
@@ -272,7 +301,9 @@ impl VaisBackend {
                     }
                     FunctionBody::Block(stmts) => {
                         for stmt in stmts {
-                            self.collect_hints_from_stmt(stmt, &func_map, &mut hints);
+                            self.collect_hints_from_stmt_with_ctx(
+                                stmt, &func_map, &type_ctx, &mut hints,
+                            );
                         }
                     }
                 },
@@ -284,7 +315,9 @@ impl VaisBackend {
                             }
                             FunctionBody::Block(stmts) => {
                                 for stmt in stmts {
-                                    self.collect_hints_from_stmt(stmt, &func_map, &mut hints);
+                                    self.collect_hints_from_stmt_with_ctx(
+                                        stmt, &func_map, &type_ctx, &mut hints,
+                                    );
                                 }
                             }
                         }
@@ -307,7 +340,7 @@ impl VaisBackend {
         hints
     }
 
-    /// Collect inlay hints from a statement
+    /// Collect inlay hints from a statement (basic version, used by collect_hints_from_expr)
     fn collect_hints_from_stmt(
         &self,
         stmt: &Spanned<Stmt>,
@@ -335,6 +368,66 @@ impl VaisBackend {
                         // Explicit `_` type - show inferred type
                         let type_hint = self
                             .infer_expr_type_hint(value, func_map)
+                            .unwrap_or_else(|| "_".to_string());
+                        hints.push(InlayHintInfo {
+                            position: name.span.end,
+                            label: format!(": {}", type_hint),
+                            kind: InlayHintKind::TYPE,
+                        });
+                    }
+                    _ => {
+                        // Explicit type annotation - no type hint needed
+                    }
+                }
+
+                // Collect parameter hints from the value expression
+                self.collect_hints_from_expr(value, func_map, hints);
+            }
+            Stmt::Expr(expr) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Return(Some(expr)) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Break(Some(expr)) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Defer(expr) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect inlay hints from a statement (with type context for enhanced inference)
+    fn collect_hints_from_stmt_with_ctx(
+        &self,
+        stmt: &Spanned<Stmt>,
+        func_map: &HashMap<String, (Vec<String>, Option<String>)>,
+        type_ctx: &TypeContext,
+        hints: &mut Vec<InlayHintInfo>,
+    ) {
+        match &stmt.node {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
+                // Add type hint for variables with inferred types (no explicit type annotation)
+                match ty {
+                    None => {
+                        // No type annotation - infer from expression (enhanced)
+                        let type_hint = self
+                            .infer_expr_type_hint_enhanced(value, func_map, type_ctx)
+                            .unwrap_or_else(|| "_".to_string());
+                        hints.push(InlayHintInfo {
+                            position: name.span.end,
+                            label: format!(": {}", type_hint),
+                            kind: InlayHintKind::TYPE,
+                        });
+                    }
+                    Some(spanned_ty) if matches!(spanned_ty.node, Type::Infer) => {
+                        // Explicit `_` type - show inferred type (enhanced)
+                        let type_hint = self
+                            .infer_expr_type_hint_enhanced(value, func_map, type_ctx)
                             .unwrap_or_else(|| "_".to_string());
                         hints.push(InlayHintInfo {
                             position: name.span.end,

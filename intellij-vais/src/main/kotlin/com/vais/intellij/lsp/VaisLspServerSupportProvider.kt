@@ -13,7 +13,9 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * LSP client and server manager for Vais language.
  *
- * Manages LSP server lifecycle per project.
+ * Manages LSP server lifecycle per project. Provides document synchronization
+ * (didOpen/didClose/didChange) and exposes the LSP server for IDE features
+ * like completion, hover, go-to-definition, and references.
  */
 class VaisLspManager private constructor() {
     private val logger = Logger.getInstance(VaisLspManager::class.java)
@@ -61,21 +63,45 @@ class VaisLspManager private constructor() {
             launcher.startListening()
             val server = launcher.remoteProxy
 
-            // Initialize the server
+            // Initialize the server with comprehensive capabilities
             val initParams = InitializeParams().apply {
                 rootUri = "file://$basePath"
                 capabilities = ClientCapabilities().apply {
                     textDocument = TextDocumentClientCapabilities().apply {
+                        synchronization = SynchronizationCapabilities().apply {
+                            dynamicRegistration = true
+                            didSave = true
+                            willSave = false
+                            willSaveWaitUntil = false
+                        }
                         completion = CompletionCapabilities().apply {
                             completionItem = CompletionItemCapabilities().apply {
                                 snippetSupport = true
+                                documentationFormat = listOf(MarkupKind.MARKDOWN, MarkupKind.PLAINTEXT)
                             }
+                            contextSupport = true
                         }
-                        hover = HoverCapabilities()
-                        definition = DefinitionCapabilities()
-                        references = ReferencesCapabilities()
+                        hover = HoverCapabilities().apply {
+                            contentFormat = listOf(MarkupKind.MARKDOWN, MarkupKind.PLAINTEXT)
+                        }
+                        definition = DefinitionCapabilities().apply {
+                            dynamicRegistration = true
+                        }
+                        references = ReferencesCapabilities().apply {
+                            dynamicRegistration = true
+                        }
                         formatting = FormattingCapabilities()
                         diagnostic = DiagnosticCapabilities()
+                        signatureHelp = SignatureHelpCapabilities()
+                        documentSymbol = DocumentSymbolCapabilities().apply {
+                            dynamicRegistration = true
+                        }
+                        inlayHint = InlayHintCapabilities().apply {
+                            dynamicRegistration = true
+                        }
+                        codeAction = CodeActionCapabilities().apply {
+                            dynamicRegistration = true
+                        }
                     }
                 }
             }
@@ -107,6 +133,9 @@ class VaisLspManager private constructor() {
 
 /**
  * Represents an active LSP connection.
+ *
+ * Provides convenience methods for document synchronization and
+ * LSP feature requests.
  */
 class VaisLspConnection(
     val server: LanguageServer,
@@ -114,6 +143,61 @@ class VaisLspConnection(
     val client: VaisLanguageClient
 ) {
     private val logger = Logger.getInstance(VaisLspConnection::class.java)
+    private var documentVersion = ConcurrentHashMap<String, Int>()
+
+    /**
+     * Notify the server that a document was opened.
+     */
+    fun didOpen(uri: String, text: String) {
+        documentVersion[uri] = 1
+        server.textDocumentService.didOpen(
+            DidOpenTextDocumentParams(
+                TextDocumentItem(uri, "vais", 1, text)
+            )
+        )
+    }
+
+    /**
+     * Notify the server that a document was changed.
+     */
+    fun didChange(uri: String, text: String) {
+        val version = (documentVersion[uri] ?: 0) + 1
+        documentVersion[uri] = version
+        server.textDocumentService.didChange(
+            DidChangeTextDocumentParams(
+                VersionedTextDocumentIdentifier(uri, version),
+                listOf(TextDocumentContentChangeEvent(text))
+            )
+        )
+    }
+
+    /**
+     * Notify the server that a document was closed.
+     */
+    fun didClose(uri: String) {
+        documentVersion.remove(uri)
+        server.textDocumentService.didClose(
+            DidCloseTextDocumentParams(
+                TextDocumentIdentifier(uri)
+            )
+        )
+    }
+
+    /**
+     * Notify the server that a document was saved.
+     */
+    fun didSave(uri: String, text: String? = null) {
+        server.textDocumentService.didSave(
+            DidSaveTextDocumentParams(
+                TextDocumentIdentifier(uri),
+                text
+            )
+        )
+    }
+
+    fun isAlive(): Boolean {
+        return process.isAlive
+    }
 
     fun shutdown() {
         try {

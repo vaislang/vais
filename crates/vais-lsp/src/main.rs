@@ -15,6 +15,7 @@ mod folding;
 mod handlers;
 mod hints;
 mod symbol_analysis;
+mod type_resolve;
 
 use backend::VaisBackend;
 

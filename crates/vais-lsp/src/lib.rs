@@ -13,6 +13,7 @@ mod analysis;
 mod folding;
 mod hints;
 mod symbol_analysis;
+mod type_resolve;
 
 // LSP request handlers
 pub(crate) mod handlers;

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Design Philosophy Behind Single-Character Keywords - Vais Blog</title>
+  <meta name="description" content="Why Vais uses F, S, E, I, L, M instead of function, struct, enum, if, loop, match. A deep dive into token efficiency, AI readability, and language design trade-offs.">
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="apple-touch-icon" href="/logo-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0f; --bg-surface: #12121a; --bg-card: #1a1a26; --bg-card-hover: #22222f;
+      --border: #2a2a3a; --border-light: #3a3a4a; --text: #e4e4ef; --text-muted: #8888a0;
+      --text-dim: #666678; --primary: #7c6aef; --primary-light: #9d8ff5; --accent: #22d3ee;
+      --accent-green: #34d399;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --radius: 12px; --radius-sm: 8px; --shadow: 0 4px 24px rgba(0,0,0,0.4); --max-width: 1200px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: var(--primary-light); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--accent); }
+    code { font-family: var(--font-mono); font-size: 0.9em; background: var(--bg-card); padding: 3px 8px; border-radius: 4px; color: var(--accent); }
+    pre { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 20px; overflow-x: auto; margin: 24px 0; line-height: 1.7; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 0.88rem; }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,15,0.85); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+    .nav-inner { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.2rem; color: var(--text); }
+    .logo-text { font-family: var(--font-mono); }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: var(--text-muted); font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-link-github { display: flex; align-items: center; opacity: 0.7; transition: opacity 0.2s; }
+    .nav-link-github:hover { opacity: 1; }
+    .article { padding: 140px 0 80px; }
+    .article-container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+    .article-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .article-date { font-family: var(--font-mono); font-size: 0.9rem; color: var(--text-muted); }
+    .article-tag { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 10px; background: rgba(124,106,239,0.15); border: 1px solid rgba(124,106,239,0.3); border-radius: 4px; color: var(--primary-light); }
+    .article-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 40px; }
+    .article-content { font-size: 1.05rem; line-height: 1.8; color: var(--text); }
+    .article-content h2 { font-size: 1.8rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px; line-height: 1.3; }
+    .article-content h3 { font-size: 1.4rem; font-weight: 600; margin-top: 36px; margin-bottom: 12px; }
+    .article-content p { margin-bottom: 20px; }
+    .article-content ul, .article-content ol { margin: 20px 0; padding-left: 28px; }
+    .article-content li { margin-bottom: 10px; }
+    .article-content strong { font-weight: 600; color: var(--text); }
+    .article-content blockquote { border-left: 3px solid var(--primary); padding-left: 20px; margin: 28px 0; color: var(--text-muted); font-style: italic; }
+    .article-content table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .article-content th, .article-content td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .article-content th { font-weight: 600; color: var(--accent); background: var(--bg-surface); }
+    .kw { color: #c792ea; } .fn { color: #82aaff; } .type { color: #ffcb6b; } .num { color: #f78c6c; } .str { color: #c3e88d; } .self { color: #22d3ee; font-weight: 700; } .comment { color: #676e95; font-style: italic; }
+    .article-cta { margin-top: 60px; padding: 32px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+    .article-cta h3 { font-size: 1.4rem; margin-bottom: 12px; }
+    .article-cta p { color: var(--text-muted); margin-bottom: 24px; }
+    .btn { display: inline-block; padding: 12px 28px; background: var(--primary); color: white; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.95rem; transition: all 0.2s; }
+    .btn:hover { background: var(--primary-light); color: white; transform: translateY(-1px); }
+    .footer { padding: 60px 0 32px; border-top: 1px solid var(--border); }
+    .footer-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+    .footer-tagline { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+    .footer-col { display: flex; flex-direction: column; gap: 8px; }
+    .footer-col h4 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .footer-col a { color: var(--text-muted); font-size: 0.9rem; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom { padding-top: 24px; border-top: 1px solid var(--border); text-align: center; }
+    .footer-bottom p { color: var(--text-dim); font-size: 0.82rem; }
+    @media (max-width: 640px) { .article { padding: 110px 0 60px; } .article-title { font-size: 2rem; } .footer-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo"><img src="/logo-icon.png" alt="Vais" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">Vais</span></a>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/docs">Docs</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="article">
+    <div class="article-container">
+      <div class="article-meta">
+        <span class="article-date">2026-03-02</span>
+        <span class="article-tag">Language Design</span>
+      </div>
+      <h1 class="article-title">The Design Philosophy Behind Single-Character Keywords</h1>
+
+      <div class="article-content">
+        <p>
+          One of the most striking features of Vais is its single-character keyword system. Instead of <code>function</code>, we write <code>F</code>. Instead of <code>struct</code>, we write <code>S</code>. This is not merely an aesthetic choice -- it is a deliberate design decision rooted in the intersection of AI code generation, information theory, and developer ergonomics.
+        </p>
+
+        <h2>The Token Economy</h2>
+
+        <p>
+          Large Language Models process text in tokens. Every token costs compute, latency, and money. When an LLM generates code, the keyword <code>function</code> consumes one token (sometimes two, depending on the tokenizer). In Vais, <code>F</code> is a single character that consistently maps to one token.
+        </p>
+
+        <p>
+          This matters at scale. Consider a typical 50-function program:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Language</th><th>Keyword Tokens</th><th>Savings</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust</td><td>~350 keyword tokens</td><td>baseline</td></tr>
+            <tr><td>Go</td><td>~280 keyword tokens</td><td>~20%</td></tr>
+            <tr><td>Vais</td><td>~120 keyword tokens</td><td>~65%</td></tr>
+          </tbody>
+        </table>
+
+        <p>
+          The reduction comes not just from shorter keywords, but from Vais's expression-oriented design that eliminates many keywords entirely. <code>return</code> is often implicit (last expression is the return value), and type annotations are inferred.
+        </p>
+
+        <h2>The Keyword Map</h2>
+
+        <p>
+          Every single-character keyword in Vais was chosen based on mnemonic strength and visual distinctiveness:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Vais</th><th>Meaning</th><th>Mnemonic</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>F</code></td><td>Function</td><td><strong>F</strong>unction</td></tr>
+            <tr><td><code>S</code></td><td>Struct</td><td><strong>S</strong>truct</td></tr>
+            <tr><td><code>E</code></td><td>Enum / Else</td><td><strong>E</strong>num, <strong>E</strong>lse</td></tr>
+            <tr><td><code>I</code></td><td>If</td><td><strong>I</strong>f</td></tr>
+            <tr><td><code>L</code></td><td>Loop</td><td><strong>L</strong>oop</td></tr>
+            <tr><td><code>M</code></td><td>Match</td><td><strong>M</strong>atch</td></tr>
+            <tr><td><code>R</code></td><td>Return</td><td><strong>R</strong>eturn</td></tr>
+            <tr><td><code>B</code></td><td>Break</td><td><strong>B</strong>reak</td></tr>
+            <tr><td><code>C</code></td><td>Continue / Const</td><td><strong>C</strong>ontinue</td></tr>
+            <tr><td><code>W</code></td><td>Trait (like)</td><td>"<strong>W</strong>hat it does"</td></tr>
+            <tr><td><code>X</code></td><td>Impl</td><td>e<strong>X</strong>ecute/e<strong>X</strong>tend</td></tr>
+            <tr><td><code>D</code></td><td>Defer</td><td><strong>D</strong>efer</td></tr>
+            <tr><td><code>P</code></td><td>Public</td><td><strong>P</strong>ublic</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Side-by-Side: Vais vs. Rust</h2>
+
+        <p>Consider a generic function with pattern matching:</p>
+
+        <p><strong>Rust (72 tokens):</strong></p>
+<pre><code><span class="kw">fn</span> <span class="fn">classify</span>(x: <span class="type">i64</span>) -> <span class="type">i64</span> {
+    <span class="kw">match</span> x {
+        0 => <span class="num">100</span>,
+        1..=9 => <span class="num">200</span>,
+        _ => <span class="num">300</span>,
+    }
+}</code></pre>
+
+        <p><strong>Vais (48 tokens):</strong></p>
+<pre><code><span class="kw">F</span> <span class="fn">classify</span>(x: <span class="type">i64</span>) -> <span class="type">i64</span> {
+    <span class="kw">M</span> x {
+        <span class="num">0</span> => <span class="num">100</span>,
+        <span class="num">1</span>..<span class="num">9</span> => <span class="num">200</span>,
+        _ => <span class="num">300</span>
+    }
+}</code></pre>
+
+        <p>
+          The Vais version is 33% fewer tokens while maintaining identical readability for developers who know the keyword map. The learning curve is approximately 15 minutes -- memorizing 13 single-letter mnemonics.
+        </p>
+
+        <h2>The <code>@</code> Self-Recursion Operator</h2>
+
+        <p>
+          The <code>@</code> operator is perhaps our most distinctive design choice. It calls the current function recursively without naming it:
+        </p>
+
+<pre><code><span class="comment"># Fibonacci in one line</span>
+<span class="kw">F</span> <span class="fn">fib</span>(n:<span class="type">i64</span>)-><span class="type">i64</span> = n&lt;2 ? n : <span class="self">@</span>(n-1) + <span class="self">@</span>(n-2)</code></pre>
+
+        <p>
+          This eliminates the common pattern where a function name appears in both the definition and the recursive call. The <code>@</code> symbol is universally recognizable and unambiguous in its meaning.
+        </p>
+
+        <h2>Expression-Oriented by Default</h2>
+
+        <p>
+          In Vais, everything is an expression. The last expression in a block is its return value, eliminating explicit <code>return</code> in most cases:
+        </p>
+
+<pre><code><span class="comment"># No explicit return needed</span>
+<span class="kw">F</span> <span class="fn">abs</span>(x: <span class="type">i64</span>) -> <span class="type">i64</span> = <span class="kw">I</span> x &lt; 0 { -x } <span class="kw">E</span> { x }
+
+<span class="comment"># Ternary for simple cases</span>
+<span class="kw">F</span> <span class="fn">max</span>(a: <span class="type">i64</span>, b: <span class="type">i64</span>) -> <span class="type">i64</span> = a > b ? a : b</code></pre>
+
+        <h2>Design Trade-offs We Considered</h2>
+
+        <p>
+          This approach is not without trade-offs. We carefully evaluated each concern:
+        </p>
+
+        <ul>
+          <li><strong>Readability for newcomers:</strong> The initial "alphabet soup" impression fades within one coding session. LSP hover information shows the full keyword name.</li>
+          <li><strong>Collision with variable names:</strong> All Vais keywords are uppercase single letters. Variable names conventionally start with lowercase, creating a natural visual separation.</li>
+          <li><strong>IDE support:</strong> The VSCode extension and IntelliJ plugin provide syntax highlighting that makes keywords visually prominent.</li>
+          <li><strong>Searchability:</strong> <code>F </code> (with trailing space) is more searchable than you might expect. LSP "Go to Definition" handles the rest.</li>
+        </ul>
+
+        <h2>The AI-Native Perspective</h2>
+
+        <p>
+          As AI models become primary authors of code, the cost function shifts. Traditional readability optimized for human scanning speed. AI-native readability optimizes for:
+        </p>
+
+        <ol>
+          <li><strong>Token efficiency</strong> -- fewer tokens mean faster generation and lower cost</li>
+          <li><strong>Unambiguous parsing</strong> -- single-character keywords have zero ambiguity</li>
+          <li><strong>Information density</strong> -- more logic per context window means better AI reasoning</li>
+        </ol>
+
+        <p>
+          Vais is designed for the era where an AI writes the code and a human reviews it. The single-character keywords make generation efficient, while the LSP tooling makes review ergonomic.
+        </p>
+
+        <div class="article-cta">
+          <h3>Try Vais Yourself</h3>
+          <p>Install Vais and see how single-character keywords feel in practice.</p>
+          <a href="https://github.com/vaislang/vais" class="btn" target="_blank" rel="noopener">Get Started on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <img src="/logo-icon.png" alt="Vais" style="width:28px;height:28px;">
+          <span class="logo-text">Vais</span>
+          <p class="footer-tagline">AI-Optimized Systems Language</p>
+        </div>
+        <div class="footer-col"><h4>Learn</h4><a href="/docs">Documentation</a><a href="/#playground">Playground</a></div>
+        <div class="footer-col"><h4>Community</h4><a href="https://github.com/vaislang/vais" target="_blank">GitHub</a><a href="https://github.com/vaislang/vais/discussions" target="_blank">Discussions</a></div>
+        <div class="footer-col"><h4>More</h4><a href="/blog/">Blog</a><a href="https://github.com/vaislang/vais/blob/main/CHANGELOG.md" target="_blank">Changelog</a></div>
+      </div>
+      <div class="footer-bottom"><p>&copy; 2026 Vais Contributors. Built with care for AI.</p></div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -4,6 +4,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 
 use crate::backend::{get_builtin_hover, position_in_range, VaisBackend};
+use crate::type_resolve::TypeContext;
 
 pub(crate) async fn handle_hover(
     backend: &VaisBackend,
@@ -27,6 +28,37 @@ pub(crate) async fn handle_hover(
             if let Some(ref name) = ident {
                 if let Some(hover) = get_builtin_hover(name) {
                     return Ok(Some(hover));
+                }
+            }
+
+            // Try to show inferred variable type
+            if let Some(ref name) = ident {
+                let mut type_ctx = TypeContext::from_module(ast);
+                type_ctx.collect_variable_bindings(ast, offset);
+                if let Some(ty) = type_ctx.variable_types.get(name) {
+                    let type_display = ty.display_name();
+                    if type_display != "_" {
+                        // Check this is actually a variable (not a type/function definition)
+                        let is_definition = ast.items.iter().any(|item| match &item.node {
+                            vais_ast::Item::Function(f) => f.name.node == *name,
+                            vais_ast::Item::Struct(s) => s.name.node == *name,
+                            vais_ast::Item::Enum(e) => e.name.node == *name,
+                            vais_ast::Item::Trait(t) => t.name.node == *name,
+                            _ => false,
+                        });
+                        if !is_definition {
+                            return Ok(Some(Hover {
+                                contents: HoverContents::Markup(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: format!(
+                                        "```vais\n{}: {}\n```\n\nInferred variable type",
+                                        name, type_display
+                                    ),
+                                }),
+                                range: None,
+                            }));
+                        }
+                    }
                 }
             }
 

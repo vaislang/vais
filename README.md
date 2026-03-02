@@ -4,6 +4,9 @@
 
 [![CI](https://github.com/vaislang/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaislang/vais/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/vaislang/vais/branch/main/graph/badge.svg)](https://codecov.io/gh/vaislang/vais)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/vaislang/vais/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-vais.dev-purple)](https://vais.dev/docs/)
+[![GitHub Discussions](https://img.shields.io/github/discussions/vaislang/vais)](https://github.com/vaislang/vais/discussions)
 
 Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
 
@@ -99,7 +102,7 @@ playground/        # Web playground frontend
 ```bash
 cargo build --release
 cargo test                                     # Run all 7,000+ tests
-cargo test -p vaisc                            # Run vaisc tests (1,150 E2E tests)
+cargo test -p vaisc                            # Run vaisc tests (1,250 E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -349,8 +352,22 @@ Step-by-step project tutorials:
 ## Community
 
 - [GitHub Discussions](https://github.com/vaislang/vais/discussions) - Questions, ideas, show & tell
+- [Blog](https://vais.dev/blog/) - Technical articles and language design insights
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute
 - [CHANGELOG](CHANGELOG.md) - Release history
+- [Discord](https://discord.gg/vaislang) - Real-time chat (coming soon)
+
+### Follow Us
+
+- GitHub: [@vaislang](https://github.com/vaislang)
+- Twitter/X: [@vaislang](https://twitter.com/vaislang)
+- Instagram: [@vaislang](https://instagram.com/vaislang)
+
+### Recent Blog Posts
+
+- [The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself](https://vais.dev/blog/self-hosting-journey.html)
+- [Vais Performance: Compilation Speed and Runtime Benchmarks](https://vais.dev/blog/performance-comparison.html)
+- [The Design Philosophy Behind Single-Character Keywords](https://vais.dev/blog/why-single-char-keywords.html)
 
 ## Legacy
 

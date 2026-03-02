@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself - Vais Blog</title>
+  <meta name="description" content="How we bootstrapped the Vais compiler -- from first lexer token to 50K LOC self-hosting with 21/21 clang success. The challenges, breakthroughs, and lessons learned.">
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="apple-touch-icon" href="/logo-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0f; --bg-surface: #12121a; --bg-card: #1a1a26; --bg-card-hover: #22222f;
+      --border: #2a2a3a; --border-light: #3a3a4a; --text: #e4e4ef; --text-muted: #8888a0;
+      --text-dim: #666678; --primary: #7c6aef; --primary-light: #9d8ff5; --accent: #22d3ee;
+      --accent-green: #34d399;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --radius: 12px; --radius-sm: 8px; --shadow: 0 4px 24px rgba(0,0,0,0.4); --max-width: 1200px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: var(--primary-light); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--accent); }
+    code { font-family: var(--font-mono); font-size: 0.9em; background: var(--bg-card); padding: 3px 8px; border-radius: 4px; color: var(--accent); }
+    pre { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 20px; overflow-x: auto; margin: 24px 0; line-height: 1.7; }
+    pre code { background: none; padding: 0; color: var(--text); font-size: 0.88rem; }
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,15,0.85); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
+    .nav-inner { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.2rem; color: var(--text); }
+    .logo-text { font-family: var(--font-mono); }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: var(--text-muted); font-size: 0.9rem; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-link-github { display: flex; align-items: center; opacity: 0.7; transition: opacity 0.2s; }
+    .nav-link-github:hover { opacity: 1; }
+    .article { padding: 140px 0 80px; }
+    .article-container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+    .article-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .article-date { font-family: var(--font-mono); font-size: 0.9rem; color: var(--text-muted); }
+    .article-tag { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 10px; background: rgba(34,211,238,0.15); border: 1px solid rgba(34,211,238,0.3); border-radius: 4px; color: var(--accent); }
+    .article-title { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 40px; }
+    .article-content { font-size: 1.05rem; line-height: 1.8; color: var(--text); }
+    .article-content h2 { font-size: 1.8rem; font-weight: 700; margin-top: 48px; margin-bottom: 16px; line-height: 1.3; }
+    .article-content h3 { font-size: 1.4rem; font-weight: 600; margin-top: 36px; margin-bottom: 12px; }
+    .article-content p { margin-bottom: 20px; }
+    .article-content ul, .article-content ol { margin: 20px 0; padding-left: 28px; }
+    .article-content li { margin-bottom: 10px; }
+    .article-content strong { font-weight: 600; color: var(--text); }
+    .article-content blockquote { border-left: 3px solid var(--primary); padding-left: 20px; margin: 28px 0; color: var(--text-muted); font-style: italic; }
+    .article-content table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .article-content th, .article-content td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .article-content th { font-weight: 600; color: var(--accent); background: var(--bg-surface); }
+    .kw { color: #c792ea; } .fn { color: #82aaff; } .type { color: #ffcb6b; } .num { color: #f78c6c; } .str { color: #c3e88d; } .self { color: #22d3ee; font-weight: 700; } .comment { color: #676e95; font-style: italic; }
+    .article-cta { margin-top: 60px; padding: 32px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+    .article-cta h3 { font-size: 1.4rem; margin-bottom: 12px; }
+    .article-cta p { color: var(--text-muted); margin-bottom: 24px; }
+    .btn { display: inline-block; padding: 12px 28px; background: var(--primary); color: white; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.95rem; transition: all 0.2s; }
+    .btn:hover { background: var(--primary-light); color: white; transform: translateY(-1px); }
+    .milestone { display: flex; gap: 16px; margin: 20px 0; padding: 16px; background: var(--bg-surface); border-radius: var(--radius-sm); border-left: 3px solid var(--accent-green); }
+    .milestone-phase { font-family: var(--font-mono); color: var(--accent-green); font-weight: 700; min-width: 80px; }
+    .milestone-desc { color: var(--text); }
+    .footer { padding: 60px 0 32px; border-top: 1px solid var(--border); }
+    .footer-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+    .footer-tagline { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+    .footer-col { display: flex; flex-direction: column; gap: 8px; }
+    .footer-col h4 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+    .footer-col a { color: var(--text-muted); font-size: 0.9rem; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom { padding-top: 24px; border-top: 1px solid var(--border); text-align: center; }
+    .footer-bottom p { color: var(--text-dim); font-size: 0.82rem; }
+    @media (max-width: 640px) { .article { padding: 110px 0 60px; } .article-title { font-size: 2rem; } .footer-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo"><img src="/logo-icon.png" alt="Vais" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">Vais</span></a>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/docs">Docs</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="article">
+    <div class="article-container">
+      <div class="article-meta">
+        <span class="article-date">2026-03-02</span>
+        <span class="article-tag">Self-Hosting</span>
+      </div>
+      <h1 class="article-title">The Self-Hosting Journey: 50,000 Lines of Vais Compiling Itself</h1>
+
+      <div class="article-content">
+        <p>
+          Self-hosting -- a compiler written in the language it compiles -- is the traditional rite of passage for a programming language. It proves that the language is expressive enough to build complex software, and that the compiler is correct enough to compile non-trivial programs. This is the story of how Vais achieved self-hosting with 50,000+ lines of code and 100% clang compilation success.
+        </p>
+
+        <h2>Why Self-Host?</h2>
+
+        <p>
+          A self-hosting compiler serves three purposes:
+        </p>
+
+        <ol>
+          <li><strong>Proof of expressiveness:</strong> If you can build a compiler in a language, you can build anything. A compiler requires data structures, string processing, pattern matching, error handling, file I/O, and code generation -- it exercises every feature.</li>
+          <li><strong>Proof of correctness:</strong> A self-hosting compiler is the ultimate integration test. If the generated LLVM IR compiles and the resulting binary produces correct output, the compiler is working.</li>
+          <li><strong>Dogfooding:</strong> Using Vais to build its own compiler revealed dozens of ergonomic issues, codegen bugs, and missing features that would have been invisible from the outside.</li>
+        </ol>
+
+        <h2>The Bootstrap Architecture</h2>
+
+        <p>
+          The Vais self-hosting compiler lives in the <code>selfhost/</code> directory with 50,000+ lines across multiple modules:
+        </p>
+
+<pre><code>selfhost/
+  main.vais          # Entry point
+  lexer.vais         # Token scanner (114 tests)
+  parser.vais        # Recursive descent parser
+  ast.vais           # AST node definitions
+  types.vais         # Type checker
+  codegen.vais       # LLVM IR emitter
+  ir_builder.vais    # IR construction helpers
+  builtins.vais      # Built-in function definitions
+  ...</code></pre>
+
+        <p>
+          The bootstrap compiler reads <code>.vais</code> source files, lexes them, parses an AST, runs type checking, and emits LLVM IR that is compiled by clang into a native binary.
+        </p>
+
+        <h2>The Milestones</h2>
+
+        <p>
+          The self-hosting journey progressed through phases, each adding capability:
+        </p>
+
+        <div class="milestone">
+          <span class="milestone-phase">Phase 1-10</span>
+          <span class="milestone-desc">Basic lexer, parser, and arithmetic codegen. The compiler could tokenize and emit IR for simple expressions.</span>
+        </div>
+
+        <div class="milestone">
+          <span class="milestone-phase">Phase 11-20</span>
+          <span class="milestone-desc">Control flow (if/else, loops, match), functions, and struct definitions. The compiler could compile meaningful programs.</span>
+        </div>
+
+        <div class="milestone">
+          <span class="milestone-phase">Phase 21-30</span>
+          <span class="milestone-desc">Generic types, trait dispatch, error handling (Result/Option), and string processing. The type system became self-sufficient.</span>
+        </div>
+
+        <div class="milestone">
+          <span class="milestone-phase">Phase 31-40</span>
+          <span class="milestone-desc">Full bootstrap achieved. The compiler could compile itself, producing valid LLVM IR. 21/21 clang compilation success. Module system, imports, and standard library integration.</span>
+        </div>
+
+        <div class="milestone">
+          <span class="milestone-phase">Phase 41-56</span>
+          <span class="milestone-desc">Optimization and hardening. MIR lowering, advanced optimization passes, extensive E2E testing (1,200+ tests), and codegen correctness improvements.</span>
+        </div>
+
+        <h2>The Hardest Bugs</h2>
+
+        <p>
+          Self-hosting exposed bugs that no test suite would have caught:
+        </p>
+
+        <h3>1. The "Everything is i64" Problem</h3>
+
+        <p>
+          Early Vais codegen treated almost everything as <code>i64</code>. This worked for simple programs but created subtle bugs in the self-hosting compiler where enum tags, boolean values, and pointers all needed distinct LLVM types. Phase 42 systematically addressed 135+ instances of this pattern.
+        </p>
+
+        <h3>2. Void Phi Nodes</h3>
+
+        <p>
+          LLVM's <code>phi</code> instruction cannot use the <code>void</code> type. When the self-hosting compiler generated code for blocks ending in void-returning functions, it produced invalid IR: <code>phi void</code>. The fix was to emit <code>add i64 0, 0</code> as a placeholder in void contexts.
+        </p>
+
+        <h3>3. Generic Closing Brackets</h3>
+
+        <p>
+          The expression <code>Vec&lt;HashMap&lt;K,V&gt;&gt;</code> has two closing angle brackets <code>&gt;&gt;</code>, which the lexer tokenized as a single right-shift operator. The fix introduced a <code>pending_gt</code> flag that splits <code>&gt;&gt;</code> into two <code>&gt;</code> tokens when inside a generic context.
+        </p>
+
+        <h3>4. Occurs Check</h3>
+
+        <p>
+          The type inference engine lacked an occurs check, causing infinite recursion during unification when a type variable appeared in its own constraint. This is a classic bug in Hindley-Milner implementations, and it only surfaced when the self-hosting compiler tried to infer types for its own recursive data structures.
+        </p>
+
+        <h2>Lessons Learned</h2>
+
+        <ul>
+          <li><strong>Write the self-hosting compiler early.</strong> We started at Phase 1. Every new language feature was immediately tested by implementing something in the self-hosting compiler. This provided continuous feedback.</li>
+          <li><strong>Test at the IR level.</strong> Many bugs only manifest when the generated LLVM IR is validated by clang. Unit tests that only check AST or type information miss codegen issues.</li>
+          <li><strong>The compiler is the best benchmark.</strong> Compiling 50K lines revealed performance bottlenecks that synthetic benchmarks never would. The hot-path optimization work (Phase 26) was entirely motivated by self-hosting profiling.</li>
+          <li><strong>Bootstrap in increments.</strong> Each phase added one capability and verified it worked. We never tried to "big bang" the bootstrap.</li>
+        </ul>
+
+        <h2>By the Numbers</h2>
+
+        <table>
+          <thead>
+            <tr><th>Metric</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Total LOC (self-hosting)</td><td>50,000+</td></tr>
+            <tr><td>Lexer tests</td><td>114</td></tr>
+            <tr><td>Clang compilation success</td><td>21/21 (100%)</td></tr>
+            <tr><td>Bootstrap compile time</td><td>64.6ms</td></tr>
+            <tr><td>Throughput</td><td>774K lines/sec</td></tr>
+            <tr><td>E2E tests (full compiler)</td><td>1,200+</td></tr>
+            <tr><td>Phases to bootstrap</td><td>40</td></tr>
+            <tr><td>Codegen bugs found</td><td>135+</td></tr>
+          </tbody>
+        </table>
+
+        <h2>What Self-Hosting Proves</h2>
+
+        <p>
+          Self-hosting proves that Vais is not a toy language. It has the expressiveness to build systems software (a compiler is among the most demanding applications), the correctness to produce valid machine code, and the performance to do it in under 65 milliseconds.
+        </p>
+
+        <p>
+          The <code>selfhost/</code> directory is open source. You can read the self-hosting compiler, modify it, and bootstrap it yourself. It is both the ultimate test and the best documentation for what Vais can do.
+        </p>
+
+        <div class="article-cta">
+          <h3>Explore the Self-Hosting Compiler</h3>
+          <p>Browse 50,000+ lines of Vais compiling itself.</p>
+          <a href="https://github.com/vaislang/vais/tree/main/selfhost" class="btn" target="_blank" rel="noopener">View selfhost/ on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <img src="/logo-icon.png" alt="Vais" style="width:28px;height:28px;">
+          <span class="logo-text">Vais</span>
+          <p class="footer-tagline">AI-Optimized Systems Language</p>
+        </div>
+        <div class="footer-col"><h4>Learn</h4><a href="/docs">Documentation</a><a href="/#playground">Playground</a></div>
+        <div class="footer-col"><h4>Community</h4><a href="https://github.com/vaislang/vais" target="_blank">GitHub</a><a href="https://github.com/vaislang/vais/discussions" target="_blank">Discussions</a></div>
+        <div class="footer-col"><h4>More</h4><a href="/blog/">Blog</a><a href="https://github.com/vaislang/vais/blob/main/CHANGELOG.md" target="_blank">Changelog</a></div>
+      </div>
+      <div class="footer-bottom"><p>&copy; 2026 Vais Contributors. Built with care for AI.</p></div>
+    </div>
+  </footer>
+</body>
+</html>

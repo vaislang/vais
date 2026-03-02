@@ -53,3 +53,4 @@ mod phase80_serialization;
 mod phase81_coverage;
 mod phase83_stdlib;
 mod phase84;
+mod phase85_wasm;

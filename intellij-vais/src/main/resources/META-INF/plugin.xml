@@ -9,22 +9,37 @@
 
     <h2>Features</h2>
     <ul>
-        <li>Syntax highlighting</li>
-        <li>Code completion</li>
-        <li>Go to definition</li>
+        <li>Syntax highlighting with Vais single-character keywords</li>
+        <li>LSP-powered code completion (struct fields, methods, trait methods)</li>
+        <li>Go to definition (cross-module, import resolution)</li>
         <li>Find references</li>
-        <li>Hover information</li>
-        <li>Error diagnostics</li>
-        <li>Code formatting</li>
+        <li>Hover information with inferred types</li>
+        <li>Error diagnostics via LSP</li>
+        <li>Inlay hints for variable types</li>
+        <li>Signature help</li>
+        <li>Document symbols</li>
+        <li>Code actions</li>
+        <li>Run configuration for compiling and running .vais files</li>
+        <li>Debug configuration via vais-dap (DAP server)</li>
     </ul>
 
     <h2>Requirements</h2>
     <ul>
-        <li>vais-lsp binary in PATH or configured location</li>
+        <li>vais-lsp binary in PATH or configured location (for LSP features)</li>
+        <li>vais-dap binary in PATH or configured location (for debugging)</li>
+        <li>vaisc compiler in PATH or configured location (for run/debug)</li>
     </ul>
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>0.0.2</h3>
+    <ul>
+        <li>Enhanced LSP integration with document synchronization</li>
+        <li>Auto-start LSP server on .vais file open</li>
+        <li>DAP debug configuration support</li>
+        <li>Fixed createElement crash in parser definition</li>
+        <li>Expanded client capabilities (inlay hints, signature help, code actions)</li>
+    </ul>
     <h3>0.0.1</h3>
     <ul>
         <li>Initial release</li>
@@ -66,6 +81,9 @@
 
         <!-- Run Configuration -->
         <configurationType implementation="com.vais.intellij.run.VaisRunConfigurationType"/>
+
+        <!-- Debug Configuration -->
+        <configurationType implementation="com.vais.intellij.debug.VaisDebugConfigurationType"/>
     </extensions>
 
     <applicationListeners>

@@ -5,6 +5,7 @@ use tower_lsp::lsp_types::*;
 
 use crate::ai_completion::{generate_ai_completions, CompletionContext as AiContext};
 use crate::backend::VaisBackend;
+use crate::type_resolve::{CompletionKind, LspType, TypeContext};
 
 pub(crate) async fn handle_completion(
     backend: &VaisBackend,
@@ -30,7 +31,14 @@ pub(crate) async fn handle_completion(
     };
 
     if is_method_completion {
-        items.extend(method_completions(backend, uri));
+        // Try type-aware completion first
+        let type_completions = type_aware_method_completions(backend, uri, position);
+        if !type_completions.is_empty() {
+            items.extend(type_completions);
+        } else {
+            // Fallback to generic method completions
+            items.extend(method_completions(backend, uri));
+        }
         return Ok(Some(CompletionResponse::Array(items)));
     }
 
@@ -571,4 +579,319 @@ fn document_symbol_completions(
     }
 
     items
+}
+
+/// Type-aware method/field completions using AST-based type resolution
+fn type_aware_method_completions(
+    backend: &VaisBackend,
+    uri: &tower_lsp::lsp_types::Url,
+    position: Position,
+) -> Vec<CompletionItem> {
+    let mut items = vec![];
+
+    let doc = match backend.documents.get(uri) {
+        Some(doc) => doc,
+        None => return items,
+    };
+
+    let ast = match &doc.ast {
+        Some(ast) => ast,
+        None => return items,
+    };
+
+    // Extract the identifier before the dot
+    let line_idx = position.line as usize;
+    let line = match doc.content.get_line(line_idx) {
+        Some(line) => line,
+        None => return items,
+    };
+
+    let line_str: String = line.chars().collect();
+    let col = position.character as usize;
+
+    // Walk backwards from the dot to find the identifier
+    if col < 2 {
+        return items;
+    }
+
+    // Find the expression before the dot
+    let before_dot = &line_str[..col.saturating_sub(1)];
+    let ident_before_dot = extract_trailing_identifier(before_dot);
+    if ident_before_dot.is_empty() {
+        return items;
+    }
+
+    // Build type context from AST
+    let mut type_ctx = TypeContext::from_module(ast);
+
+    // Collect variable bindings up to cursor position
+    let line_start = doc.content.line_to_char(line_idx);
+    let cursor_offset = line_start + col;
+    type_ctx.collect_variable_bindings(ast, cursor_offset);
+
+    // Resolve the type of the identifier before the dot
+    let resolved_type: LspType = if let Some(ty) = type_ctx.variable_types.get(ident_before_dot) {
+        ty.clone()
+    } else {
+        // Check if it's a direct struct/enum name (static access)
+        if type_ctx.structs.contains_key(ident_before_dot)
+            || type_ctx.enum_variants.contains_key(ident_before_dot)
+        {
+            LspType::Named(ident_before_dot.to_string())
+        } else {
+            return items;
+        }
+    };
+
+    // Get completions for the resolved type
+    let type_name = match &resolved_type {
+        LspType::Named(name) => name.clone(),
+        LspType::Primitive(name) => name.clone(),
+        LspType::Array(_) => "Vec".to_string(),
+        LspType::Optional(_) => "Option".to_string(),
+        LspType::Result(_, _) => "Result".to_string(),
+        _ => return items,
+    };
+
+    let completions = type_ctx.get_dot_completions(&type_name);
+    for entry in completions {
+        let (kind, sort_prefix) = match entry.kind {
+            CompletionKind::Field => (CompletionItemKind::FIELD, "0"), // Fields sort first
+            CompletionKind::Method => (CompletionItemKind::METHOD, "1"),
+        };
+
+        let detail = if let Some(ref trait_name) = entry.from_trait {
+            format!("{} (from trait {})", entry.detail, trait_name)
+        } else {
+            entry.detail
+        };
+
+        items.push(CompletionItem {
+            label: entry.label.clone(),
+            kind: Some(kind),
+            detail: Some(detail),
+            insert_text: Some(entry.insert_text),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            sort_text: Some(format!("{}{}", sort_prefix, entry.label)),
+            ..Default::default()
+        });
+    }
+
+    // For well-known types, add builtin methods
+    match type_name.as_str() {
+        "Vec" | "Array" => {
+            add_vec_builtins(&mut items);
+        }
+        "Option" => {
+            add_option_builtins(&mut items);
+        }
+        "Result" => {
+            add_result_builtins(&mut items);
+        }
+        "str" | "String" => {
+            add_string_builtins(&mut items);
+        }
+        _ => {}
+    }
+
+    items
+}
+
+/// Extract trailing identifier from a string (e.g., "  foo.bar" -> "bar", "x" -> "x")
+fn extract_trailing_identifier(s: &str) -> &str {
+    let s = s.trim_end();
+    let start = s
+        .rfind(|c: char| !c.is_alphanumeric() && c != '_')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    &s[start..]
+}
+
+fn add_vec_builtins(items: &mut Vec<CompletionItem>) {
+    let methods = [
+        ("len", "Get length", "len()", "fn() -> i64"),
+        ("is_empty", "Check if empty", "is_empty()", "fn() -> bool"),
+        ("push", "Push element to end", "push(${1:value})", "fn(T)"),
+        (
+            "pop",
+            "Remove and return last element",
+            "pop()",
+            "fn() -> T",
+        ),
+        (
+            "get",
+            "Get element at index",
+            "get(${1:index})",
+            "fn(i64) -> Option<T>",
+        ),
+        ("first", "Get first element", "first()", "fn() -> Option<T>"),
+        ("last", "Get last element", "last()", "fn() -> Option<T>"),
+        ("clear", "Remove all elements", "clear()", "fn()"),
+        (
+            "contains",
+            "Check if contains element",
+            "contains(${1:value})",
+            "fn(T) -> bool",
+        ),
+        ("iter", "Get iterator", "iter()", "fn() -> Iterator<T>"),
+        ("reverse", "Reverse in place", "reverse()", "fn()"),
+        ("sort", "Sort in place", "sort()", "fn()"),
+        ("clone", "Clone the vector", "clone()", "fn() -> Vec<T>"),
+    ];
+    for (name, doc, snippet, sig) in methods {
+        items.push(CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::METHOD),
+            detail: Some(sig.to_string()),
+            documentation: Some(Documentation::String(doc.to_string())),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            sort_text: Some(format!("1{}", name)),
+            ..Default::default()
+        });
+    }
+}
+
+fn add_option_builtins(items: &mut Vec<CompletionItem>) {
+    let methods = [
+        ("is_some", "Check if Some", "is_some()", "fn() -> bool"),
+        ("is_none", "Check if None", "is_none()", "fn() -> bool"),
+        (
+            "unwrap",
+            "Unwrap value (panics if None)",
+            "unwrap()",
+            "fn() -> T",
+        ),
+        (
+            "unwrap_or",
+            "Unwrap with default",
+            "unwrap_or(${1:default})",
+            "fn(T) -> T",
+        ),
+        (
+            "map",
+            "Transform inner value",
+            "map(|${1:v}| ${2:expr})",
+            "fn(fn(T) -> U) -> Option<U>",
+        ),
+        (
+            "and_then",
+            "Chain computation",
+            "and_then(|${1:v}| ${2:expr})",
+            "fn(fn(T) -> Option<U>) -> Option<U>",
+        ),
+    ];
+    for (name, doc, snippet, sig) in methods {
+        items.push(CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::METHOD),
+            detail: Some(sig.to_string()),
+            documentation: Some(Documentation::String(doc.to_string())),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            sort_text: Some(format!("1{}", name)),
+            ..Default::default()
+        });
+    }
+}
+
+fn add_result_builtins(items: &mut Vec<CompletionItem>) {
+    let methods = [
+        ("is_ok", "Check if Ok", "is_ok()", "fn() -> bool"),
+        ("is_err", "Check if Err", "is_err()", "fn() -> bool"),
+        (
+            "unwrap",
+            "Unwrap Ok (panics if Err)",
+            "unwrap()",
+            "fn() -> T",
+        ),
+        (
+            "unwrap_or",
+            "Unwrap with default",
+            "unwrap_or(${1:default})",
+            "fn(T) -> T",
+        ),
+        ("unwrap_err", "Unwrap Err", "unwrap_err()", "fn() -> E"),
+        (
+            "map",
+            "Transform Ok value",
+            "map(|${1:v}| ${2:expr})",
+            "fn(fn(T) -> U) -> Result<U, E>",
+        ),
+        (
+            "map_err",
+            "Transform Err value",
+            "map_err(|${1:e}| ${2:expr})",
+            "fn(fn(E) -> F) -> Result<T, F>",
+        ),
+    ];
+    for (name, doc, snippet, sig) in methods {
+        items.push(CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::METHOD),
+            detail: Some(sig.to_string()),
+            documentation: Some(Documentation::String(doc.to_string())),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            sort_text: Some(format!("1{}", name)),
+            ..Default::default()
+        });
+    }
+}
+
+fn add_string_builtins(items: &mut Vec<CompletionItem>) {
+    let methods = [
+        ("len", "Get string length", "len()", "fn() -> i64"),
+        ("is_empty", "Check if empty", "is_empty()", "fn() -> bool"),
+        (
+            "contains",
+            "Check if contains substring",
+            "contains(${1:substr})",
+            "fn(str) -> bool",
+        ),
+        (
+            "starts_with",
+            "Check if starts with prefix",
+            "starts_with(${1:prefix})",
+            "fn(str) -> bool",
+        ),
+        (
+            "ends_with",
+            "Check if ends with suffix",
+            "ends_with(${1:suffix})",
+            "fn(str) -> bool",
+        ),
+        (
+            "to_uppercase",
+            "Convert to uppercase",
+            "to_uppercase()",
+            "fn() -> str",
+        ),
+        (
+            "to_lowercase",
+            "Convert to lowercase",
+            "to_lowercase()",
+            "fn() -> str",
+        ),
+        ("trim", "Trim whitespace", "trim()", "fn() -> str"),
+        (
+            "split",
+            "Split by delimiter",
+            "split(${1:delimiter})",
+            "fn(str) -> Vec<str>",
+        ),
+        ("clone", "Clone the string", "clone()", "fn() -> str"),
+    ];
+    for (name, doc, snippet, sig) in methods {
+        items.push(CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::METHOD),
+            detail: Some(sig.to_string()),
+            documentation: Some(Documentation::String(doc.to_string())),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            sort_text: Some(format!("1{}", name)),
+            ..Default::default()
+        });
+    }
 }

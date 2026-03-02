@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.FileViewProvider
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
 
@@ -32,8 +33,11 @@ class VaisParserDefinition : ParserDefinition {
 
     override fun getStringLiteralElements(): TokenSet = VaisTokenTypes.STRINGS
 
-    override fun createElement(node: ASTNode?): PsiElement {
-        throw UnsupportedOperationException("Not implemented - LSP handles parsing")
+    override fun createElement(node: ASTNode): PsiElement {
+        // Return a leaf PSI element stub -- actual parsing is delegated to the LSP server.
+        // This prevents UnsupportedOperationException when the IDE creates PSI elements
+        // from the AST during indexing or code analysis.
+        return LeafPsiElement(node.elementType, node.text)
     }
 
     override fun createFile(viewProvider: FileViewProvider): PsiFile = VaisFile(viewProvider)
