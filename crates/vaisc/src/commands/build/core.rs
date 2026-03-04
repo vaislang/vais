@@ -755,6 +755,16 @@ pub(crate) fn cmd_build(
                                 )
                             })?;
 
+                            // Verify IR structural integrity before optimization.
+                            if let Err(verify_err) =
+                                vais_codegen::ir_verify::verify_text_ir_or_error(&raw_ir)
+                            {
+                                eprintln!(
+                                    "[IR verify] module '{}': {}",
+                                    module_stem, verify_err
+                                );
+                            }
+
                             // Apply optimizations
                             let opt = match effective_opt_level {
                                 0 => vais_codegen::optimize::OptLevel::O0,

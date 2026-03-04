@@ -69,3 +69,4 @@ mod phase90_variables;
 mod phase90_functions;
 mod phase91_lifetime;
 mod phase91_monomorphization;
+mod phase95_coverage;

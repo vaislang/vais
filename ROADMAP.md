@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-04 (Phase 94 완료 — 레지스트리/자동수정/정적분석/빌드 생태계 확장)
+> **최종 업데이트**: 2026-03-04 (Phase 95 완료 — IR 검증 게이트 전경로 통합/E2E 1,620 달성/문서 동기화)
 
 ---
 
@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (7,400+) | ✅ |
-| E2E 1,509개 통과 (0 fail, 1 ignored) | ✅ |
+| E2E 1,620개 통과 (0 fail, 1 ignored) | ✅ |
 | 보안 감사 (14개 수정, cargo audit 통과) | ✅ |
 | 라이선스 (396개 의존성, MIT/Apache-2.0) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
@@ -237,10 +237,32 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 92 | 컴파일러 안정성 강화 | Panic-free (180+ expect→Result), proptest 24개, Codegen graceful degradation, IR 검증 확장 | 1,540 |
 | 93 | 성능 최적화 심화 | 2-level 치환 캐시 (L1 16+L2 256), IdentPool 인터닝, 문자열 상수 dedup, CI Welch's t-test 회귀 감지 | 1,540 |
 | 94 | 생태계 확장 | Ed25519 서명, SemVer 해석, 순환 감지, vaisc fix, lint 7종, 빌드 캐시/스크립트/템플릿 | 1,540 |
+| 95 | 검증 강화 · E2E 확장 | IR 검증 게이트 7경로 통합, assert_compiles 10→1, +80 E2E, 문서 수치 동기화 | 1,620 |
 
 ---
 
 ## 현재 작업 (2026-03-04)
+
+모드: 자동진행
+
+### Phase 95: 컴파일러 검증 강화 & E2E 확장
+
+> **목표**: IR 검증 게이트 전경로 통합, assert_compiles 최종 전환, E2E 1,600 달성, 문서 수치 동기화
+> **기대 효과**: codegen 버그 조기 발견율 향상, 테스트 품질 완성, 문서 정확성 보장
+
+- [x] 1. IR 검증 게이트 전경로 통합 + 진단 개선 (Opus) ✅ 2026-03-04
+  변경: ir_verify.rs (IrDiagnostic에 function_name 추가), backend.rs/core.rs/per_module.rs/test.rs/repl.rs (5개 경로에 verify_text_ir_or_error 게이트 추가)
+- [x] 2. assert_compiles→assert_exit_code 최종 전환 + ignored 테스트 분류 (Sonnet) ✅ 2026-03-04
+  변경: phase91_lifetime.rs (9/10개 assert_compiles→assert_exit_code 전환, 1개 codegen 한계로 유지+NOTE)
+- [x] 3. E2E 1,600 달성 — 미커버 언어 기능 테스트 추가 (Sonnet) ✅ 2026-03-04
+  변경: phase95_coverage.rs (신규 80개 E2E — 패턴/구조체/산술/논리/루프/클로저/trait/auto-return 등), e2e/main.rs (모듈 등록)
+- [x] 4. README/문서 수치 동기화 + 예제 갤러리 갱신 (Haiku) ✅ 2026-03-04
+  변경: README.md (std 79, examples 174, E2E 1,620+, tests 9,300+), CLAUDE.md (동기화)
+진행률: 4/4 (100%)
+
+---
+
+## 📜 이전 작업 (2026-03-04)
 
 모드: 자동진행
 

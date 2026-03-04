@@ -14,7 +14,7 @@ fn e2e_lifetime_single_ref_param_elision() {
 F identity(x: &i64) -> &i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn e2e_lifetime_single_ref_pass_through() {
 F pass(x: &i64) -> &i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn e2e_lifetime_single_ref_with_value_params() {
 F pick(x: &i64, n: i64) -> &i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Lifetime Elision Failure: Multiple Ref Params ====================
@@ -66,7 +66,7 @@ fn e2e_lifetime_explicit_same_lifetime() {
 F first<'a>(x: &'a i64, y: &'a i64) -> &'a i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn e2e_lifetime_explicit_different_lifetimes() {
 F first<'a, 'b>(x: &'a i64, y: &'b i64) -> &'a i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn e2e_lifetime_explicit_return_second_param() {
 F second<'a, 'b>(x: &'a i64, y: &'b i64) -> &'b i64 = y
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Orphan Lifetime Detection ====================
@@ -130,7 +130,7 @@ fn e2e_lifetime_no_ref_return_type() {
 F deref(x: &i64) -> i64 = 42
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== Method Self Lifetime (Rule 3) ====================
@@ -197,7 +197,7 @@ fn e2e_lifetime_elision_with_bool_and_ref() {
 F cond_ref(flag: bool, x: &i64) -> &i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
@@ -207,12 +207,13 @@ fn e2e_lifetime_explicit_single_lifetime() {
 F wrap<'a>(x: &'a i64) -> &'a i64 = x
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 #[test]
 fn e2e_lifetime_no_ref_params_returns_ref() {
     // No ref params, returns a ref → gets 'static from elision (valid for now)
+    // NOTE: assert_compiles only -- codegen emits `ret i64* 42` (literal, not pointer), clang rejects
     let source = r#"
 F get_ref() -> &i64 {
     42

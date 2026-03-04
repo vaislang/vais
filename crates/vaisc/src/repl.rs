@@ -667,6 +667,11 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
         )
     })?;
 
+    // Verify IR structural integrity before compiling.
+    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&ir) {
+        eprintln!("[IR verify] repl: {}", verify_err);
+    }
+
     // Write to temp file (atomic counter + PID for uniqueness, TOCTOU mitigation)
     let counter = REPL_COUNTER.fetch_add(1, Ordering::Relaxed);
     let temp_dir = std::env::temp_dir();

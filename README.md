@@ -87,12 +87,12 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (74 modules)
+std/               # Standard library (79 modules)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (189 files)
+examples/          # Example programs (174 .vais files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```
@@ -101,8 +101,8 @@ playground/        # Web playground frontend
 
 ```bash
 cargo build --release
-cargo test                                     # Run all 7,000+ tests
-cargo test -p vaisc                            # Run vaisc tests (1,250 E2E tests)
+cargo test                                     # Run all 9,300+ tests
+cargo test -p vaisc                            # Run vaisc tests (1,620+ E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 

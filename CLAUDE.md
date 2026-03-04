@@ -60,8 +60,8 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (74 .vais files)
-examples/          # Example programs (189 files)
+std/               # Standard library (79 .vais files)
+examples/          # Example programs (174 .vais files)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
@@ -133,12 +133,12 @@ intellij-vais/     # IntelliJ plugin
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e_tests.rs` - End-to-end compilation tests (538)
+- `vaisc/tests/e2e/` - End-to-end compilation tests (1,620+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests
 
-Total: 6,900+ tests across all crates.
+Total: 9,300+ tests across all crates.
 
 ## Dependencies
 
