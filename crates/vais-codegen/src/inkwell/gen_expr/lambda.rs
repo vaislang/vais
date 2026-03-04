@@ -59,7 +59,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Register captured vars as params in thunk
         for (idx, (cap_name, _, cap_type)) in captured_vars.iter().enumerate() {
-            let param_val = thunk_fn.get_nth_param(idx as u32).unwrap();
+            let param_val = thunk_fn.get_nth_param(idx as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: lazy thunk captured variable '{}' parameter index {} out of bounds",
+                    cap_name, idx
+                ))
+            })?;
             let alloca = self
                 .builder
                 .build_alloca(*cap_type, &format!("__cap_{}", cap_name))

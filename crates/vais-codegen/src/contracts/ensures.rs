@@ -1,7 +1,6 @@
 //! Postcondition (ensures) checks.
 
 use crate::{CodeGenerator, CodegenResult};
-use std::fmt::Write;
 use vais_ast::Function;
 use vais_types::ResolvedType;
 
@@ -35,13 +34,13 @@ impl CodeGenerator {
         let return_var_name = format!("__contract_return.{}", *counter);
         *counter += 1;
 
-        writeln!(ir, "  %{} = alloca {}", return_var_name, return_llvm).unwrap();
-        writeln!(
+        write_ir!(ir, "  %{} = alloca {}", return_var_name, return_llvm);
+        write_ir!(
             ir,
             "  store {} {}, {}* %{}",
             return_llvm, return_value, return_llvm, return_var_name
-        )
-        .unwrap();
+        );
+
 
         // Register 'return' in locals for expression generation
         // Use alloca since we stored the return value at return_var_name

@@ -139,9 +139,16 @@ pub struct TypeChecker {
     // Generic instantiations required for monomorphization
     pub(crate) generic_instantiations: HashSet<GenericInstantiation>,
 
-    // Memoization cache for substitute_generics
-    // Key: (type hash, substitution map hash) -> Result type
-    pub(crate) substitute_cache: RefCell<HashMap<(u64, u64), ResolvedType>>,
+    // 2-level memoization cache for substitute_generics
+    //
+    // L1: Small fixed-size cache (16 entries) for fast path lookups.
+    //     Uses full (u64, u64) hash keys with direct-mapped indexing.
+    //     Avoids HashMap overhead for the most frequently accessed entries.
+    //
+    // L2: Bounded HashMap (max 256 entries) for overflow.
+    //     When capacity is exceeded, the oldest half is evicted.
+    pub(crate) substitute_cache_l1: RefCell<Vec<((u64, u64), ResolvedType)>>,
+    pub(crate) substitute_cache_l2: RefCell<HashMap<(u64, u64), ResolvedType>>,
 
     // Lifetime inference engine
     pub(crate) lifetime_inferencer: lifetime::LifetimeInferencer,
@@ -190,7 +197,8 @@ impl TypeChecker {
             exhaustiveness_checker: ExhaustivenessChecker::new(),
             warnings: Vec::new(),
             generic_instantiations: HashSet::new(),
-            substitute_cache: RefCell::new(HashMap::with_capacity(64)),
+            substitute_cache_l1: RefCell::new(Vec::with_capacity(16)),
+            substitute_cache_l2: RefCell::new(HashMap::with_capacity(64)),
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
             ownership_check_mode: Some(false), // warn-only by default
             imported_item_count: 0,

@@ -16,4 +16,5 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
+proptest = { workspace = true }
 vais-parser = { path = "../vais-parser" }

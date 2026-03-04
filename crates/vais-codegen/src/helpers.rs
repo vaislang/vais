@@ -71,6 +71,27 @@ impl CodeGenerator {
         name
     }
 
+    /// Get or create a string constant, deduplicating identical string values.
+    ///
+    /// If the same string value has already been registered as a global constant,
+    /// returns the existing constant name without creating a new one.
+    /// This reduces IR size and binary size when the same string literal
+    /// appears multiple times in source code.
+    #[inline]
+    pub(crate) fn get_or_create_string_constant(&mut self, value: &str) -> String {
+        // Check dedup cache first
+        if let Some(existing_name) = self.strings.dedup_cache.get(value) {
+            return existing_name.clone();
+        }
+
+        // Create new constant
+        let name = self.make_string_name();
+        self.strings.counter += 1;
+        self.strings.constants.push((name.clone(), value.to_string()));
+        self.strings.dedup_cache.insert(value.to_string(), name.clone());
+        name
+    }
+
     /// Generate a unique label with the given prefix
     #[inline]
     pub(crate) fn next_label(&mut self, prefix: &str) -> String {

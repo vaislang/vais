@@ -660,19 +660,61 @@ impl TypeChecker {
         hasher.finish()
     }
 
-    /// Substitute generic type parameters with concrete types (with memoization)
+    /// Substitute generic type parameters with concrete types (with 2-level memoization)
+    ///
+    /// Uses a 2-level cache for optimal performance:
+    /// - L1: 16-entry direct-mapped cache with O(1) lookup (no HashMap overhead)
+    /// - L2: Bounded 256-entry HashMap for overflow
+    ///
+    /// Primitive types that contain no generic parameters are returned immediately
+    /// without any cache interaction (fast path).
     pub(crate) fn substitute_generics(
         &self,
         ty: &ResolvedType,
         substitutions: &HashMap<String, ResolvedType>,
     ) -> ResolvedType {
-        // Check cache first
+        // Fast path: primitives never need substitution
+        if Self::is_primitive_type(ty) {
+            return ty.clone();
+        }
+
+        // Fast path: empty substitutions map means no work
+        if substitutions.is_empty() {
+            return ty.clone();
+        }
+
+        // Compute cache key (hashes)
         let type_hash = Self::hash_type(ty);
         let subst_hash = Self::hash_substitutions(substitutions);
         let cache_key = (type_hash, subst_hash);
 
-        if let Some(cached) = self.substitute_cache.borrow().get(&cache_key) {
-            return cached.clone();
+        // L1 cache: direct-mapped lookup (16 entries, indexed by lower 4 bits of type_hash)
+        let l1_index = (type_hash as usize) & 0xF;
+        {
+            let l1 = self.substitute_cache_l1.borrow();
+            if l1_index < l1.len() {
+                let (ref key, ref val) = l1[l1_index];
+                if *key == cache_key {
+                    return val.clone();
+                }
+            }
+        }
+
+        // L2 cache: HashMap lookup
+        if let Some(cached) = self.substitute_cache_l2.borrow().get(&cache_key) {
+            // Promote to L1 on L2 hit
+            let result = cached.clone();
+            let mut l1 = self.substitute_cache_l1.borrow_mut();
+            if l1_index < l1.len() {
+                l1[l1_index] = (cache_key, result.clone());
+            } else {
+                // Grow L1 to accommodate this index
+                while l1.len() <= l1_index {
+                    l1.push(((0, 0), ResolvedType::Unit));
+                }
+                l1[l1_index] = (cache_key, result.clone());
+            }
+            return result;
         }
 
         // Compute the substitution
@@ -784,11 +826,58 @@ impl TypeChecker {
             _ => ty.clone(),
         };
 
-        // Store in cache
-        self.substitute_cache
-            .borrow_mut()
-            .insert(cache_key, result.clone());
+        // Store in L1 cache (direct-mapped, overwrites existing entry at this index)
+        {
+            let mut l1 = self.substitute_cache_l1.borrow_mut();
+            if l1_index < l1.len() {
+                l1[l1_index] = (cache_key, result.clone());
+            } else {
+                while l1.len() <= l1_index {
+                    l1.push(((0, 0), ResolvedType::Unit));
+                }
+                l1[l1_index] = (cache_key, result.clone());
+            }
+        }
+
+        // Store in L2 cache (bounded — evict oldest half when exceeding 256 entries)
+        {
+            let mut l2 = self.substitute_cache_l2.borrow_mut();
+            if l2.len() >= 256 {
+                // Evict: retain only the most recently inserted half.
+                // Since HashMap doesn't track insertion order, we simply clear.
+                // The L1 cache retains the hottest 16 entries across the clear.
+                l2.clear();
+            }
+            l2.insert(cache_key, result.clone());
+        }
+
         result
+    }
+
+    /// Check if a type is a primitive that never contains generic parameters.
+    /// These types can skip cache lookup entirely in substitute_generics.
+    #[inline]
+    fn is_primitive_type(ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::I8
+                | ResolvedType::I16
+                | ResolvedType::I32
+                | ResolvedType::I64
+                | ResolvedType::I128
+                | ResolvedType::U8
+                | ResolvedType::U16
+                | ResolvedType::U32
+                | ResolvedType::U64
+                | ResolvedType::U128
+                | ResolvedType::F32
+                | ResolvedType::F64
+                | ResolvedType::Bool
+                | ResolvedType::Str
+                | ResolvedType::Unit
+                | ResolvedType::Never
+                | ResolvedType::Unknown
+        )
     }
 
     /// Check a generic function call, inferring type arguments from actual arguments

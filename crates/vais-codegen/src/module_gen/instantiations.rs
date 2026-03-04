@@ -459,11 +459,19 @@ impl CodeGenerator {
                     self.generics
                         .function_templates
                         .insert(method_key.clone(), method_fn);
+                    let template = self
+                        .generics
+                        .function_templates
+                        .get(&method_key)
+                        .ok_or_else(|| {
+                            CodegenError::InternalError(format!(
+                                "method template '{}' missing after insert",
+                                method_key
+                            ))
+                        })?
+                        .clone();
                     body_ir.push_str(
-                        &self.generate_specialized_function(
-                            &self.generics.function_templates.get(&method_key).unwrap().clone(),
-                            &method_inst,
-                        )?,
+                        &self.generate_specialized_function(&template, &method_inst)?,
                     );
                     body_ir.push('\n');
                     // Clean up the temporary template

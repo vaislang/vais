@@ -1,5 +1,4 @@
 use super::*;
-use std::fmt::Write;
 
 impl CodeGenerator {
     /// Generate code for if-else branches with termination tracking
@@ -38,15 +37,15 @@ impl CodeGenerator {
                 let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
                 ir.push_str(&conv_ir);
 
-                writeln!(
+                write_ir!(
                     ir,
                     "  br i1 {}, label %{}, label %{}",
                     cond_bool, then_label, else_label
-                )
-                .unwrap();
+                );
+
 
                 // Then branch
-                writeln!(ir, "{}:", then_label).unwrap();
+                write_ir!(ir, "{}:", then_label);
                 self.fn_ctx.current_block = then_label; // move: label not used after
                 let (then_val, then_ir, then_terminated) =
                     self.generate_block_stmts(then_stmts, counter)?;
@@ -55,12 +54,12 @@ impl CodeGenerator {
                 // For struct results, load the value before branch if it's a pointer
                 let then_val_for_phi = if is_struct_result && !then_terminated {
                     let loaded = self.next_temp(counter);
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  {} = load {}, {}* {}",
                         loaded, llvm_type, llvm_type, then_val
-                    )
-                    .unwrap();
+                    );
+
                     loaded
                 } else {
                     then_val // move: not used after
@@ -68,14 +67,14 @@ impl CodeGenerator {
 
                 let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
                 let then_from_label = if !then_terminated {
-                    writeln!(ir, "  br label %{}", local_merge).unwrap();
+                    write_ir!(ir, "  br label %{}", local_merge);
                     then_actual_block
                 } else {
                     String::new()
                 };
 
                 // Else branch
-                writeln!(ir, "{}:", else_label).unwrap();
+                write_ir!(ir, "{}:", else_label);
                 self.fn_ctx.current_block = else_label; // move: not used after
                 let has_else = else_branch.is_some();
                 let (else_val, else_ir, else_terminated, nested_last_block) =
@@ -95,19 +94,19 @@ impl CodeGenerator {
                     && nested_last_block.is_empty()
                 {
                     let loaded = self.next_temp(counter);
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  {} = load {}, {}* {}",
                         loaded, llvm_type, llvm_type, else_val
-                    )
-                    .unwrap();
+                    );
+
                     loaded
                 } else {
                     else_val // move: not used after
                 };
 
                 let else_from_label = if !else_terminated {
-                    writeln!(ir, "  br label %{}", local_merge).unwrap();
+                    write_ir!(ir, "  br label %{}", local_merge);
                     // If there was a nested if-else, use its merge block as the predecessor
                     if !nested_last_block.is_empty() {
                         nested_last_block
@@ -131,7 +130,7 @@ impl CodeGenerator {
                 }
 
                 // Merge
-                writeln!(ir, "{}:", local_merge).unwrap();
+                write_ir!(ir, "{}:", local_merge);
                 self.fn_ctx.current_block = local_merge.clone();
                 let result = self.next_temp(counter);
 
@@ -142,9 +141,9 @@ impl CodeGenerator {
                 // Build phi node only from non-terminated predecessors and non-void types
                 if is_void_type {
                     // Void type: value is not used, just use 0
-                    writeln!(ir, "  {} = add i64 0, 0", result).unwrap();
+                    write_ir!(ir, "  {} = add i64 0, 0", result);
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
                         result,
@@ -153,22 +152,22 @@ impl CodeGenerator {
                         then_from_label,
                         else_val_for_phi,
                         else_from_label
-                    )
-                    .unwrap();
+                    );
+
                 } else if !then_from_label.is_empty() {
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
                         result, llvm_type, then_val_for_phi, then_from_label
-                    )
-                    .unwrap();
+                    );
+
                 } else if !else_from_label.is_empty() {
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
                         result, llvm_type, else_val_for_phi, else_from_label
-                    )
-                    .unwrap();
+                    );
+
                 } else {
                     // Unreachable merge block — add terminator
                     ir.push_str("  unreachable\n");

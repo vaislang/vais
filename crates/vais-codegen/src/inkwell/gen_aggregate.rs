@@ -366,7 +366,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
             .left()
-            .unwrap();
+            .ok_or_else(|| CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into()))?;
         let slice_ptr = self
             .builder
             .build_pointer_cast(
@@ -722,7 +722,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Register captured variables as parameters in lambda scope
         let mut param_idx = 0u32;
         for (cap_name, _, cap_type) in &captured_vars {
-            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
+            let param_val = lambda_fn.get_nth_param(param_idx).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: captured variable '{}' parameter index {} out of bounds for lambda",
+                    cap_name, param_idx
+                ))
+            })?;
             if is_ref_capture {
                 // ByRef/ByMutRef: parameter is already a pointer to the outer alloca.
                 // Use it directly — build_load will read from the outer variable.
@@ -748,7 +753,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Register original parameters
         for p in params {
-            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
+            let param_val = lambda_fn.get_nth_param(param_idx).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: lambda parameter '{}' index {} out of bounds",
+                    p.name.node, param_idx
+                ))
+            })?;
             let ty = self.ast_type_to_resolved(&p.ty.node);
             let param_type = self.type_mapper.map_type(&ty);
             let alloca = self

@@ -29,7 +29,6 @@
 
 use crate::types::LocalVar;
 use crate::{CodeGenerator, CodegenResult};
-use std::fmt::Write;
 use vais_ast::{Param, Type};
 use vais_types::ResolvedType;
 
@@ -132,18 +131,18 @@ impl CodeGenerator {
                 // VAIS uses i64 for bool, but LLVM branch needs i1
                 let cond_i1 = format!("%dep_cond_i1_{}", *counter);
                 *counter += 1;
-                writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, pred_value).unwrap();
+                write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, pred_value);
 
                 // Branch based on predicate result
-                writeln!(
+                write_ir!(
                     ir,
                     "  br i1 {}, label %{}, label %{}",
                     cond_i1, ok_label, fail_label
-                )
-                .unwrap();
+                );
+
 
                 // Failure block -- call panic with a descriptive message
-                writeln!(ir, "{}:", fail_label).unwrap();
+                write_ir!(ir, "{}:", fail_label);
 
                 // Create descriptive error message
                 let fail_msg = format!(
@@ -152,11 +151,11 @@ impl CodeGenerator {
                 );
                 let msg_const = self.get_or_create_contract_string(&fail_msg);
 
-                writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
+                write_ir!(ir, "  call i64 @__panic(i8* {})", msg_const);
                 ir.push_str("  unreachable\n");
 
                 // Success block
-                writeln!(ir, "{}:", ok_label).unwrap();
+                write_ir!(ir, "{}:", ok_label);
             }
         }
 

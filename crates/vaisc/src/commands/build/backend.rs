@@ -55,6 +55,10 @@ pub(crate) fn generate_with_text_backend(
     codegen.set_resolved_functions(checker.get_all_functions().clone());
     codegen.set_type_aliases(checker.get_type_aliases().clone());
 
+    // Enable multi-error mode for graceful degradation:
+    // collect codegen errors instead of stopping at the first one.
+    codegen.multi_error_mode = true;
+
     if verbose {
         println!("  {} text (IR generation)", "Backend:".cyan());
     }
@@ -66,6 +70,15 @@ pub(crate) fn generate_with_text_backend(
     } else {
         codegen.generate_module_with_instantiations(final_ast, &instantiations)
     };
+
+    // Report all collected codegen errors before returning the first fatal one
+    for collected_err in codegen.get_collected_errors() {
+        eprintln!(
+            "{}",
+            error_formatter::format_spanned_codegen_error(collected_err, main_source, input)
+        );
+    }
+
     let raw_ir = result.map_err(|e| {
         let spanned = vais_codegen::SpannedCodegenError {
             span: codegen.last_error_span(),
@@ -73,6 +86,18 @@ pub(crate) fn generate_with_text_backend(
         };
         error_formatter::format_spanned_codegen_error(&spanned, main_source, input)
     })?;
+
+    // If we got here, IR was generated but some functions may have failed.
+    // Report collected errors as warnings and return the partial IR.
+    if !codegen.get_collected_errors().is_empty() {
+        let err_count = codegen.get_collected_errors().len();
+        eprintln!(
+            "{}: {} codegen error(s) occurred during compilation (partial IR generated)",
+            "warning".yellow().bold(),
+            err_count
+        );
+    }
+
     let codegen_time = codegen_start.elapsed();
 
     if verbose {

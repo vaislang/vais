@@ -131,6 +131,8 @@ impl CodeGenerator {
         let mut body_ir = String::new();
 
         // Second pass: generate function bodies
+        // In multi_error_mode, errors are collected and stub functions emitted
+        // so that multiple codegen errors can be reported at once.
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => {
@@ -141,18 +143,36 @@ impl CodeGenerator {
                     if !f.generics.is_empty() {
                         continue;
                     }
-                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
-                    body_ir.push('\n');
+                    match self.generate_function_with_span(f, item.span) {
+                        Ok(ir_fragment) => {
+                            body_ir.push_str(&ir_fragment);
+                            body_ir.push('\n');
+                        }
+                        Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                            let span = self.last_error_span.unwrap_or(item.span);
+                            self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
                 Item::Struct(s) => {
                     // Generate methods for this struct
                     for method in &s.methods {
-                        body_ir.push_str(&self.generate_method_with_span(
+                        match self.generate_method_with_span(
                             &s.name.node,
                             &method.node,
                             method.span,
-                        )?);
-                        body_ir.push('\n');
+                        ) {
+                            Ok(ir_fragment) => {
+                                body_ir.push_str(&ir_fragment);
+                                body_ir.push('\n');
+                            }
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                                let span = self.last_error_span.unwrap_or(method.span);
+                                self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
                 }
                 Item::Impl(impl_block) => {
@@ -163,12 +183,21 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        body_ir.push_str(&self.generate_method_with_span(
+                        match self.generate_method_with_span(
                             &type_name,
                             &method.node,
                             method.span,
-                        )?);
-                        body_ir.push('\n');
+                        ) {
+                            Ok(ir_fragment) => {
+                                body_ir.push_str(&ir_fragment);
+                                body_ir.push('\n');
+                            }
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                                let span = self.last_error_span.unwrap_or(method.span);
+                                self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
                 }
                 Item::Enum(_)

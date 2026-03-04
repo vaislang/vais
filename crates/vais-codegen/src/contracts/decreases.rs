@@ -1,7 +1,6 @@
 //! Termination proofs and decreases checks.
 
 use crate::{CodeGenerator, CodegenResult};
-use std::fmt::Write;
 use vais_ast::{Expr, Function, IfElse, Spanned};
 
 impl CodeGenerator {
@@ -51,13 +50,13 @@ impl CodeGenerator {
                 let ty = self.infer_expr_type(inner);
                 let llvm_ty = self.type_to_llvm(&ty);
 
-                writeln!(ir, "  %{} = alloca {}", snapshot_name, llvm_ty).unwrap();
-                writeln!(
+                write_ir!(ir, "  %{} = alloca {}", snapshot_name, llvm_ty);
+                write_ir!(
                     ir,
                     "  store {} {}, {}* %{}",
                     llvm_ty, value, llvm_ty, snapshot_name
-                )
-                .unwrap();
+                );
+
 
                 // Register the snapshot
                 let old_var_name = format!("__old_{}", *counter);
@@ -170,8 +169,8 @@ impl CodeGenerator {
 
                     // Store the initial value for comparison in recursive calls
                     let storage_name = format!("__decreases_{}_{}", f.name.node, idx);
-                    writeln!(ir, "  %{} = alloca i64", storage_name).unwrap();
-                    writeln!(ir, "  store i64 {}, i64* %{}", value, storage_name).unwrap();
+                    write_ir!(ir, "  %{} = alloca i64", storage_name);
+                    write_ir!(ir, "  store i64 {}, i64* %{}", value, storage_name);
 
                     // Store decreases info for recursive call checking
                     self.contracts.current_decreases_info = Some(crate::DecreasesInfo {
@@ -187,27 +186,27 @@ impl CodeGenerator {
 
                     let cmp_result = format!("%decreases_cmp_{}", *counter);
                     *counter += 1;
-                    writeln!(ir, "  {} = icmp sge i64 {}, 0", cmp_result, value).unwrap();
-                    writeln!(
+                    write_ir!(ir, "  {} = icmp sge i64 {}, 0", cmp_result, value);
+                    write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
                         cmp_result, ok_label, fail_label
-                    )
-                    .unwrap();
+                    );
+
 
                     // Failure block
-                    writeln!(ir, "{}:", fail_label).unwrap();
+                    write_ir!(ir, "{}:", fail_label);
 
                     let fail_msg = format!(
                         "decreases expression must be non-negative in function '{}'",
                         f.name.node
                     );
                     let msg_const = self.get_or_create_contract_string(&fail_msg);
-                    writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
+                    write_ir!(ir, "  call i64 @__panic(i8* {})", msg_const);
                     ir.push_str("  unreachable\n");
 
                     // Success block
-                    writeln!(ir, "{}:", ok_label).unwrap();
+                    write_ir!(ir, "{}:", ok_label);
                 }
             }
         }
@@ -280,8 +279,8 @@ impl CodeGenerator {
                     let temp_var = format!("__decreases_arg_{}_{}", i, *counter);
                     *counter += 1;
                     let ty = self.type_to_llvm(param_type);
-                    writeln!(ir, "  %{} = alloca {}", temp_var, ty).unwrap();
-                    writeln!(ir, "  store {} {}, {}* %{}", ty, arg_val, ty, temp_var).unwrap();
+                    write_ir!(ir, "  %{} = alloca {}", temp_var, ty);
+                    write_ir!(ir, "  store {} {}, {}* %{}", ty, arg_val, ty, temp_var);
 
                     // Register in locals so generate_expr can find it
                     self.fn_ctx.locals.insert(
@@ -301,12 +300,12 @@ impl CodeGenerator {
 
         // Load the original decreases value
         let old_value = self.next_temp(counter);
-        writeln!(
+        write_ir!(
             ir,
             "  {} = load i64, i64* %{}",
             old_value, decreases_info.storage_name
-        )
-        .unwrap();
+        );
+
 
         // Check that new_value < old_value (strictly decreasing)
         let ok_label = format!("decreases_check_ok_{}", *counter);
@@ -315,32 +314,32 @@ impl CodeGenerator {
 
         let cmp_result = format!("%decreases_strict_cmp_{}", *counter);
         *counter += 1;
-        writeln!(
+        write_ir!(
             ir,
             "  {} = icmp slt i64 {}, {}",
             cmp_result, new_value, old_value
-        )
-        .unwrap();
-        writeln!(
+        );
+
+        write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
             cmp_result, ok_label, fail_label
-        )
-        .unwrap();
+        );
+
 
         // Failure block
-        writeln!(ir, "{}:", fail_label).unwrap();
+        write_ir!(ir, "{}:", fail_label);
 
         let fail_msg = format!(
             "decreases expression must strictly decrease on recursive call in '{}'",
             decreases_info.function_name
         );
         let msg_const = self.get_or_create_contract_string(&fail_msg);
-        writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
+        write_ir!(ir, "  call i64 @__panic(i8* {})", msg_const);
         ir.push_str("  unreachable\n");
 
         // Success block
-        writeln!(ir, "{}:", ok_label).unwrap();
+        write_ir!(ir, "{}:", ok_label);
 
         Ok(ir)
     }

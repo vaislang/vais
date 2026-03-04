@@ -17,6 +17,28 @@
 //! - `text-codegen` (default): Enable text-based IR generation
 //! - `inkwell-codegen`: Enable inkwell-based generation (requires LLVM 17+)
 
+/// Infallible `writeln!` to a `String` buffer used for IR emission.
+///
+/// Writing to a `String` via `std::fmt::Write` never fails (it only allocates),
+/// so the `Result` can be safely discarded. This macro replaces the pervasive
+/// `writeln!(ir, ...).unwrap()` pattern with an explicit, panic-free idiom.
+macro_rules! write_ir {
+    ($dst:expr, $($arg:tt)*) => {{
+        use std::fmt::Write as _;
+        let _ = writeln!($dst, $($arg)*);
+    }};
+}
+
+/// Infallible `write!` (no trailing newline) to a `String` buffer.
+///
+/// Same rationale as [`write_ir!`]: `String` writes never fail.
+macro_rules! write_ir_no_newline {
+    ($dst:expr, $($arg:tt)*) => {{
+        use std::fmt::Write as _;
+        let _ = write!($dst, $($arg)*);
+    }};
+}
+
 pub mod abi;
 #[cfg(test)]
 mod abi_tests;
@@ -47,6 +69,7 @@ mod generate_expr_struct;
 mod generics_helpers;
 mod helpers;
 mod init;
+pub mod ir_verify;
 mod lambda_closure;
 mod module_gen;
 #[cfg(test)]
@@ -57,6 +80,7 @@ mod registration;
 mod state;
 mod stmt;
 mod stmt_visitor;
+pub mod string_pool;
 mod string_ops;
 #[cfg(test)]
 mod struct_param_tests;
@@ -208,6 +232,17 @@ pub struct CodeGenerator {
     // Updated at the top of generate_expr, used to decorate CodegenError
     // with source location when it propagates up to generate_module.
     pub(crate) last_error_span: Option<Span>,
+
+    // Multi-error collection mode for graceful degradation.
+    // When enabled, function body generation errors are collected instead of
+    // immediately failing. A stub function is emitted for failed functions
+    // so that the rest of the module can still be generated.
+    pub multi_error_mode: bool,
+    pub(crate) collected_errors: Vec<SpannedCodegenError>,
+
+    // String interning pool for identifier deduplication.
+    // Reduces memory usage by storing each unique function/struct/variable name once.
+    pub(crate) ident_pool: string_pool::IdentPool,
 }
 
 #[cfg(test)]

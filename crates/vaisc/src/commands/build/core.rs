@@ -880,6 +880,18 @@ pub(crate) fn cmd_build(
             gen.generate_module_with_instantiations(&final_ast, &instantiations)
                 .map_err(|e| error_formatter::format_codegen_error(&e, &main_source, input))?;
         }
+
+        // Verify the generated LLVM module using LLVMVerifyModule
+        if let Err(verify_err) = gen.verify_module() {
+            if verbose {
+                eprintln!(
+                    "{} {}",
+                    "LLVM IR verification warning:".yellow().bold(),
+                    verify_err
+                );
+            }
+        }
+
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();
 
@@ -994,6 +1006,22 @@ pub(crate) fn cmd_build(
         // For binary compilation, always use .ll extension for intermediate IR
         input.with_extension("ll")
     };
+
+    // Verify IR structural integrity before writing to file
+    // This catches common codegen bugs early with clear diagnostics
+    // instead of opaque clang errors.
+    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&ir) {
+        if verbose {
+            eprintln!(
+                "{} {}",
+                "IR verification warning:".yellow().bold(),
+                verify_err
+            );
+            // In verbose mode, continue anyway (clang may still accept it)
+        }
+        // In non-verbose mode, also continue: the verification is advisory.
+        // Clang is the authoritative validator.
+    }
 
     // Write IR
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;

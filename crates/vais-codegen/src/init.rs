@@ -64,6 +64,7 @@ impl CodeGenerator {
                 constants: Vec::with_capacity(16),
                 counter: 0,
                 prefix: None,
+                dedup_cache: HashMap::with_capacity(32),
             },
             lambdas: LambdaState {
                 generated_ir: Vec::new(),
@@ -96,6 +97,9 @@ impl CodeGenerator {
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
             last_error_span: None,
+            multi_error_mode: false,
+            collected_errors: Vec::new(),
+            ident_pool: crate::string_pool::IdentPool::with_capacity(256),
         };
 
         // Register built-in extern functions
@@ -181,5 +185,14 @@ impl CodeGenerator {
     /// to construct a [`SpannedCodegenError`] for rich diagnostics.
     pub fn last_error_span(&self) -> Option<Span> {
         self.last_error_span
+    }
+
+    /// Get collected codegen errors (when multi_error_mode is enabled).
+    ///
+    /// In multi-error mode, function body generation errors are collected
+    /// instead of immediately halting compilation. This allows reporting
+    /// multiple codegen errors at once.
+    pub fn get_collected_errors(&self) -> &[SpannedCodegenError] {
+        &self.collected_errors
     }
 }

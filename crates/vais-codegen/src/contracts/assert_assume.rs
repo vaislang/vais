@@ -1,7 +1,6 @@
 //! Assert and assume expression generation.
 
 use crate::{CodeGenerator, CodegenResult};
-use std::fmt::Write;
 use vais_ast::{Expr, Spanned};
 
 impl CodeGenerator {
@@ -30,18 +29,18 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assert_cond_i1_{}", *counter);
         *counter += 1;
-        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
+        write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value);
 
         // Branch based on condition
-        writeln!(
+        write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
             cond_i1, ok_label, fail_label
-        )
-        .unwrap();
+        );
+
 
         // Failure block
-        writeln!(ir, "{}:", fail_label).unwrap();
+        write_ir!(ir, "{}:", fail_label);
 
         // Generate error message
         let msg_str = if let Some(msg_expr) = message {
@@ -61,11 +60,11 @@ impl CodeGenerator {
         };
 
         // Call __panic to terminate
-        writeln!(ir, "  call i64 @__panic(i8* {})", msg_str).unwrap();
+        write_ir!(ir, "  call i64 @__panic(i8* {})", msg_str);
         ir.push_str("  unreachable\n");
 
         // Success block
-        writeln!(ir, "{}:", ok_label).unwrap();
+        write_ir!(ir, "{}:", ok_label);
 
         // Assert returns unit (0)
         Ok(("0".to_string(), ir))
@@ -89,26 +88,26 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assume_cond_i1_{}", *counter);
         *counter += 1;
-        writeln!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value).unwrap();
+        write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, cond_value);
 
         if self.release_mode {
             // In release mode, use LLVM assume intrinsic for optimization hints
-            writeln!(ir, "  call void @llvm.assume(i1 {})", cond_i1).unwrap();
+            write_ir!(ir, "  call void @llvm.assume(i1 {})", cond_i1);
         } else {
             // In debug mode, check the assumption
             let ok_label = format!("assume_ok_{}", *counter);
             let fail_label = format!("assume_fail_{}", *counter);
             *counter += 1;
 
-            writeln!(
+            write_ir!(
                 ir,
                 "  br i1 {}, label %{}, label %{}",
                 cond_i1, ok_label, fail_label
-            )
-            .unwrap();
+            );
+
 
             // Failure block
-            writeln!(ir, "{}:", fail_label).unwrap();
+            write_ir!(ir, "{}:", fail_label);
 
             let fail_msg = format!(
                 "Assumption violated at {}:{}",
@@ -117,11 +116,11 @@ impl CodeGenerator {
             );
             let msg_const = self.get_or_create_contract_string(&fail_msg);
 
-            writeln!(ir, "  call i64 @__panic(i8* {})", msg_const).unwrap();
+            write_ir!(ir, "  call i64 @__panic(i8* {})", msg_const);
             ir.push_str("  unreachable\n");
 
             // Success block
-            writeln!(ir, "{}:", ok_label).unwrap();
+            write_ir!(ir, "{}:", ok_label);
         }
 
         // Assume returns unit (0)

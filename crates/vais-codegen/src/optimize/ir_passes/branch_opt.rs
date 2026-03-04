@@ -156,8 +156,10 @@ pub(crate) fn conditional_branch_simplification(ir: &str) -> String {
                     *var_uses.entry(word.to_string()).or_insert(0) += 1;
                 } else if trimmed.starts_with(word) && trimmed.contains(" = ") {
                     // This is a definition, but also check for uses in the RHS
-                    // safe: checked above that trimmed contains " = "
-                    let def_end = trimmed.find(" = ").unwrap() + 3;
+                    let Some(eq_pos) = trimmed.find(" = ") else {
+                        continue;
+                    };
+                    let def_end = eq_pos + 3;
                     let rhs = &trimmed[def_end..];
                     if rhs.contains(word) {
                         *var_uses.entry(word.to_string()).or_insert(0) += 1;

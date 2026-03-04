@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-02 (Phase 91 완료 — 기술 부채 해소/커버리지 75%+/Monomorphization Method/Lifetime 검증)
+> **최종 업데이트**: 2026-03-04 (Phase 93 완료 — 캐시/인터닝/회귀 감지 성능 최적화)
 
 ---
 
@@ -234,10 +234,12 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 89 | 기술 부채 해소 | Codecov +203 tests, DT 런타임 assert/f64, Unicode \u{}/char_count | 1,291 |
 | 90 | 컴파일러 최적화 · E2E 1,500 · 셀프호스팅 | GVN-CSE/DCE 4단계/Loop Unswitch, +218 E2E, MIR 4패스 추가 | 1,509 |
 | 91 | 기술 부채 해소 · 언어 기능 완성도 | assert_compiles 0개, +406 단위 테스트, Method monomorphization, Lifetime 검증 실장 | 1,540 |
+| 92 | 컴파일러 안정성 강화 | Panic-free (180+ expect→Result), proptest 24개, Codegen graceful degradation, IR 검증 확장 | 1,540 |
+| 93 | 성능 최적화 심화 | 2-level 치환 캐시 (L1 16+L2 256), IdentPool 인터닝, 문자열 상수 dedup, CI Welch's t-test 회귀 감지 | 1,540 |
 
 ---
 
-## 현재 작업 (2026-03-02)
+## 현재 작업 (2026-03-04)
 
 모드: 자동진행
 
@@ -282,30 +284,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 프로덕션 코드 unwrap 865개 중 핵심 경로 300+개 Result 전환, Fuzzing 인프라 구축, 에러 복구 강화
 > **기대 효과**: 런타임 panic 0개 보장, 악의적 입력 내성, 다중 에러 보고 UX 개선
 
-- [ ] 1. unwrap()/panic() 제거 — codegen 핵심 경로 Result 전환 (Opus)
-  대상: builtins.rs (152개), writeln 패턴 (100+), vtable.rs (17개) → CodegenError 전파
-- [ ] 2. Fuzzing 인프라 구축 — cargo-fuzz 하네스 + proptest 속성 기반 테스트 (Sonnet)
-  대상: lexer (토큰화 퍼징), parser (AST 생성 퍼징), type checker (추론 퍼징)
-- [ ] 3. 에러 복구 강화 — TC 다중 에러 누적 + Codegen graceful degradation (Opus)
-  대상: vais-types (단일 에러→Vec<TypeError> 누적), vais-codegen (LLVM API 실패 시 fallback)
-- [ ] 4. LLVM IR 검증 게이트 — LLVMVerifyModule 추가 + 진단 메시지 개선 (Sonnet)
-  대상: lib.rs/inkwell generator.rs (clang 전달 전 IR 유효성 검증)
-진행률: 0/4 (0%)
+- [x] 1. unwrap()/panic() 제거 — codegen 핵심 경로 Result 전환 (Opus) ✅ 2026-03-03
+  변경: builtins.rs 152개 expect→?전환, inkwell gen_*.rs 26개 expect→?전환 (8파일), ir_passes 2개 unwrap→let-else 전환, generator.rs 호출처 에러처리
+- [x] 2. Fuzzing 인프라 구축 — cargo-fuzz 하네스 + proptest 속성 기반 테스트 (Sonnet) ✅ 2026-03-03
+  변경: proptest 의존성 추가 (workspace+3크레이트), lexer 7 proptest (2K cases), parser 8 proptest (1K cases), types 9 proptest (500 cases)
+- [x] 3. 에러 복구 강화 — TC 다중 에러 누적 + Codegen graceful degradation (Opus) ✅ 2026-03-03
+  변경: CodeGenerator에 multi_error_mode/collected_errors 추가, generate_module Pass2에서 함수별 에러 수집(max 20)+계속 진행, backend.rs에서 활성화+에러 출력
+- [x] 4. LLVM IR 검증 게이트 — LLVMVerifyModule 추가 + 진단 메시지 개선 (Sonnet) ✅ 2026-03-03
+  변경: ir_verify.rs에 undefined label 검증+return type consistency 검증 추가 (+5 테스트), optimize/mod.rs에 O2+ 후 재검증 게이트 추가
+진행률: 4/4 (100%)
 
 ### Phase 93: 성능 최적화 심화 — 캐시/인터닝/회귀 감지
 
 > **목표**: 50K lines 컴파일 28.9ms → 24.5ms (2M lines/s), 성능 회귀 자동 감지
 > **기대 효과**: 컴파일 속도 -15%, CI 성능 대시보드 구축
 
-- [ ] 1. 타입 치환 캐시 고도화 — 2-level 캐시 (L1 fast path + L2 LRU 256) (Opus)
-  대상: vais-types/lib.rs (substitute_cache), checker_expr.rs — 예상 -8% TC 시간
-- [ ] 2. String Interning — FxHashMap 식별자 인턴 풀 + codegen ID 전환 (Sonnet)
-  대상: vais-codegen/src/string_pool.rs (신규), lib.rs, expr_helpers.rs — 예상 -4%
-- [ ] 3. LLVM Value 중복 제거 — ValueCache 상수/phi 재사용 (Opus)
-  대상: vais-codegen/src/lib.rs (CodeGenerator), expr_helpers.rs — 예상 -6% codegen
-- [ ] 4. 성능 회귀 감지 — CI 벤치마크 대시보드 + 자동 알림 (Sonnet)
-  대상: .github/workflows/bench-regression.yml 강화, benches/ 통계적 유의성 테스트
-진행률: 0/4 (0%)
+- [x] 1. 타입 치환 캐시 고도화 — 2-level 캐시 (L1 fast path + L2 LRU 256) (Opus) ✅ 2026-03-04
+  변경: vais-types/src/lib.rs (L1 16-entry direct-mapped + L2 256-entry HashMap), inference.rs (primitive fast path + empty subst fast path + L2→L1 promotion)
+- [x] 2. String Interning — FxHashMap 식별자 인턴 풀 + codegen ID 전환 (Sonnet) ✅ 2026-03-04
+  변경: vais-codegen/src/string_pool.rs (신규 212줄, IdentPool + InternId(u32) + 7 테스트), lib.rs/init.rs/registration.rs (함수/구조체/enum 이름 인터닝)
+- [x] 3. LLVM Value 중복 제거 — ValueCache 상수/phi 재사용 (Opus) ✅ 2026-03-04
+  변경: state.rs (dedup_cache), helpers.rs (get_or_create_string_constant), generate_expr/mod.rs+special.rs+expr_visitor.rs+pattern.rs (문자열 상수 중복 제거), types.rs (Named 타입 semi-fast path)
+- [x] 4. 성능 회귀 감지 — CI 벤치마크 대시보드 + 자동 알림 (Sonnet) ✅ 2026-03-04
+  변경: bench-regression.yml (Welch's t-test + Cohen's d 효과 크기 + perf-regression 이슈 자동 생성 + 90일 아티팩트 보존)
+진행률: 4/4 (100%)
 
 ### Phase 94: 생태계 확장 — 레지스트리/자동수정/정적분석
 

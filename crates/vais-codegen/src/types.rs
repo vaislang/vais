@@ -214,10 +214,14 @@ pub(crate) struct AsyncFunctionInfo {
 use crate::CodeGenerator;
 
 impl CodeGenerator {
-    /// Convert a ResolvedType to LLVM IR type string with caching
+    /// Convert a ResolvedType to LLVM IR type string with caching.
+    ///
+    /// Uses a 2-tier approach:
+    /// - Primitive types: immediate return (no cache interaction)
+    /// - Complex types: hash-based cache with u64 key (avoids String allocation on cache hit)
     pub(crate) fn type_to_llvm(&self, ty: &ResolvedType) -> String {
         // Ultra-fast path: return static strings for primitive types
-        // Avoids format!("{:?}") allocation and cache lookup entirely
+        // Avoids hash computation and cache lookup entirely
         match ty {
             ResolvedType::I8 => return String::from("i8"),
             ResolvedType::I16 => return String::from("i16"),
@@ -235,6 +239,30 @@ impl CodeGenerator {
             ResolvedType::Str => return String::from("{ i8*, i64 }"),
             ResolvedType::Unit => return String::from("void"),
             _ => {}
+        }
+
+        // Semi-fast path: Named types without generics (common for struct types)
+        // Use the name directly as cache key — avoids expensive Debug format
+        if let ResolvedType::Named { name, generics } = ty {
+            if generics.is_empty() {
+                let cache_key = name.clone();
+                if let Some(cached) = self.type_to_llvm_cache.borrow().get(&cache_key) {
+                    return cached.clone();
+                }
+                let result = match self.type_to_llvm_impl(ty) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("Warning: {}", e);
+                        let _ = e;
+                        String::from("i64")
+                    }
+                };
+                self.type_to_llvm_cache
+                    .borrow_mut()
+                    .insert(cache_key, result.clone());
+                return result;
+            }
         }
 
         // Complex types: use cache with Debug key

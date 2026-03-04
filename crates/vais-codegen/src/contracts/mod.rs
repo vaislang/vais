@@ -38,15 +38,14 @@ impl CodeGenerator {
 
         for (s, name) in &self.contracts.contract_constants {
             let escaped = escape_string_for_llvm(s);
-            use std::fmt::Write;
-            writeln!(
+            write_ir!(
                 ir,
                 "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
                 name,
                 s.len() + 1,
                 escaped
-            )
-            .unwrap();
+            );
+
         }
 
         ir

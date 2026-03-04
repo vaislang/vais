@@ -419,7 +419,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Allocate parameters
         for (i, param) in func.params.iter().enumerate() {
-            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_value = fn_value.get_nth_param(i as u32).ok_or_else(|| {
+                CodegenError::InternalError(format!(
+                    "ICE: parameter index {} out of bounds for method '{}'",
+                    i,
+                    func.name.node
+                ))
+            })?;
 
             if param.name.node == "self" {
                 // self is passed as a pointer to the caller's alloca
@@ -481,7 +487,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .expect("ICE: no insert block during method expr-body generation")
+                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during method expr-body generation".into()))?
                     .get_terminator()
                     .is_none()
                 {
@@ -502,7 +508,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .unwrap()
+                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during method block-body generation".into()))?
                     .get_terminator()
                     .is_none()
                 {

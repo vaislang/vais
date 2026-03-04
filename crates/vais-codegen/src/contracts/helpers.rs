@@ -1,7 +1,6 @@
 //! Contract helper utilities.
 
 use crate::CodeGenerator;
-use std::fmt::Write;
 
 impl CodeGenerator {
     pub(crate) fn get_or_create_contract_string(&mut self, s: &str) -> String {
@@ -48,7 +47,7 @@ pub(crate) fn escape_string_for_llvm(s: &str) -> String {
             c => {
                 // Escape non-printable characters as hex
                 for byte in c.to_string().as_bytes() {
-                    write!(result, "\\{:02X}", byte).unwrap();
+                    write_ir_no_newline!(result, "\\{:02X}", byte);
                 }
             }
         }

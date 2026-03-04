@@ -130,9 +130,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str, _counter: &mut usize) -> GenResult {
-        let name = self.make_string_name();
-        self.strings.counter += 1;
-        self.strings.constants.push((name.clone(), s.to_string()));
+        let name = self.get_or_create_string_constant(s);
 
         let len = s.len() + 1;
         Ok((
@@ -494,10 +492,8 @@ impl ExprVisitor for CodeGenerator {
                 Ok((if b { "1" } else { "0" }.to_string(), String::new()))
             }
             vais_types::ComptimeValue::String(s) => {
-                // Create a global string constant
-                let name = self.make_string_name();
-                self.strings.counter += 1;
-                self.strings.constants.push((name.clone(), s.clone()));
+                // Create a global string constant (deduplicated)
+                let name = self.get_or_create_string_constant(&s);
                 let len = s.len() + 1;
                 Ok((
                     format!(

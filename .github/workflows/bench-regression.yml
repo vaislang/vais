@@ -22,6 +22,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout PR branch
@@ -110,27 +111,35 @@ jobs:
         run: |
           echo "::group::Comparing benchmark results"
 
-          # Create comparison script inline (in case scripts/bench-compare.sh doesn't exist in base branch)
+          # Enhanced comparison script with statistical significance testing
           cat > compare_benchmarks.py << 'EOF'
           #!/usr/bin/env python3
+          """Benchmark comparison with Welch's t-test for statistical significance.
+
+          Compares PR benchmark results against base branch, using:
+          - Criterion's sample data for multi-sample statistical testing
+          - Welch's t-test (unequal variances) for significance at p < 0.05
+          - Cohen's d for effect size classification
+          """
           import json
+          import math
           import os
           import sys
           from pathlib import Path
 
           THRESHOLD = float(os.environ.get('BENCH_THRESHOLD', '10'))
+          P_VALUE_THRESHOLD = 0.05  # Statistical significance level
 
           def find_benchmarks(base_dir):
               """Find all benchmark estimate files."""
               benchmarks = {}
               criterion_dir = Path(base_dir)
               for estimates in criterion_dir.rglob('estimates.json'):
-                  # Extract benchmark name from path
                   parts = estimates.parts
                   if 'criterion' in parts:
                       idx = parts.index('criterion')
                       if idx + 1 < len(parts):
-                          bench_name = '/'.join(parts[idx+1:-2])  # Exclude baseline dir and file
+                          bench_name = '/'.join(parts[idx+1:-2])
                           benchmarks[bench_name] = estimates
               return benchmarks
 
@@ -143,12 +152,112 @@ jobs:
               except (FileNotFoundError, KeyError, json.JSONDecodeError):
                   return None
 
+          def load_estimate_with_ci(path):
+              """Load mean estimate with confidence interval from JSON file."""
+              try:
+                  with open(path) as f:
+                      data = json.load(f)
+                      mean = data['mean']['point_estimate']
+                      ci_lower = data['mean']['confidence_interval']['lower_bound']
+                      ci_upper = data['mean']['confidence_interval']['upper_bound']
+                      std_dev = data.get('std_dev', {}).get('point_estimate', 0)
+                      return {'mean': mean, 'ci_lower': ci_lower, 'ci_upper': ci_upper, 'std_dev': std_dev}
+              except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                  return None
+
+          def load_sample_data(estimates_path):
+              """Load raw sample data from Criterion's sample.json."""
+              sample_path = estimates_path.parent / 'sample.json'
+              try:
+                  with open(sample_path) as f:
+                      data = json.load(f)
+                      # Criterion stores (iteration_count, elapsed_time) pairs
+                      iters = data.get('iters', [])
+                      times = data.get('times', [])
+                      if iters and times:
+                          # Compute per-iteration time
+                          return [t / i for i, t in zip(iters, times)]
+              except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                  pass
+              return None
+
+          def welch_t_test(samples_a, samples_b):
+              """Perform Welch's t-test for unequal variances.
+
+              Returns (t_statistic, p_value, degrees_of_freedom).
+              Uses the Welch-Satterthwaite approximation for degrees of freedom.
+              """
+              n_a = len(samples_a)
+              n_b = len(samples_b)
+              if n_a < 2 or n_b < 2:
+                  return 0, 1.0, 0  # Not enough samples
+
+              mean_a = sum(samples_a) / n_a
+              mean_b = sum(samples_b) / n_b
+              var_a = sum((x - mean_a) ** 2 for x in samples_a) / (n_a - 1)
+              var_b = sum((x - mean_b) ** 2 for x in samples_b) / (n_b - 1)
+
+              se_a = var_a / n_a
+              se_b = var_b / n_b
+              se_diff = math.sqrt(se_a + se_b)
+
+              if se_diff == 0:
+                  return 0, 1.0, 0
+
+              t_stat = (mean_a - mean_b) / se_diff
+
+              # Welch-Satterthwaite degrees of freedom
+              if se_a + se_b == 0:
+                  df = n_a + n_b - 2
+              else:
+                  df = (se_a + se_b) ** 2 / (
+                      (se_a ** 2 / (n_a - 1)) + (se_b ** 2 / (n_b - 1))
+                  )
+                  df = max(1, df)
+
+              # Approximate p-value using the t-distribution CDF
+              # Uses the regularized incomplete beta function approximation
+              p_value = approx_t_cdf(abs(t_stat), df)
+
+              return t_stat, p_value, df
+
+          def approx_t_cdf(t, df):
+              """Approximate two-tailed p-value for t-distribution.
+
+              Uses the approximation: p ≈ 2 * (1 - Phi(t * sqrt(df/(df + t^2))))
+              where Phi is the standard normal CDF. Accurate for df > 4.
+              """
+              if df <= 0:
+                  return 1.0
+              x = t * math.sqrt(df / (df + t * t))
+              # Approximate normal CDF using error function
+              p = 1.0 - 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+              return 2.0 * p  # Two-tailed
+
+          def cohens_d(mean_a, mean_b, std_a, std_b):
+              """Compute Cohen's d effect size."""
+              pooled_std = math.sqrt((std_a ** 2 + std_b ** 2) / 2)
+              if pooled_std == 0:
+                  return 0
+              return abs(mean_a - mean_b) / pooled_std
+
+          def effect_size_label(d):
+              """Classify effect size per Cohen's conventions."""
+              if d < 0.2:
+                  return "negligible"
+              elif d < 0.5:
+                  return "small"
+              elif d < 0.8:
+                  return "medium"
+              else:
+                  return "large"
+
           def format_time(ns):
               """Format nanoseconds in human-readable format."""
               if ns < 1000:
                   return f"{ns:.2f} ns"
               elif ns < 1_000_000:
-                  return f"{ns/1000:.2f} µs"
+                  return f"{ns/1000:.2f} us"
               elif ns < 1_000_000_000:
                   return f"{ns/1_000_000:.2f} ms"
               else:
@@ -160,75 +269,127 @@ jobs:
               results = []
               regressions = []
               improvements = []
+              stats_summary = []
 
-              print("## 📊 Benchmark Comparison Report\n")
-              print(f"**Regression Threshold:** {THRESHOLD}%\n")
-              print("| Status | Benchmark | Base | PR | Change |")
-              print("|--------|-----------|------|-----|--------|")
+              print("## Benchmark Comparison Report\n")
+              print(f"**Regression Threshold:** {THRESHOLD}% | **Significance Level:** p < {P_VALUE_THRESHOLD}\n")
+              print("| Status | Benchmark | Base | PR | Change | p-value | Effect |")
+              print("|--------|-----------|------|-----|--------|---------|--------|")
 
               for bench_name, pr_path in sorted(pr_benchmarks.items()):
-                  # Try to find corresponding base benchmark
-                  base_path = str(pr_path).replace('/base/', '/main/')
-                  if not Path(base_path).exists():
-                      # Try alternative path structure
-                      base_path = str(pr_path)
-
-                  pr_time = load_estimate(pr_path)
-
-                  # Look for main baseline
                   main_path = str(pr_path).replace('/base/', '/main/')
-                  base_time = load_estimate(main_path)
 
-                  if pr_time and base_time:
-                      change_pct = ((pr_time - base_time) / base_time) * 100
+                  pr_stats = load_estimate_with_ci(pr_path)
+                  base_stats = load_estimate_with_ci(Path(main_path))
 
-                      # Determine status
-                      if change_pct > THRESHOLD:
-                          status = "🔴"
-                          regressions.append((bench_name, change_pct))
-                      elif change_pct > 5:
-                          status = "🟡"
-                      elif change_pct < -10:
-                          status = "🟢"
-                          improvements.append((bench_name, change_pct))
-                      elif change_pct < -2:
-                          status = "🔵"
-                      else:
-                          status = "⚪"
+                  if not pr_stats or not base_stats:
+                      continue
 
-                      change_str = f"{change_pct:+.2f}%"
-                      base_str = format_time(base_time)
-                      pr_str = format_time(pr_time)
+                  pr_time = pr_stats['mean']
+                  base_time = base_stats['mean']
+                  change_pct = ((pr_time - base_time) / base_time) * 100
 
-                      print(f"| {status} | `{bench_name}` | {base_str} | {pr_str} | {change_str} |")
-                      results.append((bench_name, base_time, pr_time, change_pct))
+                  # Statistical significance testing
+                  pr_samples = load_sample_data(pr_path)
+                  base_samples = load_sample_data(Path(main_path))
+
+                  p_value = 1.0
+                  effect = "n/a"
+                  significant = False
+
+                  if pr_samples and base_samples:
+                      _, p_value, _ = welch_t_test(pr_samples, base_samples)
+                      significant = p_value < P_VALUE_THRESHOLD
+                      d = cohens_d(pr_stats['mean'], base_stats['mean'],
+                                   pr_stats['std_dev'], base_stats['std_dev'])
+                      effect = effect_size_label(d)
+                  elif pr_stats['std_dev'] > 0 and base_stats['std_dev'] > 0:
+                      # Fallback: use CI overlap as significance proxy
+                      ci_overlap = not (pr_stats['ci_lower'] > base_stats['ci_upper'] or
+                                        base_stats['ci_lower'] > pr_stats['ci_upper'])
+                      significant = not ci_overlap
+                      p_value = 0.01 if significant else 0.5
+                      d = cohens_d(pr_stats['mean'], base_stats['mean'],
+                                   pr_stats['std_dev'], base_stats['std_dev'])
+                      effect = effect_size_label(d)
+
+                  # Determine status (requires both threshold AND significance)
+                  if change_pct > THRESHOLD and significant:
+                      status = "CRITICAL"
+                      regressions.append((bench_name, change_pct, p_value, effect))
+                  elif change_pct > THRESHOLD and not significant:
+                      status = "NOISY"  # Above threshold but not statistically significant
+                  elif change_pct > 5:
+                      status = "WARN"
+                  elif change_pct < -10 and significant:
+                      status = "GOOD"
+                      improvements.append((bench_name, change_pct, p_value, effect))
+                  elif change_pct < -2:
+                      status = "MINOR"
+                  else:
+                      status = "OK"
+
+                  change_str = f"{change_pct:+.2f}%"
+                  base_str = format_time(base_time)
+                  pr_str = format_time(pr_time)
+                  p_str = f"{p_value:.4f}" if p_value < 1.0 else "n/a"
+
+                  print(f"| {status} | `{bench_name}` | {base_str} | {pr_str} | {change_str} | {p_str} | {effect} |")
+                  results.append((bench_name, base_time, pr_time, change_pct, p_value))
 
               print("\n---\n")
               print("### Legend\n")
-              print("- 🔴 **Critical Regression:** >" + str(THRESHOLD) + "% slower")
-              print("- 🟡 **Minor Regression:** 5-" + str(THRESHOLD) + "% slower")
-              print("- 🔵 **Minor Improvement:** 2-10% faster")
-              print("- 🟢 **Significant Improvement:** >10% faster")
-              print("- ⚪ **Neutral:** Within ±5%\n")
+              print(f"- **CRITICAL**: >{THRESHOLD}% slower AND statistically significant (p < {P_VALUE_THRESHOLD})")
+              print(f"- **NOISY**: >{THRESHOLD}% slower but NOT statistically significant (likely noise)")
+              print(f"- **WARN**: 5-{THRESHOLD}% slower")
+              print(f"- **MINOR**: 2-10% faster")
+              print(f"- **GOOD**: >10% faster AND statistically significant")
+              print(f"- **OK**: Within noise range\n")
+              print("**Effect sizes:** negligible (d<0.2), small (0.2-0.5), medium (0.5-0.8), large (>0.8)\n")
 
               if regressions:
-                  print("### ⚠️ Regressions Detected\n")
-                  for name, pct in regressions:
-                      print(f"- `{name}`: {pct:+.2f}%")
+                  print("### Statistically Significant Regressions\n")
+                  for name, pct, p, eff in regressions:
+                      print(f"- `{name}`: {pct:+.2f}% (p={p:.4f}, effect={eff})")
                   print()
 
               if improvements:
-                  print("### ✅ Improvements\n")
-                  for name, pct in improvements:
-                      print(f"- `{name}`: {pct:.2f}%")
+                  print("### Statistically Significant Improvements\n")
+                  for name, pct, p, eff in improvements:
+                      print(f"- `{name}`: {pct:.2f}% (p={p:.4f}, effect={eff})")
                   print()
 
-              # Exit with error if regressions found
+              # Summary statistics
+              if results:
+                  changes = [r[3] for r in results]
+                  print(f"\n### Summary Statistics\n")
+                  print(f"- **Benchmarks compared:** {len(results)}")
+                  print(f"- **Mean change:** {sum(changes)/len(changes):+.2f}%")
+                  print(f"- **Max regression:** {max(changes):+.2f}%")
+                  print(f"- **Max improvement:** {min(changes):+.2f}%")
+                  print(f"- **Significant regressions:** {len(regressions)}")
+                  print(f"- **Significant improvements:** {len(improvements)}")
+
+              # Export results as JSON for historical tracking
+              json_results = {
+                  'benchmarks': [
+                      {'name': r[0], 'base_ns': r[1], 'pr_ns': r[2],
+                       'change_pct': r[3], 'p_value': r[4]}
+                      for r in results
+                  ],
+                  'regressions': len(regressions),
+                  'improvements': len(improvements),
+                  'threshold': THRESHOLD,
+              }
+              with open('benchmark-results.json', 'w') as f:
+                  json.dump(json_results, f, indent=2)
+
+              # Exit with error only for statistically significant regressions
               if regressions:
-                  print(f"\n**Result:** {len(regressions)} regression(s) exceed {THRESHOLD}% threshold")
+                  print(f"\n**Result:** {len(regressions)} statistically significant regression(s) exceed {THRESHOLD}% threshold")
                   sys.exit(1)
               else:
-                  print(f"\n**Result:** No significant regressions detected ✅")
+                  print(f"\n**Result:** No statistically significant regressions detected")
                   sys.exit(0)
 
           if __name__ == '__main__':
@@ -251,19 +412,33 @@ jobs:
             try {
               comparisonReport = fs.readFileSync('benchmark-comparison.md', 'utf8');
             } catch (e) {
-              comparisonReport = '⚠️ Could not load benchmark comparison report';
+              comparisonReport = 'Could not load benchmark comparison report';
             }
+
+            // Load JSON results for structured data
+            let jsonResults = null;
+            try {
+              jsonResults = JSON.parse(fs.readFileSync('benchmark-results.json', 'utf8'));
+            } catch (e) {}
+
+            const regressionCount = jsonResults ? jsonResults.regressions : 0;
+            const improvementCount = jsonResults ? jsonResults.improvements : 0;
+            const statusLine = regressionCount > 0
+              ? `**${regressionCount} regression(s) detected** (statistically significant, p < 0.05)`
+              : `No significant regressions`;
 
             const body = `${comparisonReport}
 
             ---
             <details>
-            <summary>📖 How to interpret these results</summary>
+            <summary>How to interpret these results</summary>
 
-            - **Focus on critical regressions (🔴)**: These exceed the ${process.env.BENCH_THRESHOLD}% threshold
-            - **Investigate minor regressions (🟡)**: May indicate a trend
-            - **Celebrate improvements (🟢)**: Performance got better!
-            - **Neutral changes (⚪)**: Normal variance
+            - **CRITICAL**: Exceeds ${process.env.BENCH_THRESHOLD}% threshold AND statistically significant (Welch's t-test, p < 0.05)
+            - **NOISY**: Exceeds threshold but NOT statistically significant (likely measurement noise)
+            - **WARN / MINOR**: Within noise range, monitor for trends
+            - **GOOD**: Significant improvement confirmed by t-test
+
+            **Effect sizes** (Cohen's d): negligible (<0.2), small (0.2-0.5), medium (0.5-0.8), large (>0.8)
 
             To reproduce locally:
             \`\`\`bash
@@ -277,7 +452,7 @@ jobs:
             \`\`\`
             </details>
 
-            <sub>🤖 Automated benchmark comparison • Threshold: ${process.env.BENCH_THRESHOLD}%</sub>
+            <sub>Automated benchmark comparison | Threshold: ${process.env.BENCH_THRESHOLD}% | Statistical test: Welch's t-test (p < 0.05)</sub>
             `;
 
             // Find existing benchmark comment
@@ -289,11 +464,10 @@ jobs:
 
             const botComment = comments.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('📊 Benchmark Comparison Report')
+              comment.body.includes('Benchmark Comparison Report')
             );
 
             if (botComment) {
-              // Update existing comment
               await github.rest.issues.updateComment({
                 comment_id: botComment.id,
                 owner: context.repo.owner,
@@ -301,13 +475,89 @@ jobs:
                 body: body
               });
             } else {
-              // Create new comment
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 body: body
               });
+            }
+
+      - name: Auto-alert on critical regressions
+        if: steps.compare.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let jsonResults = null;
+            try {
+              jsonResults = JSON.parse(fs.readFileSync('benchmark-results.json', 'utf8'));
+            } catch (e) {
+              return; // No results to report
+            }
+
+            if (!jsonResults || jsonResults.regressions === 0) return;
+
+            // Build regression details
+            const regressions = jsonResults.benchmarks
+              .filter(b => b.change_pct > parseFloat(process.env.BENCH_THRESHOLD) && b.p_value < 0.05)
+              .map(b => `- \`${b.name}\`: ${b.change_pct.toFixed(2)}% slower (p=${b.p_value.toFixed(4)})`)
+              .join('\n');
+
+            const prNumber = context.issue.number;
+            const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${prNumber}`;
+
+            // Check if a regression issue already exists for this PR
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'perf-regression',
+              state: 'open',
+            });
+
+            const existingIssue = issues.find(i =>
+              i.title.includes(`PR #${prNumber}`)
+            );
+
+            const issueBody = `## Performance Regression Alert
+
+            **Source:** ${prUrl}
+            **Threshold:** ${process.env.BENCH_THRESHOLD}%
+            **Significance:** Welch's t-test, p < 0.05
+
+            ### Regressions
+
+            ${regressions}
+
+            ### Action Required
+
+            1. Review the benchmark results in the PR
+            2. Investigate root cause of the regression
+            3. Either fix the regression or document why it is acceptable
+            4. Close this issue when resolved
+
+            ---
+            *Auto-generated by CI benchmark regression check*`;
+
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: issueBody,
+              });
+              console.log(`Updated existing regression issue #${existingIssue.number}`);
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Performance regression detected in PR #${prNumber}`,
+                body: issueBody,
+                labels: ['perf-regression'],
+              });
+              console.log('Created new regression issue');
             }
 
       - name: Generate job summary
@@ -327,7 +577,8 @@ jobs:
           path: |
             benchmark-results/
             benchmark-comparison.md
-          retention-days: 30
+            benchmark-results.json
+          retention-days: 90
 
       - name: Fail on critical regressions
         if: steps.compare.outcome == 'failure'

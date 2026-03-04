@@ -106,6 +106,17 @@ pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &pgo::PgoMode) -> St
         result = ir_passes::loop_invariant_motion(&result);
     }
 
+    // Post-optimization IR verification: catch optimizer-introduced bugs.
+    // Only run at O2+ where transformations are aggressive enough to risk breakage.
+    if level >= OptLevel::O2 {
+        let diags = crate::ir_verify::verify_text_ir(&result);
+        for d in &diags {
+            if d.severity == crate::ir_verify::DiagnosticSeverity::Error {
+                eprintln!("[ICE] Post-optimization IR verification: {}", d);
+            }
+        }
+    }
+
     result
 }
 

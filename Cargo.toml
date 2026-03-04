@@ -112,6 +112,7 @@ colored = "3"
 
 # Testing
 pretty_assertions = "1.4"
+proptest = "1.5"
 
 [profile.release]
 strip = true

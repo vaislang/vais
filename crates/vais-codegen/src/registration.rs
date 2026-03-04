@@ -52,6 +52,9 @@ impl CodeGenerator {
 
         let func_name = f.name.node.to_string();
 
+        // Intern the function name for deduplication across the codegen pipeline
+        self.ident_pool.intern(&func_name);
+
         self.types.functions.insert(
             func_name.clone(),
             FunctionInfo {
@@ -193,6 +196,9 @@ impl CodeGenerator {
             .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
             .collect();
 
+        // Intern the struct name for deduplication
+        self.ident_pool.intern(&s.name.node);
+
         self.types.structs.insert(
             s.name.node.to_string(),
             StructInfo {
@@ -239,6 +245,12 @@ impl CodeGenerator {
                 _tag: tag as u32,
                 fields,
             });
+        }
+
+        // Intern enum and variant names
+        self.ident_pool.intern(&e.name.node);
+        for v in &variants {
+            self.ident_pool.intern(&v.name);
         }
 
         self.types.enums.insert(

@@ -114,6 +114,10 @@ pub(crate) struct StringPool {
     pub(crate) counter: usize,
     /// Module-specific prefix for string constants (avoids collisions in multi-module builds)
     pub(crate) prefix: Option<String>,
+    /// Deduplication cache: string_value -> constant_name
+    /// When the same string literal appears multiple times, reuses the existing global constant
+    /// instead of creating a new one. Reduces binary size and IR output.
+    pub(crate) dedup_cache: HashMap<String, String>,
 }
 
 /// Contract verification state — pre/post conditions, old() snapshots, decreases

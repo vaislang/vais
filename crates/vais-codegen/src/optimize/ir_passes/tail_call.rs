@@ -42,8 +42,9 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
 
                         // Mark as tail call
                         let prefix = if is_self_call { "musttail" } else { "tail" };
-                        // safe: checked at line 603 that trimmed contains " = call "
-                        let call_pos = trimmed.find(" = call ").unwrap();
+                        let Some(call_pos) = trimmed.find(" = call ") else {
+                            continue;
+                        };
                         let dest_part = &trimmed[..call_pos];
                         let call_part = &trimmed[call_pos + 3..]; // " = call ..."
                         result.push(format!(

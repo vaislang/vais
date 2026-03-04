@@ -1,5 +1,4 @@
 use super::*;
-use std::fmt::Write;
 
 impl CodeGenerator {
     /// Generate code for match expression
@@ -22,13 +21,13 @@ impl CodeGenerator {
         let match_val = if is_enum_or_struct && is_value {
             let llvm_type = self.type_to_llvm(&match_type);
             let stack_ptr = self.next_temp(counter);
-            writeln!(ir, "  {} = alloca {}", stack_ptr, llvm_type).unwrap();
-            writeln!(
+            write_ir!(ir, "  {} = alloca {}", stack_ptr, llvm_type);
+            write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
                 llvm_type, match_val_raw, llvm_type, stack_ptr
-            )
-            .unwrap();
+            );
+
             stack_ptr
         } else {
             match_val_raw
@@ -68,9 +67,9 @@ impl CodeGenerator {
             }
 
             // Generate switch instruction
-            writeln!(ir, "  switch i64 {}, label %{} [", match_val, default_label).unwrap();
+            write_ir!(ir, "  switch i64 {}, label %{} [", match_val, default_label);
             for (val, label) in &switch_cases {
-                writeln!(ir, "    i64 {}, label %{}", val, label).unwrap();
+                write_ir!(ir, "    i64 {}, label %{}", val, label);
             }
             ir.push_str("  ]\n");
 
@@ -79,7 +78,7 @@ impl CodeGenerator {
             for arm in arms {
                 if let Pattern::Literal(Literal::Int(_)) = &arm.pattern.node {
                     let label = &arm_labels[case_idx];
-                    writeln!(ir, "{}:", label).unwrap();
+                    write_ir!(ir, "{}:", label);
 
                     // Check guard if present
                     if let Some(guard) = &arm.guard {
@@ -88,30 +87,30 @@ impl CodeGenerator {
 
                         let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
                         ir.push_str(&guard_ir);
-                        writeln!(
+                        write_ir!(
                             ir,
                             "  br i1 {}, label %{}, label %{}",
                             guard_val, guard_pass, guard_fail
-                        )
-                        .unwrap();
+                        );
+
 
                         // Guard passed - execute body
-                        writeln!(ir, "{}:", guard_pass).unwrap();
+                        write_ir!(ir, "{}:", guard_pass);
                         self.fn_ctx.current_block = guard_pass.clone();
                         let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                         ir.push_str(&body_ir);
                         arm_values.push((body_val, self.fn_ctx.current_block.clone()));
-                        writeln!(ir, "  br label %{}", merge_label).unwrap();
+                        write_ir!(ir, "  br label %{}", merge_label);
 
                         // Guard failed - go to default
-                        writeln!(ir, "{}:", guard_fail).unwrap();
-                        writeln!(ir, "  br label %{}", default_label).unwrap();
+                        write_ir!(ir, "{}:", guard_fail);
+                        write_ir!(ir, "  br label %{}", default_label);
                     } else {
                         self.fn_ctx.current_block.clone_from(label);
                         let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                         ir.push_str(&body_ir);
                         arm_values.push((body_val, self.fn_ctx.current_block.clone()));
-                        writeln!(ir, "  br label %{}", merge_label).unwrap();
+                        write_ir!(ir, "  br label %{}", merge_label);
                     }
 
                     case_idx += 1;
@@ -119,7 +118,7 @@ impl CodeGenerator {
             }
 
             // Generate default arm
-            writeln!(ir, "{}:", default_label).unwrap();
+            write_ir!(ir, "{}:", default_label);
             if let Some(arm) = default_arm {
                 let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
@@ -128,13 +127,13 @@ impl CodeGenerator {
                 // No default arm - unreachable or return 0
                 arm_values.push(("0".to_string(), default_label.clone()));
             }
-            writeln!(ir, "  br label %{}", merge_label).unwrap();
+            write_ir!(ir, "  br label %{}", merge_label);
         } else {
             // Fall back to chained conditional branches for complex patterns
             let mut current_label = self.next_label("match.check");
             // Create a default fallthrough block so all check-fail paths have a phi entry
             let default_label = self.next_label("match.default");
-            writeln!(ir, "  br label %{}", current_label).unwrap();
+            write_ir!(ir, "  br label %{}", current_label);
 
             for (i, arm) in arms.iter().enumerate() {
                 let is_last = i == arms.len() - 1;
@@ -145,7 +144,7 @@ impl CodeGenerator {
                 };
                 let arm_body_label = self.next_label("match.arm");
 
-                writeln!(ir, "{}:", current_label).unwrap();
+                write_ir!(ir, "{}:", current_label);
 
                 // Generate pattern check — pass match_type for correct nested tuple type inference
                 let (check_val, check_ir) = self.generate_pattern_check_typed(
@@ -162,15 +161,15 @@ impl CodeGenerator {
                     let guard_check = self.next_label("match.guard.check");
 
                     // First check pattern
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
                         check_val, guard_bind, next_label
-                    )
-                    .unwrap();
+                    );
+
 
                     // Bind pattern variables for guard to use
-                    writeln!(ir, "{}:", guard_bind).unwrap();
+                    write_ir!(ir, "{}:", guard_bind);
                     let bind_ir = self.generate_pattern_bindings_typed(
                         &arm.pattern,
                         &match_val,
@@ -178,35 +177,35 @@ impl CodeGenerator {
                         &match_type,
                     )?;
                     ir.push_str(&bind_ir);
-                    writeln!(ir, "  br label %{}", guard_check).unwrap();
+                    write_ir!(ir, "  br label %{}", guard_check);
 
                     // Then check guard
-                    writeln!(ir, "{}:", guard_check).unwrap();
+                    write_ir!(ir, "{}:", guard_check);
                     let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
                     ir.push_str(&guard_ir);
                     // Guard value is i64 (0 or 1), convert to i1 for branch
                     let guard_bool = self.next_temp(counter);
-                    writeln!(ir, "  {} = icmp ne i64 {}, 0", guard_bool, guard_val).unwrap();
-                    writeln!(
+                    write_ir!(ir, "  {} = icmp ne i64 {}, 0", guard_bool, guard_val);
+                    write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
                         guard_bool, arm_body_label, next_label
-                    )
-                    .unwrap();
+                    );
+
 
                     // Generate arm body (bindings already done)
-                    writeln!(ir, "{}:", arm_body_label).unwrap();
+                    write_ir!(ir, "{}:", arm_body_label);
                     self.fn_ctx.current_block.clone_from(&arm_body_label);
                 } else {
-                    writeln!(
+                    write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
                         check_val, arm_body_label, next_label
-                    )
-                    .unwrap();
+                    );
+
 
                     // Generate arm body
-                    writeln!(ir, "{}:", arm_body_label).unwrap();
+                    write_ir!(ir, "{}:", arm_body_label);
                     self.fn_ctx.current_block.clone_from(&arm_body_label);
 
                     // Bind pattern variables if needed
@@ -225,13 +224,13 @@ impl CodeGenerator {
                 // inserted intermediate labels, e.g., division-by-zero guard)
                 let actual_block = self.fn_ctx.current_block.clone();
                 arm_values.push((body_val, actual_block));
-                writeln!(ir, "  br label %{}", merge_label).unwrap();
+                write_ir!(ir, "  br label %{}", merge_label);
 
                 current_label = next_label;
             }
 
             // Default fallthrough block (no arm matched)
-            writeln!(ir, "{}:", default_label).unwrap();
+            write_ir!(ir, "{}:", default_label);
             // Use appropriate default value based on first arm's body type
             let default_val = if !arms.is_empty() {
                 let arm_body_type = self.infer_expr_type(&arms[0].body);
@@ -248,11 +247,11 @@ impl CodeGenerator {
                 "0".to_string()
             };
             arm_values.push((default_val, default_label.clone()));
-            writeln!(ir, "  br label %{}", merge_label).unwrap();
+            write_ir!(ir, "  br label %{}", merge_label);
         }
 
         // Merge block with phi node
-        writeln!(ir, "{}:", merge_label).unwrap();
+        write_ir!(ir, "{}:", merge_label);
 
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
@@ -286,26 +285,26 @@ impl CodeGenerator {
                 .iter()
                 .map(|(val, label)| format!("[ {}, %{} ]", val, label))
                 .collect();
-            writeln!(
+            write_ir!(
                 ir,
                 "  {} = phi {} {}",
                 phi_result,
                 phi_type,
                 phi_args.join(", ")
-            )
-            .unwrap();
+            );
+
 
             // For Named types (enum/struct), the phi gives us a pointer.
             // Load the value so it can be used directly (e.g., as a return value).
             if is_named_type {
                 let llvm_ty = self.type_to_llvm(&arm_body_type);
                 let loaded = self.next_temp(counter);
-                writeln!(
+                write_ir!(
                     ir,
                     "  {} = load {}, {}* {}",
                     loaded, llvm_ty, llvm_ty, phi_result
-                )
-                .unwrap();
+                );
+
                 Ok((loaded, ir))
             } else {
                 Ok((phi_result, ir))

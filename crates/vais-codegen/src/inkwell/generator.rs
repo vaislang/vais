@@ -188,7 +188,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
 
         // Declare built-in functions
-        builtins::declare_builtins(context, &gen.module);
+        if let Err(e) = builtins::declare_builtins(context, &gen.module) {
+            eprintln!("[ICE] Failed to declare builtins: {e}");
+        }
 
         gen
     }
@@ -507,6 +509,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.module.print_to_file(path).map_err(|e| e.to_string())
     }
 
+    /// Verify the generated LLVM IR module using LLVMVerifyModule.
+    ///
+    /// This should be called after `generate_module()` and before emitting
+    /// the IR to a file or passing it to a backend. Returns `Ok(())` if the
+    /// module is valid, or an error with LLVM's diagnostic message.
+    pub fn verify_module(&self) -> CodegenResult<()> {
+        self.module.verify().map_err(|llvm_msg| {
+            crate::CodegenError::LlvmError(format!(
+                "LLVM IR verification failed:\n{}",
+                llvm_msg.to_string()
+            ))
+        })
+    }
+
     // ========== Declaration Phase ==========
 }
 
@@ -533,7 +549,7 @@ mod tests {
         let entry = context.append_basic_block(func, "entry");
         gen.builder.position_at_end(entry);
 
-        let result = gen.generate_string_literal("hello").unwrap();
+        let result = gen.generate_string_literal("hello").expect("ICE: inkwell operation failed in generator");
         // String literals return a fat pointer struct { ptr, i64 }
         assert!(result.is_struct_value());
     }

@@ -45,15 +45,14 @@ impl CodeGenerator {
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
                 // Create a global string constant and wrap in fat pointer { i8*, i64 }
-                let name = self.make_string_name();
-                self.strings.counter += 1;
+                // Uses dedup cache: identical string literals share the same global constant
+                let name = self.get_or_create_string_constant(s);
                 let byte_len = s.len() + 1; // includes null terminator for global
                 let str_len = s.len() as i64; // actual string length (no null)
                 let gep = format!(
                     "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
                     byte_len, byte_len, name
                 );
-                self.strings.constants.push((name, s.clone()));
                 // Build fat pointer: { i8* ptr, i64 len }
                 let t0 = self.next_temp(counter);
                 let t1 = self.next_temp(counter);
