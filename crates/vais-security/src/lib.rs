@@ -69,9 +69,11 @@
 
 pub mod analyzer;
 pub mod findings;
+pub mod lint;
 
 #[cfg(test)]
 mod tests;
 
 pub use analyzer::SecurityAnalyzer;
 pub use findings::{FindingCategory, SecurityFinding, Severity};
+pub use lint::{LintAnalyzer, LintCategory, LintDiagnostic, LintLevel};

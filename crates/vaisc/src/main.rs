@@ -351,6 +351,16 @@ enum Commands {
         indent: usize,
     },
 
+    /// Automatically fix code issues (unused vars, imports)
+    Fix {
+        /// Input source file
+        input: PathBuf,
+
+        /// Show what would be fixed without modifying files
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Package management commands
     #[command(subcommand)]
     Pkg(PkgCommands),
@@ -385,6 +395,10 @@ enum Commands {
         /// Create a library project instead of a binary
         #[arg(long)]
         lib: bool,
+
+        /// Project template: "binary" (default), "lib", "workspace"
+        #[arg(long, default_value = "binary")]
+        template: String,
     },
 
     /// Run tests in the project
@@ -416,16 +430,6 @@ enum Commands {
         /// Filter benchmarks by name pattern
         #[arg(long)]
         filter: Option<String>,
-    },
-
-    /// Auto-apply compiler suggested fixes
-    Fix {
-        /// Input source file or directory
-        input: PathBuf,
-
-        /// Show fixes without applying them
-        #[arg(long)]
-        dry_run: bool,
     },
 
     /// Run lint checks on source files
@@ -838,7 +842,12 @@ fn main() {
             check,
             indent,
         }) => commands::simple::cmd_fmt(&input, check, indent),
-        Some(Commands::New { name, lib }) => commands::simple::cmd_new(&name, lib),
+        Some(Commands::Fix { input, dry_run }) => {
+            commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+        }
+        Some(Commands::New { name, lib, template }) => {
+            commands::simple::cmd_new(&name, lib, &template)
+        }
         Some(Commands::Test {
             path,
             filter,
@@ -859,9 +868,6 @@ fn main() {
         }
         Some(Commands::Bench { path, filter }) => {
             commands::test::cmd_bench(&path, filter.as_deref(), cli.verbose)
-        }
-        Some(Commands::Fix { input, dry_run }) => {
-            commands::test::cmd_fix(&input, dry_run, cli.verbose, &plugins)
         }
         Some(Commands::Lint {
             input,

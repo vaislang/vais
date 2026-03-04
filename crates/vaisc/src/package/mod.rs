@@ -6,6 +6,7 @@
 mod features;
 mod manifest;
 mod resolution;
+pub mod semver;
 mod types;
 mod workspace;
 
@@ -29,3 +30,7 @@ pub use manifest::{add_dependency, find_manifest, init_package, load_manifest, r
 pub use resolution::{
     default_registry_cache_root, find_cached_registry_dep, resolve_all_dependencies,
 };
+
+// Cycle detection utilities — re-exported for package tooling & lint integration
+#[allow(unused_imports)]
+pub use resolution::{detect_all_cycles, format_cycles};

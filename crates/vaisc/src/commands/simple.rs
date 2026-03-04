@@ -183,7 +183,30 @@ pub(crate) fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(),
 }
 
 /// Create a new Vais project
-pub(crate) fn cmd_new(name: &str, lib: bool) -> Result<(), String> {
+pub(crate) fn cmd_new(name: &str, lib: bool, template: &str) -> Result<(), String> {
+    // Determine effective template
+    let effective_template = if lib {
+        "lib"
+    } else {
+        match template {
+            "binary" | "bin" => "binary",
+            "lib" | "library" => "lib",
+            "workspace" | "ws" => "workspace",
+            other => return Err(format!(
+                "unknown template '{}'. Available: binary, lib, workspace", other
+            )),
+        }
+    };
+
+    match effective_template {
+        "workspace" => create_workspace_project(name),
+        "lib" => create_standard_project(name, true),
+        _ => create_standard_project(name, false),
+    }
+}
+
+/// Create a standard (binary or library) project
+fn create_standard_project(name: &str, lib: bool) -> Result<(), String> {
     use crate::package::init_package;
 
     let cwd =
@@ -257,6 +280,130 @@ pub(crate) fn cmd_new(name: &str, lib: bool) -> Result<(), String> {
     } else {
         println!("  vaisc build src/main.vais");
     }
+    println!("  vaisc test");
+
+    Ok(())
+}
+
+/// Create a workspace project with multiple member packages
+fn create_workspace_project(name: &str) -> Result<(), String> {
+    let cwd =
+        std::env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
+    let project_dir = cwd.join(name);
+
+    if project_dir.exists() {
+        return Err(format!(
+            "directory '{}' already exists",
+            project_dir.display()
+        ));
+    }
+
+    // Create workspace root
+    fs::create_dir_all(&project_dir)
+        .map_err(|e| format!("failed to create directory '{}': {}", name, e))?;
+
+    // Create workspace vais.toml
+    let workspace_toml = format!(
+        r#"[package]
+name = "{name}"
+version = "0.1.0"
+authors = []
+
+[workspace]
+members = [
+    "crates/*",
+]
+
+[workspace.dependencies]
+# Shared dependency versions for all workspace members
+"#
+    );
+    fs::write(project_dir.join("vais.toml"), workspace_toml)
+        .map_err(|e| format!("failed to create workspace vais.toml: {}", e))?;
+
+    // Create crates/ directory
+    let crates_dir = project_dir.join("crates");
+    fs::create_dir_all(&crates_dir)
+        .map_err(|e| format!("failed to create crates/ directory: {}", e))?;
+
+    // Create a library crate
+    let lib_name = format!("{}-core", name);
+    let lib_dir = crates_dir.join(&lib_name);
+    fs::create_dir_all(lib_dir.join("src"))
+        .map_err(|e| format!("failed to create {}/src/ directory: {}", lib_name, e))?;
+
+    let lib_toml = format!(
+        r#"[package]
+name = "{lib_name}"
+version = "0.1.0"
+authors = []
+description = "Core library for {name}"
+"#
+    );
+    fs::write(lib_dir.join("vais.toml"), lib_toml)
+        .map_err(|e| format!("failed to create {}/vais.toml: {}", lib_name, e))?;
+
+    let lib_content = format!(
+        "# {lib_name} - core library\n\nP F add(a: i64, b: i64) -> i64 {{\n    a + b\n}}\n\nP F greet() -> i64 {{\n    print_str(\"{name} core library loaded\")\n    0\n}}\n"
+    );
+    fs::write(lib_dir.join("src").join("lib.vais"), lib_content)
+        .map_err(|e| format!("failed to create {}/src/lib.vais: {}", lib_name, e))?;
+
+    // Create a binary crate
+    let bin_name = format!("{}-cli", name);
+    let bin_dir = crates_dir.join(&bin_name);
+    fs::create_dir_all(bin_dir.join("src"))
+        .map_err(|e| format!("failed to create {}/src/ directory: {}", bin_name, e))?;
+
+    let bin_toml = format!(
+        r#"[package]
+name = "{bin_name}"
+version = "0.1.0"
+authors = []
+description = "CLI for {name}"
+
+[dependencies]
+{lib_name} = {{ path = "../{lib_name}" }}
+"#
+    );
+    fs::write(bin_dir.join("vais.toml"), bin_toml)
+        .map_err(|e| format!("failed to create {}/vais.toml: {}", bin_name, e))?;
+
+    let bin_content = format!(
+        "# {bin_name} - main binary\n\nF main() -> i64 {{\n    print_str(\"Hello from {name}!\")\n    0\n}}\n"
+    );
+    fs::write(bin_dir.join("src").join("main.vais"), bin_content)
+        .map_err(|e| format!("failed to create {}/src/main.vais: {}", bin_name, e))?;
+
+    // Create shared tests directory
+    let tests_dir = project_dir.join("tests");
+    fs::create_dir_all(&tests_dir)
+        .map_err(|e| format!("failed to create tests/ directory: {}", e))?;
+
+    let test_content = format!(
+        "# Integration tests for {}\n\nF test_integration() -> i64 {{\n    # Integration test - return 0 for pass\n    0\n}}\n",
+        name
+    );
+    fs::write(tests_dir.join("test_integration.vais"), test_content)
+        .map_err(|e| format!("failed to create integration test: {}", e))?;
+
+    // Create .gitignore
+    let gitignore_content = "target/\n*.ll\n*.o\n*.out\n.vais-cache/\n";
+    fs::write(project_dir.join(".gitignore"), gitignore_content)
+        .map_err(|e| format!("failed to create .gitignore: {}", e))?;
+
+    println!(
+        "{} Created workspace project '{}'",
+        "✓".green(),
+        name
+    );
+    println!("  {}", project_dir.display());
+    println!("  Members:");
+    println!("    crates/{} (library)", lib_name);
+    println!("    crates/{} (binary)", bin_name);
+    println!();
+    println!("  cd {}", name);
+    println!("  vaisc build crates/{}/src/main.vais", bin_name);
     println!("  vaisc test");
 
     Ok(())

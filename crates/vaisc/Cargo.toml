@@ -47,12 +47,17 @@ rayon = { workspace = true }
 toml = "0.9"
 notify = "8"
 
+# Static analysis
+vais-security = { path = "../vais-security" }
+hex = "0.4"
+
 # Registry support
 ureq = { version = "2.12", features = ["gzip", "json"] }
 flate2 = { workspace = true }
 tar = { workspace = true }
 dirs = "6"
 glob = "0.3"
+semver = "1.0"
 
 [dev-dependencies]
 tempfile = "3.10"

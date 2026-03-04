@@ -2,8 +2,10 @@
 
 // Submodules
 mod backend;
+pub(crate) mod cache;
 mod core;
 mod gpu;
+pub(crate) mod scripts;
 mod utils;
 
 // Re-export public functions

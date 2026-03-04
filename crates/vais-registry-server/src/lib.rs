@@ -15,6 +15,8 @@ pub mod error;
 pub mod handlers;
 pub mod models;
 pub mod router;
+pub mod semver_resolve;
+pub mod signing;
 pub mod storage;
 
 pub use config::ServerConfig;

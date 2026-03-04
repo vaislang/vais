@@ -289,7 +289,8 @@ pub(crate) fn cmd_bench(path: &Path, filter: Option<&str>, verbose: bool) -> Res
     }
 }
 
-/// Auto-apply compiler suggested fixes
+/// Auto-apply compiler suggested fixes (legacy — superseded by commands::fix)
+#[allow(dead_code)]
 pub(crate) fn cmd_fix(
     input: &Path,
     dry_run: bool,
@@ -567,6 +568,102 @@ pub(crate) fn cmd_lint(
                 };
                 eprintln!("{}: {}", severity, w);
                 eprintln!("  {} {}", "-->".blue().bold(), file.display());
+            }
+        }
+
+        // Run static analysis lint checks (dead code, unused imports, naming, complexity, unsafe)
+        let mut lint_analyzer = vais_security::LintAnalyzer::new();
+        let lint_diagnostics = lint_analyzer.analyze(&module);
+        for lint_diag in &lint_diagnostics {
+            let is_warning = lint_diag.level != vais_security::LintLevel::Error;
+
+            if is_warning {
+                if level == 0 {
+                    continue;
+                }
+                total_warnings += 1;
+                if level == 2 {
+                    total_errors += 1;
+                }
+            } else {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let mut json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": &lint_diag.code,
+                    "category": lint_diag.category.to_string(),
+                    "message": &lint_diag.message,
+                    "severity": lint_diag.level.to_string(),
+                    "line": source[..lint_diag.span.start.min(source.len())].matches('\n').count() + 1,
+                });
+                if let Some(ref sug) = lint_diag.suggestion {
+                    json_diag["suggestion"] = serde_json::json!(sug);
+                }
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = if is_warning && level < 2 {
+                    "warning".yellow().bold().to_string()
+                } else {
+                    "error".red().bold().to_string()
+                };
+
+                let line = source[..lint_diag.span.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [{}] {} ({})",
+                    severity_str, lint_diag.code, lint_diag.message, lint_diag.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                if let Some(ref sug) = lint_diag.suggestion {
+                    eprintln!("  {} {}", "=".blue().bold(), sug);
+                }
+            }
+        }
+
+        // Run security audit
+        let mut sec_analyzer = vais_security::SecurityAnalyzer::new();
+        let sec_findings = sec_analyzer.analyze(&module);
+        for finding in &sec_findings {
+            if level == 0 {
+                continue;
+            }
+            total_warnings += 1;
+            if level == 2 {
+                total_errors += 1;
+            }
+
+            if format == "json" {
+                let json_diag = serde_json::json!({
+                    "file": file.display().to_string(),
+                    "code": format!("SEC-{}", finding.category),
+                    "category": "security",
+                    "message": &finding.description,
+                    "severity": finding.severity.to_string().to_lowercase(),
+                    "recommendation": &finding.recommendation,
+                    "line": source[..finding.location.start.min(source.len())].matches('\n').count() + 1,
+                });
+                all_diagnostics.push(json_diag);
+            } else {
+                let severity_str = match finding.severity {
+                    vais_security::Severity::Critical | vais_security::Severity::High => {
+                        "warning".red().bold().to_string()
+                    }
+                    _ => "warning".yellow().bold().to_string(),
+                };
+                let line = source[..finding.location.start.min(source.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                eprintln!(
+                    "{}: [SEC] {} ({})",
+                    severity_str, finding.description, finding.category
+                );
+                eprintln!("  {} {}:{}", "-->".blue().bold(), file.display(), line);
+                eprintln!("  {} {}", "=".blue().bold(), finding.recommendation);
             }
         }
     }

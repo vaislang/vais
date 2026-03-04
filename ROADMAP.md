@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-04 (Phase 93 완료 — 캐시/인터닝/회귀 감지 성능 최적화)
+> **최종 업데이트**: 2026-03-04 (Phase 94 완료 — 레지스트리/자동수정/정적분석/빌드 생태계 확장)
 
 ---
 
@@ -236,6 +236,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 91 | 기술 부채 해소 · 언어 기능 완성도 | assert_compiles 0개, +406 단위 테스트, Method monomorphization, Lifetime 검증 실장 | 1,540 |
 | 92 | 컴파일러 안정성 강화 | Panic-free (180+ expect→Result), proptest 24개, Codegen graceful degradation, IR 검증 확장 | 1,540 |
 | 93 | 성능 최적화 심화 | 2-level 치환 캐시 (L1 16+L2 256), IdentPool 인터닝, 문자열 상수 dedup, CI Welch's t-test 회귀 감지 | 1,540 |
+| 94 | 생태계 확장 | Ed25519 서명, SemVer 해석, 순환 감지, vaisc fix, lint 7종, 빌드 캐시/스크립트/템플릿 | 1,540 |
 
 ---
 
@@ -314,15 +315,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 패키지 레지스트리 프로덕션화, vaisc fix 자동 수정 실장, 정적 분석 확장
 > **기대 효과**: 패키지 생태계 성숙도 60%→90%, 개발자 경험(DX) 향상
 
-- [ ] 1. 패키지 레지스트리 프로덕션화 — Ed25519 서명 + SemVer 해석 + 순환 감지 (Opus)
-  대상: vais-registry-server/ (서명 검증), vaisc/src/package/ (SemVer negotiation, 순환 의존성)
-- [ ] 2. vaisc fix 자동 수정 — AST 재작성 엔진 + unused vars/imports 제거 (Opus)
-  대상: vaisc/src/commands/ (fix.rs 확장), vais-parser/ (AST rewriter)
-- [ ] 3. 정적 분석 확장 — Dead code/unused import/unsafe 감사 + lint 규칙 (Sonnet)
-  대상: vaisc/src/commands/ (lint 규칙 추가), vais-security/ (unsafe 분석 강화)
-- [ ] 4. 빌드 시스템 강화 — vais.build 스크립트 + 바이너리 캐싱 + 워크스페이스 템플릿 (Sonnet)
-  대상: vaisc/src/package/ (build hooks), vaisc/src/commands/build.rs (캐싱)
-진행률: 0/4 (0%)
+- [x] 1. 패키지 레지스트리 프로덕션화 — Ed25519 서명 + SemVer 해석 + 순환 감지 (Opus) ✅ 2026-03-04
+  변경: signing.rs (Ed25519 서명 검증 13 tests), semver_resolve.rs (서버 SemVer 20+ tests), package/semver.rs (클라이언트 SemVer 11 tests), resolution.rs (순환 감지 Tarjan DFS 9 tests)
+- [x] 2. vaisc fix 자동 수정 — AST 재작성 엔진 + unused vars/imports 제거 (Opus) ✅ 2026-03-04
+  변경: commands/fix.rs (911줄, AST 재작성 엔진 + unused var/import 감지 + span 기반 제거, 9 tests)
+- [x] 3. 정적 분석 확장 — Dead code/unused import/unsafe 감사 + lint 규칙 (Sonnet) ✅ 2026-03-04
+  변경: vais-security/src/lint.rs (~650줄, L100~L600 lint 규칙 7종 + 2-pass 분석, 13 tests), commands/test.rs (LintAnalyzer 통합)
+- [x] 4. 빌드 시스템 강화 — vais.build 스크립트 + 바이너리 캐싱 + 워크스페이스 템플릿 (Sonnet) ✅ 2026-03-04
+  변경: build/scripts.rs (빌드 스크립트 pre/post 6 tests), build/cache.rs (SHA-256 content-addressable 캐시 11 tests), simple.rs (workspace 템플릿 --template binary/lib/workspace)
+진행률: 4/4 (100%)
 
 ---
 

@@ -26,6 +26,10 @@ sha2 = { workspace = true }
 hex = "0.4"
 argon2 = "0.5"
 rand = "0.8"
+ed25519-dalek = { version = "2.1", features = ["pem", "rand_core"] }
+
+# SemVer
+semver = "1.0"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
