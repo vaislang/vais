@@ -756,14 +756,7 @@ pub(crate) fn cmd_build(
                             })?;
 
                             // Verify IR structural integrity before optimization.
-                            if let Err(verify_err) =
-                                vais_codegen::ir_verify::verify_text_ir_or_error(&raw_ir)
-                            {
-                                eprintln!(
-                                    "[IR verify] module '{}': {}",
-                                    module_stem, verify_err
-                                );
-                            }
+                            crate::utils::verify_ir_and_log(&raw_ir, &format!("module '{}'", module_stem));
 
                             // Apply optimizations
                             let opt = match effective_opt_level {
@@ -1017,21 +1010,8 @@ pub(crate) fn cmd_build(
         input.with_extension("ll")
     };
 
-    // Verify IR structural integrity before writing to file
-    // This catches common codegen bugs early with clear diagnostics
-    // instead of opaque clang errors.
-    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&ir) {
-        if verbose {
-            eprintln!(
-                "{} {}",
-                "IR verification warning:".yellow().bold(),
-                verify_err
-            );
-            // In verbose mode, continue anyway (clang may still accept it)
-        }
-        // In non-verbose mode, also continue: the verification is advisory.
-        // Clang is the authoritative validator.
-    }
+    // Verify IR structural integrity before writing to file.
+    crate::utils::verify_ir_and_log(&ir, "single module");
 
     // Write IR
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;

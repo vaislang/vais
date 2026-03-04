@@ -76,13 +76,22 @@ pub fn verify_text_ir(ir: &str) -> Vec<IrDiagnostic> {
             continue;
         }
 
-        // Track braces (before any continues so we never miss a brace)
+        // Track braces (before any continues so we never miss a brace).
+        // Skip characters inside string constants (c"..." or "...") to avoid
+        // counting braces that appear inside literal strings.
+        let mut in_string = false;
+        let mut prev_ch = '\0';
         for ch in trimmed.chars() {
-            match ch {
-                '{' => brace_depth += 1,
-                '}' => brace_depth -= 1,
-                _ => {}
+            if ch == '"' && prev_ch != '\\' {
+                in_string = !in_string;
+            } else if !in_string {
+                match ch {
+                    '{' => brace_depth += 1,
+                    '}' => brace_depth -= 1,
+                    _ => {}
+                }
             }
+            prev_ch = ch;
         }
 
         // Track function definitions
@@ -182,9 +191,7 @@ pub fn verify_text_ir(ir: &str) -> Vec<IrDiagnostic> {
             }
         } else if !trimmed.ends_with(':') && !trimmed.is_empty() {
             // Any non-phi, non-label instruction marks non-phi zone
-            if in_function && !is_terminator(trimmed) || is_terminator(trimmed) {
-                seen_non_phi_in_block = true;
-            }
+            seen_non_phi_in_block = true;
         }
 
         // Track terminators
@@ -294,11 +301,19 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
         let trimmed = line.trim();
 
         if trimmed.starts_with("define ") {
-            // Extract return type: "define RETTYPE @name(...)"
+            // Extract return type: the last whitespace-delimited token before `@`.
+            // LLVM IR `define` lines may include linkage, visibility, calling
+            // convention, and parameter attributes before the return type, e.g.:
+            //   define dso_local fastcc i64 @name(...)
+            // The return type is always the token immediately before `@`.
             let after_define = &trimmed[7..]; // skip "define "
             if let Some(at_pos) = after_define.find('@') {
-                let ret_type = after_define[..at_pos].trim().to_string();
-                current_ret_type = Some(ret_type);
+                let prefix = after_define[..at_pos].trim();
+                // Take last whitespace-delimited token as the return type
+                let ret_type = prefix
+                    .rsplit_once(char::is_whitespace)
+                    .map_or(prefix, |(_, last)| last);
+                current_ret_type = Some(ret_type.to_string());
             }
             current_fn_name = extract_define_name(trimmed).map(|s| s.to_string());
             continue;
@@ -323,26 +338,15 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
                 };
 
                 if !expected.is_empty() && ret_type != *expected && *expected != "void" && ret_type != "void" {
-                    // Ignore known-safe mismatches (e.g., linkage modifiers)
-                    let clean_expected = expected
-                        .replace("internal ", "")
-                        .replace("private ", "")
-                        .replace("external ", "")
-                        .replace("dso_local ", "")
-                        .replace("nounwind ", "")
-                        .trim()
-                        .to_string();
-                    if !clean_expected.is_empty() && ret_type != clean_expected {
-                        diagnostics.push(IrDiagnostic {
-                            line: i + 1,
-                            severity: DiagnosticSeverity::Warning,
-                            message: format!(
-                                "return type mismatch: function declares '{}' but returns '{}'",
-                                clean_expected, ret_type
-                            ),
-                            function_name: current_fn_name.clone(),
-                        });
-                    }
+                    diagnostics.push(IrDiagnostic {
+                        line: i + 1,
+                        severity: DiagnosticSeverity::Warning,
+                        message: format!(
+                            "return type mismatch: function declares '{}' but returns '{}'",
+                            expected, ret_type
+                        ),
+                        function_name: current_fn_name.clone(),
+                    });
                 }
             }
         }
@@ -355,6 +359,12 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
 /// `generate_module()` and before writing the IR to a file.
 pub fn verify_text_ir_or_error(ir: &str) -> CodegenResult<()> {
     let diagnostics = verify_text_ir(ir);
+
+    // Log Warning-level diagnostics to stderr so they are not silently lost.
+    for diag in diagnostics.iter().filter(|d| d.severity == DiagnosticSeverity::Warning) {
+        eprintln!("[IR verify] {}", diag);
+    }
+
     let errors: Vec<_> = diagnostics
         .iter()
         .filter(|d| d.severity == DiagnosticSeverity::Error)
@@ -576,6 +586,49 @@ entry:
             ret_diags.is_empty(),
             "Expected no return type warnings, got: {:?}",
             ret_diags
+        );
+    }
+
+    #[test]
+    fn test_return_type_with_linkage_modifiers() {
+        // LLVM IR with linkage, visibility, and calling convention before return type
+        let ir = r#"
+define dso_local fastcc i64 @foo() {
+entry:
+  ret i64 42
+}
+"#;
+        let diags = verify_text_ir(ir);
+        let ret_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("return type mismatch"))
+            .collect();
+        assert!(
+            ret_diags.is_empty(),
+            "Should not report mismatch for linkage-prefixed define, got: {:?}",
+            ret_diags
+        );
+    }
+
+    #[test]
+    fn test_brace_in_string_constant() {
+        // Braces inside string constants should not affect brace counting
+        let ir = r#"
+@.str = private constant [12 x i8] c"hello {}\0a\00"
+define i64 @main() {
+entry:
+  ret i64 0
+}
+"#;
+        let diags = verify_text_ir(ir);
+        let brace_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("mismatched braces"))
+            .collect();
+        assert!(
+            brace_diags.is_empty(),
+            "Should not report mismatched braces from string constants, got: {:?}",
+            brace_diags
         );
     }
 }

@@ -176,6 +176,20 @@ pub(crate) fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str
     eprintln!();
 }
 
+/// Run the LLVM IR structural verification gate and log any errors.
+///
+/// This is the single integration point for `verify_text_ir_or_error`.
+/// All codegen output paths should call this instead of duplicating the
+/// verification + logging logic.
+pub(crate) fn verify_ir_and_log(ir: &str, context: &str) {
+    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(ir) {
+        eprintln!(
+            "[IR verify] {}: {}",
+            context, verify_err
+        );
+    }
+}
+
 pub(crate) fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str, path: &Path) {
     let filename = path.to_str().unwrap_or("unknown");
     let lines: Vec<&str> = source.lines().collect();

@@ -88,18 +88,7 @@ pub(crate) fn generate_with_text_backend(
     })?;
 
     // Verify IR structural integrity before returning.
-    // Catches common codegen bugs early with clear diagnostics
-    // instead of opaque clang errors downstream.
-    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&raw_ir) {
-        if verbose {
-            eprintln!(
-                "{} {}",
-                "IR verification warning:".yellow().bold(),
-                verify_err
-            );
-        }
-        // Continue anyway: clang is the authoritative validator.
-    }
+    crate::utils::verify_ir_and_log(&raw_ir, "text backend");
 
     // If we got here, IR was generated but some functions may have failed.
     // Report collected errors as warnings and return the partial IR.

@@ -99,12 +99,7 @@ pub(crate) fn compile_per_module(
             })?;
 
             // Verify IR structural integrity before optimization.
-            if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&raw_ir) {
-                eprintln!(
-                    "[IR verify] module '{}': {}",
-                    module_stem, verify_err
-                );
-            }
+            crate::utils::verify_ir_and_log(&raw_ir, &format!("module '{}'", module_stem));
 
             // Apply optimizations
             let opt = match effective_opt_level {

@@ -765,9 +765,7 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     })?;
 
     // Verify IR structural integrity for test builds.
-    if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(&ir) {
-        eprintln!("[IR verify] {}: {}", path.display(), verify_err);
-    }
+    crate::utils::verify_ir_and_log(&ir, &path.display().to_string());
 
     Ok(ir)
 }

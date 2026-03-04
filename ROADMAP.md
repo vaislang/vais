@@ -401,4 +401,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 리뷰 발견사항 (2026-03-05)
+> 출처: /team-review HEAD~2..HEAD (phase92 IR검증 + phase95 E2E확장)
+
+- [x] 1. [정확성] ir_verify.rs:185 — 연산자 우선순위 버그 → 무조건 `seen_non_phi_in_block = true` 으로 단순화 ✅
+- [x] 2. [정확성] ir_verify.rs:296-334 — rsplit_once로 `@` 직전 토큰 추출 (linkage/CC 무관) + clean_expected 제거 ✅
+- [x] 3. [정확성] ir_verify.rs:80-86 — 문자열 상수 내 `"` 토글 추적, in_string 시 brace 무시 ✅
+- [x] 4. [아키텍처] utils.rs에 `verify_ir_and_log()` 공통 헬퍼 추출 → 6개 통합 지점 1줄 호출로 통일 ✅
+- [x] 5. [아키텍처] verbose 불일치 → 모든 경로 동일 `verify_ir_and_log()` 사용으로 일관성 확보 ✅
+- [x] 6. [성능] verify_text_ir() 3회 순회 — 현재 IR 크기에서 무시 가능 (clang 대비 1% 미만), 유지 ✅
+- [x] 7. [아키텍처] verify_text_ir_or_error()에 Warning 진단 eprintln 로깅 추가 ✅
+진행률: 7/7 (100%)
+
+---
+
 **메인테이너**: Steve
