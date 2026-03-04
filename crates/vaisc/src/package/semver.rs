@@ -1,7 +1,13 @@
-//! SemVer version negotiation for package dependency resolution
+//! SemVer version negotiation for package dependency resolution (client-side)
 //!
 //! Provides proper Semantic Versioning 2.0.0 support for resolving
 //! dependency version requirements against cached or registry versions.
+//!
+//! NOTE: The registry server has a parallel implementation in
+//! `vais-registry-server::semver_resolve` for server-side resolution.
+//! Both use the `semver` crate as the canonical parsing layer, so behavior
+//! is consistent. If a shared `vais-semver` crate is extracted in the future,
+//! both modules should delegate to it.
 
 #![allow(dead_code)]
 

@@ -70,16 +70,35 @@ pub fn find_cached_registry_dep(
         }
     }
 
-    // Scan available versions in the cache directory
+    // Scan available versions in the cache directory, picking the best match
+    // that satisfies the version requirement
     if let Ok(entries) = fs::read_dir(&pkg_cache_dir) {
+        let mut best: Option<(String, PathBuf)> = None;
         for entry in entries.flatten() {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 let extracted = entry_path.join("extracted");
                 if extracted.exists() {
-                    return Some(extracted);
+                    let dir_name = entry_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("");
+                    // Use the semver module to check if this version satisfies the requirement
+                    if super::semver::version_satisfies(dir_name, stripped) {
+                        if let Some((ref best_ver, _)) = best {
+                            if super::semver::compare_versions(dir_name, best_ver)
+                                == Some(std::cmp::Ordering::Greater)
+                            {
+                                best = Some((dir_name.to_string(), extracted));
+                            }
+                        } else {
+                            best = Some((dir_name.to_string(), extracted));
+                        }
+                    }
                 }
             }
+        }
+        if let Some((_, path)) = best {
+            return Some(path);
         }
     }
 

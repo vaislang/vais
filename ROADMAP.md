@@ -362,4 +362,21 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+## 리뷰 발견사항 (2026-03-04)
+> 출처: /team-review HEAD~1..HEAD (phase94 commit)
+
+- [x] 1. [보안] scripts.rs — Command::arg() 사용으로 커맨드 인젝션 방지 ✅
+- [x] 2. [보안] scripts.rs — Command::env() per-process 전환, set_var 제거 ✅
+- [x] 3. [보안] scripts.rs — 빌드 명령 실행 전 eprintln 경고 추가 ✅
+- [x] 4. [아키텍처] semver 중복 — 양 모듈에 교차 참조 문서 추가, 공유 crate 추출 계획 명시 ✅
+- [x] 5. [성능] semver_resolve — 테스트 버전 범위 major 0-4→0-19 확장 (75→300 버전) ✅
+- [x] 6. [정확성] fix.rs — 겹치는 span 검증 + skip 로직 추가 ✅
+- [x] 7. [보안] cache.rs — is_valid_hex() 검증 추가 (lookup/store) ✅
+- [x] 8. [성능] cache.rs — BufReader 스트리밍 해시 (8KB 청크) ✅
+- [x] 9. [정확성] resolution.rs — fallback에 SemVer 요구사항 매칭 + 최대 버전 선택 ✅
+- [x] 10. [아키텍처] test.rs — 레거시 cmd_fix 98줄 삭제 ✅
+진행률: 10/10 (100%)
+
+---
+
 **메인테이너**: Steve

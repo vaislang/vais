@@ -104,10 +104,17 @@ pub fn satisfies(version: &str, requirement: &str) -> bool {
     req.matches(&v)
 }
 
-/// Generate a set of test versions for compatibility checking
+/// Generate a set of test versions for compatibility checking.
+///
+/// Covers major versions 0-20 with select minor/patch combinations to provide
+/// reasonable coverage without excessive iteration.
+///
+/// NOTE: This heuristic is only used for `are_compatible()` which checks if
+/// two version requirements can be simultaneously satisfied. For exact
+/// resolution, use `resolve_best_version()` which operates on real version lists.
 fn generate_test_versions() -> Vec<Version> {
     let mut versions = Vec::new();
-    for major in 0..5 {
+    for major in 0..20 {
         for minor in 0..5 {
             for patch in 0..3 {
                 if let Ok(v) = Version::parse(&format!("{}.{}.{}", major, minor, patch)) {

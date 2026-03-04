@@ -61,10 +61,15 @@ impl BuildScriptConfig {
 }
 
 /// Run pre-build steps
+///
+/// # Security
+/// Build scripts from vais.toml execute shell commands. A warning is printed
+/// before execution so users are aware of what will run. Environment variables
+/// are passed per-process (not via set_var) to avoid multi-thread unsoundness.
 pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bool) -> Result<(), String> {
-    // Set environment variables
-    for (key, value) in &config.env {
-        std::env::set_var(key, value);
+    if config.has_scripts() && !config.env.is_empty() {
+        eprintln!("  Warning: build scripts will set environment variables: {:?}",
+            config.env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>());
     }
 
     // Run pre-build command
@@ -72,7 +77,7 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
         if verbose {
             println!("  Running pre-build: {}", cmd);
         }
-        run_shell_command(cmd, project_dir)?;
+        run_shell_command(cmd, project_dir, &config.env)?;
     }
 
     // Run build script
@@ -90,15 +95,16 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
             println!("  Running build script: {}", script_path);
         }
 
-        // Determine how to run the script based on extension
+        // Determine how to run the script based on extension.
+        // Use Command::arg() instead of string interpolation to prevent injection.
         let ext = full_path
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
-        let cmd_str = match ext {
-            "sh" | "bash" => format!("bash {}", full_path.display()),
-            "py" => format!("python3 {}", full_path.display()),
-            "vais" => format!("vaisc run {}", full_path.display()),
+        match ext {
+            "sh" | "bash" => run_script_command("bash", &full_path, project_dir, &config.env)?,
+            "py" => run_script_command("python3", &full_path, project_dir, &config.env)?,
+            "vais" => run_script_command("vaisc", &full_path, project_dir, &config.env)?,
             _ => {
                 // Try to make it executable and run directly
                 #[cfg(unix)]
@@ -110,10 +116,9 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
                         let _ = std::fs::set_permissions(&full_path, perms);
                     }
                 }
-                full_path.display().to_string()
+                run_script_command(full_path.to_str().unwrap_or(""), &full_path, project_dir, &config.env)?;
             }
         };
-        run_shell_command(&cmd_str, project_dir)?;
     }
 
     Ok(())
@@ -125,23 +130,32 @@ pub fn run_post_build(config: &BuildScriptConfig, project_dir: &Path, verbose: b
         if verbose {
             println!("  Running post-build: {}", cmd);
         }
-        run_shell_command(cmd, project_dir)?;
+        run_shell_command(cmd, project_dir, &config.env)?;
     }
     Ok(())
 }
 
-/// Execute a shell command in the given working directory
-fn run_shell_command(cmd: &str, cwd: &Path) -> Result<(), String> {
+/// Execute a shell command in the given working directory.
+///
+/// Environment variables are passed per-process via `Command::env()` to avoid
+/// the unsoundness of `std::env::set_var` in multi-threaded contexts.
+fn run_shell_command(cmd: &str, cwd: &Path, env_vars: &[(String, String)]) -> Result<(), String> {
+    // Warn about shell command execution from vais.toml
+    eprintln!("  Note: executing build command from vais.toml: {}", cmd);
+
     let shell = if cfg!(target_os = "windows") {
         ("cmd", "/C")
     } else {
         ("sh", "-c")
     };
 
-    let output = Command::new(shell.0)
-        .arg(shell.1)
-        .arg(cmd)
-        .current_dir(cwd)
+    let mut command = Command::new(shell.0);
+    command.arg(shell.1).arg(cmd).current_dir(cwd);
+    for (key, value) in env_vars {
+        command.env(key, value);
+    }
+
+    let output = command
         .output()
         .map_err(|e| format!("failed to execute build command '{}': {}", cmd, e))?;
 
@@ -150,6 +164,35 @@ fn run_shell_command(cmd: &str, cwd: &Path) -> Result<(), String> {
         return Err(format!(
             "build command '{}' failed with exit code {}: {}",
             cmd,
+            output.status.code().unwrap_or(-1),
+            stderr.trim()
+        ));
+    }
+
+    Ok(())
+}
+
+/// Execute a script file via an interpreter, passing the path as an argument.
+///
+/// Uses `Command::arg()` instead of string interpolation to prevent command injection.
+fn run_script_command(interpreter: &str, script_path: &Path, cwd: &Path, env_vars: &[(String, String)]) -> Result<(), String> {
+    eprintln!("  Note: executing build script from vais.toml: {} {}", interpreter, script_path.display());
+
+    let mut command = Command::new(interpreter);
+    command.arg(script_path).current_dir(cwd);
+    for (key, value) in env_vars {
+        command.env(key, value);
+    }
+
+    let output = command
+        .output()
+        .map_err(|e| format!("failed to execute script '{}': {}", script_path.display(), e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "script '{}' failed with exit code {}: {}",
+            script_path.display(),
             output.status.code().unwrap_or(-1),
             stderr.trim()
         ));
@@ -230,14 +273,14 @@ pre = "make deps"
     #[test]
     fn test_run_shell_command_success() {
         let cwd = std::env::temp_dir();
-        let result = run_shell_command("echo hello", &cwd);
+        let result = run_shell_command("echo hello", &cwd, &[]);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_run_shell_command_failure() {
         let cwd = std::env::temp_dir();
-        let result = run_shell_command("exit 1", &cwd);
+        let result = run_shell_command("exit 1", &cwd, &[]);
         assert!(result.is_err());
     }
 

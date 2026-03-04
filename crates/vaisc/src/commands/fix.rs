@@ -92,8 +92,23 @@ pub(crate) fn cmd_fix(
         });
     }
 
-    // Sort removals by start position in descending order
+    // Sort removals by start position in descending order (apply from end to start
+    // so earlier offsets remain valid after each removal)
     removals.sort_by(|a, b| b.start.cmp(&a.start));
+
+    // Validate no overlapping spans — overlapping removals would corrupt the source
+    for window in removals.windows(2) {
+        // window[0].start >= window[1].start (descending order)
+        // Overlap if window[0].start < window[1].end
+        if window[0].start < window[1].end && verbose {
+            eprintln!(
+                "  Warning: overlapping fix spans [{}, {}) and [{}, {}), skipping overlap",
+                window[1].start, window[1].end, window[0].start, window[0].end
+            );
+            // Skip the second (earlier in source) removal to avoid corruption
+            // In practice this is rare since let statements don't overlap
+        }
+    }
 
     if dry_run {
         println!(
@@ -115,11 +130,17 @@ pub(crate) fn cmd_fix(
         return Ok(());
     }
 
-    // Apply removals to source text
+    // Apply removals to source text (reverse order preserves offsets)
     let mut fixed_source = source.clone();
+    let mut last_start = usize::MAX;
     for removal in &removals {
         let start = removal.start;
         let end = removal.end;
+
+        // Skip if this removal overlaps with the previous one (detected above)
+        if end > last_start {
+            continue;
+        }
 
         if start < fixed_source.len() && end <= fixed_source.len() && start < end {
             // Remove the span and any trailing newline
@@ -128,6 +149,7 @@ pub(crate) fn cmd_fix(
                 remove_end += 1;
             }
             fixed_source.replace_range(start..remove_end, "");
+            last_start = start;
         }
     }
 

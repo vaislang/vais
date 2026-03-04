@@ -60,8 +60,13 @@ impl BinaryCache {
         &self.cache_dir
     }
 
-    /// Check if a cached binary exists for the given source hash
+    /// Check if a cached binary exists for the given source hash.
+    ///
+    /// The hash is validated as hex to prevent path traversal attacks.
     pub fn lookup(&self, source_hash: &str) -> Option<PathBuf> {
+        if !is_valid_hex(source_hash) {
+            return None;
+        }
         let bin_path = self.bin_dir().join(format!("{}.bin", source_hash));
         let meta_path = self.bin_dir().join(format!("{}.meta", source_hash));
 
@@ -72,13 +77,18 @@ impl BinaryCache {
         }
     }
 
-    /// Store a compiled binary in the cache
+    /// Store a compiled binary in the cache.
+    ///
+    /// The hash is validated as hex to prevent path traversal attacks.
     pub fn store(
         &self,
         source_hash: &str,
         binary_path: &Path,
         entry: &CacheEntry,
     ) -> Result<(), String> {
+        if !is_valid_hex(source_hash) {
+            return Err(format!("invalid source hash (must be hex): {}", source_hash));
+        }
         let bin_dir = self.bin_dir();
         fs::create_dir_all(&bin_dir)
             .map_err(|e| format!("failed to create cache directory: {}", e))?;
@@ -218,26 +228,44 @@ impl CacheStats {
     }
 }
 
-/// Compute a SHA-256 hash of all source files that contribute to a build
+/// Validate that a string contains only hex characters (a-f, 0-9) and is non-empty.
+fn is_valid_hex(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Compute a SHA-256 hash of all source files that contribute to a build.
+///
+/// Uses streaming reads via BufReader to avoid loading entire files into memory.
 pub fn compute_source_hash(
     source_files: &[PathBuf],
     opt_level: u8,
     target: &str,
     debug: bool,
 ) -> Result<String, String> {
+    use std::io::{BufReader, Read as _};
+
     let mut hasher = Sha256::new();
 
     // Sort paths for deterministic hashing
     let mut sorted_files: Vec<_> = source_files.to_vec();
     sorted_files.sort();
 
-    // Hash each source file's contents
+    // Hash each source file's contents using streaming reads
     let mut file_hashes = BTreeMap::new();
     for file in &sorted_files {
-        let content = fs::read(file)
+        let f = fs::File::open(file)
             .map_err(|e| format!("failed to read '{}' for hashing: {}", file.display(), e))?;
+        let mut reader = BufReader::new(f);
         let mut file_hasher = Sha256::new();
-        file_hasher.update(&content);
+        let mut buf = [0u8; 8192];
+        loop {
+            let n = reader.read(&mut buf)
+                .map_err(|e| format!("failed to read '{}': {}", file.display(), e))?;
+            if n == 0 {
+                break;
+            }
+            file_hasher.update(&buf[..n]);
+        }
         let hash = hex::encode(file_hasher.finalize());
         file_hashes.insert(file.display().to_string(), hash);
     }
@@ -349,7 +377,7 @@ mod tests {
         fake_bin.write_all(b"some data").unwrap();
 
         let entry = CacheEntry {
-            source_hash: "hash1".to_string(),
+            source_hash: "aabb11".to_string(),
             source_path: "a.vais".to_string(),
             cached_at: utc_timestamp(),
             opt_level: 0,
@@ -357,7 +385,7 @@ mod tests {
             debug: false,
         };
 
-        cache.store("hash1", fake_bin.path(), &entry).unwrap();
+        cache.store("aabb11", fake_bin.path(), &entry).unwrap();
 
         let stats = cache.stats();
         assert_eq!(stats.entries, 1);
@@ -373,7 +401,7 @@ mod tests {
         fake_bin.write_all(b"data").unwrap();
 
         let entry = CacheEntry {
-            source_hash: "hash2".to_string(),
+            source_hash: "aabb22".to_string(),
             source_path: "b.vais".to_string(),
             cached_at: utc_timestamp(),
             opt_level: 0,
@@ -381,12 +409,12 @@ mod tests {
             debug: false,
         };
 
-        cache.store("hash2", fake_bin.path(), &entry).unwrap();
-        assert!(cache.lookup("hash2").is_some());
+        cache.store("aabb22", fake_bin.path(), &entry).unwrap();
+        assert!(cache.lookup("aabb22").is_some());
 
         let removed = cache.clear().unwrap();
         assert!(removed > 0);
-        assert!(cache.lookup("hash2").is_none());
+        assert!(cache.lookup("aabb22").is_none());
     }
 
     #[test]
