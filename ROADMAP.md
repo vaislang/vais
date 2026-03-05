@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-05 (Phase 96 계획 — 기술 부채 해소: 안정성/보안/최신화/유지보수)
+> **최종 업데이트**: 2026-03-05 (Phase 97 — CI 복구 & Codecov 강화)
 
 ---
 
@@ -239,6 +239,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 94 | 생태계 확장 | Ed25519 서명, SemVer 해석, 순환 감지, vaisc fix, lint 7종, 빌드 캐시/스크립트/템플릿 | 1,540 |
 | 95 | 검증 강화 · E2E 확장 | IR 검증 게이트 7경로 통합, assert_compiles 10→1, +80 E2E, 문서 수치 동기화 | 1,620 |
 | 96 | 기술 부채 해소 | Registry 테스트 수정, cargo-audit CI, unwrap→Result, toml 1.0/Cranelift 0.129/Wasmtime 42, LSP 모듈화 | 1,620 |
+| 97 | CI 복구 · Codecov 강화 | cargo fmt 65파일, Clippy 0건, MIR +58/JS +39 테스트, CI green 복구 | 1,620 |
 
 ---
 
@@ -251,10 +252,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: CI green 복구 (fmt/clippy 수정 + push) + Codecov 69% → 72% 목표
 > **기대 효과**: 홈페이지 CI 상태 badge 정상화, 코드 품질 지표 향상
 
-- [ ] 1. cargo fmt 적용 + Clippy 검증 (Sonnet)
-- [ ] 2. Codecov 커버리지 강화 — 69% → 72% 목표 (Sonnet)
-- [ ] 3. origin/main에 push + CI green 확인 (Sonnet) [blockedBy: 1, 2]
-진행률: 0/3 (0%)
+- [x] 1. cargo fmt 적용 + Clippy 검증 (Sonnet) ✅ 2026-03-05
+  변경: 65파일 fmt 적용, wasm_sandbox.rs saturating_add 수정, Clippy 0건
+- [x] 2. Codecov 커버리지 강화 — 69% → 72% 목표 (Sonnet) ✅ 2026-03-05
+  변경: vais-mir 58개 테스트 추가, vais-codegen-js 39개 테스트 추가 (+3,045/-728줄)
+- [x] 3. origin/main에 push + CI green 확인 (Sonnet) ✅ 2026-03-05
+  변경: 2커밋 push (50b02bc, 195eae3), Format/Check/Clippy/Test 전 OS 통과, 9,516 테스트 0 실패
+진행률: 3/3 (100%)
 
 ---
 
