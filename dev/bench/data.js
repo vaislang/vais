@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772322410298,
+  "lastUpdate": 1772727174350,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -29735,6 +29735,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1754658,
             "range": "± 23981",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "50b02bce50a1b021da156c71f5653fdb7396ea0f",
+          "message": "fix(phase97): cargo fmt + clippy 해소 & 커버리지 강화 — 9,516 테스트 전체 통과\n\n- cargo fmt --all 적용: 65파일 일괄 포맷팅\n- clippy 경고 해소: wasm_sandbox.rs saturating_add 전환\n- vais-mir 커버리지 강화: 58개 신규 테스트 (emit_llvm/types/display/lowering/optimization)\n- vais-codegen-js 커버리지 강화: 39개 신규 테스트 (bitwise/shift/comparison/loops/structs/closures)\n- 전체 워크스페이스 9,516 테스트 통과, 0 실패\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-06T01:05:57+09:00",
+          "tree_id": "e1b06ab544325c29ad209ff803a321ccc4fde9f4",
+          "url": "https://github.com/vaislang/vais/commit/50b02bce50a1b021da156c71f5653fdb7396ea0f"
+        },
+        "date": 1772727173809,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2884,
+            "range": "± 23",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5495,
+            "range": "± 151",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6478,
+            "range": "± 54",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11401,
+            "range": "± 77",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18433,
+            "range": "± 203",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35576,
+            "range": "± 268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31285,
+            "range": "± 145",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 68681,
+            "range": "± 1090",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 313230,
+            "range": "± 987",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 479307,
+            "range": "± 2635",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 108477,
+            "range": "± 737",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 834182,
+            "range": "± 4139",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 162257,
+            "range": "± 1568",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 192711,
+            "range": "± 1975",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 195182,
+            "range": "± 4047",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 244081,
+            "range": "± 1904",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 545495,
+            "range": "± 2830",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 776422,
+            "range": "± 5068",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 400229,
+            "range": "± 2049",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1235155,
+            "range": "± 9251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 39820,
+            "range": "± 283",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 203910,
+            "range": "± 1502",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 394752,
+            "range": "± 3355",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1891191,
+            "range": "± 58443",
             "unit": "ns/iter"
           }
         ]
