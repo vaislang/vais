@@ -73,20 +73,16 @@ fn test_is_copy_pointer_ref() {
 
 #[test]
 fn test_is_copy_ref_lifetime() {
-    assert!(
-        MirType::RefLifetime {
-            lifetime: "a".to_string(),
-            inner: Box::new(MirType::I64),
-        }
-        .is_copy()
-    );
-    assert!(
-        MirType::RefMutLifetime {
-            lifetime: "b".to_string(),
-            inner: Box::new(MirType::Str),
-        }
-        .is_copy()
-    );
+    assert!(MirType::RefLifetime {
+        lifetime: "a".to_string(),
+        inner: Box::new(MirType::I64),
+    }
+    .is_copy());
+    assert!(MirType::RefMutLifetime {
+        lifetime: "b".to_string(),
+        inner: Box::new(MirType::Str),
+    }
+    .is_copy());
 }
 
 #[test]
@@ -128,13 +124,11 @@ fn test_is_not_copy_array() {
 
 #[test]
 fn test_is_not_copy_function() {
-    assert!(
-        !MirType::Function {
-            params: vec![MirType::I64],
-            ret: Box::new(MirType::Bool),
-        }
-        .is_copy()
-    );
+    assert!(!MirType::Function {
+        params: vec![MirType::I64],
+        ret: Box::new(MirType::Bool),
+    }
+    .is_copy());
 }
 
 // ============================================================================
@@ -145,7 +139,10 @@ fn test_is_not_copy_function() {
 fn test_constant_int_display() {
     assert_eq!(format!("{}", Constant::Int(0)), "0");
     assert_eq!(format!("{}", Constant::Int(-42)), "-42");
-    assert_eq!(format!("{}", Constant::Int(i64::MAX)), format!("{}", i64::MAX));
+    assert_eq!(
+        format!("{}", Constant::Int(i64::MAX)),
+        format!("{}", i64::MAX)
+    );
 }
 
 #[test]

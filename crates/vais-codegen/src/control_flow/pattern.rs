@@ -33,9 +33,11 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                        tag_ptr, enum_name, enum_name, match_val
+                        tag_ptr,
+                        enum_name,
+                        enum_name,
+                        match_val
                     );
-
 
                     let tag_val = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
@@ -48,9 +50,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = icmp eq i32 {}, {}",
-                        result, tag_val, expected_tag
+                        result,
+                        tag_val,
+                        expected_tag
                     );
-
 
                     Ok((result, ir))
                 } else {
@@ -88,9 +91,11 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i32 0, i32 0",
-                        str_ptr, str_len, str_len, const_name
+                        str_ptr,
+                        str_len,
+                        str_len,
+                        const_name
                     );
-
 
                     // Call strcmp: int strcmp(const char* s1, const char* s2)
                     // Returns 0 if strings are equal
@@ -98,9 +103,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = call i32 @strcmp(i8* {}, i8* {})",
-                        cmp_result, match_val, str_ptr
+                        cmp_result,
+                        match_val,
+                        str_ptr
                     );
-
 
                     // Check if strcmp returned 0 (equal)
                     let result = self.next_temp(counter);
@@ -200,9 +206,11 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = extractvalue {} {}, {}",
-                        elem, tuple_llvm_ty, match_val, i
+                        elem,
+                        tuple_llvm_ty,
+                        match_val,
+                        i
                     );
-
 
                     // Recurse with the element's actual type.
                     let elem_ty = elem_types.get(i).cloned().unwrap_or(ResolvedType::I64);
@@ -242,9 +250,11 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                    tag_ptr, enum_name, enum_name, match_val
+                    tag_ptr,
+                    enum_name,
+                    enum_name,
+                    match_val
                 );
-
 
                 let tag_val = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
@@ -257,9 +267,10 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  {} = icmp eq i32 {}, {}",
-                    result, tag_val, expected_tag
+                    result,
+                    tag_val,
+                    expected_tag
                 );
-
 
                 Ok((result, ir))
             }
@@ -283,9 +294,12 @@ impl CodeGenerator {
                                 write_ir!(
                                     ir,
                                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
-                                    field_ptr, struct_name, struct_name, match_val, field_idx
+                                    field_ptr,
+                                    struct_name,
+                                    struct_name,
+                                    match_val,
+                                    field_idx
                                 );
-
 
                                 let field_val = self.next_temp(counter);
                                 let field_ty = &struct_info.fields[field_idx].1;
@@ -293,9 +307,11 @@ impl CodeGenerator {
                                 write_ir!(
                                     ir,
                                     "  {} = load {}, {}* {}",
-                                    field_val, llvm_ty, llvm_ty, field_ptr
+                                    field_val,
+                                    llvm_ty,
+                                    llvm_ty,
+                                    field_ptr
                                 );
-
 
                                 let (check, check_ir) =
                                     self.generate_pattern_check(pat, &field_val, counter)?;
@@ -454,9 +470,11 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = extractvalue {} {}, {}",
-                        elem, tuple_llvm_ty, match_val, i
+                        elem,
+                        tuple_llvm_ty,
+                        match_val,
+                        i
                     );
-
 
                     // Recurse with the element's actual type so nested tuple bindings
                     // also generate correct extractvalue instructions.
@@ -491,7 +509,11 @@ impl CodeGenerator {
                         write_ir!(
                             ir,
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
-                            payload_ptr, enum_name, enum_name, match_val, i
+                            payload_ptr,
+                            enum_name,
+                            enum_name,
+                            match_val,
+                            i
                         );
 
                         let field_val = self.next_temp(counter);
@@ -506,7 +528,10 @@ impl CodeGenerator {
                         write_ir!(
                             ir,
                             "  {} = extractvalue %{} {}, 1, {}",
-                            payload_val, enum_name, match_val, i
+                            payload_val,
+                            enum_name,
+                            match_val,
+                            i
                         );
 
                         let bind_ir =
@@ -535,9 +560,12 @@ impl CodeGenerator {
                             write_ir!(
                                 ir,
                                 "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
-                                field_ptr, struct_name, struct_name, match_val, field_idx
+                                field_ptr,
+                                struct_name,
+                                struct_name,
+                                match_val,
+                                field_idx
                             );
-
 
                             let field_val = self.next_temp(counter);
                             let field_ty = &struct_info.fields[field_idx].1;
@@ -545,9 +573,11 @@ impl CodeGenerator {
                             write_ir!(
                                 ir,
                                 "  {} = load {}, {}* {}",
-                                field_val, llvm_ty, llvm_ty, field_ptr
+                                field_val,
+                                llvm_ty,
+                                llvm_ty,
+                                field_ptr
                             );
-
 
                             if let Some(pat) = field_pat {
                                 // Bind to pattern

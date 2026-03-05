@@ -43,14 +43,10 @@ fn try_fold_any_binop(line: &str) -> Option<String> {
     if let Some(folded) = try_fold_binary_op(line, "mul", |a, b| a.wrapping_mul(b)) {
         return Some(folded);
     }
-    if let Some(folded) =
-        try_fold_binary_op(line, "sdiv", |a, b| if b != 0 { a / b } else { 0 })
-    {
+    if let Some(folded) = try_fold_binary_op(line, "sdiv", |a, b| if b != 0 { a / b } else { 0 }) {
         return Some(folded);
     }
-    if let Some(folded) =
-        try_fold_binary_op(line, "srem", |a, b| if b != 0 { a % b } else { 0 })
-    {
+    if let Some(folded) = try_fold_binary_op(line, "srem", |a, b| if b != 0 { a % b } else { 0 }) {
         return Some(folded);
     }
 
@@ -110,12 +106,7 @@ fn try_fold_any_binop(line: &str) -> Option<String> {
 /// - sub X, 0 => X
 fn try_simplify_identity(line: &str) -> Option<String> {
     let ops_and_identities: &[(&str, &[(&str, IdentityAction)])] = &[
-        (
-            "add",
-            &[
-                ("0", IdentityAction::Other),
-            ],
-        ),
+        ("add", &[("0", IdentityAction::Other)]),
         (
             "sub",
             &[
@@ -124,48 +115,17 @@ fn try_simplify_identity(line: &str) -> Option<String> {
         ),
         (
             "mul",
-            &[
-                ("1", IdentityAction::Other),
-                ("0", IdentityAction::Zero),
-            ],
+            &[("1", IdentityAction::Other), ("0", IdentityAction::Zero)],
         ),
         (
             "and",
-            &[
-                ("0", IdentityAction::Zero),
-                ("-1", IdentityAction::Other),
-            ],
+            &[("0", IdentityAction::Zero), ("-1", IdentityAction::Other)],
         ),
-        (
-            "or",
-            &[
-                ("0", IdentityAction::Other),
-            ],
-        ),
-        (
-            "xor",
-            &[
-                ("0", IdentityAction::Other),
-            ],
-        ),
-        (
-            "shl",
-            &[
-                ("0", IdentityAction::First),
-            ],
-        ),
-        (
-            "ashr",
-            &[
-                ("0", IdentityAction::First),
-            ],
-        ),
-        (
-            "lshr",
-            &[
-                ("0", IdentityAction::First),
-            ],
-        ),
+        ("or", &[("0", IdentityAction::Other)]),
+        ("xor", &[("0", IdentityAction::Other)]),
+        ("shl", &[("0", IdentityAction::First)]),
+        ("ashr", &[("0", IdentityAction::First)]),
+        ("lshr", &[("0", IdentityAction::First)]),
     ];
 
     for (op, rules) in ops_and_identities {
@@ -228,9 +188,9 @@ fn try_simplify_identity(line: &str) -> Option<String> {
 
 #[derive(Clone, Copy)]
 enum IdentityAction {
-    Other,  // Commutative identity: return the non-identity operand
-    First,  // Non-commutative: only when right operand is the value
-    Zero,   // Absorbing element: result is 0
+    Other, // Commutative identity: return the non-identity operand
+    First, // Non-commutative: only when right operand is the value
+    Zero,  // Absorbing element: result is 0
 }
 
 /// Try to fold a binary operation with constant operands

@@ -190,7 +190,8 @@ fn unreachable_block_elimination(ir: &str) -> String {
         // Unconditional branches and other control flow make targets reachable
         else if trimmed.starts_with("br label %") {
             if let Some(label) = trimmed.strip_prefix("br label %") {
-                let label = label.split(|c: char| !c.is_alphanumeric() && c != '.' && c != '_')
+                let label = label
+                    .split(|c: char| !c.is_alphanumeric() && c != '.' && c != '_')
                     .next()
                     .unwrap_or("");
                 reachable_labels.insert(label.to_string());
@@ -540,7 +541,10 @@ dead:
             result
         );
         // The "then" block should be preserved
-        assert!(result.contains("ret i64 42"), "Live block should be preserved");
+        assert!(
+            result.contains("ret i64 42"),
+            "Live block should be preserved"
+        );
     }
 
     #[test]

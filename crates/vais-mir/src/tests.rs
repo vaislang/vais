@@ -317,10 +317,7 @@ fn test_cross_verify_copyprop_then_dce() {
         Rvalue::Use(Operand::Copy(Place::local(b.param(0)))),
     );
     // y = copy x (will become y = copy param0 after copyprop)
-    b.assign(
-        Place::local(y),
-        Rvalue::Use(Operand::Copy(Place::local(x))),
-    );
+    b.assign(Place::local(y), Rvalue::Use(Operand::Copy(Place::local(x))));
     // _0 = copy y
     b.assign(
         b.return_place(),

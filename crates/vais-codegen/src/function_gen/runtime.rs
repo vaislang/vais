@@ -509,7 +509,10 @@ impl CodeGenerator {
 
         // Bump allocator state: heap pointer starts at configurable offset
         ir.push_str("; Bump allocator heap pointer\n");
-        ir.push_str(&format!("@__heap_ptr = global i32 {}\n\n", WASM_HEAP_START_OFFSET));
+        ir.push_str(&format!(
+            "@__heap_ptr = global i32 {}\n\n",
+            WASM_HEAP_START_OFFSET
+        ));
 
         // malloc replacement using bump allocator
         ir.push_str("; WASM malloc: bump allocator with memory.grow\n");
@@ -524,13 +527,22 @@ impl CodeGenerator {
         ir.push_str("  %new = add i32 %cur, %aligned_size\n");
         ir.push_str("  ; Check if we need to grow memory\n");
         ir.push_str("  %cur_pages = call i32 @llvm.wasm.memory.size.i32(i32 0)\n");
-        ir.push_str(&format!("  %cur_bytes = mul i32 %cur_pages, {}\n", WASM_PAGE_SIZE));
+        ir.push_str(&format!(
+            "  %cur_bytes = mul i32 %cur_pages, {}\n",
+            WASM_PAGE_SIZE
+        ));
         ir.push_str("  %needs_grow = icmp ugt i32 %new, %cur_bytes\n");
         ir.push_str("  br i1 %needs_grow, label %grow, label %done\n");
         ir.push_str("grow:\n");
         ir.push_str("  %needed = sub i32 %new, %cur_bytes\n");
-        ir.push_str(&format!("  %pages_needed_raw = add i32 %needed, {}\n", WASM_PAGE_SIZE - 1));
-        ir.push_str(&format!("  %pages_needed = udiv i32 %pages_needed_raw, {}\n", WASM_PAGE_SIZE));
+        ir.push_str(&format!(
+            "  %pages_needed_raw = add i32 %needed, {}\n",
+            WASM_PAGE_SIZE - 1
+        ));
+        ir.push_str(&format!(
+            "  %pages_needed = udiv i32 %pages_needed_raw, {}\n",
+            WASM_PAGE_SIZE
+        ));
         ir.push_str(
             "  %grow_result = call i32 @llvm.wasm.memory.grow.i32(i32 0, i32 %pages_needed)\n",
         );

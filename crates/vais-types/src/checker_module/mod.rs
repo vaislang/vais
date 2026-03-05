@@ -171,7 +171,9 @@ impl TypeChecker {
             if !ownership_errors.is_empty() {
                 if strict {
                     // Strict mode: return first error
-                    let first_err = ownership_errors.into_iter().next()
+                    let first_err = ownership_errors
+                        .into_iter()
+                        .next()
                         .expect("ownership_errors is non-empty (checked above)");
                     return Err(first_err);
                 } else {

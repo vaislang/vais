@@ -366,7 +366,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
             .left()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into()))?;
+            .ok_or_else(|| {
+                CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into())
+            })?;
         let slice_ptr = self
             .builder
             .build_pointer_cast(

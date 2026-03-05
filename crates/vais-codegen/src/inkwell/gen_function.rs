@@ -163,7 +163,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during TCO function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during TCO function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
@@ -205,7 +209,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during TCO function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during TCO function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
@@ -443,7 +451,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during expr-body function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during expr-body function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
@@ -473,7 +485,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
@@ -652,7 +668,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during specialized expr-body function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during specialized expr-body function generation"
+                                .into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {
@@ -694,7 +715,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if self
                     .builder
                     .get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block during specialized function generation".into()))?
+                    .ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block during specialized function generation".into(),
+                        )
+                    })?
                     .get_terminator()
                     .is_none()
                 {

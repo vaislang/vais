@@ -579,7 +579,10 @@ mod tests {
 
     #[test]
     fn test_display_name_named() {
-        assert_eq!(LspType::Named("MyStruct".to_string()).display_name(), "MyStruct");
+        assert_eq!(
+            LspType::Named("MyStruct".to_string()).display_name(),
+            "MyStruct"
+        );
     }
 
     #[test]
@@ -589,7 +592,10 @@ mod tests {
 
     #[test]
     fn test_display_name_primitive_bool() {
-        assert_eq!(LspType::Primitive("bool".to_string()).display_name(), "bool");
+        assert_eq!(
+            LspType::Primitive("bool".to_string()).display_name(),
+            "bool"
+        );
     }
 
     #[test]
@@ -605,7 +611,9 @@ mod tests {
 
     #[test]
     fn test_display_name_array_nested() {
-        let t = LspType::Array(Box::new(LspType::Array(Box::new(LspType::Primitive("f64".to_string())))));
+        let t = LspType::Array(Box::new(LspType::Array(Box::new(LspType::Primitive(
+            "f64".to_string(),
+        )))));
         assert_eq!(t.display_name(), "[[f64]]");
     }
 
@@ -649,7 +657,10 @@ mod tests {
     #[test]
     fn test_display_name_function() {
         let t = LspType::Function {
-            params: vec![LspType::Primitive("i64".to_string()), LspType::Primitive("bool".to_string())],
+            params: vec![
+                LspType::Primitive("i64".to_string()),
+                LspType::Primitive("bool".to_string()),
+            ],
             ret: Box::new(LspType::Primitive("str".to_string())),
         };
         assert_eq!(t.display_name(), "fn(i64, bool) -> str");
@@ -719,46 +730,75 @@ mod tests {
 
     #[test]
     fn test_parse_type_string_i64() {
-        assert_eq!(parse_type_string("i64"), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            parse_type_string("i64"),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_f64() {
-        assert_eq!(parse_type_string("f64"), LspType::Primitive("f64".to_string()));
+        assert_eq!(
+            parse_type_string("f64"),
+            LspType::Primitive("f64".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_bool() {
-        assert_eq!(parse_type_string("bool"), LspType::Primitive("bool".to_string()));
+        assert_eq!(
+            parse_type_string("bool"),
+            LspType::Primitive("bool".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_str() {
-        assert_eq!(parse_type_string("str"), LspType::Primitive("str".to_string()));
+        assert_eq!(
+            parse_type_string("str"),
+            LspType::Primitive("str".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_all_int_types() {
-        for ty in ["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128"] {
+        for ty in [
+            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128",
+        ] {
             assert_eq!(parse_type_string(ty), LspType::Primitive(ty.to_string()));
         }
     }
 
     #[test]
     fn test_parse_type_string_float_types() {
-        assert_eq!(parse_type_string("f32"), LspType::Primitive("f32".to_string()));
-        assert_eq!(parse_type_string("f64"), LspType::Primitive("f64".to_string()));
+        assert_eq!(
+            parse_type_string("f32"),
+            LspType::Primitive("f32".to_string())
+        );
+        assert_eq!(
+            parse_type_string("f64"),
+            LspType::Primitive("f64".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_size_types() {
-        assert_eq!(parse_type_string("isize"), LspType::Primitive("isize".to_string()));
-        assert_eq!(parse_type_string("usize"), LspType::Primitive("usize".to_string()));
+        assert_eq!(
+            parse_type_string("isize"),
+            LspType::Primitive("isize".to_string())
+        );
+        assert_eq!(
+            parse_type_string("usize"),
+            LspType::Primitive("usize".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_char() {
-        assert_eq!(parse_type_string("char"), LspType::Primitive("char".to_string()));
+        assert_eq!(
+            parse_type_string("char"),
+            LspType::Primitive("char".to_string())
+        );
     }
 
     #[test]
@@ -768,12 +808,18 @@ mod tests {
 
     #[test]
     fn test_parse_type_string_option() {
-        assert!(matches!(parse_type_string("Option<i64>"), LspType::Optional(_)));
+        assert!(matches!(
+            parse_type_string("Option<i64>"),
+            LspType::Optional(_)
+        ));
     }
 
     #[test]
     fn test_parse_type_string_result() {
-        assert!(matches!(parse_type_string("Result<i64, str>"), LspType::Result(_, _)));
+        assert!(matches!(
+            parse_type_string("Result<i64, str>"),
+            LspType::Result(_, _)
+        ));
     }
 
     #[test]
@@ -788,38 +834,59 @@ mod tests {
 
     #[test]
     fn test_parse_type_string_fn() {
-        assert!(matches!(parse_type_string("fn(i64) -> bool"), LspType::Function { .. }));
+        assert!(matches!(
+            parse_type_string("fn(i64) -> bool"),
+            LspType::Function { .. }
+        ));
     }
 
     #[test]
     fn test_parse_type_string_custom_named() {
-        assert_eq!(parse_type_string("MyStruct"), LspType::Named("MyStruct".to_string()));
+        assert_eq!(
+            parse_type_string("MyStruct"),
+            LspType::Named("MyStruct".to_string())
+        );
     }
 
     #[test]
     fn test_parse_type_string_trimming() {
-        assert_eq!(parse_type_string("  i64  "), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            parse_type_string("  i64  "),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     // ========== ast_type_to_lsp tests ==========
 
     #[test]
     fn test_ast_type_to_lsp_named_primitive() {
-        let ty = Type::Named { name: "i64".to_string(), generics: vec![] };
+        let ty = Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        };
         assert_eq!(ast_type_to_lsp(&ty), LspType::Primitive("i64".to_string()));
     }
 
     #[test]
     fn test_ast_type_to_lsp_named_all_primitives() {
-        for name in ["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64", "bool", "str", "isize", "usize", "char"] {
-            let ty = Type::Named { name: name.to_string(), generics: vec![] };
+        for name in [
+            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
+            "bool", "str", "isize", "usize", "char",
+        ] {
+            let ty = Type::Named {
+                name: name.to_string(),
+                generics: vec![],
+            };
             assert_eq!(ast_type_to_lsp(&ty), LspType::Primitive(name.to_string()));
         }
     }
 
     #[test]
     fn test_ast_type_to_lsp_named_custom() {
-        let ty = Type::Named { name: "MyStruct".to_string(), generics: vec![] };
+        let ty = Type::Named {
+            name: "MyStruct".to_string(),
+            generics: vec![],
+        };
         assert_eq!(ast_type_to_lsp(&ty), LspType::Named("MyStruct".to_string()));
     }
 
@@ -828,7 +895,13 @@ mod tests {
         use vais_ast::Spanned;
         let ty = Type::Named {
             name: "Option".to_string(),
-            generics: vec![Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) }],
+            generics: vec![Spanned {
+                node: Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(0, 1),
+            }],
         };
         let result = ast_type_to_lsp(&ty);
         assert!(matches!(result, LspType::Optional(_)));
@@ -840,8 +913,20 @@ mod tests {
         let ty = Type::Named {
             name: "Result".to_string(),
             generics: vec![
-                Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) },
-                Spanned { node: Type::Named { name: "str".to_string(), generics: vec![] }, span: Span::new(2, 3) },
+                Spanned {
+                    node: Type::Named {
+                        name: "i64".to_string(),
+                        generics: vec![],
+                    },
+                    span: Span::new(0, 1),
+                },
+                Spanned {
+                    node: Type::Named {
+                        name: "str".to_string(),
+                        generics: vec![],
+                    },
+                    span: Span::new(2, 3),
+                },
             ],
         };
         let result = ast_type_to_lsp(&ty);
@@ -853,7 +938,13 @@ mod tests {
         use vais_ast::Spanned;
         let ty = Type::Named {
             name: "Vec".to_string(),
-            generics: vec![Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) }],
+            generics: vec![Spanned {
+                node: Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(0, 1),
+            }],
         };
         let result = ast_type_to_lsp(&ty);
         assert!(matches!(result, LspType::Array(_)));
@@ -873,7 +964,10 @@ mod tests {
     fn test_ast_type_to_lsp_array() {
         use vais_ast::Spanned;
         let ty = Type::Array(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         let result = ast_type_to_lsp(&ty);
@@ -884,8 +978,20 @@ mod tests {
     fn test_ast_type_to_lsp_tuple() {
         use vais_ast::Spanned;
         let ty = Type::Tuple(vec![
-            Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) },
-            Spanned { node: Type::Named { name: "bool".to_string(), generics: vec![] }, span: Span::new(2, 3) },
+            Spanned {
+                node: Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(0, 1),
+            },
+            Spanned {
+                node: Type::Named {
+                    name: "bool".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(2, 3),
+            },
         ]);
         let result = ast_type_to_lsp(&ty);
         assert!(matches!(result, LspType::Tuple(_)));
@@ -898,7 +1004,10 @@ mod tests {
     fn test_ast_type_to_lsp_optional() {
         use vais_ast::Spanned;
         let ty = Type::Optional(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert!(matches!(ast_type_to_lsp(&ty), LspType::Optional(_)));
@@ -908,7 +1017,10 @@ mod tests {
     fn test_ast_type_to_lsp_result_shorthand() {
         use vais_ast::Spanned;
         let ty = Type::Result(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         let result = ast_type_to_lsp(&ty);
@@ -919,7 +1031,10 @@ mod tests {
     fn test_ast_type_to_lsp_ref() {
         use vais_ast::Spanned;
         let ty = Type::Ref(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(ast_type_to_lsp(&ty), LspType::Primitive("i64".to_string()));
@@ -929,7 +1044,10 @@ mod tests {
     fn test_ast_type_to_lsp_ref_mut() {
         use vais_ast::Spanned;
         let ty = Type::RefMut(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(ast_type_to_lsp(&ty), LspType::Primitive("i64".to_string()));
@@ -939,7 +1057,10 @@ mod tests {
     fn test_ast_type_to_lsp_pointer() {
         use vais_ast::Spanned;
         let ty = Type::Pointer(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(ast_type_to_lsp(&ty), LspType::Primitive("i64".to_string()));
@@ -949,7 +1070,10 @@ mod tests {
     fn test_ast_type_to_lsp_slice() {
         use vais_ast::Spanned;
         let ty = Type::Slice(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert!(matches!(ast_type_to_lsp(&ty), LspType::Array(_)));
@@ -959,7 +1083,10 @@ mod tests {
     fn test_ast_type_to_lsp_slice_mut() {
         use vais_ast::Spanned;
         let ty = Type::SliceMut(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert!(matches!(ast_type_to_lsp(&ty), LspType::Array(_)));
@@ -967,7 +1094,10 @@ mod tests {
 
     #[test]
     fn test_ast_type_to_lsp_option_no_generic() {
-        let ty = Type::Named { name: "Option".to_string(), generics: vec![] };
+        let ty = Type::Named {
+            name: "Option".to_string(),
+            generics: vec![],
+        };
         let result = ast_type_to_lsp(&ty);
         if let LspType::Optional(inner) = result {
             assert_eq!(*inner, LspType::Unknown);
@@ -980,7 +1110,10 @@ mod tests {
 
     #[test]
     fn test_format_type_named_simple() {
-        let ty = Type::Named { name: "i64".to_string(), generics: vec![] };
+        let ty = Type::Named {
+            name: "i64".to_string(),
+            generics: vec![],
+        };
         assert_eq!(format_type(&ty), "i64");
     }
 
@@ -990,7 +1123,10 @@ mod tests {
         let ty = Type::Named {
             name: "Vec".to_string(),
             generics: vec![Spanned {
-                node: Type::Named { name: "i64".to_string(), generics: vec![] },
+                node: Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
                 span: Span::new(0, 1),
             }],
         };
@@ -1003,8 +1139,20 @@ mod tests {
         let ty = Type::Named {
             name: "HashMap".to_string(),
             generics: vec![
-                Spanned { node: Type::Named { name: "str".to_string(), generics: vec![] }, span: Span::new(0, 1) },
-                Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(2, 3) },
+                Spanned {
+                    node: Type::Named {
+                        name: "str".to_string(),
+                        generics: vec![],
+                    },
+                    span: Span::new(0, 1),
+                },
+                Spanned {
+                    node: Type::Named {
+                        name: "i64".to_string(),
+                        generics: vec![],
+                    },
+                    span: Span::new(2, 3),
+                },
             ],
         };
         assert_eq!(format_type(&ty), "HashMap<str, i64>");
@@ -1014,7 +1162,10 @@ mod tests {
     fn test_format_type_array() {
         use vais_ast::Spanned;
         let ty = Type::Array(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "[i64]");
@@ -1024,8 +1175,20 @@ mod tests {
     fn test_format_type_tuple() {
         use vais_ast::Spanned;
         let ty = Type::Tuple(vec![
-            Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) },
-            Spanned { node: Type::Named { name: "bool".to_string(), generics: vec![] }, span: Span::new(2, 3) },
+            Spanned {
+                node: Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(0, 1),
+            },
+            Spanned {
+                node: Type::Named {
+                    name: "bool".to_string(),
+                    generics: vec![],
+                },
+                span: Span::new(2, 3),
+            },
         ]);
         assert_eq!(format_type(&ty), "(i64, bool)");
     }
@@ -1044,7 +1207,10 @@ mod tests {
     fn test_format_type_pointer() {
         use vais_ast::Spanned;
         let ty = Type::Pointer(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "*i64");
@@ -1054,7 +1220,10 @@ mod tests {
     fn test_format_type_ref() {
         use vais_ast::Spanned;
         let ty = Type::Ref(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "&i64");
@@ -1064,7 +1233,10 @@ mod tests {
     fn test_format_type_ref_mut() {
         use vais_ast::Spanned;
         let ty = Type::RefMut(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "&mut i64");
@@ -1074,7 +1246,10 @@ mod tests {
     fn test_format_type_slice() {
         use vais_ast::Spanned;
         let ty = Type::Slice(Box::new(Spanned {
-            node: Type::Named { name: "u8".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "u8".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "&[u8]");
@@ -1084,7 +1259,10 @@ mod tests {
     fn test_format_type_slice_mut() {
         use vais_ast::Spanned;
         let ty = Type::SliceMut(Box::new(Spanned {
-            node: Type::Named { name: "u8".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "u8".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "&mut [u8]");
@@ -1094,7 +1272,10 @@ mod tests {
     fn test_format_type_optional() {
         use vais_ast::Spanned;
         let ty = Type::Optional(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "i64?");
@@ -1104,7 +1285,10 @@ mod tests {
     fn test_format_type_result_shorthand() {
         use vais_ast::Spanned;
         let ty = Type::Result(Box::new(Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }));
         assert_eq!(format_type(&ty), "i64!");
@@ -1125,43 +1309,62 @@ mod tests {
     }
 
     fn spanned<T>(node: T) -> Spanned<T> {
-        Spanned { node, span: Span::new(0, 1) }
+        Spanned {
+            node,
+            span: Span::new(0, 1),
+        }
     }
 
     #[test]
     fn test_infer_int() {
         let ctx = make_ctx();
         let expr = spanned(Expr::Int(42));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
     fn test_infer_float() {
         let ctx = make_ctx();
         let expr = spanned(Expr::Float(3.14));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("f64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("f64".to_string())
+        );
     }
 
     #[test]
     fn test_infer_bool() {
         let ctx = make_ctx();
         let expr = spanned(Expr::Bool(true));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("bool".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("bool".to_string())
+        );
     }
 
     #[test]
     fn test_infer_string() {
         let ctx = make_ctx();
         let expr = spanned(Expr::String("hello".to_string()));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("str".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("str".to_string())
+        );
     }
 
     #[test]
     fn test_infer_ident_known() {
         let mut ctx = make_ctx();
-        ctx.variable_types.insert("x".to_string(), LspType::Primitive("i64".to_string()));
+        ctx.variable_types
+            .insert("x".to_string(), LspType::Primitive("i64".to_string()));
         let expr = spanned(Expr::Ident("x".to_string()));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
@@ -1182,7 +1385,10 @@ mod tests {
     #[test]
     fn test_infer_array_with_elements() {
         let ctx = make_ctx();
-        let expr = spanned(Expr::Array(vec![spanned(Expr::Int(1)), spanned(Expr::Int(2))]));
+        let expr = spanned(Expr::Array(vec![
+            spanned(Expr::Int(1)),
+            spanned(Expr::Int(2)),
+        ]));
         let result = ctx.infer_expr_type(&expr);
         if let LspType::Array(inner) = result {
             assert_eq!(*inner, LspType::Primitive("i64".to_string()));
@@ -1194,7 +1400,10 @@ mod tests {
     #[test]
     fn test_infer_tuple() {
         let ctx = make_ctx();
-        let expr = spanned(Expr::Tuple(vec![spanned(Expr::Int(1)), spanned(Expr::Bool(true))]));
+        let expr = spanned(Expr::Tuple(vec![
+            spanned(Expr::Int(1)),
+            spanned(Expr::Bool(true)),
+        ]));
         let result = ctx.infer_expr_type(&expr);
         if let LspType::Tuple(types) = result {
             assert_eq!(types.len(), 2);
@@ -1248,12 +1457,16 @@ mod tests {
     #[test]
     fn test_infer_call_known_function() {
         let mut ctx = make_ctx();
-        ctx.function_returns.insert("foo".to_string(), LspType::Primitive("bool".to_string()));
+        ctx.function_returns
+            .insert("foo".to_string(), LspType::Primitive("bool".to_string()));
         let expr = spanned(Expr::Call {
             func: Box::new(spanned(Expr::Ident("foo".to_string()))),
             args: vec![],
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("bool".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("bool".to_string())
+        );
     }
 
     #[test]
@@ -1264,7 +1477,10 @@ mod tests {
             func: Box::new(spanned(Expr::Ident("Point".to_string()))),
             args: vec![],
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Named("Point".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Named("Point".to_string())
+        );
     }
 
     #[test]
@@ -1284,39 +1500,55 @@ mod tests {
             name: spanned("Point".to_string()),
             fields: vec![],
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Named("Point".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Named("Point".to_string())
+        );
     }
 
     #[test]
     fn test_infer_field_access() {
         let mut ctx = make_ctx();
-        ctx.structs.insert("Point".to_string(), vec![
-            FieldInfo {
-                name: "x".to_string(),
-                ty: LspType::Primitive("i64".to_string()),
-                type_display: "i64".to_string(),
-            },
-            FieldInfo {
-                name: "y".to_string(),
-                ty: LspType::Primitive("f64".to_string()),
-                type_display: "f64".to_string(),
-            },
-        ]);
-        ctx.variable_types.insert("p".to_string(), LspType::Named("Point".to_string()));
+        ctx.structs.insert(
+            "Point".to_string(),
+            vec![
+                FieldInfo {
+                    name: "x".to_string(),
+                    ty: LspType::Primitive("i64".to_string()),
+                    type_display: "i64".to_string(),
+                },
+                FieldInfo {
+                    name: "y".to_string(),
+                    ty: LspType::Primitive("f64".to_string()),
+                    type_display: "f64".to_string(),
+                },
+            ],
+        );
+        ctx.variable_types
+            .insert("p".to_string(), LspType::Named("Point".to_string()));
         let expr = spanned(Expr::Field {
             expr: Box::new(spanned(Expr::Ident("p".to_string()))),
             field: spanned("x".to_string()),
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
     fn test_infer_field_access_unknown_field() {
         let mut ctx = make_ctx();
-        ctx.structs.insert("Point".to_string(), vec![
-            FieldInfo { name: "x".to_string(), ty: LspType::Primitive("i64".to_string()), type_display: "i64".to_string() },
-        ]);
-        ctx.variable_types.insert("p".to_string(), LspType::Named("Point".to_string()));
+        ctx.structs.insert(
+            "Point".to_string(),
+            vec![FieldInfo {
+                name: "x".to_string(),
+                ty: LspType::Primitive("i64".to_string()),
+                type_display: "i64".to_string(),
+            }],
+        );
+        ctx.variable_types
+            .insert("p".to_string(), LspType::Named("Point".to_string()));
         let expr = spanned(Expr::Field {
             expr: Box::new(spanned(Expr::Ident("p".to_string()))),
             field: spanned("z".to_string()),
@@ -1327,21 +1559,26 @@ mod tests {
     #[test]
     fn test_infer_method_call() {
         let mut ctx = make_ctx();
-        ctx.type_methods.insert("Vec".to_string(), vec![
-            MethodInfo {
+        ctx.type_methods.insert(
+            "Vec".to_string(),
+            vec![MethodInfo {
                 name: "len".to_string(),
                 params: vec![],
                 ret_type: Some("i64".to_string()),
                 from_trait: None,
-            },
-        ]);
-        ctx.variable_types.insert("v".to_string(), LspType::Named("Vec".to_string()));
+            }],
+        );
+        ctx.variable_types
+            .insert("v".to_string(), LspType::Named("Vec".to_string()));
         let expr = spanned(Expr::MethodCall {
             receiver: Box::new(spanned(Expr::Ident("v".to_string()))),
             method: spanned("len".to_string()),
             args: vec![],
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
@@ -1365,19 +1602,25 @@ mod tests {
     #[test]
     fn test_infer_block_with_expr() {
         let ctx = make_ctx();
-        let expr = spanned(Expr::Block(vec![
-            spanned(Stmt::Expr(Box::new(spanned(Expr::Int(42))))),
-        ]));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        let expr = spanned(Expr::Block(vec![spanned(Stmt::Expr(Box::new(spanned(
+            Expr::Int(42),
+        ))))]));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
     fn test_infer_block_with_return() {
         let ctx = make_ctx();
-        let expr = spanned(Expr::Block(vec![
-            spanned(Stmt::Return(Some(Box::new(spanned(Expr::Bool(true)))))),
-        ]));
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("bool".to_string()));
+        let expr = spanned(Expr::Block(vec![spanned(Stmt::Return(Some(Box::new(
+            spanned(Expr::Bool(true)),
+        ))))]));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("bool".to_string())
+        );
     }
 
     // ========== TypeContext::from_module tests ==========
@@ -1449,10 +1692,21 @@ mod tests {
     #[test]
     fn test_dot_completions_struct_fields() {
         let mut ctx = make_ctx();
-        ctx.structs.insert("Point".to_string(), vec![
-            FieldInfo { name: "x".to_string(), ty: LspType::Primitive("i64".to_string()), type_display: "i64".to_string() },
-            FieldInfo { name: "y".to_string(), ty: LspType::Primitive("i64".to_string()), type_display: "i64".to_string() },
-        ]);
+        ctx.structs.insert(
+            "Point".to_string(),
+            vec![
+                FieldInfo {
+                    name: "x".to_string(),
+                    ty: LspType::Primitive("i64".to_string()),
+                    type_display: "i64".to_string(),
+                },
+                FieldInfo {
+                    name: "y".to_string(),
+                    ty: LspType::Primitive("i64".to_string()),
+                    type_display: "i64".to_string(),
+                },
+            ],
+        );
         let completions = ctx.get_dot_completions("Point");
         assert_eq!(completions.len(), 2);
         assert!(completions.iter().any(|c| c.label == "x"));
@@ -1462,10 +1716,23 @@ mod tests {
     #[test]
     fn test_dot_completions_methods() {
         let mut ctx = make_ctx();
-        ctx.type_methods.insert("Vec".to_string(), vec![
-            MethodInfo { name: "len".to_string(), params: vec![], ret_type: Some("i64".to_string()), from_trait: None },
-            MethodInfo { name: "push".to_string(), params: vec![("item".to_string(), "T".to_string())], ret_type: None, from_trait: None },
-        ]);
+        ctx.type_methods.insert(
+            "Vec".to_string(),
+            vec![
+                MethodInfo {
+                    name: "len".to_string(),
+                    params: vec![],
+                    ret_type: Some("i64".to_string()),
+                    from_trait: None,
+                },
+                MethodInfo {
+                    name: "push".to_string(),
+                    params: vec![("item".to_string(), "T".to_string())],
+                    ret_type: None,
+                    from_trait: None,
+                },
+            ],
+        );
         let completions = ctx.get_dot_completions("Vec");
         assert_eq!(completions.len(), 2);
         assert!(completions.iter().any(|c| c.label == "len"));
@@ -1475,10 +1742,17 @@ mod tests {
     #[test]
     fn test_dot_completions_trait_methods() {
         let mut ctx = make_ctx();
-        ctx.type_traits.insert("Foo".to_string(), vec!["ToString".to_string()]);
-        ctx.trait_methods.insert("ToString".to_string(), vec![
-            MethodInfo { name: "to_string".to_string(), params: vec![], ret_type: Some("str".to_string()), from_trait: Some("ToString".to_string()) },
-        ]);
+        ctx.type_traits
+            .insert("Foo".to_string(), vec!["ToString".to_string()]);
+        ctx.trait_methods.insert(
+            "ToString".to_string(),
+            vec![MethodInfo {
+                name: "to_string".to_string(),
+                params: vec![],
+                ret_type: Some("str".to_string()),
+                from_trait: Some("ToString".to_string()),
+            }],
+        );
         let completions = ctx.get_dot_completions("Foo");
         assert_eq!(completions.len(), 1);
         assert_eq!(completions[0].label, "to_string");
@@ -1488,16 +1762,32 @@ mod tests {
     #[test]
     fn test_dot_completions_no_duplicates() {
         let mut ctx = make_ctx();
-        ctx.type_methods.insert("Foo".to_string(), vec![
-            MethodInfo { name: "display".to_string(), params: vec![], ret_type: Some("str".to_string()), from_trait: None },
-        ]);
-        ctx.type_traits.insert("Foo".to_string(), vec!["Display".to_string()]);
-        ctx.trait_methods.insert("Display".to_string(), vec![
-            MethodInfo { name: "display".to_string(), params: vec![], ret_type: Some("str".to_string()), from_trait: Some("Display".to_string()) },
-        ]);
+        ctx.type_methods.insert(
+            "Foo".to_string(),
+            vec![MethodInfo {
+                name: "display".to_string(),
+                params: vec![],
+                ret_type: Some("str".to_string()),
+                from_trait: None,
+            }],
+        );
+        ctx.type_traits
+            .insert("Foo".to_string(), vec!["Display".to_string()]);
+        ctx.trait_methods.insert(
+            "Display".to_string(),
+            vec![MethodInfo {
+                name: "display".to_string(),
+                params: vec![],
+                ret_type: Some("str".to_string()),
+                from_trait: Some("Display".to_string()),
+            }],
+        );
         let completions = ctx.get_dot_completions("Foo");
         // Should only have 1 "display" entry (direct impl takes priority)
-        assert_eq!(completions.iter().filter(|c| c.label == "display").count(), 1);
+        assert_eq!(
+            completions.iter().filter(|c| c.label == "display").count(),
+            1
+        );
     }
 
     #[test]
@@ -1510,12 +1800,23 @@ mod tests {
     #[test]
     fn test_dot_completions_fields_and_methods() {
         let mut ctx = make_ctx();
-        ctx.structs.insert("MyStruct".to_string(), vec![
-            FieldInfo { name: "value".to_string(), ty: LspType::Primitive("i64".to_string()), type_display: "i64".to_string() },
-        ]);
-        ctx.type_methods.insert("MyStruct".to_string(), vec![
-            MethodInfo { name: "get_value".to_string(), params: vec![], ret_type: Some("i64".to_string()), from_trait: None },
-        ]);
+        ctx.structs.insert(
+            "MyStruct".to_string(),
+            vec![FieldInfo {
+                name: "value".to_string(),
+                ty: LspType::Primitive("i64".to_string()),
+                type_display: "i64".to_string(),
+            }],
+        );
+        ctx.type_methods.insert(
+            "MyStruct".to_string(),
+            vec![MethodInfo {
+                name: "get_value".to_string(),
+                params: vec![],
+                ret_type: Some("i64".to_string()),
+                from_trait: None,
+            }],
+        );
         let completions = ctx.get_dot_completions("MyStruct");
         assert_eq!(completions.len(), 2);
         let field = completions.iter().find(|c| c.label == "value").unwrap();
@@ -1528,14 +1829,18 @@ mod tests {
 
     #[test]
     fn test_display_name_optional_nested() {
-        let t = LspType::Optional(Box::new(LspType::Optional(Box::new(LspType::Primitive("i64".to_string())))));
+        let t = LspType::Optional(Box::new(LspType::Optional(Box::new(LspType::Primitive(
+            "i64".to_string(),
+        )))));
         assert_eq!(t.display_name(), "Option<Option<i64>>");
     }
 
     #[test]
     fn test_display_name_result_nested() {
         let t = LspType::Result(
-            Box::new(LspType::Array(Box::new(LspType::Primitive("i64".to_string())))),
+            Box::new(LspType::Array(Box::new(LspType::Primitive(
+                "i64".to_string(),
+            )))),
             Box::new(LspType::Primitive("str".to_string())),
         );
         assert_eq!(t.display_name(), "Result<[i64], str>");
@@ -1553,7 +1858,10 @@ mod tests {
                 Box::new(LspType::Primitive("str".to_string())),
             )),
         };
-        assert_eq!(t.display_name(), "fn([i64], Option<str>) -> Result<bool, str>");
+        assert_eq!(
+            t.display_name(),
+            "fn([i64], Option<str>) -> Result<bool, str>"
+        );
     }
 
     #[test]
@@ -1593,7 +1901,10 @@ mod tests {
 
     #[test]
     fn test_lsp_type_ne_different_variants() {
-        assert_ne!(LspType::Primitive("i64".to_string()), LspType::Named("i64".to_string()));
+        assert_ne!(
+            LspType::Primitive("i64".to_string()),
+            LspType::Named("i64".to_string())
+        );
         assert_ne!(LspType::Unit, LspType::Range);
         assert_ne!(LspType::Array(Box::new(LspType::Unit)), LspType::Unit);
     }
@@ -1639,7 +1950,10 @@ mod tests {
                 node: Type::Named {
                     name: "Option".to_string(),
                     generics: vec![Spanned {
-                        node: Type::Named { name: "i64".to_string(), generics: vec![] },
+                        node: Type::Named {
+                            name: "i64".to_string(),
+                            generics: vec![],
+                        },
                         span: Span::new(0, 1),
                     }],
                 },
@@ -1661,13 +1975,23 @@ mod tests {
             name: "Result".to_string(),
             generics: vec![
                 Spanned {
-                    node: Type::Named { name: "Vec".to_string(), generics: vec![
-                        Spanned { node: Type::Named { name: "i64".to_string(), generics: vec![] }, span: Span::new(0, 1) },
-                    ]},
+                    node: Type::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![Spanned {
+                            node: Type::Named {
+                                name: "i64".to_string(),
+                                generics: vec![],
+                            },
+                            span: Span::new(0, 1),
+                        }],
+                    },
                     span: Span::new(0, 1),
                 },
                 Spanned {
-                    node: Type::Named { name: "str".to_string(), generics: vec![] },
+                    node: Type::Named {
+                        name: "str".to_string(),
+                        generics: vec![],
+                    },
                     span: Span::new(2, 3),
                 },
             ],
@@ -1691,7 +2015,10 @@ mod tests {
                 node: Type::Named {
                     name: "Vec".to_string(),
                     generics: vec![Spanned {
-                        node: Type::Named { name: "i64".to_string(), generics: vec![] },
+                        node: Type::Named {
+                            name: "i64".to_string(),
+                            generics: vec![],
+                        },
                         span: Span::new(0, 1),
                     }],
                 },
@@ -1711,7 +2038,10 @@ mod tests {
     fn test_format_type_single_element_tuple() {
         use vais_ast::Spanned;
         let ty = Type::Tuple(vec![Spanned {
-            node: Type::Named { name: "i64".to_string(), generics: vec![] },
+            node: Type::Named {
+                name: "i64".to_string(),
+                generics: vec![],
+            },
             span: Span::new(0, 1),
         }]);
         assert_eq!(format_type(&ty), "(i64)");
@@ -1722,7 +2052,8 @@ mod tests {
     #[test]
     fn test_infer_nested_call() {
         let mut ctx = make_ctx();
-        ctx.function_returns.insert("inner".to_string(), LspType::Primitive("i64".to_string()));
+        ctx.function_returns
+            .insert("inner".to_string(), LspType::Primitive("i64".to_string()));
         let expr = spanned(Expr::Call {
             func: Box::new(spanned(Expr::Ident("outer".to_string()))),
             args: vec![spanned(Expr::Call {
@@ -1744,7 +2075,10 @@ mod tests {
                 (spanned("level".to_string()), spanned(Expr::Int(3))),
             ],
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Named("Config".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Named("Config".to_string())
+        );
     }
 
     #[test]
@@ -1752,16 +2086,19 @@ mod tests {
         // infer_expr_type only checks type_methods, not trait_methods
         // so trait-only methods return Unknown
         let mut ctx = make_ctx();
-        ctx.type_traits.insert("MyType".to_string(), vec!["Display".to_string()]);
-        ctx.trait_methods.insert("Display".to_string(), vec![
-            MethodInfo {
+        ctx.type_traits
+            .insert("MyType".to_string(), vec!["Display".to_string()]);
+        ctx.trait_methods.insert(
+            "Display".to_string(),
+            vec![MethodInfo {
                 name: "to_string".to_string(),
                 params: vec![],
                 ret_type: Some("str".to_string()),
                 from_trait: Some("Display".to_string()),
-            },
-        ]);
-        ctx.variable_types.insert("x".to_string(), LspType::Named("MyType".to_string()));
+            }],
+        );
+        ctx.variable_types
+            .insert("x".to_string(), LspType::Named("MyType".to_string()));
         let expr = spanned(Expr::MethodCall {
             receiver: Box::new(spanned(Expr::Ident("x".to_string()))),
             method: spanned("to_string".to_string()),
@@ -1863,14 +2200,15 @@ mod tests {
     #[test]
     fn test_dot_completions_method_detail() {
         let mut ctx = make_ctx();
-        ctx.type_methods.insert("Vec".to_string(), vec![
-            MethodInfo {
+        ctx.type_methods.insert(
+            "Vec".to_string(),
+            vec![MethodInfo {
                 name: "len".to_string(),
                 params: vec![],
                 ret_type: Some("i64".to_string()),
                 from_trait: None,
-            },
-        ]);
+            }],
+        );
         let completions = ctx.get_dot_completions("Vec");
         assert_eq!(completions[0].label, "len");
         assert!(completions[0].detail.contains("i64"));
@@ -1879,13 +2217,14 @@ mod tests {
     #[test]
     fn test_dot_completions_field_detail() {
         let mut ctx = make_ctx();
-        ctx.structs.insert("Point".to_string(), vec![
-            FieldInfo {
+        ctx.structs.insert(
+            "Point".to_string(),
+            vec![FieldInfo {
                 name: "x".to_string(),
                 ty: LspType::Primitive("f64".to_string()),
                 type_display: "f64".to_string(),
-            },
-        ]);
+            }],
+        );
         let completions = ctx.get_dot_completions("Point");
         assert_eq!(completions[0].label, "x");
         assert!(completions[0].detail.contains("f64"));
@@ -1894,13 +2233,28 @@ mod tests {
     #[test]
     fn test_dot_completions_multiple_traits() {
         let mut ctx = make_ctx();
-        ctx.type_traits.insert("MyType".to_string(), vec!["Display".to_string(), "Debug".to_string()]);
-        ctx.trait_methods.insert("Display".to_string(), vec![
-            MethodInfo { name: "display".to_string(), params: vec![], ret_type: Some("str".to_string()), from_trait: Some("Display".to_string()) },
-        ]);
-        ctx.trait_methods.insert("Debug".to_string(), vec![
-            MethodInfo { name: "debug".to_string(), params: vec![], ret_type: Some("str".to_string()), from_trait: Some("Debug".to_string()) },
-        ]);
+        ctx.type_traits.insert(
+            "MyType".to_string(),
+            vec!["Display".to_string(), "Debug".to_string()],
+        );
+        ctx.trait_methods.insert(
+            "Display".to_string(),
+            vec![MethodInfo {
+                name: "display".to_string(),
+                params: vec![],
+                ret_type: Some("str".to_string()),
+                from_trait: Some("Display".to_string()),
+            }],
+        );
+        ctx.trait_methods.insert(
+            "Debug".to_string(),
+            vec![MethodInfo {
+                name: "debug".to_string(),
+                params: vec![],
+                ret_type: Some("str".to_string()),
+                from_trait: Some("Debug".to_string()),
+            }],
+        );
         let completions = ctx.get_dot_completions("MyType");
         assert_eq!(completions.len(), 2);
         assert!(completions.iter().any(|c| c.label == "display"));
@@ -2007,7 +2361,10 @@ mod tests {
             then: vec![spanned(Stmt::Expr(Box::new(spanned(Expr::Int(42)))))],
             else_: None,
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("i64".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("i64".to_string())
+        );
     }
 
     #[test]
@@ -2025,11 +2382,14 @@ mod tests {
         let expr = spanned(Expr::If {
             cond: Box::new(spanned(Expr::Bool(true))),
             then: vec![],
-            else_: Some(IfElse::Else(vec![
-                spanned(Stmt::Expr(Box::new(spanned(Expr::String("hello".to_string()))))),
-            ])),
+            else_: Some(IfElse::Else(vec![spanned(Stmt::Expr(Box::new(spanned(
+                Expr::String("hello".to_string()),
+            ))))])),
         });
-        assert_eq!(ctx.infer_expr_type(&expr), LspType::Primitive("str".to_string()));
+        assert_eq!(
+            ctx.infer_expr_type(&expr),
+            LspType::Primitive("str".to_string())
+        );
     }
 
     #[test]

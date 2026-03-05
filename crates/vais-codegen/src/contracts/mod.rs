@@ -45,7 +45,6 @@ impl CodeGenerator {
                 s.len() + 1,
                 escaped
             );
-
         }
 
         ir

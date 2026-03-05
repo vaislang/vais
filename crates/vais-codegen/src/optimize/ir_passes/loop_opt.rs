@@ -480,8 +480,7 @@ fn loop_unswitching(ir: &str) -> String {
                     let cond_var = rest[..comma].trim().to_string();
                     // Check if this condition is loop-invariant
                     if !loop_vars.contains(&cond_var) {
-                        invariant_conditions
-                            .push((cond_var, trimmed.to_string()));
+                        invariant_conditions.push((cond_var, trimmed.to_string()));
                     }
                 }
             }
@@ -513,9 +512,7 @@ fn loop_strength_reduction(ir: &str) -> String {
         let trimmed = lines[i].trim();
 
         // Detect loop headers
-        if trimmed.ends_with(':')
-            && (trimmed.contains("loop.start") || trimmed.contains("while"))
-        {
+        if trimmed.ends_with(':') && (trimmed.contains("loop.start") || trimmed.contains("while")) {
             // Collect the entire loop body range
             let loop_start = i;
             let mut loop_end = i + 1;
@@ -524,9 +521,7 @@ fn loop_strength_reduction(ir: &str) -> String {
             // Find the matching loop.end
             while loop_end < lines.len() {
                 let lt = lines[loop_end].trim();
-                if lt.ends_with(':')
-                    && (lt.contains("loop.start") || lt.contains("while"))
-                {
+                if lt.ends_with(':') && (lt.contains("loop.start") || lt.contains("while")) {
                     depth += 1;
                 }
                 if lt.ends_with(':') && lt.contains("loop.end") {
@@ -561,9 +556,7 @@ fn loop_strength_reduction(ir: &str) -> String {
             for line in lines.iter().take(loop_end).skip(loop_start) {
                 let lt = line.trim();
                 if lt.contains(" = mul i64 ") && !induction_vars.is_empty() {
-                    if let Some(reduced) =
-                        try_loop_strength_reduce(lt, &induction_vars)
-                    {
+                    if let Some(reduced) = try_loop_strength_reduce(lt, &induction_vars) {
                         result.push(reduced);
                         continue;
                     }
@@ -616,10 +609,7 @@ fn detect_induction_add(line: &str) -> Option<String> {
 ///
 /// Pattern: %x = mul i64 %iv, CONST  (where %iv is an induction variable)
 /// Emits: %x = mul i64 %iv, CONST  ; LSR candidate: mul->add (stride=CONST)
-fn try_loop_strength_reduce(
-    line: &str,
-    induction_vars: &HashSet<String>,
-) -> Option<String> {
+fn try_loop_strength_reduce(line: &str, induction_vars: &HashSet<String>) -> Option<String> {
     let trimmed = line.trim();
     let parts: Vec<&str> = trimmed.split(" = mul i64 ").collect();
     if parts.len() != 2 {

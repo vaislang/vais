@@ -160,7 +160,10 @@ impl GvnState {
         let rhs_vn = self.operand_vn(rhs);
 
         // Normalize commutative operations: put smaller VN first
-        let is_commutative = matches!(op, GvnOp::Add | GvnOp::Mul | GvnOp::And | GvnOp::Or | GvnOp::Xor);
+        let is_commutative = matches!(
+            op,
+            GvnOp::Add | GvnOp::Mul | GvnOp::And | GvnOp::Or | GvnOp::Xor
+        );
         let (norm_lhs, norm_rhs) = if is_commutative && lhs_vn > rhs_vn {
             (rhs_vn, lhs_vn)
         } else {
@@ -250,8 +253,12 @@ pub(crate) fn common_subexpression_elimination(ir: &str) -> String {
 /// Extract binary operation components for GVN.
 /// Returns (dest, interned_op, interned_ty, ty_str, lhs_operand, rhs_operand) if the line matches.
 /// Uses interned GvnOp/GvnTy to avoid String allocation on the hot path.
-fn extract_binop_components(line: &str) -> Option<(String, GvnOp, GvnTy, &'static str, String, String)> {
-    let ops: &[&str] = &["add", "sub", "mul", "sdiv", "and", "or", "xor", "shl", "ashr", "lshr"];
+fn extract_binop_components(
+    line: &str,
+) -> Option<(String, GvnOp, GvnTy, &'static str, String, String)> {
+    let ops: &[&str] = &[
+        "add", "sub", "mul", "sdiv", "and", "or", "xor", "shl", "ashr", "lshr",
+    ];
     let types: &[&str] = &["i64", "i32", "i16", "i8", "i1"];
 
     for op_str in ops {

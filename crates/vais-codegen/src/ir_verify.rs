@@ -45,7 +45,11 @@ impl std::fmt::Display for IrDiagnostic {
             DiagnosticSeverity::Warning => "warning",
         };
         if let Some(ref fn_name) = self.function_name {
-            write!(f, "IR {}:{} (in @{}): {}", tag, self.line, fn_name, self.message)
+            write!(
+                f,
+                "IR {}:{} (in @{}): {}",
+                tag, self.line, fn_name, self.message
+            )
         } else {
             write!(f, "IR {}:{}: {}", tag, self.line, self.message)
         }
@@ -335,7 +339,11 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
                     ret_part.to_string()
                 };
 
-                if !expected.is_empty() && ret_type != *expected && *expected != "void" && ret_type != "void" {
+                if !expected.is_empty()
+                    && ret_type != *expected
+                    && *expected != "void"
+                    && ret_type != "void"
+                {
                     diagnostics.push(IrDiagnostic {
                         line: i + 1,
                         severity: DiagnosticSeverity::Warning,
@@ -359,7 +367,10 @@ pub fn verify_text_ir_or_error(ir: &str) -> CodegenResult<()> {
     let diagnostics = verify_text_ir(ir);
 
     // Log Warning-level diagnostics to stderr so they are not silently lost.
-    for diag in diagnostics.iter().filter(|d| d.severity == DiagnosticSeverity::Warning) {
+    for diag in diagnostics
+        .iter()
+        .filter(|d| d.severity == DiagnosticSeverity::Warning)
+    {
         eprintln!("[IR verify] {}", diag);
     }
 
@@ -419,7 +430,11 @@ entry:
 }
 "#;
         let diags = verify_text_ir(ir);
-        assert!(diags.is_empty(), "Expected no diagnostics, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "Expected no diagnostics, got: {:?}",
+            diags
+        );
     }
 
     #[test]
@@ -561,7 +576,9 @@ entry:
 "#;
         let diags = verify_text_ir(ir);
         assert!(
-            diags.iter().any(|d| d.message.contains("return type mismatch")),
+            diags
+                .iter()
+                .any(|d| d.message.contains("return type mismatch")),
             "Expected return type mismatch, got: {:?}",
             diags
         );

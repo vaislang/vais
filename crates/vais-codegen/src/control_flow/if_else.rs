@@ -40,9 +40,10 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  br i1 {}, label %{}, label %{}",
-                    cond_bool, then_label, else_label
+                    cond_bool,
+                    then_label,
+                    else_label
                 );
-
 
                 // Then branch
                 write_ir!(ir, "{}:", then_label);
@@ -57,7 +58,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = load {}, {}* {}",
-                        loaded, llvm_type, llvm_type, then_val
+                        loaded,
+                        llvm_type,
+                        llvm_type,
+                        then_val
                     );
 
                     loaded
@@ -97,7 +101,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  {} = load {}, {}* {}",
-                        loaded, llvm_type, llvm_type, else_val
+                        loaded,
+                        llvm_type,
+                        llvm_type,
+                        else_val
                     );
 
                     loaded
@@ -153,21 +160,24 @@ impl CodeGenerator {
                         else_val_for_phi,
                         else_from_label
                     );
-
                 } else if !then_from_label.is_empty() {
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
-                        result, llvm_type, then_val_for_phi, then_from_label
+                        result,
+                        llvm_type,
+                        then_val_for_phi,
+                        then_from_label
                     );
-
                 } else if !else_from_label.is_empty() {
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
-                        result, llvm_type, else_val_for_phi, else_from_label
+                        result,
+                        llvm_type,
+                        else_val_for_phi,
+                        else_from_label
                     );
-
                 } else {
                     // Unreachable merge block — add terminator
                     ir.push_str("  unreachable\n");

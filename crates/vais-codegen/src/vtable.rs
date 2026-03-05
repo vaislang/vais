@@ -292,12 +292,17 @@ done:
         write_ir!(
             ir,
             "  {} = bitcast i8* {} to {}*",
-            cast_ptr, alloc_name, concrete_type
+            cast_ptr,
+            alloc_name,
+            concrete_type
         );
         write_ir!(
             ir,
             "  store {} {}, {}* {}",
-            concrete_type, concrete_value, concrete_type, cast_ptr
+            concrete_type,
+            concrete_value,
+            concrete_type,
+            cast_ptr
         );
 
         // Build the trait object struct
@@ -313,19 +318,25 @@ done:
         write_ir!(
             ir,
             "  {} = bitcast %vtable_type* {} to i8*",
-            vtable_cast, vtable_info.global_name
+            vtable_cast,
+            vtable_info.global_name
         );
 
         // Create the trait object { data_ptr, vtable_ptr }
         write_ir!(
             ir,
             "  {} = insertvalue {} undef, i8* {}, 0",
-            trait_obj_tmp1, TRAIT_OBJECT_TYPE, alloc_name
+            trait_obj_tmp1,
+            TRAIT_OBJECT_TYPE,
+            alloc_name
         );
         write_ir!(
             ir,
             "  {} = insertvalue {} {}, i8* {}, 1",
-            trait_obj_tmp2, TRAIT_OBJECT_TYPE, trait_obj_tmp1, vtable_cast
+            trait_obj_tmp2,
+            TRAIT_OBJECT_TYPE,
+            trait_obj_tmp1,
+            vtable_cast
         );
 
         (ir, trait_obj_tmp2)
@@ -351,7 +362,9 @@ done:
         write_ir!(
             ir,
             "  {} = extractvalue {} {}, 0",
-            data_ptr, TRAIT_OBJECT_TYPE, trait_object
+            data_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
         );
 
         // Extract vtable pointer from trait object
@@ -361,7 +374,9 @@ done:
         write_ir!(
             ir,
             "  {} = extractvalue {} {}, 1",
-            vtable_ptr, TRAIT_OBJECT_TYPE, trait_object
+            vtable_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
         );
 
         // Cast vtable pointer to the correct vtable type
@@ -372,7 +387,9 @@ done:
         write_ir!(
             ir,
             "  {} = bitcast i8* {} to {}*",
-            vtable_cast, vtable_ptr, vtable_type
+            vtable_cast,
+            vtable_ptr,
+            vtable_type
         );
 
         // Get the method function pointer from vtable
@@ -384,7 +401,11 @@ done:
         write_ir!(
             ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
-            fn_ptr_ptr, vtable_type, vtable_type, vtable_cast, vtable_slot
+            fn_ptr_ptr,
+            vtable_type,
+            vtable_type,
+            vtable_cast,
+            vtable_slot
         );
 
         // Load the function pointer
@@ -402,7 +423,10 @@ done:
         write_ir!(
             ir,
             "  {} = load {}, {}* {}",
-            fn_ptr, fn_type, fn_type, fn_ptr_ptr
+            fn_ptr,
+            fn_type,
+            fn_type,
+            fn_ptr_ptr
         );
 
         // Build argument list: data_ptr followed by method arguments

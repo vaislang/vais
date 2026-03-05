@@ -550,8 +550,7 @@ impl LlvmEmitter {
         // Named metadata
         self.output
             .push_str(&format!("!llvm.dbg.cu = !{{!{}}}\n", cu_id));
-        self.output
-            .push_str("!llvm.module.flags = !{!9999}\n");
+        self.output.push_str("!llvm.module.flags = !{!9999}\n");
         self.output
             .push_str("!9999 = !{i32 2, !\"Debug Info Version\", i32 3}\n");
 
@@ -867,12 +866,8 @@ mod tests {
         let mut module = MirModule::new("test_mod");
         module.bodies.push(body);
 
-        let ir = emit_llvm_ir_with_options(
-            &module,
-            "x86_64-unknown-linux-gnu",
-            OptLevel::Default,
-            true,
-        );
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::Default, true);
         assert!(ir.contains("DICompileUnit"));
         assert!(ir.contains("DIFile"));
         assert!(ir.contains("test_mod.vais"));
@@ -931,12 +926,8 @@ mod tests {
         let mut module = MirModule::new("test");
         module.bodies.push(body);
 
-        let ir = emit_llvm_ir_with_options(
-            &module,
-            "x86_64-unknown-linux-gnu",
-            OptLevel::MinSize,
-            true,
-        );
+        let ir =
+            emit_llvm_ir_with_options(&module, "x86_64-unknown-linux-gnu", OptLevel::MinSize, true);
         assert!(ir.contains("#2"));
         assert!(ir.contains("minsize"));
     }

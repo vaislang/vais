@@ -10,10 +10,7 @@ use semver::{Version, VersionReq};
 ///
 /// Returns the highest compatible version that satisfies the requirement,
 /// preferring non-prerelease versions when possible.
-pub fn resolve_best_version(
-    version_req_str: &str,
-    available_versions: &[&str],
-) -> Option<String> {
+pub fn resolve_best_version(version_req_str: &str, available_versions: &[&str]) -> Option<String> {
     let req = parse_version_req(version_req_str)?;
 
     let mut candidates: Vec<Version> = available_versions
@@ -78,9 +75,7 @@ pub fn are_compatible(req_a: &str, req_b: &str) -> bool {
 
     // Generate some test versions and check if any satisfy both
     let test_versions = generate_test_versions();
-    test_versions
-        .iter()
-        .any(|v| a.matches(v) && b.matches(v))
+    test_versions.iter().any(|v| a.matches(v) && b.matches(v))
 }
 
 /// Compare two semver strings, returning the ordering.

@@ -80,8 +80,8 @@ mod registration;
 mod state;
 mod stmt;
 mod stmt_visitor;
-pub mod string_pool;
 mod string_ops;
+pub mod string_pool;
 #[cfg(test)]
 mod struct_param_tests;
 mod target;

@@ -136,11 +136,7 @@ loop.end.0:
     fn test_constant_folding_modulo() {
         let ir = "  %0 = srem i64 17, 5\n";
         let result = constant_folding(ir);
-        assert!(
-            result.contains("2"),
-            "Expected 17 % 5 = 2, got: {}",
-            result
-        );
+        assert!(result.contains("2"), "Expected 17 % 5 = 2, got: {}", result);
     }
 
     #[test]

@@ -54,9 +54,11 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  store {} {}, {}* %{}",
-                    llvm_ty, value, llvm_ty, snapshot_name
+                    llvm_ty,
+                    value,
+                    llvm_ty,
+                    snapshot_name
                 );
-
 
                 // Register the snapshot
                 let old_var_name = format!("__old_{}", *counter);
@@ -190,9 +192,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
-                        cmp_result, ok_label, fail_label
+                        cmp_result,
+                        ok_label,
+                        fail_label
                     );
-
 
                     // Failure block
                     write_ir!(ir, "{}:", fail_label);
@@ -303,9 +306,9 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = load i64, i64* %{}",
-            old_value, decreases_info.storage_name
+            old_value,
+            decreases_info.storage_name
         );
-
 
         // Check that new_value < old_value (strictly decreasing)
         let ok_label = format!("decreases_check_ok_{}", *counter);
@@ -317,15 +320,18 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  {} = icmp slt i64 {}, {}",
-            cmp_result, new_value, old_value
+            cmp_result,
+            new_value,
+            old_value
         );
 
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            cmp_result, ok_label, fail_label
+            cmp_result,
+            ok_label,
+            fail_label
         );
-
 
         // Failure block
         write_ir!(ir, "{}:", fail_label);

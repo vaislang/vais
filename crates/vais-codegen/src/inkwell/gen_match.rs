@@ -261,8 +261,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Guard passed - execute body
                     self.builder.position_at_end(guard_pass);
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    let body_end = self.builder.get_insert_block()
-                        .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after match arm body (guarded)".into()))?;
+                    let body_end = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "ICE: no insert block after match arm body (guarded)".into(),
+                        )
+                    })?;
                     if body_end.get_terminator().is_none() {
                         self.builder
                             .build_unconditional_branch(merge_block)
@@ -277,8 +280,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 } else {
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    let body_end = self.builder.get_insert_block()
-                        .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after match arm body".into()))?;
+                    let body_end = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError("ICE: no insert block after match arm body".into())
+                    })?;
                     if body_end.get_terminator().is_none() {
                         self.builder
                             .build_unconditional_branch(merge_block)
@@ -292,8 +296,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.position_at_end(default_block);
             if let Some(arm) = default_arm {
                 let body_val = self.generate_expr(&arm.body.node)?;
-                let default_end = self.builder.get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after match default arm".into()))?;
+                let default_end = self.builder.get_insert_block().ok_or_else(|| {
+                    CodegenError::LlvmError("ICE: no insert block after match default arm".into())
+                })?;
                 if default_end.get_terminator().is_none() {
                     self.builder
                         .build_unconditional_branch(merge_block)
@@ -310,8 +315,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         } else {
             // Fall back to chained conditional branches for complex patterns
-            let mut current_block = self.builder.get_insert_block()
-                .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block at start of match chain".into()))?;
+            let mut current_block = self.builder.get_insert_block().ok_or_else(|| {
+                CodegenError::LlvmError("ICE: no insert block at start of match chain".into())
+            })?;
 
             for (i, arm) in arms.iter().enumerate() {
                 let is_last = i == arms.len() - 1;
@@ -398,8 +404,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
 
                 let body_val = self.generate_expr(&arm.body.node)?;
-                let body_end_block = self.builder.get_insert_block()
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after match arm body (chained)".into()))?;
+                let body_end_block = self.builder.get_insert_block().ok_or_else(|| {
+                    CodegenError::LlvmError(
+                        "ICE: no insert block after match arm body (chained)".into(),
+                    )
+                })?;
                 if body_end_block.get_terminator().is_none() {
                     self.builder
                         .build_unconditional_branch(merge_block)

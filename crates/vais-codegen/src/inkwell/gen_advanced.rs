@@ -258,8 +258,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.builder.position_at_end(then_block);
         let then_val = self.generate_expr(then_expr)?;
-        let then_end = self.builder.get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after ternary then branch".into()))?;
+        let then_end = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError("ICE: no insert block after ternary then branch".into())
+        })?;
         let then_terminated = then_end.get_terminator().is_some();
         if !then_terminated {
             self.builder
@@ -269,8 +270,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.builder.position_at_end(else_block);
         let else_val = self.generate_expr(else_expr)?;
-        let else_end = self.builder.get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after ternary else branch".into()))?;
+        let else_end = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError("ICE: no insert block after ternary else branch".into())
+        })?;
         let else_terminated = else_end.get_terminator().is_some();
         if !else_terminated {
             self.builder
@@ -338,8 +340,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if is_union {
             // Union: all fields share index 0, need to bitcast if types differ
             if let Some((_, val)) = field_name_values.first() {
-                let field_llvm_type = struct_type.get_field_type_at_index(0)
-                    .ok_or_else(|| CodegenError::LlvmError("ICE: union struct has no field at index 0".into()))?;
+                let field_llvm_type = struct_type.get_field_type_at_index(0).ok_or_else(|| {
+                    CodegenError::LlvmError("ICE: union struct has no field at index 0".into())
+                })?;
                 let coerced_val = if val.get_type() != field_llvm_type {
                     // Bitcast through memory for type punning (e.g., f64 -> i64)
                     if val.is_float_value() && field_llvm_type.is_int_type() {

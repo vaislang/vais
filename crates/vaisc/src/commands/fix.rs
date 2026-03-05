@@ -25,11 +25,7 @@ pub struct FixResult {
 }
 
 /// Run the fix command on a single file
-pub(crate) fn cmd_fix(
-    input: &PathBuf,
-    dry_run: bool,
-    verbose: bool,
-) -> Result<(), String> {
+pub(crate) fn cmd_fix(input: &PathBuf, dry_run: bool, verbose: bool) -> Result<(), String> {
     let source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
@@ -164,16 +160,10 @@ pub(crate) fn cmd_fix(
         input.display()
     );
     if !unused_vars.is_empty() {
-        println!(
-            "  Removed {} unused variable(s)",
-            unused_vars.len()
-        );
+        println!("  Removed {} unused variable(s)", unused_vars.len());
     }
     if !unused_imports.is_empty() {
-        println!(
-            "  Removed {} unused import(s)",
-            unused_imports.len()
-        );
+        println!("  Removed {} unused import(s)", unused_imports.len());
     }
 
     Ok(())
@@ -307,9 +297,7 @@ fn count_ident_in_expr(expr: &Expr, name: &str) -> usize {
                     .map(|a| count_ident_in_expr(&a.node, name))
                     .sum::<usize>()
         }
-        Expr::MethodCall {
-            receiver, args, ..
-        } => {
+        Expr::MethodCall { receiver, args, .. } => {
             count_ident_in_expr(&receiver.node, name)
                 + args
                     .iter()
@@ -378,8 +366,16 @@ fn count_ident_in_expr(expr: &Expr, name: &str) -> usize {
             }
             count
         }
-        Expr::Ref(e) | Expr::Deref(e) | Expr::Spread(e) | Expr::Await(e) | Expr::Try(e)
-        | Expr::Unwrap(e) | Expr::Spawn(e) | Expr::Lazy(e) | Expr::Force(e) | Expr::Old(e)
+        Expr::Ref(e)
+        | Expr::Deref(e)
+        | Expr::Spread(e)
+        | Expr::Await(e)
+        | Expr::Try(e)
+        | Expr::Unwrap(e)
+        | Expr::Spawn(e)
+        | Expr::Lazy(e)
+        | Expr::Force(e)
+        | Expr::Old(e)
         | Expr::Assume(e) => count_ident_in_expr(&e.node, name),
         Expr::Cast { expr, .. } => count_ident_in_expr(&expr.node, name),
         Expr::Range { start, end, .. } => {
@@ -484,9 +480,7 @@ fn collect_used_idents_in_expr(expr: &Expr, used: &mut HashSet<String>) {
                 collect_used_idents_in_expr(&arg.node, used);
             }
         }
-        Expr::MethodCall {
-            receiver, args, ..
-        } => {
+        Expr::MethodCall { receiver, args, .. } => {
             collect_used_idents_in_expr(&receiver.node, used);
             for arg in args {
                 collect_used_idents_in_expr(&arg.node, used);
@@ -551,8 +545,16 @@ fn collect_used_idents_in_expr(expr: &Expr, used: &mut HashSet<String>) {
             collect_used_idents_in_expr(&value.node, used);
         }
         Expr::Lambda { body, .. } => collect_used_idents_in_expr(&body.node, used),
-        Expr::Ref(e) | Expr::Deref(e) | Expr::Spread(e) | Expr::Await(e) | Expr::Try(e)
-        | Expr::Unwrap(e) | Expr::Spawn(e) | Expr::Lazy(e) | Expr::Force(e) | Expr::Old(e)
+        Expr::Ref(e)
+        | Expr::Deref(e)
+        | Expr::Spread(e)
+        | Expr::Await(e)
+        | Expr::Try(e)
+        | Expr::Unwrap(e)
+        | Expr::Spawn(e)
+        | Expr::Lazy(e)
+        | Expr::Force(e)
+        | Expr::Old(e)
         | Expr::Assume(e) => collect_used_idents_in_expr(&e.node, used),
         Expr::Cast { expr, .. } => collect_used_idents_in_expr(&expr.node, used),
         Expr::Range { start, end, .. } => {
@@ -760,13 +762,21 @@ fn collect_type_idents(ty: &Type, used: &mut HashSet<String>) {
         Type::RefLifetime { inner, .. } | Type::RefMutLifetime { inner, .. } => {
             collect_type_idents(&inner.node, used);
         }
-        Type::DynTrait { trait_name, generics } => {
+        Type::DynTrait {
+            trait_name,
+            generics,
+        } => {
             used.insert(trait_name.clone());
             for g in generics {
                 collect_type_idents(&g.node, used);
             }
         }
-        Type::Associated { base, trait_name, assoc_name, generics } => {
+        Type::Associated {
+            base,
+            trait_name,
+            assoc_name,
+            generics,
+        } => {
             collect_type_idents(&base.node, used);
             if let Some(tn) = trait_name {
                 used.insert(tn.clone());
@@ -892,8 +902,14 @@ F main() -> i64 {
     fn test_get_import_names_path() {
         let use_stmt = Use {
             path: vec![
-                Spanned { node: "std".to_string(), span: Span { start: 0, end: 3 } },
-                Spanned { node: "io".to_string(), span: Span { start: 4, end: 6 } },
+                Spanned {
+                    node: "std".to_string(),
+                    span: Span { start: 0, end: 3 },
+                },
+                Spanned {
+                    node: "io".to_string(),
+                    span: Span { start: 4, end: 6 },
+                },
             ],
             alias: None,
             items: None,
@@ -905,13 +921,20 @@ F main() -> i64 {
     #[test]
     fn test_get_import_names_selective() {
         let use_stmt = Use {
-            path: vec![
-                Spanned { node: "std".to_string(), span: Span { start: 0, end: 3 } },
-            ],
+            path: vec![Spanned {
+                node: "std".to_string(),
+                span: Span { start: 0, end: 3 },
+            }],
             alias: None,
             items: Some(vec![
-                Spanned { node: "File".to_string(), span: Span { start: 5, end: 9 } },
-                Spanned { node: "Dir".to_string(), span: Span { start: 11, end: 14 } },
+                Spanned {
+                    node: "File".to_string(),
+                    span: Span { start: 5, end: 9 },
+                },
+                Spanned {
+                    node: "Dir".to_string(),
+                    span: Span { start: 11, end: 14 },
+                },
             ]),
         };
         let names = get_import_names(&use_stmt);
@@ -921,10 +944,14 @@ F main() -> i64 {
     #[test]
     fn test_get_import_names_alias() {
         let use_stmt = Use {
-            path: vec![
-                Spanned { node: "long_module".to_string(), span: Span { start: 0, end: 11 } },
-            ],
-            alias: Some(Spanned { node: "lm".to_string(), span: Span { start: 15, end: 17 } }),
+            path: vec![Spanned {
+                node: "long_module".to_string(),
+                span: Span { start: 0, end: 11 },
+            }],
+            alias: Some(Spanned {
+                node: "lm".to_string(),
+                span: Span { start: 15, end: 17 },
+            }),
             items: None,
         };
         let names = get_import_names(&use_stmt);

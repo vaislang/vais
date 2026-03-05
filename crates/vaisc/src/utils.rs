@@ -183,10 +183,7 @@ pub(crate) fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str
 /// verification + logging logic.
 pub(crate) fn verify_ir_and_log(ir: &str, context: &str) {
     if let Err(verify_err) = vais_codegen::ir_verify::verify_text_ir_or_error(ir) {
-        eprintln!(
-            "[IR verify] {}: {}",
-            context, verify_err
-        );
+        eprintln!("[IR verify] {}: {}", context, verify_err);
     }
 }
 

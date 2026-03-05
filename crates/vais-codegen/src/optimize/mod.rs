@@ -185,7 +185,8 @@ entry:
         assert!(
             optimized.contains("INLINE") || after != before,
             "O3 should transform IR via inlining. before={}, after={}",
-            before, after
+            before,
+            after
         );
     }
 
@@ -330,8 +331,7 @@ dead:
         let optimized = optimize_ir(ir, OptLevel::O2);
         // Branch optimization + DCE should simplify the constant branch
         assert!(
-            optimized.contains("simplified from conditional")
-                || optimized.contains("unreachable"),
+            optimized.contains("simplified from conditional") || optimized.contains("unreachable"),
             "O2 should simplify constant branches. Result:\n{}",
             optimized
         );
@@ -361,7 +361,8 @@ entry:
         assert!(
             o2_size <= o0_size || o2_result.contains("GVN-CSE") || o2_result.contains("DCE"),
             "O2 should optimize the IR. O0 size={}, O2 size={}",
-            o0_size, o2_size
+            o0_size,
+            o2_size
         );
     }
 

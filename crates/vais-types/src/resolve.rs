@@ -498,19 +498,31 @@ impl TypeChecker {
                 match op {
                     BinOp::And => {
                         let l = Self::try_evaluate_predicate_f64_inner(
-                            &left.node, var_name, value, depth + 1,
+                            &left.node,
+                            var_name,
+                            value,
+                            depth + 1,
                         )?;
                         let r = Self::try_evaluate_predicate_f64_inner(
-                            &right.node, var_name, value, depth + 1,
+                            &right.node,
+                            var_name,
+                            value,
+                            depth + 1,
                         )?;
                         return Some(l && r);
                     }
                     BinOp::Or => {
                         let l = Self::try_evaluate_predicate_f64_inner(
-                            &left.node, var_name, value, depth + 1,
+                            &left.node,
+                            var_name,
+                            value,
+                            depth + 1,
                         )?;
                         let r = Self::try_evaluate_predicate_f64_inner(
-                            &right.node, var_name, value, depth + 1,
+                            &right.node,
+                            var_name,
+                            value,
+                            depth + 1,
                         )?;
                         return Some(l || r);
                     }
@@ -565,10 +577,16 @@ impl TypeChecker {
                 .map(|v| -v),
             Expr::Binary { op, left, right } => {
                 let l = Self::try_eval_const_expr_f64_inner(
-                    &left.node, var_name, var_value, depth + 1,
+                    &left.node,
+                    var_name,
+                    var_value,
+                    depth + 1,
                 )?;
                 let r = Self::try_eval_const_expr_f64_inner(
-                    &right.node, var_name, var_value, depth + 1,
+                    &right.node,
+                    var_name,
+                    var_value,
+                    depth + 1,
                 )?;
                 match op {
                     BinOp::Add => Some(l + r),

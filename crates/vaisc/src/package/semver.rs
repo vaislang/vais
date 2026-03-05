@@ -39,11 +39,9 @@ pub fn resolve_cached_version(
         });
     }
 
-    let req = parse_version_req(version_req_str).ok_or_else(|| {
-        PackageError::ParseError {
-            path: pkg_cache_dir.clone(),
-            message: format!("invalid version requirement: {}", version_req_str),
-        }
+    let req = parse_version_req(version_req_str).ok_or_else(|| PackageError::ParseError {
+        path: pkg_cache_dir.clone(),
+        message: format!("invalid version requirement: {}", version_req_str),
     })?;
 
     // Collect all cached versions
@@ -141,22 +139,19 @@ mod tests {
     use super::*;
     use std::fs;
 
-    fn setup_cache(
-        tmp: &Path,
-        name: &str,
-        versions: &[&str],
-    ) -> PathBuf {
+    fn setup_cache(tmp: &Path, name: &str, versions: &[&str]) -> PathBuf {
         let cache_root = tmp.join("registry");
         for ver in versions {
-            let extracted = cache_root.join("cache").join(name).join(ver).join("extracted");
+            let extracted = cache_root
+                .join("cache")
+                .join(name)
+                .join(ver)
+                .join("extracted");
             fs::create_dir_all(&extracted).unwrap();
             // Create a minimal vais.toml
             fs::write(
                 extracted.join("vais.toml"),
-                format!(
-                    "[package]\nname = \"{}\"\nversion = \"{}\"",
-                    name, ver
-                ),
+                format!("[package]\nname = \"{}\"\nversion = \"{}\"", name, ver),
             )
             .unwrap();
         }

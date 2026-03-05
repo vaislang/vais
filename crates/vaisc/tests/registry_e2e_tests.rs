@@ -2624,17 +2624,10 @@ version = "1.0.0"
                 match run_vaisc_from_root(&["uninstall", "test_installable"]) {
                     Ok(uninstall_output) => {
                         if uninstall_output.status.success() {
-                            assert!(
-                                !binary.exists(),
-                                "binary should be removed after uninstall"
-                            );
+                            assert!(!binary.exists(), "binary should be removed after uninstall");
                         } else {
-                            let stderr =
-                                String::from_utf8_lossy(&uninstall_output.stderr);
-                            eprintln!(
-                                "::warning::uninstall failed (non-fatal in CI): {}",
-                                stderr
-                            );
+                            let stderr = String::from_utf8_lossy(&uninstall_output.stderr);
+                            eprintln!("::warning::uninstall failed (non-fatal in CI): {}", stderr);
                             // Clean up manually
                             let _ = fs::remove_file(&binary);
                         }

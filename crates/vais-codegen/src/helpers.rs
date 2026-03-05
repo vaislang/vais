@@ -12,8 +12,8 @@ const RESERVED_BLOCK_LABELS: &[&str] = &["entry"];
 /// LLVM allows alphanumeric, '.', '_', and '$' in identifiers.
 #[allow(dead_code)] // Used by sanitize_llvm_name below; callers will migrate incrementally
 const LLVM_INVALID_CHARS: &[char] = &[
-    '<', '>', ',', ' ', ':', ';', '(', ')', '{', '}', '[', ']', '!', '@', '#', '%', '^', '&',
-    '*', '+', '=', '|', '\\', '/', '?', '~', '`', '"', '\'',
+    '<', '>', ',', ' ', ':', ';', '(', ')', '{', '}', '[', ']', '!', '@', '#', '%', '^', '&', '*',
+    '+', '=', '|', '\\', '/', '?', '~', '`', '"', '\'',
 ];
 
 /// Sanitize a parameter name to avoid collision with LLVM block labels.
@@ -87,8 +87,12 @@ impl CodeGenerator {
         // Create new constant
         let name = self.make_string_name();
         self.strings.counter += 1;
-        self.strings.constants.push((name.clone(), value.to_string()));
-        self.strings.dedup_cache.insert(value.to_string(), name.clone());
+        self.strings
+            .constants
+            .push((name.clone(), value.to_string()));
+        self.strings
+            .dedup_cache
+            .insert(value.to_string(), name.clone());
         name
     }
 

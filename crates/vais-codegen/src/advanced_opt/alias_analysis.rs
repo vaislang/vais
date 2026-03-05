@@ -233,10 +233,8 @@ impl AliasAnalysis {
                 }
 
                 if let Some(func_name) = current_func.take() {
-                    self.functions.insert(
-                        func_name,
-                        std::mem::take(&mut current_summary),
-                    );
+                    self.functions
+                        .insert(func_name, std::mem::take(&mut current_summary));
                 }
             }
         }

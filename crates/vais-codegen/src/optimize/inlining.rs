@@ -47,9 +47,7 @@ fn detect_loop_call_sites(ir: &str) -> HashMap<String, usize> {
         let trimmed = line.trim();
 
         // Detect loop header labels
-        if trimmed.ends_with(':')
-            && (trimmed.contains("loop.start") || trimmed.contains("while"))
-        {
+        if trimmed.ends_with(':') && (trimmed.contains("loop.start") || trimmed.contains("while")) {
             loop_depth += 1;
             continue;
         }
@@ -85,11 +83,7 @@ fn detect_loop_call_sites(ir: &str) -> HashMap<String, usize> {
 ///   bonus = -20 if leaf function (no outgoing calls)
 ///   bonus += -30 * loop_call_weight (called in loops => big benefit)
 ///   Final: cost + bonus
-fn compute_inline_cost(
-    func: &InlinableFunction,
-    caller_count: usize,
-    loop_weight: usize,
-) -> i64 {
+fn compute_inline_cost(func: &InlinableFunction, caller_count: usize, loop_weight: usize) -> i64 {
     let body_size = func.body.len() as i64;
     let callers = caller_count.max(1) as i64;
 
@@ -104,7 +98,13 @@ fn compute_inline_cost(
     let loop_bonus: i64 = -(loop_weight.min(5) as i64) * 30;
 
     // Small function bonus: very small functions almost always benefit from inlining
-    let size_bonus: i64 = if body_size <= 5 { -40 } else if body_size <= 10 { -20 } else { 0 };
+    let size_bonus: i64 = if body_size <= 5 {
+        -40
+    } else if body_size <= 10 {
+        -20
+    } else {
+        0
+    };
 
     base_cost + leaf_bonus + loop_bonus + size_bonus
 }
@@ -573,7 +573,10 @@ entry:
         let candidates = find_inline_candidates(ir);
         let leaf_func = candidates.iter().find(|f| f.name == "@leaf");
         assert!(leaf_func.is_some(), "leaf should be a candidate");
-        assert!(leaf_func.unwrap().is_leaf, "leaf should be detected as leaf function");
+        assert!(
+            leaf_func.unwrap().is_leaf,
+            "leaf should be detected as leaf function"
+        );
     }
 
     #[test]
@@ -620,14 +623,19 @@ loop.end.0:
 
         // Small leaf called once: very low cost
         let cost = compute_inline_cost(&small_leaf, 1, 0);
-        assert!(cost < 0, "Small leaf function should have negative cost (bonus), got {}", cost);
+        assert!(
+            cost < 0,
+            "Small leaf function should have negative cost (bonus), got {}",
+            cost
+        );
 
         // Same function called in a loop: even lower cost
         let loop_cost = compute_inline_cost(&small_leaf, 1, 1);
         assert!(
             loop_cost < cost,
             "Loop call should reduce cost further: loop_cost={}, normal={}",
-            loop_cost, cost
+            loop_cost,
+            cost
         );
     }
 
@@ -638,7 +646,9 @@ loop.end.0:
             name: String::from("@large"),
             params: vec![],
             return_type: String::from("i64"),
-            body: (0..50).map(|i| format!("%{} = add i64 0, {}", i, i)).collect(),
+            body: (0..50)
+                .map(|i| format!("%{} = add i64 0, {}", i, i))
+                .collect(),
             has_side_effects: false,
             has_external_calls: false,
             is_leaf: true,

@@ -25,7 +25,10 @@ impl CodeGenerator {
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
-                llvm_type, match_val_raw, llvm_type, stack_ptr
+                llvm_type,
+                match_val_raw,
+                llvm_type,
+                stack_ptr
             );
 
             stack_ptr
@@ -90,9 +93,10 @@ impl CodeGenerator {
                         write_ir!(
                             ir,
                             "  br i1 {}, label %{}, label %{}",
-                            guard_val, guard_pass, guard_fail
+                            guard_val,
+                            guard_pass,
+                            guard_fail
                         );
-
 
                         // Guard passed - execute body
                         write_ir!(ir, "{}:", guard_pass);
@@ -164,9 +168,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
-                        check_val, guard_bind, next_label
+                        check_val,
+                        guard_bind,
+                        next_label
                     );
-
 
                     // Bind pattern variables for guard to use
                     write_ir!(ir, "{}:", guard_bind);
@@ -189,9 +194,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
-                        guard_bool, arm_body_label, next_label
+                        guard_bool,
+                        arm_body_label,
+                        next_label
                     );
-
 
                     // Generate arm body (bindings already done)
                     write_ir!(ir, "{}:", arm_body_label);
@@ -200,9 +206,10 @@ impl CodeGenerator {
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",
-                        check_val, arm_body_label, next_label
+                        check_val,
+                        arm_body_label,
+                        next_label
                     );
-
 
                     // Generate arm body
                     write_ir!(ir, "{}:", arm_body_label);
@@ -293,7 +300,6 @@ impl CodeGenerator {
                 phi_args.join(", ")
             );
 
-
             // For Named types (enum/struct), the phi gives us a pointer.
             // Load the value so it can be used directly (e.g., as a return value).
             if is_named_type {
@@ -302,7 +308,10 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  {} = load {}, {}* {}",
-                    loaded, llvm_ty, llvm_ty, phi_result
+                    loaded,
+                    llvm_ty,
+                    llvm_ty,
+                    phi_result
                 );
 
                 Ok((loaded, ir))

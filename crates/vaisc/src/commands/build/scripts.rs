@@ -66,10 +66,20 @@ impl BuildScriptConfig {
 /// Build scripts from vais.toml execute shell commands. A warning is printed
 /// before execution so users are aware of what will run. Environment variables
 /// are passed per-process (not via set_var) to avoid multi-thread unsoundness.
-pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bool) -> Result<(), String> {
+pub fn run_pre_build(
+    config: &BuildScriptConfig,
+    project_dir: &Path,
+    verbose: bool,
+) -> Result<(), String> {
     if config.has_scripts() && !config.env.is_empty() {
-        eprintln!("  Warning: build scripts will set environment variables: {:?}",
-            config.env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>());
+        eprintln!(
+            "  Warning: build scripts will set environment variables: {:?}",
+            config
+                .env
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .collect::<Vec<_>>()
+        );
     }
 
     // Run pre-build command
@@ -97,10 +107,7 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
 
         // Determine how to run the script based on extension.
         // Use Command::arg() instead of string interpolation to prevent injection.
-        let ext = full_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         match ext {
             "sh" | "bash" => run_script_command("bash", &full_path, project_dir, &config.env)?,
             "py" => run_script_command("python3", &full_path, project_dir, &config.env)?,
@@ -116,7 +123,12 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
                         let _ = std::fs::set_permissions(&full_path, perms);
                     }
                 }
-                run_script_command(full_path.to_str().unwrap_or(""), &full_path, project_dir, &config.env)?;
+                run_script_command(
+                    full_path.to_str().unwrap_or(""),
+                    &full_path,
+                    project_dir,
+                    &config.env,
+                )?;
             }
         };
     }
@@ -125,7 +137,11 @@ pub fn run_pre_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bo
 }
 
 /// Run post-build steps
-pub fn run_post_build(config: &BuildScriptConfig, project_dir: &Path, verbose: bool) -> Result<(), String> {
+pub fn run_post_build(
+    config: &BuildScriptConfig,
+    project_dir: &Path,
+    verbose: bool,
+) -> Result<(), String> {
     if let Some(ref cmd) = config.post_build {
         if verbose {
             println!("  Running post-build: {}", cmd);
@@ -175,8 +191,17 @@ fn run_shell_command(cmd: &str, cwd: &Path, env_vars: &[(String, String)]) -> Re
 /// Execute a script file via an interpreter, passing the path as an argument.
 ///
 /// Uses `Command::arg()` instead of string interpolation to prevent command injection.
-fn run_script_command(interpreter: &str, script_path: &Path, cwd: &Path, env_vars: &[(String, String)]) -> Result<(), String> {
-    eprintln!("  Note: executing build script from vais.toml: {} {}", interpreter, script_path.display());
+fn run_script_command(
+    interpreter: &str,
+    script_path: &Path,
+    cwd: &Path,
+    env_vars: &[(String, String)],
+) -> Result<(), String> {
+    eprintln!(
+        "  Note: executing build script from vais.toml: {} {}",
+        interpreter,
+        script_path.display()
+    );
 
     let mut command = Command::new(interpreter);
     command.arg(script_path).current_dir(cwd);
@@ -184,9 +209,13 @@ fn run_script_command(interpreter: &str, script_path: &Path, cwd: &Path, env_var
         command.env(key, value);
     }
 
-    let output = command
-        .output()
-        .map_err(|e| format!("failed to execute script '{}': {}", script_path.display(), e))?;
+    let output = command.output().map_err(|e| {
+        format!(
+            "failed to execute script '{}': {}",
+            script_path.display(),
+            e
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

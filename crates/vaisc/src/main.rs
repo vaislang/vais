@@ -845,9 +845,11 @@ fn main() {
         Some(Commands::Fix { input, dry_run }) => {
             commands::fix::cmd_fix(&input, dry_run, cli.verbose)
         }
-        Some(Commands::New { name, lib, template }) => {
-            commands::simple::cmd_new(&name, lib, &template)
-        }
+        Some(Commands::New {
+            name,
+            lib,
+            template,
+        }) => commands::simple::cmd_new(&name, lib, &template),
         Some(Commands::Test {
             path,
             filter,

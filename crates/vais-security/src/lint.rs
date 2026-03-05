@@ -162,8 +162,7 @@ impl LintAnalyzer {
                     let name = &func.name.node;
                     // Skip main() — it's always the entry point
                     if name != "main" {
-                        self.defined_functions
-                            .insert(name.clone(), func.name.span);
+                        self.defined_functions.insert(name.clone(), func.name.span);
                     }
                 }
                 Item::Struct(s) => {
@@ -343,9 +342,7 @@ impl LintAnalyzer {
                 self.collect_usages_in_expr(&then.node);
                 self.collect_usages_in_expr(&else_.node);
             }
-            Expr::Loop {
-                iter, body, ..
-            } => {
+            Expr::Loop { iter, body, .. } => {
                 if let Some(it) = iter {
                     self.collect_usages_in_expr(&it.node);
                 }
@@ -609,15 +606,9 @@ impl LintAnalyzer {
                             code: "L300".to_string(),
                             level: LintLevel::Hint,
                             category: LintCategory::NamingConvention,
-                            message: format!(
-                                "function '{}' should use snake_case naming",
-                                name
-                            ),
+                            message: format!("function '{}' should use snake_case naming", name),
                             span: func.name.span,
-                            suggestion: Some(format!(
-                                "Rename to '{}'",
-                                to_snake_case(name)
-                            )),
+                            suggestion: Some(format!("Rename to '{}'", to_snake_case(name))),
                         });
                     }
                 }
@@ -629,10 +620,7 @@ impl LintAnalyzer {
                             code: "L301".to_string(),
                             level: LintLevel::Hint,
                             category: LintCategory::NamingConvention,
-                            message: format!(
-                                "struct '{}' should use PascalCase naming",
-                                name
-                            ),
+                            message: format!("struct '{}' should use PascalCase naming", name),
                             span: s.name.span,
                             suggestion: None,
                         });
@@ -645,10 +633,7 @@ impl LintAnalyzer {
                             code: "L302".to_string(),
                             level: LintLevel::Hint,
                             category: LintCategory::NamingConvention,
-                            message: format!(
-                                "enum '{}' should use PascalCase naming",
-                                name
-                            ),
+                            message: format!("enum '{}' should use PascalCase naming", name),
                             span: e.name.span,
                             suggestion: None,
                         });
@@ -787,17 +772,21 @@ impl LintAnalyzer {
                 if let Expr::Ident(name) = &func.node {
                     if matches!(
                         name.as_str(),
-                        "malloc" | "free" | "memcpy" | "memmove" | "memset"
-                            | "load_byte" | "store_byte" | "load_i64" | "store_i64"
+                        "malloc"
+                            | "free"
+                            | "memcpy"
+                            | "memmove"
+                            | "memset"
+                            | "load_byte"
+                            | "store_byte"
+                            | "load_i64"
+                            | "store_i64"
                     ) {
                         self.diagnostics.push(LintDiagnostic {
                             code: "L502".to_string(),
                             level: LintLevel::Warning,
                             category: LintCategory::UnsafeAudit,
-                            message: format!(
-                                "raw memory operation '{}' — review for safety",
-                                name
-                            ),
+                            message: format!("raw memory operation '{}' — review for safety", name),
                             span,
                             suggestion: Some(
                                 "Prefer safe abstractions (Vec, slice) over raw memory ops"
@@ -830,7 +819,10 @@ impl LintAnalyzer {
                     self.check_unsafe_in_stmt(&s.node, s.span);
                 }
             }
-            Expr::Match { expr: match_expr, arms } => {
+            Expr::Match {
+                expr: match_expr,
+                arms,
+            } => {
                 self.check_unsafe_in_expr(&match_expr.node, match_expr.span);
                 for arm in arms {
                     self.check_unsafe_in_expr(&arm.body.node, arm.body.span);
@@ -1108,7 +1100,10 @@ mod tests {
     fn test_lint_category_display() {
         assert_eq!(LintCategory::DeadCode.to_string(), "dead-code");
         assert_eq!(LintCategory::UnusedImport.to_string(), "unused-import");
-        assert_eq!(LintCategory::NamingConvention.to_string(), "naming-convention");
+        assert_eq!(
+            LintCategory::NamingConvention.to_string(),
+            "naming-convention"
+        );
     }
 
     #[test]
@@ -1175,7 +1170,11 @@ F main() -> i64 {
             .filter(|d| d.category == LintCategory::UnusedImport)
             .collect();
         // Both io and math are unused
-        assert!(unused.len() >= 2, "Expected >= 2 unused imports, got {}", unused.len());
+        assert!(
+            unused.len() >= 2,
+            "Expected >= 2 unused imports, got {}",
+            unused.len()
+        );
     }
 
     #[test]
@@ -1220,7 +1219,11 @@ F main() -> i64 {
             .iter()
             .filter(|d| d.category == LintCategory::DeadCode)
             .collect();
-        assert_eq!(dead_code.len(), 0, "Underscore prefix should suppress dead code");
+        assert_eq!(
+            dead_code.len(),
+            0,
+            "Underscore prefix should suppress dead code"
+        );
     }
 
     #[test]
@@ -1258,7 +1261,10 @@ F main() -> i64 {
             .iter()
             .filter(|d| d.category == LintCategory::UnsafeAudit)
             .collect();
-        assert!(!unsafe_audit.is_empty(), "Expected unsafe audit warnings for malloc/deref");
+        assert!(
+            !unsafe_audit.is_empty(),
+            "Expected unsafe audit warnings for malloc/deref"
+        );
     }
 
     #[test]

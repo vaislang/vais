@@ -193,9 +193,7 @@ fn test_emit_bitwise_ops() {
         }
     "#,
     );
-    assert!(
-        ir.contains("and") || ir.contains("or") || ir.contains("xor") || ir.contains("shl")
-    );
+    assert!(ir.contains("and") || ir.contains("or") || ir.contains("xor") || ir.contains("shl"));
 }
 
 // ============================================================================

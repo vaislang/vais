@@ -108,9 +108,7 @@ impl CodeGenerator {
                     kind: param_local.kind,
                     llvm_name: param_local.llvm_name.clone(),
                 };
-                self.fn_ctx
-                    .locals
-                    .insert(var_name.clone(), temp_local);
+                self.fn_ctx.locals.insert(var_name.clone(), temp_local);
 
                 // Generate the predicate expression as IR
                 let (pred_value, pred_ir) = self.generate_expr(predicate, counter)?;
@@ -137,9 +135,10 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  br i1 {}, label %{}, label %{}",
-                    cond_i1, ok_label, fail_label
+                    cond_i1,
+                    ok_label,
+                    fail_label
                 );
-
 
                 // Failure block -- call panic with a descriptive message
                 write_ir!(ir, "{}:", fail_label);

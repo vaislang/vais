@@ -41,7 +41,10 @@ F main() -> i64 {
     // Should abort with non-zero exit code (runtime assertion failure)
     let result = compile_and_run(source);
     match result {
-        Ok(r) => assert_ne!(r.exit_code, 0, "Expected runtime assertion failure, but program exited normally"),
+        Ok(r) => assert_ne!(
+            r.exit_code, 0,
+            "Expected runtime assertion failure, but program exited normally"
+        ),
         Err(_) => {} // Compilation failure also acceptable (shouldn't happen but defensive)
     }
 }

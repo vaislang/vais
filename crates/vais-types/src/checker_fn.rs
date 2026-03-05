@@ -366,9 +366,9 @@ impl TypeChecker {
             // Additionally check: if return type has a named lifetime that doesn't
             // appear in any parameter, it could be dangling (referencing a local).
             if let lifetime::Lifetime::Named(ref lt_name) = return_lt {
-                let param_has_lifetime = param_lifetimes.iter().any(|(_, plt)| {
-                    matches!(plt, lifetime::Lifetime::Named(n) if n == lt_name)
-                });
+                let param_has_lifetime = param_lifetimes
+                    .iter()
+                    .any(|(_, plt)| matches!(plt, lifetime::Lifetime::Named(n) if n == lt_name));
                 let is_explicit_param = lifetime_params.contains(lt_name);
 
                 // If the return lifetime is an explicit parameter but no input has it,

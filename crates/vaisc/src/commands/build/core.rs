@@ -756,7 +756,10 @@ pub(crate) fn cmd_build(
                             })?;
 
                             // Verify IR structural integrity before optimization.
-                            crate::utils::verify_ir_and_log(&raw_ir, &format!("module '{}'", module_stem));
+                            crate::utils::verify_ir_and_log(
+                                &raw_ir,
+                                &format!("module '{}'", module_stem),
+                            );
 
                             // Apply optimizations
                             let opt = match effective_opt_level {

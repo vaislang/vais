@@ -38,9 +38,11 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  store {} {}, {}* %{}",
-            return_llvm, return_value, return_llvm, return_var_name
+            return_llvm,
+            return_value,
+            return_llvm,
+            return_var_name
         );
-
 
         // Register 'return' in locals for expression generation
         // Use alloca since we stored the return value at return_var_name

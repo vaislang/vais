@@ -294,8 +294,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Impl(impl_block) => {
-                    if let Some(type_name) =
-                        Self::get_impl_type_name(&impl_block.target_type.node)
+                    if let Some(type_name) = Self::get_impl_type_name(&impl_block.target_type.node)
                     {
                         for method in &impl_block.methods {
                             if !method.node.generics.is_empty() {
@@ -549,7 +548,9 @@ mod tests {
         let entry = context.append_basic_block(func, "entry");
         gen.builder.position_at_end(entry);
 
-        let result = gen.generate_string_literal("hello").expect("ICE: inkwell operation failed in generator");
+        let result = gen
+            .generate_string_literal("hello")
+            .expect("ICE: inkwell operation failed in generator");
         // String literals return a fat pointer struct { ptr, i64 }
         assert!(result.is_struct_value());
     }

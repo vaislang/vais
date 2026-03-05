@@ -24,8 +24,7 @@ fn gen_js_with_config(source: &str, config: JsConfig) -> String {
 fn gen_js_result(source: &str) -> Result<String, String> {
     let module = parse(source).map_err(|e| format!("{:?}", e))?;
     let mut gen = JsCodeGenerator::new();
-    gen.generate_module(&module)
-        .map_err(|e| format!("{}", e))
+    gen.generate_module(&module).map_err(|e| format!("{}", e))
 }
 
 // ============================================================================

@@ -192,9 +192,12 @@ pub(crate) fn cmd_new(name: &str, lib: bool, template: &str) -> Result<(), Strin
             "binary" | "bin" => "binary",
             "lib" | "library" => "lib",
             "workspace" | "ws" => "workspace",
-            other => return Err(format!(
-                "unknown template '{}'. Available: binary, lib, workspace", other
-            )),
+            other => {
+                return Err(format!(
+                    "unknown template '{}'. Available: binary, lib, workspace",
+                    other
+                ))
+            }
         }
     };
 
@@ -392,11 +395,7 @@ description = "CLI for {name}"
     fs::write(project_dir.join(".gitignore"), gitignore_content)
         .map_err(|e| format!("failed to create .gitignore: {}", e))?;
 
-    println!(
-        "{} Created workspace project '{}'",
-        "✓".green(),
-        name
-    );
+    println!("{} Created workspace project '{}'", "✓".green(), name);
     println!("  {}", project_dir.display());
     println!("  Members:");
     println!("    crates/{} (library)", lib_name);

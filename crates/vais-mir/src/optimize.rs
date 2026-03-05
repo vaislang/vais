@@ -706,9 +706,8 @@ pub fn escape_analysis(body: &mut Body) {
         }
 
         // Check terminator arguments
-        if let Some(
-            Terminator::Call { args, .. } | Terminator::TailCall { args, .. },
-        ) = &bb.terminator
+        if let Some(Terminator::Call { args, .. } | Terminator::TailCall { args, .. }) =
+            &bb.terminator
         {
             for arg in args {
                 match arg {
@@ -1151,10 +1150,7 @@ mod tests {
             Rvalue::Use(Operand::Copy(Place::local(param0))),
         );
         // y = copy x  (should be propagated to: y = copy param0)
-        builder.assign(
-            Place::local(y),
-            Rvalue::Use(Operand::Copy(Place::local(x))),
-        );
+        builder.assign(Place::local(y), Rvalue::Use(Operand::Copy(Place::local(x))));
         // _0 = copy y
         builder.assign(
             builder.return_place(),

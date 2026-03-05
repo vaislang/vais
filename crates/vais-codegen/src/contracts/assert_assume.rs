@@ -35,9 +35,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_i1, ok_label, fail_label
+            cond_i1,
+            ok_label,
+            fail_label
         );
-
 
         // Failure block
         write_ir!(ir, "{}:", fail_label);
@@ -102,9 +103,10 @@ impl CodeGenerator {
             write_ir!(
                 ir,
                 "  br i1 {}, label %{}, label %{}",
-                cond_i1, ok_label, fail_label
+                cond_i1,
+                ok_label,
+                fail_label
             );
-
 
             // Failure block
             write_ir!(ir, "{}:", fail_label);

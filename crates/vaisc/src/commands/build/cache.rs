@@ -87,7 +87,10 @@ impl BinaryCache {
         entry: &CacheEntry,
     ) -> Result<(), String> {
         if !is_valid_hex(source_hash) {
-            return Err(format!("invalid source hash (must be hex): {}", source_hash));
+            return Err(format!(
+                "invalid source hash (must be hex): {}",
+                source_hash
+            ));
         }
         let bin_dir = self.bin_dir();
         fs::create_dir_all(&bin_dir)
@@ -96,8 +99,7 @@ impl BinaryCache {
         let cached_bin = bin_dir.join(format!("{}.bin", source_hash));
         let meta_path = bin_dir.join(format!("{}.meta", source_hash));
 
-        fs::copy(binary_path, &cached_bin)
-            .map_err(|e| format!("failed to cache binary: {}", e))?;
+        fs::copy(binary_path, &cached_bin).map_err(|e| format!("failed to cache binary: {}", e))?;
 
         let meta_json = serde_json::to_string_pretty(entry)
             .map_err(|e| format!("failed to serialize cache metadata: {}", e))?;
@@ -187,9 +189,7 @@ impl BinaryCache {
                 if let Ok(meta) = fs::metadata(&path) {
                     if let Ok(modified) = meta.modified() {
                         if let Ok(age) = now.duration_since(modified) {
-                            if age.as_secs() > max_age_secs
-                                && fs::remove_file(&path).is_ok()
-                            {
+                            if age.as_secs() > max_age_secs && fs::remove_file(&path).is_ok() {
                                 removed += 1;
                             }
                         }
@@ -259,7 +259,8 @@ pub fn compute_source_hash(
         let mut file_hasher = Sha256::new();
         let mut buf = [0u8; 8192];
         loop {
-            let n = reader.read(&mut buf)
+            let n = reader
+                .read(&mut buf)
                 .map_err(|e| format!("failed to read '{}': {}", file.display(), e))?;
             if n == 0 {
                 break;
@@ -425,7 +426,8 @@ mod tests {
         fs::write(&file1, "F main() -> i64 { 0 }").unwrap();
         fs::write(&file2, "F helper() -> i64 { 1 }").unwrap();
 
-        let hash1 = compute_source_hash(&[file1.clone(), file2.clone()], 0, "native", false).unwrap();
+        let hash1 =
+            compute_source_hash(&[file1.clone(), file2.clone()], 0, "native", false).unwrap();
         let hash2 = compute_source_hash(&[file2, file1], 0, "native", false).unwrap();
 
         // Order shouldn't matter (sorted internally)
@@ -460,10 +462,38 @@ mod tests {
 
     #[test]
     fn test_human_size() {
-        assert_eq!(CacheStats { entries: 0, total_size: 0 }.human_size(), "0 B");
-        assert_eq!(CacheStats { entries: 0, total_size: 512 }.human_size(), "512 B");
-        assert_eq!(CacheStats { entries: 0, total_size: 2048 }.human_size(), "2.0 KB");
-        assert_eq!(CacheStats { entries: 0, total_size: 1_500_000 }.human_size(), "1.4 MB");
+        assert_eq!(
+            CacheStats {
+                entries: 0,
+                total_size: 0
+            }
+            .human_size(),
+            "0 B"
+        );
+        assert_eq!(
+            CacheStats {
+                entries: 0,
+                total_size: 512
+            }
+            .human_size(),
+            "512 B"
+        );
+        assert_eq!(
+            CacheStats {
+                entries: 0,
+                total_size: 2048
+            }
+            .human_size(),
+            "2.0 KB"
+        );
+        assert_eq!(
+            CacheStats {
+                entries: 0,
+                total_size: 1_500_000
+            }
+            .human_size(),
+            "1.4 MB"
+        );
     }
 
     #[test]

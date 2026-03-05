@@ -246,6 +246,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 모드: 자동진행
 
+### Phase 97: CI 복구 & Codecov 강화
+
+> **목표**: CI green 복구 (fmt/clippy 수정 + push) + Codecov 69% → 72% 목표
+> **기대 효과**: 홈페이지 CI 상태 badge 정상화, 코드 품질 지표 향상
+
+- [ ] 1. cargo fmt 적용 + Clippy 검증 (Sonnet)
+- [ ] 2. Codecov 커버리지 강화 — 69% → 72% 목표 (Sonnet)
+- [ ] 3. origin/main에 push + CI green 확인 (Sonnet) [blockedBy: 1, 2]
+진행률: 0/3 (0%)
+
+---
+
+## 📜 이전 작업 (2026-03-05)
+
 ### Phase 96: 기술 부채 해소 — 안정성/보안/최신화/유지보수
 
 > **목표**: 프로젝트 현황 리포트 기반 기술 부채 체계적 해소 — unwrap Result 전환, 보안 감사, 의존성 최신화, 코드 정결성

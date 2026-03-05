@@ -150,7 +150,10 @@ impl CodeGenerator {
                         }
                         Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
                             let span = self.last_error_span.unwrap_or(item.span);
-                            self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                            self.collected_errors.push(SpannedCodegenError {
+                                error: e,
+                                span: Some(span),
+                            });
                         }
                         Err(e) => return Err(e),
                     }
@@ -169,7 +172,10 @@ impl CodeGenerator {
                             }
                             Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
                                 let span = self.last_error_span.unwrap_or(method.span);
-                                self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                                self.collected_errors.push(SpannedCodegenError {
+                                    error: e,
+                                    span: Some(span),
+                                });
                             }
                             Err(e) => return Err(e),
                         }
@@ -183,18 +189,18 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        match self.generate_method_with_span(
-                            &type_name,
-                            &method.node,
-                            method.span,
-                        ) {
+                        match self.generate_method_with_span(&type_name, &method.node, method.span)
+                        {
                             Ok(ir_fragment) => {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');
                             }
                             Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
                                 let span = self.last_error_span.unwrap_or(method.span);
-                                self.collected_errors.push(SpannedCodegenError { error: e, span: Some(span) });
+                                self.collected_errors.push(SpannedCodegenError {
+                                    error: e,
+                                    span: Some(span),
+                                });
                             }
                             Err(e) => return Err(e),
                         }

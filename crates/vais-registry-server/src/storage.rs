@@ -649,10 +649,16 @@ mod tests {
         let manifest: PackageManifest = toml::from_str(toml).unwrap();
         assert_eq!(manifest.package.name, "my-pkg");
         assert_eq!(manifest.package.version, "2.0.0");
-        assert_eq!(manifest.package.description, Some("A test package".to_string()));
+        assert_eq!(
+            manifest.package.description,
+            Some("A test package".to_string())
+        );
         assert_eq!(manifest.package.authors, vec!["alice", "bob"]);
         assert_eq!(manifest.package.license, Some("MIT".to_string()));
-        assert_eq!(manifest.package.homepage, Some("https://example.com".to_string()));
+        assert_eq!(
+            manifest.package.homepage,
+            Some("https://example.com".to_string())
+        );
         assert_eq!(manifest.package.keywords, vec!["test", "vais"]);
         assert_eq!(manifest.package.categories, vec!["web"]);
         assert_eq!(manifest.dependencies.len(), 1);

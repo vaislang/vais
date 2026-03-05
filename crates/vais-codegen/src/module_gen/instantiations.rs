@@ -239,8 +239,7 @@ impl CodeGenerator {
                                 )
                             } else {
                                 let ty = self.ast_type_to_resolved(&p.ty.node);
-                                let concrete_ty =
-                                    vais_types::substitute_type(&ty, &substitutions);
+                                let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
                                 (p.name.node.to_string(), concrete_ty, p.is_mut)
                             }
                         })
@@ -470,9 +469,7 @@ impl CodeGenerator {
                             ))
                         })?
                         .clone();
-                    body_ir.push_str(
-                        &self.generate_specialized_function(&template, &method_inst)?,
-                    );
+                    body_ir.push_str(&self.generate_specialized_function(&template, &method_inst)?);
                     body_ir.push('\n');
                     // Clean up the temporary template
                     self.generics.function_templates.remove(&method_key);

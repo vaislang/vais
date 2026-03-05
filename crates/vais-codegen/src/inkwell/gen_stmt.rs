@@ -206,8 +206,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Then block
         self.builder.position_at_end(then_block);
         let then_val = self.generate_block(then_stmts)?;
-        let then_end_block = self.builder.get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after then branch in if expression".into()))?;
+        let then_end_block = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError(
+                "ICE: no insert block after then branch in if expression".into(),
+            )
+        })?;
         let then_terminated = then_end_block.get_terminator().is_some();
         if !then_terminated {
             self.builder
@@ -222,8 +225,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         } else {
             self.context.struct_type(&[], false).const_zero().into()
         };
-        let else_end_block = self.builder.get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after else branch in if expression".into()))?;
+        let else_end_block = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::LlvmError(
+                "ICE: no insert block after else branch in if expression".into(),
+            )
+        })?;
         let else_terminated = else_end_block.get_terminator().is_some();
         if !else_terminated {
             self.builder
@@ -437,7 +443,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if self
             .builder
             .get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after range for-loop body".into()))?
+            .ok_or_else(|| {
+                CodegenError::LlvmError("ICE: no insert block after range for-loop body".into())
+            })?
             .get_terminator()
             .is_none()
         {
@@ -599,7 +607,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if self
             .builder
             .get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after condition loop body".into()))?
+            .ok_or_else(|| {
+                CodegenError::LlvmError("ICE: no insert block after condition loop body".into())
+            })?
             .get_terminator()
             .is_none()
         {
@@ -679,7 +689,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if self
             .builder
             .get_insert_block()
-            .ok_or_else(|| CodegenError::LlvmError("ICE: no insert block after while loop body".into()))?
+            .ok_or_else(|| {
+                CodegenError::LlvmError("ICE: no insert block after while loop body".into())
+            })?
             .get_terminator()
             .is_none()
         {

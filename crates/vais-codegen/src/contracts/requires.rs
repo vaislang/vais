@@ -74,9 +74,10 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_i1, ok_label, fail_label
+            cond_i1,
+            ok_label,
+            fail_label
         );
-
 
         // Failure block
         write_ir!(ir, "{}:", fail_label);
@@ -103,7 +104,11 @@ impl CodeGenerator {
         write_ir!(
             ir,
             "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})",
-            kind_value, condition_str, file_str, line, func_str
+            kind_value,
+            condition_str,
+            file_str,
+            line,
+            func_str
         );
 
         ir.push_str("  unreachable\n");

@@ -79,7 +79,8 @@ pub fn find_cached_registry_dep(
             if entry_path.is_dir() {
                 let extracted = entry_path.join("extracted");
                 if extracted.exists() {
-                    let dir_name = entry_path.file_name()
+                    let dir_name = entry_path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("");
                     // Use the semver module to check if this version satisfies the requirement
@@ -282,12 +283,12 @@ fn build_dependency_graph(
                     let path = d.path.as_ref().expect("guarded by is_some()");
                     Some(base_dir.join(path))
                 }
-                Dependency::Version(v) => cache_root
-                    .and_then(|c| find_cached_registry_dep(c, dep_name, v)),
+                Dependency::Version(v) => {
+                    cache_root.and_then(|c| find_cached_registry_dep(c, dep_name, v))
+                }
                 Dependency::Detailed(d) => {
                     let version = d.version.as_deref().unwrap_or("*");
-                    cache_root
-                        .and_then(|c| find_cached_registry_dep(c, dep_name, version))
+                    cache_root.and_then(|c| find_cached_registry_dep(c, dep_name, version))
                 }
             };
 
@@ -467,11 +468,7 @@ mod cycle_tests {
 
     #[test]
     fn test_format_cycles_one() {
-        let cycles = vec![vec![
-            "a".to_string(),
-            "b".to_string(),
-            "a".to_string(),
-        ]];
+        let cycles = vec![vec!["a".to_string(), "b".to_string(), "a".to_string()]];
         let result = format_cycles(&cycles);
         assert!(result.contains("1 dependency cycle"));
         assert!(result.contains("a -> b -> a"));
