@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772731766601,
+  "lastUpdate": 1772744776561,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -30071,6 +30071,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1855678,
             "range": "± 19193",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "8c6d43fc4a539c07ea008f674421c2eaf604137d",
+          "message": "fix: 홈페이지 복구 — playground.yml 제거 + 누락 docs 파일 추가\n\n근본 원인: playground.yml이 playground/dist를 GitHub Pages 루트에\n직접 배포하여 website.yml의 홈페이지를 덮어씌움.\nwebsite.yml이 이미 /playground/ 서브경로에 통합 배포하므로 중복 제거.\n\n추가로 docs-site/src/compiler/at-a-glance.md가 SUMMARY.md에서\n참조되지만 커밋되지 않아 mdbook 빌드 실패 → website.yml 실패.\n누락 파일 추가하여 docs 빌드 복구.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-06T05:53:49+09:00",
+          "tree_id": "f863bf758ec6c41dd037fa84e724e3b7603d779f",
+          "url": "https://github.com/vaislang/vais/commit/8c6d43fc4a539c07ea008f674421c2eaf604137d"
+        },
+        "date": 1772744776138,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 1973,
+            "range": "± 13",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 4893,
+            "range": "± 245",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5835,
+            "range": "± 70",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10540,
+            "range": "± 168",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 16919,
+            "range": "± 73",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 32846,
+            "range": "± 112",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29464,
+            "range": "± 263",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 64495,
+            "range": "± 222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 275476,
+            "range": "± 1709",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 411773,
+            "range": "± 2340",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 108616,
+            "range": "± 521",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 697428,
+            "range": "± 2933",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 155527,
+            "range": "± 877",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 186012,
+            "range": "± 457",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 189487,
+            "range": "± 1278",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 238803,
+            "range": "± 813",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 499216,
+            "range": "± 2544",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 703685,
+            "range": "± 26266",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 392499,
+            "range": "± 1517",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1105416,
+            "range": "± 22275",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 36787,
+            "range": "± 184",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 179208,
+            "range": "± 3286",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 353068,
+            "range": "± 1979",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1752142,
+            "range": "± 24429",
             "unit": "ns/iter"
           }
         ]
