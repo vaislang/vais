@@ -435,6 +435,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 6. [테스트] registry uninstall 실패 시 CI warning annotation (Warning) ✅
 진행률: 6/6 (100%)
 
+## 리뷰 발견사항 (2026-03-05 #3)
+> 출처: /team-review commit 91c7d7e (Tarjan SCC/comptime 정확성/보안 강화)
+
+- [x] 1. [정확성] comptime.rs:722 — `len()` 함수가 `s.len()` (바이트 길이) 반환 → `s.chars().count()` (문자 수)로 통일 ✅ 2026-03-05
+  변경: comptime.rs len() 빌트인에서 `s.len()` → `s.chars().count()` 전환, 인덱싱과 일관성 확보
+진행률: 1/1 (100%)
+
 ---
 
 **메인테이너**: Steve

@@ -719,7 +719,7 @@ impl ComptimeEvaluator {
                     });
                 }
                 match &arg_vals[0] {
-                    ComptimeValue::String(s) => Ok(ComptimeValue::Int(s.len() as i64)),
+                    ComptimeValue::String(s) => Ok(ComptimeValue::Int(s.chars().count() as i64)),
                     ComptimeValue::Array(arr) => Ok(ComptimeValue::Int(arr.len() as i64)),
                     _ => Err(TypeError::Mismatch {
                         expected: "string or array".to_string(),
