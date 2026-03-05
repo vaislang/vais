@@ -2632,7 +2632,7 @@ version = "1.0.0"
                             let stderr =
                                 String::from_utf8_lossy(&uninstall_output.stderr);
                             eprintln!(
-                                "uninstall failed (non-fatal in CI): {}",
+                                "::warning::uninstall failed (non-fatal in CI): {}",
                                 stderr
                             );
                             // Clean up manually

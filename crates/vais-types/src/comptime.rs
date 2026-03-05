@@ -786,9 +786,10 @@ impl ComptimeEvaluator {
                 Ok(arr[idx as usize].clone())
             }
             ComptimeValue::String(s) => {
-                if idx < 0 || idx >= s.len() as i64 {
+                let char_count = s.chars().count();
+                if idx < 0 || idx >= char_count as i64 {
                     return Err(TypeError::Mismatch {
-                        expected: format!("index in range 0..{}", s.len()),
+                        expected: format!("index in range 0..{}", char_count),
                         found: format!("{}", idx),
                         span: Some(span),
                     });

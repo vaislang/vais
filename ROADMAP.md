@@ -424,6 +424,17 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 7. [아키텍처] verify_text_ir_or_error()에 Warning 진단 eprintln 로깅 추가 ✅
 진행률: 7/7 (100%)
 
+## 리뷰 발견사항 (2026-03-05 #2)
+> 출처: /team-review commit 3295990 (phase96 기술 부채 해소)
+
+- [x] 1. [정확성] Tarjan SCC `if let Some` → `expect()` 전환 — silent failure 방지 (Critical) ✅
+- [x] 2. [정확성] comptime 문자열 인덱싱 바운드 체크를 `s.chars().count()`로 수정 (Critical) ✅
+- [x] 3. [정확성] checker_module strict 모드 `if let Some` → `expect()` (Warning) ✅
+- [x] 4. [보안] CI action SHA 고정 taiki-e/install-action (Warning) ✅
+- [x] 5. [보안] WASM async_stack_size overflow 방어 checked_add (Warning) ✅
+- [x] 6. [테스트] registry uninstall 실패 시 CI warning annotation (Warning) ✅
+진행률: 6/6 (100%)
+
 ---
 
 **메인테이너**: Steve
