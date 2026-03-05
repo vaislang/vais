@@ -52,7 +52,7 @@ vais-security = { path = "../vais-security" }
 hex = "0.4"
 
 # Registry support
-ureq = { version = "2.12", features = ["gzip", "json"] }
+ureq = { version = "3.2", features = ["gzip", "json"] }
 flate2 = { workspace = true }
 tar = { workspace = true }
 dirs = "6"
