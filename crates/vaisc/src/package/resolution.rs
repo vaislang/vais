@@ -235,7 +235,7 @@ fn resolve_deps_recursive(
 ///
 /// Returns a list of all cycles found, where each cycle is a vector
 /// of package names forming the cycle. An empty result means no cycles.
-#[allow(dead_code)]
+#[allow(dead_code)] // Public API reserved for `vaisc build --check-cycles` integration
 pub fn detect_all_cycles(
     manifest: &PackageManifest,
     base_dir: &Path,
@@ -249,7 +249,7 @@ pub fn detect_all_cycles(
 ///
 /// Each key is a package name, and the value is a list of its direct
 /// dependency names.
-#[allow(dead_code)]
+#[allow(dead_code)] // Used by detect_all_cycles (reserved public API)
 fn build_dependency_graph(
     manifest: &PackageManifest,
     base_dir: &Path,
@@ -278,7 +278,8 @@ fn build_dependency_graph(
             let dep = &manifest.dependencies[dep_name];
             let dep_path = match dep {
                 Dependency::Detailed(d) if d.path.is_some() => {
-                    let path = d.path.as_ref().unwrap();
+                    // safe: guard `d.path.is_some()` ensures this branch only matches Some
+                    let path = d.path.as_ref().expect("guarded by is_some()");
                     Some(base_dir.join(path))
                 }
                 Dependency::Version(v) => cache_root
@@ -323,7 +324,7 @@ fn build_dependency_graph(
 /// Find all cycles in a directed graph using DFS.
 ///
 /// Uses Tarjan-inspired coloring: white (unvisited), gray (in progress), black (done).
-#[allow(dead_code)]
+#[allow(dead_code)] // Used by detect_all_cycles (reserved public API)
 fn find_all_cycles(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
     #[derive(Clone, Copy, PartialEq)]
     enum Color {
@@ -383,7 +384,7 @@ fn find_all_cycles(graph: &HashMap<String, Vec<String>>) -> Vec<Vec<String>> {
 }
 
 /// Format cycle information for user-friendly error messages.
-#[allow(dead_code)]
+#[allow(dead_code)] // Public API reserved for `vaisc build --check-cycles` integration
 pub fn format_cycles(cycles: &[Vec<String>]) -> String {
     if cycles.is_empty() {
         return "No dependency cycles detected.".to_string();

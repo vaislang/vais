@@ -85,7 +85,7 @@ pub fn resolve_cached_version(
         .find(|(v, _)| v.pre.is_empty())
         .or_else(|| candidates.first())
         .cloned()
-        .unwrap(); // safe: candidates is non-empty
+        .expect("candidates is non-empty (checked above)");
 
     Ok(ResolvedVersion {
         version: version.to_string(),

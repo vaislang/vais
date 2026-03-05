@@ -793,7 +793,13 @@ impl ComptimeEvaluator {
                         span: Some(span),
                     });
                 }
-                let ch = s.chars().nth(idx as usize).unwrap();
+                // safe: bounds check above guarantees idx is valid for byte length,
+                // but chars() iterates codepoints. Use unwrap_or for safety.
+                let ch = s.chars().nth(idx as usize).ok_or_else(|| TypeError::Mismatch {
+                    expected: format!("valid char index in range 0..{}", s.chars().count()),
+                    found: format!("{}", idx),
+                    span: Some(span),
+                })?;
                 Ok(ComptimeValue::String(ch.to_string()))
             }
             _ => Err(TypeError::Mismatch {

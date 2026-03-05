@@ -302,12 +302,10 @@ fn find_branch_on_cmp(lines: &[&str], cmp_line: usize, cmp_var: &str) -> Option<
 fn has_array_access_in_true_branch(lines: &[&str], br_line: usize, idx_var: &str) -> bool {
     // Extract true target label from: br i1 %cmp, label %then, label %else
     let br = lines[br_line].trim();
-    let true_label = extract_true_label(br);
-    if true_label.is_none() {
-        return false;
-    }
-    // safe: checked above that true_label is Some
-    let true_label = true_label.unwrap();
+    let true_label = match extract_true_label(br) {
+        Some(label) => label,
+        None => return false,
+    };
 
     // Find the true label block and check for GEP using idx_var
     let mut in_true_block = false;

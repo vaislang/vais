@@ -162,7 +162,13 @@ impl WasmSandbox {
         }
 
         // Set stack size limit
-        engine_config.max_wasm_stack(config.limits.stack.max_bytes as usize);
+        // In wasmtime 42+, max_wasm_stack must not exceed async_stack_size.
+        // Ensure async_stack_size is at least max_wasm_stack + headroom for host calls.
+        let wasm_stack = config.limits.stack.max_bytes as usize;
+        engine_config.max_wasm_stack(wasm_stack);
+        // Reserve at least 512 KB for host function call frames on top of the wasm stack.
+        let host_headroom = 512 * 1024;
+        engine_config.async_stack_size(wasm_stack + host_headroom);
 
         // Enable debug if requested
         if config.debug {

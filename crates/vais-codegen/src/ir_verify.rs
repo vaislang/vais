@@ -300,13 +300,12 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
 
-        if trimmed.starts_with("define ") {
+        if let Some(after_define) = trimmed.strip_prefix("define ") {
             // Extract return type: the last whitespace-delimited token before `@`.
             // LLVM IR `define` lines may include linkage, visibility, calling
             // convention, and parameter attributes before the return type, e.g.:
             //   define dso_local fastcc i64 @name(...)
             // The return type is always the token immediately before `@`.
-            let after_define = &trimmed[7..]; // skip "define "
             if let Some(at_pos) = after_define.find('@') {
                 let prefix = after_define[..at_pos].trim();
                 // Take last whitespace-delimited token as the return type
@@ -326,9 +325,8 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
         }
 
         // Check ret instructions
-        if trimmed.starts_with("ret ") {
+        if let Some(ret_part) = trimmed.strip_prefix("ret ") {
             if let Some(ref expected) = current_ret_type {
-                let ret_part = &trimmed[4..]; // skip "ret "
                 let ret_type = if ret_part == "void" {
                     "void".to_string()
                 } else if let Some(space) = ret_part.find(' ') {

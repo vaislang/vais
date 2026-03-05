@@ -232,11 +232,12 @@ impl AliasAnalysis {
                     }
                 }
 
-                // safe: checked above that current_func.is_some()
-                self.functions.insert(
-                    current_func.take().unwrap(),
-                    std::mem::take(&mut current_summary),
-                );
+                if let Some(func_name) = current_func.take() {
+                    self.functions.insert(
+                        func_name,
+                        std::mem::take(&mut current_summary),
+                    );
+                }
             }
         }
     }

@@ -3,7 +3,7 @@
 
 > **현재 버전**: 0.1.0 (Phase 76 파일럿 검증 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-04 (Phase 95 완료 — IR 검증 게이트 전경로 통합/E2E 1,620 달성/문서 동기화)
+> **최종 업데이트**: 2026-03-05 (Phase 96 계획 — 기술 부채 해소: 안정성/보안/최신화/유지보수)
 
 ---
 
@@ -238,33 +238,44 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 93 | 성능 최적화 심화 | 2-level 치환 캐시 (L1 16+L2 256), IdentPool 인터닝, 문자열 상수 dedup, CI Welch's t-test 회귀 감지 | 1,540 |
 | 94 | 생태계 확장 | Ed25519 서명, SemVer 해석, 순환 감지, vaisc fix, lint 7종, 빌드 캐시/스크립트/템플릿 | 1,540 |
 | 95 | 검증 강화 · E2E 확장 | IR 검증 게이트 7경로 통합, assert_compiles 10→1, +80 E2E, 문서 수치 동기화 | 1,620 |
+| 96 | 기술 부채 해소 | Registry 테스트 수정, cargo-audit CI, unwrap→Result, toml 1.0/Cranelift 0.129/Wasmtime 42, LSP 모듈화 | 1,620 |
 
 ---
 
-## 현재 작업 (2026-03-04)
+## 현재 작업 (2026-03-05)
+
+모드: 자동진행
+
+### Phase 96: 기술 부채 해소 — 안정성/보안/최신화/유지보수
+
+> **목표**: 프로젝트 현황 리포트 기반 기술 부채 체계적 해소 — unwrap Result 전환, 보안 감사, 의존성 최신화, 코드 정결성
+> **기대 효과**: 프로덕션 panic 경로 축소, 보안 취약점 자동 감지, 의존성 최신 상태, 코드베이스 유지보수성 향상
+
+- [x] 1. Registry 테스트 실패 수정 + Clippy warning 2건 해결 (Sonnet) ✅ 2026-03-05
+  변경: registry_e2e_tests.rs (test_install_and_uninstall_roundtrip graceful 에러 처리), ir_verify.rs (starts_with→strip_prefix Clippy 수정 2건)
+- [x] 2. cargo-audit CI 통합 + 보안 감사 게이트 추가 (Sonnet) ✅ 2026-03-05
+  변경: .github/workflows/ci.yml (install-action@cargo-audit 캐시 설치, --deny warnings 플래그)
+- [x] 3. unwrap() 핵심 경로 Result 전환 — 프로덕션 핵심 경로 수정 (Opus) ✅ 2026-03-05
+  변경: comptime.rs (char unwrap→ok_or_else), checker_module/mod.rs (iterator unwrap→if let), resolution.rs/semver.rs (expect+guard), alias_analysis.rs/bounds_check_elim.rs (if let/match), graph.rs (HashMap unwrap→safe pattern)
+- [x] 4. 의존성 업그레이드 — toml 1.0, Cranelift 0.129, Wasmtime 42 (Sonnet) ✅ 2026-03-05
+  변경: Cargo.toml 4크레이트 toml 0.9→1.0, vais-jit Cargo.toml cranelift 0.128→0.129, vais-dynload Cargo.toml wasmtime 41→42 + wasm_sandbox.rs async_stack_size 설정
+- [x] 5. LSP 대형 파일 모듈화 + #[allow(dead_code)] 25건 정리 (Sonnet) ✅ 2026-03-05
+  변경: vais-lsp type_resolve.rs→type_resolve/mod.rs+helpers.rs(128줄 추출), backend.rs→backend/mod.rs+types.rs(67줄)+builtins.rs(91줄), error_formatter.rs dead_code 제거
+진행률: 5/5 (100%)
+
+---
+
+## 📜 이전 작업 (2026-03-05)
 
 모드: 자동진행
 
 ### Phase 95: 컴파일러 검증 강화 & E2E 확장
 
-> **목표**: IR 검증 게이트 전경로 통합, assert_compiles 최종 전환, E2E 1,600 달성, 문서 수치 동기화
-> **기대 효과**: codegen 버그 조기 발견율 향상, 테스트 품질 완성, 문서 정확성 보장
-
 - [x] 1. IR 검증 게이트 전경로 통합 + 진단 개선 (Opus) ✅ 2026-03-04
-  변경: ir_verify.rs (IrDiagnostic에 function_name 추가), backend.rs/core.rs/per_module.rs/test.rs/repl.rs (5개 경로에 verify_text_ir_or_error 게이트 추가)
-- [x] 2. assert_compiles→assert_exit_code 최종 전환 + ignored 테스트 분류 (Sonnet) ✅ 2026-03-04
-  변경: phase91_lifetime.rs (9/10개 assert_compiles→assert_exit_code 전환, 1개 codegen 한계로 유지+NOTE)
-- [x] 3. E2E 1,600 달성 — 미커버 언어 기능 테스트 추가 (Sonnet) ✅ 2026-03-04
-  변경: phase95_coverage.rs (신규 80개 E2E — 패턴/구조체/산술/논리/루프/클로저/trait/auto-return 등), e2e/main.rs (모듈 등록)
-- [x] 4. README/문서 수치 동기화 + 예제 갤러리 갱신 (Haiku) ✅ 2026-03-04
-  변경: README.md (std 79, examples 174, E2E 1,620+, tests 9,300+), CLAUDE.md (동기화)
+- [x] 2. assert_compiles→assert_exit_code 최종 전환 (Sonnet) ✅ 2026-03-04
+- [x] 3. E2E 1,600 달성 — +80 E2E (Sonnet) ✅ 2026-03-04
+- [x] 4. README/문서 수치 동기화 (Haiku) ✅ 2026-03-04
 진행률: 4/4 (100%)
-
----
-
-## 📜 이전 작업 (2026-03-04)
-
-모드: 자동진행
 
 ### Phase 92-pre: Playground 예제 에러 수정
 

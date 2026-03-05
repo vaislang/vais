@@ -177,8 +177,12 @@ impl DependencyGraph {
                             // So to_scc must be processed before from_scc
                             // This means we add an edge to_scc -> from_scc in the condensation
                             // (reverse the edge direction for processing order)
-                            if scc_forward_deps.get_mut(&to_scc).unwrap().insert(from_scc) {
-                                *scc_in_degree.get_mut(&from_scc).unwrap() += 1;
+                            if let Some(deps) = scc_forward_deps.get_mut(&to_scc) {
+                                if deps.insert(from_scc) {
+                                    if let Some(deg) = scc_in_degree.get_mut(&from_scc) {
+                                        *deg += 1;
+                                    }
+                                }
                             }
                         }
                     }
@@ -280,14 +284,20 @@ impl DependencyGraph {
                 if !state.index.contains_key(dep) {
                     // Recurse
                     self.tarjan_visit(dep, state);
-                    let dep_low = *state.low_link.get(dep).unwrap();
-                    let file_low = state.low_link.get_mut(file).unwrap();
-                    *file_low = (*file_low).min(dep_low);
+                    let dep_low = state.low_link.get(dep).copied();
+                    if let (Some(dep_low), Some(file_low)) =
+                        (dep_low, state.low_link.get_mut(file))
+                    {
+                        *file_low = (*file_low).min(dep_low);
+                    }
                 } else if state.on_stack.contains(dep) {
                     // Back edge
-                    let dep_index = *state.index.get(dep).unwrap();
-                    let file_low = state.low_link.get_mut(file).unwrap();
-                    *file_low = (*file_low).min(dep_index);
+                    let dep_index = state.index.get(dep).copied();
+                    if let (Some(dep_index), Some(file_low)) =
+                        (dep_index, state.low_link.get_mut(file))
+                    {
+                        *file_low = (*file_low).min(dep_index);
+                    }
                 }
             }
         }

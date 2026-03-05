@@ -19,7 +19,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
-toml = "0.9"
+toml = "1.0"
 
 # Cryptography
 sha2 = { workspace = true }

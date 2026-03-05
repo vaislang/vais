@@ -171,7 +171,9 @@ impl TypeChecker {
             if !ownership_errors.is_empty() {
                 if strict {
                     // Strict mode: return first error
-                    return Err(ownership_errors.into_iter().next().unwrap());
+                    if let Some(first_err) = ownership_errors.into_iter().next() {
+                        return Err(first_err);
+                    }
                 } else {
                     // Warn mode: add to warnings
                     for err in &ownership_errors {

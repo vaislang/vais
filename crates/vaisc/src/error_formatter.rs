@@ -76,7 +76,6 @@ pub fn format_codegen_error(error: &CodegenError, source: &str, path: &Path) -> 
 ///
 /// Uses the span carried by [`SpannedCodegenError`] to render a precise
 /// source-location diagnostic.
-#[allow(dead_code)]
 pub fn format_spanned_codegen_error(
     error: &SpannedCodegenError,
     source: &str,
