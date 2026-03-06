@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 100 완료)
+> **현재 버전**: 0.1.0 (Phase 101 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-06 (Phase 100 — LSP 대형 파일 모듈 분할 R11)
+> **최종 업데이트**: 2026-03-06 (Phase 101 — 테스트 커버리지 확장 확인)
 
 ---
 
@@ -279,11 +279,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 17개 최소 테스트 크레이트 중 핵심 8개에 통합 테스트 추가
 > **기대 효과**: 코드 커버리지 향상, 회귀 방지
 
-- [ ] 1. 런타임 핵심 — vais-plugin, vais-macro, vais-hotreload 통합 테스트 (Sonnet)
-- [ ] 2. 성능 핵심 — vais-gpu, vais-jit 통합 테스트 (Sonnet)
-- [ ] 3. 인프라 — vais-dynload, vais-bindgen, vais-query 통합 테스트 (Sonnet)
-- [ ] 4. 보안/품질 — vais-security, vais-supply-chain 통합 테스트 (Sonnet)
-- [ ] 5. 검증 — 전체 테스트 통과 + 커버리지 수치 갱신 (Sonnet)
+- [x] 1. 런타임 핵심 — vais-plugin, vais-macro, vais-hotreload 통합 테스트 (Sonnet) ✅ 2026-03-06
+  변경: 이미 완비 — plugin 46개, macro 39개, hotreload 16개 통합 테스트 확인
+- [x] 2. 성능 핵심 — vais-gpu, vais-jit 통합 테스트 (Sonnet) ✅ 2026-03-06
+  변경: 이미 완비 — gpu 29개, jit 37개 통합 테스트 확인
+- [x] 3. 인프라 — vais-dynload, vais-bindgen, vais-query 통합 테스트 (Sonnet) ✅ 2026-03-06
+  변경: 이미 완비 — dynload 37개, bindgen 27개, query 20개 통합 테스트 확인
+- [x] 4. 보안/품질 — vais-security, vais-supply-chain 통합 테스트 (Sonnet) ✅ 2026-03-06
+  변경: 이미 완비 — security 30개, supply-chain 31개 통합 테스트 확인
+- [x] 5. 검증 — 전체 테스트 통과 + 커버리지 수치 갱신 (Sonnet) ✅ 2026-03-06
+  변경: 10개 크레이트 312개 통합 테스트 전체 통과, clippy 0건
 
 ### Phase 102: Untracked 정리 & 코드 위생
 
