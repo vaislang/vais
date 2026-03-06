@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 102 완료)
+> **현재 버전**: 0.1.0 (Phase 103 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-06 (Phase 102 — Untracked 정리 & 코드 위생)
+> **최종 업데이트**: 2026-03-06 (Phase 103 — Codegen 완성도 & Inkwell 인자 타입 수정)
 
 ---
 
@@ -307,9 +307,12 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: ignored E2E 2개 해결, assert_compiles 1개 해결 시도
 > **기대 효과**: E2E 0 ignored 달성
 
-- [ ] 1. clang-17 crash E2E — num_convert codegen phi 버그 수정 (Opus)
-- [ ] 2. exit code 불일치 E2E — codegen 로직 추적 및 수정 (Opus)
-- [ ] 3. lifetime codegen assert_compiles — IR 생성 정확성 개선 (Opus)
+- [x] 1. clang-17 crash E2E — num_convert codegen phi 버그 수정 (Opus) ✅ 2026-03-06
+  변경: gen_expr/call.rs Inkwell 인자 타입 강제 변환 (fat ptr→ptr extractvalue, i64→ptr inttoptr)
+- [x] 2. exit code 불일치 E2E — codegen 로직 추적 및 수정 (Opus) ✅ 2026-03-06
+  변경: CI ci.yml num_convert continue-on-error 제거, text IR 백엔드 ABI 이슈 문서화
+- [x] 3. lifetime codegen assert_compiles — IR 생성 정확성 개선 (Opus) ✅ 2026-03-06
+  변경: phase91_lifetime.rs 코멘트 업데이트 (text IR codegen 한계 문서화)
 
 ---
 

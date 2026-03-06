@@ -574,11 +574,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         };
 
-        // Generate arguments
-        let arg_values: Vec<BasicMetadataValueEnum> = args
-            .iter()
-            .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
-            .collect::<CodegenResult<Vec<_>>>()?;
+        // Generate arguments, coercing types to match function parameter expectations.
+        // - String fat pointers { ptr, i64 } → extract raw ptr for extern C (printf/puts)
+        // - Integer values (i64) → inttoptr when function expects ptr (free/realloc)
+        let fn_type = fn_value.get_type();
+        let param_types: Vec<_> = fn_type.get_param_types();
+        let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::with_capacity(args.len());
+        for (i, arg) in args.iter().enumerate() {
+            let val = self.generate_expr(&arg.node)?;
+            let coerced: BasicMetadataValueEnum = if let Some(param_ty) = param_types.get(i) {
+                if param_ty.is_pointer_type() && val.is_struct_value() {
+                    // Fat string { ptr, i64 } → extract raw ptr
+                    let raw_ptr = self.extract_str_raw_ptr(val)?;
+                    raw_ptr.into()
+                } else if param_ty.is_pointer_type() && val.is_int_value() {
+                    // i64 → inttoptr (e.g. free(ptr) called with i64 handle)
+                    let i8_ptr_type = self
+                        .context
+                        .i8_type()
+                        .ptr_type(AddressSpace::default());
+                    let ptr_val = self
+                        .builder
+                        .build_int_to_ptr(val.into_int_value(), i8_ptr_type, "arg_inttoptr")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    ptr_val.into()
+                } else {
+                    val.into()
+                }
+            } else {
+                // Variadic argument beyond declared params — coerce struct fat ptrs
+                if val.is_struct_value() {
+                    let raw_ptr = self.extract_str_raw_ptr(val)?;
+                    raw_ptr.into()
+                } else {
+                    val.into()
+                }
+            };
+            arg_values.push(coerced);
+        }
 
         // Build call
         let call = self

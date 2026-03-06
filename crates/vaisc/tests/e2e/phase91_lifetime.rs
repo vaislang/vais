@@ -213,7 +213,7 @@ F main() -> i64 = 42
 #[test]
 fn e2e_lifetime_no_ref_params_returns_ref() {
     // No ref params, returns a ref → gets 'static from elision (valid for now)
-    // NOTE: assert_compiles only -- codegen emits `ret i64* 42` (literal, not pointer), clang rejects
+    // NOTE: assert_compiles only -- text IR codegen emits `ret i64* 42` (literal, not pointer), clang rejects
     let source = r#"
 F get_ref() -> &i64 {
     42
