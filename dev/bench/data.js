@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772744776561,
+  "lastUpdate": 1772765023621,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -30239,6 +30239,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1752142,
             "range": "± 24429",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "e8273a6c166ddd922388e38e496dda0f96c60a05",
+          "message": "fix(ci): CI green 복구 — Security Audit SHA, Clippy lint, clang-17 명시\n\n- Security Audit: taiki-e/install-action 무효 SHA → @cargo-audit 태그 참조\n- Clippy: Rust 1.94 result_large_err lint → #[allow] 추가 (core.rs cmd_build)\n- clang: CI Ubuntu에서 CC=clang-17 환경변수 설정 (7개 LLVM 설치 블록)\n- E2E helpers: CC/CLANG env var 지원 (하드코딩 \"clang\" 제거)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-03-06T09:08:44+09:00",
+          "tree_id": "90544b06bd13b2b4548eac210e5b2705c4f6d194",
+          "url": "https://github.com/vaislang/vais/commit/e8273a6c166ddd922388e38e496dda0f96c60a05"
+        },
+        "date": 1772765023177,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2382,
+            "range": "± 27",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5431,
+            "range": "± 42",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6218,
+            "range": "± 249",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10781,
+            "range": "± 104",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18249,
+            "range": "± 62",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34531,
+            "range": "± 166",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30666,
+            "range": "± 118",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67256,
+            "range": "± 378",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 296609,
+            "range": "± 4071",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 452146,
+            "range": "± 4112",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 103287,
+            "range": "± 499",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 779251,
+            "range": "± 18043",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 153371,
+            "range": "± 1942",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 181700,
+            "range": "± 1444",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 184562,
+            "range": "± 873",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 233661,
+            "range": "± 1237",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 520721,
+            "range": "± 2508",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 737491,
+            "range": "± 5877",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 385803,
+            "range": "± 2674",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1173659,
+            "range": "± 14644",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 40001,
+            "range": "± 2587",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 195176,
+            "range": "± 1298",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 375396,
+            "range": "± 9507",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1829575,
+            "range": "± 41560",
             "unit": "ns/iter"
           }
         ]
