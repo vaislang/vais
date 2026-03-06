@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 99 완료)
+> **현재 버전**: 0.1.0 (Phase 100 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-06 (Phase 99 — expect→Result 전환 & panic 축소)
+> **최종 업데이트**: 2026-03-06 (Phase 100 — LSP 대형 파일 모듈 분할 R11)
 
 ---
 
@@ -263,11 +263,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 1,500줄+ 대형 파일 6개 모듈 분할
 > **기대 효과**: 유지보수성 향상, 코드 탐색 용이
 
-- [ ] 1. vais-lsp type_resolve/mod.rs (2,461줄) → 4~5개 서브모듈 분할 (Sonnet)
-- [ ] 2. vais-lsp backend/mod.rs (1,935줄) → 3~4개 서브모듈 분할 (Sonnet)
-- [ ] 3. vais-codegen types.rs (1,697줄) → 2~3개 서브모듈 분할 (Sonnet)
-- [ ] 4. vais-codegen-js expr.rs (1,676줄) → 2~3개 서브모듈 분할 (Sonnet)
-- [ ] 5. 검증 — E2E 전체 통과 + clippy 0건 확인 (Sonnet)
+- [x] 1. vais-lsp type_resolve/mod.rs (2,461줄) → 4개 서브모듈 분할 (Sonnet) ✅ 2026-03-06
+  변경: mod.rs(125줄) + context.rs(241줄) + inference.rs(224줄) + tests.rs(1,886줄)
+- [x] 2. vais-lsp backend/mod.rs (1,935줄) → 3개 서브모듈 분할 (Sonnet) ✅ 2026-03-06
+  변경: mod.rs(127줄) + language_server.rs(1,019줄) + tests.rs(792줄)
+- [x] 3. vais-codegen types.rs (1,697줄) → 3개 서브모듈 분할 (Sonnet) ✅ 2026-03-06
+  변경: types/mod.rs(222줄) + conversion.rs(763줄) + tests.rs(721줄)
+- [x] 4. vais-codegen-js expr.rs (1,676줄) → 3개 모듈 분할 (Sonnet) ✅ 2026-03-06
+  변경: expr.rs(714줄) + expr_helpers.rs(100줄) + expr_tests.rs(870줄)
+- [x] 5. 검증 — E2E 전체 통과 + clippy 0건 확인 (Sonnet) ✅ 2026-03-06
+  변경: E2E 1618 passed, 0 failed, 3 ignored, clippy 0건
 
 ### Phase 101: 테스트 커버리지 확장 — 최소 테스트 크레이트 강화
 

@@ -10,12 +10,16 @@
 //! ```
 
 mod expr;
+mod expr_helpers;
 mod items;
 mod modules;
 mod sourcemap;
 mod stmt;
 pub mod tree_shaking;
 mod types;
+
+#[cfg(test)]
+mod expr_tests;
 
 pub use sourcemap::SourceMap;
 pub use types::JsType;

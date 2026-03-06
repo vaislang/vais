@@ -1,6 +1,6 @@
 //! Top-level item code generation: Vais Item → JavaScript declarations
 
-use crate::expr::sanitize_js_ident;
+use crate::expr_helpers::sanitize_js_ident;
 use crate::{ImplInfo, JsCodeGenerator, Result};
 use vais_ast::*;
 

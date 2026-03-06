@@ -1,6 +1,6 @@
 //! Statement code generation: Vais Stmt → JavaScript statement string
 
-use crate::expr::sanitize_js_ident;
+use crate::expr_helpers::sanitize_js_ident;
 use crate::{JsCodeGenerator, Result};
 use vais_ast::*;
 
