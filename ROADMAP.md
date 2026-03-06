@@ -243,9 +243,24 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
-## 현재 작업 (2026-03-05)
+## 현재 작업 (2026-03-06)
 
 모드: 자동진행
+
+### Phase 98: CI Green 복구 — Security Audit/Clippy/clang 버전 수정
+
+> **목표**: CI 3개 실패 job 수정 (Security Audit SHA 404, Clippy result_large_err, clang-18 crash)
+> **기대 효과**: 홈페이지 CI badge green 복구
+
+- [x] 1. Security Audit SHA 수정 — taiki-e/install-action@cargo-audit 태그 참조로 교체
+- [x] 2. Clippy result_large_err 수정 — cmd_build에 #[allow(clippy::result_large_err)] 추가
+- [x] 3. CI clang 버전 명시 — CC=clang-17 환경변수 + helpers.rs CC/CLANG env 지원
+- [x] 4. 검증 — cargo check + clippy 0건, E2E 빌드 성공
+진행률: 4/4 (100%)
+
+---
+
+## 📜 이전 작업 (2026-03-05)
 
 ### Phase 97: CI 복구 & Codecov 강화
 

@@ -59,7 +59,11 @@ pub fn compile_and_run_with_extra_sources(
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
     // Compile LLVM IR to executable with clang
-    let mut cmd = Command::new("clang");
+    // Respect CC or CLANG env var to allow CI to pin clang version (e.g. clang-17)
+    let clang_bin = std::env::var("CC")
+        .or_else(|_| std::env::var("CLANG"))
+        .unwrap_or_else(|_| "clang".to_string());
+    let mut cmd = Command::new(&clang_bin);
     cmd.arg(&ll_path)
         .arg("-o")
         .arg(&exe_path)
@@ -111,7 +115,11 @@ pub fn compile_and_run_with_coverage(source: &str) -> Result<RunResult, String> 
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
     // Compile with coverage instrumentation flags
-    let clang_output = Command::new("clang")
+    // Respect CC or CLANG env var to allow CI to pin clang version (e.g. clang-17)
+    let clang_bin = std::env::var("CC")
+        .or_else(|_| std::env::var("CLANG"))
+        .unwrap_or_else(|_| "clang".to_string());
+    let clang_output = Command::new(&clang_bin)
         .arg(&ll_path)
         .arg("-o")
         .arg(&exe_path)

@@ -50,6 +50,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -94,6 +95,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (macOS)
         if: runner.os == 'macOS'
@@ -161,6 +163,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (macOS)
         if: runner.os == 'macOS'
@@ -228,6 +231,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (macOS)
         if: runner.os == 'macOS'
@@ -293,6 +297,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -382,6 +387,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -445,6 +451,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (macOS)
         if: runner.os == 'macOS'
@@ -504,7 +511,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@4379c0dac7a39dfc31c9dbf31a20e5bcdc7b530d # cargo-audit
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Run security audit
         run: cargo audit --deny warnings

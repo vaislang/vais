@@ -156,6 +156,7 @@ pub(crate) fn cmd_build_with_timing(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::result_large_err)]
 pub(crate) fn cmd_build(
     input: &PathBuf,
     output: Option<PathBuf>,
