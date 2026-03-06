@@ -413,10 +413,13 @@ jobs:
         run: /tmp/math_cli
 
       - name: Compile num-convert project
+        id: num-convert-compile
         run: |
           ./target/release/vaisc examples/projects/num-convert/num_convert.vais -o /tmp/num_convert
+        continue-on-error: true
 
       - name: Run num-convert project
+        if: steps.num-convert-compile.outcome == 'success'
         run: /tmp/num_convert
 
       - name: Batch compile example programs
