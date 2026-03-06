@@ -282,7 +282,10 @@ impl Default for PackageCache {
             // Create a fallback cache in temp directory
             let temp_root = std::env::temp_dir().join(".vais-fallback-registry");
             Self::with_root(temp_root)
-                .expect("Failed to create fallback package cache in temp directory")
+                .unwrap_or_else(|e| {
+                    eprintln!("FATAL: Failed to create fallback package cache: {}", e);
+                    std::process::abort();
+                })
         })
     }
 }

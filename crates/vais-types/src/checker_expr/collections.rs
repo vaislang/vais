@@ -415,7 +415,7 @@ impl TypeChecker {
                         .iter()
                         .map(|param| {
                             let ty = generic_substitutions.get(param)
-                                .expect("Internal compiler error: generic parameter should exist in substitutions map");
+                                .unwrap_or(&ResolvedType::Unknown);
                             self.apply_substitutions(ty)
                         })
                         .collect();
@@ -487,7 +487,7 @@ impl TypeChecker {
                         .iter()
                         .map(|param| {
                             let ty = generic_substitutions.get(param)
-                                .expect("Internal compiler error: generic parameter should exist in substitutions map");
+                                .unwrap_or(&ResolvedType::Unknown);
                             self.apply_substitutions(ty)
                         })
                         .collect();

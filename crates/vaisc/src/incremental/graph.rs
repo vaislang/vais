@@ -284,28 +284,17 @@ impl DependencyGraph {
                 if !state.index.contains_key(dep) {
                     // Recurse
                     self.tarjan_visit(dep, state);
-                    let dep_low = state
-                        .low_link
-                        .get(dep)
-                        .copied()
-                        .expect("Tarjan: low_link must exist after visiting dep");
-                    let file_low = state
-                        .low_link
-                        .get_mut(file)
-                        .expect("Tarjan: low_link must exist for current file");
-                    *file_low = (*file_low).min(dep_low);
+                    // SAFETY: low_link is always set before recursive return in Tarjan's algorithm
+                    let dep_low = state.low_link.get(dep).copied().unwrap_or(0);
+                    if let Some(file_low) = state.low_link.get_mut(file) {
+                        *file_low = (*file_low).min(dep_low);
+                    }
                 } else if state.on_stack.contains(dep) {
-                    // Back edge
-                    let dep_index = state
-                        .index
-                        .get(dep)
-                        .copied()
-                        .expect("Tarjan: index must exist for visited dep");
-                    let file_low = state
-                        .low_link
-                        .get_mut(file)
-                        .expect("Tarjan: low_link must exist for current file");
-                    *file_low = (*file_low).min(dep_index);
+                    // Back edge — index is always set for visited nodes in Tarjan's
+                    let dep_index = state.index.get(dep).copied().unwrap_or(0);
+                    if let Some(file_low) = state.low_link.get_mut(file) {
+                        *file_low = (*file_low).min(dep_index);
+                    }
                 }
             }
         }

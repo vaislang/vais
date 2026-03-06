@@ -473,7 +473,11 @@ impl TypeChecker {
                         .map(|param| {
                             let ty = generic_substitutions
                                 .get(param)
-                                .expect("Generic parameter should exist in substitutions map");
+                                .unwrap_or_else(|| {
+                                    // ICE: generic parameter missing from substitutions
+                                    eprintln!("ICE: generic parameter '{}' missing from substitutions map", param);
+                                    &ResolvedType::Unknown
+                                });
                             self.apply_substitutions(ty)
                         })
                         .collect();

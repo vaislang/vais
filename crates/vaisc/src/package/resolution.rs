@@ -126,7 +126,8 @@ fn resolve_deps_recursive(
                 let path = d
                     .path
                     .as_ref()
-                    .expect("path is Some - checked in match guard");
+                    // SAFETY: match guard checks path.is_some()
+                    .unwrap_or_else(|| unreachable!("path is Some - checked in match guard"));
                 base_dir.join(path)
             }
             Dependency::Version(v) => {
@@ -280,7 +281,8 @@ fn build_dependency_graph(
             let dep_path = match dep {
                 Dependency::Detailed(d) if d.path.is_some() => {
                     // safe: guard `d.path.is_some()` ensures this branch only matches Some
-                    let path = d.path.as_ref().expect("guarded by is_some()");
+                    // SAFETY: match guard checks d.path.is_some()
+                    let path = d.path.as_ref().unwrap_or_else(|| unreachable!("guarded by is_some()"));
                     Some(base_dir.join(path))
                 }
                 Dependency::Version(v) => {

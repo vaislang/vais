@@ -97,8 +97,14 @@ impl Debugger {
             .map_err(|e| DapError::Debugger(format!("Failed to start LLDB: {}", e)))?;
 
         // Set up communication channels
-        let stdin = child.stdin.take().expect("Failed to get stdin");
-        let stdout = child.stdout.take().expect("Failed to get stdout");
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| DapError::Debugger("Failed to get stdin from LLDB process".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| DapError::Debugger("Failed to get stdout from LLDB process".into()))?;
 
         let (stdin_tx, stdin_rx) = std::sync::mpsc::channel::<String>();
         let (stdout_tx, stdout_rx) = std::sync::mpsc::channel::<String>();
@@ -184,8 +190,14 @@ impl Debugger {
             .spawn()
             .map_err(|e| DapError::Debugger(format!("Failed to start LLDB: {}", e)))?;
 
-        let stdin = child.stdin.take().expect("Failed to get stdin");
-        let stdout = child.stdout.take().expect("Failed to get stdout");
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| DapError::Debugger("Failed to get stdin from LLDB process".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| DapError::Debugger("Failed to get stdout from LLDB process".into()))?;
 
         let (stdin_tx, stdin_rx) = std::sync::mpsc::channel::<String>();
         let (stdout_tx, stdout_rx) = std::sync::mpsc::channel::<String>();

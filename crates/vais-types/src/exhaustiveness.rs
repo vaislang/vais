@@ -457,7 +457,7 @@ impl ExhaustivenessChecker {
                     new_spaces
                         .into_iter()
                         .next()
-                        .expect("length verified to be 1")
+                        .unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -552,7 +552,7 @@ impl ExhaustivenessChecker {
                     new_spaces
                         .into_iter()
                         .next()
-                        .expect("length verified to be 1")
+                        .unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }

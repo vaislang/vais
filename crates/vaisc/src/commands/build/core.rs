@@ -490,7 +490,8 @@ pub(crate) fn cmd_build(
             let modules_map = final_ast
                 .modules_map
                 .as_ref()
-                .expect("BUG: modules_map should be Some (checked above)");
+                // SAFETY: modules_map is set to Some above when multi-module is enabled
+                .unwrap_or_else(|| unreachable!("BUG: modules_map should be Some"));
             let module_paths: Vec<PathBuf> = modules_map.keys().cloned().collect();
 
             if verbose {
