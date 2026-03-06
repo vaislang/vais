@@ -1,0 +1,15 @@
+# Selfhost loop verification (using recursion — selfhost stage1 L/B limitation)
+# Tests recursive iteration patterns as loop equivalents
+
+# sum_to(n) = 1+2+...+n using self-recursion
+F sum_to(n: i64) -> i64 = n < 1 ? 0 : n + @(n - 1)
+
+# power(base, exp) using self-recursion
+F power(base: i64, exp: i64) -> i64 = exp < 1 ? 1 : base * @(base, exp - 1)
+
+# gcd using Euclidean algorithm
+F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
+
+# Main: expression body (no let bindings — selfhost stage1 limitation)
+# sum_to(10)=55, power(2,6)=64, gcd(48,18)=6 → 55+64+6 = 125
+F main() -> i64 = sum_to(10) + power(2, 6) + gcd(48, 18)

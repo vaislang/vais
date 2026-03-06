@@ -167,3 +167,10 @@ packages/*/STATS.txt
 
 # Generated LLVM IR in packages
 packages/**/*.ll
+
+# Proptest regression files (auto-generated)
+**/*.proptest-regressions
+
+# Compiled pilot project binaries
+examples/pilot_json2toml
+examples/pilot_rest_api

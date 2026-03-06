@@ -1,0 +1,21 @@
+# Selfhost arithmetic verification
+# Tests all basic arithmetic and comparison operators
+
+F add(a: i64, b: i64) -> i64 = a + b
+F sub(a: i64, b: i64) -> i64 = a - b
+F mul(a: i64, b: i64) -> i64 = a * b
+F div_safe(a: i64, b: i64) -> i64 = a / b
+F rem_safe(a: i64, b: i64) -> i64 = a % b
+
+F max(a: i64, b: i64) -> i64 = a > b ? a : b
+F min(a: i64, b: i64) -> i64 = a < b ? a : b
+F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+
+F main() -> i64 {
+    # Basic arithmetic: (10+5) + (10-5) + (3*4) + (20/5) + (17%10) = 15+5+12+4+7 = 43
+    result := add(10, 5) + sub(10, 5) + mul(3, 4) + div_safe(20, 5) + rem_safe(17, 10)
+    # max(10,20)=20, min(10,20)=10, abs(-5)=5 → 20+10+5=35
+    result2 := max(10, 20) + min(10, 20) + abs(0 - 5)
+    # Total: 43 + 35 = 78
+    result + result2
+}

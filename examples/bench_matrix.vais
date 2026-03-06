@@ -1,0 +1,80 @@
+# Runtime benchmark: Matrix multiplication
+# 50x50 matrix multiply using heap-allocated arrays (i64 arrays via malloc)
+
+N F malloc(size: i64) -> i64
+N F free(ptr: i64) -> i64
+
+F mat_new(rows: i64, cols: i64) -> i64 {
+    ptr := malloc(rows * cols * 8)
+    ptr
+}
+
+F mat_set(ptr: i64, cols: i64, row: i64, col: i64, val: i64) -> i64 {
+    offset := (row * cols + col) * 8
+    store_i64(ptr + offset, val)
+    0
+}
+
+F mat_get(ptr: i64, cols: i64, row: i64, col: i64) -> i64 {
+    offset := (row * cols + col) * 8
+    load_i64(ptr + offset)
+}
+
+N F store_i64(addr: i64, val: i64) -> i64
+N F load_i64(addr: i64) -> i64
+
+F mat_mul(a: i64, b: i64, c: i64, n: i64) -> i64 {
+    i := mut 0
+    L i < n {
+        j := mut 0
+        L j < n {
+            sum := mut 0
+            k := mut 0
+            L k < n {
+                av := mat_get(a, n, i, k)
+                bv := mat_get(b, n, k, j)
+                sum = sum + av * bv
+                k = k + 1
+            }
+            mat_set(c, n, i, j, sum)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    0
+}
+
+F main() -> i64 {
+    n := 50
+    a := mat_new(n, n)
+    b := mat_new(n, n)
+    c := mat_new(n, n)
+
+    # Initialize matrices
+    i := mut 0
+    L i < n {
+        j := mut 0
+        L j < n {
+            mat_set(a, n, i, j, i + j)
+            mat_set(b, n, i, j, i * j + 1)
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    mat_mul(a, b, c, n)
+
+    # Return checksum: sum of diagonal
+    checksum := mut 0
+    i = 0
+    L i < n {
+        checksum = checksum + mat_get(c, n, i, i)
+        i = i + 1
+    }
+
+    free(a)
+    free(b)
+    free(c)
+
+    checksum % 256
+}

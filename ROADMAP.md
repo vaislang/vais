@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 101 완료)
+> **현재 버전**: 0.1.0 (Phase 102 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-06 (Phase 101 — 테스트 커버리지 확장 확인)
+> **최종 업데이트**: 2026-03-06 (Phase 102 — Untracked 정리 & 코드 위생)
 
 ---
 
@@ -295,9 +295,12 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 11개 untracked 파일 정돈, proptest regression 파일 관리
 > **기대 효과**: 깔끔한 git status, 재현 가능한 빌드
 
-- [ ] 1. proptest regression 파일 .gitignore 추가 + 예제 파일 commit/정리 (Sonnet)
-- [ ] 2. pilot 프로젝트 디렉토리 정돈 (examples/pilot_*) (Sonnet)
-- [ ] 3. selfhost 예제 파일 정리 (examples/selfhost_*.vais) (Sonnet)
+- [x] 1. proptest regression 파일 .gitignore 추가 + 예제 파일 commit/정리 (Sonnet) ✅ 2026-03-06
+  변경: .gitignore에 *.proptest-regressions 추가, proptest_fuzz.rs 3개 + .vais 4개 commit 준비
+- [x] 2. pilot 프로젝트 디렉토리 정돈 (examples/pilot_*) (Sonnet) ✅ 2026-03-06
+  변경: pilot_json2toml, pilot_rest_api는 컴파일된 바이너리 → .gitignore 추가
+- [x] 3. selfhost 예제 파일 정리 (examples/selfhost_*.vais) (Sonnet) ✅ 2026-03-06
+  변경: selfhost_arith.vais, selfhost_loop.vais 유효한 소스 → commit 대상
 
 ### Phase 103: Codegen 완성도 — 잔여 이슈 해결
 

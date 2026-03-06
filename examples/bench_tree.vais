@@ -1,0 +1,62 @@
+# Runtime benchmark: Binary tree traversal (DFS)
+# Builds a complete binary tree of depth 15, then sums all node values
+
+N F malloc(size: i64) -> i64
+N F free(ptr: i64) -> i64
+N F store_i64(addr: i64, val: i64) -> i64
+N F load_i64(addr: i64) -> i64
+
+# Tree node layout: [value: i64, left: i64, right: i64] = 24 bytes
+
+F node_new(val: i64) -> i64 {
+    ptr := malloc(24)
+    store_i64(ptr, val)
+    store_i64(ptr + 8, 0)
+    store_i64(ptr + 16, 0)
+    ptr
+}
+
+F node_set_left(node: i64, child: i64) -> i64 {
+    store_i64(node + 8, child)
+    0
+}
+
+F node_set_right(node: i64, child: i64) -> i64 {
+    store_i64(node + 16, child)
+    0
+}
+
+F build_tree(depth: i64, val: i64) -> i64 {
+    I depth <= 0 { R 0 }
+    node := node_new(val)
+    left := build_tree(depth - 1, val * 2 + 1)
+    right := build_tree(depth - 1, val * 2 + 2)
+    node_set_left(node, left)
+    node_set_right(node, right)
+    node
+}
+
+F sum_tree(node: i64) -> i64 {
+    I node == 0 { R 0 }
+    val := load_i64(node)
+    left := load_i64(node + 8)
+    right := load_i64(node + 16)
+    val + sum_tree(left) + sum_tree(right)
+}
+
+F free_tree(node: i64) -> i64 {
+    I node == 0 { R 0 }
+    left := load_i64(node + 8)
+    right := load_i64(node + 16)
+    free_tree(left)
+    free_tree(right)
+    free(node)
+    0
+}
+
+F main() -> i64 {
+    tree := build_tree(15, 1)
+    total := sum_tree(tree)
+    free_tree(tree)
+    total % 256
+}
