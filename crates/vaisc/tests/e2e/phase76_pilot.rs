@@ -457,10 +457,9 @@ fn e2e_p76_pilot_rest_api_full() {
     assert_exit_code(&source, 28);
 }
 
-/// Debug helper: dump text IR for pilot program
+/// Verify pilot_json2toml example compiles to text IR successfully
 #[test]
-#[ignore]
-fn e2e_p76_debug_dump_pilot_ir() {
+fn e2e_p76_pilot_json2toml_compiles() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let workspace_root = std::path::Path::new(manifest_dir)
         .parent()
@@ -470,9 +469,5 @@ fn e2e_p76_debug_dump_pilot_ir() {
     let source = std::fs::read_to_string(workspace_root.join("examples/pilot_json2toml.vais"))
         .expect("pilot_json2toml.vais should exist");
     let ir = compile_to_ir(&source).expect("should compile");
-    std::fs::write("/tmp/pilot_text_ir.ll", &ir).expect("should write");
-    eprintln!(
-        "Text IR written to /tmp/pilot_text_ir.ll ({} bytes)",
-        ir.len()
-    );
+    assert!(!ir.is_empty(), "IR should not be empty");
 }

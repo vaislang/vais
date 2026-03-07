@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 103 완료)
+> **현재 버전**: 0.1.0 (Phase 108 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-06 (Phase 103 — Codegen 완성도 & Inkwell 인자 타입 수정)
+> **최종 업데이트**: 2026-03-07 (Phase 104~108 — expect/panic 감사, 모듈 분할 R12, E2E 0 ignored)
 
 ---
 
@@ -92,10 +92,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | TODO/FIXME | 0개 | ✅ |
 | Clippy 경고 | 0건 | ✅ |
 | assert_compiles 잔여 | 1개 (lifetime codegen 한계) | ✅ |
-| expect() 핫스팟 | parser 38, gc 25, mir 18 | ⚠️ |
-| panic! 호출 | 96개 | ⚠️ |
-| 대형 파일 (>1000줄) | 32개 | ⚠️ |
-| 최소 테스트 크레이트 (1파일) | 17개 | ⚠️ |
+| expect() 핫스팟 | 프로덕션 0개 (전부 안전 메서드/테스트 코드) | ✅ |
+| panic! 호출 | 프로덕션 0개 (전부 테스트 코드) | ✅ |
+| 대형 파일 (>1000줄) | 18개 (R12에서 9개 분할) | ⚠️ |
+| 최소 테스트 크레이트 (1파일) | 0개 (전 크레이트 10개+ 통합 테스트) | ✅ |
 
 ### 릴리즈 상태: v0.1.0 (프리릴리스)
 
@@ -105,7 +105,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (9,500+) | ✅ |
-| E2E 1,620개 통과 (0 fail, 1 ignored) | ✅ |
+| E2E 1,620개 통과 (0 fail, 0 ignored) | ✅ |
 | 보안 감사 (cargo audit 통과) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
 | 문서 (mdBook, API 문서 65개 모듈) | ✅ |
@@ -237,6 +237,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 92~94 | 안정성 · 성능 · 생태계 | Panic-free 180+ expect→Result, proptest, 2-level 캐시, Ed25519, vaisc fix, lint 7종 | 1,540 |
 | 95~96 | 검증 · 기술부채 | IR 검증 게이트 7경로, +80 E2E, toml 1.0/Cranelift 0.129, LSP 모듈화 | 1,620 |
 | 97~98 | CI 복구 | cargo fmt 65파일, MIR +58/JS +39 tests, Security Audit SHA, clang-17 명시 | 1,620 |
+| 99~103 | 안정성 · 정리 | expect→Result 61개, 모듈 분할 R11, 테스트 커버리지, Inkwell ABI 수정 | 1,620 |
+| 104~108 | 감사 · 분할 R12 · 0 ignored | expect/panic 전수 감사(프로덕션 0건), 9파일 모듈 분할, E2E 0 ignored | 1,620 |
 
 ---
 
@@ -313,6 +315,66 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: CI ci.yml num_convert continue-on-error 제거, text IR 백엔드 ABI 이슈 문서화
 - [x] 3. lifetime codegen assert_compiles — IR 생성 정확성 개선 (Opus) ✅ 2026-03-06
   변경: phase91_lifetime.rs 코멘트 업데이트 (text IR codegen 한계 문서화)
+
+### Phase 104: expect() 핫스팟 정리 — parser 119개, mir 34개
+
+> **목표**: parser expect() 119개 + mir expect() 34개 안전 패턴 전환
+> **기대 효과**: 컴파일러 런타임 unwrap panic 경로 대폭 축소
+
+- [x] 1. parser expect() 정리 — primary.rs(38), declarations.rs(20), macros.rs(19), types.rs(14) 등 11파일 (Sonnet) ✅ 2026-03-07
+  변경: 전수 조사 결과 118개 모두 self.expect(&Token::...) ParseResult 메서드 — 변환 불필요 확인
+- [x] 2. mir expect() 정리 — lib.rs(18), lower.rs(15) (Sonnet) ✅ 2026-03-07
+  변경: 34개 모두 #[cfg(test)] 내부 테스트 코드 — 프로덕션 expect("string") 0건 확인
+- [x] 3. 검증 — cargo test 전체 통과 + clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 105: panic! 추가 축소 — 56개 잔여 중 30+개 전환
+
+> **목표**: 프로덕션 panic! 56개 중 30+개를 Result/에러 반환으로 전환
+> **기대 효과**: panic! 25개 이하 달성
+
+- [x] 1. 고빈도 파일 — ffi.rs(12), bindgen/parser.rs(9), proc_macro.rs(8), optimize.rs(6) (Sonnet) ✅ 2026-03-07
+  변경: 전수 조사 결과 55개 모두 #[cfg(test)] 테스트 코드 내부 — 프로덕션 panic! 0건 확인
+- [x] 2. 중빈도 파일 — registry/source.rs(5), gpu/lib.rs(4), tree_shaking.rs(2), dap 2파일 (Sonnet) ✅ 2026-03-07
+  변경: 동일 — 전부 테스트 코드 내 panic!
+- [x] 3. 검증 — cargo test 전체 통과 + clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 106: 대형 파일 모듈 분할 R12 — 1,000줄+ 상위 10개
+
+> **목표**: 27개 대형 파일 중 상위 10개 서브모듈 분할
+> **기대 효과**: 유지보수성 향상, 1,000줄+ 파일 17개 이하
+
+- [x] 1. codegen — auto_vectorize.rs(1,620→1,147), builtins.rs→builtins/mod.rs(635)+simd.rs(791) (Sonnet) ✅ 2026-03-07
+  변경: builtins 디렉토리 모듈 분할 + auto_vectorize_tests.rs 추출
+- [x] 2. gpu — simd.rs(1,524→878), metal.rs(1,495→760) (Sonnet) ✅ 2026-03-07
+  변경: simd_tests.rs, metal_tests.rs 추출
+- [x] 3. mir/optimize.rs(1,480→827), lexer/lib.rs(1,361→595) (Sonnet) ✅ 2026-03-07
+  변경: optimize_tests.rs, lexer/tests.rs 추출
+- [x] 4. security/lint.rs(1,285→1,058) (Sonnet) ✅ 2026-03-07
+  변경: lint_tests.rs 추출, inference.rs(1,275)는 순수 impl 블록 — 추후 과제
+- [x] 5. codegen-js — items.rs(1,268→757), tree_shaking.rs(1,222→734) (Sonnet) ✅ 2026-03-07
+  변경: items_tests.rs, tree_shaking_tests.rs 추출
+- [x] 6. 검증 — cargo test 전체 통과 + clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 107: 최소 테스트 크레이트 강화 — 잔여 7개
+
+> **목표**: 17개 최소 테스트 크레이트 중 잔여 7개에 통합 테스트 추가
+> **기대 효과**: 코드 커버리지 향상, 회귀 방지 강화
+
+- [x] 1. 잔여 7개 크레이트 파악 + 각 10개 이상 통합 테스트 추가 (Sonnet) ✅ 2026-03-07
+  변경: 전수 조사 결과 17개 모두 10개+ 통합 테스트 보유 확인 (tokio::test 등 누락 카운트 보정)
+- [x] 2. 검증 — cargo test 전체 통과 (Sonnet) ✅ 2026-03-07
+
+### Phase 108: E2E ignored 3개 해결 — 0 ignored 목표
+
+> **목표**: E2E ignored 3개 해결하여 0 ignored 달성
+> **기대 효과**: 완벽한 테스트 커버리지
+
+- [x] 1. e2e_p74_str_from_int — text IR i64-as-ptr ABI 수정 (Opus) ✅ 2026-03-07
+  변경: 이미 수정됨 확인 → #[ignore] 제거
+- [x] 2. e2e_p76_debug_dump_pilot_ir — ignore 사유 조사 및 해결 (Opus) ✅ 2026-03-07
+  변경: 디버그 유틸 → e2e_p76_pilot_json2toml_compiles 실제 테스트로 변환
+- [x] 3. e2e_cf_ternary_in_function — nested ternary phi node clang crash 수정 (Opus) ✅ 2026-03-07
+  변경: clang crash 해결 확인 → #[ignore] 제거
 
 ---
 
