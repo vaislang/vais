@@ -192,6 +192,9 @@ pub struct CodeGenerator {
     // Flag to emit unwrap panic message and abort declaration
     needs_unwrap_panic: bool,
 
+    // Flag to emit abort declaration for runtime bounds checking
+    needs_bounds_check: bool,
+
     // Flag to emit __sync_spawn__poll function for sync spawn→Future wrapping
     needs_sync_spawn_poll: bool,
 

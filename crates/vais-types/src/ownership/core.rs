@@ -1,6 +1,7 @@
 //! Core OwnershipChecker struct and scope management
 
 use super::{BorrowInfo, OwnershipInfo};
+use crate::lifetime::LifetimeInferencer;
 use crate::types::{TypeError, TypeResult};
 use std::collections::HashMap;
 
@@ -24,6 +25,8 @@ pub struct OwnershipChecker {
     pub(super) errors: Vec<TypeError>,
     /// Whether to collect errors instead of returning immediately
     pub(super) collect_errors: bool,
+    /// Lifetime inferencer for lifetime bounds validation
+    pub(super) lifetime_inferencer: LifetimeInferencer,
 }
 
 impl Default for OwnershipChecker {
@@ -44,6 +47,7 @@ impl OwnershipChecker {
             function_returns_ref: false,
             errors: Vec::new(),
             collect_errors: false,
+            lifetime_inferencer: LifetimeInferencer::new(),
         }
     }
 

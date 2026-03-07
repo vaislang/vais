@@ -93,6 +93,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
         let old_substitutions = std::mem::take(&mut self.generic_substitutions);
@@ -172,6 +173,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -218,6 +220,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -289,6 +292,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
 
         // Non-generic function: substitutions should be empty, take avoids clone allocation
         let old_substitutions = std::mem::take(&mut self.generic_substitutions);
@@ -460,6 +464,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -494,6 +499,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -604,6 +610,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -678,6 +685,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -724,6 +732,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)

@@ -113,6 +113,10 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Defer stack: expressions to execute in LIFO order before function return
     pub(super) defer_stack: Vec<Expr>,
 
+    /// Tracks heap allocations (malloc'd pointers) for automatic cleanup at scope exit.
+    /// Each entry is a PointerValue that should be freed before function return.
+    pub(super) alloc_tracker: Vec<inkwell::values::PointerValue<'ctx>>,
+
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
     pub(super) tco_state: Option<TcoState<'ctx>>,
@@ -182,6 +186,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             constants: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
+            alloc_tracker: Vec::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),

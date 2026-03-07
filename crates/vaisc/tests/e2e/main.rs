@@ -70,3 +70,6 @@ mod phase90_variables;
 mod phase91_lifetime;
 mod phase91_monomorphization;
 mod phase95_coverage;
+mod phase109_bounds_check;
+mod phase110_auto_free;
+mod phase111_error_paths;

@@ -59,6 +59,7 @@ impl CodeGenerator {
                 current_file: None,
                 future_poll_fns: HashMap::new(),
                 async_poll_context: None,
+                alloc_tracker: Vec::new(),
             },
             strings: StringPool {
                 constants: Vec::with_capacity(16),
@@ -79,6 +80,7 @@ impl CodeGenerator {
             module_name: module_name.to_string(),
             target,
             needs_unwrap_panic: false,
+            needs_bounds_check: false,
             needs_sync_spawn_poll: false,
             needs_string_helpers: false,
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),

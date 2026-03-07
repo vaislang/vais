@@ -47,6 +47,9 @@ impl CodeGenerator {
         if self.needs_unwrap_panic {
             ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
             ir.push_str("declare void @abort()\n\n");
+        } else if self.needs_bounds_check {
+            // Bounds check uses abort() for OOB access
+            ir.push_str("declare void @abort()\n\n");
         }
     }
 

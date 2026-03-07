@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 108 완료)
+> **현재 버전**: 0.1.0 (Phase 113 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-07 (Phase 104~108 — expect/panic 감사, 모듈 분할 R12, E2E 0 ignored)
+> **최종 업데이트**: 2026-03-07 (Phase 109~113 — bounds check, auto free, 에러 테스트, ownership 강화)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 9,500+ (E2E 1,620+, 단위 7,900+) |
+| 전체 테스트 | 9,600+ (E2E 1,667+, 단위 7,900+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.6ms (812K lines/s) |
@@ -105,7 +105,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (9,500+) | ✅ |
-| E2E 1,620개 통과 (0 fail, 0 ignored) | ✅ |
+| E2E 1,667개 통과 (0 fail, 0 ignored) | ✅ |
 | 보안 감사 (cargo audit 통과) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
 | 문서 (mdBook, API 문서 65개 모듈) | ✅ |
@@ -239,6 +239,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 97~98 | CI 복구 | cargo fmt 65파일, MIR +58/JS +39 tests, Security Audit SHA, clang-17 명시 | 1,620 |
 | 99~103 | 안정성 · 정리 | expect→Result 61개, 모듈 분할 R11, 테스트 커버리지, Inkwell ABI 수정 | 1,620 |
 | 104~108 | 감사 · 분할 R12 · 0 ignored | expect/panic 전수 감사(프로덕션 0건), 9파일 모듈 분할, E2E 0 ignored | 1,620 |
+| 109~113 | v1.0 블로커 해결 | Slice bounds check, scope-based auto free, 에러 테스트 +31, ownership 강화 44 tests | 1,667 |
 
 ---
 
@@ -375,6 +376,69 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: 디버그 유틸 → e2e_p76_pilot_json2toml_compiles 실제 테스트로 변환
 - [x] 3. e2e_cf_ternary_in_function — nested ternary phi node clang crash 수정 (Opus) ✅ 2026-03-07
   변경: clang crash 해결 확인 → #[ignore] 제거
+
+### Phase 109: Slice bounds check — runtime OOB 방어
+
+> **목표**: 배열/슬라이스 인덱싱 시 runtime bounds check 코드 생성
+> **기대 효과**: undefined behavior 방지, 메모리 안전성 보장 (v1.0 블로커)
+
+- [x] 1. Text IR bounds check — expr_helpers_data.rs GEP 전 icmp+br 삽입 (Opus) ✅ 2026-03-07
+  변경: expr_helpers_data.rs +31줄 (fat ptr slice 감지 → extractvalue len → icmp ult → br abort)
+- [x] 2. Inkwell bounds check — gen_aggregate.rs conditional branch 삽입 (Opus) ✅ 2026-03-07
+  변경: gen_aggregate.rs +44줄, gen_expr/binary.rs pub(in crate::inkwell) 공개, lib.rs/init.rs/emit.rs needs_bounds_check 플래그
+- [x] 3. OOB 테스트 추가 — 6개 E2E (Opus) ✅ 2026-03-07
+  변경: phase109_bounds_check.rs 6개 테스트 (in-bounds, last element, boundary, OOB compile check)
+- [x] 4. 검증 — E2E 1,667 passed, 0 failed, 0 ignored, clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 110: 메모리 관리 — scope-based auto free
+
+> **목표**: malloc without free 해결 (13개 malloc 중 9개 누수)
+> **기대 효과**: 메모리 누수 근본 해결 (v1.0 블로커)
+
+- [x] 1. alloc_tracker 도입 — state.rs FunctionContext + stmt.rs track/cleanup/clear (Opus) ✅ 2026-03-07
+  변경: state.rs alloc_tracker Vec, stmt.rs generate_alloc_cleanup()/track_alloc()/clear, stmt_visitor.rs 모든 return 경로에 cleanup
+- [x] 2. String/Format 즉시 free — string_ops.rs concat/substring + print_format.rs (Opus) ✅ 2026-03-07
+  변경: string_ops.rs +14줄 track_alloc, print_format.rs +2줄 track_alloc, helpers.rs +2줄
+- [x] 3. Inkwell alloc_tracker — generator.rs + gen_stmt.rs emit_alloc_cleanup (Opus) ✅ 2026-03-07
+  변경: generator.rs alloc_tracker Vec<PointerValue>, gen_stmt.rs emit_alloc_cleanup(), gen_function/gen_special clear/cleanup
+- [x] 4. Trait object auto drop — trait_dispatch.rs scope exit free (Opus) ✅ 2026-03-07
+  변경: trait_dispatch.rs +9줄 track_alloc, return 전 cleanup 순서 수정 (use-after-free 버그 발견→수정)
+- [x] 5. 검증 — E2E 1,667 passed, 0 failed + 9개 auto_free 테스트 (Opus) ✅ 2026-03-07
+  변경: phase110_auto_free.rs 9개 E2E (5 IR 검증 + 4 runtime)
+
+### Phase 111: 에러 경로 테스트 — codegen 에러 30+개 추가
+
+> **목표**: codegen 에러 110건 중 30+개 테스트 추가
+> **기대 효과**: 컴파일러 에러 처리 신뢰성 향상
+
+- [x] 1. 제어흐름 + 패턴 + 할당 에러 — 6개 (Sonnet) ✅ 2026-03-07
+  변경: phase111_error_paths.rs — break/continue outside loop, non-exhaustive match, assignment, method on non-struct
+- [x] 2. 타입 + 미정의 심볼 + 함수 에러 — 12개 (Sonnet) ✅ 2026-03-07
+  변경: indexing error, mismatch, undefined var/func/struct/field, arg count, duplicate
+- [x] 3. 에지 케이스 + 회귀 테스트 — 13개 (Sonnet) ✅ 2026-03-07
+  변경: empty body/source, self-call, loop/match/struct/enum/recursion/closure/array 양성 테스트
+- [x] 4. 검증 — 31개 전체 통과, E2E 1,667 passed (Sonnet) ✅ 2026-03-07
+
+### Phase 112: Ownership checker 강화 — lifetime bounds 검증
+
+> **목표**: ownership checker 70%→85% 완성도
+> **기대 효과**: dangling reference 감지, lifetime bound 검증 (v1.0 권장)
+
+- [x] 1. lifetime.rs ↔ ownership 통합 — core.rs LifetimeInferencer 필드 + ast_check.rs validate (Opus) ✅ 2026-03-07
+  변경: core.rs +4줄, ast_check.rs +121줄 (validate_function_lifetimes, is_resolved_ref_type, lifetime_for_resolved_type)
+- [x] 2. dangling reference 감지 — mut ref 추적 + scope 검증 강화 (Opus) ✅ 2026-03-07
+  변경: ast_check.rs let binding ref tracking에 &mut 감지, ReferenceInfo is_mut 기록
+- [x] 3. 테스트 확대 — 19개→44개 (+25) (Opus) ✅ 2026-03-07
+  변경: tests.rs +375줄 (lifetime integration, borrow conflicts, copy types 10개, scope isolation, dangling ref)
+- [x] 4. 검증 — vais-types 348 unit tests, E2E 1,667 passed, clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 113: ROADMAP 코드 건강도 지표 업데이트
+
+> **목표**: Phase 109-112 반영하여 건강도 지표 갱신
+> **기대 효과**: 정확한 프로젝트 현황 파악
+
+- [x] 1. 코드 건강도 테이블 갱신 + E2E 수치 업데이트 (Sonnet) ✅ 2026-03-07
+  변경: ROADMAP 헤더 Phase 113, E2E 1,667, Phase history 갱신
 
 ---
 

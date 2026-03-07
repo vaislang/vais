@@ -303,10 +303,9 @@ impl CodeGenerator {
         // must wrap the value as a poll result {1, value} and return the poll type.
         if let Some(poll_ctx) = self.fn_ctx.async_poll_context.clone() {
             let mut ir = String::new();
-            let defer_ir = self.generate_defer_cleanup(counter)?;
-            ir.push_str(&defer_ir);
 
             if let Some(expr) = expr {
+                // Evaluate return expression FIRST (before cleanup)
                 let (val, expr_ir) = self.generate_expr(expr, counter)?;
                 ir.push_str(&expr_ir);
 
@@ -318,6 +317,12 @@ impl CodeGenerator {
                 } else {
                     val
                 };
+
+                // Cleanup after expression evaluation, before ret
+                let defer_ir = self.generate_defer_cleanup(counter)?;
+                ir.push_str(&defer_ir);
+                let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                ir.push_str(&alloc_cleanup_ir);
 
                 let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                 let t0 = self.next_temp(counter);
@@ -333,6 +338,11 @@ impl CodeGenerator {
                 ir.push_str("  store i64 -1, i64* %state_field\n");
                 ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t1));
             } else {
+                let defer_ir = self.generate_defer_cleanup(counter)?;
+                ir.push_str(&defer_ir);
+                let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                ir.push_str(&alloc_cleanup_ir);
+
                 let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                 let t0 = self.next_temp(counter);
                 ir.push_str(&format!(
@@ -347,11 +357,9 @@ impl CodeGenerator {
 
         let mut ir = String::new();
 
-        // Execute deferred expressions before return (LIFO order)
-        let defer_ir = self.generate_defer_cleanup(counter)?;
-        ir.push_str(&defer_ir);
-
         if let Some(expr) = expr {
+            // Evaluate return expression FIRST (before cleanup),
+            // so we don't free memory that the expression still needs.
             let (val, expr_ir) = self.generate_expr(expr, counter)?;
             ir.push_str(&expr_ir);
 
@@ -365,18 +373,38 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(&ret_type);
 
             // For struct types, may need to load from pointer
-            if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
+            let ret_val = if matches!(ret_type, ResolvedType::Named { .. })
+                && !self.is_expr_value(expr)
+            {
                 let loaded = format!("%ret.{}", counter);
                 *counter += 1;
                 ir.push_str(&format!(
                     "  {} = load {}, {}* {}\n",
                     loaded, llvm_ty, llvm_ty, val
                 ));
-                ir.push_str(&format!("  ret {} {}\n", llvm_ty, loaded));
+                loaded
             } else {
-                ir.push_str(&format!("  ret {} {}\n", llvm_ty, val));
-            }
+                val
+            };
+
+            // Execute deferred expressions before return (LIFO order)
+            let defer_ir = self.generate_defer_cleanup(counter)?;
+            ir.push_str(&defer_ir);
+
+            // Free tracked heap allocations before return
+            let alloc_cleanup_ir = self.generate_alloc_cleanup();
+            ir.push_str(&alloc_cleanup_ir);
+
+            ir.push_str(&format!("  ret {} {}\n", llvm_ty, ret_val));
         } else {
+            // Execute deferred expressions before return (LIFO order)
+            let defer_ir = self.generate_defer_cleanup(counter)?;
+            ir.push_str(&defer_ir);
+
+            // Free tracked heap allocations before return
+            let alloc_cleanup_ir = self.generate_alloc_cleanup();
+            ir.push_str(&alloc_cleanup_ir);
+
             ir.push_str("  ret void\n");
         }
 

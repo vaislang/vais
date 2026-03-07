@@ -398,6 +398,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.var_struct_types.clear();
         self.var_resolved_types.clear();
         self.defer_stack.clear();
+        self.alloc_tracker.clear();
 
         // Set up generic substitutions from parent struct and method generics
         let old_substitutions = self.generic_substitutions.clone();
@@ -495,6 +496,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)
@@ -520,6 +522,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .is_none()
                 {
                     self.emit_defer_cleanup()?;
+                    self.emit_alloc_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder
                             .build_return(None)

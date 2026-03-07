@@ -1655,3 +1655,64 @@ F main() -> i64 {
     let ir = gen.generate_module(&module).unwrap();
     assert!(ir.contains("@check__poll"), "Expected check__poll:\n{}", ir);
 }
+
+#[test]
+fn test_alloc_tracker_string_concat() {
+    // Verify that the alloc_tracker works by checking the generate_alloc_cleanup output
+    let mut gen = CodeGenerator::new("test");
+    // Manually track some allocations
+    gen.track_alloc("%ptr1".to_string());
+    gen.track_alloc("%ptr2".to_string());
+    let cleanup_ir = gen.generate_alloc_cleanup();
+    assert!(
+        cleanup_ir.contains("auto-free tracked allocations"),
+        "Expected auto-free comment, got: {}",
+        cleanup_ir
+    );
+    assert!(
+        cleanup_ir.contains("call void @free"),
+        "Expected free calls, got: {}",
+        cleanup_ir
+    );
+    assert!(
+        cleanup_ir.contains("ptrtoint i8* %ptr1 to i64"),
+        "Expected ptrtoint for ptr1, got: {}",
+        cleanup_ir
+    );
+    assert!(
+        cleanup_ir.contains("ptrtoint i8* %ptr2 to i64"),
+        "Expected ptrtoint for ptr2, got: {}",
+        cleanup_ir
+    );
+}
+
+#[test]
+fn test_alloc_tracker_clear() {
+    let mut gen = CodeGenerator::new("test");
+    gen.track_alloc("%ptr1".to_string());
+    assert!(!gen.fn_ctx.alloc_tracker.is_empty());
+    gen.clear_alloc_tracker();
+    assert!(gen.fn_ctx.alloc_tracker.is_empty());
+    // After clearing, cleanup should produce empty string
+    let cleanup_ir = gen.generate_alloc_cleanup();
+    assert!(cleanup_ir.is_empty(), "Expected empty cleanup after clear");
+}
+
+#[test]
+fn test_alloc_tracker_no_alloc() {
+    let source = r#"
+F add(a: i64, b: i64) -> i64 = a + b
+F main() -> i64 = add(1, 2)
+"#;
+    let module = parse(source).unwrap();
+    let mut gen = CodeGenerator::new("test");
+    let ir = gen.generate_module(&module).unwrap();
+    // Pure arithmetic should NOT have auto-free
+    let add_fn = ir.find("define i64 @add").unwrap();
+    let add_end = ir[add_fn..].find("\n}\n").unwrap() + add_fn;
+    let add_ir = &ir[add_fn..add_end];
+    assert!(
+        !add_ir.contains("auto-free"),
+        "Pure function should not have auto-free cleanup"
+    );
+}

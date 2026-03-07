@@ -84,6 +84,11 @@ pub(crate) struct FunctionContext {
     /// Contains (state_struct_name, ret_llvm_type, state_field_ptr)
     /// so that Return statements can properly wrap results.
     pub(crate) async_poll_context: Option<AsyncPollContext>,
+
+    /// Tracks heap allocations (malloc'd pointers) in the current function scope.
+    /// At function exit, all tracked pointers are freed automatically.
+    /// Each entry is the LLVM register name holding the i8* pointer (e.g., "%tmp.5").
+    pub(crate) alloc_tracker: Vec<String>,
 }
 
 /// Lambda, closure, and async function state

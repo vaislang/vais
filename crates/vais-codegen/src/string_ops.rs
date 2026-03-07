@@ -82,6 +82,13 @@ impl CodeGenerator {
                     "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})\n",
                     result, left_ptr, right_ptr
                 ));
+                // Extract the raw pointer from the fat pointer for auto-free tracking
+                let raw_ptr_for_free = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    raw_ptr_for_free, result
+                ));
+                self.track_alloc(raw_ptr_for_free);
                 Ok((result, ir))
             }
             BinOp::Eq => {
@@ -255,6 +262,13 @@ impl CodeGenerator {
                     "  {} = call {{ i8*, i64 }} @__vais_str_substring(i8* {}, i64 {}, i64 {})\n",
                     result, recv_ptr, start_val, end_val
                 ));
+                // Extract the raw pointer from the fat pointer for auto-free tracking
+                let raw_ptr_for_free = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                    raw_ptr_for_free, result
+                ));
+                self.track_alloc(raw_ptr_for_free);
                 Ok((result, ir))
             }
             "startsWith" => {

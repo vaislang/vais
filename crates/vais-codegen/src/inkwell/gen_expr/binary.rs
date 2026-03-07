@@ -10,7 +10,7 @@ use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Get or declare the abort() function for runtime errors
-    fn get_or_declare_abort(&mut self) -> FunctionValue<'ctx> {
+    pub(in crate::inkwell) fn get_or_declare_abort(&mut self) -> FunctionValue<'ctx> {
         // Check if abort is already declared
         if let Some(abort_fn) = self.module.get_function("abort") {
             return abort_fn;
@@ -231,6 +231,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .into()
                     })
                     .into_pointer_value();
+                // Track allocation for automatic cleanup at scope exit
+                self.alloc_tracker.push(buf);
 
                 // Copy first string
                 let args1: Vec<BasicMetadataValueEnum> =

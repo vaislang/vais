@@ -406,4 +406,379 @@ mod tests {
         assert_eq!(err1.error_code(), "E028");
         assert_eq!(err2.error_code(), "E029");
     }
+
+    // --- Lifetime integration tests ---
+
+    #[test]
+    fn test_lifetime_inferencer_available() {
+        // OwnershipChecker now has an integrated LifetimeInferencer
+        let mut checker = OwnershipChecker::new();
+        // Register a named lifetime and verify it works
+        checker.lifetime_inferencer.register_named_lifetime("a");
+        let lt = checker.lifetime_inferencer.resolve_lifetime_name("a");
+        assert_eq!(
+            lt,
+            crate::lifetime::Lifetime::Named("a".to_string())
+        );
+    }
+
+    #[test]
+    fn test_lifetime_var_tracking() {
+        // Test that variable lifetimes can be tracked through the ownership checker
+        let mut checker = OwnershipChecker::new();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+
+        let lt = crate::lifetime::Lifetime::Named("a".to_string());
+        checker.lifetime_inferencer.register_var_lifetime("x", lt.clone());
+
+        assert_eq!(
+            checker.lifetime_inferencer.get_var_lifetime("x"),
+            Some(&lt)
+        );
+    }
+
+    #[test]
+    fn test_multiple_immutable_borrows_same_scope() {
+        // Multiple immutable borrows in the same scope should be fine
+        let mut checker = OwnershipChecker::new();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+
+        assert!(checker.borrow_var("r1", "x", Some(make_span())).is_ok());
+        assert!(checker.borrow_var("r2", "x", Some(make_span())).is_ok());
+        assert!(checker.borrow_var("r3", "x", Some(make_span())).is_ok());
+    }
+
+    #[test]
+    fn test_mut_borrow_after_immutable_borrow_fails() {
+        // Cannot take a mutable borrow while an immutable borrow is active
+        let mut checker = OwnershipChecker::new();
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
+
+        assert!(checker.borrow_var("r1", "x", Some(make_span())).is_ok());
+        // Mutable borrow while immutable borrow is active should fail
+        let result = checker.borrow_var_mut("r2", "x", Some(make_span()));
+        assert!(result.is_err());
+        if let Err(TypeError::BorrowConflict {
+            existing_is_mut,
+            new_is_mut,
+            ..
+        }) = result
+        {
+            assert!(!existing_is_mut); // existing is immutable
+            assert!(new_is_mut); // new is mutable
+        } else {
+            panic!("Expected BorrowConflict error");
+        }
+    }
+
+    #[test]
+    fn test_double_move_detection() {
+        // Moving a value twice should detect on the second move
+        let mut checker = OwnershipChecker::new();
+        let non_copy = ResolvedType::Named {
+            name: "Buffer".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("buf", non_copy, false, Some(make_span()));
+
+        assert!(checker.use_var("buf", Some(make_span())).is_ok());
+        let err = checker.use_var("buf", Some(make_span())).unwrap_err();
+        assert!(matches!(err, TypeError::UseAfterMove { .. }));
+    }
+
+    #[test]
+    fn test_copy_tuple_is_copy() {
+        // Tuple of Copy types is Copy
+        let mut checker = OwnershipChecker::new();
+        let tuple_ty = ResolvedType::Tuple(vec![ResolvedType::I64, ResolvedType::Bool]);
+        checker.define_var("t", tuple_ty, false, Some(make_span()));
+
+        // Using a Copy tuple multiple times should be fine
+        assert!(checker.use_var("t", Some(make_span())).is_ok());
+        assert!(checker.use_var("t", Some(make_span())).is_ok());
+    }
+
+    #[test]
+    fn test_non_copy_tuple_moves() {
+        // Tuple containing a non-Copy type is not Copy
+        let mut checker = OwnershipChecker::new();
+        let tuple_ty = ResolvedType::Tuple(vec![
+            ResolvedType::I64,
+            ResolvedType::Named {
+                name: "String".to_string(),
+                generics: vec![],
+            },
+        ]);
+        checker.define_var("t", tuple_ty, false, Some(make_span()));
+
+        assert!(checker.use_var("t", Some(make_span())).is_ok());
+        assert!(checker.use_var("t", Some(make_span())).is_err());
+    }
+
+    #[test]
+    fn test_optional_copy_is_copy() {
+        let mut checker = OwnershipChecker::new();
+        let opt_ty = ResolvedType::Optional(Box::new(ResolvedType::I64));
+        checker.define_var("x", opt_ty, false, Some(make_span()));
+
+        assert!(checker.use_var("x", Some(make_span())).is_ok());
+        assert!(checker.use_var("x", Some(make_span())).is_ok());
+    }
+
+    #[test]
+    fn test_optional_non_copy_moves() {
+        let mut checker = OwnershipChecker::new();
+        let opt_ty = ResolvedType::Optional(Box::new(ResolvedType::Named {
+            name: "Vec".to_string(),
+            generics: vec![],
+        }));
+        checker.define_var("x", opt_ty, false, Some(make_span()));
+
+        assert!(checker.use_var("x", Some(make_span())).is_ok());
+        assert!(checker.use_var("x", Some(make_span())).is_err());
+    }
+
+    #[test]
+    fn test_scope_isolates_variables() {
+        // Variables in inner scope should not be visible in outer scope
+        let mut checker = OwnershipChecker::new();
+
+        checker.push_scope();
+        checker.define_var("inner", ResolvedType::I64, false, Some(make_span()));
+        checker.pop_scope();
+
+        // inner is no longer tracked
+        assert!(checker.lookup_var("inner").is_none());
+    }
+
+    #[test]
+    fn test_reference_source_cleanup_on_scope_exit() {
+        // Reference tracking should be cleaned up when variables go out of scope
+        let mut checker = OwnershipChecker::new();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+
+        checker.push_scope();
+        checker.define_var(
+            "r",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
+        checker.register_reference("r", "x", false);
+        assert!(checker.reference_sources.contains_key("r"));
+        checker.pop_scope();
+
+        // After inner scope exit, the reference tracking for 'r' should be cleaned up
+        assert!(!checker.reference_sources.contains_key("r"));
+    }
+
+    #[test]
+    fn test_borrow_after_move_is_error() {
+        let mut checker = OwnershipChecker::new();
+        let non_copy = ResolvedType::Named {
+            name: "Data".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("d", non_copy, false, Some(make_span()));
+
+        // Move the value
+        assert!(checker.use_var("d", Some(make_span())).is_ok());
+        // Try to mutably borrow the moved value
+        let result = checker.borrow_var_mut("r1", "d", Some(make_span()));
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), TypeError::BorrowAfterMove { .. }));
+    }
+
+    #[test]
+    fn test_multiple_scopes_borrow_release() {
+        // Borrows from different scopes should be properly managed
+        let mut checker = OwnershipChecker::new();
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
+
+        // Scope 1: take mutable borrow
+        checker.push_scope();
+        assert!(checker.borrow_var_mut("r1", "x", Some(make_span())).is_ok());
+        checker.pop_scope(); // borrow released
+
+        // Scope 2: take another mutable borrow
+        checker.push_scope();
+        assert!(checker.borrow_var_mut("r2", "x", Some(make_span())).is_ok());
+        checker.pop_scope(); // borrow released
+
+        // Scope 3: take an immutable borrow
+        assert!(checker.borrow_var("r3", "x", Some(make_span())).is_ok());
+    }
+
+    #[test]
+    fn test_ref_type_is_copy() {
+        // Immutable references are Copy
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Ref(
+            Box::new(ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![]
+            })
+        )));
+    }
+
+    #[test]
+    fn test_ref_mut_type_is_not_copy() {
+        // Mutable references are NOT Copy (uniqueness requirement)
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::RefMut(
+            Box::new(ResolvedType::I64)
+        )));
+    }
+
+    #[test]
+    fn test_fn_type_is_copy() {
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Fn {
+            params: vec![ResolvedType::I64],
+            ret: Box::new(ResolvedType::Bool),
+            effects: None,
+        }));
+    }
+
+    #[test]
+    fn test_linear_type_not_copy() {
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Linear(
+            Box::new(ResolvedType::I64)
+        )));
+    }
+
+    #[test]
+    fn test_collecting_mode_gathers_all_errors() {
+        let mut checker = OwnershipChecker::new_collecting();
+        let non_copy = ResolvedType::Named {
+            name: "A".to_string(),
+            generics: vec![],
+        };
+
+        // Create 3 variables and move all of them
+        for name in &["a", "b", "c"] {
+            checker.define_var(name, non_copy.clone(), false, Some(make_span()));
+            let _ = checker.use_var(name, Some(make_span())); // move
+            let _ = checker.use_var(name, Some(make_span())); // use-after-move (error collected)
+        }
+
+        assert_eq!(checker.errors().len(), 3);
+        for err in checker.errors() {
+            assert!(matches!(err, TypeError::UseAfterMove { .. }));
+        }
+    }
+
+    #[test]
+    fn test_take_errors_clears_list() {
+        let mut checker = OwnershipChecker::new_collecting();
+        let non_copy = ResolvedType::Named {
+            name: "X".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("x", non_copy, false, Some(make_span()));
+        let _ = checker.use_var("x", Some(make_span()));
+        let _ = checker.use_var("x", Some(make_span()));
+
+        assert_eq!(checker.errors().len(), 1);
+        let taken = checker.take_errors();
+        assert_eq!(taken.len(), 1);
+        assert!(checker.errors().is_empty());
+    }
+
+    #[test]
+    fn test_assign_resets_moved_state() {
+        let mut checker = OwnershipChecker::new();
+        let non_copy = ResolvedType::Named {
+            name: "Data".to_string(),
+            generics: vec![],
+        };
+        checker.define_var("d", non_copy.clone(), true, Some(make_span()));
+
+        // Move
+        assert!(checker.use_var("d", Some(make_span())).is_ok());
+        // Assign new value
+        assert!(checker.assign_var("d", non_copy, Some(make_span())).is_ok());
+        // Use again - should be fine
+        assert!(checker.use_var("d", Some(make_span())).is_ok());
+    }
+
+    #[test]
+    fn test_dangling_ref_in_conditional_branch() {
+        // Reference created in one branch pointing to inner-scope data
+        let mut checker = OwnershipChecker::new_collecting();
+
+        checker.define_var(
+            "result_ref",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
+
+        // Simulate: if true { x := 5; result_ref = &x }
+        checker.push_scope();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+        checker.register_reference("result_ref", "x", false);
+        checker.pop_scope(); // x is dropped, result_ref dangles
+
+        assert!(!checker.errors().is_empty());
+        assert!(matches!(
+            checker.errors()[0],
+            TypeError::DanglingReference { .. }
+        ));
+    }
+
+    #[test]
+    fn test_const_array_copy_if_element_copy() {
+        use crate::types::resolved::ResolvedConst;
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::ConstArray {
+            element: Box::new(ResolvedType::I64),
+            size: ResolvedConst::Value(10),
+        }));
+    }
+
+    #[test]
+    fn test_const_array_not_copy_if_element_not_copy() {
+        use crate::types::resolved::ResolvedConst;
+        assert!(!OwnershipChecker::is_copy_type(
+            &ResolvedType::ConstArray {
+                element: Box::new(ResolvedType::Named {
+                    name: "Vec".to_string(),
+                    generics: vec![]
+                }),
+                size: ResolvedConst::Value(10),
+            }
+        ));
+    }
+
+    #[test]
+    fn test_result_copy_if_both_copy() {
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Result(
+            Box::new(ResolvedType::I64),
+            Box::new(ResolvedType::Bool),
+        )));
+    }
+
+    #[test]
+    fn test_result_not_copy_if_err_not_copy() {
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Result(
+            Box::new(ResolvedType::I64),
+            Box::new(ResolvedType::Named {
+                name: "Error".to_string(),
+                generics: vec![]
+            }),
+        )));
+    }
 }

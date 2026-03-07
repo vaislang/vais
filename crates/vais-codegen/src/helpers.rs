@@ -356,6 +356,8 @@ impl CodeGenerator {
             "  {} = call i8* @malloc(i64 {})\n",
             raw_ptr, byte_size
         ));
+        // Track allocation for automatic cleanup at scope exit
+        self.track_alloc(raw_ptr.clone());
 
         let slice_ptr = self.next_temp(counter);
         ir.push_str(&format!(

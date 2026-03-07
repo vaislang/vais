@@ -220,6 +220,10 @@ impl CodeGenerator {
                         let defer_ir = self.generate_defer_cleanup(counter)?;
                         ir.push_str(&defer_ir);
 
+                        // Free tracked heap allocations before return
+                        let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                        ir.push_str(&alloc_cleanup_ir);
+
                         // Codegen promotes bool to i64 (zext), truncate back for i1 return
                         let ret_val = if poll_ctx.ret_llvm == "i1" {
                             let trunc = self.next_temp(counter);
@@ -250,6 +254,8 @@ impl CodeGenerator {
                         let mut ir = String::new();
                         let defer_ir = self.generate_defer_cleanup(counter)?;
                         ir.push_str(&defer_ir);
+                        let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                        ir.push_str(&alloc_cleanup_ir);
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
                         ir.push_str(&format!(
@@ -312,6 +318,10 @@ impl CodeGenerator {
                     let defer_ir = self.generate_defer_cleanup(counter)?;
                     ir.push_str(&defer_ir);
 
+                    // Free tracked heap allocations before return
+                    let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                    ir.push_str(&alloc_cleanup_ir);
+
                     // Emit the ret instruction
                     ir.push_str(&format!("  ret {} {}\n", ret_type, final_val));
                     Ok((final_val, ir))
@@ -320,6 +330,11 @@ impl CodeGenerator {
                     let mut ir = String::new();
                     let defer_ir = self.generate_defer_cleanup(counter)?;
                     ir.push_str(&defer_ir);
+
+                    // Free tracked heap allocations before return
+                    let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                    ir.push_str(&alloc_cleanup_ir);
+
                     ir.push_str("  ret void\n");
                     Ok(("void".to_string(), ir))
                 }
@@ -465,5 +480,37 @@ impl CodeGenerator {
     /// Clear the defer stack (called when entering a new function)
     pub(crate) fn clear_defer_stack(&mut self) {
         self.fn_ctx.defer_stack.clear();
+    }
+
+    /// Generate IR to free all tracked heap allocations (scope-based auto free).
+    /// Called before function exit points, after defer cleanup.
+    /// Note: free is declared as `void @free(i64)` in the Text IR path
+    /// (the "everything is i64" ABI), so we convert i8* pointers to i64 via ptrtoint.
+    /// Uses `label_counter` to generate unique temp names (safe for multiple call sites).
+    pub(crate) fn generate_alloc_cleanup(&mut self) -> String {
+        if self.fn_ctx.alloc_tracker.is_empty() {
+            return String::new();
+        }
+        let mut ir = String::new();
+        ir.push_str("  ; auto-free tracked allocations\n");
+        for ptr in self.fn_ctx.alloc_tracker.clone() {
+            let id = self.fn_ctx.label_counter;
+            self.fn_ctx.label_counter += 1;
+            let int_tmp = format!("%__free_ptr_{}", id);
+            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", int_tmp, ptr));
+            ir.push_str(&format!("  call void @free(i64 {})\n", int_tmp));
+        }
+        ir
+    }
+
+    /// Clear the alloc tracker (called when entering a new function)
+    pub(crate) fn clear_alloc_tracker(&mut self) {
+        self.fn_ctx.alloc_tracker.clear();
+    }
+
+    /// Register a heap allocation for automatic cleanup at scope exit.
+    /// `ptr_reg` should be an i8* register name (e.g., "%tmp.5").
+    pub(crate) fn track_alloc(&mut self, ptr_reg: String) {
+        self.fn_ctx.alloc_tracker.push(ptr_reg);
     }
 }

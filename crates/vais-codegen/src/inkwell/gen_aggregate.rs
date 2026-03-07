@@ -218,7 +218,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             // Slice is { i8*, i64 } - check if it has exactly 2 fields
             if struct_type.count_fields() == 2 {
-                // This is likely a slice - extract data pointer (field 0)
+                // Extract length (field 1) for bounds check
+                let len_val = self
+                    .builder
+                    .build_extract_value(struct_val, 1, "slice_len")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value();
+
+                let idx_int = idx_val.into_int_value();
+
+                // Bounds check: idx < len (unsigned)
+                let in_bounds = self
+                    .builder
+                    .build_int_compare(IntPredicate::ULT, idx_int, len_val, "bounds_check")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                let current_fn = self.current_function.ok_or_else(|| {
+                    CodegenError::LlvmError("No current function for bounds check".to_string())
+                })?;
+
+                let safe_bb = self.context.append_basic_block(current_fn, "bounds_safe");
+                let oob_bb = self.context.append_basic_block(current_fn, "bounds_oob");
+
+                self.builder
+                    .build_conditional_branch(in_bounds, safe_bb, oob_bb)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // OOB path: abort
+                self.builder.position_at_end(oob_bb);
+                let abort_fn = self.get_or_declare_abort();
+                self.builder
+                    .build_call(abort_fn, &[], "")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder
+                    .build_unreachable()
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Safe path: continue with element access
+                self.builder.position_at_end(safe_bb);
+
+                // Extract data pointer (field 0)
                 let data_ptr = self
                     .builder
                     .build_extract_value(struct_val, 0, "data_ptr")
@@ -228,7 +267,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // The GEP instruction uses elem_type for stride calculation.
                 let elem_type = inferred_elem_type;
                 let data_ptr_val = data_ptr.into_pointer_value();
-                let idx_int = idx_val.into_int_value();
 
                 // GEP to get element pointer (stride = sizeof(elem_type))
                 let elem_ptr = unsafe {
@@ -369,6 +407,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .ok_or_else(|| {
                 CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into())
             })?;
+        // Track allocation for automatic cleanup at scope exit
+        self.alloc_tracker.push(raw_ptr.into_pointer_value());
         let slice_ptr = self
             .builder
             .build_pointer_cast(

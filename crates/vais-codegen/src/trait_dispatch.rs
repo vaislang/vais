@@ -166,12 +166,17 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         let vtable_info = self.get_or_generate_vtable(impl_type, trait_name)?;
 
-        Ok(self.vtable_generator.create_trait_object(
+        // Remember the counter value — create_trait_object will use it for the malloc register
+        let alloc_counter = *counter;
+        let result = self.vtable_generator.create_trait_object(
             concrete_value,
             concrete_type,
             &vtable_info,
             counter,
-        ))
+        );
+        // Track the trait data allocation for automatic cleanup at scope exit
+        self.track_alloc(format!("%trait_data_{}", alloc_counter));
+        Ok(result)
     }
 
     /// Generate code for a dynamic method call on a trait object

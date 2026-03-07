@@ -24,6 +24,7 @@ impl CodeGenerator {
 
         self.initialize_function_state(&f.name.node);
         self.clear_defer_stack();
+        self.clear_alloc_tracker();
 
         // Create debug info for this function
         let func_line = self.debug_info.offset_to_line(span.start);
@@ -161,6 +162,10 @@ impl CodeGenerator {
                 let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                 ir.push_str(&defer_ir);
 
+                // Free tracked heap allocations before return
+                let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                ir.push_str(&alloc_cleanup_ir);
+
                 // Generate ensures (postcondition) checks before return
                 let ensures_ir =
                     self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
@@ -208,11 +213,15 @@ impl CodeGenerator {
                 if terminated {
                     // Block already has a terminator, no need for ret
                     // Note: defer cleanup for early returns is handled in Return statement
-                    // Note: ensures checks for early returns need to be added to Return statement handling
+                    // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                     ir.push_str(&defer_ir);
+
+                    // Free tracked heap allocations before return
+                    let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                    ir.push_str(&alloc_cleanup_ir);
 
                     // Generate ensures (postcondition) checks before return
                     let ensures_ir =
@@ -274,6 +283,7 @@ impl CodeGenerator {
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
         self.initialize_function_state(&method_name);
+        self.clear_alloc_tracker();
 
         // Create debug info for this method
         let func_line = self.debug_info.offset_to_line(span.start);
@@ -383,6 +393,11 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
+
+                // Free tracked heap allocations before return
+                let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                ir.push_str(&alloc_cleanup_ir);
+
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str(&format!("  ret void{}\n", ret_dbg));
@@ -406,7 +421,12 @@ impl CodeGenerator {
                 // If block is already terminated (has return/break), don't emit ret
                 if terminated {
                     // Block already has a terminator, no need for ret
+                    // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
+                    // Free tracked heap allocations before return
+                    let alloc_cleanup_ir = self.generate_alloc_cleanup();
+                    ir.push_str(&alloc_cleanup_ir);
+
                     let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
                     let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                     if ret_type == ResolvedType::Unit {

@@ -134,6 +134,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Stmt::Return(Some(expr)) => {
                 let val = self.generate_expr(&expr.node)?;
                 self.emit_defer_cleanup()?;
+                self.emit_alloc_cleanup()?;
                 self.builder
                     .build_return(Some(&val))
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -141,6 +142,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Stmt::Return(None) => {
                 self.emit_defer_cleanup()?;
+                self.emit_alloc_cleanup()?;
                 self.builder
                     .build_return(None)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -713,6 +715,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let deferred: Vec<Expr> = self.defer_stack.iter().rev().cloned().collect();
         for expr in deferred {
             self.generate_expr(&expr)?;
+        }
+        Ok(())
+    }
+
+    /// Emit free calls for all tracked heap allocations (scope-based auto free).
+    /// Called before function exit points, after defer cleanup.
+    pub(super) fn emit_alloc_cleanup(&mut self) -> CodegenResult<()> {
+        if self.alloc_tracker.is_empty() {
+            return Ok(());
+        }
+        let free_fn = self
+            .module
+            .get_function("free")
+            .ok_or_else(|| CodegenError::UndefinedFunction("free".to_string()))?;
+        // Clone to avoid borrow conflict
+        let ptrs: Vec<_> = self.alloc_tracker.clone();
+        for ptr in ptrs {
+            self.builder
+                .build_call(free_fn, &[ptr.into()], "")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         }
         Ok(())
     }

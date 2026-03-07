@@ -1,6 +1,7 @@
 //! AST checking for ownership violations
 
 use super::{OwnershipChecker, OwnershipState};
+use crate::lifetime::{self, Lifetime, LifetimeInferencer};
 use crate::types::{ResolvedType, TypeError, TypeResult};
 use vais_ast::*;
 
@@ -33,10 +34,21 @@ impl OwnershipChecker {
         let prev_returns_ref = self.function_returns_ref;
         self.function_returns_ref = returns_ref;
 
+        // --- Lifetime bounds validation ---
+        // Integrate lifetime inferencer to validate function signature lifetime bounds
+        self.validate_function_lifetimes(f)?;
+
         // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
-            self.define_var(&param.name.node, ty, param.is_mut, Some(param.name.span));
+            self.define_var(&param.name.node, ty.clone(), param.is_mut, Some(param.name.span));
+
+            // Register parameter lifetime for reference types
+            if self.is_ref_ast_type(&param.ty.node) {
+                let lt = self.lifetime_for_resolved_type(&ty);
+                self.lifetime_inferencer
+                    .register_var_lifetime(&param.name.node, lt);
+            }
         }
 
         // Check body
@@ -58,6 +70,110 @@ impl OwnershipChecker {
         self.function_returns_ref = prev_returns_ref;
         self.pop_scope();
         Ok(())
+    }
+
+    /// Validate lifetime bounds in a function signature using the lifetime inferencer.
+    /// Checks that lifetime parameters and their bounds are consistent.
+    fn validate_function_lifetimes(&mut self, f: &Function) -> TypeResult<()> {
+        // Reset the inferencer for this function
+        self.lifetime_inferencer.reset();
+
+        // Build parameter list with resolved types
+        let params: Vec<(String, ResolvedType, bool)> = f
+            .params
+            .iter()
+            .map(|p| {
+                let ty = self.ast_type_to_resolved(&p.ty.node);
+                (p.name.node.clone(), ty, p.is_mut)
+            })
+            .collect();
+
+        let ret_type = f
+            .ret_type
+            .as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        // Check if the function has any reference types at all
+        let has_ref_params = params
+            .iter()
+            .any(|(_, ty, _)| self.is_resolved_ref_type(ty));
+        let has_ref_return = self.is_resolved_ref_type(&ret_type);
+
+        // Only run lifetime inference if there are references
+        if !has_ref_params && !has_ref_return {
+            return Ok(());
+        }
+
+        // Extract lifetime parameters and bounds from generics
+        let lifetime_params = LifetimeInferencer::extract_lifetime_params(&f.generics);
+        let lifetime_bounds = LifetimeInferencer::extract_lifetime_bounds(&f.generics);
+
+        // Run lifetime inference -- errors are collected, not fatal
+        match self.lifetime_inferencer.infer_function_lifetimes(
+            &f.name.node,
+            &params,
+            &ret_type,
+            &lifetime_params,
+            &lifetime_bounds,
+        ) {
+            Ok(_resolution) => {}
+            Err(err) => {
+                self.report_error(err)?;
+            }
+        }
+
+        // Validate return lifetime is tied to a parameter lifetime
+        if has_ref_return {
+            let return_lt = self
+                .lifetime_inferencer
+                .extract_reference_lifetime(&ret_type)
+                .unwrap_or(lifetime::Lifetime::Static);
+
+            let param_lifetimes: Vec<(String, Lifetime)> = params
+                .iter()
+                .filter_map(|(name, ty, _)| {
+                    self.lifetime_inferencer
+                        .extract_reference_lifetime(ty)
+                        .map(|lt| (name.clone(), lt))
+                })
+                .collect();
+
+            if let Err(err) = self
+                .lifetime_inferencer
+                .validate_return_lifetime(&return_lt, &param_lifetimes)
+            {
+                self.report_error(err)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a resolved type is a reference type
+    fn is_resolved_ref_type(&self, ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::Ref(_)
+                | ResolvedType::RefMut(_)
+                | ResolvedType::RefLifetime { .. }
+                | ResolvedType::RefMutLifetime { .. }
+        )
+    }
+
+    /// Get a lifetime for a resolved type (for tracking purposes)
+    fn lifetime_for_resolved_type(&self, ty: &ResolvedType) -> Lifetime {
+        match ty {
+            ResolvedType::RefLifetime { lifetime, .. }
+            | ResolvedType::RefMutLifetime { lifetime, .. } => {
+                self.lifetime_inferencer.resolve_lifetime_name(lifetime)
+            }
+            _ => {
+                // For un-annotated references, use an inferred lifetime
+                // based on the current scope
+                Lifetime::Inferred(lifetime::LifetimeVar(self.scope_depth))
+            }
+        }
     }
 
     /// Check if an AST type is a reference type
@@ -100,7 +216,12 @@ impl OwnershipChecker {
                 // Track reference sources for dangling pointer detection
                 if let Expr::Ref(inner) = &value.node {
                     if let Expr::Ident(source_name) = &inner.node {
-                        self.register_reference(&name.node, source_name, false);
+                        // Determine if mutable based on the binding type
+                        let is_mut_ref = matches!(
+                            ty.as_ref().map(|t| &t.node),
+                            Some(Type::RefMut(_)) | Some(Type::RefMutLifetime { .. })
+                        );
+                        self.register_reference(&name.node, source_name, is_mut_ref);
                     }
                 }
 

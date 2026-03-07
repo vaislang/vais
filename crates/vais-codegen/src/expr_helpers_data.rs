@@ -314,7 +314,38 @@ impl CodeGenerator {
         };
 
         // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
+        // Also insert runtime bounds check: idx < len, abort on OOB
         let base_ptr = if is_fat_ptr {
+            self.needs_bounds_check = true;
+            // Extract length (field 1) for bounds check
+            let len_val = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+                len_val, arr_val
+            ));
+
+            // Bounds check: idx < len (unsigned comparison)
+            let in_bounds = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = icmp ult i64 {}, {}\n",
+                in_bounds, idx_val, len_val
+            ));
+
+            let safe_label = self.next_label("bounds_safe");
+            let oob_label = self.next_label("bounds_oob");
+            ir.push_str(&format!(
+                "  br i1 {}, label %{}, label %{}\n",
+                in_bounds, safe_label, oob_label
+            ));
+
+            // OOB path: abort
+            ir.push_str(&format!("{}:\n", oob_label));
+            ir.push_str("  call void @abort()\n");
+            ir.push_str("  unreachable\n");
+
+            // Safe path: continue with element access
+            ir.push_str(&format!("{}:\n", safe_label));
+
             let data_ptr = self.next_temp(counter);
             ir.push_str(&format!(
                 "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
