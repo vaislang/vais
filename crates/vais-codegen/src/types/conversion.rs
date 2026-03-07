@@ -241,9 +241,11 @@ impl CodeGenerator {
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
             ResolvedType::ImplTrait { .. } => {
-                return Err(crate::CodegenError::InternalError(
-                    "ImplTrait should be monomorphized before codegen".to_string(),
-                ));
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved ImplTrait"),
+                    backend: String::from("text"),
+                });
+                String::from("i64")
             }
             ResolvedType::FnPtr {
                 params,
@@ -279,9 +281,11 @@ impl CodeGenerator {
                 format!("{}*", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Lifetime(_) => {
-                return Err(crate::CodegenError::InternalError(
-                    "bare lifetime has no runtime representation".to_string(),
-                ));
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("bare lifetime"),
+                    backend: String::from("text"),
+                });
+                String::from("i64")
             }
             ResolvedType::Map(key, _val) => {
                 // Map is represented as a pointer to key array (parallel arrays)
@@ -333,9 +337,11 @@ impl CodeGenerator {
                 String::from("void")
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                return Err(crate::CodegenError::InternalError(
-                    "unresolved type variable reached codegen".to_string(),
-                ));
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved type variable"),
+                    backend: String::from("text"),
+                });
+                String::from("i64")
             }
             ResolvedType::Associated {
                 base,
@@ -358,9 +364,11 @@ impl CodeGenerator {
                 String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
-                return Err(crate::CodegenError::InternalError(
-                    "unresolved higher-kinded type in codegen".to_string(),
-                ));
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved HKT"),
+                    backend: String::from("text"),
+                });
+                String::from("i64")
             }
         })
     }

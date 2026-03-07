@@ -7,6 +7,9 @@ pub fn create_chapters() -> Vec<Chapter> {
         create_chapter3_collections(),
         create_chapter4_error_handling(),
         create_chapter5_structs_traits(),
+        create_chapter6_closures_iterators(),
+        create_chapter7_async_concurrency(),
+        create_chapter8_ffi_wasm(),
     ]
 }
 
@@ -846,6 +849,608 @@ Self-recursion with generics:
     }
 }
 
+fn create_chapter6_closures_iterators() -> Chapter {
+    Chapter {
+        id: 5,
+        title: "Chapter 6: Closures and Iterators".to_string(),
+        description: "Master closures, higher-order functions, and iterator patterns".to_string(),
+        lessons: vec![
+            Lesson {
+                id: "ch6_closures".to_string(),
+                title: "Closures In Depth".to_string(),
+                description: "Learn closure syntax, capture modes, and higher-order functions".to_string(),
+                content: r#"
+Closures capture variables from their enclosing scope:
+
+    x := 10
+    add_x := |n| n + x    # captures x by value
+
+Multi-line closures:
+    transform := |a, b| {
+        sum := a + b
+        sum * 2
+    }
+
+Passing closures to functions:
+    F apply(f: |i64| -> i64, val: i64) -> i64 {
+        f(val)
+    }
+
+    result := apply(|x| x * 3, 5)  # result = 15
+
+Returning closures:
+    F make_adder(n: i64) -> |i64| -> i64 {
+        |x| x + n
+    }
+    add5 := make_adder(5)
+    result := add5(10)  # result = 15
+"#
+                .to_string(),
+                code_template: r#"# Write a function 'make_multiplier' that takes an i64 and
+# returns a closure that multiplies its argument by that value.
+# Then use it: make_multiplier(3)(7) should return 21
+# Your code here
+"#
+                .to_string(),
+                solution: r#"F make_multiplier(factor: i64) -> |i64| -> i64 {
+    |x| x * factor
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Closure factory should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Return a closure that captures the factor parameter".to_string(),
+                    "Closure syntax: |param| expression".to_string(),
+                    "The closure captures 'factor' from the outer function".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch6_higher_order".to_string(),
+                title: "Higher-Order Functions".to_string(),
+                description: "Use functions as arguments and return values".to_string(),
+                content: r#"
+Higher-order functions take or return other functions:
+
+    F twice(f: |i64| -> i64, x: i64) -> i64 {
+        f(f(x))
+    }
+
+    result := twice(|x| x + 1, 5)  # result = 7
+
+Composing functions:
+    F compose(f: |i64| -> i64, g: |i64| -> i64) -> |i64| -> i64 {
+        |x| f(g(x))
+    }
+
+    double := |x| x * 2
+    inc := |x| x + 1
+    double_then_inc := compose(inc, double)
+    result := double_then_inc(5)  # 5*2=10, 10+1=11
+
+The pipe operator chains transformations:
+    result := 5 |> |x| x * 2 |> |x| x + 1  # 11
+"#
+                .to_string(),
+                code_template: r#"# Write a function 'apply_twice' that takes a closure and a value,
+# applies the closure twice, and returns the result.
+# Example: apply_twice(|x| x * 2, 3) -> 12
+# Your code here
+"#
+                .to_string(),
+                solution: r#"F apply_twice(f: |i64| -> i64, x: i64) -> i64 {
+    f(f(x))
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Higher-order function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Call f once on x, then call f again on the result".to_string(),
+                    "Function parameter syntax: f: |ParamType| -> ReturnType".to_string(),
+                    "Solution: f(f(x))".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch6_iterators".to_string(),
+                title: "Iterator Patterns".to_string(),
+                description: "Build iterator-like patterns with closures and loops".to_string(),
+                content: r#"
+Vais uses loop + closure patterns for iteration:
+
+Summing with accumulation:
+    F fold(arr: [i64; 5], init: i64, f: |i64, i64| -> i64) -> i64 {
+        acc := mut init
+        L i:0..5 {
+            acc = f(acc, arr[i])
+        }
+        acc
+    }
+
+    nums := [1, 2, 3, 4, 5]
+    sum := fold(nums, 0, |acc, x| acc + x)  # 15
+
+Mapping over arrays:
+    F map5(arr: [i64; 5], f: |i64| -> i64) -> [i64; 5] {
+        result := mut [0, 0, 0, 0, 0]
+        L i:0..5 {
+            result[i] = f(arr[i])
+        }
+        result
+    }
+
+Filtering with predicates:
+    F count_if(arr: [i64; 5], pred: |i64| -> bool) -> i64 {
+        count := mut 0
+        L i:0..5 {
+            I pred(arr[i]) { count = count + 1 }
+        }
+        count
+    }
+"#
+                .to_string(),
+                code_template: r#"# Write a function 'sum_mapped' that takes an array of 5 i64,
+# a mapping closure, and returns the sum of applying the closure
+# to each element.
+# Example: sum_mapped([1,2,3,4,5], |x| x * x) -> 55
+# Your code here
+"#
+                .to_string(),
+                solution: r#"F sum_mapped(arr: [i64; 5], f: |i64| -> i64) -> i64 {
+    total := mut 0
+    L i:0..5 {
+        total = total + f(arr[i])
+    }
+    total
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Iterator pattern should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Loop over the array indices with L i:0..5".to_string(),
+                    "Apply f to each element and accumulate the result".to_string(),
+                    "Use a mutable accumulator: total := mut 0".to_string(),
+                ],
+            },
+        ],
+    }
+}
+
+fn create_chapter7_async_concurrency() -> Chapter {
+    Chapter {
+        id: 6,
+        title: "Chapter 7: Async and Concurrency".to_string(),
+        description: "Write asynchronous and concurrent programs in Vais".to_string(),
+        lessons: vec![
+            Lesson {
+                id: "ch7_async_basics".to_string(),
+                title: "Async Functions".to_string(),
+                description: "Learn async/await syntax and the Future type".to_string(),
+                content: r#"
+Async functions use 'A' (async) and 'Y' (await):
+
+    A F fetch_data() -> i64 {
+        # Simulated async work
+        result := Y compute_value()
+        result * 2
+    }
+
+    A F compute_value() -> i64 {
+        42
+    }
+
+Async functions return a Future:
+    future := fetch_data()   # doesn't run yet
+    value := Y future        # runs and waits for result
+
+Key rules:
+- 'A' marks a function as async
+- 'Y' awaits a Future inside an async function
+- Async functions can only be awaited inside other async functions
+  or from a spawn context
+"#
+                .to_string(),
+                code_template: r#"# Write an async function 'async_add' that takes two i64 values,
+# and returns their sum. Then write an async function 'double_add'
+# that calls async_add and doubles the result.
+# Your code here
+"#
+                .to_string(),
+                solution: r#"A F async_add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+A F double_add(a: i64, b: i64) -> i64 {
+    sum := Y async_add(a, b)
+    sum * 2
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Async functions should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Use 'A F' to declare an async function".to_string(),
+                    "Use 'Y' to await the result of an async call".to_string(),
+                    "Async functions can call other async functions with Y".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch7_spawn".to_string(),
+                title: "Spawn and Concurrency".to_string(),
+                description: "Run tasks concurrently with spawn".to_string(),
+                content: r#"
+The 'spawn' keyword creates a concurrent task:
+
+    A F main_task() -> i64 {
+        # Spawn two tasks that run concurrently
+        task1 := spawn compute(10)
+        task2 := spawn compute(20)
+
+        # Wait for both results
+        r1 := Y task1
+        r2 := Y task2
+
+        r1 + r2
+    }
+
+    A F compute(x: i64) -> i64 {
+        x * x
+    }
+
+Spawn returns a Future that can be awaited later.
+Tasks may run in parallel depending on the runtime.
+
+Sequential vs concurrent:
+    # Sequential: total time = time(a) + time(b)
+    result1 := Y slow_op()
+    result2 := Y slow_op()
+
+    # Concurrent: total time = max(time(a), time(b))
+    f1 := spawn slow_op()
+    f2 := spawn slow_op()
+    result1 := Y f1
+    result2 := Y f2
+"#
+                .to_string(),
+                code_template: r#"# Write an async function 'parallel_sum' that spawns two
+# computations and returns their combined result.
+# Use spawn to run them concurrently.
+# Your code here
+"#
+                .to_string(),
+                solution: r#"A F square(x: i64) -> i64 {
+    x * x
+}
+
+A F parallel_sum(a: i64, b: i64) -> i64 {
+    fa := spawn square(a)
+    fb := spawn square(b)
+    Y fa + Y fb
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Spawn pattern should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Use 'spawn' to start a concurrent task".to_string(),
+                    "Spawn returns a Future — await it with Y".to_string(),
+                    "Spawn both tasks first, then await both results".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch7_channels".to_string(),
+                title: "Communication Patterns".to_string(),
+                description: "Coordinate concurrent tasks with shared state".to_string(),
+                content: r#"
+Concurrent tasks can communicate through shared mutable state
+or return values:
+
+Using return values (recommended):
+    A F fan_out(inputs: [i64; 3]) -> i64 {
+        t0 := spawn process(inputs[0])
+        t1 := spawn process(inputs[1])
+        t2 := spawn process(inputs[2])
+        Y t0 + Y t1 + Y t2
+    }
+
+Defer for cleanup (like Go's defer):
+    F with_resource() -> i64 {
+        res := acquire()
+        D release(res)    # runs when function exits
+        use_resource(res)
+    }
+
+Yield for cooperative multitasking:
+    A F generator() -> i64 {
+        yield 1
+        yield 2
+        yield 3
+        0
+    }
+
+Common patterns:
+- Fan-out: spawn N tasks, await all results
+- Pipeline: chain async operations with |>
+- Defer: ensure cleanup runs on exit
+"#
+                .to_string(),
+                code_template: r#"# Write a function 'with_cleanup' that:
+# 1. Creates a resource (just use an i64 value)
+# 2. Uses D (defer) to ensure cleanup
+# 3. Returns the resource value multiplied by 2
+# Your code here
+"#
+                .to_string(),
+                solution: r#"F acquire() -> i64 { 42 }
+F release(r: i64) -> i64 { r }
+
+F with_cleanup() -> i64 {
+    res := acquire()
+    D release(res)
+    res * 2
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Defer pattern should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "D (defer) schedules a call to run when the function exits".to_string(),
+                    "Place the defer right after acquiring the resource".to_string(),
+                    "The deferred call runs regardless of how the function exits".to_string(),
+                ],
+            },
+        ],
+    }
+}
+
+fn create_chapter8_ffi_wasm() -> Chapter {
+    Chapter {
+        id: 7,
+        title: "Chapter 8: FFI and WebAssembly".to_string(),
+        description: "Interface with C libraries and compile to WebAssembly".to_string(),
+        lessons: vec![
+            Lesson {
+                id: "ch8_ffi_basics".to_string(),
+                title: "Foreign Function Interface".to_string(),
+                description: "Call C functions from Vais using extern blocks".to_string(),
+                content: r#"
+The 'N' (extern) keyword declares foreign functions:
+
+Calling C standard library:
+    N "C" {
+        F malloc(size: i64) -> i64
+        F free(ptr: i64) -> i64
+        F printf(fmt: str) -> i64
+    }
+
+Using extern functions:
+    F allocate_buffer(size: i64) -> i64 {
+        buf := malloc(size)
+        I buf == 0 {
+            R -1   # allocation failed
+        }
+        buf
+    }
+
+Calling math functions:
+    N "C" {
+        F abs(x: i64) -> i64
+        F sqrt(x: f64) -> f64
+    }
+
+    F distance(x: f64, y: f64) -> f64 {
+        sqrt(x * x + y * y)
+    }
+
+FFI guidelines:
+- Always check return values from C functions
+- Free allocated memory when done
+- Use D (defer) for automatic cleanup
+"#
+                .to_string(),
+                code_template: r#"# Write a function that uses extern malloc/free to:
+# 1. Allocate 16 bytes
+# 2. Store a value at offset 0
+# 3. Read the value back
+# 4. Free the memory
+# 5. Return the read value
+# Your code here
+"#
+                .to_string(),
+                solution: r#"N "C" {
+    F malloc(size: i64) -> i64
+    F free(ptr: i64) -> i64
+}
+
+F alloc_and_read() -> i64 {
+    buf := malloc(16)
+    store_byte(buf, 0, 99)
+    val := load_byte(buf, 0)
+    free(buf)
+    val
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "FFI code should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Declare extern functions with N \"C\" { ... }".to_string(),
+                    "Use store_byte and load_byte for memory access".to_string(),
+                    "Always free allocated memory".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch8_wasm_basics".to_string(),
+                title: "WebAssembly Basics".to_string(),
+                description: "Compile Vais code to WebAssembly".to_string(),
+                content: r#"
+Vais can compile to WebAssembly (WASM):
+
+    vaisc --target wasm32-unknown-unknown myfile.vais
+
+Exporting functions to WASM:
+    #[wasm_export("add")]
+    F add(a: i64, b: i64) -> i64 {
+        a + b
+    }
+
+Importing from the WASM host:
+    #[wasm_import("env", "log")]
+    N "C" { F log(value: i64) -> i64 }
+
+WASM constraints:
+- No direct filesystem access
+- No raw pointers to host memory
+- Integer and float types only at the boundary
+- Use i32 for WASM-native integers
+
+A minimal WASM module:
+    #[wasm_export("main")]
+    F main() -> i64 {
+        result := compute(10, 20)
+        result
+    }
+
+    F compute(a: i64, b: i64) -> i64 {
+        a * b + a + b
+    }
+"#
+                .to_string(),
+                code_template: r#"# Write a WASM-exportable function 'fibonacci' that computes
+# the nth Fibonacci number. Use #[wasm_export("fibonacci")].
+# Your code here
+"#
+                .to_string(),
+                solution: r#"#[wasm_export("fibonacci")]
+F fibonacci(n: i64) -> i64 {
+    I n < 2 { R n }
+    a := mut 0
+    b := mut 1
+    L i:2..n {
+        temp := b
+        b = a + b
+        a = temp
+    }
+    a + b
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "WASM export should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Use #[wasm_export(\"name\")] attribute before the function".to_string(),
+                    "Use an iterative approach for Fibonacci (not recursive)".to_string(),
+                    "Track two variables (a, b) and update in a loop".to_string(),
+                ],
+            },
+            Lesson {
+                id: "ch8_wasm_js_interop".to_string(),
+                title: "WASM-JavaScript Interop".to_string(),
+                description: "Bridge Vais WASM modules with JavaScript".to_string(),
+                content: r#"
+Vais can also compile to JavaScript ESM:
+
+    vaisc --target js myfile.vais  # produces myfile.mjs
+
+JavaScript codegen produces clean ESM modules:
+    # Vais source:
+    F add(a: i64, b: i64) -> i64 = a + b
+
+    // Generated JavaScript (myfile.mjs):
+    // export function add(a, b) { return a + b; }
+
+WASM + JS bridging pattern:
+    # math.vais
+    #[wasm_export("multiply")]
+    F multiply(a: i64, b: i64) -> i64 = a * b
+
+    #[wasm_export("power")]
+    F power(base: i64, exp: i64) -> i64 {
+        result := mut 1
+        L i:0..exp {
+            result = result * base
+        }
+        result
+    }
+
+    // JavaScript usage:
+    // const wasm = await WebAssembly.instantiate(buffer);
+    // console.log(wasm.instance.exports.multiply(3, 4)); // 12
+    // console.log(wasm.instance.exports.power(2, 10));   // 1024
+
+Import functions from JS host:
+    #[wasm_import("env", "console_log")]
+    N "C" { F console_log(val: i64) -> i64 }
+"#
+                .to_string(),
+                code_template: r#"# Write two WASM-exportable functions:
+# 1. 'square' that returns x * x
+# 2. 'sum_of_squares' that returns the sum of squares from 1 to n
+# Your code here
+"#
+                .to_string(),
+                solution: r#"#[wasm_export("square")]
+F square(x: i64) -> i64 = x * x
+
+#[wasm_export("sum_of_squares")]
+F sum_of_squares(n: i64) -> i64 {
+    total := mut 0
+    L i:1..n {
+        total = total + i * i
+    }
+    total + n * n
+}
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "WASM interop functions should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
+                hints: vec![
+                    "Use #[wasm_export(\"name\")] for each exported function".to_string(),
+                    "Single-expression functions can use = syntax".to_string(),
+                    "Loop from 1 to n and accumulate squares".to_string(),
+                ],
+            },
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -853,7 +1458,7 @@ mod tests {
     #[test]
     fn test_all_chapters_created() {
         let chapters = create_chapters();
-        assert_eq!(chapters.len(), 5);
+        assert_eq!(chapters.len(), 8);
     }
 
     #[test]
@@ -969,7 +1574,7 @@ mod tests {
     fn test_total_lessons() {
         let chapters = create_chapters();
         let total: usize = chapters.iter().map(|c| c.lessons.len()).sum();
-        assert_eq!(total, 15);
+        assert_eq!(total, 24);
     }
 
     #[test]
@@ -1093,6 +1698,62 @@ mod tests {
         let chapter = create_chapter5_structs_traits();
         let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
         assert!(ids.contains(&"ch5_structs"));
+    }
+
+    #[test]
+    fn test_chapter6_lesson_count() {
+        let chapter = create_chapter6_closures_iterators();
+        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.id, 5);
+        assert_eq!(chapter.lessons[0].id, "ch6_closures");
+        assert_eq!(chapter.lessons[1].id, "ch6_higher_order");
+        assert_eq!(chapter.lessons[2].id, "ch6_iterators");
+    }
+
+    #[test]
+    fn test_chapter6_topics() {
+        let chapter = create_chapter6_closures_iterators();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch6_closures"));
+        assert!(ids.contains(&"ch6_higher_order"));
+        assert!(ids.contains(&"ch6_iterators"));
+    }
+
+    #[test]
+    fn test_chapter7_lesson_count() {
+        let chapter = create_chapter7_async_concurrency();
+        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.id, 6);
+        assert_eq!(chapter.lessons[0].id, "ch7_async_basics");
+        assert_eq!(chapter.lessons[1].id, "ch7_spawn");
+        assert_eq!(chapter.lessons[2].id, "ch7_channels");
+    }
+
+    #[test]
+    fn test_chapter7_topics() {
+        let chapter = create_chapter7_async_concurrency();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch7_async_basics"));
+        assert!(ids.contains(&"ch7_spawn"));
+    }
+
+    #[test]
+    fn test_chapter8_lesson_count() {
+        let chapter = create_chapter8_ffi_wasm();
+        assert_eq!(chapter.lessons.len(), 3);
+        assert_eq!(chapter.id, 7);
+        assert_eq!(chapter.lessons[0].id, "ch8_ffi_basics");
+        assert_eq!(chapter.lessons[1].id, "ch8_wasm_basics");
+        assert_eq!(chapter.lessons[2].id, "ch8_wasm_js_interop");
+    }
+
+    #[test]
+    fn test_chapter8_topics() {
+        let chapter = create_chapter8_ffi_wasm();
+        let ids: Vec<&str> = chapter.lessons.iter().map(|l| l.id.as_str()).collect();
+        assert!(ids.contains(&"ch8_ffi_basics"));
+        assert!(ids.contains(&"ch8_wasm_basics"));
+        assert!(ids.contains(&"ch8_wasm_js_interop"));
     }
 
     #[test]

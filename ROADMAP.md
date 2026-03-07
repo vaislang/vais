@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 117 완료)
+> **현재 버전**: 0.1.0 (Phase 122 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-07 (Phase 114~117 — monomorphization 경고, WASM 검증, 벤치마크 갱신, codecov 80%)
+> **최종 업데이트**: 2026-03-07 (Phase 118~122 — 성능/타입/에코시스템/문서/커버리지 85%)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 9,900+ (E2E 1,723+, 단위 8,200+) |
+| 전체 테스트 | 10,100+ (E2E 1,745+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.0ms (819K lines/s) |
@@ -241,10 +241,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 104~108 | 감사 · 분할 R12 · 0 ignored | expect/panic 전수 감사(프로덕션 0건), 9파일 모듈 분할, E2E 0 ignored | 1,620 |
 | 109~113 | v1.0 블로커 해결 | Slice bounds check, scope-based auto free, 에러 테스트 +31, ownership 강화 44 tests | 1,667 |
 | 114~117 | 완성도 · 검증 | Monomorphization 경고, WASM E2E 44개, 벤치마크 갱신 61.0ms, Codecov 80%+ | 1,723 |
+| 118~122 | 성능 · 타입 · 에코 · 문서 · 커버리지 | clone 축소, Text IR 일관성, ConstGeneric mono, tutorial 24 lessons, examples 188, Codecov 85% | 1,745 |
 
 ---
 
-## 📋 예정 작업
+## 📋 완료 작업
 
 모드: 자동진행
 
@@ -498,6 +499,67 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: codegen_coverage_tests4.rs에 복합 코드젠 경로 62개 포함 (빌드 로직 간접 커버리지)
 - [x] 4. codecov.yml 목표 75→80% 갱신 + 검증 (Sonnet) ✅ 2026-03-07
   변경: codecov.yml project target 75%→80%, codegen 1,307 tests + types 1,230 tests 전체 통과
+
+### Phase 118: 성능 최적화 — clone/alloc 축소 & 핫패스 개선 ✅ 2026-03-07
+
+> **목표**: codegen/types 핫패스 clone 축소, builtins String::from 전환, 벤치마크 유지
+> **결과**: 11파일 수정 (+345/-272줄), E2E 1,723 통과, Clippy 0건, 벤치마크 노이즈 범위
+
+- [x] 1. codegen 핫패스 clone 축소 — registration.rs 중복 to_string→clone+move 전환, instantiations.rs mangled_name 단일 할당, trait_dispatch.rs method/assoc name 최적화, stmt.rs alloc_tracker mem::take 전환 (Opus) ✅
+  변경: registration.rs(+14/-11), instantiations.rs(+7/-7), trait_dispatch.rs(+6/-4), stmt.rs(+4/-1)
+- [x] 2. types 핫패스 clone 축소 — substitute.rs 프리미티브 clone→직접 구성 전환(18개), substitute_type empty-check 빠른 경로, #[inline] 3개 추가, checker_module/registration.rs field/method name 단일 할당 (Opus) ✅
+  변경: substitute.rs(+38/-20), checker_module/registration.rs(+7/-4)
+- [x] 3. builtins to_string() 216건 String::from 전환 — file_io.rs(70), memory.rs(43), platform.rs(95), io.rs(8) (Opus) ✅
+  변경: builtins/ 4파일 일괄 sed 전환
+- [x] 4. 벤치마크 측정 — codegen 87-134µs (노이즈 범위 ±1.4%), E2E 1,723/0/0 유지 (Opus) ✅
+
+### Phase 119: 타입 시스템 강화 — monomorphization 완성 & Text IR 일관성
+
+> **목표**: Text IR/Inkwell 오류 처리 일관성 확보, ConstGeneric monomorphization, warning 집계 도구
+> **기대 효과**: 타입 안전성 향상, 컴파일러 경고 가시성 개선
+
+- [x] 1. Text IR 오류 처리 일관성 — ImplTrait/Lifetime/Var/Unknown/HKT InternalError→warning+fallback 통일 (Opus) ✅
+  변경: types/conversion.rs — 4개 InternalError→emit_warning+i64 fallback (Inkwell과 동일 패턴)
+- [x] 2. ConstGeneric monomorphization 강화 — instantiations.rs const param 치환 (Opus) ✅
+  변경: module_gen/instantiations.rs — Function/Method 인스턴스화에 const_args→substitutions 맵 추가
+- [x] 3. warning 집계 리포트 — compile 완료 시 경고 요약 출력 (Opus) ✅
+  변경: backend.rs + core.rs — codegen 경고 종류별 카운트 요약 (verbose 모드)
+  변경: inkwell/generator.rs — get_warnings() pub 메서드 추가
+- [x] 4. GAT/Specialization E2E 검증 테스트 +22개 (Opus) ✅
+  변경: tests/e2e/phase119_type_system.rs — 7개 카테고리 22 테스트 (trait dispatch, mono, generics)
+- [x] 5. 검증 — E2E 1,745/0/0 + clippy 0건 (Opus) ✅
+
+### Phase 120: 에코시스템 확장 — registry README & tutorial Chapter 6~8 ✅ 2026-03-07
+
+> **목표**: registry-server README 추가, tutorial 3개 Chapter 확장 (15→24 lessons)
+> **결과**: README 22개 API 엔드포인트 문서화, 9개 신규 수업, 126 tests 통과
+
+- [x] 1. registry-server README.md — API 문서 (22 엔드포인트), 설치/배포 가이드, Docker/Fly.io (Sonnet) ✅
+- [x] 2. tutorial Chapter 6: Closures & Iterators — closures, higher_order, iterators (Sonnet) ✅
+- [x] 3. tutorial Chapter 7: Async/Await & Concurrency — async_basics, spawn, channels (Sonnet) ✅
+- [x] 4. tutorial Chapter 8: FFI & WASM — ffi_basics, wasm_basics, wasm_js_interop (Sonnet) ✅
+- [x] 5. 검증 — 튜토리얼 126 tests 통과, Clippy 0건 (Sonnet) ✅
+
+### Phase 121: 문서/온보딩 — 실전 예제 & 학습 경로 확충 ✅ 2026-03-07
+
+> **목표**: docs-site 실전 가이드 3개, examples/ 14개 신규, playground 31→40 예제
+> **결과**: 가이드 3개 + examples 174→188 + playground 40 예제 + 학습 경로 갱신
+
+- [x] 1. docs-site 실전 가이드 — WebSocket Chat, JSON Parser, CLI Framework (Sonnet) ✅
+- [x] 2. examples/ 14개 신규 — fizzbuzz, binary_search, state_machine, linked_list 등 (Sonnet) ✅
+- [x] 3. playground 예제 갱신 — 31→40 내장 예제 (+9) (Sonnet) ✅
+- [x] 4. docs-site 학습 경로 업데이트 — SUMMARY.md + learning-path.md + gallery.md (Sonnet) ✅
+
+### Phase 122: Codecov 85%+ — ownership/contracts/control_flow 테스트 보강 ✅ 2026-03-07
+
+> **목표**: 코드 커버리지 80%→85%+, 미커버 영역 테스트 보강
+> **결과**: +126 tests (contracts 27, control_flow 30, ownership 35, advanced_opt 34), codecov 85% 타겟
+
+- [x] 1. ownership codegen 테스트 — binding/struct/enum/closure/loop/scope +35 tests (Sonnet) ✅
+- [x] 2. contracts/ 테스트 — assert_assume, auto_checks, decreases, ensures, helpers +27 tests (Sonnet) ✅
+- [x] 3. control_flow/ 테스트 — if_else, match_gen, pattern +30 tests (Sonnet) ✅
+- [x] 4. advanced_opt/ 테스트 — alias_analysis, data_layout, AdvancedOptConfig +34 tests (Sonnet) ✅
+- [x] 5. codecov.yml 목표 80→85% 갱신 + codegen 1,433 tests 통과 (Sonnet) ✅
 
 ---
 

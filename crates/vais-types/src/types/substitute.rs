@@ -9,10 +9,14 @@ use super::resolved::{ConstBinOp, ResolvedConst, ResolvedType};
 const MAX_SUBSTITUTE_DEPTH: usize = 64;
 
 /// Substitute generic type parameters with concrete types
+#[inline]
 pub fn substitute_type(
     ty: &ResolvedType,
     substitutions: &HashMap<String, ResolvedType>,
 ) -> ResolvedType {
+    if substitutions.is_empty() {
+        return ty.clone();
+    }
     substitute_type_impl(ty, substitutions, 0)
 }
 
@@ -307,9 +311,11 @@ fn substitute_type_impl(
                 generics: new_generics,
             }
         }
-        ResolvedType::ImplTrait { bounds: _ } => {
+        ResolvedType::ImplTrait { bounds } => {
             // Bounds are String trait names, no type substitution needed
-            ty.clone()
+            ResolvedType::ImplTrait {
+                bounds: bounds.clone(),
+            }
         }
         ResolvedType::Associated {
             base,
@@ -398,33 +404,36 @@ fn substitute_type_impl(
                 inner: Box::new(new_inner),
             }
         }
-        ResolvedType::Lifetime(_) => {
+        ResolvedType::Lifetime(name) => {
             // Lifetime parameters are not substituted
-            ty.clone()
+            ResolvedType::Lifetime(name.clone())
         }
-        // Primitives pass through unchanged
-        ResolvedType::I8
-        | ResolvedType::I16
-        | ResolvedType::I32
-        | ResolvedType::I64
-        | ResolvedType::I128
-        | ResolvedType::U8
-        | ResolvedType::U16
-        | ResolvedType::U32
-        | ResolvedType::U64
-        | ResolvedType::U128
-        | ResolvedType::F32
-        | ResolvedType::F64
-        | ResolvedType::Bool
-        | ResolvedType::Str
-        | ResolvedType::Unit
-        | ResolvedType::Unknown
-        | ResolvedType::Never
-        | ResolvedType::Var(_) => ty.clone(),
+        // Primitives and simple variants pass through unchanged.
+        // Use explicit construction instead of clone() to avoid vtable dispatch
+        // and potential heap allocation overhead on non-Copy enum variants.
+        ResolvedType::I8 => ResolvedType::I8,
+        ResolvedType::I16 => ResolvedType::I16,
+        ResolvedType::I32 => ResolvedType::I32,
+        ResolvedType::I64 => ResolvedType::I64,
+        ResolvedType::I128 => ResolvedType::I128,
+        ResolvedType::U8 => ResolvedType::U8,
+        ResolvedType::U16 => ResolvedType::U16,
+        ResolvedType::U32 => ResolvedType::U32,
+        ResolvedType::U64 => ResolvedType::U64,
+        ResolvedType::U128 => ResolvedType::U128,
+        ResolvedType::F32 => ResolvedType::F32,
+        ResolvedType::F64 => ResolvedType::F64,
+        ResolvedType::Bool => ResolvedType::Bool,
+        ResolvedType::Str => ResolvedType::Str,
+        ResolvedType::Unit => ResolvedType::Unit,
+        ResolvedType::Unknown => ResolvedType::Unknown,
+        ResolvedType::Never => ResolvedType::Never,
+        ResolvedType::Var(id) => ResolvedType::Var(*id),
     }
 }
 
 /// Substitute const parameter names in a ResolvedConst expression
+#[inline]
 pub fn substitute_const(
     c: &ResolvedConst,
     _substitutions: &HashMap<String, ResolvedType>,
@@ -434,6 +443,7 @@ pub fn substitute_const(
 }
 
 /// Substitute const parameters with concrete values in a ResolvedConst expression
+#[inline]
 pub fn substitute_const_values(
     c: &ResolvedConst,
     const_subs: &HashMap<String, i64>,

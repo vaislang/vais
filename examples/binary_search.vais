@@ -1,0 +1,54 @@
+# Binary Search — Efficient search on sorted arrays
+# Demonstrates: pointer arrays, while loops, ternary operator
+#
+# Run: vaisc run examples/binary_search.vais
+
+F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+    lo := mut 0
+    hi := mut len - 1
+
+    L lo <= hi {
+        mid := lo + (hi - lo) / 2
+        I arr[mid] == target {
+            R mid
+        } E I arr[mid] < target {
+            lo = mid + 1
+        } E {
+            hi = mid - 1
+        }
+    }
+    -1   # not found
+}
+
+F main() -> i64 {
+    # Sorted array
+    arr: *i64 = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
+    len := 10
+
+    puts("=== Binary Search ===")
+
+    # Search for existing element
+    idx1 := binary_search(arr, len, 23)
+    puts("Search 23: index = {idx1}")   # 5
+
+    # Search for non-existing element
+    idx2 := binary_search(arr, len, 42)
+    puts("Search 42: index = {idx2}")   # -1
+
+    # Search for first element
+    idx3 := binary_search(arr, len, 2)
+    puts("Search 2: index = {idx3}")    # 0
+
+    # Search for last element
+    idx4 := binary_search(arr, len, 91)
+    puts("Search 91: index = {idx4}")   # 9
+
+    # Return 0 if all tests pass
+    I idx1 == 5 & idx2 == -1 & idx3 == 0 & idx4 == 9 {
+        puts("All tests passed!")
+        0
+    } E {
+        puts("Test failed!")
+        1
+    }
+}

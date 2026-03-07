@@ -1071,6 +1071,6 @@ mod tests {
     fn test_tutorial_chapters_not_empty() {
         let temp_file = NamedTempFile::new().unwrap();
         let tutorial = Tutorial::with_progress_file(temp_file.path());
-        assert!(tutorial.chapters.len() >= 5);
+        assert!(tutorial.chapters.len() >= 8);
     }
 }

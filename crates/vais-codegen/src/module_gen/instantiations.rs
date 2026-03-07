@@ -153,13 +153,20 @@ impl CodeGenerator {
                         .push((inst.type_args.clone(), inst.mangled_name.clone()));
 
                     // Register the specialized function signature so call codegen can find it
-                    let substitutions: HashMap<String, ResolvedType> = generic_fn
+                    let mut substitutions: HashMap<String, ResolvedType> = generic_fn
                         .generics
                         .iter()
                         .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
                         .zip(inst.type_args.iter())
                         .map(|(g, t)| (g.name.node.to_string(), t.clone()))
                         .collect();
+
+                    // Add const generic args to substitution map (name -> I64 representation)
+                    for (name, _value) in &inst.const_args {
+                        substitutions
+                            .entry(name.clone())
+                            .or_insert(ResolvedType::I64);
+                    }
 
                     let params: Vec<_> = generic_fn
                         .params
@@ -180,11 +187,12 @@ impl CodeGenerator {
                         })
                         .unwrap_or(ResolvedType::Unit);
 
+                    let mangled = inst.mangled_name.clone();
                     self.types.functions.insert(
-                        inst.mangled_name.clone(),
+                        mangled.clone(),
                         FunctionInfo {
                             signature: vais_types::FunctionSig {
-                                name: inst.mangled_name.clone(),
+                                name: mangled,
                                 params,
                                 ret: ret_type,
                                 is_async: generic_fn.is_async,
@@ -216,13 +224,20 @@ impl CodeGenerator {
                         .or_default()
                         .push((inst.type_args.clone(), inst.mangled_name.clone()));
 
-                    let substitutions: HashMap<String, ResolvedType> = method_fn
+                    let mut substitutions: HashMap<String, ResolvedType> = method_fn
                         .generics
                         .iter()
                         .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
                         .zip(inst.type_args.iter())
                         .map(|(g, t)| (g.name.node.to_string(), t.clone()))
                         .collect();
+
+                    // Add const generic args to substitution map
+                    for (name, _value) in &inst.const_args {
+                        substitutions
+                            .entry(name.clone())
+                            .or_insert(ResolvedType::I64);
+                    }
 
                     let params: Vec<_> = method_fn
                         .params
@@ -254,11 +269,12 @@ impl CodeGenerator {
                         })
                         .unwrap_or(ResolvedType::Unit);
 
+                    let mangled = inst.mangled_name.clone();
                     self.types.functions.insert(
-                        inst.mangled_name.clone(),
+                        mangled.clone(),
                         FunctionInfo {
                             signature: vais_types::FunctionSig {
-                                name: inst.mangled_name.clone(),
+                                name: mangled,
                                 params,
                                 ret: ret_type,
                                 is_async: method_fn.is_async,
@@ -446,15 +462,15 @@ impl CodeGenerator {
                 if let Some(method_fn) = method_templates.get(&key).cloned() {
                     // Reuse generate_specialized_function by treating the method as a function
                     // with the mangled base name (StructName_methodName)
+                    let method_key = format!("{}_{}", struct_name, inst.base_name);
                     let method_inst = vais_types::GenericInstantiation {
                         kind: vais_types::InstantiationKind::Function,
-                        base_name: format!("{}_{}", struct_name, inst.base_name),
+                        base_name: method_key.clone(),
                         mangled_name: inst.mangled_name.clone(),
                         type_args: inst.type_args.clone(),
                         const_args: inst.const_args.clone(),
                     };
                     // Temporarily register the method as a function template
-                    let method_key = method_inst.base_name.clone();
                     self.generics
                         .function_templates
                         .insert(method_key.clone(), method_fn);

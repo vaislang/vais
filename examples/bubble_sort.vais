@@ -1,0 +1,52 @@
+# Bubble Sort — Sorting algorithm with pointer arrays
+# Demonstrates: pointer arrays, nested loops, mutable variables, swap
+#
+# Run: vaisc run examples/bubble_sort.vais
+
+F bubble_sort(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L i < len - 1 {
+        j := mut 0
+        L j < len - 1 - i {
+            I arr[j] > arr[j + 1] {
+                # Manual swap
+                tmp := arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    0
+}
+
+F print_array(arr: *i64, len: i64) -> i64 {
+    L i:0..len {
+        puts("{arr[i]}")
+    }
+    0
+}
+
+F main() -> i64 {
+    arr: *i64 = [64, 25, 12, 22, 11, 90, 45, 33]
+    len := 8
+
+    puts("=== Bubble Sort ===")
+    puts("Before:")
+    print_array(arr, len)
+
+    bubble_sort(arr, len)
+
+    puts("After:")
+    print_array(arr, len)
+
+    # Verify sorted: return 0 if sorted
+    ok := mut 1
+    L i:0..len-1 {
+        I arr[i] > arr[i + 1] {
+            ok = 0
+        }
+    }
+    I ok == 1 { 0 } E { 1 }
+}

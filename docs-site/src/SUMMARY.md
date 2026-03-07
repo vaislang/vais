@@ -16,6 +16,9 @@
 - [CLI Tool 만들기](./tutorials/cli-tool.md)
 - [HTTP Server 만들기](./tutorials/http-server.md)
 - [Data Pipeline 만들기](./tutorials/data-pipeline.md)
+- [WebSocket Chat Server](./tutorials/websocket-chat.md)
+- [JSON Parser 만들기](./tutorials/json-parser.md)
+- [CLI Framework 만들기](./tutorials/cli-framework.md)
 
 # 가이드
 

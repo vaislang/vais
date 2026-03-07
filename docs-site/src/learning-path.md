@@ -284,9 +284,11 @@ result := 5 |> double |> |x| x + 1
 
 ### 2.6 실전 프로젝트: CLI 도구 (30분)
 
-**읽기**: [Tutorial: CLI Tool 만들기](./tutorials/cli-tool.md)
+**읽기**: [Tutorial: CLI Tool 만들기](./tutorials/cli-tool.md), [Tutorial: CLI Framework 만들기](./tutorials/cli-framework.md)
 
-**실습**: 간단한 텍스트 처리 CLI 도구를 처음부터 작성
+**실습**: 간단한 텍스트 처리 CLI 도구를 처음부터 작성. 서브커맨드 디스패치와 옵션 파싱도 시도해보세요.
+
+**참고 예제**: [examples/tutorial_cli_framework.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_cli_framework.vais)
 
 ### 2.7 Defer와 리소스 관리 (20분)
 
@@ -418,7 +420,23 @@ F add(a: i32, b: i32) -> i32 = a + b
 
 **참고 예제**: [examples/bench_fibonacci.vais](https://github.com/vaislang/vais/blob/main/examples/bench_fibonacci.vais), [examples/simd_test.vais](https://github.com/vaislang/vais/blob/main/examples/simd_test.vais)
 
-### 3.7 실전 프로젝트: REST API 서버 (40분)
+### 3.7 실전 프로젝트: WebSocket 서버 (40분)
+
+**읽기**: [Tutorial: WebSocket Chat Server](./tutorials/websocket-chat.md)
+
+**실습**: WebSocket 에코 서버를 만들고 handshake, frame encoding, 메시지 루프를 구현
+
+**참고 예제**: [examples/tutorial_ws_chat.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_ws_chat.vais), [examples/websocket_example.vais](https://github.com/vaislang/vais/blob/main/examples/websocket_example.vais)
+
+### 3.8 실전 프로젝트: JSON Parser (30분)
+
+**읽기**: [Tutorial: JSON Parser 만들기](./tutorials/json-parser.md)
+
+**실습**: 재귀 하강 파서로 JSON 문자열을 파싱하는 프로그램 작성
+
+**참고 예제**: [examples/tutorial_json_parser.vais](https://github.com/vaislang/vais/blob/main/examples/tutorial_json_parser.vais)
+
+### 3.9 실전 프로젝트: REST API 서버 (40분)
 
 **읽기**: [Tutorial: HTTP Server 만들기](./tutorials/http-server.md)
 
@@ -432,6 +450,7 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [ ] WASM 타겟 컴파일 및 실행
 - [ ] 고급 타입 시스템 (where, trait alias, associated types) 활용
 - [ ] 성능 최적화 기법 적용
+- [ ] WebSocket 서버 또는 JSON 파서 구현 완료
 - [ ] 500줄 이상의 실전 프로젝트 독립 완성 가능
 
 ---
@@ -483,5 +502,16 @@ F add(a: i32, b: i32) -> i32 = a + b
 - [API 문서](./api/index.md) - 타입별 API 레퍼런스
 - [트러블슈팅](./troubleshooting.md) - 자주 묻는 질문과 해결 방법
 - [기여 가이드](./contributing/contributing.md) - 컴파일러 개발에 참여하기
-- [Playground](https://vais.dev/playground/) - 브라우저에서 Vais 실행
+- [Playground](https://vais.dev/playground/) - 브라우저에서 Vais 실행 (40+ 예제)
 - [인터랙티브 튜토리얼](./tools/vais-tutorial/README.md) - 단계별 연습 문제
+
+### 실전 튜토리얼
+
+| 튜토리얼 | 난이도 | 소요 시간 | 핵심 주제 |
+|----------|--------|-----------|-----------|
+| [CLI Tool](./tutorials/cli-tool.md) | 초급 | 30분 | 파일 I/O, 문자열 처리 |
+| [Data Pipeline](./tutorials/data-pipeline.md) | 중급 | 40분 | 구조체, 배열, 통계 |
+| [HTTP Server](./tutorials/http-server.md) | 중급 | 50분 | TCP, JSON 응답, FFI |
+| [CLI Framework](./tutorials/cli-framework.md) | 중급 | 40분 | 디스패치, 옵션 파싱, 전역 변수 |
+| [JSON Parser](./tutorials/json-parser.md) | 고급 | 50분 | 재귀 하강, 토큰화, 상태 머신 |
+| [WebSocket Chat](./tutorials/websocket-chat.md) | 고급 | 50분 | 네트워킹, 프로토콜, 메모리 관리 |

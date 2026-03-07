@@ -1,6 +1,6 @@
 # Examples Gallery
 
-> 174 example programs organized by category and difficulty
+> 184+ example programs organized by category and difficulty
 
 This gallery provides an overview of the Vais example programs in the `examples/` directory. Examples range from basic "hello world" programs to advanced GPU, async, and self-hosting compiler demos.
 

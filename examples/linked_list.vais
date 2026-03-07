@@ -1,0 +1,96 @@
+# Linked List — Manual memory management with pointers
+# Demonstrates: structs, pointer manipulation, loops, defer
+#
+# Run: vaisc run examples/linked_list.vais
+
+# Node: { value: i64, next: i64 (pointer to next node, 0 = null) }
+# Layout: [value:i64][next:i64] — 16 bytes per node
+
+F node_new(value: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, value)       # value field
+    store_i64(ptr + 8, 0)      # next = null
+    ptr
+}
+
+F node_value(node: i64) -> i64 = load_i64(node)
+F node_next(node: i64) -> i64 = load_i64(node + 8)
+F node_set_next(node: i64, next: i64) -> i64 {
+    store_i64(node + 8, next)
+    0
+}
+
+# Push value to front of list, return new head
+F list_push(head: i64, value: i64) -> i64 {
+    new_node := node_new(value)
+    node_set_next(new_node, head)
+    new_node
+}
+
+# Count elements
+F list_len(head: i64) -> i64 {
+    count := mut 0
+    cur := mut head
+    L cur != 0 {
+        count = count + 1
+        cur = node_next(cur)
+    }
+    count
+}
+
+# Sum all values
+F list_sum(head: i64) -> i64 {
+    total := mut 0
+    cur := mut head
+    L cur != 0 {
+        total = total + node_value(cur)
+        cur = node_next(cur)
+    }
+    total
+}
+
+# Print all values
+F list_print(head: i64) -> i64 {
+    cur := mut head
+    L cur != 0 {
+        v := node_value(cur)
+        puts("{v}")
+        cur = node_next(cur)
+    }
+    0
+}
+
+# Free all nodes
+F list_free(head: i64) -> i64 {
+    cur := mut head
+    L cur != 0 {
+        next := node_next(cur)
+        free(cur)
+        cur = next
+    }
+    0
+}
+
+F main() -> i64 {
+    # Build list: 5 -> 4 -> 3 -> 2 -> 1
+    head := mut 0
+    L i:1..6 {
+        head = list_push(head, i)
+    }
+
+    puts("=== Linked List ===")
+    puts("Elements:")
+    list_print(head)
+
+    len := list_len(head)
+    puts("Length: {len}")
+
+    total := list_sum(head)
+    puts("Sum: {total}")
+
+    list_free(head)
+    puts("List freed")
+
+    # 5+4+3+2+1 = 15
+    I total == 15 & len == 5 { 0 } E { 1 }
+}

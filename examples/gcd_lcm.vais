@@ -1,0 +1,40 @@
+# GCD & LCM — Mathematical algorithms
+# Demonstrates: self-recursion @, ternary operator, expression bodies
+#
+# Run: vaisc run examples/gcd_lcm.vais
+
+# GCD using Euclidean algorithm with self-recursion
+F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
+
+# LCM via GCD
+F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+
+# Check if two numbers are coprime
+F coprime(a: i64, b: i64) -> i64 = gcd(a, b) == 1 ? 1 : 0
+
+F main() -> i64 {
+    puts("=== GCD & LCM ===")
+
+    g1 := gcd(48, 18)
+    puts("gcd(48, 18) = {g1}")     # 6
+
+    g2 := gcd(100, 75)
+    puts("gcd(100, 75) = {g2}")    # 25
+
+    l1 := lcm(12, 18)
+    puts("lcm(12, 18) = {l1}")     # 36
+
+    l2 := lcm(7, 5)
+    puts("lcm(7, 5) = {l2}")       # 35
+
+    c1 := coprime(15, 28)
+    puts("coprime(15, 28) = {c1}") # 1
+
+    c2 := coprime(12, 8)
+    puts("coprime(12, 8) = {c2}")  # 0
+
+    # Verify: 6 + 25 + 36 + 35 + 1 + 0 = 103
+    total := g1 + g2 + l1 + l2 + c1 + c2
+    puts("Total = {total}")
+    I total == 103 { 0 } E { 1 }
+}

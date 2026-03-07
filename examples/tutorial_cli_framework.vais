@@ -1,0 +1,109 @@
+# CLI Framework — Tutorial companion
+# Demonstrates: extern FFI, string comparison, dispatch pattern, globals
+#
+# Build:
+#   vaisc --emit-ir examples/tutorial_cli_framework.vais
+#   clang -o mycli tutorial_cli_framework.ll
+
+N "C" {
+    F __get_argc() -> i64
+    F __get_argv(index: i64) -> str
+    F __strlen(s: str) -> i64
+    F __strcmp(a: str, b: str) -> i64
+    F __atoi(s: str) -> i64
+}
+
+G verbose: i64 = mut 0
+
+F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+
+F cmd_help() -> i64 {
+    puts("mycli v1.0 — Vais CLI Framework Demo")
+    puts("")
+    puts("Commands:")
+    puts("  greet <name>     Say hello")
+    puts("  count <n>        Count from 1 to n")
+    puts("  fib <n>          Compute Fibonacci")
+    puts("  help             Show this help")
+    puts("")
+    puts("Options:")
+    puts("  --verbose, -v    Verbose output")
+    0
+}
+
+F cmd_greet(argc: i64) -> i64 {
+    I argc < 3 {
+        puts("Error: greet requires a name")
+        R 1
+    }
+    name := __get_argv(2)
+    puts("Hello, {name}!")
+    0
+}
+
+F cmd_count(argc: i64) -> i64 {
+    I argc < 3 {
+        puts("Error: count requires a number")
+        R 1
+    }
+    n := __atoi(__get_argv(2))
+    I n <= 0 {
+        puts("Error: n must be positive")
+        R 1
+    }
+    total := mut 0
+    L i:1..n+1 {
+        total = total + i
+    }
+    puts("Sum 1..{n} = {total}")
+    0
+}
+
+F cmd_fib(argc: i64) -> i64 {
+    I argc < 3 {
+        puts("Error: fib requires a number")
+        R 1
+    }
+    n := __atoi(__get_argv(2))
+    result := fib(n)
+    puts("fib({n}) = {result}")
+    0
+}
+
+F dispatch(cmd: str, argc: i64) -> i64 {
+    I verbose == 1 {
+        puts("[verbose] command: {cmd}")
+    }
+    I __strcmp(cmd, "help") == 0 { R cmd_help() }
+    I __strcmp(cmd, "greet") == 0 { R cmd_greet(argc) }
+    I __strcmp(cmd, "count") == 0 { R cmd_count(argc) }
+    I __strcmp(cmd, "fib") == 0 { R cmd_fib(argc) }
+
+    puts("Unknown command: {cmd}")
+    puts("Try: mycli help")
+    1
+}
+
+F main() -> i64 {
+    argc := __get_argc()
+
+    # Check for --verbose flag
+    I argc >= 2 {
+        first := __get_argv(1)
+        I __strcmp(first, "--verbose") == 0 | __strcmp(first, "-v") == 0 {
+            verbose = 1
+        }
+    }
+
+    I argc < 2 {
+        R cmd_help()
+    }
+
+    cmd_idx := I verbose == 1 { 2 } E { 1 }
+    I cmd_idx >= argc {
+        R cmd_help()
+    }
+
+    cmd := __get_argv(cmd_idx)
+    dispatch(cmd, argc)
+}

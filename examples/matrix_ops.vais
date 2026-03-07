@@ -1,0 +1,81 @@
+# Matrix Operations — 2x2 matrix arithmetic with pointers
+# Demonstrates: pointer arrays, nested loops, multiple return via pointer
+#
+# Run: vaisc run examples/matrix_ops.vais
+
+# 2x2 matrix stored as [a, b, c, d] = | a b |
+#                                       | c d |
+
+F mat_add(a: *i64, b: *i64, out: *i64) -> i64 {
+    L i:0..4 {
+        out[i] = a[i] + b[i]
+    }
+    0
+}
+
+F mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
+    # out[0] = a[0]*b[0] + a[1]*b[2]
+    # out[1] = a[0]*b[1] + a[1]*b[3]
+    # out[2] = a[2]*b[0] + a[3]*b[2]
+    # out[3] = a[2]*b[1] + a[3]*b[3]
+    out[0] = a[0]*b[0] + a[1]*b[2]
+    out[1] = a[0]*b[1] + a[1]*b[3]
+    out[2] = a[2]*b[0] + a[3]*b[2]
+    out[3] = a[2]*b[1] + a[3]*b[3]
+    0
+}
+
+F mat_det(m: *i64) -> i64 = m[0]*m[3] - m[1]*m[2]
+
+F mat_trace(m: *i64) -> i64 = m[0] + m[3]
+
+F mat_print(name: str, m: *i64) -> i64 {
+    puts("{name}:")
+    puts("  | {m[0]} {m[1]} |")
+    puts("  | {m[2]} {m[3]} |")
+    0
+}
+
+F main() -> i64 {
+    puts("=== Matrix Operations ===")
+
+    a: *i64 = [1, 2, 3, 4]
+    b: *i64 = [5, 6, 7, 8]
+    result: *i64 = [0, 0, 0, 0]
+
+    mat_print("A", a)
+    mat_print("B", b)
+
+    # Addition
+    mat_add(a, b, result)
+    mat_print("A + B", result)
+
+    # Multiplication
+    mat_mul(a, b, result)
+    mat_print("A * B", result)
+
+    # Determinant
+    det_a := mat_det(a)
+    puts("det(A) = {det_a}")    # 1*4 - 2*3 = -2
+
+    det_b := mat_det(b)
+    puts("det(B) = {det_b}")    # 5*8 - 6*7 = -2
+
+    # Trace
+    tr_a := mat_trace(a)
+    puts("trace(A) = {tr_a}")   # 1 + 4 = 5
+
+    # A*B = [19, 22, 43, 50]
+    # det(A*B) = 19*50 - 22*43 = 950 - 946 = 4
+    det_ab := mat_det(result)
+    puts("det(A*B) = {det_ab}")
+
+    # det(A*B) == det(A) * det(B) = (-2)*(-2) = 4
+    I det_ab == det_a * det_b {
+        puts("Verified: det(A*B) = det(A) * det(B)")
+        0
+    } E {
+        puts("Verification failed!")
+        1
+    }
+}

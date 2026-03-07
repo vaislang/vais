@@ -87,6 +87,38 @@ pub(crate) fn generate_with_text_backend(
         error_formatter::format_spanned_codegen_error(&spanned, main_source, input)
     })?;
 
+    // Report codegen warnings summary
+    let codegen_warnings = codegen.get_warnings();
+    if !codegen_warnings.is_empty() {
+        use std::collections::HashMap;
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for w in &codegen_warnings {
+            let key = match w {
+                vais_codegen::CodegenWarning::GenericFallback { .. } => "generic fallback",
+                vais_codegen::CodegenWarning::AssociatedTypeFallback { .. } => {
+                    "associated type fallback"
+                }
+                vais_codegen::CodegenWarning::UninstantiatedGeneric { .. } => {
+                    "uninstantiated generic"
+                }
+                vais_codegen::CodegenWarning::UnresolvedTypeFallback { .. } => {
+                    "unresolved type fallback"
+                }
+            };
+            *counts.entry(key).or_insert(0) += 1;
+        }
+        if verbose {
+            eprintln!(
+                "{}: {} codegen warning(s):",
+                "warning".yellow().bold(),
+                codegen_warnings.len()
+            );
+            for (kind, count) in &counts {
+                eprintln!("  {} {} ({}x)", "·".yellow(), kind, count);
+            }
+        }
+    }
+
     // Verify IR structural integrity before returning.
     crate::utils::verify_ir_and_log(&raw_ir, "text backend");
 

@@ -900,6 +900,38 @@ pub(crate) fn cmd_build(
             }
         }
 
+        // Report codegen warnings summary
+        let codegen_warnings = gen.get_warnings();
+        if !codegen_warnings.is_empty() {
+            use std::collections::HashMap as WarnMap;
+            let mut counts: WarnMap<&str, usize> = WarnMap::new();
+            for w in &codegen_warnings {
+                let key = match w {
+                    vais_codegen::CodegenWarning::GenericFallback { .. } => "generic fallback",
+                    vais_codegen::CodegenWarning::AssociatedTypeFallback { .. } => {
+                        "associated type fallback"
+                    }
+                    vais_codegen::CodegenWarning::UninstantiatedGeneric { .. } => {
+                        "uninstantiated generic"
+                    }
+                    vais_codegen::CodegenWarning::UnresolvedTypeFallback { .. } => {
+                        "unresolved type fallback"
+                    }
+                };
+                *counts.entry(key).or_insert(0) += 1;
+            }
+            if verbose {
+                eprintln!(
+                    "{}: {} codegen warning(s):",
+                    "warning".yellow().bold(),
+                    codegen_warnings.len()
+                );
+                for (kind, count) in &counts {
+                    eprintln!("  {} {} ({}x)", "·".yellow(), kind, count);
+                }
+            }
+        }
+
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();
 

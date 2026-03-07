@@ -187,8 +187,10 @@ impl TypeChecker {
         let mut fields = HashMap::new();
         let mut field_order = Vec::new();
         for field in &s.fields {
-            field_order.push(field.name.node.clone());
-            fields.insert(field.name.node.clone(), self.resolve_type(&field.ty.node));
+            let field_name = field.name.node.clone();
+            let ty = self.resolve_type(&field.ty.node);
+            field_order.push(field_name.clone());
+            fields.insert(field_name, ty);
         }
 
         let mut methods = HashMap::new();
@@ -231,10 +233,11 @@ impl TypeChecker {
                     .extend(predicate.bounds.iter().map(|b| b.node.clone()));
             }
 
+            let method_name = method.node.name.node.clone();
             methods.insert(
-                method.node.name.node.clone(),
+                method_name.clone(),
                 FunctionSig {
-                    name: method.node.name.node.clone(),
+                    name: method_name,
                     generics: method
                         .node
                         .generics

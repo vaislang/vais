@@ -493,13 +493,15 @@ impl CodeGenerator {
         }
         let mut ir = String::new();
         ir.push_str("  ; auto-free tracked allocations\n");
-        for ptr in self.fn_ctx.alloc_tracker.clone() {
+        let alloc_ptrs = std::mem::take(&mut self.fn_ctx.alloc_tracker);
+        for ptr in &alloc_ptrs {
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
             let int_tmp = format!("%__free_ptr_{}", id);
             ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", int_tmp, ptr));
             ir.push_str(&format!("  call void @free(i64 {})\n", int_tmp));
         }
+        self.fn_ctx.alloc_tracker = alloc_ptrs;
         ir
     }
 

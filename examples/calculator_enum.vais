@@ -1,0 +1,56 @@
+# Calculator with Enum — Pattern matching on operations
+# Demonstrates: enum variants with data, match expressions, recursion
+#
+# Run: vaisc run examples/calculator_enum.vais
+
+E Op {
+    Add(i64, i64),
+    Sub(i64, i64),
+    Mul(i64, i64),
+    Div(i64, i64),
+    Neg(i64)
+}
+
+F eval(op: Op) -> i64 {
+    M op {
+        Op.Add(a, b) => a + b,
+        Op.Sub(a, b) => a - b,
+        Op.Mul(a, b) => a * b,
+        Op.Div(a, b) => {
+            I b == 0 {
+                puts("Error: division by zero")
+                R 0
+            }
+            a / b
+        },
+        Op.Neg(a) => 0 - a
+    }
+}
+
+F main() -> i64 {
+    # Basic operations
+    r1 := eval(Add(10, 5))
+    puts("10 + 5 = {r1}")
+
+    r2 := eval(Sub(10, 5))
+    puts("10 - 5 = {r2}")
+
+    r3 := eval(Mul(6, 7))
+    puts("6 * 7 = {r3}")
+
+    r4 := eval(Div(100, 4))
+    puts("100 / 4 = {r4}")
+
+    r5 := eval(Neg(42))
+    puts("neg(42) = {r5}")
+
+    # Division by zero
+    r6 := eval(Div(10, 0))
+    puts("10 / 0 = {r6}")
+
+    # Verify results
+    total := r1 + r2 + r3 + r4 + r5
+    # 15 + 5 + 42 + 25 + (-42) = 45
+    puts("Total = {total}")
+    I total == 45 { 0 } E { 1 }
+}

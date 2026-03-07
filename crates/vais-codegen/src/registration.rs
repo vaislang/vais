@@ -59,7 +59,7 @@ impl CodeGenerator {
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: f.name.node.to_string(),
+                    name: func_name.clone(),
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
                     generic_bounds: f
                         .generics
@@ -150,10 +150,10 @@ impl CodeGenerator {
         };
 
         self.types.functions.insert(
-            method_name.to_string(),
+            method_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: method_name.clone(),
+                    name: method_name,
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
                     generic_bounds: f
                         .generics
@@ -196,13 +196,15 @@ impl CodeGenerator {
             .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
             .collect();
 
+        let struct_name = s.name.node.to_string();
+
         // Intern the struct name for deduplication
-        self.ident_pool.intern(&s.name.node);
+        self.ident_pool.intern(&struct_name);
 
         self.types.structs.insert(
-            s.name.node.to_string(),
+            struct_name.clone(),
             StructInfo {
-                _name: s.name.node.to_string(),
+                _name: struct_name,
                 fields,
                 _repr_c: s
                     .attributes
@@ -247,16 +249,18 @@ impl CodeGenerator {
             });
         }
 
+        let enum_name = e.name.node.to_string();
+
         // Intern enum and variant names
-        self.ident_pool.intern(&e.name.node);
+        self.ident_pool.intern(&enum_name);
         for v in &variants {
             self.ident_pool.intern(&v.name);
         }
 
         self.types.enums.insert(
-            e.name.node.to_string(),
+            enum_name.clone(),
             EnumInfo {
-                name: e.name.node.to_string(),
+                name: enum_name,
                 variants,
             },
         );
@@ -274,10 +278,11 @@ impl CodeGenerator {
             })
             .collect();
 
+        let union_name = u.name.node.to_string();
         self.types.unions.insert(
-            u.name.node.to_string(),
+            union_name.clone(),
             UnionInfo {
-                _name: u.name.node.to_string(),
+                _name: union_name,
                 fields,
             },
         );
@@ -323,7 +328,7 @@ impl CodeGenerator {
             func_name.clone(),
             FunctionInfo {
                 signature: FunctionSig {
-                    name: func.name.node.to_string(),
+                    name: func_name.clone(),
                     params,
                     ret: ret_type,
                     is_vararg: func.is_vararg,
@@ -357,11 +362,12 @@ impl CodeGenerator {
 
     /// Register a constant definition
     pub(crate) fn register_const(&mut self, const_def: &vais_ast::ConstDef) -> CodegenResult<()> {
+        let const_name = const_def.name.node.clone();
         // Store constant in the constants map for later lookup
         self.types.constants.insert(
-            const_def.name.node.clone(),
+            const_name.clone(),
             crate::types::ConstInfo {
-                _name: const_def.name.node.clone(),
+                _name: const_name,
                 _ty: self.ast_type_to_resolved(&const_def.ty.node),
                 value: const_def.value.clone(),
             },
@@ -374,11 +380,12 @@ impl CodeGenerator {
         &mut self,
         global_def: &vais_ast::GlobalDef,
     ) -> CodegenResult<()> {
+        let global_name = global_def.name.node.clone();
         // Store global in the globals map for later code generation
         self.types.globals.insert(
-            global_def.name.node.clone(),
+            global_name.clone(),
             crate::types::GlobalInfo {
-                _name: global_def.name.node.clone(),
+                _name: global_name,
                 _ty: self.ast_type_to_resolved(&global_def.ty.node),
                 _value: global_def.value.clone(),
                 _is_mutable: global_def.is_mutable,

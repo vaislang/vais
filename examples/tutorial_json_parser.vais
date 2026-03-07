@@ -1,0 +1,222 @@
+# JSON Parser — Tutorial companion
+# Demonstrates: globals, constants, match, recursion, string processing
+#
+# Run: vaisc run examples/tutorial_json_parser.vais
+
+# Token types
+C TOK_STRING: i64 = 1
+C TOK_NUMBER: i64 = 2
+C TOK_TRUE: i64 = 3
+C TOK_FALSE: i64 = 4
+C TOK_NULL: i64 = 5
+C TOK_LBRACE: i64 = 6
+C TOK_RBRACE: i64 = 7
+C TOK_LBRACKET: i64 = 8
+C TOK_RBRACKET: i64 = 9
+C TOK_COLON: i64 = 10
+C TOK_COMMA: i64 = 11
+C TOK_EOF: i64 = 12
+C TOK_ERROR: i64 = -1
+
+# Parser state
+G input_ptr: i64 = 0
+G pos: i64 = mut 0
+G input_len: i64 = 0
+G num_value: i64 = 0
+
+F peek_char() -> i64 {
+    I pos >= input_len { R 0 }
+    load_byte(input_ptr + pos)
+}
+
+F advance() -> i64 {
+    I pos < input_len { pos = pos + 1 }
+    0
+}
+
+F skip_ws() -> i64 {
+    L pos < input_len {
+        ch := peek_char()
+        I ch == 32 | ch == 9 | ch == 10 | ch == 13 {
+            advance()
+        } E { B }
+    }
+    0
+}
+
+F scan_string() -> i64 {
+    advance()  # skip opening "
+    L pos < input_len {
+        ch := peek_char()
+        I ch == 34 { advance(); R TOK_STRING }
+        I ch == 92 { advance() }  # skip escape
+        advance()
+    }
+    TOK_ERROR
+}
+
+F scan_number() -> i64 {
+    neg := mut 0
+    I peek_char() == 45 { neg = 1; advance() }
+
+    result := mut 0
+    L pos < input_len {
+        ch := peek_char()
+        I ch >= 48 & ch <= 57 {
+            result = result * 10 + (ch - 48)
+            advance()
+        } E { B }
+    }
+    num_value = I neg == 1 { 0 - result } E { result }
+    TOK_NUMBER
+}
+
+F scan_keyword() -> i64 {
+    ch := peek_char()
+    I ch == 116 { pos = pos + 4; R TOK_TRUE }
+    I ch == 102 { pos = pos + 5; R TOK_FALSE }
+    I ch == 110 { pos = pos + 4; R TOK_NULL }
+    TOK_ERROR
+}
+
+F next_token() -> i64 {
+    skip_ws()
+    I pos >= input_len { R TOK_EOF }
+    ch := peek_char()
+    M ch {
+        123 => { advance(); TOK_LBRACE },
+        125 => { advance(); TOK_RBRACE },
+        91  => { advance(); TOK_LBRACKET },
+        93  => { advance(); TOK_RBRACKET },
+        58  => { advance(); TOK_COLON },
+        44  => { advance(); TOK_COMMA },
+        34  => scan_string(),
+        _   => {
+            I ch >= 48 & ch <= 57 | ch == 45 {
+                scan_number()
+            } E {
+                scan_keyword()
+            }
+        }
+    }
+}
+
+# Forward declarations via mutual recursion
+F parse_value() -> i64
+F parse_object() -> i64
+F parse_array() -> i64
+
+F parse_value() -> i64 {
+    tok := next_token()
+    M tok {
+        1 => 1,   # string
+        2 => 1,   # number
+        3 => 1,   # true
+        4 => 1,   # false
+        5 => 1,   # null
+        6 => parse_object(),
+        8 => parse_array(),
+        _ => -1
+    }
+}
+
+F parse_object() -> i64 {
+    count := mut 0
+    tok := next_token()
+    I tok == TOK_RBRACE { R 0 }
+    I tok != TOK_STRING { R -1 }
+    count = 1
+
+    tok = next_token()
+    I tok != TOK_COLON { R -1 }
+    I parse_value() < 0 { R -1 }
+
+    L true {
+        tok = next_token()
+        I tok == TOK_RBRACE { B }
+        I tok != TOK_COMMA { R -1 }
+        tok = next_token()
+        I tok != TOK_STRING { R -1 }
+        count = count + 1
+        tok = next_token()
+        I tok != TOK_COLON { R -1 }
+        I parse_value() < 0 { R -1 }
+    }
+    count
+}
+
+F parse_array() -> i64 {
+    skip_ws()
+    I peek_char() == 93 { advance(); R 0 }
+
+    count := mut 0
+    I parse_value() < 0 { R -1 }
+    count = 1
+
+    L true {
+        tok := next_token()
+        I tok == TOK_RBRACKET { B }
+        I tok != TOK_COMMA { R -1 }
+        I parse_value() < 0 { R -1 }
+        count = count + 1
+    }
+    count
+}
+
+F main() -> i64 {
+    puts("=== Vais JSON Parser ===")
+
+    # Test 1: simple object
+    json1 := "{\"name\":\"vais\",\"version\":1}"
+    input_ptr = json1 as i64
+    input_len = 26
+    pos = 0
+
+    tok := next_token()
+    I tok == TOK_LBRACE {
+        fields := parse_object()
+        I fields >= 0 {
+            puts("Test 1 OK: object with fields")
+        } E {
+            puts("Test 1 FAIL")
+            R 1
+        }
+    }
+
+    # Test 2: array
+    json2 := "[1,2,3]"
+    input_ptr = json2 as i64
+    input_len = 7
+    pos = 0
+
+    tok = next_token()
+    I tok == TOK_LBRACKET {
+        elems := parse_array()
+        I elems == 3 {
+            puts("Test 2 OK: array with 3 elements")
+        } E {
+            puts("Test 2 FAIL")
+            R 1
+        }
+    }
+
+    # Test 3: nested
+    json3 := "{\"a\":{\"b\":1}}"
+    input_ptr = json3 as i64
+    input_len = 13
+    pos = 0
+
+    tok = next_token()
+    I tok == TOK_LBRACE {
+        fields := parse_object()
+        I fields >= 0 {
+            puts("Test 3 OK: nested object")
+        } E {
+            puts("Test 3 FAIL")
+            R 1
+        }
+    }
+
+    puts("All JSON parser tests passed!")
+    0
+}

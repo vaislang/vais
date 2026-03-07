@@ -814,6 +814,291 @@ F main() -> i64 {
 # cleanup: first (runs last)
 # cleanup: second
 # cleanup: third (runs first)`
+  },
+
+  'fizzbuzz': {
+    name: 'FizzBuzz',
+    description: 'Classic FizzBuzz with if-else chains',
+    code: `# FizzBuzz — classic interview problem
+F fizzbuzz(n: i64) -> i64 {
+    L i:1..n+1 {
+        I i % 15 == 0 {
+            puts("FizzBuzz")
+        } E I i % 3 == 0 {
+            puts("Fizz")
+        } E I i % 5 == 0 {
+            puts("Buzz")
+        } E {
+            puts("{i}")
+        }
+    }
+    0
+}
+
+F main() -> i64 {
+    fizzbuzz(20)
+}`
+  },
+
+  'binary-search': {
+    name: 'Binary Search',
+    description: 'Efficient search on sorted arrays',
+    code: `# Binary search on a sorted array
+F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+    lo := mut 0
+    hi := mut len - 1
+
+    L lo <= hi {
+        mid := lo + (hi - lo) / 2
+        I arr[mid] == target { R mid }
+        E I arr[mid] < target { lo = mid + 1 }
+        E { hi = mid - 1 }
+    }
+    -1
+}
+
+F main() -> i64 {
+    arr: *i64 = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
+
+    idx := binary_search(arr, 10, 23)
+    puts("Search 23: index = {idx}")   # 5
+
+    idx2 := binary_search(arr, 10, 42)
+    puts("Search 42: index = {idx2}")  # -1
+
+    0
+}`
+  },
+
+  'bubble-sort': {
+    name: 'Bubble Sort',
+    description: 'Sorting algorithm with pointer arrays',
+    code: `# Bubble sort implementation
+F bubble_sort(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L i < len - 1 {
+        j := mut 0
+        L j < len - 1 - i {
+            I arr[j] > arr[j + 1] {
+                tmp := arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    0
+}
+
+F main() -> i64 {
+    arr: *i64 = [64, 25, 12, 22, 11]
+
+    puts("Before: 64 25 12 22 11")
+    bubble_sort(arr, 5)
+
+    puts("After:")
+    L i:0..5 { puts("{arr[i]}") }
+
+    0
+}`
+  },
+
+  'gcd-lcm': {
+    name: 'GCD & LCM',
+    description: 'Euclidean algorithm with self-recursion',
+    code: `# GCD using @ (self-recursion) and ternary
+F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
+
+F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+
+F coprime(a: i64, b: i64) -> i64 = gcd(a, b) == 1 ? 1 : 0
+
+F main() -> i64 {
+    puts("gcd(48, 18) = {gcd(48, 18)}")   # 6
+    puts("lcm(12, 18) = {lcm(12, 18)}")   # 36
+    puts("coprime(15, 28) = {coprime(15, 28)}") # 1
+    0
+}`
+  },
+
+  'calculator-enum': {
+    name: 'Calculator Enum',
+    description: 'Enum variants with data and pattern matching',
+    code: `# Calculator using enum with data
+E Op {
+    Add(i64, i64),
+    Sub(i64, i64),
+    Mul(i64, i64),
+    Div(i64, i64)
+}
+
+F eval(op: Op) -> i64 {
+    M op {
+        Op.Add(a, b) => a + b,
+        Op.Sub(a, b) => a - b,
+        Op.Mul(a, b) => a * b,
+        Op.Div(a, b) => {
+            I b == 0 { R 0 }
+            a / b
+        }
+    }
+}
+
+F main() -> i64 {
+    puts("10 + 5 = {eval(Add(10, 5))}")
+    puts("10 - 5 = {eval(Sub(10, 5))}")
+    puts("6 * 7 = {eval(Mul(6, 7))}")
+    puts("100 / 4 = {eval(Div(100, 4))}")
+    0
+}`
+  },
+
+  'state-machine': {
+    name: 'State Machine',
+    description: 'Traffic light simulation with enum transitions',
+    code: `# Traffic light state machine
+E Light { Red, Yellow, Green }
+
+F next_state(current: Light) -> Light {
+    M current {
+        Light.Red => Green,
+        Light.Green => Yellow,
+        Light.Yellow => Red
+    }
+}
+
+F duration(state: Light) -> i64 {
+    M state {
+        Light.Red => 3,
+        Light.Green => 4,
+        Light.Yellow => 1
+    }
+}
+
+F main() -> i64 {
+    state := mut Red
+    total := mut 0
+
+    L i:0..6 {
+        ticks := duration(state)
+        total = total + ticks
+        state = next_state(state)
+    }
+
+    puts("6 transitions, total ticks = {total}")
+    0
+}`
+  },
+
+  'pipe-chain': {
+    name: 'Pipe Chains',
+    description: 'Functional data transformation with |>',
+    code: `# Chaining transformations with pipe operator
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+F square(x: i64) -> i64 = x * x
+F clamp(x: i64) -> i64 = I x > 100 { 100 } E { x }
+
+F apply_n(f: |i64| -> i64, x: i64, n: i64) -> i64 {
+    result := mut x
+    L i:0..n { result = f(result) }
+    result
+}
+
+F main() -> i64 {
+    r1 := 5 |> double |> add_one
+    puts("5 |> double |> add_one = {r1}")
+
+    r2 := 3 |> square |> double |> add_one
+    puts("3 |> square |> double |> add_one = {r2}")
+
+    r3 := 8 |> square |> double |> clamp
+    puts("8 |> square |> double |> clamp = {r3}")
+
+    # Apply double 4 times to 1: 1->2->4->8->16
+    r4 := apply_n(double, 1, 4)
+    puts("double applied 4x to 1 = {r4}")
+
+    0
+}`
+  },
+
+  'matrix-ops': {
+    name: 'Matrix Operations',
+    description: '2x2 matrix math with pointer arrays',
+    code: `# 2x2 matrix operations
+F mat_mul(a: *i64, b: *i64, out: *i64) -> i64 {
+    out[0] = a[0]*b[0] + a[1]*b[2]
+    out[1] = a[0]*b[1] + a[1]*b[3]
+    out[2] = a[2]*b[0] + a[3]*b[2]
+    out[3] = a[2]*b[1] + a[3]*b[3]
+    0
+}
+
+F mat_det(m: *i64) -> i64 = m[0]*m[3] - m[1]*m[2]
+F mat_trace(m: *i64) -> i64 = m[0] + m[3]
+
+F main() -> i64 {
+    a: *i64 = [1, 2, 3, 4]
+    b: *i64 = [5, 6, 7, 8]
+    result: *i64 = [0, 0, 0, 0]
+
+    mat_mul(a, b, result)
+
+    det_a := mat_det(a)
+    det_b := mat_det(b)
+    det_ab := mat_det(result)
+
+    puts("det(A) = {det_a}")
+    puts("det(B) = {det_b}")
+    puts("det(A*B) = {det_ab}")
+    puts("det(A)*det(B) = {det_a * det_b}")
+
+    0
+}`
+  },
+
+  'linked-list': {
+    name: 'Linked List',
+    description: 'Manual memory management with malloc/free',
+    code: `# Linked list with manual memory
+# Node layout: [value:i64][next:i64] = 16 bytes
+
+F node_new(value: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, value)
+    store_i64(ptr + 8, 0)
+    ptr
+}
+
+F node_value(n: i64) -> i64 = load_i64(n)
+F node_next(n: i64) -> i64 = load_i64(n + 8)
+
+F list_push(head: i64, value: i64) -> i64 {
+    new_node := node_new(value)
+    store_i64(new_node + 8, head)
+    new_node
+}
+
+F list_sum(head: i64) -> i64 {
+    total := mut 0
+    cur := mut head
+    L cur != 0 {
+        total = total + node_value(cur)
+        cur = node_next(cur)
+    }
+    total
+}
+
+F main() -> i64 {
+    head := mut 0
+    L i:1..6 { head = list_push(head, i) }
+
+    total := list_sum(head)
+    puts("Sum of 1..5 = {total}")   # 15
+    0
+}`
   }
 };
 

@@ -1,0 +1,63 @@
+# State Machine — Traffic light simulation
+# Demonstrates: enum, match, mutable state, loops, constants
+#
+# Run: vaisc run examples/state_machine.vais
+
+E Light {
+    Red,
+    Yellow,
+    Green
+}
+
+# Transition to next state
+F next_state(current: Light) -> Light {
+    M current {
+        Light.Red => Green,
+        Light.Green => Yellow,
+        Light.Yellow => Red
+    }
+}
+
+# Duration (ticks) for each state
+F duration(state: Light) -> i64 {
+    M state {
+        Light.Red => 3,
+        Light.Green => 4,
+        Light.Yellow => 1
+    }
+}
+
+F state_name(state: Light) -> i64 {
+    M state {
+        Light.Red => { puts("RED"); 0 },
+        Light.Green => { puts("GREEN"); 0 },
+        Light.Yellow => { puts("YELLOW"); 0 }
+    }
+}
+
+F main() -> i64 {
+    puts("=== Traffic Light State Machine ===")
+
+    state := mut Red
+    transitions := mut 0
+    total_ticks := mut 0
+
+    # Run for 10 transitions
+    L transitions < 10 {
+        ticks := duration(state)
+        total_ticks = total_ticks + ticks
+
+        state_name(state)
+
+        state = next_state(state)
+        transitions = transitions + 1
+    }
+
+    puts("Transitions: {transitions}")
+    puts("Total ticks: {total_ticks}")
+
+    # Pattern: R(3) G(4) Y(1) = 8 ticks per cycle
+    # 10 transitions = 3 full cycles (24 ticks) + 1 R(3) = 27
+    # Actually: R3 G4 Y1 R3 G4 Y1 R3 G4 Y1 R3 = 3+4+1+3+4+1+3+4+1+3 = 27
+    I total_ticks == 27 { 0 } E { 1 }
+}

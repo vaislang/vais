@@ -1,0 +1,41 @@
+# Pipe Chain — Functional data transformation
+# Demonstrates: pipe operator |>, single-expression functions, lambdas
+#
+# Run: vaisc run examples/pipe_chain.vais
+
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+F square(x: i64) -> i64 = x * x
+F negate(x: i64) -> i64 = 0 - x
+F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }
+F clamp(x: i64) -> i64 = I x > 100 { 100 } E I x < 0 { 0 } E { x }
+
+F main() -> i64 {
+    puts("=== Pipe Chains ===")
+
+    # Chain 1: 5 -> 10 -> 11
+    r1 := 5 |> double |> add_one
+    puts("5 |> double |> add_one = {r1}")
+
+    # Chain 2: 3 -> 9 -> 18 -> 19
+    r2 := 3 |> square |> double |> add_one
+    puts("3 |> square |> double |> add_one = {r2}")
+
+    # Chain 3: 7 -> -7 -> 7
+    r3 := 7 |> negate |> abs
+    puts("7 |> negate |> abs = {r3}")
+
+    # Chain 4: 8 -> 64 -> 128 -> 100 (clamped)
+    r4 := 8 |> square |> double |> clamp
+    puts("8 |> square |> double |> clamp = {r4}")
+
+    # Lambda in pipe
+    r5 := 10 |> |x: i64| x * x + 1
+    puts("10 |> (x -> x*x+1) = {r5}")
+
+    total := r1 + r2 + r3 + r4 + r5
+    puts("Total = {total}")
+
+    # 11 + 19 + 7 + 100 + 101 = 238
+    I total == 238 { 0 } E { 1 }
+}

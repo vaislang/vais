@@ -507,6 +507,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.module.print_to_string().to_string()
     }
 
+    /// Get structured warnings collected during code generation.
+    pub fn get_warnings(&self) -> Vec<crate::CodegenWarning> {
+        self.type_mapper.take_warnings()
+    }
+
     /// Writes the LLVM IR to a file.
     #[inline]
     pub fn write_to_file(&self, path: &std::path::Path) -> Result<(), String> {

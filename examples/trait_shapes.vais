@@ -1,0 +1,67 @@
+# Trait Shapes — Polymorphism with traits
+# Demonstrates: trait definition (W), implementation (X), generic bounds
+#
+# Run: vaisc run examples/trait_shapes.vais
+
+W Describable {
+    F describe(&self) -> str
+    F value(&self) -> i64
+}
+
+S Circle {
+    radius: i64
+}
+
+S Square {
+    side: i64
+}
+
+S Triangle {
+    base: i64,
+    height: i64
+}
+
+X Circle: Describable {
+    F describe(&self) -> str { "Circle" }
+    F value(&self) -> i64 {
+        # Approximate area: pi * r^2 ~ 3 * r^2
+        3 * self.radius * self.radius
+    }
+}
+
+X Square: Describable {
+    F describe(&self) -> str { "Square" }
+    F value(&self) -> i64 {
+        self.side * self.side
+    }
+}
+
+X Triangle: Describable {
+    F describe(&self) -> str { "Triangle" }
+    F value(&self) -> i64 {
+        self.base * self.height / 2
+    }
+}
+
+F main() -> i64 {
+    c := Circle { radius: 5 }
+    s := Square { side: 4 }
+    t := Triangle { base: 6, height: 3 }
+
+    puts("=== Trait Shapes ===")
+
+    cv := c.value()
+    puts("Circle(r=5) area ~ {cv}")
+
+    sv := s.value()
+    puts("Square(s=4) area = {sv}")
+
+    tv := t.value()
+    puts("Triangle(b=6,h=3) area = {tv}")
+
+    total := cv + sv + tv
+    puts("Total area = {total}")
+
+    # 75 + 16 + 9 = 100
+    I total == 100 { 0 } E { 1 }
+}

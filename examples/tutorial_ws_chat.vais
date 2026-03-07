@@ -1,0 +1,142 @@
+# WebSocket Chat Server — Tutorial companion
+# Demonstrates: extern FFI, constants, match, defer, mutable variables
+#
+# Build:
+#   vaisc --emit-ir examples/tutorial_ws_chat.vais
+#   clang -o ws_chat tutorial_ws_chat.ll std/http_runtime.c std/websocket_runtime.c
+#
+# Test with: websocat ws://127.0.0.1:9001
+
+N "C" {
+    F __tcp_listen(port: i64) -> i64
+    F __tcp_accept(listener_fd: i64) -> i64
+    F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+    F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+    F __tcp_close(fd: i64) -> i64
+    F __strlen(s: str) -> i64
+    F __malloc(size: i64) -> i64
+    F __free(ptr: i64) -> i64
+    F __load_i64(ptr: i64) -> i64
+    F __find_header_end(buffer: i64, len: i64) -> i64
+    F __ws_accept_key(client_key: i64) -> i64
+    F __ws_encode_frame(opcode: i64, payload: i64, payload_len: i64, masked: i64, mask_key: i64, out_frame: i64) -> i64
+    F __ws_decode_frame(data: i64, data_len: i64, out_frame: i64) -> i64
+    F __ws_parse_upgrade_request(buffer: i64, len: i64) -> i64
+    F __ws_build_upgrade_response(accept_key: i64, out_buffer: i64) -> i64
+}
+
+C WS_TEXT: i64 = 1
+C WS_CLOSE: i64 = 8
+C WS_PING: i64 = 9
+C WS_PONG: i64 = 10
+
+F ws_send_text(fd: i64, msg: str) -> i64 {
+    msg_len := __strlen(msg)
+    buf := __malloc(msg_len + 14)
+    I buf == 0 { R -1 }
+    frame_len := __ws_encode_frame(WS_TEXT, msg as i64, msg_len, 0, 0, buf)
+    sent := __tcp_send(fd, buf, frame_len)
+    __free(buf)
+    sent
+}
+
+F do_handshake(fd: i64) -> i64 {
+    buf := __malloc(8192)
+    I buf == 0 { R 0 }
+
+    total := mut 0
+    L true {
+        n := __tcp_recv(fd, buf + total, 4096)
+        I n <= 0 { __free(buf); R 0 }
+        total = total + n
+        I __find_header_end(buf, total) >= 0 { B }
+        I total >= 8192 { __free(buf); R 0 }
+    }
+
+    ws_key := __ws_parse_upgrade_request(buf, total)
+    __free(buf)
+    I ws_key == 0 { R 0 }
+
+    accept_key := __ws_accept_key(ws_key)
+    __free(ws_key)
+    I accept_key == 0 { R 0 }
+
+    resp_buf := __malloc(512)
+    I resp_buf == 0 { __free(accept_key); R 0 }
+    resp_len := __ws_build_upgrade_response(accept_key, resp_buf)
+    __free(accept_key)
+
+    sent := __tcp_send(fd, resp_buf, resp_len)
+    __free(resp_buf)
+    I sent > 0 { 1 } E { 0 }
+}
+
+F handle_client(fd: i64) -> i64 {
+    recv_buf := __malloc(65550)
+    frame_out := __malloc(40)
+    I recv_buf == 0 { R -1 }
+
+    is_open := mut 1
+    L is_open == 1 {
+        total := mut 0
+        L total < 2 {
+            n := __tcp_recv(fd, recv_buf + total, 4096)
+            I n <= 0 { is_open = 0; B }
+            total = total + n
+        }
+        I is_open == 0 { B }
+
+        _ := __ws_decode_frame(recv_buf, total, frame_out)
+        opcode := __load_i64(frame_out)
+        payload := __load_i64(frame_out + 8)
+
+        M opcode {
+            1 => {
+                puts("Echo: received text")
+                ws_send_text(fd, payload as str)
+            },
+            8 => {
+                puts("Client sent close")
+                is_open = 0
+            },
+            9 => {
+                pong := __malloc(16)
+                _ := __ws_encode_frame(WS_PONG, 0, 0, 0, 0, pong)
+                _ := __tcp_send(fd, pong, 2)
+                __free(pong)
+            },
+            _ => { }
+        }
+
+        I payload != 0 { __free(payload) }
+    }
+
+    __free(recv_buf)
+    __free(frame_out)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Vais WebSocket Chat Server ===")
+    listener := __tcp_listen(9001)
+    I listener < 0 {
+        puts("Failed to start server")
+        R 1
+    }
+    puts("Listening on port 9001")
+    puts("Test with: websocat ws://127.0.0.1:9001")
+
+    L true {
+        client := __tcp_accept(listener)
+        I client < 0 { C }
+        ok := do_handshake(client)
+        I ok == 1 {
+            puts("Handshake OK")
+            handle_client(client)
+        }
+        __tcp_close(client)
+    }
+
+    __tcp_close(listener)
+    0
+}

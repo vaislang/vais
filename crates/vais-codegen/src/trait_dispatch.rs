@@ -34,10 +34,11 @@ impl CodeGenerator {
                 .map(|t| self.ast_type_to_resolved(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
+            let meth_name = m.name.node.clone();
             methods.insert(
-                m.name.node.clone(),
+                meth_name.clone(),
                 vais_types::TraitMethodSig {
-                    name: m.name.node.clone(),
+                    name: meth_name,
                     generics: m.generics.iter().map(|g| g.name.node.clone()).collect(),
                     params,
                     ret,
@@ -74,10 +75,11 @@ impl CodeGenerator {
                 .as_ref()
                 .map(|d| self.ast_type_to_resolved(&d.node));
 
+            let assoc_name = assoc.name.node.clone();
             associated_types.insert(
-                assoc.name.node.clone(),
+                assoc_name.clone(),
                 vais_types::AssociatedTypeDef {
-                    name: assoc.name.node.clone(),
+                    name: assoc_name,
                     generics,
                     generic_bounds,
                     bounds,

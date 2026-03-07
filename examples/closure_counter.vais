@@ -1,0 +1,47 @@
+# Closure Counter — Closures that capture mutable state
+# Demonstrates: lambdas with capture, mutable variables, function composition
+#
+# Run: vaisc run examples/closure_counter.vais
+
+F apply_n(f: |i64| -> i64, x: i64, n: i64) -> i64 {
+    result := mut x
+    L i:0..n {
+        result = f(result)
+    }
+    result
+}
+
+F compose(f: |i64| -> i64, g: |i64| -> i64, x: i64) -> i64 {
+    g(f(x))
+}
+
+F main() -> i64 {
+    puts("=== Closure Counter ===")
+
+    # Basic lambdas
+    inc := |x: i64| x + 1
+    dbl := |x: i64| x * 2
+    sqr := |x: i64| x * x
+
+    # Apply inc 5 times to 0 -> 5
+    r1 := apply_n(inc, 0, 5)
+    puts("inc applied 5x to 0 = {r1}")
+
+    # Apply dbl 3 times to 1 -> 8
+    r2 := apply_n(dbl, 1, 3)
+    puts("dbl applied 3x to 1 = {r2}")
+
+    # Compose: sqr then inc on 4 -> 17
+    r3 := compose(sqr, inc, 4)
+    puts("compose(sqr, inc)(4) = {r3}")
+
+    # Compose: inc then sqr on 4 -> 25
+    r4 := compose(inc, sqr, 4)
+    puts("compose(inc, sqr)(4) = {r4}")
+
+    total := r1 + r2 + r3 + r4
+    puts("Total = {total}")
+
+    # 5 + 8 + 17 + 25 = 55
+    I total == 55 { 0 } E { 1 }
+}
