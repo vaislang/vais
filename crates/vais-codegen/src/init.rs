@@ -102,6 +102,7 @@ impl CodeGenerator {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
+            warnings: std::cell::RefCell::new(Vec::new()),
         };
 
         // Register built-in extern functions
@@ -196,5 +197,24 @@ impl CodeGenerator {
     /// multiple codegen errors at once.
     pub fn get_collected_errors(&self) -> &[SpannedCodegenError] {
         &self.collected_errors
+    }
+
+    /// Get structured warnings collected during code generation.
+    ///
+    /// Warnings indicate situations where the compiler made a best-effort
+    /// decision (e.g., falling back to i64 for an unresolved generic parameter).
+    /// They do not halt compilation but may signal suboptimal code generation.
+    ///
+    /// Returns a clone of the warnings vector since it is stored in a `RefCell`.
+    pub fn get_warnings(&self) -> Vec<crate::CodegenWarning> {
+        self.warnings.borrow().clone()
+    }
+
+    /// Record a structured codegen warning.
+    ///
+    /// Uses interior mutability (`RefCell`) so this can be called from `&self` methods
+    /// such as `type_to_llvm` which cannot take `&mut self`.
+    pub(crate) fn emit_warning(&self, warning: crate::CodegenWarning) {
+        self.warnings.borrow_mut().push(warning);
     }
 }

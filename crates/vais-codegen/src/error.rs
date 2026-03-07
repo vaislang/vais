@@ -208,6 +208,98 @@ impl From<CodegenError> for SpannedCodegenError {
     }
 }
 
+/// Structured codegen warning emitted during code generation.
+///
+/// Unlike [`CodegenError`] which halts compilation, warnings are collected
+/// and can be inspected after codegen completes. They signal situations
+/// where the compiler made a best-effort decision (e.g., i64 fallback for
+/// an unresolved generic parameter) that may produce suboptimal code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CodegenWarning {
+    /// A generic type parameter was not resolved via monomorphization
+    /// and fell back to `i64`. This is expected for un-specialized
+    /// fallback versions of generic functions but may indicate a
+    /// missing instantiation in other contexts.
+    GenericFallback {
+        /// Name of the generic parameter (e.g., "T")
+        param: String,
+        /// The function or context where the fallback occurred
+        context: String,
+    },
+
+    /// An associated type could not be resolved and fell back to `i64`.
+    AssociatedTypeFallback {
+        /// The associated type name (e.g., "Output")
+        assoc_name: String,
+        /// The base type on which the associated type was referenced
+        base_type: String,
+    },
+
+    /// A generic function template had no concrete instantiations
+    /// recorded by the type checker. A fallback i64 version was
+    /// generated for backward compatibility.
+    UninstantiatedGeneric {
+        /// Function name
+        function_name: String,
+        /// Generic parameter names
+        params: Vec<String>,
+    },
+
+    /// An ICE-level type (Var, Unknown, Lifetime, ImplTrait, HKT)
+    /// reached codegen and fell back to i64.
+    UnresolvedTypeFallback {
+        /// Description of the type that was unresolved
+        type_desc: String,
+        /// The codegen backend where it occurred ("text" or "inkwell")
+        backend: String,
+    },
+}
+
+impl std::fmt::Display for CodegenWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodegenWarning::GenericFallback { param, context } => {
+                write!(
+                    f,
+                    "generic parameter '{}' not monomorphized in '{}' — using i64 fallback",
+                    param, context
+                )
+            }
+            CodegenWarning::AssociatedTypeFallback {
+                assoc_name,
+                base_type,
+            } => {
+                write!(
+                    f,
+                    "unresolved associated type '{}' on '{}' — using i64 fallback",
+                    assoc_name, base_type
+                )
+            }
+            CodegenWarning::UninstantiatedGeneric {
+                function_name,
+                params,
+            } => {
+                write!(
+                    f,
+                    "generic function '{}' has no concrete instantiations (params: {}) — generating i64 fallback version",
+                    function_name,
+                    params.join(", ")
+                )
+            }
+            CodegenWarning::UnresolvedTypeFallback {
+                type_desc,
+                backend,
+            } => {
+                write!(
+                    f,
+                    "[ICE] unresolved {} in {} codegen — using i64 fallback",
+                    type_desc, backend
+                )
+            }
+        }
+    }
+}
+
 /// Extension trait for attaching span information to a `CodegenResult`.
 ///
 /// # Example
@@ -483,5 +575,83 @@ mod tests {
             CodegenError::InternalError("".into()).title(),
             "Internal compiler error"
         );
+    }
+
+    // ========== CodegenWarning ==========
+
+    #[test]
+    fn test_warning_generic_fallback_display() {
+        let w = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "identity".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'T'"));
+        assert!(msg.contains("'identity'"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_associated_type_fallback_display() {
+        let w = CodegenWarning::AssociatedTypeFallback {
+            assoc_name: "Output".to_string(),
+            base_type: "MyStruct".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'Output'"));
+        assert!(msg.contains("'MyStruct'"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_uninstantiated_generic_display() {
+        let w = CodegenWarning::UninstantiatedGeneric {
+            function_name: "foo".to_string(),
+            params: vec!["T".to_string(), "U".to_string()],
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("'foo'"));
+        assert!(msg.contains("T, U"));
+        assert!(msg.contains("no concrete instantiations"));
+    }
+
+    #[test]
+    fn test_warning_unresolved_type_fallback_display() {
+        let w = CodegenWarning::UnresolvedTypeFallback {
+            type_desc: "unresolved ImplTrait".to_string(),
+            backend: "inkwell".to_string(),
+        };
+        let msg = w.to_string();
+        assert!(msg.contains("unresolved ImplTrait"));
+        assert!(msg.contains("inkwell"));
+        assert!(msg.contains("i64 fallback"));
+    }
+
+    #[test]
+    fn test_warning_equality() {
+        let w1 = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "foo".to_string(),
+        };
+        let w2 = CodegenWarning::GenericFallback {
+            param: "T".to_string(),
+            context: "foo".to_string(),
+        };
+        let w3 = CodegenWarning::GenericFallback {
+            param: "U".to_string(),
+            context: "foo".to_string(),
+        };
+        assert_eq!(w1, w2);
+        assert_ne!(w1, w3);
+    }
+
+    #[test]
+    fn test_warning_clone() {
+        let w = CodegenWarning::UninstantiatedGeneric {
+            function_name: "bar".to_string(),
+            params: vec!["A".to_string()],
+        };
+        let w2 = w.clone();
+        assert_eq!(w, w2);
     }
 }

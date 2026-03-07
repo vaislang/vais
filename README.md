@@ -188,11 +188,11 @@ Vais is designed for both compilation speed and runtime performance.
 
 | Phase | Time (avg) | Throughput | Notes |
 |-------|------------|------------|-------|
-| Lexer | ~0.5ms/1K LOC | ~2M tokens/sec | |
-| Parser | ~1.2ms/1K LOC | ~800K AST nodes/sec | 2.18x speedup with parallel |
-| Type Checker | ~2.5ms/1K LOC | ~400K types/sec | DAG-based parallel |
-| Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec | 4.14x speedup with parallel |
-| **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** | **50K lines → 63ms** |
+| Lexer | ~0.09ms/1K LOC | ~166 MiB/s | logos-based |
+| Parser | ~0.44ms/1K LOC | ~32 MiB/s | 2.18x speedup with parallel |
+| Type Checker | ~0.13ms/1K LOC | ~8K lines/ms | DAG-based parallel |
+| Code Generator | ~0.53ms/1K LOC | ~1.9K lines/ms | 4.14x speedup with parallel |
+| **Full Pipeline** | **~1.22ms/1K LOC** | **~819K lines/sec** | **50K lines → 61ms** |
 
 **Self-Hosting Bootstrap:** 50,000+ LOC, 21/21 clang compilation success (100%)
 

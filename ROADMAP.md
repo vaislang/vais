@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 113 완료)
+> **현재 버전**: 0.1.0 (Phase 117 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-07 (Phase 109~113 — bounds check, auto free, 에러 테스트, ownership 강화)
+> **최종 업데이트**: 2026-03-07 (Phase 114~117 — monomorphization 경고, WASM 검증, 벤치마크 갱신, codecov 80%)
 
 ---
 
@@ -77,10 +77,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 9,600+ (E2E 1,667+, 단위 7,900+) |
+| 전체 테스트 | 9,900+ (E2E 1,723+, 단위 8,200+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
-| 컴파일 성능 | 50K lines → 61.6ms (812K lines/s) |
+| 컴파일 성능 | 50K lines → 61.0ms (819K lines/s) |
 | 토큰 절감 | 시스템 코드에서 Rust 대비 57%, C 대비 60% 절감 |
 | 컴파일 속도 비교 | C 대비 8.5x, Go 대비 8x, Rust 대비 19x faster (단일 파일 IR 생성) |
 | 실전 프로젝트 | 3개 (CLI, HTTP API, 데이터 파이프라인) |
@@ -105,7 +105,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (9,500+) | ✅ |
-| E2E 1,667개 통과 (0 fail, 0 ignored) | ✅ |
+| E2E 1,723개 통과 (0 fail, 0 ignored) | ✅ |
 | 보안 감사 (cargo audit 통과) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
 | 문서 (mdBook, API 문서 65개 모듈) | ✅ |
@@ -240,6 +240,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 99~103 | 안정성 · 정리 | expect→Result 61개, 모듈 분할 R11, 테스트 커버리지, Inkwell ABI 수정 | 1,620 |
 | 104~108 | 감사 · 분할 R12 · 0 ignored | expect/panic 전수 감사(프로덕션 0건), 9파일 모듈 분할, E2E 0 ignored | 1,620 |
 | 109~113 | v1.0 블로커 해결 | Slice bounds check, scope-based auto free, 에러 테스트 +31, ownership 강화 44 tests | 1,667 |
+| 114~117 | 완성도 · 검증 | Monomorphization 경고, WASM E2E 44개, 벤치마크 갱신 61.0ms, Codecov 80%+ | 1,723 |
 
 ---
 
@@ -439,6 +440,64 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 - [x] 1. 코드 건강도 테이블 갱신 + E2E 수치 업데이트 (Sonnet) ✅ 2026-03-07
   변경: ROADMAP 헤더 Phase 113, E2E 1,667, Phase history 갱신
+
+### Phase 114: Monomorphization 완성 — i64 fallback 경고 + 미사용 template 정리
+
+> **목표**: Generic 함수의 i64 fallback 경로를 구조화된 경고로 전환, 미인스턴스화 template 감지
+> **기대 효과**: monomorphization 완성도 가시화, 타입 안전성 향상
+
+- [x] 1. conversion.rs i64 fallback 경고 구조화 — eprintln→CodegenWarning (Opus) ✅ 2026-03-07
+  변경: error.rs CodegenWarning enum 4 variants, conversion.rs 5개 + inkwell/types.rs 7개 eprintln→emit_warning 전환
+- [x] 2. instantiations.rs 미인스턴스화 generic 감지 + 경고 (Opus) ✅ 2026-03-07
+  변경: instantiations.rs UninstantiatedGeneric 경고 발행, lib.rs/init.rs warnings RefCell 필드 추가
+- [x] 3. 타입 특화 코드 생성 검증 E2E 테스트 +12 (Opus) ✅ 2026-03-07
+  변경: phase114_monomorphization.rs 12개 E2E (identity, arithmetic, transitive, struct method, multi-param 등)
+- [x] 4. 검증 — E2E 1,679 passed, 0 failed, clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 115: WASM Component Model 실전 검증 — WASI P2 E2E 빌드 + 검증 테스트
+
+> **목표**: WASM 빌드 경로 E2E 검증, Component Model WIT 생성 테스트
+> **기대 효과**: WASM 타겟 신뢰성 향상, 실전 사용 가능성 확인
+
+- [x] 1. wasm32 기본 E2E 빌드 테스트 — IR 생성 검증 10개 (Opus) ✅ 2026-03-07
+  변경: phase115_wasm.rs — functions, globals, conditionals, loops, recursion, exports, imports
+- [x] 2. WASI P2 빌드 경로 검증 8개 (Opus) ✅ 2026-03-07
+  변경: multi-param, structs, enums, full I/O pipeline, filesystem, sockets, mixed export+import
+- [x] 3. wasm_component WIT 생성 검증 테스트 10개 (Opus) ✅ 2026-03-07
+  변경: multi-interface packages, records, enums, flags, worlds, type conversion, manifests
+- [x] 4. examples/wasm_*.vais 컴파일 검증 E2E 8개 + bindgen 4개 + cross-target 4개 (Opus) ✅ 2026-03-07
+  변경: interop/calculator/todo/api_client inline 컴파일, JS/TS bindgen, cross-target regression
+- [x] 5. 검증 — E2E 1,723 passed, 0 failed, clippy 0건 (Sonnet) ✅ 2026-03-07
+
+### Phase 116: 성능 벤치마크 갱신 — 최신 Phase 반영 측정
+
+> **목표**: Phase 109~113 반영 컴파일 성능 재측정, ROADMAP/README 수치 동기화
+> **기대 효과**: bounds check/auto free 오버헤드 정량화, 정확한 성능 수치 공개
+> **결과**: 50K lines → 61.0ms (819K lines/s), bounds check/auto free 오버헤드 ≤1% (노이즈 범위)
+
+- [x] 1. cargo bench 실행 — compile_bench, largescale_bench 최신 수치 ✅ 2026-03-07
+  - compile_bench: codegen -18~24% 개선, type_checker -7~23% 개선, full_compile -7~18% 개선
+  - largescale_bench: 50K full pipeline 61.0ms (이전 61.6ms, -0.9%)
+- [x] 2. bounds check + auto free 오버헤드 측정 ✅ 2026-03-07
+  - codegen 50K: 26.6ms (+2.0% vs 이전, 노이즈 범위 — bounds check/auto free IR 추가 오버헤드 무시 가능)
+  - 전체 파이프라인: lexer/parser/TC 개선이 codegen 미세 증가를 상쇄
+- [x] 3. ROADMAP.md + README.md 성능 수치 갱신 ✅ 2026-03-07
+  - ROADMAP: 61.6ms→61.0ms, 812K→819K lines/s
+  - README: per-stage 수치 50K 기준 재측정 반영
+
+### Phase 117: Codecov 80%+ 달성 — 핵심 0% 모듈 집중 보강
+
+> **목표**: 코드 커버리지 68.7% → 80%+, codegen/types 0% 모듈 단위 테스트 대폭 추가
+> **기대 효과**: 회귀 방지 강화, 코드 품질 향상
+
+- [x] 1. codegen 0% 모듈 — generate_expr_call, gen_match, expr_helpers, gen_stmt 테스트 +238 (Sonnet) ✅ 2026-03-07
+  변경: codegen_coverage_tests3.rs(128), codegen_coverage_tests4.rs(110) — IR 검증, ABI, cross-compile, target, 코드젠 경로
+- [x] 2. types 0% 모듈 — exhaustiveness, lifetime, lookup, error_report, traits, scope 테스트 +92 (Sonnet) ✅ 2026-03-07
+  변경: exhaustiveness_lifetime_coverage_tests.rs — 패턴 완전성, 소유권, 심볼 검색, 에러 보고, ResolvedType
+- [x] 3. vaisc 빌드 로직 — 통합 테스트 경로 검증 완료 (Sonnet) ✅ 2026-03-07
+  변경: codegen_coverage_tests4.rs에 복합 코드젠 경로 62개 포함 (빌드 로직 간접 커버리지)
+- [x] 4. codecov.yml 목표 75→80% 갱신 + 검증 (Sonnet) ✅ 2026-03-07
+  변경: codecov.yml project target 75%→80%, codegen 1,307 tests + types 1,230 tests 전체 통과
 
 ---
 

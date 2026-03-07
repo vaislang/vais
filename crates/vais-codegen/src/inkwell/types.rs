@@ -13,6 +13,9 @@ pub(crate) struct TypeMapper<'ctx> {
     /// Generic substitutions mirrored from InkwellCodeGenerator.
     /// Updated via `set_generic_substitutions` / `clear_generic_substitutions`.
     pub(crate) generic_substitutions: HashMap<String, ResolvedType>,
+    /// Structured warnings collected during type mapping.
+    /// Uses RefCell for interior mutability (map_type takes &self).
+    pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
@@ -22,7 +25,19 @@ impl<'ctx> TypeMapper<'ctx> {
             context,
             struct_types: HashMap::new(),
             generic_substitutions: HashMap::new(),
+            warnings: std::cell::RefCell::new(Vec::new()),
         }
+    }
+
+    /// Record a structured codegen warning.
+    fn emit_warning(&self, warning: crate::CodegenWarning) {
+        self.warnings.borrow_mut().push(warning);
+    }
+
+    /// Drain all collected warnings (transfers ownership to caller).
+    #[allow(dead_code)]
+    pub(crate) fn take_warnings(&self) -> Vec<crate::CodegenWarning> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 
     /// Synchronise the substitution table with the generator's current map.
@@ -152,14 +167,18 @@ impl<'ctx> TypeMapper<'ctx> {
                     // Generic parameter without substitution — use i64 fallback.
                     // With transitive instantiation (Phase 67), this path is now mostly
                     // reached only for un-specialized fallback versions of generic functions.
-                    let _ = name; // suppress unused warning
+                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
                     self.context.i64_type().into()
                 }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                eprintln!(
-                    "[ICE] unresolved type variable reached Inkwell codegen — using i64 fallback"
-                );
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved type variable"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
@@ -267,18 +286,25 @@ impl<'ctx> TypeMapper<'ctx> {
                 } else {
                     // ConstGeneric parameter without substitution — use i64 fallback.
                     // Same rationale as Generic above: kept for backward-compatible fallback.
-                    let _ = name; // suppress unused warning
+                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                        param: name.clone(),
+                        context: String::from("<inkwell>"),
+                    });
                     self.context.i64_type().into()
                 }
             }
             ResolvedType::Lifetime(_) => {
-                eprintln!("[ICE] bare lifetime has no runtime representation in Inkwell codegen — using i64 fallback");
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("bare lifetime"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Associated { .. } => {
-                eprintln!(
-                    "[ICE] unresolved associated type in Inkwell codegen — using i64 fallback"
-                );
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved associated type"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::Dependent { base, .. } => {
@@ -286,11 +312,17 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.map_type(base)
             }
             ResolvedType::ImplTrait { .. } => {
-                eprintln!("[ICE] unresolved ImplTrait in Inkwell codegen — using i64 fallback");
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved ImplTrait"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
             ResolvedType::HigherKinded { .. } => {
-                eprintln!("[ICE] unresolved HKT in Inkwell codegen — using i64 fallback");
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: String::from("unresolved HKT"),
+                    backend: String::from("inkwell"),
+                });
                 self.context.i64_type().into()
             }
         }

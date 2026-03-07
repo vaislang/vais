@@ -73,3 +73,5 @@ mod phase95_coverage;
 mod phase109_bounds_check;
 mod phase110_auto_free;
 mod phase111_error_paths;
+mod phase114_monomorphization;
+mod phase115_wasm;

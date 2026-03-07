@@ -42,9 +42,10 @@ impl CodeGenerator {
                 let result = match self.type_to_llvm_impl(ty) {
                     Ok(r) => r,
                     Err(e) => {
-                        #[cfg(debug_assertions)]
-                        eprintln!("Warning: {}", e);
-                        let _ = e;
+                        self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                            type_desc: e.to_string(),
+                            backend: String::from("text"),
+                        });
                         String::from("i64")
                     }
                 };
@@ -68,9 +69,10 @@ impl CodeGenerator {
             Ok(r) => r,
             Err(e) => {
                 // On recursion error, return a fallback type
-                #[cfg(debug_assertions)]
-                eprintln!("Warning: {}", e);
-                let _ = e;
+                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: e.to_string(),
+                    backend: String::from("text"),
+                });
                 String::from("i64")
             }
         };
@@ -194,6 +196,16 @@ impl CodeGenerator {
                     //
                     // NOTE: returning Err here would break nested types like &T → i64 instead of i64*,
                     // because the error short-circuits the wrapper type conversion.
+                    let context = self
+                        .fn_ctx
+                        .current_function
+                        .as_deref()
+                        .unwrap_or("<unknown>")
+                        .to_string();
+                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                        param: param.clone(),
+                        context,
+                    });
                     String::from("i64")
                 }
             }
@@ -204,7 +216,16 @@ impl CodeGenerator {
                 } else {
                     // ConstGeneric parameter without substitution — use i64 fallback.
                     // Same rationale as Generic above: kept for backward-compatible fallback.
-                    let _ = param; // suppress unused warning
+                    let context = self
+                        .fn_ctx
+                        .current_function
+                        .as_deref()
+                        .unwrap_or("<unknown>")
+                        .to_string();
+                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                        param: param.clone(),
+                        context,
+                    });
                     String::from("i64")
                 }
             }
@@ -329,10 +350,11 @@ impl CodeGenerator {
                     return self.type_to_llvm_impl(&resolved);
                 }
                 // Fallback: associated type that couldn't be resolved (generic base)
-                eprintln!(
-                    "[ICE Warning] unresolved associated type '{}' in text IR codegen — using i64 fallback",
-                    assoc_name
-                );
+                let base_desc = format!("{:?}", base);
+                self.emit_warning(crate::CodegenWarning::AssociatedTypeFallback {
+                    assoc_name: assoc_name.clone(),
+                    base_type: base_desc,
+                });
                 String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
@@ -417,8 +439,10 @@ impl CodeGenerator {
         // Track recursion depth
         if self.enter_type_recursion("ast_type_to_resolved").is_err() {
             // On recursion limit, return Unknown type as fallback
-            #[cfg(debug_assertions)]
-            eprintln!("Warning: Type recursion limit exceeded in ast_type_to_resolved");
+            self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                type_desc: String::from("type recursion limit exceeded in ast_type_to_resolved"),
+                backend: String::from("text"),
+            });
             return ResolvedType::Unknown;
         }
 

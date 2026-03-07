@@ -107,7 +107,7 @@ pub use visitor::{ExprVisitor, ItemVisitor, StmtVisitor};
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
 // Re-export error types
-pub use error::{CodegenError, CodegenResult, SpannedCodegenError, WithSpan};
+pub use error::{CodegenError, CodegenResult, CodegenWarning, SpannedCodegenError, WithSpan};
 
 // Re-export state types
 pub use state::DecreasesInfo;
@@ -246,6 +246,13 @@ pub struct CodeGenerator {
     // String interning pool for identifier deduplication.
     // Reduces memory usage by storing each unique function/struct/variable name once.
     pub(crate) ident_pool: string_pool::IdentPool,
+
+    // Structured warnings collected during code generation.
+    // Unlike errors which halt compilation, warnings are accumulated and can be
+    // queried after codegen completes (e.g., to report i64 fallback usage).
+    // Uses RefCell for interior mutability so warnings can be emitted from &self methods
+    // (same pattern as type_to_llvm_cache).
+    pub(crate) warnings: std::cell::RefCell<Vec<CodegenWarning>>,
 }
 
 #[cfg(test)]
