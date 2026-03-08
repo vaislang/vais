@@ -50,9 +50,18 @@ class VaisLexer : LexerBase() {
                 tokenType = VaisTokenTypes.WHITE_SPACE
             }
 
-            // Line comment
+            // Line comment (// or # not followed by [)
             c == '/' && tokenStart + 1 < bufferEnd && buffer[tokenStart + 1] == '/' -> {
                 tokenEnd = tokenStart + 2
+                while (tokenEnd < bufferEnd && buffer[tokenEnd] != '\n') {
+                    tokenEnd++
+                }
+                tokenType = VaisTokenTypes.LINE_COMMENT
+            }
+
+            // Vais line comment: # (but not #[ which is an attribute)
+            c == '#' && !(tokenStart + 1 < bufferEnd && buffer[tokenStart + 1] == '[') -> {
+                tokenEnd = tokenStart + 1
                 while (tokenEnd < bufferEnd && buffer[tokenEnd] != '\n') {
                     tokenEnd++
                 }
@@ -168,6 +177,17 @@ class VaisLexer : LexerBase() {
                     "M" -> VaisTokenTypes.KW_M
                     "U" -> VaisTokenTypes.KW_U
                     "A" -> VaisTokenTypes.KW_A
+                    "R" -> VaisTokenTypes.KW_RETURN   // R = return
+                    "B" -> VaisTokenTypes.KW_BREAK    // B = break
+                    "C" -> VaisTokenTypes.KW_CONTINUE // C = continue
+                    "W" -> VaisTokenTypes.KW_TRAIT    // W = trait
+                    "X" -> VaisTokenTypes.KW_IMPL     // X = impl
+                    "P" -> VaisTokenTypes.KW_PUB      // P = pub
+                    "D" -> VaisTokenTypes.KW_D        // D = defer
+                    "Y" -> VaisTokenTypes.KW_AWAIT    // Y = await
+                    "N" -> VaisTokenTypes.KW_N        // N = extern
+                    "G" -> VaisTokenTypes.KW_G        // G = global
+                    "O" -> VaisTokenTypes.KW_O        // O = union
 
                     // Full keywords
                     "let" -> VaisTokenTypes.KW_LET
@@ -194,6 +214,14 @@ class VaisLexer : LexerBase() {
                     "where" -> VaisTokenTypes.KW_WHERE
                     "self" -> VaisTokenTypes.KW_SELF
                     "Self" -> VaisTokenTypes.KW_SELF_TYPE
+                    "defer" -> VaisTokenTypes.KW_D
+                    "extern" -> VaisTokenTypes.KW_N
+                    "global" -> VaisTokenTypes.KW_G
+                    "union" -> VaisTokenTypes.KW_O
+                    "spawn" -> VaisTokenTypes.KW_SPAWN
+                    "yield" -> VaisTokenTypes.KW_YIELD
+                    "move" -> VaisTokenTypes.KW_MOVE
+                    "type" -> VaisTokenTypes.KW_TYPE
 
                     // Boolean literals
                     "true", "false" -> VaisTokenTypes.BOOL

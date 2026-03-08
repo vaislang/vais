@@ -2,6 +2,8 @@
 
 > Structured logging and error tracing library with multiple output formats and span-based tracing
 
+> **Implementation:** Requires C runtime (`log_runtime.c`). File-based logging uses POSIX file I/O.
+
 ## Overview
 
 The Log module provides production-grade logging with:

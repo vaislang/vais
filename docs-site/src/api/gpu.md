@@ -2,6 +2,8 @@
 
 > GPU compute support for CUDA, Metal, OpenCL with host-side runtime management
 
+> **Implementation:** Requires `--gpu cuda` compilation flag and C runtime (`gpu_runtime.c`). Kernel intrinsics are replaced by GPU codegen; host-side API links from C runtime. CUDA, Metal, and WebGPU backends available; OpenCL is planned.
+
 ## Import
 
 ```vais

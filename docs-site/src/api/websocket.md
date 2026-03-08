@@ -2,6 +2,8 @@
 
 > WebSocket protocol implementation (RFC 6455)
 
+> **Implementation:** Requires C runtime (`websocket_runtime.c`). Built on top of TCP networking; for secure WebSocket (`wss://`), link OpenSSL.
+
 ## Overview
 
 The WebSocket module provides a full-featured WebSocket implementation with:

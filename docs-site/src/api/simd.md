@@ -2,6 +2,8 @@
 
 > CPU SIMD intrinsics for vector operations (SSE2/AVX2/NEON)
 
+> **Implementation:** Requires C runtime (`simd_runtime.c`) and platform-specific SIMD support. SSE2/AVX2 on x86_64, NEON on ARM64. Functions are extern declarations that link to platform intrinsics.
+
 ## Import
 
 ```vais

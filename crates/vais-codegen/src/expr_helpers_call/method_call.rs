@@ -287,13 +287,30 @@ impl CodeGenerator {
                         // Multiple trait impls provide this method — ambiguous dispatch.
                         // The type checker should have caught this, but emit an ICE-level
                         // warning for defense-in-depth.
-                        #[cfg(debug_assertions)]
-                        eprintln!(
-                            "Warning: ambiguous trait method dispatch for {}.{}() — \
-                             {} trait impls provide this method. Using i64 fallback.",
-                            name, method_name, candidate_count
-                        );
+                        self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                            type_desc: format!(
+                                "ambiguous trait method dispatch for {}.{}() — {} trait impls",
+                                name, method_name, candidate_count
+                            ),
+                            backend: String::from("text"),
+                        });
+                    } else {
+                        self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                            type_desc: format!(
+                                "method {}.{}() return type not found in function registry",
+                                name, method_name
+                            ),
+                            backend: String::from("text"),
+                        });
                     }
+                } else {
+                    self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                        type_desc: format!(
+                            "method {}() return type unknown (receiver: {:?})",
+                            method_name, recv_type
+                        ),
+                        backend: String::from("text"),
+                    });
                 }
                 "i64".to_string()
             }

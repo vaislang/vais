@@ -2,6 +2,8 @@
 
 > Browser API bindings for WebAssembly (DOM, console, timers, fetch, storage)
 
+> **Implementation:** WASM-only module. Requires `--target wasm32-unknown-unknown` compilation and a browser/JS host environment. Functions call JavaScript APIs via WASM imports.
+
 ## Import
 
 ```vais

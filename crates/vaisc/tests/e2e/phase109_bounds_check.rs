@@ -1,3 +1,4 @@
+// REGRESSION(phase-109): runtime bounds check must abort on OOB slice access
 //! Phase 109: Slice bounds check — runtime OOB defense tests
 
 use crate::helpers::{assert_exit_code, compile_to_ir};

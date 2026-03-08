@@ -2,6 +2,8 @@
 
 > Gzip/deflate compression and decompression built on zlib FFI
 
+> **Implementation:** Requires C runtime (`compress_runtime.c`) and zlib (`-lz`).
+
 ## Overview
 
 The Compress module provides RFC-compliant compression with:

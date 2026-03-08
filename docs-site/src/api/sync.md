@@ -2,6 +2,8 @@
 
 > Synchronization primitives: Mutex, RwLock, Channel, atomics, and more
 
+> **Implementation:** Requires C runtime (`sync_runtime.c`). Uses POSIX threads (`-lpthread`) for mutex, rwlock, and condition variable operations.
+
 ## Import
 
 ```vais

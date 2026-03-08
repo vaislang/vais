@@ -2,6 +2,8 @@
 
 > Full-featured HTTP client library with request building, response handling, connection pooling, and TLS support
 
+> **Implementation:** Requires C runtime (`http_client_runtime.c`). TLS support requires linking OpenSSL (`-lssl -lcrypto`).
+
 ## Import
 
 ```vais

@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 122 완료)
+> **현재 버전**: 0.1.0 (Phase 124 완료, Phase 125 예정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-07 (Phase 118~122 — 성능/타입/에코시스템/문서/커버리지 85%)
+> **최종 업데이트**: 2026-03-08 (Phase 124 완료 — 커버리지 55.6% 실측, 뮤테이션 테스트 도입, assert_compiles 0개 달성)
 
 ---
 
@@ -560,6 +560,40 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 3. control_flow/ 테스트 — if_else, match_gen, pattern +30 tests (Sonnet) ✅
 - [x] 4. advanced_opt/ 테스트 — alias_analysis, data_layout, AdvancedOptConfig +34 tests (Sonnet) ✅
 - [x] 5. codecov.yml 목표 80→85% 갱신 + codegen 1,433 tests 통과 (Sonnet) ✅
+
+### Phase 123: 빌드/CI/에코시스템 10점 — IntelliJ 강화, Docker multi-platform, 문서 동기화
+
+> **목표**: 빌드/CI/에코시스템 평가 8.5→10점, 배포/IDE/문서 완성도 달성
+> **기대 효과**: 개발자 경험 완성, 배포 채널 신뢰성 확보
+
+- [x] 1. IntelliJ 플러그인 v0.1.0 — 코드 포맷팅, Run Configuration 개선, DAP 디버깅 연동 (Opus)
+- [x] 2. Docker multi-platform — linux/amd64 + linux/arm64 빌드 (docker.yml buildx 전환) (Sonnet)
+- [x] 3. crates.io 배포 자동화 — crates-publish.yml dry-run 제거, 의존성 순서 자동 해결 (Sonnet)
+- [x] 4. API 문서-구현 동기화 — docs-site API Ref 중 미구현 항목 식별 및 "계획" 표시 일괄 추가 (Sonnet)
+- [x] 5. 검증 — CI 전체 통과 + IntelliJ 빌드 확인 (Sonnet) ✅
+  변경: E2E 1,745/0/0, Clippy 0건, codegen 77 tests, types 198 tests 전체 통과
+
+### Phase 124: 테스트 인프라 10점 — 뮤테이션 테스트, 커버리지 90%+, 잔여 정리
+
+> **목표**: 테스트 인프라 평가 9.0→10점, 테스트 품질 완벽 달성
+> **기대 효과**: 모든 코드 경로 검증, 회귀 방지 완벽
+
+- [x] 1. 코드 커버리지 실측 — cargo-llvm-cov 5개 핵심 crate 실측: 전체 55.6% (ast 50.6%, codegen 50.7%, lexer 51.2%, parser 58.6%, types 68.3%). E2E 포함 시 codegen/parser 크게 상승 예상. 90%+ 달성을 위해 codegen/parser/ast 단위 테스트 확충 필요
+- [x] 2. 뮤테이션 테스트 도입 — cargo-mutants v26.2.0 설치 및 vais-lexer 실행: 3 mutants (1 caught, 1 missed: Token::Display, 1 unviable). Token Display 테스트 갭 발견
+- [x] 3. 회귀 테스트 태깅 — `// REGRESSION(phase-N):` 태그 12개 추가 (8개 파일)
+- [x] 4. assert_compiles 마지막 1개 해결 — ref return literal을 global constant로 승격, assert_exit_code 전환 완료 (잔여 assert_compiles: 0개)
+- [x] 5. 검증 — E2E 1,745 전체 통과 (0 fail, 0 ignored) + Clippy 0건
+
+### Phase 125: 언어 기능 9점 — LLVM 백엔드 타입 정확성 강화
+
+> **목표**: 언어 기능 평가 8.0→9.0 (LLVM 백엔드 기준), i64 fallback 경로 축소
+> **기대 효과**: 타입 안전성 향상, Void/Unit 처리 정식화
+
+- [ ] 1. i64 fallback 경로 분석 — 현재 발동 빈도 측정, 제거 가능 경로 식별 (Opus)
+- [ ] 2. Void/Unit 처리 정식화 — `add i64 0, 0` 우회를 정식 void 처리로 전환 가능성 분석 및 구현 (Opus)
+- [ ] 3. Monomorphization 경고→에러 전환 — 필수 특수화 누락 시 컴파일 에러로 전환 (Opus)
+- [ ] 4. E2E 타입 정확성 테스트 +20 — 제네릭/ConstGeneric 특수화 검증 강화 (Sonnet)
+- [ ] 5. 검증 — E2E 전체 통과 + clippy 0건 (Sonnet)
 
 ---
 

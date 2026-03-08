@@ -16,6 +16,30 @@ const LLVM_INVALID_CHARS: &[char] = &[
     '+', '=', '|', '\\', '/', '?', '~', '`', '"', '\'',
 ];
 
+/// Check whether a resolved type represents void/Unit.
+///
+/// Returns `true` for `ResolvedType::Unit` and when the LLVM type string
+/// is `"void"`. Used to decide whether phi nodes should be replaced with
+/// [`void_placeholder_ir`].
+pub(crate) fn is_void_result(llvm_type: &str, resolved: &vais_types::ResolvedType) -> bool {
+    llvm_type == "void" || *resolved == vais_types::ResolvedType::Unit
+}
+
+/// Generate an LLVM IR instruction that acts as a void/Unit placeholder.
+///
+/// LLVM IR does not allow `phi void` — void is not a first-class type. When
+/// an if/else or match expression produces a Unit/void result, we still need
+/// an SSA variable to satisfy the codegen infrastructure that expects every
+/// expression to yield a result name. This helper generates a well-documented
+/// `add i64 0, 0` instruction that is dead (its result is never used).
+///
+/// The Inkwell backend uses `struct_type(&[], false).const_zero()` (a
+/// zero-sized struct) for the same purpose — both approaches are valid LLVM
+/// idioms for representing "no meaningful value."
+pub(crate) fn void_placeholder_ir(result: &str) -> String {
+    format!("  {} = add i64 0, 0  ; void/Unit placeholder\n", result)
+}
+
 /// Sanitize a parameter name to avoid collision with LLVM block labels.
 /// Returns `Cow::Borrowed` when no rename is needed (zero allocation).
 pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {

@@ -44,6 +44,16 @@ impl CodeGenerator {
         if !self.strings.constants.is_empty() {
             ir.push('\n');
         }
+        // Emit global numeric constants for reference returns
+        for (name, ty, value) in &self.ref_constants {
+            ir.push_str(&format!(
+                "@{} = internal constant {} {}\n",
+                name, ty, value
+            ));
+        }
+        if !self.ref_constants.is_empty() {
+            ir.push('\n');
+        }
         if self.needs_unwrap_panic {
             ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
             ir.push_str("declare void @abort()\n\n");

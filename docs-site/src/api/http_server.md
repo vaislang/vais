@@ -2,6 +2,8 @@
 
 > Advanced HTTP server framework with routing, middleware, and static files
 
+> **Implementation:** Requires C runtime (`http_server_runtime.c`). For TLS support, link OpenSSL (`-lssl -lcrypto`).
+
 ## Import
 
 ```vais

@@ -101,8 +101,11 @@ impl CodeGenerator {
             last_error_span: None,
             multi_error_mode: false,
             collected_errors: Vec::new(),
+            strict_type_mode: false,
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
+            ref_constants: Vec::new(),
+            ref_constant_counter: 0,
         };
 
         // Register built-in extern functions
@@ -210,11 +213,46 @@ impl CodeGenerator {
         self.warnings.borrow().clone()
     }
 
+    /// Enable strict type mode.
+    ///
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`,
+    /// `ImplTrait`, `HigherKinded` reaching codegen) become hard errors instead
+    /// of warnings with i64 fallback. Generic/ConstGeneric fallbacks remain as
+    /// warnings since they are legitimate during monomorphization.
+    pub fn set_strict_type_mode(&mut self, strict: bool) {
+        self.strict_type_mode = strict;
+    }
+
     /// Record a structured codegen warning.
     ///
     /// Uses interior mutability (`RefCell`) so this can be called from `&self` methods
     /// such as `type_to_llvm` which cannot take `&mut self`.
     pub(crate) fn emit_warning(&self, warning: crate::CodegenWarning) {
         self.warnings.borrow_mut().push(warning);
+    }
+
+    /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
+    ///
+    /// In strict mode, [`CodegenWarning::UnresolvedTypeFallback`] is promoted to
+    /// [`CodegenError::InternalError`]. Other warning types (e.g., `GenericFallback`)
+    /// remain warnings in all modes.
+    pub(crate) fn emit_warning_or_error(
+        &self,
+        warning: crate::CodegenWarning,
+    ) -> crate::CodegenResult<()> {
+        if self.strict_type_mode {
+            if let crate::CodegenWarning::UnresolvedTypeFallback {
+                ref type_desc,
+                ref backend,
+            } = warning
+            {
+                return Err(crate::CodegenError::InternalError(format!(
+                    "[strict] {} in {} codegen — i64 fallback disabled",
+                    type_desc, backend
+                )));
+            }
+        }
+        self.emit_warning(warning);
+        Ok(())
     }
 }

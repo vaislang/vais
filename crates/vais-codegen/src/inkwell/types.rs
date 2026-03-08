@@ -16,6 +16,11 @@ pub(crate) struct TypeMapper<'ctx> {
     /// Structured warnings collected during type mapping.
     /// Uses RefCell for interior mutability (map_type takes &self).
     pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
+    /// When true, ICE-level fallbacks become errors instead of warnings.
+    /// Currently unused because `map_type` returns `BasicTypeEnum` (not `Result`),
+    /// but the field is set from `InkwellCodeGenerator` for forward compatibility.
+    #[allow(dead_code)]
+    pub(crate) strict_type_mode: bool,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
@@ -26,12 +31,37 @@ impl<'ctx> TypeMapper<'ctx> {
             struct_types: HashMap::new(),
             generic_substitutions: HashMap::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
+            strict_type_mode: false,
         }
     }
 
     /// Record a structured codegen warning.
     fn emit_warning(&self, warning: crate::CodegenWarning) {
         self.warnings.borrow_mut().push(warning);
+    }
+
+    /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
+    /// Currently unused because `map_type` returns `BasicTypeEnum` (not `Result`).
+    /// Will be activated when `map_type` is refactored to return `Result`.
+    #[allow(dead_code)]
+    fn emit_warning_or_error(
+        &self,
+        warning: crate::CodegenWarning,
+    ) -> Result<(), crate::CodegenError> {
+        if self.strict_type_mode {
+            if let crate::CodegenWarning::UnresolvedTypeFallback {
+                ref type_desc,
+                ref backend,
+            } = warning
+            {
+                return Err(crate::CodegenError::InternalError(format!(
+                    "[strict] {} in {} codegen — i64 fallback disabled",
+                    type_desc, backend
+                )));
+            }
+        }
+        self.emit_warning(warning);
+        Ok(())
     }
 
     /// Drain all collected warnings (transfers ownership to caller).

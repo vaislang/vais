@@ -2,6 +2,8 @@
 
 > WebAssembly runtime utilities and polyfills
 
+> **Implementation:** WASM-only module. Requires `--target wasm32-unknown-unknown` compilation. Provides polyfill functions for WASM environments.
+
 ## Import
 
 ```vais

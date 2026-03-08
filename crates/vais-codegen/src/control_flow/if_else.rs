@@ -147,8 +147,7 @@ impl CodeGenerator {
 
                 // Build phi node only from non-terminated predecessors and non-void types
                 if is_void_type {
-                    // Void type: value is not used, just use 0
-                    write_ir!(ir, "  {} = add i64 0, 0", result);
+                    ir.push_str(&crate::helpers::void_placeholder_ir(&result));
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     write_ir!(
                         ir,

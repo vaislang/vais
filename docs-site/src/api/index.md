@@ -2,6 +2,20 @@
 
 > Complete API reference for the Vais standard library
 
+## Implementation Status
+
+Most standard library modules are self-contained Vais code that compiles directly. Some modules require additional setup:
+
+| Category | Modules | Requirement |
+|----------|---------|-------------|
+| **C Runtime** | HTTP, HTTP Client/Server, WebSocket, Log, ORM, Sync, Thread, Template, Contract | Link corresponding `*_runtime.c` file |
+| **External Libraries** | Postgres (`-lpq`), TLS (`-lssl -lcrypto`), Compress (`-lz`), SQLite (`-lsqlite3`) | System library installation |
+| **GPU** | GPU | `--gpu cuda` flag + `gpu_runtime.c` |
+| **SIMD** | SIMD | Platform-specific intrinsics + `simd_runtime.c` |
+| **WASM-only** | WASM, WASI P2, Web | `--target wasm32-unknown-unknown` or `--target wasm32-wasi` |
+
+Modules not listed above (Core Types, Collections, Math, IO, etc.) compile standalone without additional dependencies.
+
 ## Core Types
 
 | Module | Description |

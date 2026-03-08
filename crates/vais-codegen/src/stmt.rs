@@ -314,6 +314,36 @@ impl CodeGenerator {
                         val
                     };
 
+                    // When the function returns a reference type (e.g., -> &i64) but the
+                    // expression produced a bare literal (e.g., 42), we must store the
+                    // literal in a global constant so the returned pointer is valid.
+                    // Without this, we'd emit `ret i64* 42` which clang rejects.
+                    let final_val = if matches!(
+                        ret_resolved,
+                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+                    ) && !final_val.starts_with('%')
+                        && !final_val.starts_with('@')
+                    {
+                        // Get the inner type for the global constant
+                        let inner_ty = match &ret_resolved {
+                            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                self.type_to_llvm(inner)
+                            }
+                            _ => unreachable!(),
+                        };
+                        let const_name =
+                            format!(".ref.const.{}", self.ref_constant_counter);
+                        self.ref_constant_counter += 1;
+                        self.ref_constants.push((
+                            const_name.clone(),
+                            inner_ty,
+                            final_val.clone(),
+                        ));
+                        format!("@{}", const_name)
+                    } else {
+                        final_val
+                    };
+
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(counter)?;
                     ir.push_str(&defer_ir);

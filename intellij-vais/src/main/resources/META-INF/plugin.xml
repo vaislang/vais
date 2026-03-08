@@ -19,7 +19,11 @@
         <li>Signature help</li>
         <li>Document symbols</li>
         <li>Code actions</li>
-        <li>Run configuration for compiling and running .vais files</li>
+        <li>Code formatting (LSP-backed + fallback formatter)</li>
+        <li>Brace matching and auto-closing</li>
+        <li>Line/block comment toggle (Ctrl+/ and Ctrl+Shift+/)</li>
+        <li>Run configuration with target selection (native/JS/WASM)</li>
+        <li>Working directory and environment variable support</li>
         <li>Debug configuration via vais-dap (DAP server)</li>
     </ul>
 
@@ -32,6 +36,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>0.1.0</h3>
+    <ul>
+        <li>Code formatting support (LSP-backed with fallback formatter)</li>
+        <li>Brace matching and auto-closing for (), {}, [], &lt;&gt;</li>
+        <li>Line and block comment toggling</li>
+        <li>Run configuration: target selection (native/JS/WASM)</li>
+        <li>Run configuration: working directory and environment variables</li>
+        <li>Debug configuration: working directory support, source file mapping</li>
+        <li>Improved file chooser dialogs with project context</li>
+    </ul>
     <h3>0.0.2</h3>
     <ul>
         <li>Enhanced LSP integration with document synchronization</li>
@@ -73,6 +87,21 @@
         <!-- Color Settings Page -->
         <colorSettingsPage
             implementation="com.vais.intellij.VaisColorSettingsPage"/>
+
+        <!-- Code Formatting -->
+        <lang.formatter
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisFormattingModelBuilder"/>
+
+        <!-- Brace Matching -->
+        <lang.braceMatcher
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisBraceMatcher"/>
+
+        <!-- Comment Toggle (Ctrl+/ and Ctrl+Shift+/) -->
+        <lang.commenter
+            language="Vais"
+            implementationClass="com.vais.intellij.format.VaisCommenter"/>
 
         <!-- LSP Server Support (via lsp4j) -->
         <notificationGroup

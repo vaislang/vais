@@ -65,6 +65,8 @@ class VaisSyntaxHighlighter : SyntaxHighlighterBase() {
             VaisTokenTypes.KW_F, VaisTokenTypes.KW_S, VaisTokenTypes.KW_E,
             VaisTokenTypes.KW_T, VaisTokenTypes.KW_I, VaisTokenTypes.KW_L,
             VaisTokenTypes.KW_M, VaisTokenTypes.KW_U, VaisTokenTypes.KW_A,
+            VaisTokenTypes.KW_D, VaisTokenTypes.KW_N, VaisTokenTypes.KW_G,
+            VaisTokenTypes.KW_O,
             VaisTokenTypes.KW_LET, VaisTokenTypes.KW_MUT, VaisTokenTypes.KW_IF,
             VaisTokenTypes.KW_ELSE, VaisTokenTypes.KW_LOOP, VaisTokenTypes.KW_WHILE,
             VaisTokenTypes.KW_FOR, VaisTokenTypes.KW_IN, VaisTokenTypes.KW_MATCH,
@@ -72,7 +74,9 @@ class VaisSyntaxHighlighter : SyntaxHighlighterBase() {
             VaisTokenTypes.KW_FN, VaisTokenTypes.KW_STRUCT, VaisTokenTypes.KW_ENUM,
             VaisTokenTypes.KW_TRAIT, VaisTokenTypes.KW_IMPL, VaisTokenTypes.KW_PUB,
             VaisTokenTypes.KW_USE, VaisTokenTypes.KW_ASYNC, VaisTokenTypes.KW_AWAIT,
-            VaisTokenTypes.KW_WHERE, VaisTokenTypes.KW_SELF, VaisTokenTypes.KW_SELF_TYPE -> KEYWORD_KEYS
+            VaisTokenTypes.KW_WHERE, VaisTokenTypes.KW_SELF, VaisTokenTypes.KW_SELF_TYPE,
+            VaisTokenTypes.KW_SPAWN, VaisTokenTypes.KW_YIELD, VaisTokenTypes.KW_MOVE,
+            VaisTokenTypes.KW_TYPE -> KEYWORD_KEYS
 
             // Built-in types
             VaisTokenTypes.BUILTIN_TYPE -> BUILTIN_TYPE_KEYS

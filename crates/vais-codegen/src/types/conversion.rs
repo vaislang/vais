@@ -241,10 +241,10 @@ impl CodeGenerator {
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
             ResolvedType::ImplTrait { .. } => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved ImplTrait"),
                     backend: String::from("text"),
-                });
+                })?;
                 String::from("i64")
             }
             ResolvedType::FnPtr {
@@ -281,10 +281,10 @@ impl CodeGenerator {
                 format!("{}*", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Lifetime(_) => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("bare lifetime"),
                     backend: String::from("text"),
-                });
+                })?;
                 String::from("i64")
             }
             ResolvedType::Map(key, _val) => {
@@ -337,10 +337,10 @@ impl CodeGenerator {
                 String::from("void")
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved type variable"),
                     backend: String::from("text"),
-                });
+                })?;
                 String::from("i64")
             }
             ResolvedType::Associated {
@@ -364,10 +364,10 @@ impl CodeGenerator {
                 String::from("i64")
             }
             ResolvedType::HigherKinded { .. } => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved HKT"),
                     backend: String::from("text"),
-                });
+                })?;
                 String::from("i64")
             }
         })

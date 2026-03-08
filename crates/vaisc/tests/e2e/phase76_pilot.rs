@@ -421,6 +421,7 @@ F main() -> i64 {
     assert_exit_code(source, 5);
 }
 
+// REGRESSION(phase-76): parameter named "entry" collides with LLVM entry block label
 /// Regression test: parameter named "entry" should not collide with LLVM entry block label
 #[test]
 fn e2e_p76_entry_param_name_fix() {

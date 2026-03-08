@@ -1117,6 +1117,7 @@ fn test_bindgen_wasm_js_module() {
 // 6. Cross-target Regression Tests
 // ==============================================================================
 
+// REGRESSION(phase-115): same source must compile to all three WASM targets
 #[test]
 fn test_same_source_all_wasm_targets() {
     let source = r#"

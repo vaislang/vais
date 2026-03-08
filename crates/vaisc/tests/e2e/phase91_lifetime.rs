@@ -210,15 +210,16 @@ F main() -> i64 = 42
     assert_exit_code(source, 42);
 }
 
+// REGRESSION(phase-124): literal returned from &i64 function promoted to global constant
 #[test]
 fn e2e_lifetime_no_ref_params_returns_ref() {
     // No ref params, returns a ref → gets 'static from elision (valid for now)
-    // NOTE: assert_compiles only -- text IR codegen emits `ret i64* 42` (literal, not pointer), clang rejects
+    // Literal 42 is promoted to a global constant so the returned i64* pointer is valid.
     let source = r#"
 F get_ref() -> &i64 {
     42
 }
 F main() -> i64 = 42
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }

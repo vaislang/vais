@@ -2,6 +2,8 @@
 
 > Lightweight object-relational mapping with SQL query builder
 
+> **Implementation:** Requires C runtime (`orm_runtime.c`). Uses SQLite or PostgreSQL as backend; the corresponding database library (`-lsqlite3` or `-lpq`) must be linked.
+
 ## Overview
 
 The ORM module provides a lightweight ORM for Vais with:

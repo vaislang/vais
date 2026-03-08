@@ -1,3 +1,4 @@
+// REGRESSION(phase-110): heap allocations must be auto-freed before function return
 //! Phase 110: Memory management — scope-based auto free
 //!
 //! Tests that heap allocations (string concat, slices, format buffers, trait objects)

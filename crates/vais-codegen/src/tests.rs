@@ -1,6 +1,86 @@
 use super::*;
 use vais_parser::parse;
 
+// ==================== Strict Type Mode Tests ====================
+
+#[test]
+fn test_strict_mode_generic_fallback_remains_warning() {
+    // Generic fallback should remain a warning even in strict mode
+    let source = r#"
+F identity<T>(x: T) -> T { x }
+F main() -> i64 { identity(42) }
+"#;
+    let module = parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = CodeGenerator::new("test");
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
+    gen.set_strict_type_mode(true);
+    let instantiations = checker.get_generic_instantiations();
+    let result = if instantiations.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &instantiations)
+    };
+    // Should succeed — Generic fallback is Category A (always allowed)
+    assert!(result.is_ok(), "Expected success, got: {:?}", result.err());
+}
+
+#[test]
+fn test_void_placeholder_helper() {
+    let ir = crate::helpers::void_placeholder_ir("%tmp.0");
+    assert!(ir.contains("add i64 0, 0"));
+    assert!(ir.contains("void/Unit placeholder"));
+    assert!(ir.contains("%tmp.0"));
+}
+
+#[test]
+fn test_is_void_result_helper() {
+    assert!(crate::helpers::is_void_result("void", &vais_types::ResolvedType::I64));
+    assert!(crate::helpers::is_void_result("i64", &vais_types::ResolvedType::Unit));
+    assert!(!crate::helpers::is_void_result("i64", &vais_types::ResolvedType::I64));
+}
+
+#[test]
+fn test_emit_warning_or_error_default_mode() {
+    let gen = CodeGenerator::new("test");
+    // Default mode: UnresolvedTypeFallback should be a warning, not error
+    let result = gen.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+        type_desc: String::from("test type"),
+        backend: String::from("test"),
+    });
+    assert!(result.is_ok());
+    assert_eq!(gen.get_warnings().len(), 1);
+}
+
+#[test]
+fn test_emit_warning_or_error_strict_mode() {
+    let mut gen = CodeGenerator::new("test");
+    gen.set_strict_type_mode(true);
+    // Strict mode: UnresolvedTypeFallback should become an error
+    let result = gen.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+        type_desc: String::from("test type"),
+        backend: String::from("test"),
+    });
+    assert!(result.is_err());
+    // No warnings collected — it was promoted to error
+    assert_eq!(gen.get_warnings().len(), 0);
+}
+
+#[test]
+fn test_emit_warning_or_error_strict_mode_generic_fallback() {
+    let mut gen = CodeGenerator::new("test");
+    gen.set_strict_type_mode(true);
+    // GenericFallback is Category A — should remain warning even in strict mode
+    let result = gen.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+        param: String::from("T"),
+        context: String::from("test_fn"),
+    });
+    assert!(result.is_ok());
+    assert_eq!(gen.get_warnings().len(), 1);
+}
+
 #[test]
 fn test_simple_function() {
     let source = "F add(a:i64,b:i64)->i64=a+b";

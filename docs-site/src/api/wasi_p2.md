@@ -2,6 +2,8 @@
 
 > WASI Preview 2 interface bindings (Component Model)
 
+> **Implementation:** WASM-only module. Requires `--target wasm32-wasi` compilation. Functions are extern declarations bound to WASI Preview 2 host APIs via the Component Model.
+
 ## Import
 
 ```vais

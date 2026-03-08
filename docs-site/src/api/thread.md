@@ -2,6 +2,8 @@
 
 > OS-level threading with thread pools and scoped threads
 
+> **Implementation:** Requires C runtime (`thread_runtime.c`). Uses POSIX threads (`-lpthread`).
+
 ## Import
 
 ```vais

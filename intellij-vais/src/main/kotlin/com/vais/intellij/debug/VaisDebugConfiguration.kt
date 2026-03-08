@@ -26,6 +26,7 @@ class VaisDebugConfigurationOptions : RunConfigurationOptions() {
     var compilerPath by string("vaisc")
     var dapServerPath by string("vais-dap")
     var programArguments by string("")
+    var workingDirectory by string("")
 }
 
 /**
@@ -56,6 +57,10 @@ class VaisDebugConfiguration(
         get() = options.programArguments ?: ""
         set(value) { options.programArguments = value }
 
+    var workingDirectory: String
+        get() = options.workingDirectory ?: ""
+        set(value) { options.workingDirectory = value }
+
     override fun getOptions(): VaisDebugConfigurationOptions {
         return super.getOptions() as VaisDebugConfigurationOptions
     }
@@ -65,7 +70,7 @@ class VaisDebugConfiguration(
     }
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfiguration> {
-        return VaisDebugConfigurationEditor()
+        return VaisDebugConfigurationEditor(project)
     }
 
     override fun checkConfiguration() {
@@ -79,6 +84,18 @@ class VaisDebugConfiguration(
         if (!file.name.endsWith(".vais")) {
             throw RuntimeConfigurationWarning("File does not have .vais extension")
         }
+        if (workingDirectory.isNotEmpty() && !File(workingDirectory).isDirectory) {
+            throw RuntimeConfigurationError("Working directory does not exist: $workingDirectory")
+        }
+    }
+
+    /**
+     * Returns the effective working directory.
+     */
+    fun effectiveWorkingDirectory(): String {
+        if (workingDirectory.isNotEmpty()) return workingDirectory
+        val vaisFileObj = File(vaisFile)
+        return vaisFileObj.parent ?: project.basePath ?: "."
     }
 
     override fun readExternal(element: Element) {
@@ -87,6 +104,7 @@ class VaisDebugConfiguration(
         compilerPath = element.getAttributeValue("compilerPath") ?: "vaisc"
         dapServerPath = element.getAttributeValue("dapServerPath") ?: "vais-dap"
         programArguments = element.getAttributeValue("programArguments") ?: ""
+        workingDirectory = element.getAttributeValue("workingDirectory") ?: ""
     }
 
     override fun writeExternal(element: Element) {
@@ -95,24 +113,32 @@ class VaisDebugConfiguration(
         element.setAttribute("compilerPath", compilerPath)
         element.setAttribute("dapServerPath", dapServerPath)
         element.setAttribute("programArguments", programArguments)
+        element.setAttribute("workingDirectory", workingDirectory)
     }
 }
 
 /**
  * Settings editor UI for the Vais debug configuration.
  */
-class VaisDebugConfigurationEditor : SettingsEditor<VaisDebugConfiguration>() {
+class VaisDebugConfigurationEditor(private val project: Project) : SettingsEditor<VaisDebugConfiguration>() {
     private val vaisFileField = TextFieldWithBrowseButton()
     private val compilerPathField = JBTextField()
     private val dapServerPathField = JBTextField()
     private val argumentsField = JBTextField()
+    private val workingDirectoryField = TextFieldWithBrowseButton()
 
     init {
         vaisFileField.addBrowseFolderListener(
             "Select Vais File",
             "Choose the .vais source file to debug",
-            null,
+            project,
             FileChooserDescriptorFactory.createSingleFileDescriptor("vais")
+        )
+        workingDirectoryField.addBrowseFolderListener(
+            "Select Working Directory",
+            null,
+            project,
+            FileChooserDescriptorFactory.createSingleFolderDescriptor()
         )
     }
 
@@ -134,6 +160,9 @@ class VaisDebugConfigurationEditor : SettingsEditor<VaisDebugConfiguration>() {
         panel.add(LabeledComponent.create(dapServerPathField, "DAP server path (vais-dap):"), gbc)
 
         gbc.gridy = 3
+        panel.add(LabeledComponent.create(workingDirectoryField, "Working directory:"), gbc)
+
+        gbc.gridy = 4
         panel.add(LabeledComponent.create(argumentsField, "Program arguments:"), gbc)
 
         return panel
@@ -144,6 +173,7 @@ class VaisDebugConfigurationEditor : SettingsEditor<VaisDebugConfiguration>() {
         compilerPathField.text = configuration.compilerPath
         dapServerPathField.text = configuration.dapServerPath
         argumentsField.text = configuration.programArguments
+        workingDirectoryField.text = configuration.workingDirectory
     }
 
     override fun applyEditorTo(configuration: VaisDebugConfiguration) {
@@ -151,5 +181,6 @@ class VaisDebugConfigurationEditor : SettingsEditor<VaisDebugConfiguration>() {
         configuration.compilerPath = compilerPathField.text
         configuration.dapServerPath = dapServerPathField.text
         configuration.programArguments = argumentsField.text
+        configuration.workingDirectory = workingDirectoryField.text
     }
 }

@@ -2,6 +2,7 @@ use super::helpers::*;
 
 // ==================== Void Phi Node Bug Fix ====================
 
+// REGRESSION(phase-42): void phi node — `phi void` is invalid LLVM IR
 #[test]
 fn e2e_void_phi_if_else_with_assert() {
     // Regression test for void phi node bug:

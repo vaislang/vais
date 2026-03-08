@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.vais"
-version = "0.0.1"
+version = "0.1.0"
 
 repositories {
     mavenCentral()

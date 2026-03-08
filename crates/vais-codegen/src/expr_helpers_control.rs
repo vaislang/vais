@@ -159,11 +159,10 @@ impl CodeGenerator {
         ir.push_str(&format!("{}:\n", merge_label));
         self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
-        let is_void = phi_llvm == "void" || phi_type == vais_types::ResolvedType::Unit;
+        let is_void = crate::helpers::is_void_result(&phi_llvm, &phi_type);
 
         if is_void || !has_else {
-            // void/Unit type cannot have phi nodes in LLVM IR
-            ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+            ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             ir.push_str(&format!(
                 "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
@@ -185,7 +184,7 @@ impl CodeGenerator {
                 result, phi_llvm, else_val_for_phi, else_from_label
             ));
         } else {
-            ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+            ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         }
 
         Ok((result, ir))

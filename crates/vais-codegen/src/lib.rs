@@ -243,6 +243,12 @@ pub struct CodeGenerator {
     pub multi_error_mode: bool,
     pub(crate) collected_errors: Vec<SpannedCodegenError>,
 
+    // When true, ICE-level type fallbacks (Var, Unknown, Lifetime, HKT,
+    // ImplTrait reaching codegen) are promoted from warnings to hard errors.
+    // Default: false (backward compatible — i64 fallback with warning).
+    // Set to true via `set_strict_type_mode(true)` for stricter validation.
+    pub strict_type_mode: bool,
+
     // String interning pool for identifier deduplication.
     // Reduces memory usage by storing each unique function/struct/variable name once.
     pub(crate) ident_pool: string_pool::IdentPool,
@@ -253,6 +259,15 @@ pub struct CodeGenerator {
     // Uses RefCell for interior mutability so warnings can be emitted from &self methods
     // (same pattern as type_to_llvm_cache).
     pub(crate) warnings: std::cell::RefCell<Vec<CodegenWarning>>,
+
+    // Global numeric constants for reference returns.
+    // When a function with a reference return type (e.g., `-> &i64`) returns a literal value,
+    // the literal must be stored in a global constant so the returned pointer is valid.
+    // Each entry is (global_name, llvm_type, literal_value).
+    pub(crate) ref_constants: Vec<(String, String, String)>,
+
+    // Counter for unique global constant names
+    pub(crate) ref_constant_counter: usize,
 }
 
 #[cfg(test)]

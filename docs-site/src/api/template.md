@@ -2,6 +2,8 @@
 
 > Template engine with variable interpolation, conditionals, loops, filters, and partials
 
+> **Implementation:** Requires C runtime (`template_runtime.c`).
+
 ## Import
 
 ```vais

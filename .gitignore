@@ -174,3 +174,5 @@ packages/**/*.ll
 # Compiled pilot project binaries
 examples/pilot_json2toml
 examples/pilot_rest_api
+mutants.out
+mutants.out.old

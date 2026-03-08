@@ -2,6 +2,8 @@
 
 > HTTP client and server implementation built on TCP networking
 
+> **Implementation:** Requires C runtime (`http_runtime.c`). Provides HTTP/1.1 protocol constants and types used by `http_client` and `http_server` modules.
+
 ## Overview
 
 The HTTP module provides a full-featured HTTP/1.1 implementation with:

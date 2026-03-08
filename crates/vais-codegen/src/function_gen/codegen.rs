@@ -254,6 +254,31 @@ impl CodeGenerator {
                             ));
                             ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                         }
+                    } else if matches!(
+                        ret_type,
+                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+                    ) && !value.starts_with('%')
+                        && !value.starts_with('@')
+                    {
+                        // Reference return with bare literal: promote to global constant
+                        let inner_ty = match &ret_type {
+                            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                self.type_to_llvm(inner)
+                            }
+                            _ => unreachable!(),
+                        };
+                        let const_name =
+                            format!(".ref.const.{}", self.ref_constant_counter);
+                        self.ref_constant_counter += 1;
+                        self.ref_constants.push((
+                            const_name.clone(),
+                            inner_ty,
+                            value.clone(),
+                        ));
+                        ir.push_str(&format!(
+                            "  ret {} @{}{}\n",
+                            ret_llvm, const_name, ret_dbg
+                        ));
                     } else {
                         ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                     }
@@ -409,6 +434,30 @@ impl CodeGenerator {
                         loaded, ret_llvm, ret_llvm, value, ret_dbg
                     ));
                     ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                } else if matches!(
+                    ret_type,
+                    ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+                ) && !value.starts_with('%')
+                    && !value.starts_with('@')
+                {
+                    let inner_ty = match &ret_type {
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                            self.type_to_llvm(inner)
+                        }
+                        _ => unreachable!(),
+                    };
+                    let const_name =
+                        format!(".ref.const.{}", self.ref_constant_counter);
+                    self.ref_constant_counter += 1;
+                    self.ref_constants.push((
+                        const_name.clone(),
+                        inner_ty,
+                        value.clone(),
+                    ));
+                    ir.push_str(&format!(
+                        "  ret {} @{}{}\n",
+                        ret_llvm, const_name, ret_dbg
+                    ));
                 } else {
                     ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                 }
@@ -445,6 +494,30 @@ impl CodeGenerator {
                             ));
                             ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                         }
+                    } else if matches!(
+                        ret_type,
+                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+                    ) && !value.starts_with('%')
+                        && !value.starts_with('@')
+                    {
+                        let inner_ty = match &ret_type {
+                            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                self.type_to_llvm(inner)
+                            }
+                            _ => unreachable!(),
+                        };
+                        let const_name =
+                            format!(".ref.const.{}", self.ref_constant_counter);
+                        self.ref_constant_counter += 1;
+                        self.ref_constants.push((
+                            const_name.clone(),
+                            inner_ty,
+                            value.clone(),
+                        ));
+                        ir.push_str(&format!(
+                            "  ret {} @{}{}\n",
+                            ret_llvm, const_name, ret_dbg
+                        ));
                     } else {
                         ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                     }
