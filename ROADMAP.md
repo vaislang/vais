@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 127 완료, Phase 128~129 예정)
+> **현재 버전**: 0.1.0 (Phase 128 완료, Phase 129 예정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-08 (Phase 127 완료 — strict_type_mode 기본화, i64 fallback 강화)
+> **최종 업데이트**: 2026-03-08 (Phase 128 완료 — E2E 2,036개 달성, +235 테스트)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 10,200+ (E2E 1,801+, 단위 8,400+) |
+| 전체 테스트 | 10,400+ (E2E 2,036+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.0ms (819K lines/s) |
@@ -105,7 +105,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (9,500+) | ✅ |
-| E2E 1,789개 통과 (0 fail, 0 ignored) | ✅ |
+| E2E 2,036개 통과 (0 fail, 0 ignored) | ✅ |
 | 보안 감사 (cargo audit 통과) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
 | 문서 (mdBook, API 문서 65개 모듈) | ✅ |
@@ -243,6 +243,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 114~117 | 완성도 · 검증 | Monomorphization 경고, WASM E2E 44개, 벤치마크 갱신 61.0ms, Codecov 80%+ | 1,723 |
 | 118~122 | 성능 · 타입 · 에코 · 문서 · 커버리지 | clone 축소, Text IR 일관성, ConstGeneric mono, tutorial 24 lessons, examples 188, Codecov 85% | 1,745 |
 | 99~125 | 안정성 · 완성도 · 타입 정확성 | expect/panic 0건, 모듈 분할 R11-R12, bounds check, auto free, Codecov 85%, strict_type_mode, unit_value() 중앙화 | 1,789 |
+| 126~128 | 커버리지 · 타입 강화 · E2E 2K | +309 단위 테스트, strict_type_mode 기본화, +235 E2E (에러/제네릭/연산자/클로저/수치/집합체/기타) | 2,036 |
 
 ---
 
@@ -292,8 +293,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ### Phase 128: E2E 2,000개 달성 — 미커버 언어 기능 테스트 확장
 
-> **목표**: E2E 1,789 → 2,000+, 에러 경로/엣지 케이스/복합 기능 테스트 추가
+> **목표**: E2E 1,801 → 2,000+, 에러 경로/엣지 케이스/복합 기능 테스트 추가
 > **기대 효과**: 컴파일러 안정성 최종 검증, 언어 기능 전수 커버리지
+
+모드: 자동진행
+
+- [x] 1. 에러 경로 E2E 55개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_errors.rs (+55 tests — 타입 불일치/미정의 심볼/중복 정의/시그니처/제어흐름/메서드/인덱스 에러)
+- [x] 2. 제네릭/트레이트 복합 E2E 29개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_generics.rs (+29 tests — 다중 제네릭/트레이트 디스패치/monomorphization/메서드 체인)
+- [x] 3. 연산자/파이프/삼항/패턴 E2E 43개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_operators.rs (+43 tests — 파이프/삼항/범위/복합 대입/비트/논리/우선순위/매치 패턴)
+- [x] 4. 클로저/캡처/고차함수 E2E 24개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_closures.rs (+24 tests — 캡처/고차함수/중첩 클로저/제어흐름 내 클로저)
+- [x] 5. 수치 타입/형변환 E2E 35개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_numeric.rs (+35 tests — 산술/영점/음수/복합식/비교/나눗셈/큰 수/불리언/팩토리얼)
+- [x] 6. struct/enum/union 복합 E2E 23개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_aggregates.rs (+23 tests — struct 메서드/enum 매칭/제네릭 struct/trait 조합)
+- [x] 7. 문자열/보간/defer/lazy E2E 26개 추가 (Sonnet) ✅ 2026-03-08
+  변경: phase128_misc.rs (+26 tests — 자재귀/상호재귀/복합 제어흐름/루프/스코핑/배열/합성)
+- [x] 8. 검증: cargo test 전체 통과 + E2E 카운트 확인 (Opus) ✅ 2026-03-08
+  변경: 235개 신규 테스트 전체 통과, E2E 2,036개, Clippy 0건
+진행률: 8/8 (100%)
 
 ### Phase 129: 성능 최적화 & 벤치마크 — 프로파일링 기반 핫패스 개선
 
