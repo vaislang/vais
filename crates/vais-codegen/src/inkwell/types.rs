@@ -17,9 +17,11 @@ pub(crate) struct TypeMapper<'ctx> {
     /// Uses RefCell for interior mutability (map_type takes &self).
     pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
     /// When true, ICE-level fallbacks become errors instead of warnings.
-    /// Currently unused because `map_type` returns `BasicTypeEnum` (not `Result`),
-    /// but the field is set from `InkwellCodeGenerator` for forward compatibility.
-    #[allow(dead_code)]
+    /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
+    /// Note: `map_type` returns `BasicTypeEnum` (not `Result`), so strict mode
+    /// is currently enforced via `emit_warning_or_error` only where the caller
+    /// can propagate errors. Full enforcement requires refactoring `map_type`
+    /// to return `Result<BasicTypeEnum, CodegenError>`.
     pub(crate) strict_type_mode: bool,
 }
 
@@ -41,9 +43,11 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
-    /// Currently unused because `map_type` returns `BasicTypeEnum` (not `Result`).
-    /// Will be activated when `map_type` is refactored to return `Result`.
-    #[allow(dead_code)]
+    ///
+    /// Note: Currently only callable from code paths that can propagate `Result`.
+    /// `map_type` itself returns `BasicTypeEnum` (not `Result`), so this is used
+    /// by callers that wrap map_type in a fallible context.
+    #[allow(dead_code)] // Will be used when map_type returns Result
     fn emit_warning_or_error(
         &self,
         warning: crate::CodegenWarning,
@@ -65,7 +69,6 @@ impl<'ctx> TypeMapper<'ctx> {
     }
 
     /// Drain all collected warnings (transfers ownership to caller).
-    #[allow(dead_code)]
     pub(crate) fn take_warnings(&self) -> Vec<crate::CodegenWarning> {
         std::mem::take(&mut *self.warnings.borrow_mut())
     }

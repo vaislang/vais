@@ -170,7 +170,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_call(printf_fn, &[nl_ptr.into()], "puts_nl")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
         match fn_name.as_str() {
             "println" => return self.generate_println_call(args),
@@ -461,7 +461,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 return Ok(call
                     .try_as_basic_value()
                     .left()
-                    .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()));
+                    .unwrap_or_else(|| self.unit_value()));
             }
         }
 
@@ -623,6 +623,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(call
             .try_as_basic_value()
             .left()
-            .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+            .unwrap_or_else(|| self.unit_value()))
     }
 }

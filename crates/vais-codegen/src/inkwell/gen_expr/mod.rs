@@ -27,7 +27,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::Float(f) => Ok(self.context.f64_type().const_float(*f).into()),
             Expr::Bool(b) => Ok(self.context.bool_type().const_int(*b as u64, false).into()),
             Expr::String(s) => self.generate_string_literal(s),
-            Expr::Unit => Ok(self.context.struct_type(&[], false).const_zero().into()),
+            Expr::Unit => Ok(self.unit_value()),
 
             // Variable
             Expr::Ident(name) => self.generate_var(name),
@@ -197,7 +197,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Expr::Assume(inner) => {
                 // Evaluate the inner expression but discard result
                 let _ = self.generate_expr(&inner.node)?;
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
 
             // Spread: just evaluate the inner expression

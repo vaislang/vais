@@ -18,7 +18,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         stmts: &[Spanned<Stmt>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let mut last_value: BasicValueEnum =
-            self.context.struct_type(&[], false).const_zero().into();
+            self.unit_value();
 
         for stmt in stmts {
             // Stop generating after a terminator (return/break/continue)
@@ -128,7 +128,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 }
 
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
             Stmt::Expr(expr) => self.generate_expr(&expr.node),
             Stmt::Return(Some(expr)) => {
@@ -138,7 +138,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.builder
                     .build_return(Some(&val))
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
             Stmt::Return(None) => {
                 self.emit_defer_cleanup()?;
@@ -146,14 +146,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.builder
                     .build_return(None)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
             Stmt::Break(value) => self.generate_break(value.as_ref().map(|v| &v.node)),
             Stmt::Continue => self.generate_continue(),
             Stmt::Defer(expr) => {
                 // Add deferred expression to stack (will be executed in LIFO order before return)
                 self.defer_stack.push(expr.node.clone());
-                Ok(self.context.struct_type(&[], false).const_zero().into())
+                Ok(self.unit_value())
             }
             Stmt::LetDestructure {
                 pattern,
@@ -225,7 +225,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let else_val = if let Some(else_branch) = else_branch {
             self.generate_if_else(else_branch)?
         } else {
-            self.context.struct_type(&[], false).const_zero().into()
+            self.unit_value()
         };
         let else_end_block = self.builder.get_insert_block().ok_or_else(|| {
             CodegenError::LlvmError(
@@ -247,7 +247,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_unreachable()
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
 
         // Build phi node - only include non-terminated branches
@@ -294,7 +294,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Ok(phi.as_basic_value())
         } else {
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         }
     }
 
@@ -483,7 +483,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.pop();
 
         // For loops return unit
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_condition_loop(
@@ -625,7 +625,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.pop();
 
         // Loops return unit by default
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_while_loop(
@@ -707,7 +707,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.pop();
 
         // While loops return unit
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     /// Emit deferred expressions in LIFO order (before function return).
@@ -759,7 +759,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unconditional_branch(break_block)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_continue(&mut self) -> CodegenResult<BasicValueEnum<'ctx>> {
@@ -773,7 +773,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unconditional_branch(continue_block)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     // ========== Array/Tuple/Index ==========

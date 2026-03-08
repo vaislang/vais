@@ -68,9 +68,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(call
                 .try_as_basic_value()
                 .left()
-                .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+                .unwrap_or_else(|| self.unit_value()))
         } else {
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         }
     }
 
@@ -137,7 +137,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             _ => {}
         }
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
     // ========== Impl/Method Support ==========
 
@@ -625,7 +625,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             }
         }
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_print_call(
@@ -653,7 +653,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_call(printf_fn, &arg_values, "print_call")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_format_call(
@@ -696,7 +696,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_i64(
@@ -804,7 +804,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_store(p2, v1)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_store_byte(
@@ -838,7 +838,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, byte_val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_byte(
@@ -902,7 +902,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder
             .build_store(ptr, val)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     pub(super) fn generate_load_f64(

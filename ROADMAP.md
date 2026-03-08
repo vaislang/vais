@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 124 완료, Phase 125 예정)
+> **현재 버전**: 0.1.0 (Phase 125 완료, Phase 126 예정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-08 (Phase 124 완료 — 커버리지 55.6% 실측, 뮤테이션 테스트 도입, assert_compiles 0개 달성)
+> **최종 업데이트**: 2026-03-08 (Phase 125 완료 — i64 fallback 분석, unit_value() 중앙화, strict_type_mode 활성화, E2E 1,789)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 10,100+ (E2E 1,745+, 단위 8,400+) |
+| 전체 테스트 | 10,200+ (E2E 1,789+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.0ms (819K lines/s) |
@@ -105,7 +105,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 |------|------|
 | 빌드 안정성 / Clippy 0건 | ✅ |
 | 테스트 전체 통과 (9,500+) | ✅ |
-| E2E 1,723개 통과 (0 fail, 0 ignored) | ✅ |
+| E2E 1,789개 통과 (0 fail, 0 ignored) | ✅ |
 | 보안 감사 (cargo audit 통과) | ✅ |
 | 배포 (Homebrew, cargo install, Docker, GitHub Releases) | ✅ |
 | 문서 (mdBook, API 문서 65개 모듈) | ✅ |
@@ -242,6 +242,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 109~113 | v1.0 블로커 해결 | Slice bounds check, scope-based auto free, 에러 테스트 +31, ownership 강화 44 tests | 1,667 |
 | 114~117 | 완성도 · 검증 | Monomorphization 경고, WASM E2E 44개, 벤치마크 갱신 61.0ms, Codecov 80%+ | 1,723 |
 | 118~122 | 성능 · 타입 · 에코 · 문서 · 커버리지 | clone 축소, Text IR 일관성, ConstGeneric mono, tutorial 24 lessons, examples 188, Codecov 85% | 1,745 |
+| 123~125 | IDE · 빌드 · 타입 정확성 | IntelliJ v0.1.0, 뮤테이션 테스트, unit_value() 중앙화, strict_type_mode, E2E +44 | 1,789 |
 
 ---
 
@@ -589,11 +590,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: 언어 기능 평가 8.0→9.0 (LLVM 백엔드 기준), i64 fallback 경로 축소
 > **기대 효과**: 타입 안전성 향상, Void/Unit 처리 정식화
 
-- [ ] 1. i64 fallback 경로 분석 — 현재 발동 빈도 측정, 제거 가능 경로 식별 (Opus)
-- [ ] 2. Void/Unit 처리 정식화 — `add i64 0, 0` 우회를 정식 void 처리로 전환 가능성 분석 및 구현 (Opus)
-- [ ] 3. Monomorphization 경고→에러 전환 — 필수 특수화 누락 시 컴파일 에러로 전환 (Opus)
-- [ ] 4. E2E 타입 정확성 테스트 +20 — 제네릭/ConstGeneric 특수화 검증 강화 (Sonnet)
-- [ ] 5. 검증 — E2E 전체 통과 + clippy 0건 (Sonnet)
+- [x] 1. i64 fallback 경로 분석 — 현재 발동 빈도 측정, 제거 가능 경로 식별 (Opus) ✅ 2026-03-08
+  변경: Text IR 11경로 + Inkwell 7경로 분석 — 정당 7개(Generic/ConstGeneric/Future), strict-mode 4개, 제거가능 7개 식별
+- [x] 2. Void/Unit 처리 정식화 — `add i64 0, 0` 우회를 정식 void 처리로 전환 가능성 분석 및 구현 (Opus) ✅ 2026-03-08
+  변경: unit_value() 헬퍼 도입, 7파일 32개 호출사이트 중앙화 (gen_stmt 13, gen_special 9, call 3, mod 2, match 2, aggregate 2, advanced 1)
+- [x] 3. Monomorphization 경고→에러 전환 — 필수 특수화 누락 시 컴파일 에러로 전환 (Opus) ✅ 2026-03-08
+  변경: set_strict_type_mode() 추가, TypeMapper dead_code 제거, take_warnings() 활성화, 단위 테스트 추가
+- [x] 4. E2E 타입 정확성 테스트 +20 — 제네릭/ConstGeneric 특수화 검증 강화 (Sonnet) ✅ 2026-03-08
+  변경: phase125_type_accuracy.rs +20 테스트 (generic recursive/chain/multi-spec, struct method, enum, closure, for-loop, match)
+- [x] 5. 검증 — E2E 1,789 passed, 0 failed, 0 ignored + clippy 0건 (Sonnet) ✅ 2026-03-08
 
 ---
 

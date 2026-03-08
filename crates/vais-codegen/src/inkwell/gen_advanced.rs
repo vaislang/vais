@@ -286,7 +286,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_unreachable()
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
 
         let mut incoming: Vec<(

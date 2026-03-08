@@ -486,3 +486,376 @@ F main() -> i64 {
     // 21 + 20 + 1 = 42
     assert_exit_code(source, 42);
 }
+
+// ==================== 8. Generic Multi-Type Specialization ====================
+
+#[test]
+fn e2e_p125_generic_two_specializations() {
+    // Same generic called with different concrete types (both i64 at runtime)
+    let source = r#"
+F apply<T>(x: T) -> T { x }
+
+F main() -> i64 {
+    a := apply(20)
+    b := apply(22)
+    a + b
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_generic_recursive_base() {
+    // Generic function with recursion (@ self-call)
+    let source = r#"
+F power<T>(base: T, exp: i64) -> T {
+    I exp == 0 { 1 }
+    E { base * @(base, exp - 1) }
+}
+
+F main() -> i64 {
+    power(2, 5)
+}
+"#;
+    // 2^5 = 32
+    assert_exit_code(source, 32);
+}
+
+#[test]
+fn e2e_p125_generic_with_default_return() {
+    // Generic function with conditional return
+    let source = r#"
+F clamp<T>(val: T, lo: T, hi: T) -> T {
+    I val < lo { lo }
+    E I val > hi { hi }
+    E { val }
+}
+
+F main() -> i64 {
+    clamp(50, 0, 42)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+// ==================== 9. Struct with Method Chains ====================
+
+#[test]
+fn e2e_p125_struct_method_chain_result() {
+    // Multiple method calls on struct values
+    let source = r#"
+S Counter { val: i64 }
+
+X Counter {
+    F get(&self) -> i64 { self.val }
+    F doubled(&self) -> i64 { self.val * 2 }
+}
+
+F main() -> i64 {
+    c := Counter { val: 21 }
+    c.doubled()
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_struct_two_instances() {
+    // Two instances of same struct, different field values
+    let source = r#"
+S Point { x: i64, y: i64 }
+
+X Point {
+    F sum(&self) -> i64 { self.x + self.y }
+}
+
+F main() -> i64 {
+    a := Point { x: 10, y: 5 }
+    b := Point { x: 20, y: 7 }
+    a.sum() + b.sum()
+}
+"#;
+    // 15 + 27 = 42
+    assert_exit_code(source, 42);
+}
+
+// ==================== 10. Nested Generics and Expressions ====================
+
+#[test]
+fn e2e_p125_generic_called_from_conditional() {
+    // Generic function called inside if-else expression
+    let source = r#"
+F id<T>(x: T) -> T { x }
+
+F main() -> i64 {
+    x := 10
+    result := I x > 5 { id(42) } E { id(0) }
+    result
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_generic_in_loop_accumulation() {
+    // Generic add used in loop for accumulation
+    let source = r#"
+F add_vals<T>(a: T, b: T) -> T { a + b }
+
+F main() -> i64 {
+    result := mut 0
+    L i:1..8 {
+        result = add_vals(result, i)
+    }
+    result
+}
+"#;
+    // 1+2+3+4+5+6+7 = 28
+    assert_exit_code(source, 28);
+}
+
+#[test]
+fn e2e_p125_enum_unit_variants_arithmetic() {
+    // Enum unit variants used in arithmetic via match
+    let source = r#"
+E Dir { North, South, East, West }
+
+F dir_val(d: Dir) -> i64 {
+    M d {
+        North => 10,
+        South => 20,
+        East => 5,
+        West => 7
+    }
+}
+
+F main() -> i64 {
+    dir_val(North) + dir_val(South) + dir_val(East) + dir_val(West)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+// ==================== 11. Void/Unit Edge Cases ====================
+
+#[test]
+fn e2e_p125_void_in_match_all_unit_arms() {
+    // Match where all arms produce Unit/void
+    let source = r#"
+F main() -> i64 {
+    x := mut 0
+    val := 2
+    M val {
+        1 => { x = 10 },
+        2 => { x = 42 },
+        _ => { x = 99 }
+    }
+    x
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_void_loop_with_break_value() {
+    // Loop with conditional break returning value after loop
+    let source = r#"
+F main() -> i64 {
+    result := mut 0
+    i := mut 1
+    L {
+        I i > 10 { B }
+        result = result + i
+        i = i + 1
+    }
+    result
+}
+"#;
+    // 1+2+...+10 = 55
+    assert_exit_code(source, 55);
+}
+
+#[test]
+fn e2e_p125_void_nested_loops() {
+    // Nested loops both producing void
+    let source = r#"
+F main() -> i64 {
+    total := mut 0
+    i := mut 0
+    L {
+        I i >= 3 { B }
+        j := mut 0
+        L {
+            I j >= 3 { B }
+            total = total + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    total
+}
+"#;
+    // 3 * 3 = 9
+    assert_exit_code(source, 9);
+}
+
+// ==================== 12. Complex Type Interactions ====================
+
+#[test]
+fn e2e_p125_struct_in_match() {
+    // Match on integer with struct construction in each arm
+    let source = r#"
+S Result { code: i64, value: i64 }
+
+F main() -> i64 {
+    input := 2
+    r := M input {
+        1 => Result { code: 1, value: 10 },
+        2 => Result { code: 2, value: 42 },
+        _ => Result { code: 0, value: 0 }
+    }
+    r.value
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_multiple_generics_same_function() {
+    // Generic function called multiple times in same expression
+    let source = r#"
+F double<T>(x: T) -> T { x + x }
+
+F main() -> i64 {
+    double(10) + double(11)
+}
+"#;
+    // 20 + 22 = 42
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_generic_called_with_negative() {
+    // Generic with negative arguments
+    let source = r#"
+F abs_val<T>(x: T) -> T {
+    I x < 0 { 0 - x } E { x }
+}
+
+F main() -> i64 {
+    abs_val(-42)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_closure_nested_capture() {
+    // Closure capturing multiple variables
+    let source = r#"
+F main() -> i64 {
+    a := 10
+    b := 20
+    c := 12
+    sum_all := |x| x + a + b + c
+    sum_all(0)
+}
+"#;
+    // 0 + 10 + 20 + 12 = 42
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_enum_data_variant_extraction() {
+    // Extract data from enum variant in match
+    let source = r#"
+E Wrapper {
+    Val(i64),
+    Empty
+}
+
+F unwrap_or(w: Wrapper, default: i64) -> i64 {
+    M w {
+        Val(v) => v,
+        Empty => default
+    }
+}
+
+F main() -> i64 {
+    a := Val(42)
+    b := Empty
+    unwrap_or(a, 0) + unwrap_or(b, 0)
+}
+"#;
+    // 42 + 0 = 42
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_deeply_nested_if_else_value() {
+    // Deeply nested if-else producing values
+    let source = r#"
+F classify(n: i64) -> i64 {
+    I n > 1000 { 5 }
+    E I n > 100 { 4 }
+    E I n > 10 { 3 }
+    E I n > 0 { 2 }
+    E { 1 }
+}
+
+F main() -> i64 {
+    classify(0) + classify(5) + classify(50) + classify(500) + classify(5000)
+}
+"#;
+    // 1 + 2 + 3 + 4 + 5 = 15
+    assert_exit_code(source, 15);
+}
+
+#[test]
+fn e2e_p125_struct_field_arithmetic() {
+    // Arithmetic on struct fields
+    let source = r#"
+S Rect { w: i64, h: i64 }
+
+F area(r: Rect) -> i64 { r.w * r.h }
+F perimeter(r: Rect) -> i64 { 2 * (r.w + r.h) }
+
+F main() -> i64 {
+    r := Rect { w: 6, h: 7 }
+    area(r)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_p125_for_loop_type_accuracy() {
+    // For loop with range — verifying loop variable type correctness
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    L i:1..10 {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+    // 1+2+...+9 = 45
+    assert_exit_code(source, 45);
+}
+
+#[test]
+fn e2e_p125_generic_triple_call_chain() {
+    // Generic functions calling each other in a triple chain
+    let source = r#"
+F inc<T>(x: T) -> T { x + 1 }
+F double<T>(x: T) -> T { x + x }
+F triple<T>(x: T) -> T { x + x + x }
+
+F main() -> i64 {
+    inc(triple(double(3)))
+}
+"#;
+    // double(3)=6, triple(6)=18, inc(18)=19
+    assert_exit_code(source, 19);
+}

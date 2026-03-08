@@ -200,6 +200,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         gen
     }
 
+    /// Returns the Unit/void placeholder value (zero-sized empty struct).
+    ///
+    /// In Inkwell, `void` is not a first-class type so it cannot appear in phi
+    /// nodes or as an SSA value.  The canonical representation of Unit/void as
+    /// a value is an empty struct `{}` with its zero initializer.  This helper
+    /// centralizes the 30+ call sites that previously inlined
+    /// `self.context.struct_type(&[], false).const_zero().into()`.
+    #[inline]
+    pub(super) fn unit_value(&self) -> BasicValueEnum<'ctx> {
+        self.context.struct_type(&[], false).const_zero().into()
+    }
+
+    /// Enable strict type mode.
+    ///
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`,
+    /// `ImplTrait`, `HigherKinded` reaching codegen) become hard errors instead
+    /// of warnings with i64 fallback in the Inkwell TypeMapper.
+    /// Generic/ConstGeneric fallbacks remain as warnings since they are
+    /// legitimate during monomorphization.
+    pub fn set_strict_type_mode(&mut self, strict: bool) {
+        self.type_mapper.strict_type_mode = strict;
+    }
+
     /// Generates code for an entire Vais module.
     ///
     /// Delegates to `generate_module_with_instantiations` with an empty instantiation list.

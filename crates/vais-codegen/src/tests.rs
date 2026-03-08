@@ -81,6 +81,17 @@ fn test_emit_warning_or_error_strict_mode_generic_fallback() {
     assert_eq!(gen.get_warnings().len(), 1);
 }
 
+#[cfg(feature = "inkwell-codegen")]
+#[test]
+fn test_inkwell_set_strict_type_mode() {
+    let context = ::inkwell::context::Context::create();
+    let mut gen = InkwellCodeGenerator::new(&context, "test");
+    // Enable strict mode — should not panic
+    gen.set_strict_type_mode(true);
+    // Disable strict mode
+    gen.set_strict_type_mode(false);
+}
+
 #[test]
 fn test_simple_function() {
     let source = "F add(a:i64,b:i64)->i64=a+b";

@@ -446,7 +446,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder
                 .build_unreachable()
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            Ok(self.context.struct_type(&[], false).const_zero().into())
+            Ok(self.unit_value())
         } else if arm_results.len() == 1 {
             // Only one arm reaches merge - no phi needed
             Ok(arm_results[0].0)
@@ -985,7 +985,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Pass: continue
         self.builder.position_at_end(pass_block);
-        Ok(self.context.struct_type(&[], false).const_zero().into())
+        Ok(self.unit_value())
     }
 
     // ========== String Interpolation ==========

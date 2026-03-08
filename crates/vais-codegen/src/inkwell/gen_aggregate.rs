@@ -156,7 +156,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         elements: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         if elements.is_empty() {
-            return Ok(self.context.struct_type(&[], false).const_zero().into());
+            return Ok(self.unit_value());
         }
 
         // Generate all elements
@@ -668,7 +668,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(call
             .try_as_basic_value()
             .left()
-            .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+            .unwrap_or_else(|| self.unit_value()))
     }
 
     // ========== Lambda/Closure ==========
