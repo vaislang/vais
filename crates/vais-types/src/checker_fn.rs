@@ -26,6 +26,24 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in f.params.iter().enumerate() {
+            // ImplTrait in parameter position is not supported —
+            // it would require universal quantification (generics desugaring)
+            // which is not yet implemented in Vais codegen.
+            if matches!(param.ty.node, Type::ImplTrait { .. }) {
+                return Err(TypeError::InferFailed {
+                    kind: "parameter".to_string(),
+                    name: param.name.node.clone(),
+                    context: format!(
+                        "{} — `impl Trait` is only supported in return position",
+                        f.name.node
+                    ),
+                    span: Some(param.name.span),
+                    suggestion: Some(
+                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
+                    ),
+                });
+            }
+
             let ty = if i < registered_param_types.len() {
                 registered_param_types[i].clone()
             } else {
@@ -462,6 +480,22 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in method.params.iter().enumerate() {
+            // ImplTrait in parameter position is not supported
+            if param.name.node != "self" && matches!(param.ty.node, Type::ImplTrait { .. }) {
+                return Err(TypeError::InferFailed {
+                    kind: "parameter".to_string(),
+                    name: param.name.node.clone(),
+                    context: format!(
+                        "{}::{} — `impl Trait` is only supported in return position",
+                        self_type_name, method.name.node
+                    ),
+                    span: Some(param.name.span),
+                    suggestion: Some(
+                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
+                    ),
+                });
+            }
+
             // Handle &self parameter specially
             if param.name.node == "self" {
                 // self is a reference to the target type with generics
@@ -529,7 +563,7 @@ impl TypeChecker {
                         continue;
                     }
                     let resolved = self.apply_substitutions(ty);
-                    if matches!(resolved, ResolvedType::Var(_)) {
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
                         let param_span = method
                             .params
                             .iter()
@@ -538,7 +572,10 @@ impl TypeChecker {
                         return Err(TypeError::InferFailed {
                             kind: "parameter".to_string(),
                             name: name.clone(),
-                            context: format!("{}::{}", self_type_name, method.name.node),
+                            context: format!(
+                                "{}::{} (contains {})",
+                                self_type_name, method.name.node, unresolved_desc
+                            ),
                             span: param_span,
                             suggestion: Some(format!("Add explicit type: `{}: <type>`", name)),
                         });
@@ -567,6 +604,65 @@ impl TypeChecker {
                     if let Some(sig) = struct_def.methods.get_mut(&method.name.node) {
                         sig.params = resolved_params;
                     }
+                }
+            }
+        }
+
+        // Validate that no unresolved type variables survive into codegen for non-generic impl methods.
+        // Generic methods may legitimately contain Generic/ConstGeneric in signatures.
+        if method.generics.is_empty() && struct_generics.is_empty() {
+            if let Some(sig) = self
+                .structs
+                .get(&self_type_name)
+                .and_then(|s| s.methods.get(&method.name.node))
+            {
+                // Check parameter types
+                let params_snapshot: Vec<(String, ResolvedType)> = sig
+                    .params
+                    .iter()
+                    .map(|(name, ty, _)| (name.clone(), ty.clone()))
+                    .collect();
+                for (param_name, ty) in &params_snapshot {
+                    if param_name == "self" {
+                        continue;
+                    }
+                    let resolved = self.apply_substitutions(ty);
+                    if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved) {
+                        let param_span = method
+                            .params
+                            .iter()
+                            .find(|p| p.name.node == *param_name)
+                            .map(|p| p.name.span);
+                        return Err(TypeError::InferFailed {
+                            kind: "parameter".to_string(),
+                            name: param_name.clone(),
+                            context: format!(
+                                "{}::{} (contains {})",
+                                self_type_name, method.name.node, unresolved_desc
+                            ),
+                            span: param_span,
+                            suggestion: Some(format!(
+                                "Add explicit type annotation for parameter `{}`",
+                                param_name
+                            )),
+                        });
+                    }
+                }
+
+                // Check return type
+                let ret_snapshot = sig.ret.clone();
+                let resolved_ret = self.apply_substitutions(&ret_snapshot);
+                if let Some(unresolved_desc) = Self::contains_unresolved_type(&resolved_ret) {
+                    return Err(TypeError::InferFailed {
+                        kind: "return type".to_string(),
+                        name: format!("{}::{}", self_type_name, method.name.node),
+                        context: format!(
+                            "{}::{} (contains {})",
+                            self_type_name, method.name.node, unresolved_desc
+                        ),
+                        span: Some(method.name.span),
+                        suggestion: Some("Add explicit return type annotation".to_string()),
+                    });
                 }
             }
         }

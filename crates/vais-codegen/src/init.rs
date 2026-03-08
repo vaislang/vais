@@ -101,7 +101,7 @@ impl CodeGenerator {
             last_error_span: None,
             multi_error_mode: false,
             collected_errors: Vec::new(),
-            strict_type_mode: false,
+            strict_type_mode: true,
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),

@@ -328,8 +328,11 @@ impl CodeGenerator {
                 format!("{{ i8, {} }}", ok_ty)
             }
             ResolvedType::Future(_) => {
-                // Future is an opaque pointer to async state machine
-                // Represented as i64 in text IR (pointer-as-integer convention)
+                // Future is an opaque pointer to async state machine.
+                // Represented as i64 in Text IR (pointer-as-integer convention).
+                // NOTE: Inkwell backend uses i8* (actual pointer). The backends differ
+                // because Text IR spawn codegen stores the future state in an i64-sized
+                // malloc'd struct `{i64 state, i64 result}`, where state is an integer tag.
                 String::from("i64")
             }
             ResolvedType::Never => {

@@ -45,7 +45,21 @@ fn test_is_void_result_helper() {
 #[test]
 fn test_emit_warning_or_error_default_mode() {
     let gen = CodeGenerator::new("test");
-    // Default mode: UnresolvedTypeFallback should be a warning, not error
+    // Default mode is strict: UnresolvedTypeFallback should be an error
+    let result = gen.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+        type_desc: String::from("test type"),
+        backend: String::from("test"),
+    });
+    assert!(result.is_err());
+    // No warnings collected — it was promoted to error
+    assert_eq!(gen.get_warnings().len(), 0);
+}
+
+#[test]
+fn test_emit_warning_or_error_non_strict_mode() {
+    let mut gen = CodeGenerator::new("test");
+    gen.set_strict_type_mode(false);
+    // Non-strict mode: UnresolvedTypeFallback should be a warning, not error
     let result = gen.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
         type_desc: String::from("test type"),
         backend: String::from("test"),
@@ -57,6 +71,7 @@ fn test_emit_warning_or_error_default_mode() {
 #[test]
 fn test_emit_warning_or_error_strict_mode() {
     let mut gen = CodeGenerator::new("test");
+    // Strict mode is already the default; explicitly set for clarity
     gen.set_strict_type_mode(true);
     // Strict mode: UnresolvedTypeFallback should become an error
     let result = gen.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {

@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 125 완료, Phase 126~129 예정)
+> **현재 버전**: 0.1.0 (Phase 127 완료, Phase 128~129 예정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-08 (Phase 125 완료 — ROADMAP 정리, Phase 126~129 계획 수립)
+> **최종 업데이트**: 2026-03-08 (Phase 127 완료 — strict_type_mode 기본화, i64 fallback 강화)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 10,200+ (E2E 1,789+, 단위 8,400+) |
+| 전체 테스트 | 10,200+ (E2E 1,801+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 61.0ms (819K lines/s) |
@@ -277,6 +277,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 > **목표**: i64 fallback 잔여 사이트 제거, strict_type_mode 기본 활성화, 실제 타입 기반 IR 생성 확대
 > **기대 효과**: 타입 안전성 완성, 런타임 타입 불일치 버그 근절
+
+- [x] 1. Inkwell emit_warning_or_error 활성화 (Sonnet) ✅ 2026-03-08
+  변경: inkwell/types.rs (pending_error 사이드채널, Type B 4사이트 strict 대응)
+- [x] 2. strict_type_mode 기본값 true 전환 (Opus) ✅ 2026-03-08
+  변경: init.rs, inkwell/types.rs (default=true, E2E 0 regression)
+- [x] 3. Type C/D fallback 개선 — Associated/Future/Never 타입 통일 (Sonnet) ✅ 2026-03-08
+  변경: inkwell/types.rs, conversion.rs (Associated enriched error, Never→empty struct)
+- [x] 4. TC pre-codegen 검증 강화 — Var/Unknown/ImplTrait/HKT 차단 (Sonnet) ✅ 2026-03-08
+  변경: checker_fn.rs (impl method 시그니처 검증, ImplTrait 파라미터 거부)
+- [x] 5. 검증: cargo test 전체 통과 + E2E 추가 (Opus) ✅ 2026-03-08
+  변경: phase126_strict_type.rs (+12 E2E), E2E 1,801개 전체 통과, Clippy 0건
+진행률: 5/5 (100%)
 
 ### Phase 128: E2E 2,000개 달성 — 미커버 언어 기능 테스트 확장
 

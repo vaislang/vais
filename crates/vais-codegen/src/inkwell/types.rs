@@ -18,11 +18,12 @@ pub(crate) struct TypeMapper<'ctx> {
     pub(crate) warnings: std::cell::RefCell<Vec<crate::CodegenWarning>>,
     /// When true, ICE-level fallbacks become errors instead of warnings.
     /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
-    /// Note: `map_type` returns `BasicTypeEnum` (not `Result`), so strict mode
-    /// is currently enforced via `emit_warning_or_error` only where the caller
-    /// can propagate errors. Full enforcement requires refactoring `map_type`
-    /// to return `Result<BasicTypeEnum, CodegenError>`.
     pub(crate) strict_type_mode: bool,
+    /// Deferred error from `map_type` when strict mode is enabled.
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from
+    /// ICE-level fallbacks are stored here for the caller to check via
+    /// `take_pending_error()` after calling `map_type`.
+    pub(crate) pending_error: std::cell::RefCell<Option<crate::CodegenError>>,
 }
 
 impl<'ctx> TypeMapper<'ctx> {
@@ -33,7 +34,8 @@ impl<'ctx> TypeMapper<'ctx> {
             struct_types: HashMap::new(),
             generic_substitutions: HashMap::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
-            strict_type_mode: false,
+            strict_type_mode: true,
+            pending_error: std::cell::RefCell::new(None),
         }
     }
 
@@ -42,30 +44,37 @@ impl<'ctx> TypeMapper<'ctx> {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
+    /// Emit a warning, or store a deferred error in strict type mode for ICE-level fallbacks.
     ///
-    /// Note: Currently only callable from code paths that can propagate `Result`.
-    /// `map_type` itself returns `BasicTypeEnum` (not `Result`), so this is used
-    /// by callers that wrap map_type in a fallible context.
-    #[allow(dead_code)] // Will be used when map_type returns Result
-    fn emit_warning_or_error(
-        &self,
-        warning: crate::CodegenWarning,
-    ) -> Result<(), crate::CodegenError> {
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from strict mode
+    /// are stored in `pending_error` for the caller to check via `take_pending_error()`.
+    /// The i64 fallback value is still returned so `map_type` can complete, but the
+    /// caller should check for and propagate the error before using the result.
+    fn emit_warning_or_error(&self, warning: crate::CodegenWarning) {
         if self.strict_type_mode {
             if let crate::CodegenWarning::UnresolvedTypeFallback {
                 ref type_desc,
                 ref backend,
             } = warning
             {
-                return Err(crate::CodegenError::InternalError(format!(
-                    "[strict] {} in {} codegen — i64 fallback disabled",
-                    type_desc, backend
-                )));
+                // Store the first error (don't overwrite if one is already pending)
+                let mut pending = self.pending_error.borrow_mut();
+                if pending.is_none() {
+                    *pending = Some(crate::CodegenError::InternalError(format!(
+                        "[strict] {} in {} codegen — i64 fallback disabled",
+                        type_desc, backend
+                    )));
+                }
+                return;
             }
         }
         self.emit_warning(warning);
-        Ok(())
+    }
+
+    /// Take the pending error (if any) from a previous `map_type` call.
+    /// Returns `None` if no error occurred.
+    pub(crate) fn take_pending_error(&self) -> Option<crate::CodegenError> {
+        self.pending_error.borrow_mut().take()
     }
 
     /// Drain all collected warnings (transfers ownership to caller).
@@ -208,18 +217,16 @@ impl<'ctx> TypeMapper<'ctx> {
                 }
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved type variable"),
                     backend: String::from("inkwell"),
                 });
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
-                // Never type - use void pointer as placeholder
-                self.context
-                    .i8_type()
-                    .ptr_type(AddressSpace::default())
-                    .into()
+                // Never type — use empty struct as placeholder (consistent with void in Text IR).
+                // Never values should never exist at runtime; this is purely a type-level placeholder.
+                self.context.struct_type(&[], false).into()
             }
             ResolvedType::Tuple(elems) => {
                 let elem_types: Vec<BasicTypeEnum> =
@@ -327,15 +334,22 @@ impl<'ctx> TypeMapper<'ctx> {
                 }
             }
             ResolvedType::Lifetime(_) => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("bare lifetime"),
                     backend: String::from("inkwell"),
                 });
                 self.context.i64_type().into()
             }
-            ResolvedType::Associated { .. } => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved associated type"),
+            ResolvedType::Associated {
+                ref base,
+                ref assoc_name,
+                ..
+            } => {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
+                    type_desc: format!(
+                        "unresolved associated type `{}` on {:?}",
+                        assoc_name, base
+                    ),
                     backend: String::from("inkwell"),
                 });
                 self.context.i64_type().into()
@@ -345,14 +359,14 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.map_type(base)
             }
             ResolvedType::ImplTrait { .. } => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved ImplTrait"),
                     backend: String::from("inkwell"),
                 });
                 self.context.i64_type().into()
             }
             ResolvedType::HigherKinded { .. } => {
-                self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
+                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
                     type_desc: String::from("unresolved HKT"),
                     backend: String::from("inkwell"),
                 });

@@ -535,6 +535,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.type_mapper.take_warnings()
     }
 
+    /// Take any pending error from strict type mode enforcement in `map_type`.
+    /// Returns `None` if no ICE-level fallback was encountered in strict mode.
+    pub fn take_pending_type_error(&self) -> Option<crate::CodegenError> {
+        self.type_mapper.take_pending_error()
+    }
+
     /// Writes the LLVM IR to a file.
     #[inline]
     pub fn write_to_file(&self, path: &std::path::Path) -> Result<(), String> {
