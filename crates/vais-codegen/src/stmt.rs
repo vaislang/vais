@@ -146,33 +146,33 @@ impl CodeGenerator {
                     if is_struct_lit || is_enum_variant_call || is_unit_variant {
                         // The val is already a pointer to the struct/enum (%1, %2, etc)
                         // Allocate space for a pointer and store it
-                        ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {}* {}, {}** %{}\n",
+                        write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
+                        write_ir!(ir, 
+                            "  store {}* {}, {}** %{}",
                             llvm_ty, val, llvm_ty, llvm_name
-                        ));
+                        );
                     } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
                         // For struct values (e.g., from function returns),
                         // alloca struct, store value, then store pointer to it
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
-                        ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
+                        write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
+                        write_ir!(ir, 
+                            "  store {} {}, {}* {}",
                             llvm_ty, val, llvm_ty, tmp_ptr
-                        ));
-                        ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {}* {}, {}** %{}\n",
+                        );
+                        write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
+                        write_ir!(ir, 
+                            "  store {}* {}, {}** %{}",
                             llvm_ty, tmp_ptr, llvm_ty, llvm_name
-                        ));
+                        );
                     } else {
                         // Allocate and store
-                        ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* %{}\n",
+                        write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
+                        write_ir!(ir, 
+                            "  store {} {}, {}* %{}",
                             llvm_ty, val, llvm_ty, llvm_name
-                        ));
+                        );
                     }
                 }
 
@@ -227,7 +227,7 @@ impl CodeGenerator {
                         // Codegen promotes bool to i64 (zext), truncate back for i1 return
                         let ret_val = if poll_ctx.ret_llvm == "i1" {
                             let trunc = self.next_temp(counter);
-                            ir.push_str(&format!("  {} = trunc i64 {} to i1\n", trunc, val));
+                            write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, val);
                             trunc
                         } else {
                             val.clone()
@@ -236,18 +236,18 @@ impl CodeGenerator {
                         // Store result in state struct and set state to -1 (completed)
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = insertvalue {} undef, i64 1, 0\n",
+                        write_ir!(ir, 
+                            "  {} = insertvalue {} undef, i64 1, 0",
                             t0, poll_ret_ty
-                        ));
+                        );
                         let t1 = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = insertvalue {} {}, {} {}, 1\n",
+                        write_ir!(ir, 
+                            "  {} = insertvalue {} {}, {} {}, 1",
                             t1, poll_ret_ty, t0, poll_ctx.ret_llvm, ret_val
-                        ));
+                        );
                         // Set state to -1 (completed)
                         ir.push_str("  store i64 -1, i64* %state_field\n");
-                        ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t1));
+                        write_ir!(ir, "  ret {} {}", poll_ret_ty, t1);
                         return Ok((val, ir));
                     } else {
                         // Return void in async poll — return {1, undef}
@@ -258,12 +258,12 @@ impl CodeGenerator {
                         ir.push_str(&alloc_cleanup_ir);
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = insertvalue {} undef, i64 1, 0\n",
+                        write_ir!(ir, 
+                            "  {} = insertvalue {} undef, i64 1, 0",
                             t0, poll_ret_ty
-                        ));
+                        );
                         ir.push_str("  store i64 -1, i64* %state_field\n");
-                        ir.push_str(&format!("  ret {} {}\n", poll_ret_ty, t0));
+                        write_ir!(ir, "  ret {} {}", poll_ret_ty, t0);
                         return Ok(("void".to_string(), ir));
                     }
                 }
@@ -299,10 +299,10 @@ impl CodeGenerator {
                                 // val is a pointer to the struct, load the actual value
                                 let loaded = format!("%ret.{}", counter);
                                 *counter += 1;
-                                ir.push_str(&format!(
-                                    "  {} = load {}, {}* {}\n",
+                                write_ir!(ir, 
+                                    "  {} = load {}, {}* {}",
                                     loaded, ret_type, ret_type, val
-                                ));
+                                );
                                 loaded
                             } else {
                                 val
@@ -353,7 +353,7 @@ impl CodeGenerator {
                     ir.push_str(&alloc_cleanup_ir);
 
                     // Emit the ret instruction
-                    ir.push_str(&format!("  ret {} {}\n", ret_type, final_val));
+                    write_ir!(ir, "  ret {} {}", ret_type, final_val);
                     Ok((final_val, ir))
                 } else {
                     // Execute deferred expressions before return (LIFO order)
@@ -377,10 +377,10 @@ impl CodeGenerator {
                         let (val, expr_ir) = self.generate_expr(expr, counter)?;
                         ir.push_str(&expr_ir);
                         // Store break value if needed (for loop expressions)
-                        ir.push_str(&format!("  br label %{}\n", break_label));
+                        write_ir!(ir, "  br label %{}", break_label);
                         Ok((val, ir))
                     } else {
-                        ir.push_str(&format!("  br label %{}\n", break_label));
+                        write_ir!(ir, "  br label %{}", break_label);
                         Ok(("void".to_string(), ir))
                     }
                 } else {
@@ -461,10 +461,10 @@ impl CodeGenerator {
                     let elem_resolved = &elem_types[i];
                     let elem_llvm_ty = self.type_to_llvm(elem_resolved);
                     let extracted = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = extractvalue {} {}, {}\n",
+                    write_ir!(ir, 
+                        "  {} = extractvalue {} {}, {}",
                         extracted, llvm_ty, val, i
-                    ));
+                    );
                     self.bind_pattern_from_tuple(
                         pat,
                         &extracted,
@@ -528,8 +528,8 @@ impl CodeGenerator {
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
             let int_tmp = format!("%__free_ptr_{}", id);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", int_tmp, ptr));
-            ir.push_str(&format!("  call void @free(i64 {})\n", int_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", int_tmp, ptr);
+            write_ir!(ir, "  call void @free(i64 {})", int_tmp);
         }
         self.fn_ctx.alloc_tracker = alloc_ptrs;
         ir

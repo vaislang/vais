@@ -29,32 +29,32 @@ impl CodeGenerator {
         ir.push_str(&conv_ir);
 
         // Conditional branch
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}",
             cond_bool, then_label, else_label
-        ));
+        );
 
         // Then branch
-        ir.push_str(&format!("{}:\n", then_label));
+        write_ir!(ir, "{}:", then_label);
         let (then_val, then_ir) = self.generate_expr(then, counter)?;
         ir.push_str(&then_ir);
-        ir.push_str(&format!("  br label %{}\n", merge_label));
+        write_ir!(ir, "  br label %{}", merge_label);
 
         // Else branch
-        ir.push_str(&format!("{}:\n", else_label));
+        write_ir!(ir, "{}:", else_label);
         let (else_val, else_ir) = self.generate_expr(else_, counter)?;
         ir.push_str(&else_ir);
-        ir.push_str(&format!("  br label %{}\n", merge_label));
+        write_ir!(ir, "  br label %{}", merge_label);
 
         // Merge with phi — infer actual type from the then-branch
-        ir.push_str(&format!("{}:\n", merge_label));
+        write_ir!(ir, "{}:", merge_label);
         let result = self.next_temp(counter);
         let phi_type = self.infer_expr_type(then);
         let phi_llvm = self.type_to_llvm(&phi_type);
-        ir.push_str(&format!(
-            "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+        write_ir!(ir, 
+            "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
             result, phi_llvm, then_val, then_label, else_val, else_label
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -77,10 +77,10 @@ impl CodeGenerator {
         // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
         let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
         ir.push_str(&conv_ir);
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}",
             cond_bool, then_label, else_label
-        ));
+        );
 
         // Infer block type to detect struct/enum results that need loading
         let phi_type = self.infer_block_type(then);
@@ -91,7 +91,7 @@ impl CodeGenerator {
             matches!(&phi_type, ResolvedType::Named { .. }) && !self.is_block_result_value(then);
 
         // Then block
-        ir.push_str(&format!("{}:\n", then_label));
+        write_ir!(ir, "{}:", then_label);
         self.fn_ctx.current_block.clone_from(&then_label);
         let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
         ir.push_str(&then_ir);
@@ -99,10 +99,10 @@ impl CodeGenerator {
         // For struct/enum results, load the value from the alloca pointer before branch
         let then_val_for_phi = if is_struct_result && !then_terminated {
             let loaded = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = load {}, {}* {}\n",
+            write_ir!(ir, 
+                "  {} = load {}, {}* {}",
                 loaded, phi_llvm, phi_llvm, then_val
-            ));
+            );
             loaded
         } else {
             then_val
@@ -110,14 +110,14 @@ impl CodeGenerator {
 
         let then_actual_block = self.fn_ctx.current_block.clone();
         let then_from_label = if !then_terminated {
-            ir.push_str(&format!("  br label %{}\n", merge_label));
+            write_ir!(ir, "  br label %{}", merge_label);
             then_actual_block
         } else {
             String::new()
         };
 
         // Else block
-        ir.push_str(&format!("{}:\n", else_label));
+        write_ir!(ir, "{}:", else_label);
         self.fn_ctx.current_block.clone_from(&else_label);
         let (else_val, else_ir, else_terminated, nested_last_block, has_else) =
             if let Some(else_branch) = else_ {
@@ -135,17 +135,17 @@ impl CodeGenerator {
         let else_val_for_phi =
             if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
                 let loaded = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  {} = load {}, {}* {}",
                     loaded, phi_llvm, phi_llvm, else_val
-                ));
+                );
                 loaded
             } else {
                 else_val
             };
 
         let else_from_label = if !else_terminated {
-            ir.push_str(&format!("  br label %{}\n", merge_label));
+            write_ir!(ir, "  br label %{}", merge_label);
             if !nested_last_block.is_empty() {
                 nested_last_block
             } else {
@@ -156,7 +156,7 @@ impl CodeGenerator {
         };
 
         // Merge block
-        ir.push_str(&format!("{}:\n", merge_label));
+        write_ir!(ir, "{}:", merge_label);
         self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
         let is_void = crate::helpers::is_void_result(&phi_llvm, &phi_type);
@@ -164,25 +164,25 @@ impl CodeGenerator {
         if is_void || !has_else {
             ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
-            ir.push_str(&format!(
-                "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+            write_ir!(ir, 
+                "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
                 result,
                 phi_llvm,
                 then_val_for_phi,
                 then_from_label,
                 else_val_for_phi,
                 else_from_label
-            ));
+            );
         } else if !then_from_label.is_empty() {
-            ir.push_str(&format!(
-                "  {} = phi {} [ {}, %{} ]\n",
+            write_ir!(ir, 
+                "  {} = phi {} [ {}, %{} ]",
                 result, phi_llvm, then_val_for_phi, then_from_label
-            ));
+            );
         } else if !else_from_label.is_empty() {
-            ir.push_str(&format!(
-                "  {} = phi {} [ {}, %{} ]\n",
+            write_ir!(ir, 
+                "  {} = phi {} [ {}, %{} ]",
                 result, phi_llvm, else_val_for_phi, else_from_label
-            ));
+            );
         } else {
             ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         }
@@ -210,8 +210,8 @@ impl CodeGenerator {
 
         if let Some(iter_expr) = iter {
             // Conditional loop
-            ir.push_str(&format!("  br label %{}\n", loop_start));
-            ir.push_str(&format!("{}:\n", loop_start));
+            write_ir!(ir, "  br label %{}", loop_start);
+            write_ir!(ir, "{}:", loop_start);
 
             let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
             ir.push_str(&cond_ir);
@@ -219,29 +219,29 @@ impl CodeGenerator {
             // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
             let (cond_bool, conv_ir) = self.generate_cond_to_i1(iter_expr, &cond_val, counter);
             ir.push_str(&conv_ir);
-            ir.push_str(&format!(
-                "  br i1 {}, label %{}, label %{}\n",
+            write_ir!(ir, 
+                "  br i1 {}, label %{}, label %{}",
                 cond_bool, loop_body, loop_end
-            ));
+            );
 
-            ir.push_str(&format!("{}:\n", loop_body));
+            write_ir!(ir, "{}:", loop_body);
             let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
             ir.push_str(&body_ir);
             if !body_terminated {
-                ir.push_str(&format!("  br label %{}\n", loop_start));
+                write_ir!(ir, "  br label %{}", loop_start);
             }
         } else {
             // Infinite loop
-            ir.push_str(&format!("  br label %{}\n", loop_start));
-            ir.push_str(&format!("{}:\n", loop_start));
+            write_ir!(ir, "  br label %{}", loop_start);
+            write_ir!(ir, "{}:", loop_start);
             let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
             ir.push_str(&body_ir);
             if !body_terminated {
-                ir.push_str(&format!("  br label %{}\n", loop_start));
+                write_ir!(ir, "  br label %{}", loop_start);
             }
         }
 
-        ir.push_str(&format!("{}:\n", loop_end));
+        write_ir!(ir, "{}:", loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))
@@ -266,8 +266,8 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         // Jump to condition check
-        ir.push_str(&format!("  br label %{}\n", loop_start));
-        ir.push_str(&format!("{}:\n", loop_start));
+        write_ir!(ir, "  br label %{}", loop_start);
+        write_ir!(ir, "{}:", loop_start);
 
         // Evaluate condition
         let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
@@ -276,23 +276,23 @@ impl CodeGenerator {
         // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
         let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
         ir.push_str(&conv_ir);
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}",
             cond_bool, loop_body, loop_end
-        ));
+        );
 
         // Loop body
-        ir.push_str(&format!("{}:\n", loop_body));
+        write_ir!(ir, "{}:", loop_body);
         let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
         ir.push_str(&body_ir);
 
         // Jump back to condition if body doesn't terminate
         if !body_terminated {
-            ir.push_str(&format!("  br label %{}\n", loop_start));
+            write_ir!(ir, "  br label %{}", loop_start);
         }
 
         // Loop end
-        ir.push_str(&format!("{}:\n", loop_end));
+        write_ir!(ir, "{}:", loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))

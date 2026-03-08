@@ -573,7 +573,8 @@ pub enum LexError {
 /// assert!(tokens.len() > 0);
 /// ```
 pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
-    let mut tokens = Vec::new();
+    // Pre-allocate based on heuristic: ~1 token per 4 bytes of source
+    let mut tokens = Vec::with_capacity(source.len() / 4 + 16);
     let mut lexer = Token::lexer(source);
 
     while let Some(result) = lexer.next() {

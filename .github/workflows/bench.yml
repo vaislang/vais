@@ -54,6 +54,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cargo bench -p vais-benches --bench compile_bench -- --output-format bencher | tee bench-output.txt
+          cargo bench -p vais-benches --bench largescale_bench -- --output-format bencher | tee -a bench-output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
@@ -77,17 +78,20 @@ jobs:
         run: |
           # Run benchmarks and save results
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr-baseline
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline pr-baseline
 
           # Checkout main branch to compare
           git fetch origin main:main
           git checkout main
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline main-baseline
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline main-baseline
 
           # Switch back to PR branch
           git checkout -
 
           # Compare baselines using criterion
           cargo bench -p vais-benches --bench compile_bench -- --load-baseline main-baseline --baseline pr-baseline
+          cargo bench -p vais-benches --bench largescale_bench -- --load-baseline main-baseline --baseline pr-baseline
 
       - name: Parse and check for regressions
         if: github.event_name == 'pull_request'

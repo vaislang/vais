@@ -148,8 +148,8 @@ impl CodeGenerator {
                 // Check if this is a conditional loop (L cond { body }) or infinite loop
                 if let Some(iter_expr) = iter {
                     // Conditional loop: L condition { body }
-                    ir.push_str(&format!("  br label %{}\n", loop_start));
-                    ir.push_str(&format!("{}:\n", loop_start));
+                    write_ir!(ir, "  br label %{}", loop_start);
+                    write_ir!(ir, "{}:", loop_start);
 
                     // Evaluate condition
                     let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
@@ -159,35 +159,35 @@ impl CodeGenerator {
                     let (cond_bool, conv_ir) =
                         self.generate_cond_to_i1(iter_expr, &cond_val, counter);
                     ir.push_str(&conv_ir);
-                    ir.push_str(&format!(
-                        "  br i1 {}, label %{}, label %{}\n",
+                    write_ir!(ir, 
+                        "  br i1 {}, label %{}, label %{}",
                         cond_bool, loop_body, loop_end
-                    ));
+                    );
 
                     // Loop body
-                    ir.push_str(&format!("{}:\n", loop_body));
+                    write_ir!(ir, "{}:", loop_body);
                     let (_body_val, body_ir, body_terminated) =
                         self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
                     // Only emit loop back if body doesn't terminate
                     if !body_terminated {
-                        ir.push_str(&format!("  br label %{}\n", loop_start));
+                        write_ir!(ir, "  br label %{}", loop_start);
                     }
                 } else {
                     // Infinite loop: L { body } - must use break to exit
-                    ir.push_str(&format!("  br label %{}\n", loop_start));
-                    ir.push_str(&format!("{}:\n", loop_start));
+                    write_ir!(ir, "  br label %{}", loop_start);
+                    write_ir!(ir, "{}:", loop_start);
                     let (_body_val, body_ir, body_terminated) =
                         self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
                     // Only emit loop back if body doesn't terminate
                     if !body_terminated {
-                        ir.push_str(&format!("  br label %{}\n", loop_start));
+                        write_ir!(ir, "  br label %{}", loop_start);
                     }
                 }
 
                 // Loop end
-                ir.push_str(&format!("{}:\n", loop_end));
+                write_ir!(ir, "{}:", loop_end);
 
                 self.fn_ctx.loop_stack.pop();
 
@@ -210,8 +210,8 @@ impl CodeGenerator {
                 let mut ir = String::new();
 
                 // Jump to condition check
-                ir.push_str(&format!("  br label %{}\n", loop_start));
-                ir.push_str(&format!("{}:\n", loop_start));
+                write_ir!(ir, "  br label %{}", loop_start);
+                write_ir!(ir, "{}:", loop_start);
 
                 // Evaluate condition
                 let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
@@ -220,24 +220,24 @@ impl CodeGenerator {
                 // Convert to i1 for branch (type-aware: skips for bool/i1)
                 let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
                 ir.push_str(&conv_ir);
-                ir.push_str(&format!(
-                    "  br i1 {}, label %{}, label %{}\n",
+                write_ir!(ir, 
+                    "  br i1 {}, label %{}, label %{}",
                     cond_bool, loop_body, loop_end
-                ));
+                );
 
                 // Loop body
-                ir.push_str(&format!("{}:\n", loop_body));
+                write_ir!(ir, "{}:", loop_body);
                 let (_body_val, body_ir, body_terminated) =
                     self.generate_block_stmts(body, counter)?;
                 ir.push_str(&body_ir);
 
                 // Jump back to condition if body doesn't terminate
                 if !body_terminated {
-                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                    write_ir!(ir, "  br label %{}", loop_start);
                 }
 
                 // Loop end
-                ir.push_str(&format!("{}:\n", loop_end));
+                write_ir!(ir, "{}:", loop_end);
 
                 self.fn_ctx.loop_stack.pop();
 
@@ -281,43 +281,43 @@ impl CodeGenerator {
 
                 // Allocate key and value arrays on stack
                 let keys_ptr = self.next_temp(counter);
-                ir.push_str(&format!("  {} = alloca {}\n", keys_ptr, keys_arr_ty));
+                write_ir!(ir, "  {} = alloca {}", keys_ptr, keys_arr_ty);
                 let vals_ptr = self.next_temp(counter);
-                ir.push_str(&format!("  {} = alloca {}\n", vals_ptr, vals_arr_ty));
+                write_ir!(ir, "  {} = alloca {}", vals_ptr, vals_arr_ty);
 
                 // Store each key-value pair
                 for (i, (k, v)) in pairs.iter().enumerate() {
                     let (kval, k_ir) = self.generate_expr(k, counter)?;
                     ir.push_str(&k_ir);
                     let k_elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                    write_ir!(ir, 
+                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
                         k_elem_ptr, keys_arr_ty, keys_arr_ty, keys_ptr, i
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
+                    );
+                    write_ir!(ir, 
+                        "  store {} {}, {}* {}",
                         key_ty, kval, key_ty, k_elem_ptr
-                    ));
+                    );
 
                     let (vval, v_ir) = self.generate_expr(v, counter)?;
                     ir.push_str(&v_ir);
                     let v_elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                    write_ir!(ir, 
+                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
                         v_elem_ptr, vals_arr_ty, vals_arr_ty, vals_ptr, i
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
+                    );
+                    write_ir!(ir, 
+                        "  store {} {}, {}* {}",
                         val_ty, vval, val_ty, v_elem_ptr
-                    ));
+                    );
                 }
 
                 // Return pointer to keys array (map is represented as parallel arrays)
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+                write_ir!(ir, 
+                    "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
                     result, keys_arr_ty, keys_arr_ty, keys_ptr
-                ));
+                );
 
                 Ok((result, ir))
             }
@@ -377,7 +377,7 @@ impl CodeGenerator {
 
                     // Allocate array on stack
                     let arr_ptr = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca {}\n", arr_ptr, arr_ty));
+                    write_ir!(ir, "  {} = alloca {}", arr_ptr, arr_ty);
 
                     // Store each element
                     for (i, elem) in elements.iter().enumerate() {
@@ -385,41 +385,41 @@ impl CodeGenerator {
                         ir.push_str(&elem_ir);
 
                         let elem_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                        write_ir!(ir, 
+                            "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
                             elem_ptr, arr_ty, arr_ty, arr_ptr, i
-                        ));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
+                        );
+                        write_ir!(ir, 
+                            "  store {} {}, {}* {}",
                             elem_ty, val, elem_ty, elem_ptr
-                        ));
+                        );
                     }
 
                     // Get pointer to first element
                     let data_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+                    write_ir!(ir, 
+                        "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
                         data_ptr, arr_ty, arr_ty, arr_ptr
-                    ));
+                    );
 
                     // Bitcast to i8*
                     let data_i8 = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = bitcast {}* {} to i8*\n",
+                    write_ir!(ir, 
+                        "  {} = bitcast {}* {} to i8*",
                         data_i8, elem_ty, data_ptr
-                    ));
+                    );
 
                     // Build fat pointer: { i8*, i64 }
                     let fat1 = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n",
+                    write_ir!(ir, 
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
                         fat1, data_i8
-                    ));
+                    );
                     let fat2 = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
+                    write_ir!(ir, 
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
                         fat2, fat1, len
-                    ));
+                    );
 
                     return Ok((fat2, ir));
                 }
@@ -437,11 +437,11 @@ impl CodeGenerator {
                             let (val, val_ir) = self.generate_expr(inner, counter)?;
                             ir.push_str(&val_ir);
                             let tmp_alloca = self.next_temp(counter);
-                            ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
-                            ir.push_str(&format!(
-                                "  store {} {}, {}* {}\n",
+                            write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
+                            write_ir!(ir, 
+                                "  store {} {}, {}* {}",
                                 llvm_ty, val, llvm_ty, tmp_alloca
-                            ));
+                            );
                             return Ok((tmp_alloca, ir));
                         }
                     }
@@ -465,10 +465,10 @@ impl CodeGenerator {
                 };
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  {} = load {}, {}* {}",
                     result, pointee_llvm, pointee_llvm, ptr_val
-                ));
+                );
 
                 Ok((result, ir))
             }

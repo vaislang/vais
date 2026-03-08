@@ -59,10 +59,10 @@ impl CodeGenerator {
                 if fn_name == "println" {
                     // For println with non-literal, use puts
                     let i32_result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = call i32 @puts(i8* {}){}\n",
+                    write_ir!(ir, 
+                        "  {} = call i32 @puts(i8* {}){}",
                         i32_result, raw_ptr, dbg_info
-                    ));
+                    );
                 } else {
                     // For print with non-literal, use printf with %s
                     let fmt_name = self.make_string_name();
@@ -76,10 +76,10 @@ impl CodeGenerator {
                         fmt_len, fmt_len, fmt_name
                     );
                     let _result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = call i32 (i8*, ...) @printf(i8* {}, i8* {}){}\n",
+                    write_ir!(ir, 
+                        "  {} = call i32 (i8*, ...) @printf(i8* {}, i8* {}){}",
                         _result, fmt_ptr, raw_ptr, dbg_info
-                    ));
+                    );
                 }
                 return Ok(("void".to_string(), ir));
             }
@@ -166,7 +166,7 @@ impl CodeGenerator {
             match &arg_types[i] {
                 ResolvedType::I32 => {
                     let trunc_tmp = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
+                    write_ir!(ir, "  {} = trunc i64 {} to i32", trunc_tmp, val);
                     printf_args.push(format!("i32 {}", trunc_tmp));
                 }
                 ResolvedType::F32 => {
@@ -204,21 +204,21 @@ impl CodeGenerator {
                 puts_len, puts_len, puts_name
             );
             let _result = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i32 @puts(i8* {}){}\n",
+            write_ir!(ir, 
+                "  {} = call i32 @puts(i8* {}){}",
                 _result, puts_ptr, dbg_info
-            ));
+            );
             return Ok(("void".to_string(), ir));
         }
 
         // For print with no extra args, use printf with just the format string
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i32 (i8*, ...) @printf({}){}\n",
+        write_ir!(ir, 
+            "  {} = call i32 (i8*, ...) @printf({}){}",
             result,
             printf_args.join(", "),
             dbg_info
-        ));
+        );
 
         Ok(("void".to_string(), ir))
     }
@@ -324,7 +324,7 @@ impl CodeGenerator {
             match &arg_types[i] {
                 ResolvedType::I32 => {
                     let trunc_tmp = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = trunc i64 {} to i32\n", trunc_tmp, val));
+                    write_ir!(ir, "  {} = trunc i64 {} to i32", trunc_tmp, val);
                     arg_vals.push(format!("i32 {}", trunc_tmp));
                 }
                 ResolvedType::F32 => {
@@ -364,33 +364,33 @@ impl CodeGenerator {
 
         // Step 1: snprintf(NULL, 0, fmt, ...) to get required length
         let len_i32 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* null, i64 0, i8* {}{})\n",
+        write_ir!(ir, 
+            "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* null, i64 0, i8* {}{})",
             len_i32, fmt_ptr, snprintf_args
-        ));
+        );
 
         // Convert i32 length to i64
         let len_i64 = self.next_temp(counter);
-        ir.push_str(&format!("  {} = sext i32 {} to i64\n", len_i64, len_i32));
+        write_ir!(ir, "  {} = sext i32 {} to i64", len_i64, len_i32);
 
         // Step 2: malloc(len + 1)
         let buf_size = self.next_temp(counter);
-        ir.push_str(&format!("  {} = add i64 {}, 1\n", buf_size, len_i64));
+        write_ir!(ir, "  {} = add i64 {}, 1", buf_size, len_i64);
 
         let buf_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i8* @malloc(i64 {})\n",
+        write_ir!(ir, 
+            "  {} = call i8* @malloc(i64 {})",
             buf_ptr, buf_size
-        ));
+        );
         // Track allocation for automatic cleanup at scope exit
         self.track_alloc(buf_ptr.clone());
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* {}, i64 {}, i8* {}{})\n",
+        write_ir!(ir, 
+            "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* {}, i64 {}, i8* {}{})",
             _write_result, buf_ptr, buf_size, fmt_ptr, snprintf_args
-        ));
+        );
 
         // Mark that we need snprintf declaration
         self.needs_string_helpers = true;
@@ -416,17 +416,17 @@ impl CodeGenerator {
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+        write_ir!(ir, 
+            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0",
             fmt_ptr, fmt_len, fmt_len, fmt_name
-        ));
+        );
         let i32_result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
+        write_ir!(ir, 
+            "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})",
             i32_result, fmt_ptr, arg_val
-        ));
+        );
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
+        write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
         Ok((result, ir))
     }
 
@@ -446,17 +446,17 @@ impl CodeGenerator {
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+        write_ir!(ir, 
+            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0",
             fmt_ptr, fmt_len, fmt_len, fmt_name
-        ));
+        );
         let i32_result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
+        write_ir!(ir, 
+            "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})",
             i32_result, fmt_ptr, arg_val
-        ));
+        );
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
+        write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
         Ok((result, ir))
     }
 }

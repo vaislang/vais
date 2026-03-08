@@ -156,15 +156,15 @@ impl CodeGenerator {
                     let dst_ty = format!("i{}", dst_bits);
 
                     if src_bits > dst_bits {
-                        ir.push_str(&format!(
-                            "  {} = trunc {} {} to {}\n",
+                        write_ir!(ir, 
+                            "  {} = trunc {} {} to {}",
                             conv_tmp, src_ty, val, dst_ty
-                        ));
+                        );
                     } else {
-                        ir.push_str(&format!(
-                            "  {} = sext {} {} to {}\n",
+                        write_ir!(ir, 
+                            "  {} = sext {} {} to {}",
                             conv_tmp, src_ty, val, dst_ty
-                        ));
+                        );
                     }
                     val = conv_tmp;
                 }
@@ -182,10 +182,10 @@ impl CodeGenerator {
 
             if is_named && !is_value {
                 let loaded = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  {} = load {}, {}* {}",
                     loaded, arg_ty, arg_ty, val
-                ));
+                );
                 val = loaded;
             }
 
@@ -282,13 +282,13 @@ impl CodeGenerator {
             // If we have closure info, we know the exact function name - call directly
             if let Some(ref info) = closure_info {
                 let tmp = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i64 @{}({}){}\n",
+                write_ir!(ir, 
+                    "  {} = call i64 @{}({}){}",
                     tmp,
                     info.func_name,
                     all_args.join(", "),
                     dbg_info
-                ));
+                );
                 return Ok((tmp, std::mem::take(ir)));
             }
 
@@ -325,7 +325,7 @@ impl CodeGenerator {
                     .unwrap_or(fn_name)
                     .to_string(); // single clone at end
                 let tmp = self.next_temp(counter);
-                ir.push_str(&format!("  {} = load i64, i64* %{}\n", tmp, llvm_var_name));
+                write_ir!(ir, "  {} = load i64, i64* %{}", tmp, llvm_var_name);
                 tmp
             };
 
@@ -336,30 +336,30 @@ impl CodeGenerator {
             let fn_type = format!("i64 ({})*", arg_types.join(", "));
 
             let fn_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = inttoptr i64 {} to {}\n",
+            write_ir!(ir, 
+                "  {} = inttoptr i64 {} to {}",
                 fn_ptr, ptr_tmp, fn_type
-            ));
+            );
 
             let tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i64 {}({}){}\n",
+            write_ir!(ir, 
+                "  {} = call i64 {}({}){}",
                 tmp,
                 fn_ptr,
                 all_args.join(", "),
                 dbg_info
-            ));
+            );
             Ok((tmp, std::mem::take(ir)))
         } else if fn_name == "malloc" {
             let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i8* @malloc({}){}\n",
+            write_ir!(ir, 
+                "  {} = call i8* @malloc({}){}",
                 ptr_tmp,
                 arg_vals.join(", "),
                 dbg_info
-            ));
+            );
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             Ok((result, std::mem::take(ir)))
         } else if fn_name == "free" {
             let ptr_tmp = self.next_temp(counter);
@@ -367,11 +367,11 @@ impl CodeGenerator {
                 .first()
                 .map(|s| s.split_whitespace().last().unwrap_or("0"))
                 .unwrap_or("0");
-            ir.push_str(&format!(
-                "  {} = inttoptr i64 {} to i8*\n",
+            write_ir!(ir, 
+                "  {} = inttoptr i64 {} to i8*",
                 ptr_tmp, arg_val
-            ));
-            ir.push_str(&format!("  call void @free(i8* {}){}\n", ptr_tmp, dbg_info));
+            );
+            write_ir!(ir, "  call void @free(i8* {}){}", ptr_tmp, dbg_info);
             Ok(("void".to_string(), std::mem::take(ir)))
         } else if fn_name == "memcpy" || fn_name == "memcpy_str" {
             self.generate_memcpy_call(arg_vals, counter, span, ir)
@@ -400,20 +400,20 @@ impl CodeGenerator {
                     })
                     .unwrap_or_default();
                 let sig = format!("void ({}, ...)", param_types.join(", "));
-                ir.push_str(&format!(
-                    "  call {} @{}({}){}\n",
+                write_ir!(ir, 
+                    "  call {} @{}({}){}",
                     sig,
                     actual_fn_name,
                     arg_vals.join(", "),
                     dbg_info
-                ));
+                );
             } else {
-                ir.push_str(&format!(
-                    "  call void @{}({}){}\n",
+                write_ir!(ir, 
+                    "  call void @{}({}){}",
                     actual_fn_name,
                     arg_vals.join(", "),
                     dbg_info
-                ));
+                );
             }
             Ok(("void".to_string(), std::mem::take(ir)))
         } else {
@@ -438,23 +438,23 @@ impl CodeGenerator {
                     })
                     .unwrap_or_default();
                 let sig = format!("{} ({}, ...)", ret_ty, param_types.join(", "));
-                ir.push_str(&format!(
-                    "  {} = call {} @{}({}){}\n",
+                write_ir!(ir, 
+                    "  {} = call {} @{}({}){}",
                     tmp,
                     sig,
                     actual_fn_name,
                     arg_vals.join(", "),
                     dbg_info
-                ));
+                );
             } else {
-                ir.push_str(&format!(
-                    "  {} = call {} @{}({}){}\n",
+                write_ir!(ir, 
+                    "  {} = call {} @{}({}){}",
                     tmp,
                     ret_ty,
                     actual_fn_name,
                     arg_vals.join(", "),
                     dbg_info
-                ));
+                );
             }
             Ok((tmp, std::mem::take(ir)))
         }
@@ -478,26 +478,26 @@ impl CodeGenerator {
         }
 
         let enum_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_name));
+        write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_name);
 
         let tag_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+        write_ir!(ir, 
+            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
             tag_ptr, enum_name, enum_name, enum_ptr
-        ));
-        ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
+        );
+        write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
 
         // Store payload fields
         for (i, arg_val) in arg_vals.iter().enumerate() {
             let payload_field_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}\n",
+            write_ir!(ir, 
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
                 payload_field_ptr, enum_name, enum_name, enum_ptr, i
-            ));
-            ir.push_str(&format!(
-                "  store i64 {}, i64* {}\n",
+            );
+            write_ir!(ir, 
+                "  store i64 {}, i64* {}",
                 arg_val, payload_field_ptr
-            ));
+            );
         }
 
         Ok((enum_ptr, ir))

@@ -72,11 +72,11 @@ pub(crate) fn sanitize_llvm_name(name: &str, disambiguation_suffix: Option<usize
             result.push('_');
         } else {
             // Non-ASCII or other chars: encode as _uXXXX
-            result.push_str(&format!("_u{:04X}", ch as u32));
+            write_ir_no_newline!(result, "_u{:04X}", ch as u32);
         }
     }
     if let Some(suffix) = disambiguation_suffix {
-        result.push_str(&format!("__{}", suffix));
+        write_ir_no_newline!(result, "__{}", suffix);
     }
     result
 }
@@ -238,22 +238,22 @@ impl CodeGenerator {
         if self.gc_enabled {
             // Use GC allocation
             let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})\n",
+            write_ir!(ir, 
+                "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})",
                 ptr_tmp, size_arg, type_id
-            ));
+            );
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             (result, ir)
         } else {
             // Use manual malloc
             let ptr_tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call i8* @malloc(i64 {})\n",
+            write_ir!(ir, 
+                "  {} = call i8* @malloc(i64 {})",
                 ptr_tmp, size_arg
-            ));
+            );
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             (result, ir)
         }
     }
@@ -320,7 +320,7 @@ impl CodeGenerator {
             // If inclusive (..=), add 1 to end
             if inclusive {
                 let adj_end = self.next_temp(counter);
-                ir.push_str(&format!("  {} = add i64 {}, 1\n", adj_end, val));
+                write_ir!(ir, "  {} = add i64 {}, 1", adj_end, val);
                 adj_end
             } else {
                 val
@@ -330,10 +330,10 @@ impl CodeGenerator {
             if is_slice_source {
                 // Extract length from fat pointer (second field)
                 let length = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+                write_ir!(ir, 
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 1",
                     length, arr_val
-                ));
+                );
                 length
             } else {
                 // Array/Pointer source doesn't have length information
@@ -346,15 +346,15 @@ impl CodeGenerator {
         // If source is a slice, extract the data pointer
         let src_arr_ptr = if is_slice_source {
             let data_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
                 data_ptr, arr_val
-            ));
+            );
             let typed_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = bitcast i8* {} to i64*\n",
+            write_ir!(ir, 
+                "  {} = bitcast i8* {} to i64*",
                 typed_ptr, data_ptr
-            ));
+            );
             typed_ptr
         } else {
             // For arrays/pointers, use directly
@@ -363,100 +363,100 @@ impl CodeGenerator {
 
         // Calculate slice length: end - start
         let length = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = sub i64 {}, {}\n",
+        write_ir!(ir, 
+            "  {} = sub i64 {}, {}",
             length, end_val, start_val
-        ));
+        );
 
         // Allocate new array for slice
         let byte_size = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = mul i64 {}, 8\n", // 8 bytes per i64 element
+        write_ir!(ir, 
+            "  {} = mul i64 {}, 8", // 8 bytes per i64 element
             byte_size, length
-        ));
+        );
 
         let raw_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call i8* @malloc(i64 {})\n",
+        write_ir!(ir, 
+            "  {} = call i8* @malloc(i64 {})",
             raw_ptr, byte_size
-        ));
+        );
         // Track allocation for automatic cleanup at scope exit
         self.track_alloc(raw_ptr.clone());
 
         let slice_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = bitcast i8* {} to i64*\n",
+        write_ir!(ir, 
+            "  {} = bitcast i8* {} to i64*",
             slice_ptr, raw_ptr
-        ));
+        );
 
         // Copy elements using a loop
         let loop_idx_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca i64\n", loop_idx_ptr));
-        ir.push_str(&format!("  store i64 0, i64* {}\n", loop_idx_ptr));
+        write_ir!(ir, "  {} = alloca i64", loop_idx_ptr);
+        write_ir!(ir, "  store i64 0, i64* {}", loop_idx_ptr);
 
         let loop_start = self.next_label("slice_loop");
         let loop_body = self.next_label("slice_body");
         let loop_end = self.next_label("slice_end");
 
-        ir.push_str(&format!("  br label %{}\n", loop_start));
-        ir.push_str(&format!("{}:\n", loop_start));
+        write_ir!(ir, "  br label %{}", loop_start);
+        write_ir!(ir, "{}:", loop_start);
 
         let loop_idx = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load i64, i64* {}\n",
+        write_ir!(ir, 
+            "  {} = load i64, i64* {}",
             loop_idx, loop_idx_ptr
-        ));
+        );
 
         let cmp = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = icmp slt i64 {}, {}\n",
+        write_ir!(ir, 
+            "  {} = icmp slt i64 {}, {}",
             cmp, loop_idx, length
-        ));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
+        );
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}",
             cmp, loop_body, loop_end
-        ));
+        );
 
-        ir.push_str(&format!("{}:\n", loop_body));
+        write_ir!(ir, "{}:", loop_body);
 
         // Calculate source index: start + loop_idx
         let src_idx = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = add i64 {}, {}\n",
+        write_ir!(ir, 
+            "  {} = add i64 {}, {}",
             src_idx, start_val, loop_idx
-        ));
+        );
 
         // Get source element pointer
         let src_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr i64, i64* {}, i64 {}\n",
+        write_ir!(ir, 
+            "  {} = getelementptr i64, i64* {}, i64 {}",
             src_ptr, src_arr_ptr, src_idx
-        ));
+        );
 
         // Load source element
         let elem = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", elem, src_ptr));
+        write_ir!(ir, "  {} = load i64, i64* {}", elem, src_ptr);
 
         // Get destination element pointer
         let dst_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr i64, i64* {}, i64 {}\n",
+        write_ir!(ir, 
+            "  {} = getelementptr i64, i64* {}, i64 {}",
             dst_ptr, slice_ptr, loop_idx
-        ));
+        );
 
         // Store element
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", elem, dst_ptr));
+        write_ir!(ir, "  store i64 {}, i64* {}", elem, dst_ptr);
 
         // Increment loop index
         let next_idx = self.next_temp(counter);
-        ir.push_str(&format!("  {} = add i64 {}, 1\n", next_idx, loop_idx));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
+        write_ir!(ir, "  {} = add i64 {}, 1", next_idx, loop_idx);
+        write_ir!(ir, 
+            "  store i64 {}, i64* {}",
             next_idx, loop_idx_ptr
-        ));
-        ir.push_str(&format!("  br label %{}\n", loop_start));
+        );
+        write_ir!(ir, "  br label %{}", loop_start);
 
-        ir.push_str(&format!("{}:\n", loop_end));
+        write_ir!(ir, "{}:", loop_end);
 
         Ok((slice_ptr, ir))
     }

@@ -22,7 +22,7 @@ impl CodeGenerator {
 
             // Allocate struct on stack
             let struct_ptr = self.next_temp(counter);
-            ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, type_name));
+            write_ir!(ir, "  {} = alloca %{}", struct_ptr, type_name);
 
             // Store each field
             for (field_name, field_expr) in fields {
@@ -49,10 +49,10 @@ impl CodeGenerator {
                 ir.push_str(&field_ir);
 
                 let field_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                write_ir!(ir, 
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
                     field_ptr, type_name, type_name, struct_ptr, field_idx
-                ));
+                );
 
                 let field_ty = &struct_info.fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
@@ -63,19 +63,19 @@ impl CodeGenerator {
                 {
                     // Field value is a pointer to struct, need to load the value
                     let loaded = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
+                    write_ir!(ir, 
+                        "  {} = load {}, {}* {}",
                         loaded, llvm_ty, llvm_ty, val
-                    ));
+                    );
                     loaded
                 } else {
                     val
                 };
 
-                ir.push_str(&format!(
-                    "  store {} {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  store {} {}, {}* {}",
                     llvm_ty, val_to_store, llvm_ty, field_ptr
-                ));
+                );
             }
 
             // Return pointer to struct
@@ -86,7 +86,7 @@ impl CodeGenerator {
 
             // Allocate union on stack
             let union_ptr = self.next_temp(counter);
-            ir.push_str(&format!("  {} = alloca %{}\n", union_ptr, type_name));
+            write_ir!(ir, "  {} = alloca %{}", union_ptr, type_name);
 
             // Union should have exactly one field in the literal
             if fields.len() != 1 {
@@ -117,16 +117,16 @@ impl CodeGenerator {
             // Bitcast union pointer to field type pointer (all fields at offset 0)
             let field_llvm_ty = self.type_to_llvm(&field_ty);
             let field_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = bitcast %{}* {} to {}*\n",
+            write_ir!(ir, 
+                "  {} = bitcast %{}* {} to {}*",
                 field_ptr, type_name, union_ptr, field_llvm_ty
-            ));
+            );
 
             // Store the value
-            ir.push_str(&format!(
-                "  store {} {}, {}* {}\n",
+            write_ir!(ir, 
+                "  store {} {}, {}* {}",
                 field_llvm_ty, val, field_llvm_ty, field_ptr
-            ));
+            );
 
             // Return pointer to union
             Ok((union_ptr, ir))

@@ -5,17 +5,17 @@ use super::*;
 impl CodeGenerator {
     /// Emit LLVM IR module header (ModuleID, source_filename, target triple/datalayout).
     pub(crate) fn emit_module_header(&mut self, ir: &mut String) {
-        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
+        write_ir!(ir, "; ModuleID = '{}'", self.module_name);
         ir.push_str("source_filename = \"<vais>\"\n");
         if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!(
-                "target datalayout = \"{}\"\n",
+            write_ir!(ir, 
+                "target datalayout = \"{}\"",
                 self.target.data_layout()
-            ));
-            ir.push_str(&format!(
-                "target triple = \"{}\"\n",
+            );
+            write_ir!(ir, 
+                "target triple = \"{}\"",
                 self.target.triple_str()
-            ));
+            );
         }
         ir.push('\n');
         if self.debug_info.is_enabled() {
@@ -28,28 +28,28 @@ impl CodeGenerator {
         if is_main_module {
             let abi_version = crate::abi::ABI_VERSION;
             let abi_version_len = abi_version.len() + 1;
-            ir.push_str(&format!(
-                "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
+            write_ir!(ir, 
+                "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n",
                 abi_version_len, abi_version
-            ));
+            );
         }
         for (name, value) in &self.strings.constants {
             let escaped = escape_llvm_string(value);
             let len = value.len() + 1;
-            ir.push_str(&format!(
-                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
+            write_ir!(ir, 
+                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
                 name, len, escaped
-            ));
+            );
         }
         if !self.strings.constants.is_empty() {
             ir.push('\n');
         }
         // Emit global numeric constants for reference returns
         for (name, ty, value) in &self.ref_constants {
-            ir.push_str(&format!(
-                "@{} = internal constant {} {}\n",
+            write_ir!(ir, 
+                "@{} = internal constant {} {}",
                 name, ty, value
-            ));
+            );
         }
         if !self.ref_constants.is_empty() {
             ir.push('\n');

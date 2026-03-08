@@ -18,14 +18,14 @@ impl CodeGenerator {
                 if variant.name == name {
                     let mut ir = String::new();
                     let enum_ptr = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_info.name));
+                    write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
                     // Store tag
                     let tag_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                    write_ir!(ir, 
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
                         tag_ptr, enum_info.name, enum_info.name, enum_ptr
-                    ));
-                    ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
+                    );
+                    write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
                     return Ok((enum_ptr, ir));
                 }
             }
@@ -70,10 +70,10 @@ impl CodeGenerator {
             } else {
                 let tmp = self.next_temp(counter);
                 let left_llvm = self.type_to_llvm(&left_type);
-                ir.push_str(&format!(
-                    "  {} = icmp ne {} {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp ne {} {}, 0",
                     tmp, left_llvm, left_val
-                ));
+                );
                 tmp
             };
             let right_type = self.infer_expr_type(right);
@@ -82,10 +82,10 @@ impl CodeGenerator {
             } else {
                 let tmp = self.next_temp(counter);
                 let right_llvm = self.type_to_llvm(&right_type);
-                ir.push_str(&format!(
-                    "  {} = icmp ne {} {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp ne {} {}, 0",
                     tmp, right_llvm, right_val
-                ));
+                );
                 tmp
             };
 
@@ -102,14 +102,14 @@ impl CodeGenerator {
 
             let result_bool = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            ir.push_str(&format!(
-                "  {} = {} i1 {}, {}{}\n",
+            write_ir!(ir, 
+                "  {} = {} i1 {}, {}{}",
                 result_bool, op_str, left_bool, right_bool, dbg_info
-            ));
+            );
 
             // Extend back to i64 for consistency
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, result_bool));
+            write_ir!(ir, "  {} = zext i1 {} to i64", result, result_bool);
             Ok((result, ir))
         } else if is_comparison {
             // Comparison returns i1, extend to i64
@@ -149,10 +149,10 @@ impl CodeGenerator {
                 } else {
                     "double"
                 };
-                ir.push_str(&format!(
-                    "  {} = {} {} {}, {}{}\n",
+                write_ir!(ir, 
+                    "  {} = {} {} {}, {}{}",
                     cmp_tmp, op_str, float_llvm, left_val, right_val, dbg_info
-                ));
+                );
             } else {
                 let op_str = match op {
                     BinOp::Lt => "icmp slt",
@@ -168,15 +168,15 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}{}\n",
+                write_ir!(ir, 
+                    "  {} = {} i64 {}, {}{}",
                     cmp_tmp, op_str, left_val, right_val, dbg_info
-                ));
+                );
             }
 
             // Extend i1 to i64
             let result = self.next_temp(counter);
-            ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, cmp_tmp));
+            write_ir!(ir, "  {} = zext i1 {} to i64", result, cmp_tmp);
             Ok((result, ir))
         } else {
             // Arithmetic and bitwise operations
@@ -222,10 +222,10 @@ impl CodeGenerator {
                 } else {
                     "double"
                 };
-                ir.push_str(&format!(
-                    "  {} = {} {} {}, {}{}\n",
+                write_ir!(ir, 
+                    "  {} = {} {} {}, {}{}",
                     tmp, op_str, float_llvm, left_val, right_val, dbg_info
-                ));
+                );
             } else {
                 let op_str = match op {
                     BinOp::Add => "add",
@@ -245,10 +245,10 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}{}\n",
+                write_ir!(ir, 
+                    "  {} = {} i64 {}, {}{}",
                     tmp, op_str, left_val, right_val, dbg_info
-                ));
+                );
             }
             Ok((tmp, ir))
         }
@@ -269,13 +269,13 @@ impl CodeGenerator {
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
         match op {
             UnaryOp::Neg => {
-                ir.push_str(&format!("  {} = sub i64 0, {}{}\n", tmp, val, dbg_info));
+                write_ir!(ir, "  {} = sub i64 0, {}{}", tmp, val, dbg_info);
             }
             UnaryOp::Not => {
-                ir.push_str(&format!("  {} = xor i1 {}, 1{}\n", tmp, val, dbg_info));
+                write_ir!(ir, "  {} = xor i1 {}, 1{}", tmp, val, dbg_info);
             }
             UnaryOp::BitNot => {
-                ir.push_str(&format!("  {} = xor i64 {}, -1{}\n", tmp, val, dbg_info));
+                write_ir!(ir, "  {} = xor i64 {}, -1{}", tmp, val, dbg_info);
             }
         }
 
@@ -302,10 +302,10 @@ impl CodeGenerator {
             (ResolvedType::Pointer(_), _)
             | (ResolvedType::Ref(_), _)
             | (ResolvedType::RefMut(_), _) => {
-                ir.push_str(&format!(
-                    "  {} = inttoptr i64 {} to {}\n",
+                write_ir!(ir, 
+                    "  {} = inttoptr i64 {} to {}",
                     result, val, llvm_type
-                ));
+                );
             }
             // Default: just use the value as-is (same size types)
             _ => {
@@ -342,20 +342,20 @@ impl CodeGenerator {
                         // We need to alloca a new struct, store the value, then update the pointer.
                         if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
                             let tmp_ptr = self.next_temp(counter);
-                            ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-                            ir.push_str(&format!(
-                                "  store {} {}, {}* {}\n",
+                            write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
+                            write_ir!(ir, 
+                                "  store {} {}, {}* {}",
                                 llvm_ty, val, llvm_ty, tmp_ptr
-                            ));
-                            ir.push_str(&format!(
-                                "  store {}* {}, {}** %{}\n",
+                            );
+                            write_ir!(ir, 
+                                "  store {}* {}, {}** %{}",
                                 llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
-                            ));
+                            );
                         } else {
-                            ir.push_str(&format!(
-                                "  store {} {}, {}* %{}\n",
+                            write_ir!(ir, 
+                                "  store {} {}, {}* %{}",
                                 llvm_ty, val, llvm_ty, local.llvm_name
-                            ));
+                            );
                         }
                     }
                 }
@@ -390,14 +390,14 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(field_ty);
 
                         let field_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                        write_ir!(ir, 
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
                             field_ptr, struct_name, struct_name, obj_val, field_idx
-                        ));
-                        ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
+                        );
+                        write_ir!(ir, 
+                            "  store {} {}, {}* {}",
                             llvm_ty, val, llvm_ty, field_ptr
-                        ));
+                        );
                     }
                 }
             }
@@ -426,29 +426,29 @@ impl CodeGenerator {
             // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
             let base_ptr = if is_fat_ptr {
                 let data_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
                     data_ptr, arr_val
-                ));
+                );
                 let typed_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = bitcast i8* {} to {}*\n",
+                write_ir!(ir, 
+                    "  {} = bitcast i8* {} to {}*",
                     typed_ptr, data_ptr, elem_llvm_ty
-                ));
+                );
                 typed_ptr
             } else {
                 arr_val.clone()
             };
 
             let elem_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = getelementptr {}, {}* {}, i64 {}\n",
+            write_ir!(ir, 
+                "  {} = getelementptr {}, {}* {}, i64 {}",
                 elem_ptr, elem_llvm_ty, elem_llvm_ty, base_ptr, idx_val
-            ));
-            ir.push_str(&format!(
-                "  store {} {}, {}* {}\n",
+            );
+            write_ir!(ir, 
+                "  store {} {}, {}* {}",
                 elem_llvm_ty, val, elem_llvm_ty, elem_ptr
-            ));
+            );
         }
 
         Ok((val, ir))
@@ -498,14 +498,14 @@ impl CodeGenerator {
                     if variant.name == name {
                         let mut ir = String::new();
                         let enum_ptr = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_info.name));
+                        write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
                         // Store tag
                         let tag_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                        write_ir!(ir, 
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
                             tag_ptr, enum_info.name, enum_info.name, enum_ptr
-                        ));
-                        ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
+                        );
+                        write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
                         return Ok((enum_ptr, ir));
                     }
                 }
@@ -546,18 +546,18 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(field_ty);
                         let mut ir = String::new();
                         let field_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = getelementptr %{}, %{}* %self, i32 0, i32 {}\n",
+                        write_ir!(ir, 
+                            "  {} = getelementptr %{}, %{}* %self, i32 0, i32 {}",
                             field_ptr, resolved_name, resolved_name, field_idx
-                        ));
+                        );
                         if matches!(field_ty, ResolvedType::Named { .. }) {
                             return Ok((field_ptr, ir));
                         } else {
                             let result = self.next_temp(counter);
-                            ir.push_str(&format!(
-                                "  {} = load {}, {}* {}\n",
+                            write_ir!(ir, 
+                                "  {} = load {}, {}* {}",
                                 result, llvm_ty, llvm_ty, field_ptr
-                            ));
+                            );
                             return Ok((result, ir));
                         }
                     }
@@ -635,19 +635,19 @@ impl CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = {} i64 {}, {}\n",
+        write_ir!(ir, 
+            "  {} = {} i64 {}, {}",
             result, op_str, current_val, rhs_val
-        ));
+        );
 
         if let Expr::Ident(name) = &target.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
+                    write_ir!(ir, 
+                        "  store {} {}, {}* %{}",
                         llvm_ty, result, llvm_ty, local.llvm_name
-                    ));
+                    );
                 }
             }
         }

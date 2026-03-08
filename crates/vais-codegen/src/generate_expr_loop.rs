@@ -44,16 +44,16 @@ impl CodeGenerator {
 
         let counter_var = format!("%loop_counter.{}", self.fn_ctx.label_counter);
         self.fn_ctx.label_counter += 1;
-        ir.push_str(&format!("  {} = alloca i64\n", counter_var));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
+        write_ir!(ir, "  {} = alloca i64", counter_var);
+        write_ir!(ir, 
+            "  store i64 {}, i64* {}",
             start_val, counter_var
-        ));
+        );
 
         let pattern_var = if let Pattern::Ident(name) = &pattern.node {
             let var_name = format!("{}.for", name);
             let llvm_name = format!("%{}", var_name);
-            ir.push_str(&format!("  {} = alloca i64\n", llvm_name));
+            write_ir!(ir, "  {} = alloca i64", llvm_name);
             self.fn_ctx.locals.insert(
                 name.clone(),
                 LocalVar::alloca(ResolvedType::I64, var_name.clone()),
@@ -73,59 +73,59 @@ impl CodeGenerator {
             break_label: loop_end.clone(),
         });
 
-        ir.push_str(&format!("  br label %{}\n", loop_cond));
+        write_ir!(ir, "  br label %{}", loop_cond);
 
-        ir.push_str(&format!("{}:\n", loop_cond));
+        write_ir!(ir, "{}:", loop_cond);
         let current_val = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load i64, i64* {}\n",
+        write_ir!(ir, 
+            "  {} = load i64, i64* {}",
             current_val, counter_var
-        ));
+        );
 
         let cmp_pred = if inclusive { "sle" } else { "slt" };
         let cond_result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = icmp {} i64 {}, {}\n",
+        write_ir!(ir, 
+            "  {} = icmp {} i64 {}, {}",
             cond_result, cmp_pred, current_val, end_val
-        ));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n",
+        );
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}",
             cond_result, loop_body_label, loop_end
-        ));
+        );
 
-        ir.push_str(&format!("{}:\n", loop_body_label));
+        write_ir!(ir, "{}:", loop_body_label);
 
         if let Some((_, llvm_name)) = &pattern_var {
             let bind_val = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = load i64, i64* {}\n",
+            write_ir!(ir, 
+                "  {} = load i64, i64* {}",
                 bind_val, counter_var
-            ));
-            ir.push_str(&format!("  store i64 {}, i64* {}\n", bind_val, llvm_name));
+            );
+            write_ir!(ir, "  store i64 {}, i64* {}", bind_val, llvm_name);
         }
 
         let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
         ir.push_str(&body_ir);
 
         if !body_terminated {
-            ir.push_str(&format!("  br label %{}\n", loop_inc));
+            write_ir!(ir, "  br label %{}", loop_inc);
         }
 
-        ir.push_str(&format!("{}:\n", loop_inc));
+        write_ir!(ir, "{}:", loop_inc);
         let inc_load = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load i64, i64* {}\n",
+        write_ir!(ir, 
+            "  {} = load i64, i64* {}",
             inc_load, counter_var
-        ));
+        );
         let inc_result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = add i64 {}, 1\n", inc_result, inc_load));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
+        write_ir!(ir, "  {} = add i64 {}, 1", inc_result, inc_load);
+        write_ir!(ir, 
+            "  store i64 {}, i64* {}",
             inc_result, counter_var
-        ));
-        ir.push_str(&format!("  br label %{}\n", loop_cond));
+        );
+        write_ir!(ir, "  br label %{}", loop_cond);
 
-        ir.push_str(&format!("{}:\n", loop_end));
+        write_ir!(ir, "{}:", loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))

@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 128 완료, Phase 129 예정)
+> **현재 버전**: 0.1.0 (Phase 129 완료, Phase 130 예정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-08 (Phase 128 완료 — E2E 2,036개 달성, +235 테스트)
+> **최종 업데이트**: 2026-03-08 (Phase 129 완료 — 성능 최적화, Lexer -29.8%, Codegen write_ir! 619건)
 
 ---
 
@@ -244,6 +244,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 118~122 | 성능 · 타입 · 에코 · 문서 · 커버리지 | clone 축소, Text IR 일관성, ConstGeneric mono, tutorial 24 lessons, examples 188, Codecov 85% | 1,745 |
 | 99~125 | 안정성 · 완성도 · 타입 정확성 | expect/panic 0건, 모듈 분할 R11-R12, bounds check, auto free, Codecov 85%, strict_type_mode, unit_value() 중앙화 | 1,789 |
 | 126~128 | 커버리지 · 타입 강화 · E2E 2K | +309 단위 테스트, strict_type_mode 기본화, +235 E2E (에러/제네릭/연산자/클로저/수치/집합체/기타) | 2,036 |
+| 129 | 성능 최적화 · 벤치마크 | Lexer Vec pre-alloc(-29.8%), codegen write_ir! 619건 변환, CI largescale_bench, BASELINE 갱신 | 2,036 |
 
 ---
 
@@ -320,6 +321,22 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 > **목표**: 컴파일 성능 프로파일링, 핫 경로 최적화, 벤치마크 스위트 확장 및 CI 자동 비교
 > **기대 효과**: 컴파일 성능 10%+ 개선, 성능 회귀 자동 감지
+
+모드: 자동진행
+
+- [x] 1. 프로파일링 실행 & 병목 분석 (Opus) ✅ 2026-03-08
+  변경: 병목 식별 — Codegen 44.1%, Parser 36.5%, Lexer super-linear scaling
+- [x] 2. 핫패스 최적화 — codegen push_str(&format!)→write_ir! 변환 (Sonnet) ✅ 2026-03-08
+  변경: 23개 codegen 파일에서 619건 write_ir! 변환, 임시 String 할당 제거
+- [x] 3. 핫패스 최적화 — Lexer Vec pre-allocation (Sonnet) ✅ 2026-03-08
+  변경: vais-lexer/src/lib.rs (Vec::with_capacity(source.len()/4+16), Lexer 50K -29.8%)
+- [x] 4. 벤치마크 스위트 갱신 & 베이스라인 기록 (Sonnet) ✅ 2026-03-08
+  변경: benches/BASELINE.md (Phase 129 섹션 추가, fixture별+scale별 전후 비교)
+- [x] 5. CI 벤치마크 자동 비교 강화 (Sonnet) ✅ 2026-03-08
+  변경: bench.yml, bench-regression.yml (largescale_bench 추가, phase별 비교)
+- [x] 6. 검증: E2E 2,036 전체 통과, Clippy 0건 (Opus) ✅ 2026-03-08
+  변경: E2E 2,036 pass / 0 fail / 0 ignored, Clippy 0건
+진행률: 6/6 (100%)
 
 ---
 

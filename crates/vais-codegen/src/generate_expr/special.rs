@@ -40,29 +40,29 @@ impl CodeGenerator {
         // Sync value: wrap in an immediate Future state struct {i64 state, i64 result}
         let mut ir = inner_ir;
         let state_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = call i64 @malloc(i64 16)\n", state_ptr));
+        write_ir!(ir, "  {} = call i64 @malloc(i64 16)", state_ptr);
         let typed_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = inttoptr i64 {} to {{i64, i64}}*\n",
+        write_ir!(ir, 
+            "  {} = inttoptr i64 {} to {{i64, i64}}*",
             typed_ptr, state_ptr
-        ));
+        );
         // Store state = -1 (completed)
         let state_field = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n",
+        write_ir!(ir, 
+            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0",
             state_field, typed_ptr
-        ));
-        ir.push_str(&format!("  store i64 -1, i64* {}\n", state_field));
+        );
+        write_ir!(ir, "  store i64 -1, i64* {}", state_field);
         // Store result value
         let result_field = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n",
+        write_ir!(ir, 
+            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1",
             result_field, typed_ptr
-        ));
-        ir.push_str(&format!(
-            "  store i64 {}, i64* {}\n",
+        );
+        write_ir!(ir, 
+            "  store i64 {}, i64* {}",
             inner_val, result_field
-        ));
+        );
 
         self.needs_sync_spawn_poll = true;
         Ok((state_ptr, ir))
@@ -129,15 +129,15 @@ impl CodeGenerator {
                 *counter += 1;
                 let len = elements.len();
 
-                ir.push_str(&format!("  {} = alloca [{} x i64]\n", array_name, len));
+                write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}\n",
+                    write_ir!(ir, 
+                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}",
                         elem_ptr, len, len, array_name, i
-                    ));
-                    ir.push_str(&format!("  store i64 {}, i64* {}\n", elem_val, elem_ptr));
+                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 
                 Ok((array_name, ir))
@@ -176,20 +176,20 @@ impl CodeGenerator {
         // Build struct via insertvalue chain
         let range_type = "{ i64, i64, i1 }";
         let t1 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} undef, i64 {}, 0\n",
+        write_ir!(ir, 
+            "  {} = insertvalue {} undef, i64 {}, 0",
             t1, range_type, start_val
-        ));
+        );
         let t2 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} {}, i64 {}, 1\n",
+        write_ir!(ir, 
+            "  {} = insertvalue {} {}, i64 {}, 1",
             t2, range_type, t1, end_val
-        ));
+        );
         let t3 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {} {}, i1 {}, 2\n",
+        write_ir!(ir, 
+            "  {} = insertvalue {} {}, i1 {}, 2",
             t3, range_type, t2, incl_val
-        ));
+        );
 
         Ok((t3, ir))
     }

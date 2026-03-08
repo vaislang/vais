@@ -50,18 +50,18 @@ impl WitPackage {
 
         // Package declaration
         if let Some(version) = &self.version {
-            output.push_str(&format!(
-                "package {}:{}@{};\n\n",
+            write_ir!(output, 
+                "package {}:{}@{};\n",
                 self.namespace, self.name, version
-            ));
+            );
         } else {
-            output.push_str(&format!("package {}:{};\n\n", self.namespace, self.name));
+            write_ir!(output, "package {}:{};\n", self.namespace, self.name);
         }
 
         // Package docs
         if let Some(docs) = &self.docs {
             for line in docs.lines() {
-                output.push_str(&format!("/// {}\n", line));
+                write_ir!(output, "/// {}", line);
             }
             output.push('\n');
         }
@@ -86,11 +86,11 @@ impl WitPackage {
 
         if let Some(docs) = &interface.docs {
             for line in docs.lines() {
-                output.push_str(&format!("/// {}\n", line));
+                write_ir!(output, "/// {}", line);
             }
         }
 
-        output.push_str(&format!("interface {} {{\n", interface.name));
+        write_ir!(output, "interface {} {{", interface.name);
 
         // Type definitions
         for typedef in &interface.types {
@@ -125,69 +125,69 @@ impl WitPackage {
                 let mut output = String::new();
                 if let Some(docs) = &record.docs {
                     for line in docs.lines() {
-                        output.push_str(&format!("{}/// {}\n", indent_str, line));
+                        write_ir!(output, "{}/// {}", indent_str, line);
                     }
                 }
-                output.push_str(&format!("{}record {} {{\n", indent_str, record.name));
+                write_ir!(output, "{}record {} {{", indent_str, record.name);
                 for field in &record.fields {
                     if let Some(docs) = &field.docs {
-                        output.push_str(&format!("{}  /// {}\n", indent_str, docs));
+                        write_ir!(output, "{}  /// {}", indent_str, docs);
                     }
-                    output.push_str(&format!("{}  {}: {},\n", indent_str, field.name, field.ty));
+                    write_ir!(output, "{}  {}: {},", indent_str, field.name, field.ty);
                 }
-                output.push_str(&format!("{}}}\n", indent_str));
+                write_ir!(output, "{}}}", indent_str);
                 output
             }
             WitTypeDefinition::Variant(variant) => {
                 let mut output = String::new();
                 if let Some(docs) = &variant.docs {
                     for line in docs.lines() {
-                        output.push_str(&format!("{}/// {}\n", indent_str, line));
+                        write_ir!(output, "{}/// {}", indent_str, line);
                     }
                 }
-                output.push_str(&format!("{}variant {} {{\n", indent_str, variant.name));
+                write_ir!(output, "{}variant {} {{", indent_str, variant.name);
                 for case in &variant.cases {
                     if let Some(docs) = &case.docs {
-                        output.push_str(&format!("{}  /// {}\n", indent_str, docs));
+                        write_ir!(output, "{}  /// {}", indent_str, docs);
                     }
                     if let Some(ty) = &case.ty {
-                        output.push_str(&format!("{}  {}({}),\n", indent_str, case.name, ty));
+                        write_ir!(output, "{}  {}({}),", indent_str, case.name, ty);
                     } else {
-                        output.push_str(&format!("{}  {},\n", indent_str, case.name));
+                        write_ir!(output, "{}  {},", indent_str, case.name);
                     }
                 }
-                output.push_str(&format!("{}}}\n", indent_str));
+                write_ir!(output, "{}}}", indent_str);
                 output
             }
             WitTypeDefinition::Enum(enum_def) => {
                 let mut output = String::new();
                 if let Some(docs) = &enum_def.docs {
                     for line in docs.lines() {
-                        output.push_str(&format!("{}/// {}\n", indent_str, line));
+                        write_ir!(output, "{}/// {}", indent_str, line);
                     }
                 }
-                output.push_str(&format!("{}enum {} {{\n", indent_str, enum_def.name));
+                write_ir!(output, "{}enum {} {{", indent_str, enum_def.name);
                 for case in &enum_def.cases {
                     if let Some(docs) = &case.docs {
-                        output.push_str(&format!("{}  /// {}\n", indent_str, docs));
+                        write_ir!(output, "{}  /// {}", indent_str, docs);
                     }
-                    output.push_str(&format!("{}  {},\n", indent_str, case.name));
+                    write_ir!(output, "{}  {},", indent_str, case.name);
                 }
-                output.push_str(&format!("{}}}\n", indent_str));
+                write_ir!(output, "{}}}", indent_str);
                 output
             }
             WitTypeDefinition::Flags(flags) => {
                 let mut output = String::new();
                 if let Some(docs) = &flags.docs {
                     for line in docs.lines() {
-                        output.push_str(&format!("{}/// {}\n", indent_str, line));
+                        write_ir!(output, "{}/// {}", indent_str, line);
                     }
                 }
-                output.push_str(&format!("{}flags {} {{\n", indent_str, flags.name));
+                write_ir!(output, "{}flags {} {{", indent_str, flags.name);
                 for flag in &flags.flags {
-                    output.push_str(&format!("{}  {},\n", indent_str, flag));
+                    write_ir!(output, "{}  {},", indent_str, flag);
                 }
-                output.push_str(&format!("{}}}\n", indent_str));
+                write_ir!(output, "{}}}", indent_str);
                 output
             }
             WitTypeDefinition::Type { name, ty } => {
@@ -202,18 +202,18 @@ impl WitPackage {
 
         if let Some(docs) = &function.docs {
             for line in docs.lines() {
-                output.push_str(&format!("{}/// {}\n", indent_str, line));
+                write_ir!(output, "{}/// {}", indent_str, line);
             }
         }
 
-        output.push_str(&format!("{}{}: func(", indent_str, function.name));
+        write_ir_no_newline!(output, "{}{}: func(", indent_str, function.name);
 
         // Parameters
         for (i, param) in function.params.iter().enumerate() {
             if i > 0 {
                 output.push_str(", ");
             }
-            output.push_str(&format!("{}: {}", param.name, param.ty));
+            write_ir_no_newline!(output, "{}: {}", param.name, param.ty);
         }
 
         output.push(')');
@@ -222,7 +222,7 @@ impl WitPackage {
         if let Some(results) = &function.results {
             match results {
                 WitResult::Anon(ty) => {
-                    output.push_str(&format!(" -> {}", ty));
+                    write_ir_no_newline!(output, " -> {}", ty);
                 }
                 WitResult::Named(params) => {
                     output.push_str(" -> (");
@@ -230,7 +230,7 @@ impl WitPackage {
                         if i > 0 {
                             output.push_str(", ");
                         }
-                        output.push_str(&format!("{}: {}", param.name, param.ty));
+                        write_ir_no_newline!(output, "{}: {}", param.name, param.ty);
                     }
                     output.push(')');
                 }
@@ -247,26 +247,26 @@ impl WitPackage {
 
         if let Some(docs) = &resource.docs {
             for line in docs.lines() {
-                output.push_str(&format!("{}/// {}\n", indent_str, line));
+                write_ir!(output, "{}/// {}", indent_str, line);
             }
         }
 
-        output.push_str(&format!("{}resource {} {{\n", indent_str, resource.name));
+        write_ir!(output, "{}resource {} {{", indent_str, resource.name);
 
         for method in &resource.methods {
             if let Some(docs) = &method.docs {
-                output.push_str(&format!("{}  /// {}\n", indent_str, docs));
+                write_ir!(output, "{}  /// {}", indent_str, docs);
             }
 
             match method.kind {
                 WitMethodKind::Constructor => {
-                    output.push_str(&format!("{}  constructor(", indent_str));
+                    write_ir_no_newline!(output, "{}  constructor(", indent_str);
                 }
                 WitMethodKind::Static => {
-                    output.push_str(&format!("{}  {}: static func(", indent_str, method.name));
+                    write_ir_no_newline!(output, "{}  {}: static func(", indent_str, method.name);
                 }
                 WitMethodKind::Method => {
-                    output.push_str(&format!("{}  {}: func(", indent_str, method.name));
+                    write_ir_no_newline!(output, "{}  {}: func(", indent_str, method.name);
                 }
             }
 
@@ -275,7 +275,7 @@ impl WitPackage {
                 if i > 0 {
                     output.push_str(", ");
                 }
-                output.push_str(&format!("{}: {}", param.name, param.ty));
+                write_ir_no_newline!(output, "{}: {}", param.name, param.ty);
             }
 
             output.push(')');
@@ -284,7 +284,7 @@ impl WitPackage {
             if let Some(results) = &method.results {
                 match results {
                     WitResult::Anon(ty) => {
-                        output.push_str(&format!(" -> {}", ty));
+                        write_ir_no_newline!(output, " -> {}", ty);
                     }
                     WitResult::Named(params) => {
                         output.push_str(" -> (");
@@ -292,7 +292,7 @@ impl WitPackage {
                             if i > 0 {
                                 output.push_str(", ");
                             }
-                            output.push_str(&format!("{}: {}", param.name, param.ty));
+                            write_ir_no_newline!(output, "{}: {}", param.name, param.ty);
                         }
                         output.push(')');
                     }
@@ -302,7 +302,7 @@ impl WitPackage {
             output.push_str(";\n");
         }
 
-        output.push_str(&format!("{}}}\n", indent_str));
+        write_ir!(output, "{}}}", indent_str);
         output
     }
 
@@ -311,23 +311,23 @@ impl WitPackage {
 
         if let Some(docs) = &world.docs {
             for line in docs.lines() {
-                output.push_str(&format!("/// {}\n", line));
+                write_ir!(output, "/// {}", line);
             }
         }
 
-        output.push_str(&format!("world {} {{\n", world.name));
+        write_ir!(output, "world {} {{", world.name);
 
         // Imports
         for import in &world.imports {
             match &import.item {
                 WitImportItem::Interface(name) => {
-                    output.push_str(&format!("  import {};\n", name));
+                    write_ir!(output, "  import {};", name);
                 }
                 WitImportItem::Function(func) => {
-                    output.push_str(&format!(
-                        "  import {};\n",
+                    write_ir!(output, 
+                        "  import {};",
                         self.format_function(func, 1).trim()
-                    ));
+                    );
                 }
             }
         }
@@ -336,13 +336,13 @@ impl WitPackage {
         for export in &world.exports {
             match &export.item {
                 WitExportItem::Interface(name) => {
-                    output.push_str(&format!("  export {};\n", name));
+                    write_ir!(output, "  export {};", name);
                 }
                 WitExportItem::Function(func) => {
-                    output.push_str(&format!(
-                        "  export {};\n",
+                    write_ir!(output, 
+                        "  export {};",
                         self.format_function(func, 1).trim()
-                    ));
+                    );
                 }
             }
         }

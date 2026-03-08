@@ -53,6 +53,7 @@ jobs:
         run: |
           echo "::group::Running benchmarks on PR branch"
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline pr
           cargo bench -p vais-benches --bench compiler_benchmarks -- --save-baseline pr
           echo "::endgroup::"
 
@@ -75,6 +76,7 @@ jobs:
           # Clean target to avoid mixing artifacts
           cargo clean
           cargo bench -p vais-benches --bench compile_bench -- --save-baseline base
+          cargo bench -p vais-benches --bench largescale_bench -- --save-baseline base
           cargo bench -p vais-benches --bench compiler_benchmarks -- --save-baseline base
           echo "::endgroup::"
 

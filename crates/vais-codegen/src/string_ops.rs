@@ -16,10 +16,10 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> String {
         let ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {{ i8*, i64 }} {}, 0",
             ptr, fat_ptr
-        ));
+        );
         ptr
     }
 
@@ -31,10 +31,10 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> String {
         let len = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {{ i8*, i64 }} {}, 1",
             len, fat_ptr
-        ));
+        );
         len
     }
 
@@ -47,15 +47,15 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> String {
         let t0 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n",
+        write_ir!(ir, 
+            "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
             t0, ptr
-        ));
+        );
         let t1 = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
+        write_ir!(ir, 
+            "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
             t1, t0, len
-        ));
+        );
         t1
     }
 
@@ -78,78 +78,78 @@ impl CodeGenerator {
             BinOp::Add => {
                 // String concatenation: call __vais_str_concat(left, right) -> { i8*, i64 }
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})",
                     result, left_ptr, right_ptr
-                ));
+                );
                 // Extract the raw pointer from the fat pointer for auto-free tracking
                 let raw_ptr_for_free = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
                     raw_ptr_for_free, result
-                ));
+                );
                 self.track_alloc(raw_ptr_for_free);
                 Ok((result, ir))
             }
             BinOp::Eq => {
                 // String equality: strcmp(left, right) == 0
                 let cmp_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
                     cmp_result, left_ptr, right_ptr
-                ));
+                );
                 let eq_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp eq i32 {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp eq i32 {}, 0",
                     eq_result, cmp_result
-                ));
+                );
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, eq_result));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, eq_result);
                 Ok((result, ir))
             }
             BinOp::Neq => {
                 let cmp_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
                     cmp_result, left_ptr, right_ptr
-                ));
+                );
                 let neq_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i32 {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp ne i32 {}, 0",
                     neq_result, cmp_result
-                ));
+                );
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, neq_result));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, neq_result);
                 Ok((result, ir))
             }
             BinOp::Lt => {
                 let cmp_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
                     cmp_result, left_ptr, right_ptr
-                ));
+                );
                 let lt_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp slt i32 {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp slt i32 {}, 0",
                     lt_result, cmp_result
-                ));
+                );
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, lt_result));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, lt_result);
                 Ok((result, ir))
             }
             BinOp::Gt => {
                 let cmp_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i32 @strcmp(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i32 @strcmp(i8* {}, i8* {})",
                     cmp_result, left_ptr, right_ptr
-                ));
+                );
                 let gt_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp sgt i32 {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = icmp sgt i32 {}, 0",
                     gt_result, cmp_result
-                ));
+                );
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, gt_result));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, gt_result);
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
@@ -192,14 +192,14 @@ impl CodeGenerator {
                 ir.push_str(&idx_ir);
 
                 let ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr i8, i8* {}, i64 {}\n",
+                write_ir!(ir, 
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
                     ptr, recv_ptr, idx_val
-                ));
+                );
                 let byte = self.next_temp(counter);
-                ir.push_str(&format!("  {} = load i8, i8* {}\n", byte, ptr));
+                write_ir!(ir, "  {} = load i8, i8* {}", byte, ptr);
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i8 {} to i64\n", result, byte));
+                write_ir!(ir, "  {} = zext i8 {} to i64", result, byte);
                 Ok((result, ir))
             }
             "contains" => {
@@ -214,17 +214,17 @@ impl CodeGenerator {
                 let substr_ptr = self.extract_str_ptr(&substr_val, counter, &mut ir);
 
                 let strstr_result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i8* @strstr(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i8* @strstr(i8* {}, i8* {})",
                     strstr_result, recv_ptr, substr_ptr
-                ));
+                );
                 let is_null = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i8* {}, null\n",
+                write_ir!(ir, 
+                    "  {} = icmp ne i8* {}, null",
                     is_null, strstr_result
-                ));
+                );
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, is_null));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, is_null);
                 Ok((result, ir))
             }
             "indexOf" => {
@@ -239,10 +239,10 @@ impl CodeGenerator {
                 let substr_ptr = self.extract_str_ptr(&substr_val, counter, &mut ir);
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i64 @__vais_str_indexOf(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i64 @__vais_str_indexOf(i8* {}, i8* {})",
                     result, recv_ptr, substr_ptr
-                ));
+                );
                 Ok((result, ir))
             }
             "substring" => {
@@ -258,16 +258,16 @@ impl CodeGenerator {
                 ir.push_str(&end_ir);
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call {{ i8*, i64 }} @__vais_str_substring(i8* {}, i64 {}, i64 {})\n",
+                write_ir!(ir, 
+                    "  {} = call {{ i8*, i64 }} @__vais_str_substring(i8* {}, i64 {}, i64 {})",
                     result, recv_ptr, start_val, end_val
-                ));
+                );
                 // Extract the raw pointer from the fat pointer for auto-free tracking
                 let raw_ptr_for_free = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+                write_ir!(ir, 
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
                     raw_ptr_for_free, result
-                ));
+                );
                 self.track_alloc(raw_ptr_for_free);
                 Ok((result, ir))
             }
@@ -283,10 +283,10 @@ impl CodeGenerator {
                 let prefix_ptr = self.extract_str_ptr(&prefix_val, counter, &mut ir);
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i64 @__vais_str_startsWith(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i64 @__vais_str_startsWith(i8* {}, i8* {})",
                     result, recv_ptr, prefix_ptr
-                ));
+                );
                 Ok((result, ir))
             }
             "endsWith" => {
@@ -301,19 +301,19 @@ impl CodeGenerator {
                 let suffix_ptr = self.extract_str_ptr(&suffix_val, counter, &mut ir);
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call i64 @__vais_str_endsWith(i8* {}, i8* {})\n",
+                write_ir!(ir, 
+                    "  {} = call i64 @__vais_str_endsWith(i8* {}, i8* {})",
                     result, recv_ptr, suffix_ptr
-                ));
+                );
                 Ok((result, ir))
             }
             "isEmpty" => {
                 // Use length from fat pointer: len == 0
                 let len = self.extract_str_len(recv_val, counter, &mut ir);
                 let is_zero = self.next_temp(counter);
-                ir.push_str(&format!("  {} = icmp eq i64 {}, 0\n", is_zero, len));
+                write_ir!(ir, "  {} = icmp eq i64 {}, 0", is_zero, len);
                 let result = self.next_temp(counter);
-                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, is_zero));
+                write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(

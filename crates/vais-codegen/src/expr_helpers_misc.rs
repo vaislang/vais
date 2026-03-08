@@ -123,39 +123,39 @@ impl CodeGenerator {
         let poll_ready = self.next_label("await_ready");
         let poll_pending = self.next_label("await_pending");
 
-        ir.push_str(&format!("  br label %{}\n\n", poll_start));
-        ir.push_str(&format!("{}:\n", poll_start));
+        write_ir!(ir, "  br label %{}\n", poll_start);
+        write_ir!(ir, "{}:", poll_start);
 
         let poll_result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call {} @{}(i64 {})\n",
+        write_ir!(ir, 
+            "  {} = call {} @{}(i64 {})",
             poll_result, poll_ret_ty, poll_func, future_ptr
-        ));
+        );
 
         let status = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 0\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {} {}, 0",
             status, poll_ret_ty, poll_result
-        ));
+        );
 
         let is_ready = self.next_temp(counter);
-        ir.push_str(&format!("  {} = icmp eq i64 {}, 1\n", is_ready, status));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n\n",
+        write_ir!(ir, "  {} = icmp eq i64 {}, 1", is_ready, status);
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}\n",
             is_ready, poll_ready, poll_pending
-        ));
+        );
 
-        ir.push_str(&format!("{}:\n", poll_pending));
+        write_ir!(ir, "{}:", poll_pending);
         // Yield CPU cooperatively instead of busy-waiting
         ir.push_str("  call i32 @sched_yield()\n");
-        ir.push_str(&format!("  br label %{}\n\n", poll_start));
+        write_ir!(ir, "  br label %{}\n", poll_start);
 
-        ir.push_str(&format!("{}:\n", poll_ready));
+        write_ir!(ir, "{}:", poll_ready);
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 1\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {} {}, 1",
             result, poll_ret_ty, poll_result
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -191,16 +191,16 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&ty);
                         let spill_name = format!("__refcap_{}", cap_name);
                         let spill_ptr = format!("%{}", spill_name);
-                        capture_ir.push_str(&format!("  {} = alloca {}\n", spill_ptr, llvm_ty));
+                        write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
                         let val = if local.is_param() {
                             format!("%{}", local.llvm_name)
                         } else {
                             local.llvm_name.clone()
                         };
-                        capture_ir.push_str(&format!(
-                            "  store {} {}, {}* {}\n",
+                        write_ir!(capture_ir, 
+                            "  store {} {}, {}* {}",
                             llvm_ty, val, llvm_ty, spill_ptr
-                        ));
+                        );
                         captured_vars.push((cap_name.clone(), ty, spill_ptr));
                     } else {
                         captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
@@ -214,10 +214,10 @@ impl CodeGenerator {
                     } else {
                         let tmp = self.next_temp(counter);
                         let llvm_ty = self.type_to_llvm(&ty);
-                        capture_ir.push_str(&format!(
-                            "  {} = load {}, {}* %{}\n",
+                        write_ir!(capture_ir, 
+                            "  {} = load {}, {}* %{}",
                             tmp, llvm_ty, llvm_ty, local.llvm_name
-                        ));
+                        );
                         captured_vars.push((cap_name.clone(), ty, tmp));
                     }
                 }
@@ -285,7 +285,7 @@ impl CodeGenerator {
             param_strs.join(", ")
         );
         lambda_ir.push_str(&body_ir);
-        lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
+        write_ir!(lambda_ir, "  ret i64 {}\n}}", body_val);
 
         self.lambdas.generated_ir.push(lambda_ir);
 
@@ -295,12 +295,12 @@ impl CodeGenerator {
         // Emit ptrtoint as a proper instruction (not a constant expression)
         // so the result is a clean SSA temp that can be used anywhere
         let fn_ptr_tmp = self.next_temp(counter);
-        capture_ir.push_str(&format!(
-            "  {} = ptrtoint i64 ({})* @{} to i64\n",
+        write_ir!(capture_ir, 
+            "  {} = ptrtoint i64 ({})* @{} to i64",
             fn_ptr_tmp,
             param_types.join(", "),
             lambda_name
-        ));
+        );
 
         if captured_vars.is_empty() {
             self.lambdas.last_lambda_info = None;
@@ -342,10 +342,10 @@ impl CodeGenerator {
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 0\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {} {}, 0",
             tag, llvm_type, inner_val
-        ));
+        );
 
         // Check if Err (tag != 0)
         let is_err = self.next_temp(counter);
@@ -353,37 +353,37 @@ impl CodeGenerator {
         let ok_label = self.next_label("try_ok");
         let merge_label = self.next_label("try_merge");
 
-        ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n\n",
+        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}\n",
             is_err, err_label, ok_label
-        ));
+        );
 
         // Err branch: early return
-        ir.push_str(&format!("{}:\n", err_label));
-        ir.push_str(&format!(
-            "  ret {} {}  ; early return on Err\n\n",
+        write_ir!(ir, "{}:", err_label);
+        write_ir!(ir, 
+            "  ret {} {}  ; early return on Err\n",
             llvm_type, inner_val
-        ));
+        );
 
         // Ok branch: extract payload value
-        ir.push_str(&format!("{}:\n", ok_label));
+        write_ir!(ir, "{}:", ok_label);
         let value = self.next_temp(counter);
         if extract_payload {
-            ir.push_str(&format!(
-                "  {} = extractvalue {} {}, 1, 0\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {} {}, 1, 0",
                 value, llvm_type, inner_val
-            ));
+            );
         } else {
-            ir.push_str(&format!(
-                "  {} = extractvalue {} {}, 1\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {} {}, 1",
                 value, llvm_type, inner_val
-            ));
+            );
         }
-        ir.push_str(&format!("  br label %{}\n\n", merge_label));
+        write_ir!(ir, "  br label %{}\n", merge_label);
 
         // Merge block
-        ir.push_str(&format!("{}:\n", merge_label));
+        write_ir!(ir, "{}:", merge_label);
 
         Ok((value, ir))
     }
@@ -412,41 +412,41 @@ impl CodeGenerator {
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = extractvalue {} {}, 0\n",
+        write_ir!(ir, 
+            "  {} = extractvalue {} {}, 0",
             tag, llvm_type, inner_val
-        ));
+        );
 
         // Check if Err/None (tag != 0)
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("unwrap_err");
         let ok_label = self.next_label("unwrap_ok");
 
-        ir.push_str(&format!("  {} = icmp ne {} {}, 0\n", is_err, tag_type, tag));
-        ir.push_str(&format!(
-            "  br i1 {}, label %{}, label %{}\n\n",
+        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        write_ir!(ir, 
+            "  br i1 {}, label %{}, label %{}\n",
             is_err, err_label, ok_label
-        ));
+        );
 
         // Err branch: panic/abort
-        ir.push_str(&format!("{}:\n", err_label));
+        write_ir!(ir, "{}:", err_label);
         ir.push_str("  call i32 @puts(ptr getelementptr ([22 x i8], ptr @.unwrap_panic_msg, i64 0, i64 0))\n");
         ir.push_str("  call void @abort()\n");
         ir.push_str("  unreachable\n\n");
 
         // Ok branch: extract value
-        ir.push_str(&format!("{}:\n", ok_label));
+        write_ir!(ir, "{}:", ok_label);
         let value = self.next_temp(counter);
         if extract_payload {
-            ir.push_str(&format!(
-                "  {} = extractvalue {} {}, 1, 0\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {} {}, 1, 0",
                 value, llvm_type, inner_val
-            ));
+            );
         } else {
-            ir.push_str(&format!(
-                "  {} = extractvalue {} {}, 1\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {} {}, 1",
                 value, llvm_type, inner_val
-            ));
+            );
         }
 
         self.needs_unwrap_panic = true;
@@ -527,10 +527,10 @@ impl CodeGenerator {
 
         for (i, val) in arg_vals.iter().enumerate() {
             let next_vec = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = insertelement {} {}, {} {}, i32 {}\n",
+            write_ir!(ir, 
+                "  {} = insertelement {} {}, {} {}, i32 {}",
                 next_vec, vec_ty, current_vec, elem_ty, val, i
-            ));
+            );
             current_vec = next_vec;
         }
 
@@ -585,10 +585,10 @@ impl CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = {} {} {}, {}\n",
+        write_ir!(ir, 
+            "  {} = {} {} {}, {}",
             result, llvm_op, vec_ty, arg_vals[0], arg_vals[1]
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -632,15 +632,15 @@ impl CodeGenerator {
         // For float/double, we need an initial value for ordered reduction
         if elem_ty == "float" || elem_ty == "double" {
             let zero = "0.0";
-            ir.push_str(&format!(
-                "  {} = call {} {}({} {}, {} {})\n",
+            write_ir!(ir, 
+                "  {} = call {} {}({} {}, {} {})",
                 result, elem_ty, intrinsic, elem_ty, zero, vec_ty, arg_vals[0]
-            ));
+            );
         } else {
-            ir.push_str(&format!(
-                "  {} = call {} {}({} {})\n",
+            write_ir!(ir, 
+                "  {} = call {} {}({} {})",
                 result, elem_ty, intrinsic, vec_ty, arg_vals[0]
-            ));
+            );
         }
 
         Ok((result, ir))

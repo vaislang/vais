@@ -116,11 +116,11 @@ impl CodeGenerator {
                 let src_llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
-                ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
-                ir.push_str(&format!(
-                    "  store {} %{}, {}* {}\n",
+                write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                write_ir!(ir, 
+                    "  store {} %{}, {}* {}",
                     llvm_ty, src_llvm_name, llvm_ty, param_ptr
-                ));
+                );
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
                 self.fn_ctx.locals.insert(
@@ -180,10 +180,10 @@ impl CodeGenerator {
                     };
                     let converted = format!("%main_fptosi.{}", counter);
                     counter += 1;
-                    ir.push_str(&format!(
-                        "  {} = fptosi {} {} to i64\n",
+                    write_ir!(ir, 
+                        "  {} = fptosi {} {} to i64",
                         converted, float_ty, value
-                    ));
+                    );
                     converted
                 } else {
                     value
@@ -191,17 +191,17 @@ impl CodeGenerator {
 
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                    write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}{}\n",
+                    write_ir!(ir, 
+                        "  {} = load {}, {}* {}{}",
                         loaded, ret_llvm, ret_llvm, value, ret_dbg
-                    ));
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                    );
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                 }
             }
             FunctionBody::Block(stmts) => {
@@ -232,27 +232,27 @@ impl CodeGenerator {
                     let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
                     let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                     if ret_type == ResolvedType::Unit {
-                        ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                        write_ir!(ir, "  ret void{}", ret_dbg);
                     } else if f.name.node == "main"
                         && ret_type == ResolvedType::I64
                         && f.ret_type.is_none()
                         && value == "void"
                     {
                         // main() with implicit i64 return and Unit body: auto-return 0
-                        ir.push_str(&format!("  ret i64 0{}\n", ret_dbg));
+                        write_ir!(ir, "  ret i64 0{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                         if self.is_block_result_value(stmts) {
                             // Value (e.g., from if-else phi node) - return directly
-                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else {
                             // Pointer (e.g., from struct literal) - load then return
                             let loaded = format!("%ret.{}", counter);
-                            ir.push_str(&format!(
-                                "  {} = load {}, {}* {}{}\n",
+                            write_ir!(ir, 
+                                "  {} = load {}, {}* {}{}",
                                 loaded, ret_llvm, ret_llvm, value, ret_dbg
-                            ));
-                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                         }
                     } else if matches!(
                         ret_type,
@@ -275,12 +275,12 @@ impl CodeGenerator {
                             inner_ty,
                             value.clone(),
                         ));
-                        ir.push_str(&format!(
-                            "  ret {} @{}{}\n",
+                        write_ir!(ir, 
+                            "  ret {} @{}{}",
                             ret_llvm, const_name, ret_dbg
-                        ));
+                        );
                     } else {
-                        ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                        write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                     }
                 }
             }
@@ -398,11 +398,11 @@ impl CodeGenerator {
                 let src_llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
-                ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
-                ir.push_str(&format!(
-                    "  store {} %{}, {}* {}\n",
+                write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                write_ir!(ir, 
+                    "  store {} %{}, {}* {}",
                     llvm_ty, src_llvm_name, llvm_ty, param_ptr
-                ));
+                );
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
                 self.fn_ctx.locals.insert(
@@ -425,15 +425,15 @@ impl CodeGenerator {
 
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                    write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}{}\n",
+                    write_ir!(ir, 
+                        "  {} = load {}, {}* {}{}",
                         loaded, ret_llvm, ret_llvm, value, ret_dbg
-                    ));
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                    );
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else if matches!(
                     ret_type,
                     ResolvedType::Ref(_) | ResolvedType::RefMut(_)
@@ -454,12 +454,12 @@ impl CodeGenerator {
                         inner_ty,
                         value.clone(),
                     ));
-                    ir.push_str(&format!(
-                        "  ret {} @{}{}\n",
+                    write_ir!(ir, 
+                        "  ret {} @{}{}",
                         ret_llvm, const_name, ret_dbg
-                    ));
+                    );
                 } else {
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                 }
             }
             FunctionBody::Block(stmts) => {
@@ -479,20 +479,20 @@ impl CodeGenerator {
                     let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
                     let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                     if ret_type == ResolvedType::Unit {
-                        ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                        write_ir!(ir, "  ret void{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                         if self.is_block_result_value(stmts) {
                             // Value (e.g., from if-else phi node) - return directly
-                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else {
                             // Pointer (e.g., from struct literal) - load then return
                             let loaded = format!("%ret.{}", counter);
-                            ir.push_str(&format!(
-                                "  {} = load {}, {}* {}{}\n",
+                            write_ir!(ir, 
+                                "  {} = load {}, {}* {}{}",
                                 loaded, ret_llvm, ret_llvm, value, ret_dbg
-                            ));
-                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                         }
                     } else if matches!(
                         ret_type,
@@ -514,12 +514,12 @@ impl CodeGenerator {
                             inner_ty,
                             value.clone(),
                         ));
-                        ir.push_str(&format!(
-                            "  ret {} @{}{}\n",
+                        write_ir!(ir, 
+                            "  ret {} @{}{}",
                             ret_llvm, const_name, ret_dbg
-                        ));
+                        );
                     } else {
-                        ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                        write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                     }
                 }
             }

@@ -443,7 +443,56 @@ Measures compiler performance at scale with optimized hot-paths:
 - Full pipeline 10K: -6.2% improvement (type inference early-exit + substitution optimization)
 - Optimizations: 16 Vec::with_capacity sites, apply_substitutions primitive early-exit
 
+### 7. Phase 129 Optimizations (2026-03-08)
+
+write_ir! macro conversion + lexer pre-allocation:
+
+> **Last Updated:** 2026-03-08
+> **Git Commit:** Phase 129
+
+#### Compile-Time Benchmarks (Current)
+
+| Fixture | Lexer | Parser | TypeChecker | Codegen | Full |
+|---------|-------|--------|-------------|---------|------|
+| fibonacci | 1.50 us | 9.97 us | 230.6 us | 87.5 us | 338.1 us |
+| sort | 2.73 us | 18.94 us | 371.1 us | 102.8 us | 497.1 us |
+| struct_heavy | 3.02 us | 17.06 us | 52.0 us | 102.6 us | 179.8 us |
+| complex | 5.91 us | 36.51 us | 674.0 us | 123.6 us | 874.9 us |
+
+#### Large-Scale Benchmarks (Current)
+
+| Input Size | Lexer | Parser | TypeChecker | Codegen | Full Pipeline |
+|------------|-------|--------|-------------|---------|---------------|
+| 1K lines | 64 us | 392 us | 219 us | 531 us | 1.26 ms |
+| 5K lines | 340 us | 2.06 ms | 712 us | 2.49 ms | 5.75 ms |
+| 10K lines | 689 us | 4.21 ms | 1.33 ms | 4.98 ms | 11.43 ms |
+| 25K lines | 2.60 ms | 11.09 ms | 3.16 ms | 12.45 ms | 29.26 ms |
+| 50K lines | 3.39 ms | 23.73 ms | 6.58 ms | 26.79 ms | 58.85 ms |
+
+**50K lines: 58.85ms (850K lines/sec)**
+
+#### Phase 129 vs Phase 128 Comparison
+
+| Phase | Before (50K) | After (50K) | Change |
+|-------|-------------|-------------|--------|
+| Lexer | 4.84 ms | 3.39 ms | **-29.8%** |
+| Parser | 22.73 ms | 23.73 ms | +4.4% (noise) |
+| TypeChecker | 6.48 ms | 6.58 ms | +1.5% (noise) |
+| Codegen | 27.42 ms | 26.79 ms | **-2.3%** |
+| **Full Pipeline** | **62.22 ms** | **58.85 ms** | **-5.4%** |
+
+**Optimizations applied:**
+- Lexer: `Vec::with_capacity(source.len() / 4 + 16)` pre-allocation (super-linear scaling fix: 73.3x → 53.0x)
+- Codegen: 619 `push_str(&format!(...))` → `write_ir!()` macro conversions across 23 files (eliminates temp String allocations)
+- Codegen complex fixture: -7.2% improvement
+
 ## Changelog
+
+### 2026-03-08
+- Phase 129: write_ir! conversion (619 sites) + lexer Vec pre-allocation
+- Lexer 50K: -29.8% (4.84ms → 3.39ms), scaling 73.3x → 53.0x (closer to linear)
+- Codegen complex: -7.2%, Codegen 50K: -2.3%
+- Full pipeline 50K: -5.4% (62.2ms → 58.8ms, 804K → 850K lines/sec)
 
 ### 2026-02-18
 - Phase 24: Hot-path optimization — Vec::with_capacity (16 sites), apply_substitutions primitive early-exit

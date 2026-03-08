@@ -43,27 +43,27 @@ impl CodeGenerator {
 
         // 1. Generate state struct type
         // Structure: { i64 state, i64 result, param1, param2, ... }
-        ir.push_str(&format!("; Async state struct for {}\n", func_name));
-        ir.push_str(&format!(
+        write_ir!(ir, "; Async state struct for {}", func_name);
+        write_ir_no_newline!(ir, 
             "%{} = type {{ i64, {}",
             state_struct_name, ret_llvm
-        ));
+        );
         for (_, ty) in &params {
-            ir.push_str(&format!(", {}", self.type_to_llvm(ty)));
+            write_ir_no_newline!(ir, ", {}", self.type_to_llvm(ty));
         }
         ir.push_str(" }\n\n");
 
         // 2. Generate create function: allocates and initializes state
-        ir.push_str(&format!("; Create function for async {}\n", func_name));
+        write_ir!(ir, "; Create function for async {}", func_name);
         let create_params: Vec<_> = params
             .iter()
             .map(|(name, ty)| format!("{} %{}", self.type_to_llvm(ty), name))
             .collect();
-        ir.push_str(&format!(
-            "define i64 @{}({}) {{\n",
+        write_ir!(ir, 
+            "define i64 @{}({}) {{",
             func_name,
             create_params.join(", ")
-        ));
+        );
         ir.push_str("entry:\n");
 
         // Calculate struct size based on actual LLVM type sizes
@@ -81,34 +81,34 @@ impl CodeGenerator {
         let struct_size = 8 /* state: i64 */
             + llvm_size(&ret_llvm)
             + params.iter().map(|(_, ty)| llvm_size(&self.type_to_llvm(ty))).sum::<usize>();
-        ir.push_str(&format!(
-            "  %state_ptr = call i64 @malloc(i64 {})\n",
+        write_ir!(ir, 
+            "  %state_ptr = call i64 @malloc(i64 {})",
             struct_size
-        ));
-        ir.push_str(&format!(
-            "  %state = inttoptr i64 %state_ptr to %{}*\n",
+        );
+        write_ir!(ir, 
+            "  %state = inttoptr i64 %state_ptr to %{}*",
             state_struct_name
-        ));
+        );
 
         // Initialize state to 0 (start state)
-        ir.push_str(&format!(
-            "  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0\n",
+        write_ir!(ir, 
+            "  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0",
             state_struct_name, state_struct_name
-        ));
+        );
         ir.push_str("  store i64 0, i64* %state_field\n");
 
         // Store parameters in state struct
         for (i, (name, ty)) in params.iter().enumerate() {
             let field_idx = i + 2; // Skip state and result fields
             let param_llvm_ty = self.type_to_llvm(ty);
-            ir.push_str(&format!(
-                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
+            write_ir!(ir, 
+                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}",
                 name, state_struct_name, state_struct_name, field_idx
-            ));
-            ir.push_str(&format!(
-                "  store {} %{}, {}* %param_{}_ptr\n",
+            );
+            write_ir!(ir, 
+                "  store {} %{}, {}* %param_{}_ptr",
                 param_llvm_ty, name, param_llvm_ty, name
-            ));
+            );
         }
 
         ir.push_str("  ret i64 %state_ptr\n");
@@ -120,36 +120,36 @@ impl CodeGenerator {
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
 
-        ir.push_str(&format!("; Poll function for async {}\n", func_name));
-        ir.push_str(&format!(
-            "define {{ i64, {} }} @{}__poll(i64 %state_ptr) {{\n",
+        write_ir!(ir, "; Poll function for async {}", func_name);
+        write_ir!(ir, 
+            "define {{ i64, {} }} @{}__poll(i64 %state_ptr) {{",
             ret_llvm, func_name
-        ));
+        );
         ir.push_str("entry:\n");
-        ir.push_str(&format!(
-            "  %state = inttoptr i64 %state_ptr to %{}*\n",
+        write_ir!(ir, 
+            "  %state = inttoptr i64 %state_ptr to %{}*",
             state_struct_name
-        ));
+        );
 
         // Load current state
-        ir.push_str(&format!(
-            "  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0\n",
+        write_ir!(ir, 
+            "  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0",
             state_struct_name, state_struct_name
-        ));
+        );
         ir.push_str("  %current_state = load i64, i64* %state_field\n");
 
         // Load parameters from state into locals
         for (i, (name, ty)) in params.iter().enumerate() {
             let field_idx = i + 2;
             let param_llvm_ty = self.type_to_llvm(ty);
-            ir.push_str(&format!(
-                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
+            write_ir!(ir, 
+                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}",
                 name, state_struct_name, state_struct_name, field_idx
-            ));
-            ir.push_str(&format!(
-                "  %{} = load {}, {}* %param_{}_ptr\n",
+            );
+            write_ir!(ir, 
+                "  %{} = load {}, {}* %param_{}_ptr",
                 name, param_llvm_ty, param_llvm_ty, name
-            ));
+            );
 
             self.fn_ctx
                 .locals
@@ -179,53 +179,53 @@ impl CodeGenerator {
         ir.push_str(&body_result.1);
 
         // Store result and return Ready
-        ir.push_str(&format!(
-            "  %result_ptr = getelementptr %{}, %{}* %state, i32 0, i32 1\n",
+        write_ir!(ir, 
+            "  %result_ptr = getelementptr %{}, %{}* %state, i32 0, i32 1",
             state_struct_name, state_struct_name
-        ));
+        );
         // The codegen promotes bool comparisons to i64 (zext i1 to i64), but the
         // result field in the state struct uses the actual return type. Truncate
         // i64 back to i1 when the return type is bool.
         let store_val = if ret_llvm == "i1" {
             let trunc = format!("%body_trunc.{}", counter);
-            ir.push_str(&format!(
-                "  {} = trunc i64 {} to i1\n",
+            write_ir!(ir, 
+                "  {} = trunc i64 {} to i1",
                 trunc, body_result.0
-            ));
+            );
             trunc
         } else {
             body_result.0.clone()
         };
-        ir.push_str(&format!(
-            "  store {} {}, {}* %result_ptr\n",
+        write_ir!(ir, 
+            "  store {} {}, {}* %result_ptr",
             ret_llvm, store_val, ret_llvm
-        ));
+        );
 
         // Set state to -1 (completed)
         ir.push_str("  store i64 -1, i64* %state_field\n");
 
         // Return {1, result} for Ready
-        ir.push_str(&format!(
-            "  %ret_val = load {}, {}* %result_ptr\n",
+        write_ir!(ir, 
+            "  %ret_val = load {}, {}* %result_ptr",
             ret_llvm, ret_llvm
-        ));
-        ir.push_str(&format!(
-            "  %ret_0 = insertvalue {{ i64, {} }} undef, i64 1, 0\n",
+        );
+        write_ir!(ir, 
+            "  %ret_0 = insertvalue {{ i64, {} }} undef, i64 1, 0",
             ret_llvm
-        ));
-        ir.push_str(&format!(
-            "  %ret_1 = insertvalue {{ i64, {} }} %ret_0, {} %ret_val, 1\n",
+        );
+        write_ir!(ir, 
+            "  %ret_1 = insertvalue {{ i64, {} }} %ret_0, {} %ret_val, 1",
             ret_llvm, ret_llvm
-        ));
-        ir.push_str(&format!("  ret {{ i64, {} }} %ret_1\n\n", ret_llvm));
+        );
+        write_ir!(ir, "  ret {{ i64, {} }} %ret_1\n", ret_llvm);
 
         // Invalid state handler
         ir.push_str("state_invalid:\n");
-        ir.push_str(&format!(
-            "  %invalid_ret = insertvalue {{ i64, {} }} undef, i64 0, 0\n",
+        write_ir!(ir, 
+            "  %invalid_ret = insertvalue {{ i64, {} }} undef, i64 0, 0",
             ret_llvm
-        ));
-        ir.push_str(&format!("  ret {{ i64, {} }} %invalid_ret\n", ret_llvm));
+        );
+        write_ir!(ir, "  ret {{ i64, {} }} %invalid_ret", ret_llvm);
 
         ir.push_str("}\n");
 

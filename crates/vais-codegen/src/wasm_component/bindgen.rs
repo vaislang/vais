@@ -20,10 +20,10 @@ impl WasmBindgenGenerator {
     pub fn generate_js_bindings(&self, funcs: &[WitFunction]) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!(
-            "// Generated JavaScript bindings for {}\n\n",
+        write_ir!(output, 
+            "// Generated JavaScript bindings for {}\n",
             self.module_name
-        ));
+        );
 
         output.push_str("export class VaisModule {\n");
         output.push_str("  constructor(instance) {\n");
@@ -39,22 +39,22 @@ impl WasmBindgenGenerator {
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            output.push_str(&format!("  {}({}) {{\n", func.name, params));
+            write_ir!(output, "  {}({}) {{", func.name, params);
 
             // Add documentation if available
             if let Some(docs) = &func.docs {
-                output.push_str(&format!("    // {}\n", docs));
+                write_ir!(output, "    // {}", docs);
             }
 
             // Generate parameter conversion
             for param in &func.params {
                 if self.needs_conversion(&param.ty) {
-                    output.push_str(&format!(
-                        "    const _{} = this._convert_{}({});\n",
+                    write_ir!(output, 
+                        "    const _{} = this._convert_{}({});",
                         param.name,
                         self.wit_type_to_js_type(&param.ty),
                         param.name
-                    ));
+                    );
                 }
             }
 
@@ -72,20 +72,20 @@ impl WasmBindgenGenerator {
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            output.push_str(&format!(
-                "    const result = this.exports.{}({});\n",
+            write_ir!(output, 
+                "    const result = this.exports.{}({});",
                 func.name, call_params
-            ));
+            );
 
             // Generate result conversion
             if let Some(results) = &func.results {
                 match results {
                     WitResult::Anon(ty) => {
                         if self.needs_conversion(ty) {
-                            output.push_str(&format!(
-                                "    return this._convert_from_{}(result);\n",
+                            write_ir!(output, 
+                                "    return this._convert_from_{}(result);",
                                 self.wit_type_to_js_type(ty)
-                            ));
+                            );
                         } else {
                             output.push_str("    return result;\n");
                         }
@@ -93,7 +93,7 @@ impl WasmBindgenGenerator {
                     WitResult::Named(params) => {
                         output.push_str("    return {\n");
                         for (i, param) in params.iter().enumerate() {
-                            output.push_str(&format!("      {}: result[{}],\n", param.name, i));
+                            write_ir!(output, "      {}: result[{}],", param.name, i);
                         }
                         output.push_str("    };\n");
                     }
@@ -128,14 +128,14 @@ impl WasmBindgenGenerator {
         output.push_str("}\n\n");
 
         // Add module loader
-        output.push_str(&format!(
-            "export async function load{}() {{\n",
+        write_ir!(output, 
+            "export async function load{}() {{",
             self.module_name
-        ));
-        output.push_str(&format!(
-            "  const response = await fetch('{}.wasm');\n",
+        );
+        write_ir!(output, 
+            "  const response = await fetch('{}.wasm');",
             self.module_name
-        ));
+        );
         output.push_str("  const bytes = await response.arrayBuffer();\n");
         output.push_str("  const module = await WebAssembly.compile(bytes);\n");
         output.push_str("  const instance = await WebAssembly.instantiate(module, {});\n");
@@ -149,10 +149,10 @@ impl WasmBindgenGenerator {
     pub fn generate_ts_declarations(&self, funcs: &[WitFunction]) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!(
-            "// Generated TypeScript declarations for {}\n\n",
+        write_ir!(output, 
+            "// Generated TypeScript declarations for {}\n",
             self.module_name
-        ));
+        );
 
         output.push_str("export class VaisModule {\n");
         output.push_str("  constructor(instance: WebAssembly.Instance);\n\n");
@@ -160,7 +160,7 @@ impl WasmBindgenGenerator {
         for func in funcs {
             // Add documentation if available
             if let Some(docs) = &func.docs {
-                output.push_str(&format!("  /**\n   * {}\n   */\n", docs));
+                write_ir!(output, "  /**\n   * {}\n   */", docs);
             }
 
             // Generate parameter types
@@ -188,19 +188,19 @@ impl WasmBindgenGenerator {
                 "void".to_string()
             };
 
-            output.push_str(&format!(
-                "  {}({}): {};\n\n",
+            write_ir!(output, 
+                "  {}({}): {};\n",
                 func.name, params, return_type
-            ));
+            );
         }
 
         output.push_str("}\n\n");
 
         // Add module loader declaration
-        output.push_str(&format!(
-            "export function load{}(): Promise<VaisModule>;\n",
+        write_ir!(output, 
+            "export function load{}(): Promise<VaisModule>;",
             self.module_name
-        ));
+        );
 
         output
     }

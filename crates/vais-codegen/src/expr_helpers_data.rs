@@ -25,28 +25,28 @@ impl CodeGenerator {
         let arr_ty = format!("[{}  x {}]", len, elem_ty);
 
         let arr_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca {}\n", arr_ptr, arr_ty));
+        write_ir!(ir, "  {} = alloca {}", arr_ptr, arr_ty);
 
         for (i, elem) in elements.iter().enumerate() {
             let (val, elem_ir) = self.generate_expr(elem, counter)?;
             ir.push_str(&elem_ir);
 
             let elem_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+            write_ir!(ir, 
+                "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
                 elem_ptr, arr_ty, arr_ty, arr_ptr, i
-            ));
-            ir.push_str(&format!(
-                "  store {} {}, {}* {}\n",
+            );
+            write_ir!(ir, 
+                "  store {} {}, {}* {}",
                 elem_ty, val, elem_ty, elem_ptr
-            ));
+            );
         }
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+        write_ir!(ir, 
+            "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
             result, arr_ty, arr_ty, arr_ptr
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -71,29 +71,29 @@ impl CodeGenerator {
         let tuple_ty = format!("{{ {} }}", elem_llvm_types.join(", "));
 
         let tuple_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca {}\n", tuple_ptr, tuple_ty));
+        write_ir!(ir, "  {} = alloca {}", tuple_ptr, tuple_ty);
 
         for (i, elem) in elements.iter().enumerate() {
             let (val, elem_ir) = self.generate_expr(elem, counter)?;
             ir.push_str(&elem_ir);
 
             let elem_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n",
+            write_ir!(ir, 
+                "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
                 elem_ptr, tuple_ty, tuple_ty, tuple_ptr, i
-            ));
+            );
             let elem_ty = &elem_llvm_types[i];
-            ir.push_str(&format!(
-                "  store {} {}, {}* {}\n",
+            write_ir!(ir, 
+                "  store {} {}, {}* {}",
                 elem_ty, val, elem_ty, elem_ptr
-            ));
+            );
         }
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
+        write_ir!(ir, 
+            "  {} = load {}, {}* {}",
             result, tuple_ty, tuple_ty, tuple_ptr
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -155,7 +155,7 @@ impl CodeGenerator {
             };
 
             let struct_ptr = self.next_temp(counter);
-            ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, final_type_name));
+            write_ir!(ir, "  {} = alloca %{}", struct_ptr, final_type_name);
 
             for (field_name, field_expr) in fields {
                 let field_idx = struct_info
@@ -177,10 +177,10 @@ impl CodeGenerator {
                 ir.push_str(&field_ir);
 
                 let field_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                write_ir!(ir, 
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
                     field_ptr, final_type_name, final_type_name, struct_ptr, field_idx
-                ));
+                );
 
                 let field_ty = &struct_info.fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
@@ -191,19 +191,19 @@ impl CodeGenerator {
                 {
                     // Field value is a pointer to struct, need to load the value
                     let loaded = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load {}, {}* {}\n",
+                    write_ir!(ir, 
+                        "  {} = load {}, {}* {}",
                         loaded, llvm_ty, llvm_ty, val
-                    ));
+                    );
                     loaded
                 } else {
                     val
                 };
 
-                ir.push_str(&format!(
-                    "  store {} {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  store {} {}, {}* {}",
                     llvm_ty, val_to_store, llvm_ty, field_ptr
-                ));
+                );
             }
 
             Ok((struct_ptr, ir))
@@ -213,7 +213,7 @@ impl CodeGenerator {
 
             // Allocate union on stack
             let union_ptr = self.next_temp(counter);
-            ir.push_str(&format!("  {} = alloca %{}\n", union_ptr, type_name));
+            write_ir!(ir, "  {} = alloca %{}", union_ptr, type_name);
 
             // Union should have exactly one field in the literal
             if fields.len() != 1 {
@@ -248,16 +248,16 @@ impl CodeGenerator {
             // Bitcast union pointer to field type pointer (all fields at offset 0)
             let field_llvm_ty = self.type_to_llvm(&field_ty);
             let field_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = bitcast %{}* {} to {}*\n",
+            write_ir!(ir, 
+                "  {} = bitcast %{}* {} to {}*",
                 field_ptr, type_name, union_ptr, field_llvm_ty
-            ));
+            );
 
             // Store the value
-            ir.push_str(&format!(
-                "  store {} {}, {}* {}\n",
+            write_ir!(ir, 
+                "  store {} {}, {}* {}",
                 field_llvm_ty, val, field_llvm_ty, field_ptr
-            ));
+            );
 
             Ok((union_ptr, ir))
         } else {
@@ -319,59 +319,59 @@ impl CodeGenerator {
             self.needs_bounds_check = true;
             // Extract length (field 1) for bounds check
             let len_val = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = extractvalue {{ i8*, i64 }} {}, 1\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {{ i8*, i64 }} {}, 1",
                 len_val, arr_val
-            ));
+            );
 
             // Bounds check: idx < len (unsigned comparison)
             let in_bounds = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = icmp ult i64 {}, {}\n",
+            write_ir!(ir, 
+                "  {} = icmp ult i64 {}, {}",
                 in_bounds, idx_val, len_val
-            ));
+            );
 
             let safe_label = self.next_label("bounds_safe");
             let oob_label = self.next_label("bounds_oob");
-            ir.push_str(&format!(
-                "  br i1 {}, label %{}, label %{}\n",
+            write_ir!(ir, 
+                "  br i1 {}, label %{}, label %{}",
                 in_bounds, safe_label, oob_label
-            ));
+            );
 
             // OOB path: abort
-            ir.push_str(&format!("{}:\n", oob_label));
+            write_ir!(ir, "{}:", oob_label);
             ir.push_str("  call void @abort()\n");
             ir.push_str("  unreachable\n");
 
             // Safe path: continue with element access
-            ir.push_str(&format!("{}:\n", safe_label));
+            write_ir!(ir, "{}:", safe_label);
 
             let data_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0\n",
+            write_ir!(ir, 
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
                 data_ptr, arr_val
-            ));
+            );
             let typed_ptr = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = bitcast i8* {} to {}*\n",
+            write_ir!(ir, 
+                "  {} = bitcast i8* {} to {}*",
                 typed_ptr, data_ptr, elem_llvm_ty
-            ));
+            );
             typed_ptr
         } else {
             arr_val.clone()
         };
 
         let elem_ptr = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = getelementptr {}, {}* {}, i64 {}\n",
+        write_ir!(ir, 
+            "  {} = getelementptr {}, {}* {}, i64 {}",
             elem_ptr, elem_llvm_ty, elem_llvm_ty, base_ptr, idx_val
-        ));
+        );
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = load {}, {}* {}\n",
+        write_ir!(ir, 
+            "  {} = load {}, {}* {}",
             result, elem_llvm_ty, elem_llvm_ty, elem_ptr
-        ));
+        );
 
         Ok((result, ir))
     }
@@ -425,10 +425,10 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(field_ty);
 
                 let field_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                write_ir!(ir, 
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
                     field_ptr, type_name, type_name, obj_val, field_idx
-                ));
+                );
 
                 // For struct-typed fields, return the pointer directly
                 // (the caller or next field access will GEP into it)
@@ -437,10 +437,10 @@ impl CodeGenerator {
                 }
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  {} = load {}, {}* {}",
                     result, llvm_ty, llvm_ty, field_ptr
-                ));
+                );
 
                 return Ok((result, ir));
             }
@@ -467,16 +467,16 @@ impl CodeGenerator {
                 // For union field access, bitcast union pointer to field type pointer
                 // All fields share offset 0
                 let field_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = bitcast %{}* {} to {}*\n",
+                write_ir!(ir, 
+                    "  {} = bitcast %{}* {} to {}*",
                     field_ptr, type_name, obj_val, llvm_ty
-                ));
+                );
 
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load {}, {}* {}\n",
+                write_ir!(ir, 
+                    "  {} = load {}, {}* {}",
                     result, llvm_ty, llvm_ty, field_ptr
-                ));
+                );
 
                 return Ok((result, ir));
             }
