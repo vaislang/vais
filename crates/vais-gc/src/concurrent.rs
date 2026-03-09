@@ -450,6 +450,10 @@ impl ConcurrentGc {
         // Conservative scanning
         for offset in (0..size).step_by(ptr_size) {
             if offset + ptr_size <= size {
+                // SAFETY: `offset + ptr_size <= size` is checked above, and `obj.data`
+                // has at least `size` bytes. The read is aligned to `usize` boundaries
+                // via `step_by(ptr_size)`. Conservative pointer scanning: the value is
+                // only used if it matches a known GC object address in the objects map.
                 unsafe {
                     let potential_ptr =
                         std::ptr::read(obj.data.as_ptr().add(offset) as *const usize);
@@ -1070,6 +1074,43 @@ mod tests {
         let gc = default_concurrent_gc();
         assert_eq!(gc.object_count(), 0);
         assert_eq!(gc.get_phase(), GcPhase::Idle);
+    }
+
+    #[test]
+    fn test_scan_object_smaller_than_ptr_size() {
+        let gc = ConcurrentGc::new();
+        // 1-byte object: too small for usize pointer, scan should not OOB
+        let ptr = gc.alloc(1, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_sync();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_scan_zero_size_object() {
+        let gc = ConcurrentGc::new();
+        let ptr = gc.alloc(0, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_sync();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_scan_exact_ptr_size_object() {
+        let ptr_size = std::mem::size_of::<usize>();
+        let gc = ConcurrentGc::new();
+        let ptr = gc.alloc(ptr_size, 1) as usize;
+        gc.add_root(ptr);
+        gc.collect_sync();
+        assert!(gc.is_alive(ptr));
+    }
+
+    #[test]
+    fn test_collect_empty_heap() {
+        let gc = ConcurrentGc::new();
+        gc.collect_sync(); // Should not panic on empty heap
+        assert_eq!(gc.object_count(), 0);
+        assert_eq!(gc.get_stats().collections, 1);
     }
 
     #[test]

@@ -121,6 +121,9 @@ pub struct Parser {
     /// Stored as String instead of &str to avoid lifetime parameters on Parser struct.
     /// The one-time allocation is acceptable as parsing happens once per file.
     source: String,
+    /// Pre-computed newline byte positions for O(log n) newline detection.
+    /// Built once from source; used by has_newline_between() to avoid repeated scanning.
+    newline_positions: Vec<usize>,
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
     cfg_values: std::collections::HashMap<String, String>,
@@ -129,6 +132,16 @@ pub struct Parser {
     /// We split it into two `>` tokens: the first closes the inner generic,
     /// and this flag records that a second `>` is still pending for the outer generic.
     pending_gt: bool,
+}
+
+/// Build a sorted vec of byte positions where '\n' occurs in source.
+/// Used for O(log n) newline-between queries via binary search.
+fn build_newline_positions(source: &str) -> Vec<usize> {
+    source
+        .bytes()
+        .enumerate()
+        .filter_map(|(i, b)| if b == b'\n' { Some(i) } else { None })
+        .collect()
 }
 
 impl Parser {
@@ -142,6 +155,7 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
             pending_gt: false,
         }
@@ -154,6 +168,7 @@ impl Parser {
     /// since it happens once per file parse (not in a hot loop), and the source is only
     /// used for newline detection in postfix operator parsing.
     pub fn new_with_source(tokens: Vec<SpannedToken>, source: &str) -> Self {
+        let newline_positions = build_newline_positions(source);
         Self {
             tokens,
             pos: 0,
@@ -162,6 +177,7 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: source.to_string(),
+            newline_positions,
             cfg_values: std::collections::HashMap::new(),
             pending_gt: false,
         }
@@ -180,6 +196,7 @@ impl Parser {
             allow_struct_literal: true,
             depth: 0,
             source: String::new(),
+            newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
             pending_gt: false,
         }
@@ -193,13 +210,16 @@ impl Parser {
     }
 
     /// Check if there is a newline between two byte positions in the source.
+    /// Uses pre-computed newline positions with binary search for O(log n) lookup.
+    #[inline]
     fn has_newline_between(&self, start: usize, end: usize) -> bool {
-        if self.source.is_empty() {
+        if self.newline_positions.is_empty() {
             return false;
         }
-        let s = start.min(self.source.len());
-        let e = end.min(self.source.len());
-        self.source[s..e].contains('\n')
+        // Binary search for the first newline position >= start
+        let idx = self.newline_positions.partition_point(|&pos| pos < start);
+        // Check if that newline is within [start, end)
+        idx < self.newline_positions.len() && self.newline_positions[idx] < end
     }
 
     /// Increment the recursion depth, returning an error if MAX_PARSE_DEPTH is exceeded.
@@ -590,6 +610,15 @@ impl Parser {
         }
     }
 
+    /// Advance the parser position without cloning the token.
+    /// Use this when the token's content is not needed (just consuming it).
+    #[inline]
+    pub(crate) fn advance_skip(&mut self) {
+        if !self.is_at_end() {
+            self.pos += 1;
+        }
+    }
+
     pub(crate) fn check(&self, expected: &Token) -> bool {
         self.peek().map(|t| &t.token == expected).unwrap_or(false)
     }
@@ -601,6 +630,25 @@ impl Parser {
                 span: self.current_span(),
                 expected: Self::token_to_friendly_name(expected),
             })
+        } else {
+            Err(ParseError::UnexpectedToken {
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: Self::token_to_friendly_name(expected),
+            })
+        }
+    }
+
+    /// Expect a token and advance without cloning it.
+    /// Use this when the token value is not needed (just ensuring syntax correctness).
+    #[inline]
+    pub(crate) fn expect_skip(&mut self, expected: &Token) -> ParseResult<()> {
+        if self.check(expected) {
+            self.advance_skip();
+            Ok(())
         } else {
             Err(ParseError::UnexpectedToken {
                 found: self
@@ -927,6 +975,7 @@ pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
     };
 
     let mut parser = Parser::new_with_recovery(tokens);
+    parser.newline_positions = build_newline_positions(source);
     parser.source = source.to_string();
     parser.parse_module_with_recovery()
 }

@@ -186,8 +186,10 @@ impl CodeGenerator {
         // Track recursion depth
         if self.enter_type_recursion("type_size").is_err() {
             // On recursion limit, return default size
-            #[cfg(debug_assertions)]
-            eprintln!("Warning: Type recursion limit exceeded in type_size");
+            debug_assert!(
+                false,
+                "ICE: Type recursion limit exceeded in type_size"
+            );
             return 8;
         }
 

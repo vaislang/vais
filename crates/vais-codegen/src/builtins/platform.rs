@@ -448,6 +448,7 @@ impl CodeGenerator {
         register_simd_binop!("simd_add_vec4i32", vec4i32);
         register_simd_binop!("simd_sub_vec4i32", vec4i32);
         register_simd_binop!("simd_mul_vec4i32", vec4i32);
+        register_simd_binop!("simd_div_vec4i32", vec4i32);
 
         // Vec8i32 operations
         register_simd_binop!("simd_add_vec8i32", vec8i32);

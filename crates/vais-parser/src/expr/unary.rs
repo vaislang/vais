@@ -21,7 +21,7 @@ impl Parser {
         let start = self.current_span().start;
 
         if self.check(&Token::Minus) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -34,7 +34,7 @@ impl Parser {
         }
 
         if self.check(&Token::Bang) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -47,7 +47,7 @@ impl Parser {
         }
 
         if self.check(&Token::Tilde) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -60,7 +60,7 @@ impl Parser {
         }
 
         if self.check(&Token::Amp) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -70,7 +70,7 @@ impl Parser {
         }
 
         if self.check(&Token::Star) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -81,7 +81,7 @@ impl Parser {
 
         // lazy expr - deferred evaluation
         if self.check(&Token::Lazy) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(
@@ -92,7 +92,7 @@ impl Parser {
 
         // force expr - force evaluation of lazy value
         if self.check(&Token::Force) {
-            self.advance();
+            self.advance_skip();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(

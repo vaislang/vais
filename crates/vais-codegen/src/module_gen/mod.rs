@@ -18,7 +18,9 @@ mod subset;
 
 impl CodeGenerator {
     pub fn generate_module(&mut self, module: &Module) -> CodegenResult<String> {
-        let mut ir = String::new();
+        // Pre-allocate IR output: ~100 bytes per item is a reasonable estimate
+        let estimated_size = module.items.len() * 100 + 4096;
+        let mut ir = String::with_capacity(estimated_size);
 
         self.emit_module_header(&mut ir);
 
@@ -128,7 +130,9 @@ impl CodeGenerator {
         }
 
         // Generate string constants (after processing functions to collect all strings)
-        let mut body_ir = String::new();
+        // Pre-allocate body IR: ~200 bytes per function is reasonable
+        let fn_count = module.items.iter().filter(|i| matches!(i.node, Item::Function(_))).count();
+        let mut body_ir = String::with_capacity(fn_count * 200 + 2048);
 
         // Second pass: generate function bodies
         // In multi_error_mode, errors are collected and stub functions emitted

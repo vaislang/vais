@@ -110,11 +110,15 @@ pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &pgo::PgoMode) -> St
     // Only run at O2+ where transformations are aggressive enough to risk breakage.
     if level >= OptLevel::O2 {
         let diags = crate::ir_verify::verify_text_ir(&result);
-        for d in &diags {
-            if d.severity == crate::ir_verify::DiagnosticSeverity::Error {
-                eprintln!("[ICE] Post-optimization IR verification: {}", d);
-            }
-        }
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == crate::ir_verify::DiagnosticSeverity::Error)
+            .collect();
+        debug_assert!(
+            errors.is_empty(),
+            "ICE: Post-optimization IR verification failed: {:?}",
+            errors,
+        );
     }
 
     result

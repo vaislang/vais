@@ -515,9 +515,9 @@ impl CodeGenerator {
                     ResolvedType::Future(t) => *t,
                     other => {
                         // ICE: await on non-Future type is likely a type checker bug
-                        eprintln!(
-                            "ICE: await on non-Future type `{}` in codegen, treating as passthrough",
-                            other
+                        debug_assert!(
+                            false,
+                            "ICE: await on non-Future type `{other}` in codegen"
                         );
                         other
                     }

@@ -170,6 +170,9 @@ pub struct TypeChecker {
     // Cache of dependent type predicate expressions (predicate_string -> original AST Expr)
     // Used to evaluate refinement predicates at function call sites
     pub(crate) dependent_predicates: RefCell<HashMap<String, vais_ast::Expr>>,
+
+    // Loop nesting depth — used to validate break/continue are inside a loop
+    pub(crate) loop_depth: usize,
 }
 
 impl TypeChecker {
@@ -206,6 +209,7 @@ impl TypeChecker {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             dependent_predicates: RefCell::new(HashMap::new()),
+            loop_depth: 0,
         };
         checker.register_builtins();
         checker

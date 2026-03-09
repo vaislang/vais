@@ -112,9 +112,9 @@ impl Parser {
             Token::Ident(name) => {
                 // Handle contract verification builtins: old(), assert(), assume()
                 if name == "old" && self.check(&Token::LParen) {
-                    self.advance(); // consume (
+                    self.advance_skip(); // consume (
                     let inner = self.parse_expr()?;
-                    self.expect(&Token::RParen)?;
+                    self.expect_skip(&Token::RParen)?;
                     let end = self.prev_span().end;
                     return Ok(Spanned::new(
                         Expr::Old(Box::new(inner)),
@@ -122,15 +122,15 @@ impl Parser {
                     ));
                 }
                 if name == "assert" && self.check(&Token::LParen) {
-                    self.advance(); // consume (
+                    self.advance_skip(); // consume (
                     let condition = self.parse_expr()?;
                     let message = if self.check(&Token::Comma) {
-                        self.advance();
+                        self.advance_skip();
                         Some(Box::new(self.parse_expr()?))
                     } else {
                         None
                     };
-                    self.expect(&Token::RParen)?;
+                    self.expect_skip(&Token::RParen)?;
                     let end = self.prev_span().end;
                     return Ok(Spanned::new(
                         Expr::Assert {
@@ -141,9 +141,9 @@ impl Parser {
                     ));
                 }
                 if name == "assume" && self.check(&Token::LParen) {
-                    self.advance(); // consume (
+                    self.advance_skip(); // consume (
                     let inner = self.parse_expr()?;
-                    self.expect(&Token::RParen)?;
+                    self.expect_skip(&Token::RParen)?;
                     let end = self.prev_span().end;
                     return Ok(Spanned::new(
                         Expr::Assume(Box::new(inner)),
@@ -156,13 +156,13 @@ impl Parser {
                 // 2. struct literals are allowed in current context (not in loop/if conditions)
                 let is_type_name = name.chars().next().is_some_and(|c| c.is_uppercase());
                 if is_type_name && self.check(&Token::LBrace) && self.allow_struct_literal {
-                    self.advance();
+                    self.advance_skip();
                     let mut fields = Vec::new();
                     while !self.check(&Token::RBrace) && !self.is_at_end() {
                         let field_name = self.parse_ident()?;
                         // Support field punning: `Struct { field }` == `Struct { field: field }`
                         let value = if self.check(&Token::Colon) {
-                            self.advance();
+                            self.advance_skip();
                             self.parse_expr()?
                         } else {
                             // Field punning: value = ident with same name
@@ -171,10 +171,10 @@ impl Parser {
                         };
                         fields.push((field_name, value));
                         if !self.check(&Token::RBrace) {
-                            self.expect(&Token::Comma)?;
+                            self.expect_skip(&Token::Comma)?;
                         }
                     }
-                    self.expect(&Token::RBrace)?;
+                    self.expect_skip(&Token::RBrace)?;
                     let end = self.prev_span().end;
                     let name_len = name.len();
                     return Ok(Spanned::new(
@@ -189,24 +189,24 @@ impl Parser {
             }
             Token::LParen => {
                 if self.check(&Token::RParen) {
-                    self.advance();
+                    self.advance_skip();
                     Expr::Unit
                 } else {
                     let expr = self.parse_expr()?;
                     if self.check(&Token::Comma) {
                         let mut exprs = vec![expr];
                         while self.check(&Token::Comma) {
-                            self.advance();
+                            self.advance_skip();
                             if self.check(&Token::RParen) {
                                 break;
                             }
                             exprs.push(self.parse_expr()?);
                         }
-                        self.expect(&Token::RParen)?;
+                        self.expect_skip(&Token::RParen)?;
                         let end = self.prev_span().end;
                         return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
                     }
-                    self.expect(&Token::RParen)?;
+                    self.expect_skip(&Token::RParen)?;
                     return Ok(expr);
                 }
             }
@@ -227,10 +227,10 @@ impl Parser {
                         exprs.push(self.parse_expr()?);
                     }
                     if !self.check(&Token::RBracket) {
-                        self.expect(&Token::Comma)?;
+                        self.expect_skip(&Token::Comma)?;
                     }
                 }
-                self.expect(&Token::RBracket)?;
+                self.expect_skip(&Token::RBracket)?;
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(Expr::Array(exprs), Span::new(start, end)));
             }
@@ -245,20 +245,20 @@ impl Parser {
                     if let Ok(key) = maybe_key {
                         if self.check(&Token::Colon) {
                             // This looks like a map literal: {key: value, ...}
-                            self.advance(); // consume ':'
+                            self.advance_skip(); // consume ':'
                             let value = self.parse_expr()?;
                             let mut pairs = vec![(key, value)];
                             while self.check(&Token::Comma) {
-                                self.advance(); // consume ','
+                                self.advance_skip(); // consume ','
                                 if self.check(&Token::RBrace) {
                                     break; // trailing comma
                                 }
                                 let k = self.parse_expr()?;
-                                self.expect(&Token::Colon)?;
+                                self.expect_skip(&Token::Colon)?;
                                 let v = self.parse_expr()?;
                                 pairs.push((k, v));
                             }
-                            self.expect(&Token::RBrace)?;
+                            self.expect_skip(&Token::RBrace)?;
                             let end = self.prev_span().end;
                             return Ok(Spanned::new(Expr::MapLit(pairs), Span::new(start, end)));
                         } else {
@@ -275,7 +275,7 @@ impl Parser {
                     }
                 }
                 let stmts = self.parse_block_contents()?;
-                self.expect(&Token::RBrace)?;
+                self.expect_skip(&Token::RBrace)?;
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(Expr::Block(stmts), Span::new(start, end)));
             }
@@ -292,9 +292,9 @@ impl Parser {
                 // Spawn can be: spawn { expr } or spawn expr
                 let body = if self.check(&Token::LBrace) {
                     // spawn { expr }
-                    self.expect(&Token::LBrace)?;
+                    self.expect_skip(&Token::LBrace)?;
                     let body = self.parse_expr()?;
-                    self.expect(&Token::RBrace)?;
+                    self.expect_skip(&Token::RBrace)?;
                     body
                 } else {
                     // spawn expr (e.g., spawn async_func(args))
@@ -356,9 +356,9 @@ impl Parser {
             }
             Token::Comptime => {
                 // Comptime expression: comptime { expr }
-                self.expect(&Token::LBrace)?;
+                self.expect_skip(&Token::LBrace)?;
                 let body = self.parse_expr()?;
-                self.expect(&Token::RBrace)?;
+                self.expect_skip(&Token::RBrace)?;
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(
                     Expr::Comptime {
@@ -388,13 +388,13 @@ impl Parser {
         let cond = self.parse_expr()?;
         self.allow_struct_literal = old_allow_struct_literal;
 
-        self.expect(&Token::LBrace)?;
+        self.expect_skip(&Token::LBrace)?;
         let then = self.parse_block_contents()?;
-        self.expect(&Token::RBrace)?;
+        self.expect_skip(&Token::RBrace)?;
 
         let else_ = if self.check(&Token::Enum) {
             // E is used for else (context-dependent)
-            self.advance();
+            self.advance_skip();
             Some(self.parse_else_branch()?)
         } else {
             None
@@ -416,19 +416,19 @@ impl Parser {
         self.enter_depth()?;
         if self.check(&Token::If) {
             // else if
-            self.advance();
+            self.advance_skip();
             // Disable struct literals in condition to avoid ambiguity with block start
             let old_allow_struct_literal = self.allow_struct_literal;
             self.allow_struct_literal = false;
             let cond = self.parse_expr()?;
             self.allow_struct_literal = old_allow_struct_literal;
 
-            self.expect(&Token::LBrace)?;
+            self.expect_skip(&Token::LBrace)?;
             let then = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
+            self.expect_skip(&Token::RBrace)?;
 
             let else_ = if self.check(&Token::Enum) {
-                self.advance();
+                self.advance_skip();
                 Some(Box::new(self.parse_else_branch()?))
             } else {
                 None
@@ -438,9 +438,9 @@ impl Parser {
             Ok(IfElse::ElseIf(Box::new(cond), then, else_))
         } else {
             // else
-            self.expect(&Token::LBrace)?;
+            self.expect_skip(&Token::LBrace)?;
             let stmts = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
+            self.expect_skip(&Token::RBrace)?;
             self.exit_depth();
             Ok(IfElse::Else(stmts))
         }
@@ -454,9 +454,9 @@ impl Parser {
     pub(crate) fn parse_loop_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
         if self.check(&Token::LBrace) {
             // Infinite loop: `L { ... }`
-            self.advance(); // consume '{'
+            self.advance_skip(); // consume '{'
             let body = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
+            self.expect_skip(&Token::RBrace)?;
 
             let end = self.prev_span().end;
             return Ok(Spanned::new(
@@ -479,12 +479,12 @@ impl Parser {
         if let Ok(pattern) = pattern_result {
             if self.check(&Token::Colon) {
                 // This is a for-each loop: `L pattern:iter { ... }`
-                self.advance(); // consume ':'
+                self.advance_skip(); // consume ':'
                 let iter = self.parse_expr()?;
 
-                self.expect(&Token::LBrace)?;
+                self.expect_skip(&Token::LBrace)?;
                 let body = self.parse_block_contents()?;
-                self.expect(&Token::RBrace)?;
+                self.expect_skip(&Token::RBrace)?;
 
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(
@@ -510,9 +510,9 @@ impl Parser {
         let condition = self.parse_expr()?;
         self.allow_struct_literal = old_allow_struct_literal;
 
-        self.expect(&Token::LBrace)?;
+        self.expect_skip(&Token::LBrace)?;
         let body = self.parse_block_contents()?;
-        self.expect(&Token::RBrace)?;
+        self.expect_skip(&Token::RBrace)?;
 
         let end = self.prev_span().end;
         Ok(Spanned::new(
@@ -532,7 +532,7 @@ impl Parser {
         self.allow_struct_literal = false;
         let expr = self.parse_expr()?;
         self.allow_struct_literal = old_allow_struct_literal;
-        self.expect(&Token::LBrace)?;
+        self.expect_skip(&Token::LBrace)?;
 
         let mut arms = Vec::new();
         while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -541,13 +541,13 @@ impl Parser {
 
             // Check for guard: `I condition`
             let guard = if self.check(&Token::If) {
-                self.advance();
+                self.advance_skip();
                 Some(Box::new(self.parse_expr()?))
             } else {
                 None
             };
 
-            self.expect(&Token::FatArrow)?;
+            self.expect_skip(&Token::FatArrow)?;
             let body = self.parse_expr()?;
             arms.push(MatchArm {
                 pattern,
@@ -555,11 +555,11 @@ impl Parser {
                 body: Box::new(body),
             });
             if !self.check(&Token::RBrace) {
-                self.expect(&Token::Comma)?;
+                self.expect_skip(&Token::Comma)?;
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_skip(&Token::RBrace)?;
         let end = self.prev_span().end;
 
         Ok(Spanned::new(
@@ -607,7 +607,7 @@ impl Parser {
             let name = self.parse_ident()?;
             // Type annotation is optional for lambda params
             let ty = if self.check(&Token::Colon) {
-                self.advance();
+                self.advance_skip();
                 self.parse_type()?
             } else {
                 // Use Type::Infer for untyped lambda parameters
@@ -623,10 +623,10 @@ impl Parser {
                 default_value: None,
             });
             if !self.check(&Token::Pipe) {
-                self.expect(&Token::Comma)?;
+                self.expect_skip(&Token::Comma)?;
             }
         }
-        self.expect(&Token::Pipe)?;
+        self.expect_skip(&Token::Pipe)?;
 
         // Parse lambda body (single expression)
         let body = self.parse_expr()?;
@@ -668,15 +668,15 @@ impl Parser {
                     }
                     // Check for variant pattern: `Some(x)`
                     else if self.check(&Token::LParen) {
-                        self.advance();
+                        self.advance_skip();
                         let mut fields = Vec::new();
                         while !self.check(&Token::RParen) && !self.is_at_end() {
                             fields.push(self.parse_pattern()?);
                             if !self.check(&Token::RParen) {
-                                self.expect(&Token::Comma)?;
+                                self.expect_skip(&Token::Comma)?;
                             }
                         }
-                        self.expect(&Token::RParen)?;
+                        self.expect_skip(&Token::RParen)?;
                         Pattern::Variant {
                             name: Spanned::new(name, Span::new(start, start)),
                             fields,
@@ -760,15 +760,15 @@ impl Parser {
                     }
                 }
                 Token::LParen => {
-                    self.advance();
+                    self.advance_skip();
                     let mut patterns = Vec::new();
                     while !self.check(&Token::RParen) && !self.is_at_end() {
                         patterns.push(self.parse_pattern()?);
                         if !self.check(&Token::RParen) {
-                            self.expect(&Token::Comma)?;
+                            self.expect_skip(&Token::Comma)?;
                         }
                     }
-                    self.expect(&Token::RParen)?;
+                    self.expect_skip(&Token::RParen)?;
                     Pattern::Tuple(patterns)
                 }
                 _ => {
@@ -801,7 +801,7 @@ impl Parser {
         while !self.check(&Token::RParen) && !self.is_at_end() {
             args.push(self.parse_expr()?);
             if !self.check(&Token::RParen) {
-                self.expect(&Token::Comma)?;
+                self.expect_skip(&Token::Comma)?;
             }
         }
 

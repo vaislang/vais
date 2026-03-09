@@ -15,7 +15,7 @@ impl Parser {
         let expr = self.parse_pipe()?;
 
         if self.check(&Token::Eq) {
-            self.advance();
+            self.advance_skip();
             let value = self.parse_assignment()?;
             let span = expr.span.merge(value.span);
             return Ok(Spanned::new(
@@ -53,7 +53,7 @@ impl Parser {
         };
 
         if let Some(op) = op {
-            self.advance();
+            self.advance_skip();
             let value = self.parse_assignment()?;
             let span = expr.span.merge(value.span);
             return Ok(Spanned::new(
@@ -75,7 +75,7 @@ impl Parser {
         let mut left = self.parse_ternary()?;
 
         while self.check(&Token::PipeArrow) {
-            self.advance();
+            self.advance_skip();
             let right = self.parse_ternary()?;
             let span = left.span.merge(right.span);
             // Transform: left |> right into right(left)
@@ -129,9 +129,9 @@ impl Parser {
 
                 if can_start_expr {
                     // This looks like ternary, proceed
-                    self.advance();
+                    self.advance_skip();
                     let then = self.parse_ternary()?;
-                    self.expect(&Token::Colon)?;
+                    self.expect_skip(&Token::Colon)?;
                     let else_ = self.parse_ternary()?;
 
                     let span = cond.span.merge(else_.span);
@@ -159,8 +159,8 @@ impl Parser {
         let mut left = self.parse_and()?;
 
         while self.check(&Token::Pipe) && self.peek_next().map(|t| &t.token) == Some(&Token::Pipe) {
-            self.advance();
-            self.advance();
+            self.advance_skip();
+            self.advance_skip();
             let right = self.parse_and()?;
             let span = left.span.merge(right.span);
             left = Spanned::new(
@@ -181,8 +181,8 @@ impl Parser {
         let mut left = self.parse_bitwise_or()?;
 
         while self.check(&Token::Amp) && self.peek_next().map(|t| &t.token) == Some(&Token::Amp) {
-            self.advance();
-            self.advance();
+            self.advance_skip();
+            self.advance_skip();
             let right = self.parse_bitwise_or()?;
             let span = left.span.merge(right.span);
             left = Spanned::new(
@@ -203,7 +203,7 @@ impl Parser {
         let mut left = self.parse_bitwise_xor()?;
 
         while self.check(&Token::Pipe) && self.peek_next().map(|t| &t.token) != Some(&Token::Pipe) {
-            self.advance();
+            self.advance_skip();
             let right = self.parse_bitwise_xor()?;
             let span = left.span.merge(right.span);
             left = Spanned::new(
@@ -224,7 +224,7 @@ impl Parser {
         let mut left = self.parse_bitwise_and()?;
 
         while self.check(&Token::Caret) {
-            self.advance();
+            self.advance_skip();
             let right = self.parse_bitwise_and()?;
             let span = left.span.merge(right.span);
             left = Spanned::new(
@@ -245,7 +245,7 @@ impl Parser {
         let mut left = self.parse_equality()?;
 
         while self.check(&Token::Amp) && self.peek_next().map(|t| &t.token) != Some(&Token::Amp) {
-            self.advance();
+            self.advance_skip();
             let right = self.parse_equality()?;
             let span = left.span.merge(right.span);
             left = Spanned::new(
@@ -275,7 +275,7 @@ impl Parser {
             };
 
             if let Some(op) = op {
-                self.advance();
+                self.advance_skip();
                 let right = self.parse_range()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(
@@ -301,7 +301,7 @@ impl Parser {
         // Check for prefix range (..end or ..=end)
         if self.check(&Token::DotDot) || self.check(&Token::DotDotEq) {
             let inclusive = self.check(&Token::DotDotEq);
-            self.advance();
+            self.advance_skip();
             let end = self.parse_comparison()?;
             let end_span = self.prev_span().end;
             return Ok(Spanned::new(
@@ -319,7 +319,7 @@ impl Parser {
         // Check for range operator
         if self.check(&Token::DotDot) || self.check(&Token::DotDotEq) {
             let inclusive = self.check(&Token::DotDotEq);
-            self.advance();
+            self.advance_skip();
 
             // Check if there's an end expression (not at end of context like ] or ))
             if !self.is_at_end()
@@ -373,7 +373,7 @@ impl Parser {
             };
 
             if let Some(op) = op {
-                self.advance();
+                self.advance_skip();
                 let right = self.parse_shift()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(
@@ -406,7 +406,7 @@ impl Parser {
             };
 
             if let Some(op) = op {
-                self.advance();
+                self.advance_skip();
                 let right = self.parse_term()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(
@@ -450,7 +450,7 @@ impl Parser {
             };
 
             if let Some(op) = op {
-                self.advance();
+                self.advance_skip();
                 let right = self.parse_factor()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(
@@ -485,7 +485,7 @@ impl Parser {
             };
 
             if let Some(op) = op {
-                self.advance();
+                self.advance_skip();
                 let right = self.parse_unary()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(

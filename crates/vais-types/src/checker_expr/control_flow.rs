@@ -107,11 +107,13 @@ impl TypeChecker {
                 body,
             } => {
                 self.push_scope();
+                self.loop_depth += 1;
 
                 if let (Some(pattern), Some(iter)) = (pattern, iter) {
                     let iter_type = match self.check_expr(iter) {
                         Ok(t) => t,
                         Err(e) => {
+                            self.loop_depth -= 1;
                             self.pop_scope();
                             return Some(Err(e));
                         }
@@ -136,9 +138,11 @@ impl TypeChecker {
                 }
 
                 if let Err(e) = self.check_block(body) {
+                    self.loop_depth -= 1;
                     self.pop_scope();
                     return Some(Err(e));
                 }
+                self.loop_depth -= 1;
                 self.pop_scope();
 
                 Some(Ok(ResolvedType::Unit))
@@ -155,10 +159,13 @@ impl TypeChecker {
                 }
 
                 self.push_scope();
+                self.loop_depth += 1;
                 if let Err(e) = self.check_block(body) {
+                    self.loop_depth -= 1;
                     self.pop_scope();
                     return Some(Err(e));
                 }
+                self.loop_depth -= 1;
                 self.pop_scope();
 
                 Some(Ok(ResolvedType::Unit))

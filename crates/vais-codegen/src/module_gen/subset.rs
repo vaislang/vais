@@ -21,12 +21,12 @@ impl CodeGenerator {
             }
         }
         if !out_of_bounds.is_empty() {
-            eprintln!(
-                "Warning: {} item indices out of bounds (>= {}): {:?}",
+            return Err(crate::CodegenError::InternalError(format!(
+                "{} item indices out of bounds (>= {}): {:?}",
                 out_of_bounds.len(),
                 items_len,
                 out_of_bounds
-            );
+            )));
         }
 
         // Filter to valid indices only

@@ -277,14 +277,55 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     BinOp::BitAnd => lhs_int.const_and(rhs_int),
                     BinOp::BitOr => lhs_int.const_or(rhs_int),
                     BinOp::BitXor => lhs_int.const_xor(rhs_int),
-                    BinOp::Shl => lhs_int.const_shl(rhs_int),
-                    BinOp::Shr => lhs_int.const_ashr(rhs_int),
-                    // Division and modulo are not supported in const context (Inkwell 0.4 limitation)
-                    BinOp::Div | BinOp::Mod => {
-                        return Err(CodegenError::Unsupported(
-                            "Const expr division/modulo not supported in Inkwell const context"
-                                .to_string(),
-                        ))
+                    BinOp::Shl => {
+                        if let Some(shift) = rhs_int.get_zero_extended_constant() {
+                            if shift >= 64 {
+                                return Err(CodegenError::InternalError(format!(
+                                    "Const expr shift left amount {shift} >= 64 (undefined behavior)"
+                                )));
+                            }
+                        }
+                        lhs_int.const_shl(rhs_int)
+                    }
+                    BinOp::Shr => {
+                        if let Some(shift) = rhs_int.get_zero_extended_constant() {
+                            if shift >= 64 {
+                                return Err(CodegenError::InternalError(format!(
+                                    "Const expr shift right amount {shift} >= 64 (undefined behavior)"
+                                )));
+                            }
+                        }
+                        lhs_int.const_ashr(rhs_int)
+                    }
+                    BinOp::Div => {
+                        // LLVM 17 removed LLVMConstSDiv — evaluate in Rust and emit constant
+                        let lhs_val = lhs_int
+                            .get_sign_extended_constant()
+                            .ok_or_else(|| CodegenError::Unsupported("Const expr div: non-constant operand".to_string()))?;
+                        let rhs_val = rhs_int
+                            .get_sign_extended_constant()
+                            .ok_or_else(|| CodegenError::Unsupported("Const expr div: non-constant operand".to_string()))?;
+                        if rhs_val == 0 {
+                            return Err(CodegenError::InternalError(
+                                "Const expr division by zero".to_string(),
+                            ));
+                        }
+                        self.context.i64_type().const_int((lhs_val / rhs_val) as u64, true)
+                    }
+                    BinOp::Mod => {
+                        // LLVM 17 removed LLVMConstSRem — evaluate in Rust and emit constant
+                        let lhs_val = lhs_int
+                            .get_sign_extended_constant()
+                            .ok_or_else(|| CodegenError::Unsupported("Const expr mod: non-constant operand".to_string()))?;
+                        let rhs_val = rhs_int
+                            .get_sign_extended_constant()
+                            .ok_or_else(|| CodegenError::Unsupported("Const expr mod: non-constant operand".to_string()))?;
+                        if rhs_val == 0 {
+                            return Err(CodegenError::InternalError(
+                                "Const expr modulo by zero".to_string(),
+                            ));
+                        }
+                        self.context.i64_type().const_int((lhs_val % rhs_val) as u64, true)
                     }
                     _ => {
                         return Err(CodegenError::Unsupported(format!(

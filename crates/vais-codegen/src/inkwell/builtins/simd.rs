@@ -170,6 +170,7 @@ pub(super) fn define_simd_builtins<'ctx>(
         ("simd_add_vec4i32", "add"),
         ("simd_sub_vec4i32", "sub"),
         ("simd_mul_vec4i32", "mul"),
+        ("simd_div_vec4i32", "sdiv"),
     ] {
         let fn_type = i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false);
         let func = module.add_function(name, fn_type, None);
@@ -235,14 +236,13 @@ pub(super) fn define_simd_builtins<'ctx>(
                 "mul" => builder
                     .build_int_mul(a_val, b_val, "r")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
+                "sdiv" => builder
+                    .build_int_signed_div(a_val, b_val, "r")
+                    .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
                 _ => {
-                    eprintln!(
-                        "[ICE] unexpected SIMD operation in vec4i32: {} — using add as fallback",
-                        op
-                    );
-                    builder
-                        .build_int_add(a_val, b_val, "r")
-                        .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
+                    return Err(format!(
+                        "ICE: unexpected SIMD operation in vec4i32: {op}"
+                    ));
                 }
             };
             let o_gep = unsafe {
@@ -420,13 +420,9 @@ pub(super) fn define_simd_builtins<'ctx>(
                     .build_float_div(a_val, b_val, "r")
                     .map_err(|e| format!("ICE: inkwell builtins: {e}"))?,
                 _ => {
-                    eprintln!(
-                        "[ICE] unexpected SIMD operation in vec4f32: {} — using fadd as fallback",
-                        op
-                    );
-                    builder
-                        .build_float_add(a_val, b_val, "r")
-                        .map_err(|e| format!("ICE: inkwell builtins: {e}"))?
+                    return Err(format!(
+                        "ICE: unexpected SIMD operation in vec4f32: {op}"
+                    ));
                 }
             };
             let o_gep = unsafe {

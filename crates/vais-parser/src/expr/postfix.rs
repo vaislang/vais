@@ -27,9 +27,9 @@ impl Parser {
                 if self.has_newline_between(expr_end, paren_start) {
                     break;
                 }
-                self.advance();
+                self.advance_skip();
                 let args = self.parse_args()?;
-                self.expect(&Token::RParen)?;
+                self.expect_skip(&Token::RParen)?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(
                     Expr::Call {
@@ -39,17 +39,17 @@ impl Parser {
                     Span::new(start, end),
                 );
             } else if self.check(&Token::Dot) {
-                self.advance();
+                self.advance_skip();
                 if self.check(&Token::Await) {
-                    self.advance();
+                    self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Await(Box::new(expr)), Span::new(start, end));
                 } else {
                     let field = self.parse_ident()?;
                     if self.check(&Token::LParen) {
-                        self.advance();
+                        self.advance_skip();
                         let args = self.parse_args()?;
-                        self.expect(&Token::RParen)?;
+                        self.expect_skip(&Token::RParen)?;
                         let end = self.prev_span().end;
 
                         // Check if receiver is a type name (starts with uppercase)
@@ -99,11 +99,11 @@ impl Parser {
                 }
             } else if self.check(&Token::ColonColon) {
                 // Static method call: Type::method(args)
-                self.advance();
+                self.advance_skip();
                 let method = self.parse_ident()?;
-                self.expect(&Token::LParen)?;
+                self.expect_skip(&Token::LParen)?;
                 let args = self.parse_args()?;
-                self.expect(&Token::RParen)?;
+                self.expect_skip(&Token::RParen)?;
                 let end = self.prev_span().end;
 
                 if let Expr::Ident(type_name) = &expr.node {
@@ -125,9 +125,9 @@ impl Parser {
                     });
                 }
             } else if self.check(&Token::LBracket) {
-                self.advance();
+                self.advance_skip();
                 let index = self.parse_expr()?;
-                self.expect(&Token::RBracket)?;
+                self.expect_skip(&Token::RBracket)?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(
                     Expr::Index {
@@ -176,7 +176,7 @@ impl Parser {
                     break;
                 } else {
                     // Postfix try
-                    self.advance();
+                    self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Try(Box::new(expr)), Span::new(start, end));
                 }
@@ -211,7 +211,7 @@ impl Parser {
                 }
             } else if self.check(&Token::As) {
                 // Type cast: expr as Type
-                self.advance();
+                self.advance_skip();
                 let ty = self.parse_type()?;
                 let end = self.prev_span().end;
                 expr = Spanned::new(

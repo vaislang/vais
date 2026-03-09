@@ -182,6 +182,11 @@ impl GcHeap {
 
         for offset in (0..size).step_by(ptr_size) {
             if offset + ptr_size <= size {
+                // SAFETY: `offset + ptr_size <= size` is checked above, and `data_vec`
+                // has exactly `size` bytes (cloned from the GC object's data). The read
+                // is aligned to `usize` boundaries via `step_by(ptr_size)`. We perform
+                // conservative pointer scanning: the value is only used if it matches
+                // a known GC object address.
                 unsafe {
                     let potential_ptr = ptr::read(data_vec.as_ptr().add(offset) as *const usize);
 
@@ -572,6 +577,68 @@ mod tests {
 
         // Object should be unreachable
         heap.collect();
+        assert_eq!(heap.stats().objects_count, 0);
+    }
+
+    // === Unsafe boundary/null/overflow tests ===
+
+    #[test]
+    fn test_scan_pointers_size_smaller_than_ptr() {
+        // Object smaller than pointer size should not cause out-of-bounds read
+        let mut heap = GcHeap::new();
+        let ptr = heap.alloc(1, 1) as usize; // 1 byte, too small for a usize
+        heap.add_root(ptr);
+        heap.collect(); // scan_for_pointers must handle size < ptr_size safely
+        assert_eq!(heap.stats().objects_count, 1);
+    }
+
+    #[test]
+    fn test_scan_pointers_exact_ptr_size() {
+        // Object exactly pointer-sized: scan should read exactly one potential pointer
+        let ptr_size = std::mem::size_of::<usize>();
+        let mut heap = GcHeap::new();
+        let ptr = heap.alloc(ptr_size, 1) as usize;
+        heap.add_root(ptr);
+        heap.collect();
+        assert_eq!(heap.stats().objects_count, 1);
+    }
+
+    #[test]
+    fn test_scan_pointers_unaligned_tail() {
+        // Object with trailing bytes that don't form a full pointer
+        let ptr_size = std::mem::size_of::<usize>();
+        let mut heap = GcHeap::new();
+        let ptr = heap.alloc(ptr_size + 3, 1) as usize; // e.g. 11 bytes on 64-bit
+        heap.add_root(ptr);
+        heap.collect();
+        assert_eq!(heap.stats().objects_count, 1);
+    }
+
+    #[test]
+    fn test_alloc_large_object() {
+        let mut heap = GcHeap::new();
+        let ptr = heap.alloc(1024 * 1024, 1); // 1 MB
+        assert!(!ptr.is_null());
+        let stats = heap.stats();
+        assert_eq!(stats.objects_count, 1);
+        assert!(stats.bytes_allocated >= 1024 * 1024);
+    }
+
+    #[test]
+    fn test_collect_empty_heap() {
+        let mut heap = GcHeap::new();
+        heap.collect(); // Should not panic on empty heap
+        assert_eq!(heap.stats().collections, 1);
+        assert_eq!(heap.stats().objects_count, 0);
+    }
+
+    #[test]
+    fn test_null_pointer_root_ignored() {
+        let mut heap = GcHeap::new();
+        heap.add_root(0);
+        heap.alloc(100, 1);
+        heap.collect();
+        // The null root should not protect any object
         assert_eq!(heap.stats().objects_count, 0);
     }
 }

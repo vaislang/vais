@@ -42,6 +42,9 @@ pub extern "C" fn vais_profiler_create(config: *const VaisProfilerConfig) -> *mu
     let config = if config.is_null() {
         ProfilerConfig::default()
     } else {
+        // SAFETY: The caller guarantees `config` is a valid, aligned pointer to a
+        // `VaisProfilerConfig`. The null check above ensures we only dereference
+        // non-null pointers. `VaisProfilerConfig` is `#[repr(C)]` and `Copy`.
         unsafe { (*config).into() }
     };
 
@@ -52,6 +55,9 @@ pub extern "C" fn vais_profiler_create(config: *const VaisProfilerConfig) -> *mu
 #[no_mangle]
 pub extern "C" fn vais_profiler_destroy(profiler: *mut c_void) {
     if !profiler.is_null() {
+        // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw`,
+        // so reconstructing the `Arc` is valid. The caller must ensure this is called
+        // exactly once per `vais_profiler_create` call to avoid double-free.
         unsafe {
             let _ = Arc::from_raw(profiler as *const Profiler);
         }
@@ -64,6 +70,9 @@ pub extern "C" fn vais_profiler_start(profiler: *mut c_void) -> bool {
         return false;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). We borrow it as a shared reference which is safe
+    // because `Profiler` uses interior mutability (Mutex/RwLock) for thread safety.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     profiler.start().is_ok()
 }
@@ -74,6 +83,8 @@ pub extern "C" fn vais_profiler_stop(profiler: *mut c_void) -> bool {
         return false;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     profiler.stop().is_ok()
 }
@@ -84,6 +95,8 @@ pub extern "C" fn vais_profiler_is_running(profiler: *mut c_void) -> bool {
         return false;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     profiler.is_running()
 }
@@ -98,7 +111,11 @@ pub extern "C" fn vais_profiler_record_sample(
         return;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
+    // SAFETY: `function_name` is non-null (checked above) and the caller guarantees it
+    // points to a valid null-terminated C string that remains valid for this call.
     let function_name = unsafe { CStr::from_ptr(function_name) };
 
     if let Ok(function_name) = function_name.to_str() {
@@ -116,6 +133,8 @@ pub extern "C" fn vais_profiler_record_allocation(
         return;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     profiler.record_allocation(size, address);
 }
@@ -126,6 +145,8 @@ pub extern "C" fn vais_profiler_record_deallocation(profiler: *mut c_void, addre
         return;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     profiler.record_deallocation(address);
 }
@@ -140,7 +161,11 @@ pub extern "C" fn vais_profiler_record_call(
         return;
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
+    // SAFETY: `caller` and `callee` are non-null (checked above) and the caller
+    // guarantees they point to valid null-terminated C strings for the duration of this call.
     let caller = unsafe { CStr::from_ptr(caller) };
     let callee = unsafe { CStr::from_ptr(callee) };
 
@@ -154,6 +179,9 @@ pub extern "C" fn vais_profiler_global_init(config: *const VaisProfilerConfig) -
     let config = if config.is_null() {
         ProfilerConfig::default()
     } else {
+        // SAFETY: The caller guarantees `config` is a valid, aligned pointer to a
+        // `VaisProfilerConfig`. The null check above ensures non-null dereference.
+        // `VaisProfilerConfig` is `#[repr(C)]` and `Copy`.
         unsafe { (*config).into() }
     };
 
@@ -203,6 +231,8 @@ pub extern "C" fn vais_profiler_global_record_sample(
 
     let global = GLOBAL_PROFILER.lock();
     if let Some(profiler) = global.as_ref() {
+        // SAFETY: `function_name` is non-null (checked above) and the caller guarantees
+        // it points to a valid null-terminated C string for the duration of this call.
         let function_name = unsafe { CStr::from_ptr(function_name) };
         if let Ok(function_name) = function_name.to_str() {
             profiler.record_sample(function_name, instruction_pointer);
@@ -234,6 +264,8 @@ pub extern "C" fn vais_profiler_global_record_call(caller: *const c_char, callee
 
     let global = GLOBAL_PROFILER.lock();
     if let Some(profiler) = global.as_ref() {
+        // SAFETY: `caller` and `callee` are non-null (checked above) and the caller
+        // guarantees they point to valid null-terminated C strings for this call.
         let caller = unsafe { CStr::from_ptr(caller) };
         let callee = unsafe { CStr::from_ptr(callee) };
 
@@ -266,6 +298,8 @@ pub extern "C" fn vais_profiler_get_stats(profiler: *mut c_void) -> VaisProfileS
         };
     }
 
+    // SAFETY: `profiler` was created by `vais_profiler_create` via `Arc::into_raw` and
+    // is non-null (checked above). Shared reference is safe due to interior mutability.
     let profiler = unsafe { &*(profiler as *const Profiler) };
     let snapshot = profiler.snapshot();
 
@@ -422,5 +456,81 @@ mod tests {
         let profiler = vais_profiler_create(&config as *const _);
         assert!(!profiler.is_null());
         vais_profiler_destroy(profiler);
+    }
+
+    // === Null pointer safety tests ===
+
+    #[test]
+    fn test_null_profiler_start() {
+        assert!(!vais_profiler_start(std::ptr::null_mut()));
+    }
+
+    #[test]
+    fn test_null_profiler_stop() {
+        assert!(!vais_profiler_stop(std::ptr::null_mut()));
+    }
+
+    #[test]
+    fn test_null_profiler_is_running() {
+        assert!(!vais_profiler_is_running(std::ptr::null_mut()));
+    }
+
+    #[test]
+    fn test_null_profiler_record_sample() {
+        // Should not panic with null profiler
+        vais_profiler_record_sample(std::ptr::null_mut(), std::ptr::null(), 0);
+    }
+
+    #[test]
+    fn test_null_function_name_record_sample() {
+        let profiler = vais_profiler_create(std::ptr::null());
+        vais_profiler_start(profiler);
+        // Should not panic with null function name
+        vais_profiler_record_sample(profiler, std::ptr::null(), 0x1000);
+        vais_profiler_stop(profiler);
+        vais_profiler_destroy(profiler);
+    }
+
+    #[test]
+    fn test_null_profiler_record_allocation() {
+        // Should not panic with null profiler
+        vais_profiler_record_allocation(std::ptr::null_mut(), 100, 0x1000);
+    }
+
+    #[test]
+    fn test_null_profiler_record_deallocation() {
+        // Should not panic with null profiler
+        vais_profiler_record_deallocation(std::ptr::null_mut(), 0x1000);
+    }
+
+    #[test]
+    fn test_null_profiler_record_call() {
+        // Should not panic with null profiler or null strings
+        vais_profiler_record_call(std::ptr::null_mut(), std::ptr::null(), std::ptr::null());
+    }
+
+    #[test]
+    fn test_null_profiler_get_stats() {
+        let stats = vais_profiler_get_stats(std::ptr::null_mut());
+        assert_eq!(stats.sample_count, 0);
+        assert_eq!(stats.total_allocations, 0);
+    }
+
+    #[test]
+    fn test_null_profiler_destroy() {
+        // Should not panic with null pointer
+        vais_profiler_destroy(std::ptr::null_mut());
+    }
+
+    #[test]
+    fn test_global_record_sample_null_name() {
+        // Should not panic with null function name
+        vais_profiler_global_record_sample(std::ptr::null(), 0x1000);
+    }
+
+    #[test]
+    fn test_global_record_call_null_ptrs() {
+        // Should not panic with null caller/callee
+        vais_profiler_global_record_call(std::ptr::null(), std::ptr::null());
     }
 }

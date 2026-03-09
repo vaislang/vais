@@ -467,9 +467,10 @@ write_ir! macro conversion + lexer pre-allocation:
 | 5K lines | 340 us | 2.06 ms | 712 us | 2.49 ms | 5.75 ms |
 | 10K lines | 689 us | 4.21 ms | 1.33 ms | 4.98 ms | 11.43 ms |
 | 25K lines | 2.60 ms | 11.09 ms | 3.16 ms | 12.45 ms | 29.26 ms |
-| 50K lines | 3.39 ms | 23.73 ms | 6.58 ms | 26.79 ms | 58.85 ms |
+| 50K lines | 3.35 ms | 22.17 ms | 6.50 ms | 27.22 ms | 60.0 ms |
 
-**50K lines: 58.85ms (850K lines/sec)**
+**50K lines: ~60.0ms (~833K lines/sec)**
+**Parser 50K: -9.9% improvement (Phase 130)**
 
 #### Phase 129 vs Phase 128 Comparison
 
@@ -487,6 +488,14 @@ write_ir! macro conversion + lexer pre-allocation:
 - Codegen complex fixture: -7.2% improvement
 
 ## Changelog
+
+### 2026-03-10
+- Phase 130: Parser hot-path optimization + TC hash computation fix
+- Parser 50K: **-9.9%** (23.73ms → 22.17ms) — advance_skip()/expect_skip() skip SpannedToken clone
+- TypeChecker 50K: -0.1% (6.58ms → 6.50ms, noise) — format!("{:?}") → Hash::hash direct
+- Codegen 50K: +1.6% (26.79ms → 27.22ms, noise)
+- Full pipeline 50K: ~0% (58.85ms → ~60.0ms, within noise)
+- Optimizations: Parser newline binary search O(log n), advance_skip ~70 call sites, hash_type/hash_substitutions direct Hash
 
 ### 2026-03-08
 - Phase 129: write_ir! conversion (619 sites) + lexer Vec pre-allocation

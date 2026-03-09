@@ -366,12 +366,18 @@ fn check_return_type_consistency(lines: &[&str], diagnostics: &mut Vec<IrDiagnos
 pub fn verify_text_ir_or_error(ir: &str) -> CodegenResult<()> {
     let diagnostics = verify_text_ir(ir);
 
-    // Log Warning-level diagnostics to stderr so they are not silently lost.
-    for diag in diagnostics
-        .iter()
-        .filter(|d| d.severity == DiagnosticSeverity::Warning)
+    // In debug builds, assert that no Warning-level diagnostics exist.
+    #[cfg(debug_assertions)]
     {
-        eprintln!("[IR verify] {}", diag);
+        let warnings: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagnosticSeverity::Warning)
+            .collect();
+        debug_assert!(
+            warnings.is_empty(),
+            "IR verification warnings: {:?}",
+            warnings,
+        );
     }
 
     let errors: Vec<_> = diagnostics
