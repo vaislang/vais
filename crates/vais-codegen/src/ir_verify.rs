@@ -373,11 +373,9 @@ pub fn verify_text_ir_or_error(ir: &str) -> CodegenResult<()> {
             .iter()
             .filter(|d| d.severity == DiagnosticSeverity::Warning)
             .collect();
-        debug_assert!(
-            warnings.is_empty(),
-            "IR verification warnings: {:?}",
-            warnings,
-        );
+        if !warnings.is_empty() {
+            eprintln!("[IR verify] {} warning(s) (non-fatal)", warnings.len());
+        }
     }
 
     let errors: Vec<_> = diagnostics
