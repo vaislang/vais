@@ -170,10 +170,7 @@ fn test_builder_return() {
     builder.assign_const(Local(0), Constant::Int(0));
     builder.return_();
     let body = builder.build();
-    assert_eq!(
-        body.basic_blocks[0].terminator,
-        Some(Terminator::Return)
-    );
+    assert_eq!(body.basic_blocks[0].terminator, Some(Terminator::Return));
 }
 
 #[test]
@@ -298,11 +295,7 @@ fn test_mir_type_copy_pointer_ref() {
 fn test_mir_type_copy_tuple() {
     assert!(MirType::Tuple(vec![MirType::I64, MirType::Bool]).is_copy());
     // Non-copy element makes tuple non-copy
-    assert!(!MirType::Tuple(vec![
-        MirType::I64,
-        MirType::Array(Box::new(MirType::I64)),
-    ])
-    .is_copy());
+    assert!(!MirType::Tuple(vec![MirType::I64, MirType::Array(Box::new(MirType::I64)),]).is_copy());
 }
 
 #[test]

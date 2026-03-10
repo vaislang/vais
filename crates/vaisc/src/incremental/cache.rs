@@ -416,9 +416,7 @@ impl IncrementalCache {
         {
             if current != cached {
                 // Options changed - mark all files as dirty
-                let mut ds = dirty_set
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
+                let mut ds = dirty_set.lock().unwrap_or_else(|e| e.into_inner());
                 for file in self.state.dep_graph.file_metadata.keys() {
                     ds.modified_files.insert(file.clone());
                 }

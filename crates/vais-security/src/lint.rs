@@ -1058,7 +1058,6 @@ fn max_nesting_depth_if_else(branch: &IfElse, current: usize) -> usize {
     }
 }
 
-
 #[cfg(test)]
 #[path = "lint_tests.rs"]
 mod lint_tests;

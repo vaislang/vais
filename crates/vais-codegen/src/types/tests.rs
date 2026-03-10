@@ -2,7 +2,6 @@ use super::*;
 use crate::CodeGenerator;
 use vais_types::ResolvedType;
 
-
 #[test]
 fn test_tuple_sizeof_sums_elements() {
     let gen = CodeGenerator::new("test");
@@ -483,8 +482,7 @@ fn test_type_to_llvm_ref_dyn_trait_fat_pointer() {
 #[test]
 fn test_type_to_llvm_ref_slice_fat_pointer() {
     let gen = CodeGenerator::new("test");
-    let slice_ref =
-        ResolvedType::Ref(Box::new(ResolvedType::Slice(Box::new(ResolvedType::I64))));
+    let slice_ref = ResolvedType::Ref(Box::new(ResolvedType::Slice(Box::new(ResolvedType::I64))));
     // &[T] should be a fat pointer { i8*, i64 }, not pointer-to-fat-pointer
     assert_eq!(gen.type_to_llvm(&slice_ref), "{ i8*, i64 }");
 }

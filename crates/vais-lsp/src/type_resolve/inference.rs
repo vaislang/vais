@@ -207,11 +207,7 @@ impl TypeContext {
                             label: method.name.clone(),
                             kind: CompletionKind::Method,
                             detail,
-                            insert_text: format!(
-                                "{}({})",
-                                method.name,
-                                params_snippet.join(", ")
-                            ),
+                            insert_text: format!("{}({})", method.name, params_snippet.join(", ")),
                             from_trait: Some(trait_name.clone()),
                         });
                     }

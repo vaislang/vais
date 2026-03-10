@@ -172,9 +172,10 @@ impl TypeChecker {
                 if strict {
                     // Strict mode: return first error
                     // SAFETY: non-empty check is on the line above
-                    let first_err = ownership_errors.into_iter().next().unwrap_or_else(|| {
-                        unreachable!("ownership_errors was verified non-empty")
-                    });
+                    let first_err = ownership_errors
+                        .into_iter()
+                        .next()
+                        .unwrap_or_else(|| unreachable!("ownership_errors was verified non-empty"));
                     return Err(first_err);
                 } else {
                     // Warn mode: add to warnings

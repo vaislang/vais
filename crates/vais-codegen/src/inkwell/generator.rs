@@ -194,9 +194,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Declare built-in functions
         if let Err(e) = builtins::declare_builtins(context, &gen.module) {
-            gen.type_mapper.pending_error.replace(Some(
-                crate::CodegenError::InternalError(format!("Failed to declare builtins: {e}")),
-            ));
+            gen.type_mapper
+                .pending_error
+                .replace(Some(crate::CodegenError::InternalError(format!(
+                    "Failed to declare builtins: {e}"
+                ))));
         }
 
         gen

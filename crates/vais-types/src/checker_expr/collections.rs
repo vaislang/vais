@@ -414,7 +414,8 @@ impl TypeChecker {
                         .generics
                         .iter()
                         .map(|param| {
-                            let ty = generic_substitutions.get(param)
+                            let ty = generic_substitutions
+                                .get(param)
                                 .unwrap_or(&ResolvedType::Unknown);
                             self.apply_substitutions(ty)
                         })
@@ -486,7 +487,8 @@ impl TypeChecker {
                         .generics
                         .iter()
                         .map(|param| {
-                            let ty = generic_substitutions.get(param)
+                            let ty = generic_substitutions
+                                .get(param)
                                 .unwrap_or(&ResolvedType::Unknown);
                             self.apply_substitutions(ty)
                         })

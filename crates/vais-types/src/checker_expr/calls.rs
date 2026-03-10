@@ -471,13 +471,14 @@ impl TypeChecker {
                         .generics
                         .iter()
                         .map(|param| {
-                            let ty = generic_substitutions
-                                .get(param)
-                                .unwrap_or_else(|| {
-                                    // ICE: generic parameter missing from substitutions
-                                    eprintln!("ICE: generic parameter '{}' missing from substitutions map", param);
-                                    &ResolvedType::Unknown
-                                });
+                            let ty = generic_substitutions.get(param).unwrap_or_else(|| {
+                                // ICE: generic parameter missing from substitutions
+                                eprintln!(
+                                    "ICE: generic parameter '{}' missing from substitutions map",
+                                    param
+                                );
+                                &ResolvedType::Unknown
+                            });
                             self.apply_substitutions(ty)
                         })
                         .collect();

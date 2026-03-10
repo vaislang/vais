@@ -1147,7 +1147,6 @@ fn detect_reduction_op(line: &str, acc_var: &str) -> Option<ReductionKind> {
     }
 }
 
-
 #[cfg(test)]
 #[path = "auto_vectorize_tests.rs"]
 mod auto_vectorize_tests;

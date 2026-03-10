@@ -159,9 +159,12 @@ impl CodeGenerator {
                     let (cond_bool, conv_ir) =
                         self.generate_cond_to_i1(iter_expr, &cond_val, counter);
                     ir.push_str(&conv_ir);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  br i1 {}, label %{}, label %{}",
-                        cond_bool, loop_body, loop_end
+                        cond_bool,
+                        loop_body,
+                        loop_end
                     );
 
                     // Loop body
@@ -220,9 +223,12 @@ impl CodeGenerator {
                 // Convert to i1 for branch (type-aware: skips for bool/i1)
                 let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
                 ir.push_str(&conv_ir);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  br i1 {}, label %{}, label %{}",
-                    cond_bool, loop_body, loop_end
+                    cond_bool,
+                    loop_body,
+                    loop_end
                 );
 
                 // Loop body
@@ -290,33 +296,55 @@ impl CodeGenerator {
                     let (kval, k_ir) = self.generate_expr(k, counter)?;
                     ir.push_str(&k_ir);
                     let k_elem_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                        k_elem_ptr, keys_arr_ty, keys_arr_ty, keys_ptr, i
+                        k_elem_ptr,
+                        keys_arr_ty,
+                        keys_arr_ty,
+                        keys_ptr,
+                        i
                     );
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  store {} {}, {}* {}",
-                        key_ty, kval, key_ty, k_elem_ptr
+                        key_ty,
+                        kval,
+                        key_ty,
+                        k_elem_ptr
                     );
 
                     let (vval, v_ir) = self.generate_expr(v, counter)?;
                     ir.push_str(&v_ir);
                     let v_elem_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                        v_elem_ptr, vals_arr_ty, vals_arr_ty, vals_ptr, i
+                        v_elem_ptr,
+                        vals_arr_ty,
+                        vals_arr_ty,
+                        vals_ptr,
+                        i
                     );
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  store {} {}, {}* {}",
-                        val_ty, vval, val_ty, v_elem_ptr
+                        val_ty,
+                        vval,
+                        val_ty,
+                        v_elem_ptr
                     );
                 }
 
                 // Return pointer to keys array (map is represented as parallel arrays)
                 let result = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
-                    result, keys_arr_ty, keys_arr_ty, keys_ptr
+                    result,
+                    keys_arr_ty,
+                    keys_arr_ty,
+                    keys_ptr
                 );
 
                 Ok((result, ir))
@@ -385,40 +413,54 @@ impl CodeGenerator {
                         ir.push_str(&elem_ir);
 
                         let elem_ptr = self.next_temp(counter);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                            elem_ptr, arr_ty, arr_ty, arr_ptr, i
+                            elem_ptr,
+                            arr_ty,
+                            arr_ty,
+                            arr_ptr,
+                            i
                         );
-                        write_ir!(ir, 
-                            "  store {} {}, {}* {}",
-                            elem_ty, val, elem_ty, elem_ptr
-                        );
+                        write_ir!(ir, "  store {} {}, {}* {}", elem_ty, val, elem_ty, elem_ptr);
                     }
 
                     // Get pointer to first element
                     let data_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
-                        data_ptr, arr_ty, arr_ty, arr_ptr
+                        data_ptr,
+                        arr_ty,
+                        arr_ty,
+                        arr_ptr
                     );
 
                     // Bitcast to i8*
                     let data_i8 = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = bitcast {}* {} to i8*",
-                        data_i8, elem_ty, data_ptr
+                        data_i8,
+                        elem_ty,
+                        data_ptr
                     );
 
                     // Build fat pointer: { i8*, i64 }
                     let fat1 = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
-                        fat1, data_i8
+                        fat1,
+                        data_i8
                     );
                     let fat2 = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
-                        fat2, fat1, len
+                        fat2,
+                        fat1,
+                        len
                     );
 
                     return Ok((fat2, ir));
@@ -438,9 +480,13 @@ impl CodeGenerator {
                             ir.push_str(&val_ir);
                             let tmp_alloca = self.next_temp(counter);
                             write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  store {} {}, {}* {}",
-                                llvm_ty, val, llvm_ty, tmp_alloca
+                                llvm_ty,
+                                val,
+                                llvm_ty,
+                                tmp_alloca
                             );
                             return Ok((tmp_alloca, ir));
                         }
@@ -465,9 +511,13 @@ impl CodeGenerator {
                 };
 
                 let result = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = load {}, {}* {}",
-                    result, pointee_llvm, pointee_llvm, ptr_val
+                    result,
+                    pointee_llvm,
+                    pointee_llvm,
+                    ptr_val
                 );
 
                 Ok((result, ir))

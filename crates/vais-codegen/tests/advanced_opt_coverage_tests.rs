@@ -4,8 +4,8 @@
 //! Tests uncovered paths: apply_advanced_optimizations, apply_data_layout_hints,
 //! extract_function_for_loop/variable, propagate_alias_info, generate_inkwell_hints.
 
-use vais_codegen::advanced_opt::*;
 use vais_codegen::advanced_opt::alias_analysis::PointerBase;
+use vais_codegen::advanced_opt::*;
 
 // ============================================================================
 // apply_advanced_optimizations — full pipeline tests
@@ -228,9 +228,7 @@ entry:
 fn test_llvm_opt_hints_clone() {
     let mut hints = LlvmOptHints::default();
     hints.inline_hints.push(("foo".to_string(), 2));
-    hints
-        .noalias_hints
-        .push(("bar".to_string(), 0));
+    hints.noalias_hints.push(("bar".to_string(), 0));
     let cloned = hints.clone();
     assert_eq!(cloned.inline_hints.len(), 1);
     assert_eq!(cloned.noalias_hints.len(), 1);
@@ -463,9 +461,10 @@ entry:
     let mut optimizer = DataLayoutOptimizer::new();
     optimizer.analyze(ir);
     // BigStruct = 64 bytes = cache line size, should suggest cache alignment
-    let has_cache_hint = optimizer.suggestions.iter().any(|s| {
-        matches!(s, LayoutSuggestion::CacheLineAlign { .. })
-    });
+    let has_cache_hint = optimizer
+        .suggestions
+        .iter()
+        .any(|s| matches!(s, LayoutSuggestion::CacheLineAlign { .. }));
     // May or may not trigger depending on exact size vs cache_line_size/2 threshold
     let _ = has_cache_hint;
 }

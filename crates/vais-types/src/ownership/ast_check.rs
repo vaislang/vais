@@ -41,7 +41,12 @@ impl OwnershipChecker {
         // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
-            self.define_var(&param.name.node, ty.clone(), param.is_mut, Some(param.name.span));
+            self.define_var(
+                &param.name.node,
+                ty.clone(),
+                param.is_mut,
+                Some(param.name.span),
+            );
 
             // Register parameter lifetime for reference types
             if self.is_ref_ast_type(&param.ty.node) {

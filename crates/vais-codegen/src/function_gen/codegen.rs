@@ -117,9 +117,13 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} %{}, {}* {}",
-                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
+                    llvm_ty,
+                    src_llvm_name,
+                    llvm_ty,
+                    param_ptr
                 );
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
@@ -180,10 +184,7 @@ impl CodeGenerator {
                     };
                     let converted = format!("%main_fptosi.{}", counter);
                     counter += 1;
-                    write_ir!(ir, 
-                        "  {} = fptosi {} {} to i64",
-                        converted, float_ty, value
-                    );
+                    write_ir!(ir, "  {} = fptosi {} {} to i64", converted, float_ty, value);
                     converted
                 } else {
                     value
@@ -195,9 +196,14 @@ impl CodeGenerator {
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = load {}, {}* {}{}",
-                        loaded, ret_llvm, ret_llvm, value, ret_dbg
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value,
+                        ret_dbg
                     );
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
@@ -248,16 +254,19 @@ impl CodeGenerator {
                         } else {
                             // Pointer (e.g., from struct literal) - load then return
                             let loaded = format!("%ret.{}", counter);
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  {} = load {}, {}* {}{}",
-                                loaded, ret_llvm, ret_llvm, value, ret_dbg
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value,
+                                ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                         }
-                    } else if matches!(
-                        ret_type,
-                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
-                    ) && !value.starts_with('%')
+                    } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
+                        && !value.starts_with('%')
                         && !value.starts_with('@')
                     {
                         // Reference return with bare literal: promote to global constant
@@ -267,18 +276,11 @@ impl CodeGenerator {
                             }
                             _ => unreachable!(),
                         };
-                        let const_name =
-                            format!(".ref.const.{}", self.ref_constant_counter);
+                        let const_name = format!(".ref.const.{}", self.ref_constant_counter);
                         self.ref_constant_counter += 1;
-                        self.ref_constants.push((
-                            const_name.clone(),
-                            inner_ty,
-                            value.clone(),
-                        ));
-                        write_ir!(ir, 
-                            "  ret {} @{}{}",
-                            ret_llvm, const_name, ret_dbg
-                        );
+                        self.ref_constants
+                            .push((const_name.clone(), inner_ty, value.clone()));
+                        write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
                         write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                     }
@@ -399,9 +401,13 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} %{}, {}* {}",
-                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
+                    llvm_ty,
+                    src_llvm_name,
+                    llvm_ty,
+                    param_ptr
                 );
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
@@ -429,15 +435,18 @@ impl CodeGenerator {
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = load {}, {}* {}{}",
-                        loaded, ret_llvm, ret_llvm, value, ret_dbg
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value,
+                        ret_dbg
                     );
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
-                } else if matches!(
-                    ret_type,
-                    ResolvedType::Ref(_) | ResolvedType::RefMut(_)
-                ) && !value.starts_with('%')
+                } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
+                    && !value.starts_with('%')
                     && !value.starts_with('@')
                 {
                     let inner_ty = match &ret_type {
@@ -446,18 +455,11 @@ impl CodeGenerator {
                         }
                         _ => unreachable!(),
                     };
-                    let const_name =
-                        format!(".ref.const.{}", self.ref_constant_counter);
+                    let const_name = format!(".ref.const.{}", self.ref_constant_counter);
                     self.ref_constant_counter += 1;
-                    self.ref_constants.push((
-                        const_name.clone(),
-                        inner_ty,
-                        value.clone(),
-                    ));
-                    write_ir!(ir, 
-                        "  ret {} @{}{}",
-                        ret_llvm, const_name, ret_dbg
-                    );
+                    self.ref_constants
+                        .push((const_name.clone(), inner_ty, value.clone()));
+                    write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                 } else {
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                 }
@@ -488,16 +490,19 @@ impl CodeGenerator {
                         } else {
                             // Pointer (e.g., from struct literal) - load then return
                             let loaded = format!("%ret.{}", counter);
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  {} = load {}, {}* {}{}",
-                                loaded, ret_llvm, ret_llvm, value, ret_dbg
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value,
+                                ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                         }
-                    } else if matches!(
-                        ret_type,
-                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
-                    ) && !value.starts_with('%')
+                    } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
+                        && !value.starts_with('%')
                         && !value.starts_with('@')
                     {
                         let inner_ty = match &ret_type {
@@ -506,18 +511,11 @@ impl CodeGenerator {
                             }
                             _ => unreachable!(),
                         };
-                        let const_name =
-                            format!(".ref.const.{}", self.ref_constant_counter);
+                        let const_name = format!(".ref.const.{}", self.ref_constant_counter);
                         self.ref_constant_counter += 1;
-                        self.ref_constants.push((
-                            const_name.clone(),
-                            inner_ty,
-                            value.clone(),
-                        ));
-                        write_ir!(ir, 
-                            "  ret {} @{}{}",
-                            ret_llvm, const_name, ret_dbg
-                        );
+                        self.ref_constants
+                            .push((const_name.clone(), inner_ty, value.clone()));
+                        write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
                         write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                     }

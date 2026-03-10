@@ -346,10 +346,7 @@ impl<'ctx> TypeMapper<'ctx> {
                 ..
             } => {
                 self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: format!(
-                        "unresolved associated type `{}` on {:?}",
-                        assoc_name, base
-                    ),
+                    type_desc: format!("unresolved associated type `{}` on {:?}", assoc_name, base),
                     backend: String::from("inkwell"),
                 });
                 self.context.i64_type().into()

@@ -113,7 +113,9 @@ fn test_unify_tuple_three_elements() {
 
 #[test]
 fn test_unify_fn_type_callback() {
-    tc_ok("F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)\nF test() -> i64 = apply(|x| x + 1, 5)");
+    tc_ok(
+        "F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)\nF test() -> i64 = apply(|x| x + 1, 5)",
+    );
 }
 
 #[test]
@@ -290,7 +292,9 @@ fn test_check_mode_check_various_types() {
 
 #[test]
 fn test_bidirectional_lambda_param_inference() {
-    tc_ok("F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)\nF test() -> i64 = apply(|x| x * 2, 10)");
+    tc_ok(
+        "F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)\nF test() -> i64 = apply(|x| x * 2, 10)",
+    );
 }
 
 #[test]

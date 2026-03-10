@@ -183,8 +183,7 @@ pub(crate) fn optimize_and_output(
     crate::utils::verify_ir_and_log(&ir, "single module");
 
     // Write IR
-    fs::write(&ir_path, &ir)
-        .map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;
+    fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;
 
     if verbose || emit_ir {
         println!("{} {}", "Wrote".green().bold(), ir_path.display());
@@ -390,11 +389,8 @@ fn generate_with_inkwell(
 
     let codegen_start = std::time::Instant::now();
     let context = ::inkwell::context::Context::create();
-    let mut gen = vais_codegen::InkwellCodeGenerator::new_with_target(
-        &context,
-        module_name,
-        target.clone(),
-    );
+    let mut gen =
+        vais_codegen::InkwellCodeGenerator::new_with_target(&context, module_name, target.clone());
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     let instantiations = checker.get_generic_instantiations();

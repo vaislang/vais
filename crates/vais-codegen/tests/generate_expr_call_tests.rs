@@ -31,7 +31,9 @@ fn gen_result(source: &str) -> Result<String, String> {
 #[test]
 fn test_call_println_string_literal() {
     let ir = gen_ok(r#"F main() -> i64 { println("hello"); R 0 }"#);
-    assert!(ir.contains("call") || ir.contains("puts") || ir.contains("printf") || ir.contains("print"));
+    assert!(
+        ir.contains("call") || ir.contains("puts") || ir.contains("printf") || ir.contains("print")
+    );
 }
 
 #[test]
@@ -83,7 +85,9 @@ fn test_call_no_args() {
 
 #[test]
 fn test_call_multiple_args() {
-    let ir = gen_ok("F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = sum3(1, 2, 3)");
+    let ir = gen_ok(
+        "F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c\nF main() -> i64 = sum3(1, 2, 3)",
+    );
     assert!(ir.contains("@sum3"));
 }
 

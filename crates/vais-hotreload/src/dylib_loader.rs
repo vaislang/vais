@@ -416,7 +416,9 @@ mod tests {
         };
         // Pre-populate cache with a known value
         let fake_ptr = 0xDEAD_BEEF as *mut std::ffi::c_void;
-        loader.function_cache.insert("cached_fn".to_string(), fake_ptr);
+        loader
+            .function_cache
+            .insert("cached_fn".to_string(), fake_ptr);
         // Cache hit should return directly without reaching unsafe code
         let result = loader.get_function_ptr("cached_fn");
         assert!(result.is_ok());

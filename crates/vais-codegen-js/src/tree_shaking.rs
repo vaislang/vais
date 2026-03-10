@@ -734,7 +734,6 @@ impl TreeShaker {
     }
 }
 
-
 #[cfg(test)]
 #[path = "tree_shaking_tests.rs"]
 mod tree_shaking_tests;

@@ -454,10 +454,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .unwrap_or(PatternSpace::Empty)
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -549,10 +546,7 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces
-                        .into_iter()
-                        .next()
-                        .unwrap_or(PatternSpace::Empty)
+                    new_spaces.into_iter().next().unwrap_or(PatternSpace::Empty)
                 } else {
                     PatternSpace::Or(new_spaces)
                 }

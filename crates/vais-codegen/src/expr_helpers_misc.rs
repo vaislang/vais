@@ -127,22 +127,32 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", poll_start);
 
         let poll_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call {} @{}(i64 {})",
-            poll_result, poll_ret_ty, poll_func, future_ptr
+            poll_result,
+            poll_ret_ty,
+            poll_func,
+            future_ptr
         );
 
         let status = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = extractvalue {} {}, 0",
-            status, poll_ret_ty, poll_result
+            status,
+            poll_ret_ty,
+            poll_result
         );
 
         let is_ready = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp eq i64 {}, 1", is_ready, status);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}\n",
-            is_ready, poll_ready, poll_pending
+            is_ready,
+            poll_ready,
+            poll_pending
         );
 
         write_ir!(ir, "{}:", poll_pending);
@@ -152,9 +162,12 @@ impl CodeGenerator {
 
         write_ir!(ir, "{}:", poll_ready);
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = extractvalue {} {}, 1",
-            result, poll_ret_ty, poll_result
+            result,
+            poll_ret_ty,
+            poll_result
         );
 
         Ok((result, ir))
@@ -197,9 +210,13 @@ impl CodeGenerator {
                         } else {
                             local.llvm_name.clone()
                         };
-                        write_ir!(capture_ir, 
+                        write_ir!(
+                            capture_ir,
                             "  store {} {}, {}* {}",
-                            llvm_ty, val, llvm_ty, spill_ptr
+                            llvm_ty,
+                            val,
+                            llvm_ty,
+                            spill_ptr
                         );
                         captured_vars.push((cap_name.clone(), ty, spill_ptr));
                     } else {
@@ -214,9 +231,13 @@ impl CodeGenerator {
                     } else {
                         let tmp = self.next_temp(counter);
                         let llvm_ty = self.type_to_llvm(&ty);
-                        write_ir!(capture_ir, 
+                        write_ir!(
+                            capture_ir,
                             "  {} = load {}, {}* %{}",
-                            tmp, llvm_ty, llvm_ty, local.llvm_name
+                            tmp,
+                            llvm_ty,
+                            llvm_ty,
+                            local.llvm_name
                         );
                         captured_vars.push((cap_name.clone(), ty, tmp));
                     }
@@ -295,7 +316,8 @@ impl CodeGenerator {
         // Emit ptrtoint as a proper instruction (not a constant expression)
         // so the result is a clean SSA temp that can be used anywhere
         let fn_ptr_tmp = self.next_temp(counter);
-        write_ir!(capture_ir, 
+        write_ir!(
+            capture_ir,
             "  {} = ptrtoint i64 ({})* @{} to i64",
             fn_ptr_tmp,
             param_types.join(", "),
@@ -342,9 +364,12 @@ impl CodeGenerator {
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = extractvalue {} {}, 0",
-            tag, llvm_type, inner_val
+            tag,
+            llvm_type,
+            inner_val
         );
 
         // Check if Err (tag != 0)
@@ -354,30 +379,41 @@ impl CodeGenerator {
         let merge_label = self.next_label("try_merge");
 
         write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}\n",
-            is_err, err_label, ok_label
+            is_err,
+            err_label,
+            ok_label
         );
 
         // Err branch: early return
         write_ir!(ir, "{}:", err_label);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  ret {} {}  ; early return on Err\n",
-            llvm_type, inner_val
+            llvm_type,
+            inner_val
         );
 
         // Ok branch: extract payload value
         write_ir!(ir, "{}:", ok_label);
         let value = self.next_temp(counter);
         if extract_payload {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {} {}, 1, 0",
-                value, llvm_type, inner_val
+                value,
+                llvm_type,
+                inner_val
             );
         } else {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {} {}, 1",
-                value, llvm_type, inner_val
+                value,
+                llvm_type,
+                inner_val
             );
         }
         write_ir!(ir, "  br label %{}\n", merge_label);
@@ -412,9 +448,12 @@ impl CodeGenerator {
 
         // Extract tag (field 0)
         let tag = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = extractvalue {} {}, 0",
-            tag, llvm_type, inner_val
+            tag,
+            llvm_type,
+            inner_val
         );
 
         // Check if Err/None (tag != 0)
@@ -423,9 +462,12 @@ impl CodeGenerator {
         let ok_label = self.next_label("unwrap_ok");
 
         write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}\n",
-            is_err, err_label, ok_label
+            is_err,
+            err_label,
+            ok_label
         );
 
         // Err branch: panic/abort
@@ -438,14 +480,20 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", ok_label);
         let value = self.next_temp(counter);
         if extract_payload {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {} {}, 1, 0",
-                value, llvm_type, inner_val
+                value,
+                llvm_type,
+                inner_val
             );
         } else {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {} {}, 1",
-                value, llvm_type, inner_val
+                value,
+                llvm_type,
+                inner_val
             );
         }
 
@@ -527,9 +575,15 @@ impl CodeGenerator {
 
         for (i, val) in arg_vals.iter().enumerate() {
             let next_vec = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = insertelement {} {}, {} {}, i32 {}",
-                next_vec, vec_ty, current_vec, elem_ty, val, i
+                next_vec,
+                vec_ty,
+                current_vec,
+                elem_ty,
+                val,
+                i
             );
             current_vec = next_vec;
         }
@@ -585,9 +639,14 @@ impl CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = {} {} {}, {}",
-            result, llvm_op, vec_ty, arg_vals[0], arg_vals[1]
+            result,
+            llvm_op,
+            vec_ty,
+            arg_vals[0],
+            arg_vals[1]
         );
 
         Ok((result, ir))
@@ -632,14 +691,26 @@ impl CodeGenerator {
         // For float/double, we need an initial value for ordered reduction
         if elem_ty == "float" || elem_ty == "double" {
             let zero = "0.0";
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call {} {}({} {}, {} {})",
-                result, elem_ty, intrinsic, elem_ty, zero, vec_ty, arg_vals[0]
+                result,
+                elem_ty,
+                intrinsic,
+                elem_ty,
+                zero,
+                vec_ty,
+                arg_vals[0]
             );
         } else {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call {} {}({} {})",
-                result, elem_ty, intrinsic, vec_ty, arg_vals[0]
+                result,
+                elem_ty,
+                intrinsic,
+                vec_ty,
+                arg_vals[0]
             );
         }
 

@@ -11,14 +11,9 @@
 use super::helpers::compile_to_ir;
 
 // Helper: compile Vais source to IR with a specific WASM target
-fn compile_to_wasm_ir(
-    source: &str,
-    target: vais_codegen::TargetTriple,
-) -> Result<String, String> {
-    let _tokens =
-        vais_lexer::tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
-    let module =
-        vais_parser::parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
+fn compile_to_wasm_ir(source: &str, target: vais_codegen::TargetTriple) -> Result<String, String> {
+    let _tokens = vais_lexer::tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
+    let module = vais_parser::parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
     let mut checker = vais_types::TypeChecker::new();
     checker
         .check_module(&module)
@@ -148,7 +143,10 @@ F main() -> i64 {
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
-    assert!(ir.contains("wasm-export-name"), "Should have WASM export metadata");
+    assert!(
+        ir.contains("wasm-export-name"),
+        "Should have WASM export metadata"
+    );
     assert!(ir.contains("compute"), "Should export 'compute'");
 }
 
@@ -166,8 +164,14 @@ F main() -> i64 {
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
-    assert!(ir.contains("wasm-import-module"), "Should have WASM import module");
-    assert!(ir.contains("wasm-import-name"), "Should have WASM import name");
+    assert!(
+        ir.contains("wasm-import-module"),
+        "Should have WASM import module"
+    );
+    assert!(
+        ir.contains("wasm-import-name"),
+        "Should have WASM import name"
+    );
     assert!(ir.contains("env"), "Import module should be 'env'");
 }
 
@@ -232,8 +236,7 @@ F main() -> i64 {
     R 42
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"), "Should target wasm32-wasip2");
     assert!(
         ir.contains("e-m:e-p:32:32"),
@@ -250,8 +253,7 @@ F main() -> i64 {
     R compute(2, 3, 4)
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
     assert!(ir.contains("@compute"));
 }
@@ -271,8 +273,7 @@ F main() -> i64 {
     R distance_sq(p)
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
 }
 
@@ -299,8 +300,7 @@ F main() -> i64 {
     R color_value(c)
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
 }
 
@@ -329,8 +329,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
     assert!(ir.contains("wasi:io/streams@0.2.0"));
     assert!(ir.contains("wasi:io/poll@0.2.0"));
@@ -369,8 +368,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasi:filesystem/types@0.2.0"));
     assert!(ir.contains("wasi:filesystem/preopens@0.2.0"));
 }
@@ -393,8 +391,7 @@ F main() -> i64 {
     R 0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasi:sockets/tcp@0.2.0"));
     assert!(ir.contains("wasi:sockets/ip-name-lookup@0.2.0"));
 }
@@ -426,8 +423,7 @@ F main() -> i64 {
     R hello()
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
     assert!(ir.contains("wasm-import-module"));
     assert!(ir.contains("wasm-export-name"));
@@ -456,8 +452,14 @@ fn test_wit_package_with_multiple_interfaces() {
             WitFunction {
                 name: "add".to_string(),
                 params: vec![
-                    WitParam { name: "a".to_string(), ty: WitType::S64 },
-                    WitParam { name: "b".to_string(), ty: WitType::S64 },
+                    WitParam {
+                        name: "a".to_string(),
+                        ty: WitType::S64,
+                    },
+                    WitParam {
+                        name: "b".to_string(),
+                        ty: WitType::S64,
+                    },
                 ],
                 results: Some(WitResult::Anon(WitType::S64)),
                 docs: Some("Add two numbers".to_string()),
@@ -465,8 +467,14 @@ fn test_wit_package_with_multiple_interfaces() {
             WitFunction {
                 name: "multiply".to_string(),
                 params: vec![
-                    WitParam { name: "a".to_string(), ty: WitType::S64 },
-                    WitParam { name: "b".to_string(), ty: WitType::S64 },
+                    WitParam {
+                        name: "a".to_string(),
+                        ty: WitType::S64,
+                    },
+                    WitParam {
+                        name: "b".to_string(),
+                        ty: WitType::S64,
+                    },
                 ],
                 results: Some(WitResult::Anon(WitType::S64)),
                 docs: None,
@@ -509,7 +517,10 @@ fn test_wit_package_no_version() {
     let pkg = WitPackage::new("test", "simple");
     let wit = pkg.to_wit_string();
     assert!(wit.contains("package test:simple;"));
-    assert!(!wit.contains("@"), "No version should mean no @ in package line");
+    assert!(
+        !wit.contains("@"),
+        "No version should mean no @ in package line"
+    );
 }
 
 #[test]
@@ -606,8 +617,8 @@ fn test_wit_flags_construction() {
 #[test]
 fn test_wit_world_construction() {
     use vais_codegen::wasm_component::{
-        WitExport, WitExportItem, WitFunction, WitImport, WitImportItem, WitParam,
-        WitResult, WitType, WitWorld,
+        WitExport, WitExportItem, WitFunction, WitImport, WitImportItem, WitParam, WitResult,
+        WitType, WitWorld,
     };
 
     let world = WitWorld {
@@ -619,9 +630,7 @@ fn test_wit_world_construction() {
             },
             WitImport {
                 name: "fs".to_string(),
-                item: WitImportItem::Interface(
-                    "wasi:filesystem/types@0.2.0".to_string(),
-                ),
+                item: WitImportItem::Interface("wasi:filesystem/types@0.2.0".to_string()),
             },
         ],
         exports: vec![WitExport {
@@ -739,8 +748,7 @@ F main() -> i64 {
     0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
     assert!(ir.contains("wasm-import-module"));
     assert!(ir.contains("wasm-export-name"));
@@ -804,8 +812,7 @@ F main() -> i64 {
     0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
     let export_count = ir.matches("wasm-export-name").count();
     assert!(
@@ -846,11 +853,16 @@ F main() -> i64 {
     0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
-    assert!(ir.contains("wasm-import-module"), "Todo app should have imports");
-    assert!(ir.contains("wasm-export-name"), "Todo app should have exports");
+    assert!(
+        ir.contains("wasm-import-module"),
+        "Todo app should have imports"
+    );
+    assert!(
+        ir.contains("wasm-export-name"),
+        "Todo app should have exports"
+    );
 }
 
 #[test]
@@ -881,8 +893,7 @@ F main() -> i64 {
     0
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
     assert!(ir.contains("wasm32-unknown-unknown"));
     assert!(ir.contains("wasm-import-module"));
     assert!(ir.contains("wasm-export-name"));
@@ -902,8 +913,7 @@ F main() -> i64 {
     R add(1, 2) + multiply(3, 4)
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
     assert!(ir.contains("wasm-export-name"));
 }
@@ -930,8 +940,7 @@ F main() -> i64 {
     R fib(10)
 }
 "#;
-    let ir =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
+    let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
     assert!(ir.contains("wasm32-wasip2"));
     assert!(ir.contains("wasm-import-module"));
     assert!(ir.contains("wasm-export-name"));
@@ -940,23 +949,29 @@ F main() -> i64 {
 #[test]
 fn test_example_files_exist() {
     // Verify all wasm example files exist
+    let project_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let examples = [
-        "/Users/sswoo/study/projects/vais/examples/wasm_interop.vais",
-        "/Users/sswoo/study/projects/vais/examples/wasm_calculator.vais",
-        "/Users/sswoo/study/projects/vais/examples/wasm_todo_app.vais",
-        "/Users/sswoo/study/projects/vais/examples/wasm_api_client.vais",
+        "examples/wasm_interop.vais",
+        "examples/wasm_calculator.vais",
+        "examples/wasm_todo_app.vais",
+        "examples/wasm_api_client.vais",
     ];
-    for path in &examples {
+    for rel_path in &examples {
+        let path = project_root.join(rel_path);
         assert!(
-            std::path::Path::new(path).exists(),
+            path.exists(),
             "Example file should exist: {}",
-            path
+            path.display()
         );
-        let content = std::fs::read_to_string(path).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
         assert!(
             content.contains("wasm_export") || content.contains("wasm_import"),
             "Example {} should contain WASM annotations",
-            path
+            path.display()
         );
     }
 }
@@ -976,8 +991,14 @@ fn test_bindgen_js_multiple_functions() {
         WitFunction {
             name: "add".to_string(),
             params: vec![
-                WitParam { name: "a".to_string(), ty: WitType::S64 },
-                WitParam { name: "b".to_string(), ty: WitType::S64 },
+                WitParam {
+                    name: "a".to_string(),
+                    ty: WitType::S64,
+                },
+                WitParam {
+                    name: "b".to_string(),
+                    ty: WitType::S64,
+                },
             ],
             results: Some(WitResult::Anon(WitType::S64)),
             docs: None,
@@ -985,8 +1006,14 @@ fn test_bindgen_js_multiple_functions() {
         WitFunction {
             name: "multiply".to_string(),
             params: vec![
-                WitParam { name: "x".to_string(), ty: WitType::F64 },
-                WitParam { name: "y".to_string(), ty: WitType::F64 },
+                WitParam {
+                    name: "x".to_string(),
+                    ty: WitType::F64,
+                },
+                WitParam {
+                    name: "y".to_string(),
+                    ty: WitType::F64,
+                },
             ],
             results: Some(WitResult::Anon(WitType::F64)),
             docs: Some("Multiply two doubles".to_string()),
@@ -1015,9 +1042,7 @@ fn test_bindgen_js_multiple_functions() {
 
 #[test]
 fn test_bindgen_js_no_params_function() {
-    use vais_codegen::wasm_component::{
-        WasmBindgenGenerator, WitFunction, WitResult, WitType,
-    };
+    use vais_codegen::wasm_component::{WasmBindgenGenerator, WitFunction, WitResult, WitType};
 
     let gen = WasmBindgenGenerator::new("status");
     let functions = vec![WitFunction {
@@ -1036,9 +1061,7 @@ fn test_bindgen_js_no_params_function() {
 
 #[test]
 fn test_bindgen_js_void_function() {
-    use vais_codegen::wasm_component::{
-        WasmBindgenGenerator, WitFunction, WitParam, WitType,
-    };
+    use vais_codegen::wasm_component::{WasmBindgenGenerator, WitFunction, WitParam, WitType};
 
     let gen = WasmBindgenGenerator::new("actions");
     let functions = vec![WitFunction {
@@ -1131,15 +1154,12 @@ F main() -> i64 {
 }
 "#;
     // All three WASM targets should produce valid IR
-    let ir_wasm32 =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown)
-            .expect("wasm32-unknown-unknown should compile");
-    let ir_wasip1 =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview1)
-            .expect("wasm32-wasi should compile");
-    let ir_wasip2 =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2)
-            .expect("wasm32-wasip2 should compile");
+    let ir_wasm32 = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown)
+        .expect("wasm32-unknown-unknown should compile");
+    let ir_wasip1 = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview1)
+        .expect("wasm32-wasi should compile");
+    let ir_wasip2 = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2)
+        .expect("wasm32-wasip2 should compile");
 
     // Each should have distinct target triple
     assert!(ir_wasm32.contains("wasm32-unknown-unknown"));
@@ -1167,9 +1187,8 @@ F main() -> i64 {
 }
 "#;
     let ir_native = compile_to_ir(source).expect("native should compile");
-    let ir_wasm =
-        compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown)
-            .expect("wasm32 should compile");
+    let ir_wasm = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown)
+        .expect("wasm32 should compile");
 
     // Both should contain the double function
     assert!(ir_native.contains("@double"));

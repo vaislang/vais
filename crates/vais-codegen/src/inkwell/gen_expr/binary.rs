@@ -242,6 +242,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
                 // Offset for second string
+                // SAFETY: GEP offset is len1, within the malloc'd (len1 + len2 + 1) byte buffer.
                 let buf2 = unsafe {
                     self.builder
                         .build_in_bounds_gep(self.context.i8_type(), buf, &[len1], "buf2")

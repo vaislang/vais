@@ -66,6 +66,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let idx = self.context.i64_type().const_int(i as u64, false);
 
             // Store key
+            // SAFETY: GEP index i is bounded by key_vals.len(), matching the alloca'd array size.
             let k_elem_ptr = unsafe {
                 self.builder
                     .build_gep(
@@ -81,6 +82,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
             // Store value
+            // SAFETY: GEP index i is bounded by val_vals.len(), matching the alloca'd array size.
             let v_elem_ptr = unsafe {
                 self.builder
                     .build_gep(
@@ -133,6 +135,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Store each element
         for (i, val) in values.iter().enumerate() {
             let idx = self.context.i64_type().const_int(i as u64, false);
+            // SAFETY: GEP index i is bounded by elements.len(), matching the alloca'd array size.
             let elem_ptr = unsafe {
                 self.builder
                     .build_gep(
@@ -269,6 +272,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let data_ptr_val = data_ptr.into_pointer_value();
 
                 // GEP to get element pointer (stride = sizeof(elem_type))
+                // SAFETY: Runtime index from user code — bounds checking is the caller's responsibility.
+                // data_ptr comes from a valid Vec/Slice data field.
                 let elem_ptr = unsafe {
                     self.builder
                         .build_gep(elem_type, data_ptr_val, &[idx_int], "elem_ptr")
@@ -288,6 +293,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let idx_int = idx_val.into_int_value();
 
         // Get element pointer
+        // SAFETY: Runtime index from user code — bounds checking is the caller's responsibility.
+        // arr_ptr is a valid array/pointer from a prior allocation or parameter.
         let elem_ptr = unsafe {
             self.builder
                 .build_gep(inferred_elem_type, arr_ptr, &[idx_int], "elem_ptr")
@@ -456,6 +463,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_int_add(start_val, i, "src_idx")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: src_idx = start + i, bounded by slice length validation in the loop condition.
+        // arr_ptr is a valid array pointer from a prior allocation.
         let src_ptr = unsafe {
             self.builder
                 .build_gep(self.context.i64_type(), arr_ptr, &[src_idx], "src_ptr")
@@ -465,6 +474,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .builder
             .build_load(self.context.i64_type(), src_ptr, "elem")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: dst index i is bounded by slice_len (loop condition), matching the malloc'd buffer.
         let dst_ptr = unsafe {
             self.builder
                 .build_gep(self.context.i64_type(), slice_ptr, &[i], "dst_ptr")

@@ -589,10 +589,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     raw_ptr.into()
                 } else if param_ty.is_pointer_type() && val.is_int_value() {
                     // i64 → inttoptr (e.g. free(ptr) called with i64 handle)
-                    let i8_ptr_type = self
-                        .context
-                        .i8_type()
-                        .ptr_type(AddressSpace::default());
+                    let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
                     let ptr_val = self
                         .builder
                         .build_int_to_ptr(val.into_int_value(), i8_ptr_type, "arg_inttoptr")

@@ -242,8 +242,9 @@ entry:
 "#;
     let diags = verify_text_ir(ir);
     assert!(
-        diags.iter().any(|d| d.message.contains("mismatched braces")
-            || d.message.contains("unterminated")),
+        diags
+            .iter()
+            .any(|d| d.message.contains("mismatched braces") || d.message.contains("unterminated")),
         "Expected mismatched brace diagnostic: {:?}",
         diags
     );
@@ -259,9 +260,7 @@ entry:
 "#;
     let diags = verify_text_ir(ir);
     assert!(
-        diags
-            .iter()
-            .any(|d| d.message.contains("undefined label")),
+        diags.iter().any(|d| d.message.contains("undefined label")),
         "Expected undefined label diagnostic: {:?}",
         diags
     );
@@ -402,7 +401,11 @@ entry:
         .iter()
         .filter(|d| d.message.contains("mismatched braces"))
         .collect();
-    assert!(brace_diags.is_empty(), "False positive brace issue: {:?}", brace_diags);
+    assert!(
+        brace_diags.is_empty(),
+        "False positive brace issue: {:?}",
+        brace_diags
+    );
 }
 
 #[test]
@@ -618,10 +621,7 @@ fn test_abi_compat_major_diff() {
 
 #[test]
 fn test_abi_compat_invalid_format() {
-    assert_eq!(
-        check_abi_compatibility(""),
-        AbiCompatibility::Incompatible
-    );
+    assert_eq!(check_abi_compatibility(""), AbiCompatibility::Incompatible);
     assert_eq!(
         check_abi_compatibility("1.0"),
         AbiCompatibility::Incompatible
@@ -1047,7 +1047,10 @@ fn test_target_parse_unknown() {
 #[test]
 fn test_target_parse_case_insensitive() {
     assert_eq!(TargetTriple::parse("NATIVE"), Some(TargetTriple::Native));
-    assert_eq!(TargetTriple::parse("WASM32"), Some(TargetTriple::Wasm32Unknown));
+    assert_eq!(
+        TargetTriple::parse("WASM32"),
+        Some(TargetTriple::Wasm32Unknown)
+    );
 }
 
 // ============================================================================

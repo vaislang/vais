@@ -37,9 +37,18 @@ fn test_void_placeholder_helper() {
 
 #[test]
 fn test_is_void_result_helper() {
-    assert!(crate::helpers::is_void_result("void", &vais_types::ResolvedType::I64));
-    assert!(crate::helpers::is_void_result("i64", &vais_types::ResolvedType::Unit));
-    assert!(!crate::helpers::is_void_result("i64", &vais_types::ResolvedType::I64));
+    assert!(crate::helpers::is_void_result(
+        "void",
+        &vais_types::ResolvedType::I64
+    ));
+    assert!(crate::helpers::is_void_result(
+        "i64",
+        &vais_types::ResolvedType::Unit
+    ));
+    assert!(!crate::helpers::is_void_result(
+        "i64",
+        &vais_types::ResolvedType::I64
+    ));
 }
 
 #[test]

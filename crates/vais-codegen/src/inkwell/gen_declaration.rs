@@ -299,33 +299,45 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                     BinOp::Div => {
                         // LLVM 17 removed LLVMConstSDiv — evaluate in Rust and emit constant
-                        let lhs_val = lhs_int
-                            .get_sign_extended_constant()
-                            .ok_or_else(|| CodegenError::Unsupported("Const expr div: non-constant operand".to_string()))?;
-                        let rhs_val = rhs_int
-                            .get_sign_extended_constant()
-                            .ok_or_else(|| CodegenError::Unsupported("Const expr div: non-constant operand".to_string()))?;
+                        let lhs_val = lhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr div: non-constant operand".to_string(),
+                            )
+                        })?;
+                        let rhs_val = rhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr div: non-constant operand".to_string(),
+                            )
+                        })?;
                         if rhs_val == 0 {
                             return Err(CodegenError::InternalError(
                                 "Const expr division by zero".to_string(),
                             ));
                         }
-                        self.context.i64_type().const_int((lhs_val / rhs_val) as u64, true)
+                        self.context
+                            .i64_type()
+                            .const_int((lhs_val / rhs_val) as u64, true)
                     }
                     BinOp::Mod => {
                         // LLVM 17 removed LLVMConstSRem — evaluate in Rust and emit constant
-                        let lhs_val = lhs_int
-                            .get_sign_extended_constant()
-                            .ok_or_else(|| CodegenError::Unsupported("Const expr mod: non-constant operand".to_string()))?;
-                        let rhs_val = rhs_int
-                            .get_sign_extended_constant()
-                            .ok_or_else(|| CodegenError::Unsupported("Const expr mod: non-constant operand".to_string()))?;
+                        let lhs_val = lhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr mod: non-constant operand".to_string(),
+                            )
+                        })?;
+                        let rhs_val = rhs_int.get_sign_extended_constant().ok_or_else(|| {
+                            CodegenError::Unsupported(
+                                "Const expr mod: non-constant operand".to_string(),
+                            )
+                        })?;
                         if rhs_val == 0 {
                             return Err(CodegenError::InternalError(
                                 "Const expr modulo by zero".to_string(),
                             ));
                         }
-                        self.context.i64_type().const_int((lhs_val % rhs_val) as u64, true)
+                        self.context
+                            .i64_type()
+                            .const_int((lhs_val % rhs_val) as u64, true)
                     }
                     _ => {
                         return Err(CodegenError::Unsupported(format!(

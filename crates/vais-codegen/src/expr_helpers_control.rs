@@ -29,9 +29,12 @@ impl CodeGenerator {
         ir.push_str(&conv_ir);
 
         // Conditional branch
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_bool, then_label, else_label
+            cond_bool,
+            then_label,
+            else_label
         );
 
         // Then branch
@@ -51,9 +54,15 @@ impl CodeGenerator {
         let result = self.next_temp(counter);
         let phi_type = self.infer_expr_type(then);
         let phi_llvm = self.type_to_llvm(&phi_type);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
-            result, phi_llvm, then_val, then_label, else_val, else_label
+            result,
+            phi_llvm,
+            then_val,
+            then_label,
+            else_val,
+            else_label
         );
 
         Ok((result, ir))
@@ -77,9 +86,12 @@ impl CodeGenerator {
         // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
         let (cond_bool, conv_ir) = self.generate_cond_to_i1(cond, &cond_val, counter);
         ir.push_str(&conv_ir);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_bool, then_label, else_label
+            cond_bool,
+            then_label,
+            else_label
         );
 
         // Infer block type to detect struct/enum results that need loading
@@ -99,9 +111,13 @@ impl CodeGenerator {
         // For struct/enum results, load the value from the alloca pointer before branch
         let then_val_for_phi = if is_struct_result && !then_terminated {
             let loaded = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = load {}, {}* {}",
-                loaded, phi_llvm, phi_llvm, then_val
+                loaded,
+                phi_llvm,
+                phi_llvm,
+                then_val
             );
             loaded
         } else {
@@ -135,9 +151,13 @@ impl CodeGenerator {
         let else_val_for_phi =
             if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
                 let loaded = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = load {}, {}* {}",
-                    loaded, phi_llvm, phi_llvm, else_val
+                    loaded,
+                    phi_llvm,
+                    phi_llvm,
+                    else_val
                 );
                 loaded
             } else {
@@ -164,7 +184,8 @@ impl CodeGenerator {
         if is_void || !has_else {
             ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
                 result,
                 phi_llvm,
@@ -174,14 +195,22 @@ impl CodeGenerator {
                 else_from_label
             );
         } else if !then_from_label.is_empty() {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = phi {} [ {}, %{} ]",
-                result, phi_llvm, then_val_for_phi, then_from_label
+                result,
+                phi_llvm,
+                then_val_for_phi,
+                then_from_label
             );
         } else if !else_from_label.is_empty() {
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = phi {} [ {}, %{} ]",
-                result, phi_llvm, else_val_for_phi, else_from_label
+                result,
+                phi_llvm,
+                else_val_for_phi,
+                else_from_label
             );
         } else {
             ir.push_str(&crate::helpers::void_placeholder_ir(&result));
@@ -219,9 +248,12 @@ impl CodeGenerator {
             // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
             let (cond_bool, conv_ir) = self.generate_cond_to_i1(iter_expr, &cond_val, counter);
             ir.push_str(&conv_ir);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  br i1 {}, label %{}, label %{}",
-                cond_bool, loop_body, loop_end
+                cond_bool,
+                loop_body,
+                loop_end
             );
 
             write_ir!(ir, "{}:", loop_body);
@@ -276,9 +308,12 @@ impl CodeGenerator {
         // Convert to i1 for branch (type-aware: skip icmp for already-i1 bool)
         let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
         ir.push_str(&conv_ir);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_bool, loop_body, loop_end
+            cond_bool,
+            loop_body,
+            loop_end
         );
 
         // Loop body

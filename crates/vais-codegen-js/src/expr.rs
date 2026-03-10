@@ -5,7 +5,9 @@
 //! - `expr_helpers`: Free helper functions (binop_to_js, escape_js_string, sanitize_js_ident, etc.)
 //! - `expr_tests`: Unit tests
 
-use crate::expr_helpers::{binop_to_js, escape_js_string, escape_template_literal, sanitize_js_ident, unaryop_to_js};
+use crate::expr_helpers::{
+    binop_to_js, escape_js_string, escape_template_literal, sanitize_js_ident, unaryop_to_js,
+};
 use crate::{JsCodeGenerator, Result};
 use vais_ast::*;
 

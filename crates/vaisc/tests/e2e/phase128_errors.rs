@@ -26,42 +26,27 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 #[test]
 fn e2e_p128_err_type_mismatch_bool_for_int() {
-    assert_error_contains(
-        r#"F main() -> i64 = true"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_int_for_bool() {
-    assert_error_contains(
-        r#"F main() -> bool = 42"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_string_for_bool() {
-    assert_error_contains(
-        r#"F main() -> bool = "hello""#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> bool = "hello""#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_add_bool_int() {
-    assert_error_contains(
-        r#"F main() -> i64 = true + 1"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = true + 1"#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_compare_string_int() {
-    assert_error_contains(
-        r#"F main() -> bool = "abc" == 42"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> bool = "abc" == 42"#, "mismatch");
 }
 
 #[test]
@@ -102,10 +87,7 @@ F main() -> i64 = double("five")
 
 #[test]
 fn e2e_p128_err_undef_var_in_expr() {
-    assert_error_contains(
-        r#"F main() -> i64 = x + 1"#,
-        "undefined",
-    );
+    assert_error_contains(r#"F main() -> i64 = x + 1"#, "undefined");
 }
 
 #[test]
@@ -123,10 +105,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p128_err_undef_fn_call() {
-    assert_error_contains(
-        r#"F main() -> i64 = nonexistent()"#,
-        "undefined",
-    );
+    assert_error_contains(r#"F main() -> i64 = nonexistent()"#, "undefined");
 }
 
 #[test]
@@ -434,10 +413,7 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p128_err_return_string_for_int() {
-    assert_error_contains(
-        r#"F main() -> i64 = "hello""#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
 }
 
 #[test]
@@ -460,34 +436,24 @@ F main() -> i64 = foo()
 
 #[test]
 fn e2e_p128_err_self_call_in_main() {
-    assert_compile_error(
-        r#"F main() -> i64 = @(5)"#,
-    );
+    assert_compile_error(r#"F main() -> i64 = @(5)"#);
 }
 
 // ==================== K. Operator Errors ====================
 
 #[test]
 fn e2e_p128_err_subtract_strings() {
-    assert_error_contains(
-        r#"F main() -> i64 = "a" - "b""#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = "a" - "b""#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_multiply_bools() {
-    assert_error_contains(
-        r#"F main() -> i64 = true * false"#,
-        "mismatch",
-    );
+    assert_error_contains(r#"F main() -> i64 = true * false"#, "mismatch");
 }
 
 #[test]
 fn e2e_p128_err_negate_string() {
-    assert_compile_error(
-        r#"F main() -> i64 = -"hello""#,
-    );
+    assert_compile_error(r#"F main() -> i64 = -"hello""#);
 }
 
 // ==================== L. ImplTrait Position Errors ====================
@@ -502,7 +468,10 @@ F display(item: X Showable) -> i64 = 0
 F main() -> i64 { 0 }
 "#;
     let result = compile_to_ir(source);
-    assert!(result.is_err(), "impl Trait in parameter position should fail");
+    assert!(
+        result.is_err(),
+        "impl Trait in parameter position should fail"
+    );
 }
 
 // ==================== M. Positive Counterparts (should compile) ====================

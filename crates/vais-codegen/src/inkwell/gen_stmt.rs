@@ -17,8 +17,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         &mut self,
         stmts: &[Spanned<Stmt>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let mut last_value: BasicValueEnum =
-            self.unit_value();
+        let mut last_value: BasicValueEnum = self.unit_value();
 
         for stmt in stmts {
             // Stop generating after a terminator (return/break/continue)

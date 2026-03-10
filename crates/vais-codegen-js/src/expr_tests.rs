@@ -2,7 +2,6 @@ use crate::expr_helpers::*;
 use crate::JsCodeGenerator;
 use vais_ast::*;
 
-
 #[test]
 fn test_escape_js_string() {
     assert_eq!(escape_js_string("hello"), "hello");

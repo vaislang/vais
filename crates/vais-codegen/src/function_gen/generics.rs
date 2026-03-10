@@ -66,7 +66,8 @@ impl CodeGenerator {
 
         let llvm_fields: Vec<String> = fields.iter().map(|(_, ty)| self.type_to_llvm(ty)).collect();
 
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "%{} = type {{ {} }}",
             inst.mangled_name,
             llvm_fields.join(", ")
@@ -217,7 +218,8 @@ impl CodeGenerator {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "define {} @{}({}) {{",
             ret_llvm,
             inst.mangled_name,
@@ -234,9 +236,13 @@ impl CodeGenerator {
                 let src_llvm_name = crate::helpers::sanitize_param_name(name);
                 let param_ptr = format!("__{}_ptr", name);
                 write_ir!(ir, "  %{} = alloca {}", param_ptr, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} %{}, {}* %{}",
-                    llvm_ty, src_llvm_name, llvm_ty, param_ptr
+                    llvm_ty,
+                    src_llvm_name,
+                    llvm_ty,
+                    param_ptr
                 );
                 // Update locals to use the alloca pointer as an SSA value so field access works
                 self.fn_ctx.locals.insert(
@@ -256,9 +262,13 @@ impl CodeGenerator {
                     ir.push_str("  ret void\n");
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     let loaded = format!("%ret.{}", counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = load {}, {}* {}",
-                        loaded, ret_llvm, ret_llvm, value
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value
                     );
                     write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                 } else {
@@ -272,9 +282,13 @@ impl CodeGenerator {
                     ir.push_str("  ret void\n");
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     let loaded = format!("%ret.{}", counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = load {}, {}* {}",
-                        loaded, ret_llvm, ret_llvm, value
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value
                     );
                     write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                 } else {

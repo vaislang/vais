@@ -50,9 +50,12 @@ impl WitPackage {
 
         // Package declaration
         if let Some(version) = &self.version {
-            write_ir!(output, 
+            write_ir!(
+                output,
                 "package {}:{}@{};\n",
-                self.namespace, self.name, version
+                self.namespace,
+                self.name,
+                version
             );
         } else {
             write_ir!(output, "package {}:{};\n", self.namespace, self.name);
@@ -324,10 +327,7 @@ impl WitPackage {
                     write_ir!(output, "  import {};", name);
                 }
                 WitImportItem::Function(func) => {
-                    write_ir!(output, 
-                        "  import {};",
-                        self.format_function(func, 1).trim()
-                    );
+                    write_ir!(output, "  import {};", self.format_function(func, 1).trim());
                 }
             }
         }
@@ -339,10 +339,7 @@ impl WitPackage {
                     write_ir!(output, "  export {};", name);
                 }
                 WitExportItem::Function(func) => {
-                    write_ir!(output, 
-                        "  export {};",
-                        self.format_function(func, 1).trim()
-                    );
+                    write_ir!(output, "  export {};", self.format_function(func, 1).trim());
                 }
             }
         }

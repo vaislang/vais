@@ -59,9 +59,12 @@ impl CodeGenerator {
                 if fn_name == "println" {
                     // For println with non-literal, use puts
                     let i32_result = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = call i32 @puts(i8* {}){}",
-                        i32_result, raw_ptr, dbg_info
+                        i32_result,
+                        raw_ptr,
+                        dbg_info
                     );
                 } else {
                     // For print with non-literal, use printf with %s
@@ -76,9 +79,13 @@ impl CodeGenerator {
                         fmt_len, fmt_len, fmt_name
                     );
                     let _result = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = call i32 (i8*, ...) @printf(i8* {}, i8* {}){}",
-                        _result, fmt_ptr, raw_ptr, dbg_info
+                        _result,
+                        fmt_ptr,
+                        raw_ptr,
+                        dbg_info
                     );
                 }
                 return Ok(("void".to_string(), ir));
@@ -204,16 +211,20 @@ impl CodeGenerator {
                 puts_len, puts_len, puts_name
             );
             let _result = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i32 @puts(i8* {}){}",
-                _result, puts_ptr, dbg_info
+                _result,
+                puts_ptr,
+                dbg_info
             );
             return Ok(("void".to_string(), ir));
         }
 
         // For print with no extra args, use printf with just the format string
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 (i8*, ...) @printf({}){}",
             result,
             printf_args.join(", "),
@@ -364,9 +375,12 @@ impl CodeGenerator {
 
         // Step 1: snprintf(NULL, 0, fmt, ...) to get required length
         let len_i32 = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* null, i64 0, i8* {}{})",
-            len_i32, fmt_ptr, snprintf_args
+            len_i32,
+            fmt_ptr,
+            snprintf_args
         );
 
         // Convert i32 length to i64
@@ -378,18 +392,20 @@ impl CodeGenerator {
         write_ir!(ir, "  {} = add i64 {}, 1", buf_size, len_i64);
 
         let buf_ptr = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = call i8* @malloc(i64 {})",
-            buf_ptr, buf_size
-        );
+        write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
         // Track allocation for automatic cleanup at scope exit
         self.track_alloc(buf_ptr.clone());
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 (i8*, i64, i8*, ...) @snprintf(i8* {}, i64 {}, i8* {}{})",
-            _write_result, buf_ptr, buf_size, fmt_ptr, snprintf_args
+            _write_result,
+            buf_ptr,
+            buf_size,
+            fmt_ptr,
+            snprintf_args
         );
 
         // Mark that we need snprintf declaration
@@ -416,14 +432,21 @@ impl CodeGenerator {
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0",
-            fmt_ptr, fmt_len, fmt_len, fmt_name
+            fmt_ptr,
+            fmt_len,
+            fmt_len,
+            fmt_name
         );
         let i32_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})",
-            i32_result, fmt_ptr, arg_val
+            i32_result,
+            fmt_ptr,
+            arg_val
         );
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
@@ -446,14 +469,21 @@ impl CodeGenerator {
             .push((fmt_name.clone(), fmt_str.to_string()));
         let fmt_len = fmt_str.len() + 1;
         let fmt_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0",
-            fmt_ptr, fmt_len, fmt_len, fmt_name
+            fmt_ptr,
+            fmt_len,
+            fmt_len,
+            fmt_name
         );
         let i32_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})",
-            i32_result, fmt_ptr, arg_val
+            i32_result,
+            fmt_ptr,
+            arg_val
         );
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);

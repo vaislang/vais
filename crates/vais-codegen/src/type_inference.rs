@@ -138,7 +138,13 @@ impl CodeGenerator {
                 // Handle @(args) — self-recursive call returns the current function's type
                 if let Expr::SelfCall = &func.node {
                     if let Some(fn_name) = &self.fn_ctx.current_function {
-                        if let Some(fn_info) = self.types.functions.get(fn_name) {
+                        // In async poll functions, current_function is "name__poll"
+                        // but the function info is stored under the original name.
+                        let lookup_name = fn_name
+                            .strip_suffix("__poll")
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| fn_name.clone());
+                        if let Some(fn_info) = self.types.functions.get(&lookup_name) {
                             let ret_ty = fn_info.signature.ret.clone();
                             if fn_info.signature.is_async {
                                 return ResolvedType::Future(Box::new(ret_ty));
@@ -515,10 +521,7 @@ impl CodeGenerator {
                     ResolvedType::Future(t) => *t,
                     other => {
                         // ICE: await on non-Future type is likely a type checker bug
-                        debug_assert!(
-                            false,
-                            "ICE: await on non-Future type `{other}` in codegen"
-                        );
+                        debug_assert!(false, "ICE: await on non-Future type `{other}` in codegen");
                         other
                     }
                 }

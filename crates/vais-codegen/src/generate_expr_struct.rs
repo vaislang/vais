@@ -49,9 +49,14 @@ impl CodeGenerator {
                 ir.push_str(&field_ir);
 
                 let field_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
-                    field_ptr, type_name, type_name, struct_ptr, field_idx
+                    field_ptr,
+                    type_name,
+                    type_name,
+                    struct_ptr,
+                    field_idx
                 );
 
                 let field_ty = &struct_info.fields[field_idx].1;
@@ -63,18 +68,19 @@ impl CodeGenerator {
                 {
                     // Field value is a pointer to struct, need to load the value
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, 
-                        "  {} = load {}, {}* {}",
-                        loaded, llvm_ty, llvm_ty, val
-                    );
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
                     loaded
                 } else {
                     val
                 };
 
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} {}, {}* {}",
-                    llvm_ty, val_to_store, llvm_ty, field_ptr
+                    llvm_ty,
+                    val_to_store,
+                    llvm_ty,
+                    field_ptr
                 );
             }
 
@@ -117,15 +123,23 @@ impl CodeGenerator {
             // Bitcast union pointer to field type pointer (all fields at offset 0)
             let field_llvm_ty = self.type_to_llvm(&field_ty);
             let field_ptr = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = bitcast %{}* {} to {}*",
-                field_ptr, type_name, union_ptr, field_llvm_ty
+                field_ptr,
+                type_name,
+                union_ptr,
+                field_llvm_ty
             );
 
             // Store the value
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  store {} {}, {}* {}",
-                field_llvm_ty, val, field_llvm_ty, field_ptr
+                field_llvm_ty,
+                val,
+                field_llvm_ty,
+                field_ptr
             );
 
             // Return pointer to union

@@ -228,10 +228,7 @@ fn test_builder_return() {
     builder.assign_const(Local(0), Constant::Int(42));
     builder.return_();
     let body = builder.build();
-    assert_eq!(
-        body.basic_blocks[0].terminator,
-        Some(Terminator::Return)
-    );
+    assert_eq!(body.basic_blocks[0].terminator, Some(Terminator::Return));
 }
 
 // ============================================================================
@@ -454,8 +451,5 @@ fn test_builder_with_pointer_type() {
         MirType::Unit,
     );
     let body = builder.build();
-    assert_eq!(
-        body.params[0],
-        MirType::Pointer(Box::new(MirType::I64))
-    );
+    assert_eq!(body.params[0], MirType::Pointer(Box::new(MirType::I64)));
 }

@@ -86,9 +86,7 @@ fn test_constant_propagation() {
     constant_propagation(&mut body);
 
     // The use of 'c' in the binop should be replaced with const 42
-    if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, _)) =
-        &body.basic_blocks[0].statements[1]
-    {
+    if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, _)) = &body.basic_blocks[0].statements[1] {
         assert_eq!(*lhs, Operand::Constant(Constant::Int(42)));
     } else {
         panic!("Expected constant propagation");
@@ -155,8 +153,7 @@ fn test_constant_folding_with_binop() {
     constant_propagation(&mut body);
 
     // After propagation, the binop should use const operands
-    if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, rhs)) =
-        &body.basic_blocks[0].statements[2]
+    if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, rhs)) = &body.basic_blocks[0].statements[2]
     {
         assert_eq!(*lhs, Operand::Constant(Constant::Int(10)));
         assert_eq!(*rhs, Operand::Constant(Constant::Int(20)));
@@ -213,9 +210,7 @@ fn test_cse_does_not_eliminate_different_ops() {
     common_subexpression_elimination(&mut body);
 
     // t2 assignment should still be Mul, not replaced
-    if let Statement::Assign(_, Rvalue::BinaryOp(op, _, _)) =
-        &body.basic_blocks[0].statements[1]
-    {
+    if let Statement::Assign(_, Rvalue::BinaryOp(op, _, _)) = &body.basic_blocks[0].statements[1] {
         assert_eq!(*op, BinOp::Mul);
     } else {
         panic!("Expected Mul to remain");

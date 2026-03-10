@@ -858,7 +858,8 @@ fn create_chapter6_closures_iterators() -> Chapter {
             Lesson {
                 id: "ch6_closures".to_string(),
                 title: "Closures In Depth".to_string(),
-                description: "Learn closure syntax, capture modes, and higher-order functions".to_string(),
+                description: "Learn closure syntax, capture modes, and higher-order functions"
+                    .to_string(),
                 content: r#"
 Closures capture variables from their enclosing scope:
 
@@ -936,12 +937,13 @@ The pipe operator chains transformations:
     result := 5 |> |x| x * 2 |> |x| x + 1  # 11
 "#
                 .to_string(),
-                code_template: r#"# Write a function 'apply_twice' that takes a closure and a value,
+                code_template:
+                    r#"# Write a function 'apply_twice' that takes a closure and a value,
 # applies the closure twice, and returns the result.
 # Example: apply_twice(|x| x * 2, 3) -> 12
 # Your code here
 "#
-                .to_string(),
+                    .to_string(),
                 solution: r#"F apply_twice(f: |i64| -> i64, x: i64) -> i64 {
     f(f(x))
 }

@@ -147,9 +147,13 @@ impl CodeGenerator {
                         // The val is already a pointer to the struct/enum (%1, %2, etc)
                         // Allocate space for a pointer and store it
                         write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  store {}* {}, {}** %{}",
-                            llvm_ty, val, llvm_ty, llvm_name
+                            llvm_ty,
+                            val,
+                            llvm_ty,
+                            llvm_name
                         );
                     } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
                         // For struct values (e.g., from function returns),
@@ -157,21 +161,26 @@ impl CodeGenerator {
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
                         write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                        write_ir!(ir, 
-                            "  store {} {}, {}* {}",
-                            llvm_ty, val, llvm_ty, tmp_ptr
-                        );
+                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
                         write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  store {}* {}, {}** %{}",
-                            llvm_ty, tmp_ptr, llvm_ty, llvm_name
+                            llvm_ty,
+                            tmp_ptr,
+                            llvm_ty,
+                            llvm_name
                         );
                     } else {
                         // Allocate and store
                         write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  store {} {}, {}* %{}",
-                            llvm_ty, val, llvm_ty, llvm_name
+                            llvm_ty,
+                            val,
+                            llvm_ty,
+                            llvm_name
                         );
                     }
                 }
@@ -236,14 +245,16 @@ impl CodeGenerator {
                         // Store result in state struct and set state to -1 (completed)
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = insertvalue {} undef, i64 1, 0",
-                            t0, poll_ret_ty
-                        );
+                        write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
                         let t1 = self.next_temp(counter);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = insertvalue {} {}, {} {}, 1",
-                            t1, poll_ret_ty, t0, poll_ctx.ret_llvm, ret_val
+                            t1,
+                            poll_ret_ty,
+                            t0,
+                            poll_ctx.ret_llvm,
+                            ret_val
                         );
                         // Set state to -1 (completed)
                         ir.push_str("  store i64 -1, i64* %state_field\n");
@@ -258,10 +269,7 @@ impl CodeGenerator {
                         ir.push_str(&alloc_cleanup_ir);
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = insertvalue {} undef, i64 1, 0",
-                            t0, poll_ret_ty
-                        );
+                        write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
                         ir.push_str("  store i64 -1, i64* %state_field\n");
                         write_ir!(ir, "  ret {} {}", poll_ret_ty, t0);
                         return Ok(("void".to_string(), ir));
@@ -299,9 +307,13 @@ impl CodeGenerator {
                                 // val is a pointer to the struct, load the actual value
                                 let loaded = format!("%ret.{}", counter);
                                 *counter += 1;
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = load {}, {}* {}",
-                                    loaded, ret_type, ret_type, val
+                                    loaded,
+                                    ret_type,
+                                    ret_type,
+                                    val
                                 );
                                 loaded
                             } else {
@@ -318,31 +330,29 @@ impl CodeGenerator {
                     // expression produced a bare literal (e.g., 42), we must store the
                     // literal in a global constant so the returned pointer is valid.
                     // Without this, we'd emit `ret i64* 42` which clang rejects.
-                    let final_val = if matches!(
-                        ret_resolved,
-                        ResolvedType::Ref(_) | ResolvedType::RefMut(_)
-                    ) && !final_val.starts_with('%')
-                        && !final_val.starts_with('@')
-                    {
-                        // Get the inner type for the global constant
-                        let inner_ty = match &ret_resolved {
-                            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                                self.type_to_llvm(inner)
-                            }
-                            _ => unreachable!(),
+                    let final_val =
+                        if matches!(ret_resolved, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
+                            && !final_val.starts_with('%')
+                            && !final_val.starts_with('@')
+                        {
+                            // Get the inner type for the global constant
+                            let inner_ty = match &ret_resolved {
+                                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                    self.type_to_llvm(inner)
+                                }
+                                _ => unreachable!(),
+                            };
+                            let const_name = format!(".ref.const.{}", self.ref_constant_counter);
+                            self.ref_constant_counter += 1;
+                            self.ref_constants.push((
+                                const_name.clone(),
+                                inner_ty,
+                                final_val.clone(),
+                            ));
+                            format!("@{}", const_name)
+                        } else {
+                            final_val
                         };
-                        let const_name =
-                            format!(".ref.const.{}", self.ref_constant_counter);
-                        self.ref_constant_counter += 1;
-                        self.ref_constants.push((
-                            const_name.clone(),
-                            inner_ty,
-                            final_val.clone(),
-                        ));
-                        format!("@{}", const_name)
-                    } else {
-                        final_val
-                    };
 
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(counter)?;
@@ -461,9 +471,13 @@ impl CodeGenerator {
                     let elem_resolved = &elem_types[i];
                     let elem_llvm_ty = self.type_to_llvm(elem_resolved);
                     let extracted = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = extractvalue {} {}, {}",
-                        extracted, llvm_ty, val, i
+                        extracted,
+                        llvm_ty,
+                        val,
+                        i
                     );
                     self.bind_pattern_from_tuple(
                         pat,

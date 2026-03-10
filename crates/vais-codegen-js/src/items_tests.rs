@@ -76,17 +76,11 @@ fn test_result_enum_helpers() {
         variants: vec![
             Variant {
                 name: Spanned::new("Ok".to_string(), Span::new(7, 9)),
-                fields: VariantFields::Tuple(vec![Spanned::new(
-                    Type::Infer,
-                    Span::new(10, 11),
-                )]),
+                fields: VariantFields::Tuple(vec![Spanned::new(Type::Infer, Span::new(10, 11))]),
             },
             Variant {
                 name: Spanned::new("Err".to_string(), Span::new(12, 15)),
-                fields: VariantFields::Tuple(vec![Spanned::new(
-                    Type::Infer,
-                    Span::new(16, 17),
-                )]),
+                fields: VariantFields::Tuple(vec![Spanned::new(Type::Infer, Span::new(16, 17))]),
             },
         ],
         is_pub: true,
@@ -109,10 +103,7 @@ fn test_option_enum_helpers() {
         variants: vec![
             Variant {
                 name: Spanned::new("Some".to_string(), Span::new(7, 11)),
-                fields: VariantFields::Tuple(vec![Spanned::new(
-                    Type::Infer,
-                    Span::new(12, 13),
-                )]),
+                fields: VariantFields::Tuple(vec![Spanned::new(Type::Infer, Span::new(12, 13))]),
             },
             Variant {
                 name: Spanned::new("None".to_string(), Span::new(14, 18)),
@@ -573,10 +564,7 @@ fn test_struct_with_method() {
                 generics: vec![],
                 params: vec![],
                 ret_type: None,
-                body: FunctionBody::Expr(Box::new(Spanned::new(
-                    Expr::Int(1),
-                    Span::new(26, 27),
-                ))),
+                body: FunctionBody::Expr(Box::new(Spanned::new(Expr::Int(1), Span::new(26, 27)))),
                 is_pub: false,
                 is_async: false,
                 attributes: vec![],

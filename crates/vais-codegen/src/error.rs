@@ -286,10 +286,7 @@ impl std::fmt::Display for CodegenWarning {
                     params.join(", ")
                 )
             }
-            CodegenWarning::UnresolvedTypeFallback {
-                type_desc,
-                backend,
-            } => {
+            CodegenWarning::UnresolvedTypeFallback { type_desc, backend } => {
                 write!(
                     f,
                     "[ICE] unresolved {} in {} codegen — using i64 fallback",

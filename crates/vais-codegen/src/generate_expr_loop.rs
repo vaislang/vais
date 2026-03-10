@@ -45,10 +45,7 @@ impl CodeGenerator {
         let counter_var = format!("%loop_counter.{}", self.fn_ctx.label_counter);
         self.fn_ctx.label_counter += 1;
         write_ir!(ir, "  {} = alloca i64", counter_var);
-        write_ir!(ir, 
-            "  store i64 {}, i64* {}",
-            start_val, counter_var
-        );
+        write_ir!(ir, "  store i64 {}, i64* {}", start_val, counter_var);
 
         let pattern_var = if let Pattern::Ident(name) = &pattern.node {
             let var_name = format!("{}.for", name);
@@ -77,30 +74,31 @@ impl CodeGenerator {
 
         write_ir!(ir, "{}:", loop_cond);
         let current_val = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = load i64, i64* {}",
-            current_val, counter_var
-        );
+        write_ir!(ir, "  {} = load i64, i64* {}", current_val, counter_var);
 
         let cmp_pred = if inclusive { "sle" } else { "slt" };
         let cond_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = icmp {} i64 {}, {}",
-            cond_result, cmp_pred, current_val, end_val
+            cond_result,
+            cmp_pred,
+            current_val,
+            end_val
         );
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}",
-            cond_result, loop_body_label, loop_end
+            cond_result,
+            loop_body_label,
+            loop_end
         );
 
         write_ir!(ir, "{}:", loop_body_label);
 
         if let Some((_, llvm_name)) = &pattern_var {
             let bind_val = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = load i64, i64* {}",
-                bind_val, counter_var
-            );
+            write_ir!(ir, "  {} = load i64, i64* {}", bind_val, counter_var);
             write_ir!(ir, "  store i64 {}, i64* {}", bind_val, llvm_name);
         }
 
@@ -113,16 +111,10 @@ impl CodeGenerator {
 
         write_ir!(ir, "{}:", loop_inc);
         let inc_load = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = load i64, i64* {}",
-            inc_load, counter_var
-        );
+        write_ir!(ir, "  {} = load i64, i64* {}", inc_load, counter_var);
         let inc_result = self.next_temp(counter);
         write_ir!(ir, "  {} = add i64 {}, 1", inc_result, inc_load);
-        write_ir!(ir, 
-            "  store i64 {}, i64* {}",
-            inc_result, counter_var
-        );
+        write_ir!(ir, "  store i64 {}, i64* {}", inc_result, counter_var);
         write_ir!(ir, "  br label %{}", loop_cond);
 
         write_ir!(ir, "{}:", loop_end);

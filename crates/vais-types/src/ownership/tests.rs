@@ -416,10 +416,7 @@ mod tests {
         // Register a named lifetime and verify it works
         checker.lifetime_inferencer.register_named_lifetime("a");
         let lt = checker.lifetime_inferencer.resolve_lifetime_name("a");
-        assert_eq!(
-            lt,
-            crate::lifetime::Lifetime::Named("a".to_string())
-        );
+        assert_eq!(lt, crate::lifetime::Lifetime::Named("a".to_string()));
     }
 
     #[test]
@@ -429,12 +426,11 @@ mod tests {
         checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
 
         let lt = crate::lifetime::Lifetime::Named("a".to_string());
-        checker.lifetime_inferencer.register_var_lifetime("x", lt.clone());
+        checker
+            .lifetime_inferencer
+            .register_var_lifetime("x", lt.clone());
 
-        assert_eq!(
-            checker.lifetime_inferencer.get_var_lifetime("x"),
-            Some(&lt)
-        );
+        assert_eq!(checker.lifetime_inferencer.get_var_lifetime("x"), Some(&lt));
     }
 
     #[test]
@@ -594,7 +590,10 @@ mod tests {
         // Try to mutably borrow the moved value
         let result = checker.borrow_var_mut("r1", "d", Some(make_span()));
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TypeError::BorrowAfterMove { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            TypeError::BorrowAfterMove { .. }
+        ));
     }
 
     #[test]
@@ -752,15 +751,13 @@ mod tests {
     #[test]
     fn test_const_array_not_copy_if_element_not_copy() {
         use crate::types::resolved::ResolvedConst;
-        assert!(!OwnershipChecker::is_copy_type(
-            &ResolvedType::ConstArray {
-                element: Box::new(ResolvedType::Named {
-                    name: "Vec".to_string(),
-                    generics: vec![]
-                }),
-                size: ResolvedConst::Value(10),
-            }
-        ));
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::ConstArray {
+            element: Box::new(ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![]
+            }),
+            size: ResolvedConst::Value(10),
+        }));
     }
 
     #[test]

@@ -178,7 +178,10 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_self_call(&mut self) -> GenResult {
         if let Some(fn_name) = &self.fn_ctx.current_function {
-            Ok((format!("@{}", fn_name), String::new()))
+            // In async poll functions, current_function is "name__poll"
+            // but @ should refer to the original create function.
+            let call_name = fn_name.strip_suffix("__poll").unwrap_or(fn_name);
+            Ok((format!("@{}", call_name), String::new()))
         } else {
             Err(CodegenError::UndefinedFunction("@".to_string()))
         }
@@ -347,9 +350,13 @@ impl ExprVisitor for CodeGenerator {
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  store {} {}, {}* {}",
-                        llvm_ty, val, llvm_ty, tmp_alloca
+                        llvm_ty,
+                        val,
+                        llvm_ty,
+                        tmp_alloca
                     );
                     return Ok((tmp_alloca, ir));
                 }
@@ -373,9 +380,13 @@ impl ExprVisitor for CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = load {}, {}* {}",
-            result, llvm_ty, llvm_ty, ptr_val
+            result,
+            llvm_ty,
+            llvm_ty,
+            ptr_val
         );
 
         Ok((result, ir))
@@ -433,25 +444,28 @@ impl ExprVisitor for CodeGenerator {
         let state_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i64 @malloc(i64 16)", state_ptr);
         let typed_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = inttoptr i64 {} to {{i64, i64}}*",
-            typed_ptr, state_ptr
+            typed_ptr,
+            state_ptr
         );
         let state_field = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0",
-            state_field, typed_ptr
+            state_field,
+            typed_ptr
         );
         write_ir!(ir, "  store i64 -1, i64* {}", state_field);
         let result_field = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1",
-            result_field, typed_ptr
+            result_field,
+            typed_ptr
         );
-        write_ir!(ir, 
-            "  store i64 {}, i64* {}",
-            inner_val, result_field
-        );
+        write_ir!(ir, "  store i64 {}, i64* {}", inner_val, result_field);
 
         self.needs_sync_spawn_poll = true;
         write_ir!(ir, "; Spawned sync task (wrapped) at {}", state_ptr);
@@ -536,9 +550,14 @@ impl ExprVisitor for CodeGenerator {
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}",
-                        elem_ptr, len, len, array_name, i
+                        elem_ptr,
+                        len,
+                        len,
+                        array_name,
+                        i
                     );
                     write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
@@ -634,9 +653,13 @@ impl ExprVisitor for CodeGenerator {
                     captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
                 } else {
                     let tmp = self.next_temp(counter);
-                    write_ir!(capture_ir, 
+                    write_ir!(
+                        capture_ir,
                         "  {} = load {}, {}* %{}",
-                        tmp, llvm_ty, llvm_ty, local.llvm_name
+                        tmp,
+                        llvm_ty,
+                        llvm_ty,
+                        local.llvm_name
                     );
                     captured_vars.push((cap_name.clone(), ty, tmp));
                 }
@@ -720,26 +743,38 @@ impl ExprVisitor for CodeGenerator {
 
         // Store computed = false
         let computed_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
-            computed_ptr, lazy_ty, lazy_ty, lazy_ptr
+            computed_ptr,
+            lazy_ty,
+            lazy_ty,
+            lazy_ptr
         );
         write_ir!(ir, "  store i1 0, i1* {}", computed_ptr);
 
         // Store zero-initialized value (will be filled on first force)
         let value_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
-            value_ptr, lazy_ty, lazy_ty, lazy_ptr
+            value_ptr,
+            lazy_ty,
+            lazy_ty,
+            lazy_ptr
         );
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  store {} 0, {}* {}",
-            inner_llvm_ty, inner_llvm_ty, value_ptr
+            inner_llvm_ty,
+            inner_llvm_ty,
+            value_ptr
         );
 
         // Store thunk function pointer (cast to i8*)
         let thunk_fn_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = bitcast {} ({})* @{} to i8*",
             thunk_fn_ptr,
             ret_ty,
@@ -747,20 +782,25 @@ impl ExprVisitor for CodeGenerator {
             thunk_name
         );
         let thunk_slot = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr {}, {}* {}, i32 0, i32 2",
-            thunk_slot, lazy_ty, lazy_ty, lazy_ptr
+            thunk_slot,
+            lazy_ty,
+            lazy_ty,
+            lazy_ptr
         );
-        write_ir!(ir, 
-            "  store i8* {}, i8** {}",
-            thunk_fn_ptr, thunk_slot
-        );
+        write_ir!(ir, "  store i8* {}, i8** {}", thunk_fn_ptr, thunk_slot);
 
         // Load and return the lazy struct
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = load {}, {}* {}",
-            result, lazy_ty, lazy_ty, lazy_ptr
+            result,
+            lazy_ty,
+            lazy_ty,
+            lazy_ptr
         );
 
         // Store lazy thunk info for force to use at call sites
@@ -816,9 +856,13 @@ impl ExprVisitor for CodeGenerator {
                     } else {
                         local.llvm_name.clone()
                     };
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  store {} {}, {}* {}",
-                        lazy_ty, val_ref, lazy_ty, alloca
+                        lazy_ty,
+                        val_ref,
+                        lazy_ty,
+                        alloca
                     );
                     alloca
                 } else {
@@ -827,9 +871,13 @@ impl ExprVisitor for CodeGenerator {
 
                 // Load computed flag
                 let computed_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
-                    computed_ptr, lazy_ty, lazy_ty, lazy_alloca
+                    computed_ptr,
+                    lazy_ty,
+                    lazy_ty,
+                    lazy_alloca
                 );
                 let computed = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i1, i1* {}", computed, computed_ptr);
@@ -841,22 +889,33 @@ impl ExprVisitor for CodeGenerator {
                 let compute_label = format!("lazy.compute.{}", label_id + 1);
                 let merge_label = format!("lazy.merge.{}", label_id + 2);
 
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  br i1 {}, label %{}, label %{}",
-                    computed, cached_label, compute_label
+                    computed,
+                    cached_label,
+                    compute_label
                 );
 
                 // Cached path: load value from struct
                 write_ir!(ir, "{}:", cached_label);
                 let cached_val_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
-                    cached_val_ptr, lazy_ty, lazy_ty, lazy_alloca
+                    cached_val_ptr,
+                    lazy_ty,
+                    lazy_ty,
+                    lazy_alloca
                 );
                 let cached_val = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = load {}, {}* {}",
-                    cached_val, inner_llvm_ty, inner_llvm_ty, cached_val_ptr
+                    cached_val,
+                    inner_llvm_ty,
+                    inner_llvm_ty,
+                    cached_val_ptr
                 );
                 write_ir!(ir, "  br label %{}", merge_label);
 
@@ -875,9 +934,13 @@ impl ExprVisitor for CodeGenerator {
                             thunk_args.push(format!("{} {}", cap_llvm_ty, cap_local.llvm_name));
                         } else {
                             let tmp = self.next_temp(counter);
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  {} = load {}, {}* %{}",
-                                tmp, cap_llvm_ty, cap_llvm_ty, cap_local.llvm_name
+                                tmp,
+                                cap_llvm_ty,
+                                cap_llvm_ty,
+                                cap_local.llvm_name
                             );
                             thunk_args.push(format!("{} {}", cap_llvm_ty, tmp));
                         }
@@ -888,7 +951,8 @@ impl ExprVisitor for CodeGenerator {
                 }
 
                 let computed_val = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call {} @{}({})",
                     computed_val,
                     inner_llvm_ty,
@@ -898,13 +962,21 @@ impl ExprVisitor for CodeGenerator {
 
                 // Store computed value into lazy struct
                 let store_val_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
-                    store_val_ptr, lazy_ty, lazy_ty, lazy_alloca
+                    store_val_ptr,
+                    lazy_ty,
+                    lazy_ty,
+                    lazy_alloca
                 );
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} {}, {}* {}",
-                    inner_llvm_ty, computed_val, inner_llvm_ty, store_val_ptr
+                    inner_llvm_ty,
+                    computed_val,
+                    inner_llvm_ty,
+                    store_val_ptr
                 );
 
                 // Set computed = true
@@ -915,9 +987,15 @@ impl ExprVisitor for CodeGenerator {
                 // Merge: phi node
                 write_ir!(ir, "{}:", merge_label);
                 let result = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = phi {} [{}, %{}], [{}, %{}]",
-                    result, inner_llvm_ty, cached_val, cached_label, computed_val, compute_label
+                    result,
+                    inner_llvm_ty,
+                    cached_val,
+                    cached_label,
+                    computed_val,
+                    compute_label
                 );
 
                 return Ok((result, ir));
@@ -929,9 +1007,12 @@ impl ExprVisitor for CodeGenerator {
         let mut ir = lazy_ir;
 
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = extractvalue {} {}, 1",
-            result, lazy_ty, lazy_val
+            result,
+            lazy_ty,
+            lazy_val
         );
 
         Ok((result, ir))

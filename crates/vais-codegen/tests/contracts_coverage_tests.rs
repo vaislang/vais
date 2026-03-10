@@ -131,9 +131,7 @@ fn test_assert_generates_failure_path() {
     "#,
     );
     // Assert should generate fail label and ok label
-    assert!(
-        ir.contains("assert_ok") || ir.contains("assert_fail") || ir.contains("unreachable")
-    );
+    assert!(ir.contains("assert_ok") || ir.contains("assert_fail") || ir.contains("unreachable"));
 }
 
 #[test]

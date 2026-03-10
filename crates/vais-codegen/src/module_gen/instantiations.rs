@@ -511,11 +511,8 @@ impl CodeGenerator {
                         // Generic function with no concrete instantiation but IS called
                         // from within another function (e.g., identity<T> called from
                         // double<T>). Generate a fallback version with i64.
-                        let param_names: Vec<String> = f
-                            .generics
-                            .iter()
-                            .map(|g| g.name.node.clone())
-                            .collect();
+                        let param_names: Vec<String> =
+                            f.generics.iter().map(|g| g.name.node.clone()).collect();
                         self.emit_warning(crate::CodegenWarning::UninstantiatedGeneric {
                             function_name: f.name.node.clone(),
                             params: param_names,

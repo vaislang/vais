@@ -197,9 +197,7 @@ pub(crate) fn cmd_build(
     // Check if we can skip compilation (only when not forcing rebuild)
     if !force_rebuild {
         if let Some(ref mut c) = cache {
-            if let Some(result) =
-                check_cache_skip(c, input, &output, emit_ir, verbose, &target)?
-            {
+            if let Some(result) = check_cache_skip(c, input, &output, emit_ir, verbose, &target)? {
                 return result;
             }
         }
@@ -373,13 +371,11 @@ pub(crate) fn cmd_build(
     }
 
     // Per-module codegen path
-    let use_per_module =
-        per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1);
+    let use_per_module = per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1);
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
-                let input_canonical =
-                    input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+                let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
 
                 if emit_ir {
                     return super::parallel::run_per_module_emit_ir(

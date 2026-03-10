@@ -21,9 +21,13 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
                     // Store tag
                     let tag_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                        tag_ptr, enum_info.name, enum_info.name, enum_ptr
+                        tag_ptr,
+                        enum_info.name,
+                        enum_info.name,
+                        enum_ptr
                     );
                     write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
                     return Ok((enum_ptr, ir));
@@ -70,10 +74,7 @@ impl CodeGenerator {
             } else {
                 let tmp = self.next_temp(counter);
                 let left_llvm = self.type_to_llvm(&left_type);
-                write_ir!(ir, 
-                    "  {} = icmp ne {} {}, 0",
-                    tmp, left_llvm, left_val
-                );
+                write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, left_llvm, left_val);
                 tmp
             };
             let right_type = self.infer_expr_type(right);
@@ -82,10 +83,7 @@ impl CodeGenerator {
             } else {
                 let tmp = self.next_temp(counter);
                 let right_llvm = self.type_to_llvm(&right_type);
-                write_ir!(ir, 
-                    "  {} = icmp ne {} {}, 0",
-                    tmp, right_llvm, right_val
-                );
+                write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, right_llvm, right_val);
                 tmp
             };
 
@@ -102,9 +100,14 @@ impl CodeGenerator {
 
             let result_bool = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = {} i1 {}, {}{}",
-                result_bool, op_str, left_bool, right_bool, dbg_info
+                result_bool,
+                op_str,
+                left_bool,
+                right_bool,
+                dbg_info
             );
 
             // Extend back to i64 for consistency
@@ -149,9 +152,15 @@ impl CodeGenerator {
                 } else {
                     "double"
                 };
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = {} {} {}, {}{}",
-                    cmp_tmp, op_str, float_llvm, left_val, right_val, dbg_info
+                    cmp_tmp,
+                    op_str,
+                    float_llvm,
+                    left_val,
+                    right_val,
+                    dbg_info
                 );
             } else {
                 let op_str = match op {
@@ -168,9 +177,14 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = {} i64 {}, {}{}",
-                    cmp_tmp, op_str, left_val, right_val, dbg_info
+                    cmp_tmp,
+                    op_str,
+                    left_val,
+                    right_val,
+                    dbg_info
                 );
             }
 
@@ -222,9 +236,15 @@ impl CodeGenerator {
                 } else {
                     "double"
                 };
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = {} {} {}, {}{}",
-                    tmp, op_str, float_llvm, left_val, right_val, dbg_info
+                    tmp,
+                    op_str,
+                    float_llvm,
+                    left_val,
+                    right_val,
+                    dbg_info
                 );
             } else {
                 let op_str = match op {
@@ -245,9 +265,14 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = {} i64 {}, {}{}",
-                    tmp, op_str, left_val, right_val, dbg_info
+                    tmp,
+                    op_str,
+                    left_val,
+                    right_val,
+                    dbg_info
                 );
             }
             Ok((tmp, ir))
@@ -302,10 +327,7 @@ impl CodeGenerator {
             (ResolvedType::Pointer(_), _)
             | (ResolvedType::Ref(_), _)
             | (ResolvedType::RefMut(_), _) => {
-                write_ir!(ir, 
-                    "  {} = inttoptr i64 {} to {}",
-                    result, val, llvm_type
-                );
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}", result, val, llvm_type);
             }
             // Default: just use the value as-is (same size types)
             _ => {
@@ -343,18 +365,23 @@ impl CodeGenerator {
                         if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
                             let tmp_ptr = self.next_temp(counter);
                             write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                            write_ir!(ir, 
-                                "  store {} {}, {}* {}",
-                                llvm_ty, val, llvm_ty, tmp_ptr
-                            );
-                            write_ir!(ir, 
+                            write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
+                            write_ir!(
+                                ir,
                                 "  store {}* {}, {}** %{}",
-                                llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
+                                llvm_ty,
+                                tmp_ptr,
+                                llvm_ty,
+                                local.llvm_name
                             );
                         } else {
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  store {} {}, {}* %{}",
-                                llvm_ty, val, llvm_ty, local.llvm_name
+                                llvm_ty,
+                                val,
+                                llvm_ty,
+                                local.llvm_name
                             );
                         }
                     }
@@ -390,13 +417,22 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(field_ty);
 
                         let field_ptr = self.next_temp(counter);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
-                            field_ptr, struct_name, struct_name, obj_val, field_idx
+                            field_ptr,
+                            struct_name,
+                            struct_name,
+                            obj_val,
+                            field_idx
                         );
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  store {} {}, {}* {}",
-                            llvm_ty, val, llvm_ty, field_ptr
+                            llvm_ty,
+                            val,
+                            llvm_ty,
+                            field_ptr
                         );
                     }
                 }
@@ -426,14 +462,19 @@ impl CodeGenerator {
             // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
             let base_ptr = if is_fat_ptr {
                 let data_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    data_ptr, arr_val
+                    data_ptr,
+                    arr_val
                 );
                 let typed_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = bitcast i8* {} to {}*",
-                    typed_ptr, data_ptr, elem_llvm_ty
+                    typed_ptr,
+                    data_ptr,
+                    elem_llvm_ty
                 );
                 typed_ptr
             } else {
@@ -441,13 +482,22 @@ impl CodeGenerator {
             };
 
             let elem_ptr = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = getelementptr {}, {}* {}, i64 {}",
-                elem_ptr, elem_llvm_ty, elem_llvm_ty, base_ptr, idx_val
+                elem_ptr,
+                elem_llvm_ty,
+                elem_llvm_ty,
+                base_ptr,
+                idx_val
             );
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  store {} {}, {}* {}",
-                elem_llvm_ty, val, elem_llvm_ty, elem_ptr
+                elem_llvm_ty,
+                val,
+                elem_llvm_ty,
+                elem_ptr
             );
         }
 
@@ -501,9 +551,13 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
                         // Store tag
                         let tag_ptr = self.next_temp(counter);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                            tag_ptr, enum_info.name, enum_info.name, enum_ptr
+                            tag_ptr,
+                            enum_info.name,
+                            enum_info.name,
+                            enum_ptr
                         );
                         write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
                         return Ok((enum_ptr, ir));
@@ -546,17 +600,25 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(field_ty);
                         let mut ir = String::new();
                         let field_ptr = self.next_temp(counter);
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = getelementptr %{}, %{}* %self, i32 0, i32 {}",
-                            field_ptr, resolved_name, resolved_name, field_idx
+                            field_ptr,
+                            resolved_name,
+                            resolved_name,
+                            field_idx
                         );
                         if matches!(field_ty, ResolvedType::Named { .. }) {
                             return Ok((field_ptr, ir));
                         } else {
                             let result = self.next_temp(counter);
-                            write_ir!(ir, 
+                            write_ir!(
+                                ir,
                                 "  {} = load {}, {}* {}",
-                                result, llvm_ty, llvm_ty, field_ptr
+                                result,
+                                llvm_ty,
+                                llvm_ty,
+                                field_ptr
                             );
                             return Ok((result, ir));
                         }
@@ -635,18 +697,26 @@ impl CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = {} i64 {}, {}",
-            result, op_str, current_val, rhs_val
+            result,
+            op_str,
+            current_val,
+            rhs_val
         );
 
         if let Expr::Ident(name) = &target.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
                 if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  store {} {}, {}* %{}",
-                        llvm_ty, result, llvm_ty, local.llvm_name
+                        llvm_ty,
+                        result,
+                        llvm_ty,
+                        local.llvm_name
                     );
                 }
             }

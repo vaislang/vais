@@ -20,7 +20,8 @@ impl WasmBindgenGenerator {
     pub fn generate_js_bindings(&self, funcs: &[WitFunction]) -> String {
         let mut output = String::new();
 
-        write_ir!(output, 
+        write_ir!(
+            output,
             "// Generated JavaScript bindings for {}\n",
             self.module_name
         );
@@ -49,7 +50,8 @@ impl WasmBindgenGenerator {
             // Generate parameter conversion
             for param in &func.params {
                 if self.needs_conversion(&param.ty) {
-                    write_ir!(output, 
+                    write_ir!(
+                        output,
                         "    const _{} = this._convert_{}({});",
                         param.name,
                         self.wit_type_to_js_type(&param.ty),
@@ -72,9 +74,11 @@ impl WasmBindgenGenerator {
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            write_ir!(output, 
+            write_ir!(
+                output,
                 "    const result = this.exports.{}({});",
-                func.name, call_params
+                func.name,
+                call_params
             );
 
             // Generate result conversion
@@ -82,7 +86,8 @@ impl WasmBindgenGenerator {
                 match results {
                     WitResult::Anon(ty) => {
                         if self.needs_conversion(ty) {
-                            write_ir!(output, 
+                            write_ir!(
+                                output,
                                 "    return this._convert_from_{}(result);",
                                 self.wit_type_to_js_type(ty)
                             );
@@ -128,11 +133,13 @@ impl WasmBindgenGenerator {
         output.push_str("}\n\n");
 
         // Add module loader
-        write_ir!(output, 
+        write_ir!(
+            output,
             "export async function load{}() {{",
             self.module_name
         );
-        write_ir!(output, 
+        write_ir!(
+            output,
             "  const response = await fetch('{}.wasm');",
             self.module_name
         );
@@ -149,7 +156,8 @@ impl WasmBindgenGenerator {
     pub fn generate_ts_declarations(&self, funcs: &[WitFunction]) -> String {
         let mut output = String::new();
 
-        write_ir!(output, 
+        write_ir!(
+            output,
             "// Generated TypeScript declarations for {}\n",
             self.module_name
         );
@@ -188,16 +196,14 @@ impl WasmBindgenGenerator {
                 "void".to_string()
             };
 
-            write_ir!(output, 
-                "  {}({}): {};\n",
-                func.name, params, return_type
-            );
+            write_ir!(output, "  {}({}): {};\n", func.name, params, return_type);
         }
 
         output.push_str("}\n\n");
 
         // Add module loader declaration
-        write_ir!(output, 
+        write_ir!(
+            output,
             "export function load{}(): Promise<VaisModule>;",
             self.module_name
         );

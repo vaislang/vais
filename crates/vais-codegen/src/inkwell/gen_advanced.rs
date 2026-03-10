@@ -95,6 +95,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // This is correct when val's type matches the array's element type,
                 // which is the common case since you store one element at a time.
                 let elem_type = val.get_type();
+                // SAFETY: Runtime index from user code — bounds checking is the caller's
+                // responsibility. arr_ptr is a valid array/pointer from a prior allocation.
                 let elem_ptr = unsafe {
                     self.builder
                         .build_gep(elem_type, arr_ptr, &[idx_int], "elem_ptr")

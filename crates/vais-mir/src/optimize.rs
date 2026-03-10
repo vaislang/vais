@@ -827,7 +827,6 @@ pub fn tail_call_detection(body: &mut Body) {
     }
 }
 
-
 #[cfg(test)]
 #[path = "optimize_tests.rs"]
 mod optimize_tests;

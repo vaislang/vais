@@ -257,42 +257,27 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p128_op_bitwise_and() {
-    assert_exit_code(
-        r#"F main() -> i64 = 63 & 42"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 63 & 42"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_bitwise_or() {
-    assert_exit_code(
-        r#"F main() -> i64 = 32 | 10"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 32 | 10"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_bitwise_xor() {
-    assert_exit_code(
-        r#"F main() -> i64 = 35 ^ 9"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 35 ^ 9"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_shift_left() {
-    assert_exit_code(
-        r#"F main() -> i64 = 21 << 1"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 21 << 1"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_shift_right() {
-    assert_exit_code(
-        r#"F main() -> i64 = 84 >> 1"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 84 >> 1"#, 42);
 }
 
 // ==================== F. Logical Short-Circuit ====================
@@ -436,28 +421,19 @@ F main() -> i64 {
 #[test]
 fn e2e_p128_op_precedence_mul_before_add() {
     // 2 + 5 * 8 = 2 + 40 = 42
-    assert_exit_code(
-        r#"F main() -> i64 = 2 + 5 * 8"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = 2 + 5 * 8"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_precedence_parens_override() {
     // (2 + 5) * 6 = 42
-    assert_exit_code(
-        r#"F main() -> i64 = (2 + 5) * 6"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = (2 + 5) * 6"#, 42);
 }
 
 #[test]
 fn e2e_p128_op_precedence_nested_parens() {
     // ((10 + 5) * 2 + 12) = 42
-    assert_exit_code(
-        r#"F main() -> i64 = (10 + 5) * 2 + 12"#,
-        42,
-    );
+    assert_exit_code(r#"F main() -> i64 = (10 + 5) * 2 + 12"#, 42);
 }
 
 // ==================== I. Pattern Matching ====================

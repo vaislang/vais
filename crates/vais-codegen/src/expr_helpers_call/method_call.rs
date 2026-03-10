@@ -25,10 +25,7 @@ impl CodeGenerator {
                 .strip_prefix("{ i8*, i64 } ")
                 .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
             let ptr = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                ptr, val
-            );
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
             ptr
         } else if dest_full.starts_with("i8*") {
             dest_full
@@ -48,10 +45,7 @@ impl CodeGenerator {
                 .strip_prefix("{ i8*, i64 } ")
                 .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
             let ptr = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                ptr, val
-            );
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
             ptr
         } else if src_full.starts_with("i8*") {
             src_full
@@ -66,15 +60,17 @@ impl CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {}){}",
-            result, dest_ptr, src_ptr, n_val, dbg_info
+            result,
+            dest_ptr,
+            src_ptr,
+            n_val,
+            dbg_info
         );
         let result_i64 = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = ptrtoint i8* {} to i64",
-            result_i64, result
-        );
+        write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
         Ok((result_i64, std::mem::take(ir)))
     }
 
@@ -97,32 +93,40 @@ impl CodeGenerator {
                 .strip_prefix("{ i8*, i64 } ")
                 .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
             let ptr_tmp = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                ptr_tmp, arg_val
+                ptr_tmp,
+                arg_val
             );
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i64 @strlen(i8* {}){}",
-                result, ptr_tmp, dbg_info
+                result,
+                ptr_tmp,
+                dbg_info
             );
         } else if arg_full.starts_with("i8*") {
             // Already a raw pointer, use directly
             let ptr_val = arg_full.split_whitespace().last().unwrap_or("null");
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i64 @strlen(i8* {}){}",
-                result, ptr_val, dbg_info
+                result,
+                ptr_val,
+                dbg_info
             );
         } else {
             // Convert i64 to pointer
             let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
             let ptr_tmp = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = inttoptr i64 {} to i8*",
-                ptr_tmp, arg_val
-            );
-            write_ir!(ir, 
+            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_tmp, arg_val);
+            write_ir!(
+                ir,
                 "  {} = call i64 @strlen(i8* {}){}",
-                result, ptr_tmp, dbg_info
+                result,
+                ptr_tmp,
+                dbg_info
             );
         }
         Ok((result, std::mem::take(ir)))
@@ -145,10 +149,7 @@ impl CodeGenerator {
                 .strip_prefix("{ i8*, i64 } ")
                 .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
             let ptr = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                ptr, val
-            );
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
             ptr
         } else if arg_full.starts_with("i8*") {
             arg_full
@@ -164,9 +165,12 @@ impl CodeGenerator {
         };
 
         let i32_result = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call i32 @puts(i8* {}){}",
-            i32_result, ptr_tmp, dbg_info
+            i32_result,
+            ptr_tmp,
+            dbg_info
         );
         // Convert i32 result to i64 for consistency
         let result = self.next_temp(counter);
@@ -217,9 +221,11 @@ impl CodeGenerator {
             };
             if is_slice_type {
                 let result = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = extractvalue {{ i8*, i64 }} {}, 1",
-                    result, recv_val
+                    result,
+                    recv_val
                 );
                 return Ok((result, ir));
             }
@@ -253,9 +259,13 @@ impl CodeGenerator {
             // but function params expect values.
             if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
                 let loaded = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = load {}, {}* {}",
-                    loaded, arg_llvm_ty, arg_llvm_ty, val
+                    loaded,
+                    arg_llvm_ty,
+                    arg_llvm_ty,
+                    val
                 );
                 val = loaded;
             }
@@ -317,7 +327,8 @@ impl CodeGenerator {
         };
 
         let tmp = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call {} @{}({})",
             tmp,
             ret_type,
@@ -350,9 +361,13 @@ impl CodeGenerator {
             // For struct types, load the value from pointer if the expression produces a pointer.
             if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
                 let loaded = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = load {}, {}* {}",
-                    loaded, arg_llvm_ty, arg_llvm_ty, val
+                    loaded,
+                    arg_llvm_ty,
+                    arg_llvm_ty,
+                    val
                 );
                 val = loaded;
             }
@@ -368,7 +383,8 @@ impl CodeGenerator {
             .unwrap_or_else(|| "i64".to_string());
 
         let tmp = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = call {} @{}({})",
             tmp,
             ret_type,

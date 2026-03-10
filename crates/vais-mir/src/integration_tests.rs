@@ -268,8 +268,7 @@ fn test_emit_ref_rvalue() {
 
 #[test]
 fn test_emit_aggregate_rvalue() {
-    let mut builder =
-        MirBuilder::new("make_tuple", vec![MirType::I64, MirType::I64], MirType::I64);
+    let mut builder = MirBuilder::new("make_tuple", vec![MirType::I64, MirType::I64], MirType::I64);
     let tup = builder.new_local(MirType::Tuple(vec![MirType::I64, MirType::I64]), None);
     builder.assign(
         Place::local(tup),
@@ -920,8 +919,7 @@ fn test_emit_integer_bitwise_ops() {
         (BinOp::Shr, "ashr i64"),
         (BinOp::Rem, "srem i64"),
     ] {
-        let mut builder =
-            MirBuilder::new("bit_op", vec![MirType::I64, MirType::I64], MirType::I64);
+        let mut builder = MirBuilder::new("bit_op", vec![MirType::I64, MirType::I64], MirType::I64);
         let result = builder.new_local(MirType::I64, None);
         builder.assign_binop(
             result,
@@ -958,8 +956,7 @@ fn test_emit_comparison_ops_all() {
         (BinOp::Gt, "icmp sgt"),
         (BinOp::Ge, "icmp sge"),
     ] {
-        let mut builder =
-            MirBuilder::new("cmp_op", vec![MirType::I64, MirType::I64], MirType::I64);
+        let mut builder = MirBuilder::new("cmp_op", vec![MirType::I64, MirType::I64], MirType::I64);
         let result = builder.new_local(MirType::I64, None);
         builder.assign_binop(
             result,

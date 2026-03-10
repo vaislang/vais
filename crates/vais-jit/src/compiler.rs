@@ -99,6 +99,9 @@ impl JitCompiler {
         let code_ptr = self.module.get_finalized_function(func_id);
 
         // Call the function
+        // SAFETY: code_ptr is obtained from cranelift's finalized function. The function
+        // signature is `fn() -> i64` as declared during JIT compilation. The module is
+        // kept alive (not dropped) so the code memory remains valid.
         let func: fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
         Ok(func())
     }

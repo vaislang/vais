@@ -168,10 +168,7 @@ impl CodeGenerator {
                         let tmp1 = self.next_temp(counter);
                         let tmp2 = self.next_temp(counter);
                         let tmp3 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = inttoptr i64 {} to float*",
-                            tmp1, ptr_val
-                        );
+                        write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
                         write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
                         write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
                         write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
@@ -186,10 +183,7 @@ impl CodeGenerator {
                     _ if matches!(resolved_t, ResolvedType::F64) => {
                         let tmp1 = self.next_temp(counter);
                         let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = inttoptr i64 {} to double*",
-                            tmp1, ptr_val
-                        );
+                        write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
                         write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
                         write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
                     }
@@ -232,10 +226,7 @@ impl CodeGenerator {
                         let tmp1 = self.next_temp(counter);
                         let tmp2 = self.next_temp(counter);
                         let tmp3 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = inttoptr i64 {} to float*",
-                            tmp1, ptr_val
-                        );
+                        write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
                         write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
                         write_ir!(ir, "  {} = fptrunc double {} to float", tmp3, tmp2);
                         write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
@@ -250,10 +241,7 @@ impl CodeGenerator {
                     _ if matches!(resolved_t, ResolvedType::F64) => {
                         let tmp1 = self.next_temp(counter);
                         let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, 
-                            "  {} = inttoptr i64 {} to double*",
-                            tmp1, ptr_val
-                        );
+                        write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
                         write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
                         write_ir!(ir, "  store double {}, double* {}", tmp2, tmp1);
                     }
@@ -278,15 +266,16 @@ impl CodeGenerator {
 
                 // Convert ptr to i64 for __swap(i64, i64, i64) signature
                 let ptr_i64 = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = ptrtoint ptr {} to i64",
-                    ptr_i64, ptr_val
-                );
+                write_ir!(ir, "  {} = ptrtoint ptr {} to i64", ptr_i64, ptr_val);
 
                 let dbg_info = self.debug_info.dbg_ref_from_span(span);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  call void @__swap(i64 {}, i64 {}, i64 {}){}",
-                    ptr_i64, idx1_val, idx2_val, dbg_info
+                    ptr_i64,
+                    idx1_val,
+                    idx2_val,
+                    dbg_info
                 );
 
                 return Ok(("void".to_string(), ir));
@@ -310,23 +299,29 @@ impl CodeGenerator {
 
                 // Store tag
                 let tag_ptr = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                    tag_ptr, enum_name, enum_name, enum_ptr
+                    tag_ptr,
+                    enum_name,
+                    enum_name,
+                    enum_ptr
                 );
                 write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
 
                 // Store payload fields into the payload sub-struct
                 for (i, arg_val) in arg_vals.iter().enumerate() {
                     let payload_field_ptr = self.next_temp(counter);
-                    write_ir!(ir, 
+                    write_ir!(
+                        ir,
                         "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
-                        payload_field_ptr, enum_name, enum_name, enum_ptr, i
+                        payload_field_ptr,
+                        enum_name,
+                        enum_name,
+                        enum_ptr,
+                        i
                     );
-                    write_ir!(ir, 
-                        "  store i64 {}, i64* {}",
-                        arg_val, payload_field_ptr
-                    );
+                    write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
                 }
 
                 // Return pointer to the enum
@@ -469,10 +464,7 @@ impl CodeGenerator {
                 // Check if val looks like a pointer (starts with %)
                 if val.starts_with('%') {
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, 
-                        "  {} = load {}, {}* {}",
-                        loaded, arg_ty, arg_ty, val
-                    );
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
                     val = loaded;
                 }
             }
@@ -518,32 +510,46 @@ impl CodeGenerator {
                                 // Load the actual struct pointer if we have a pointer-to-pointer
                                 // (Ref expressions return the address of the storage, not the struct)
                                 let struct_ptr = self.next_temp(counter);
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = load %{}*, %{}** {}",
-                                    struct_ptr, concrete_name, concrete_name, val
+                                    struct_ptr,
+                                    concrete_name,
+                                    concrete_name,
+                                    val
                                 );
                                 // Cast data pointer to i8*
                                 let data_ptr = self.next_temp(counter);
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = bitcast %{}* {} to i8*",
-                                    data_ptr, concrete_name, struct_ptr
+                                    data_ptr,
+                                    concrete_name,
+                                    struct_ptr
                                 );
 
                                 // Create fat pointer { i8*, i8* }
                                 let trait_obj_1 = self.next_temp(counter);
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = insertvalue {{ i8*, i8* }} undef, i8* {}, 0",
-                                    trait_obj_1, data_ptr
+                                    trait_obj_1,
+                                    data_ptr
                                 );
                                 let vtable_cast = self.next_temp(counter);
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = bitcast {{ i8*, i64, i64, i64(i8*)* }}* {} to i8*",
-                                    vtable_cast, vtable.global_name
+                                    vtable_cast,
+                                    vtable.global_name
                                 );
                                 let trait_obj_2 = self.next_temp(counter);
-                                write_ir!(ir, 
+                                write_ir!(
+                                    ir,
                                     "  {} = insertvalue {{ i8*, i8* }} {}, i8* {}, 1",
-                                    trait_obj_2, trait_obj_1, vtable_cast
+                                    trait_obj_2,
+                                    trait_obj_1,
+                                    vtable_cast
                                 );
 
                                 val = trait_obj_2;
@@ -569,16 +575,17 @@ impl CodeGenerator {
 
                     if src_bits > dst_bits {
                         // Truncate
-                        write_ir!(ir, 
+                        write_ir!(
+                            ir,
                             "  {} = trunc {} {} to {}",
-                            conv_tmp, src_ty, val, dst_ty
+                            conv_tmp,
+                            src_ty,
+                            val,
+                            dst_ty
                         );
                     } else {
                         // Sign extend
-                        write_ir!(ir, 
-                            "  {} = sext {} {} to {}",
-                            conv_tmp, src_ty, val, dst_ty
-                        );
+                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
                     val = conv_tmp;
                 }
@@ -681,7 +688,8 @@ impl CodeGenerator {
             if let Some(ref info) = closure_info {
                 let tmp = self.next_temp(counter);
                 let dbg_info = self.debug_info.dbg_ref_from_span(span);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call i64 @{}({}){}",
                     tmp,
                     info.func_name,
@@ -737,15 +745,13 @@ impl CodeGenerator {
 
             // Cast i64 to function pointer
             let fn_ptr = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = inttoptr i64 {} to {}",
-                fn_ptr, ptr_tmp, fn_type
-            );
+            write_ir!(ir, "  {} = inttoptr i64 {} to {}", fn_ptr, ptr_tmp, fn_type);
 
             // Make indirect call with all arguments
             let tmp = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i64 {}({}){}",
                 tmp,
                 fn_ptr,
@@ -757,7 +763,8 @@ impl CodeGenerator {
             // Special handling for malloc: call returns i8*, convert to i64
             let ptr_tmp = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i8* @malloc({}){}",
                 ptr_tmp,
                 arg_vals.join(", "),
@@ -774,10 +781,7 @@ impl CodeGenerator {
                     .strip_prefix("{ i8*, i64 } ")
                     .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
                 let ptr = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    ptr, val
-                );
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
                 ptr
             } else if arg_full.starts_with("i8*") {
                 arg_full
@@ -809,10 +813,7 @@ impl CodeGenerator {
                     .strip_prefix("{ i8*, i64 } ")
                     .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
                 let ptr = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    ptr, val
-                );
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
                 ptr
             } else if dest_full.starts_with("i8*") {
                 dest_full
@@ -832,10 +833,7 @@ impl CodeGenerator {
                     .strip_prefix("{ i8*, i64 } ")
                     .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
                 let ptr = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    ptr, val
-                );
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
                 ptr
             } else if src_full.starts_with("i8*") {
                 src_full
@@ -851,16 +849,18 @@ impl CodeGenerator {
 
             let result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {}){}",
-                result, dest_ptr, src_ptr, n_val, dbg_info
+                result,
+                dest_ptr,
+                src_ptr,
+                n_val,
+                dbg_info
             );
             // Convert result back to i64
             let result_i64 = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = ptrtoint i8* {} to i64",
-                result_i64, result
-            );
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
             Ok((result_i64, ir))
         } else if fn_name == "strlen" {
             // Special handling for strlen: extract i8* from various argument types
@@ -875,34 +875,37 @@ impl CodeGenerator {
                     .strip_prefix("{ i8*, i64 } ")
                     .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
                 let ptr_tmp = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    ptr_tmp, val
-                );
-                write_ir!(ir, 
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr_tmp, val);
+                write_ir!(
+                    ir,
                     "  {} = call i64 @strlen(i8* {}){}",
-                    result, ptr_tmp, dbg_info
+                    result,
+                    ptr_tmp,
+                    dbg_info
                 );
             } else if arg_full.starts_with("i8*") {
                 // Already a pointer, use directly
                 let ptr_val = arg_full
                     .strip_prefix("i8* ")
                     .unwrap_or(arg_full.split_whitespace().last().unwrap_or("null"));
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call i64 @strlen(i8* {}){}",
-                    result, ptr_val, dbg_info
+                    result,
+                    ptr_val,
+                    dbg_info
                 );
             } else {
                 // Convert i64 to pointer
                 let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
                 let ptr_tmp = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = inttoptr i64 {} to i8*",
-                    ptr_tmp, arg_val
-                );
-                write_ir!(ir, 
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_tmp, arg_val);
+                write_ir!(
+                    ir,
                     "  {} = call i64 @strlen(i8* {}){}",
-                    result, ptr_tmp, dbg_info
+                    result,
+                    ptr_tmp,
+                    dbg_info
                 );
             }
             Ok((result, ir))
@@ -914,10 +917,7 @@ impl CodeGenerator {
                     .strip_prefix("{ i8*, i64 } ")
                     .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
                 let ptr = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    ptr, val
-                );
+                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
                 ptr
             } else if arg_full.starts_with("i8*") {
                 arg_full
@@ -933,9 +933,12 @@ impl CodeGenerator {
             };
             let i32_result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i32 @puts(i8* {}){}",
-                i32_result, ptr_tmp, dbg_info
+                i32_result,
+                ptr_tmp,
+                dbg_info
             );
             // Convert i32 result to i64 for consistency
             let result = self.next_temp(counter);
@@ -968,7 +971,8 @@ impl CodeGenerator {
                     })
                     .unwrap_or_default();
                 let sig = format!("void ({}, ...)", param_types.join(", "));
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  call {} @{}({}){}",
                     sig,
                     actual_fn_name,
@@ -976,7 +980,8 @@ impl CodeGenerator {
                     dbg_info
                 );
             } else {
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  call void @{}({}){}",
                     actual_fn_name,
                     arg_vals.join(", "),
@@ -1013,7 +1018,8 @@ impl CodeGenerator {
                     })
                     .unwrap_or_default();
                 let sig = format!("i32 ({}, ...)", param_types.join(", "));
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call {} @{}({}){}",
                     i32_tmp,
                     sig,
@@ -1022,7 +1028,8 @@ impl CodeGenerator {
                     dbg_info
                 );
             } else {
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call i32 @{}({}){}",
                     i32_tmp,
                     actual_fn_name,
@@ -1061,7 +1068,8 @@ impl CodeGenerator {
                     })
                     .unwrap_or_default();
                 let sig = format!("{} ({}, ...)", ret_ty, param_types.join(", "));
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call {} @{}({}){}",
                     tmp,
                     sig,
@@ -1070,7 +1078,8 @@ impl CodeGenerator {
                     dbg_info
                 );
             } else {
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = call {} @{}({}){}",
                     tmp,
                     ret_ty,

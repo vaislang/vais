@@ -22,7 +22,9 @@ F main() -> i64 {
     )
     .unwrap();
     // The auto-free cleanup should emit free calls for tracked allocations
-    let main_start = ir.find("define i64 @main").expect("main function not found");
+    let main_start = ir
+        .find("define i64 @main")
+        .expect("main function not found");
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
     assert!(
@@ -51,7 +53,9 @@ F main() -> i64 {
 "#,
     )
     .unwrap();
-    let main_start = ir.find("define i64 @main").expect("main function not found");
+    let main_start = ir
+        .find("define i64 @main")
+        .expect("main function not found");
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
     // Simple integer format goes through printf directly, no malloc needed
@@ -74,7 +78,9 @@ F main() -> i64 {
 "#,
     )
     .unwrap();
-    let main_start = ir.find("define i64 @main").expect("main function not found");
+    let main_start = ir
+        .find("define i64 @main")
+        .expect("main function not found");
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
     assert!(

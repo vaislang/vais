@@ -141,9 +141,7 @@ fn test_semantic_tokens_complex_program() {
 
 #[test]
 fn test_diagnostic_unexpected_eof() {
-    let err = ParseError::UnexpectedEof {
-        span: 10..10,
-    };
+    let err = ParseError::UnexpectedEof { span: 10..10 };
     let source = "F test() {";
     let diag = parse_error_to_diagnostic(&err, source);
     assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -174,9 +172,7 @@ fn test_diagnostic_unexpected_token_with_span() {
 
 #[test]
 fn test_diagnostic_at_end_of_file() {
-    let err = ParseError::UnexpectedEof {
-        span: 18..18,
-    };
+    let err = ParseError::UnexpectedEof { span: 18..18 };
     let source = "F test() -> i64 =";
     let diag = parse_error_to_diagnostic(&err, source);
     // Position should be at end of source
@@ -255,7 +251,8 @@ fn test_ai_completion_after_colon_type_position() {
 
 #[test]
 fn test_ai_completion_with_struct_in_ast() {
-    let source = "S Point { x: i64, y: i64 }\nF test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
+    let source =
+        "S Point { x: i64, y: i64 }\nF test() -> i64 {\n    p := Point { x: 1, y: 2 }\n    p.\n}";
     let ast = vais_parser::parse(source).ok();
     let ctx = CompletionContext::from_document(source, Position::new(3, 6), ast.as_ref());
     let completions = generate_ai_completions(&ctx);

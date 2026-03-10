@@ -314,6 +314,8 @@ mod tests {
         let ptr = obj.data_ptr_mut();
         assert!(!ptr.is_null());
         // Write through pointer and verify
+        // SAFETY: ptr is non-null (asserted above) and points to the first byte of
+        // obj.data, a Vec<u8> with capacity >= 32 from GcObject::new.
         unsafe {
             *ptr = 0xFF;
         }

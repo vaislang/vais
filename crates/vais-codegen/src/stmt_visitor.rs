@@ -199,28 +199,37 @@ impl CodeGenerator {
             // For struct literals and enum variant constructors, the value is already an alloca'd pointer
             if is_struct_lit || is_enum_variant_call || is_unit_variant {
                 write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {}* {}, {}** %{}",
-                    llvm_ty, val, llvm_ty, llvm_name
+                    llvm_ty,
+                    val,
+                    llvm_ty,
+                    llvm_name
                 );
             } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
                 // For struct values (e.g., from function returns)
                 let tmp_ptr = format!("%{}.struct", llvm_name);
                 write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                write_ir!(ir, 
-                    "  store {} {}, {}* {}",
-                    llvm_ty, val, llvm_ty, tmp_ptr
-                );
+                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
                 write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {}* {}, {}** %{}",
-                    llvm_ty, tmp_ptr, llvm_ty, llvm_name
+                    llvm_ty,
+                    tmp_ptr,
+                    llvm_ty,
+                    llvm_name
                 );
             } else {
                 write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  store {} {}, {}* %{}",
-                    llvm_ty, val, llvm_ty, llvm_name
+                    llvm_ty,
+                    val,
+                    llvm_ty,
+                    llvm_name
                 );
             }
 
@@ -326,14 +335,16 @@ impl CodeGenerator {
 
                 let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                 let t0 = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = insertvalue {} undef, i64 1, 0",
-                    t0, poll_ret_ty
-                );
+                write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
                 let t1 = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = insertvalue {} {}, {} {}, 1",
-                    t1, poll_ret_ty, t0, poll_ctx.ret_llvm, ret_val
+                    t1,
+                    poll_ret_ty,
+                    t0,
+                    poll_ctx.ret_llvm,
+                    ret_val
                 );
                 ir.push_str("  store i64 -1, i64* %state_field\n");
                 write_ir!(ir, "  ret {} {}", poll_ret_ty, t1);
@@ -345,10 +356,7 @@ impl CodeGenerator {
 
                 let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                 let t0 = self.next_temp(counter);
-                write_ir!(ir, 
-                    "  {} = insertvalue {} undef, i64 1, 0",
-                    t0, poll_ret_ty
-                );
+                write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
                 ir.push_str("  store i64 -1, i64* %state_field\n");
                 write_ir!(ir, "  ret {} {}", poll_ret_ty, t0);
             }
@@ -373,19 +381,15 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(&ret_type);
 
             // For struct types, may need to load from pointer
-            let ret_val = if matches!(ret_type, ResolvedType::Named { .. })
-                && !self.is_expr_value(expr)
-            {
-                let loaded = format!("%ret.{}", counter);
-                *counter += 1;
-                write_ir!(ir, 
-                    "  {} = load {}, {}* {}",
-                    loaded, llvm_ty, llvm_ty, val
-                );
-                loaded
-            } else {
-                val
-            };
+            let ret_val =
+                if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
+                    let loaded = format!("%ret.{}", counter);
+                    *counter += 1;
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                    loaded
+                } else {
+                    val
+                };
 
             // Execute deferred expressions before return (LIFO order)
             let defer_ir = self.generate_defer_cleanup(counter)?;

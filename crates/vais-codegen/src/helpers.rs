@@ -186,10 +186,7 @@ impl CodeGenerator {
         // Track recursion depth
         if self.enter_type_recursion("type_size").is_err() {
             // On recursion limit, return default size
-            debug_assert!(
-                false,
-                "ICE: Type recursion limit exceeded in type_size"
-            );
+            debug_assert!(false, "ICE: Type recursion limit exceeded in type_size");
             return 8;
         }
 
@@ -240,9 +237,12 @@ impl CodeGenerator {
         if self.gc_enabled {
             // Use GC allocation
             let ptr_tmp = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})",
-                ptr_tmp, size_arg, type_id
+                ptr_tmp,
+                size_arg,
+                type_id
             );
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
@@ -250,10 +250,7 @@ impl CodeGenerator {
         } else {
             // Use manual malloc
             let ptr_tmp = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = call i8* @malloc(i64 {})",
-                ptr_tmp, size_arg
-            );
+            write_ir!(ir, "  {} = call i8* @malloc(i64 {})", ptr_tmp, size_arg);
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
             (result, ir)
@@ -332,9 +329,11 @@ impl CodeGenerator {
             if is_slice_source {
                 // Extract length from fat pointer (second field)
                 let length = self.next_temp(counter);
-                write_ir!(ir, 
+                write_ir!(
+                    ir,
                     "  {} = extractvalue {{ i8*, i64 }} {}, 1",
-                    length, arr_val
+                    length,
+                    arr_val
                 );
                 length
             } else {
@@ -348,15 +347,14 @@ impl CodeGenerator {
         // If source is a slice, extract the data pointer
         let src_arr_ptr = if is_slice_source {
             let data_ptr = self.next_temp(counter);
-            write_ir!(ir, 
+            write_ir!(
+                ir,
                 "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                data_ptr, arr_val
+                data_ptr,
+                arr_val
             );
             let typed_ptr = self.next_temp(counter);
-            write_ir!(ir, 
-                "  {} = bitcast i8* {} to i64*",
-                typed_ptr, data_ptr
-            );
+            write_ir!(ir, "  {} = bitcast i8* {} to i64*", typed_ptr, data_ptr);
             typed_ptr
         } else {
             // For arrays/pointers, use directly
@@ -365,31 +363,24 @@ impl CodeGenerator {
 
         // Calculate slice length: end - start
         let length = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = sub i64 {}, {}",
-            length, end_val, start_val
-        );
+        write_ir!(ir, "  {} = sub i64 {}, {}", length, end_val, start_val);
 
         // Allocate new array for slice
         let byte_size = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = mul i64 {}, 8", // 8 bytes per i64 element
-            byte_size, length
+            byte_size,
+            length
         );
 
         let raw_ptr = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = call i8* @malloc(i64 {})",
-            raw_ptr, byte_size
-        );
+        write_ir!(ir, "  {} = call i8* @malloc(i64 {})", raw_ptr, byte_size);
         // Track allocation for automatic cleanup at scope exit
         self.track_alloc(raw_ptr.clone());
 
         let slice_ptr = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = bitcast i8* {} to i64*",
-            slice_ptr, raw_ptr
-        );
+        write_ir!(ir, "  {} = bitcast i8* {} to i64*", slice_ptr, raw_ptr);
 
         // Copy elements using a loop
         let loop_idx_ptr = self.next_temp(counter);
@@ -404,35 +395,32 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", loop_start);
 
         let loop_idx = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = load i64, i64* {}",
-            loop_idx, loop_idx_ptr
-        );
+        write_ir!(ir, "  {} = load i64, i64* {}", loop_idx, loop_idx_ptr);
 
         let cmp = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = icmp slt i64 {}, {}",
-            cmp, loop_idx, length
-        );
-        write_ir!(ir, 
+        write_ir!(ir, "  {} = icmp slt i64 {}, {}", cmp, loop_idx, length);
+        write_ir!(
+            ir,
             "  br i1 {}, label %{}, label %{}",
-            cmp, loop_body, loop_end
+            cmp,
+            loop_body,
+            loop_end
         );
 
         write_ir!(ir, "{}:", loop_body);
 
         // Calculate source index: start + loop_idx
         let src_idx = self.next_temp(counter);
-        write_ir!(ir, 
-            "  {} = add i64 {}, {}",
-            src_idx, start_val, loop_idx
-        );
+        write_ir!(ir, "  {} = add i64 {}, {}", src_idx, start_val, loop_idx);
 
         // Get source element pointer
         let src_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr i64, i64* {}, i64 {}",
-            src_ptr, src_arr_ptr, src_idx
+            src_ptr,
+            src_arr_ptr,
+            src_idx
         );
 
         // Load source element
@@ -441,9 +429,12 @@ impl CodeGenerator {
 
         // Get destination element pointer
         let dst_ptr = self.next_temp(counter);
-        write_ir!(ir, 
+        write_ir!(
+            ir,
             "  {} = getelementptr i64, i64* {}, i64 {}",
-            dst_ptr, slice_ptr, loop_idx
+            dst_ptr,
+            slice_ptr,
+            loop_idx
         );
 
         // Store element
@@ -452,10 +443,7 @@ impl CodeGenerator {
         // Increment loop index
         let next_idx = self.next_temp(counter);
         write_ir!(ir, "  {} = add i64 {}, 1", next_idx, loop_idx);
-        write_ir!(ir, 
-            "  store i64 {}, i64* {}",
-            next_idx, loop_idx_ptr
-        );
+        write_ir!(ir, "  store i64 {}, i64* {}", next_idx, loop_idx_ptr);
         write_ir!(ir, "  br label %{}", loop_start);
 
         write_ir!(ir, "{}:", loop_end);
