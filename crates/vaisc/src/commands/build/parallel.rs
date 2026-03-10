@@ -57,7 +57,7 @@ pub(crate) fn run_parallel_type_check(
                 // Type check this module
                 match module_checker.check_module(&module_ast) {
                     Ok(_) => Ok(module_checker),
-                    Err(e) => Err((format!("{}", e), module_checker)),
+                    Err(e) => Err(Box::new((format!("{}", e), module_checker))),
                 }
             } else {
                 Ok(module_checker)
@@ -76,7 +76,8 @@ pub(crate) fn run_parallel_type_check(
             Ok(module_checker) => {
                 final_checker.merge_type_defs_from(module_checker);
             }
-            Err((err_msg, module_checker)) => {
+            Err(boxed) => {
+                let (err_msg, module_checker) = *boxed;
                 all_errors.push(err_msg);
                 final_checker.merge_type_defs_from(module_checker);
             }
