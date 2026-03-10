@@ -96,6 +96,55 @@ X String {
         puts_ptr(self.data)
     }
 
+    # ===== Additional String Methods =====
+
+    # Check if string starts with a given prefix (null-terminated i64 pointer)
+    F starts_with(&self, prefix: i64) -> i64 {
+        prefix_len := strlen(prefix)
+        I prefix_len > self.len { R 0 }
+        str_starts_with_rec(self.data, prefix, prefix_len, 0)
+    }
+
+    # Check if string ends with a given suffix (null-terminated i64 pointer)
+    F ends_with(&self, suffix: i64) -> i64 {
+        suffix_len := strlen(suffix)
+        I suffix_len > self.len { R 0 }
+        offset := self.len - suffix_len
+        str_ends_with_rec(self.data, offset, suffix, suffix_len, 0)
+    }
+
+    # Convert to uppercase, returns new pointer (caller must free)
+    F to_uppercase(&self) -> i64 {
+        str_to_upper(self.data, self.len)
+    }
+
+    # Convert to lowercase, returns new pointer (caller must free)
+    F to_lowercase(&self) -> i64 {
+        str_to_lower(self.data, self.len)
+    }
+
+    # Parse string as integer, returns the value (0 if invalid)
+    F parse_int(&self) -> i64 {
+        str_parse_int(self.data, self.len)
+    }
+
+    # Get character count (ASCII: same as len; handles UTF-8 multi-byte)
+    F char_count(&self) -> i64 {
+        str_char_count(self.data, self.len)
+    }
+
+    # Check if string contains a substring (null-terminated i64 pointer)
+    F contains_str(&self, needle: i64) -> i64 {
+        needle_len := strlen(needle)
+        str_contains_raw(self.data, self.len, needle, needle_len)
+    }
+
+    # Find index of substring, returns -1 if not found
+    F index_of(&self, needle: i64) -> i64 {
+        needle_len := strlen(needle)
+        str_index_of_raw(self.data, self.len, needle, needle_len)
+    }
+
     # Free the string memory
     F drop(&self) -> i64 {
         free(self.data)
@@ -541,6 +590,36 @@ F str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, p
         part_len := split_get_len(split_result, idx)
         I part_len > 0 { memcpy(buf + new_pos, part_data, part_len) }
         str_join_fill(split_result, count, delim, idx + 1, buf, new_pos + part_len)
+    }
+}
+
+# =====================================================
+# String to integer conversion (raw pointer API)
+# =====================================================
+
+# Parse a string as an i64 integer
+# Returns the parsed value, or 0 if empty/invalid
+# Handles optional leading '-' sign
+F str_parse_int(data: i64, len: i64) -> i64 {
+    I len <= 0 { R 0 }
+    first := load_byte(data)
+    I first == 45 {
+        # Negative number
+        I len == 1 { R 0 }
+        0 - str_parse_int_digits(data, len, 1, 0)
+    } E {
+        str_parse_int_digits(data, len, 0, 0)
+    }
+}
+
+F str_parse_int_digits(data: i64, len: i64, idx: i64, acc: i64) -> i64 {
+    I idx >= len { acc }
+    E {
+        c := load_byte(data + idx)
+        I c < 48 || c > 57 { acc }
+        E {
+            str_parse_int_digits(data, len, idx + 1, acc * 10 + c - 48)
+        }
     }
 }
 

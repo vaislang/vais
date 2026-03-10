@@ -1,6 +1,8 @@
 # File I/O - basic file operations
 # Uses C standard library functions via extern
-# Updated to use Option<T> for error handling
+# Updated to use Option<T> and Result<T, E> for error handling
+
+U std/result
 
 # Seek origin constants
 C SEEK_SET: i64 = 0  # Beginning of file
@@ -81,6 +83,17 @@ X File {
             0 - 1
         } E {
             fgetc(self.handle)
+        }
+    }
+
+    # Read a single byte using Result type
+    # Returns Ok(byte) on success, Err(error_code) on failure
+    F read_byte_result(&self) -> Result<i64, i64> {
+        I self.handle == 0 {
+            Err(ERR_INVALID())
+        } E {
+            byte := fgetc(self.handle)
+            I byte < 0 { Err(ERR_IO()) } E { Ok(byte) }
         }
     }
 
@@ -253,6 +266,19 @@ X File {
         }
     }
 
+    # Seek to position using Result type
+    # Returns Ok(0) on success, Err(error_code) on failure
+    F seek_result(&self, offset: i64, origin: i64) -> Result<i64, i64> {
+        I self.handle == 0 {
+            Err(ERR_INVALID())
+        } EI origin < SEEK_SET | origin > SEEK_END {
+            Err(ERR_INVALID())
+        } E {
+            result := fseek(self.handle, offset, origin)
+            I result == 0 { Ok(0) } E { Err(ERR_IO()) }
+        }
+    }
+
     # Get current position in file
     # Returns -1 on error
     F tell(&self) -> i64 {
@@ -260,6 +286,17 @@ X File {
             0 - 1
         } E {
             ftell(self.handle)
+        }
+    }
+
+    # Get current position using Result type
+    # Returns Ok(position) on success, Err(error_code) on failure
+    F tell_result(&self) -> Result<i64, i64> {
+        I self.handle == 0 {
+            Err(ERR_INVALID())
+        } E {
+            pos := ftell(self.handle)
+            I pos < 0 { Err(ERR_IO()) } E { Ok(pos) }
         }
     }
 
@@ -578,6 +615,17 @@ X MappedFile {
         }
     }
 
+    # Read a byte using Result type
+    # Returns Ok(byte) on success, Err(error_code) on failure
+    F read_byte_result(&self, offset: i64) -> Result<i64, i64> {
+        I self.addr == 0 { Err(ERR_INVALID()) }
+        E I offset < 0 { Err(ERR_INVALID()) }
+        E I offset >= self.len { Err(ERR_OVERFLOW()) }
+        E {
+            Ok(load_byte(self.addr + offset))
+        }
+    }
+
     # Write a byte at given offset within the mapping
     F write_byte(&self, offset: i64, val: i64) -> i64 {
         I self.addr == 0 { 0 }
@@ -586,6 +634,18 @@ X MappedFile {
         E {
             store_byte(self.addr + offset, val)
             1
+        }
+    }
+
+    # Write a byte using Result type
+    # Returns Ok(1) on success, Err(error_code) on failure
+    F write_byte_result(&self, offset: i64, val: i64) -> Result<i64, i64> {
+        I self.addr == 0 { Err(ERR_INVALID()) }
+        E I offset < 0 { Err(ERR_INVALID()) }
+        E I offset >= self.len { Err(ERR_OVERFLOW()) }
+        E {
+            store_byte(self.addr + offset, val)
+            Ok(1)
         }
     }
 }
@@ -751,6 +811,23 @@ X File {
         }
     }
 
+    # Read bytes at specific offset using Result type
+    # Returns Ok(bytes_read) on success, Err(error_code) on failure
+    F pread_result(&self, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
+        I self.handle == 0 { Err(ERR_INVALID()) }
+        EI buffer == 0 { Err(ERR_INVALID()) }
+        EI count < 0 { Err(ERR_INVALID()) }
+        EI offset < 0 { Err(ERR_INVALID()) }
+        E {
+            fd := fileno(self.handle)
+            I fd < 0 { Err(ERR_IO()) }
+            E {
+                n := pread(fd, buffer, count, offset)
+                I n < 0 { Err(ERR_IO()) } E { Ok(n) }
+            }
+        }
+    }
+
     # Write bytes at specific offset without changing file position
     # Returns number of bytes written, or -1 on error
     # Thread-safe: does not modify file offset
@@ -763,6 +840,23 @@ X File {
             fd := fileno(self.handle)
             I fd < 0 { 0 - 1 }
             E { pwrite(fd, buffer, count, offset) }
+        }
+    }
+
+    # Write bytes at specific offset using Result type
+    # Returns Ok(bytes_written) on success, Err(error_code) on failure
+    F pwrite_result(&self, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
+        I self.handle == 0 { Err(ERR_INVALID()) }
+        EI buffer == 0 { Err(ERR_INVALID()) }
+        EI count < 0 { Err(ERR_INVALID()) }
+        EI offset < 0 { Err(ERR_INVALID()) }
+        E {
+            fd := fileno(self.handle)
+            I fd < 0 { Err(ERR_IO()) }
+            E {
+                n := pwrite(fd, buffer, count, offset)
+                I n < 0 { Err(ERR_IO()) } E { Ok(n) }
+            }
         }
     }
 }
@@ -783,6 +877,22 @@ F file_pread(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
     }
 }
 
+# Convenience: read bytes from file at offset using Result type
+# Returns Ok(bytes_read) on success, Err(error_code) on failure
+F file_pread_result(path: i64, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
+    I path == 0 { Err(ERR_INVALID()) }
+    EI buffer == 0 { Err(ERR_INVALID()) }
+    E {
+        f := File.open_read(path)
+        I f.handle == 0 { Err(ERR_NOT_FOUND()) }
+        E {
+            result := f.pread(buffer, count, offset)
+            f.close()
+            I result < 0 { Err(ERR_IO()) } E { Ok(result) }
+        }
+    }
+}
+
 # Convenience: write bytes to file at offset (opens/writes/closes)
 # Returns number of bytes written, or -1 on error
 F file_pwrite(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
@@ -795,6 +905,22 @@ F file_pwrite(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
             result := f.pwrite(buffer, count, offset)
             f.close()
             result
+        }
+    }
+}
+
+# Convenience: write bytes to file at offset using Result type
+# Returns Ok(bytes_written) on success, Err(error_code) on failure
+F file_pwrite_result(path: i64, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
+    I path == 0 { Err(ERR_INVALID()) }
+    EI buffer == 0 { Err(ERR_INVALID()) }
+    E {
+        f := File.open_write(path)
+        I f.handle == 0 { Err(ERR_IO()) }
+        E {
+            result := f.pwrite(buffer, count, offset)
+            f.close()
+            I result < 0 { Err(ERR_IO()) } E { Ok(result) }
         }
     }
 }

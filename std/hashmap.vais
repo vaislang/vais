@@ -332,6 +332,49 @@ X HashMap<K, V> {
         1
     }
 
+    # ===== Additional HashMap Methods =====
+
+    # Alias for contains (for API consistency with other languages)
+    F contains_key(&self, key: K) -> i64 {
+        @.contains(key)
+    }
+
+    # Collect all keys into a flat array
+    # Returns pointer to allocated array of keys (caller must free)
+    # Sets count_out to number of keys
+    F keys(&self, count_out: i64) -> i64 {
+        arr := malloc(self.size * 8)
+        hashmap_collect_keys(self.buckets, self.cap, arr, 0, 0)
+        store_i64(count_out, self.size)
+        arr
+    }
+
+    # Collect all values into a flat array
+    # Returns pointer to allocated array of values (caller must free)
+    # Sets count_out to number of values
+    F values(&self, count_out: i64) -> i64 {
+        arr := malloc(self.size * 8)
+        hashmap_collect_values(self.buckets, self.cap, arr, 0, 0)
+        store_i64(count_out, self.size)
+        arr
+    }
+
+    # Collect all entries (key-value pairs) into a flat array
+    # Returns pointer to array of {key, value} pairs (16 bytes each)
+    # Sets count_out to number of entries
+    F entries(&self, count_out: i64) -> i64 {
+        arr := malloc(self.size * 16)
+        hashmap_collect_entries(self.buckets, self.cap, arr, 0, 0)
+        store_i64(count_out, self.size)
+        arr
+    }
+
+    # Apply a function to each key-value pair
+    F for_each(&self, f: fn(i64, i64) -> i64) -> i64 {
+        hashmap_for_each_bucket(self.buckets, self.cap, f, 0)
+        0
+    }
+
     # Clear all entries
     F clear(&self) -> i64 {
         hashmap_clear_buckets(self.buckets, 0, self.cap)
@@ -346,6 +389,85 @@ X HashMap<K, V> {
         self.buckets = 0
         self.cap = 0
         0
+    }
+}
+
+# ===== Collection helpers (recursive) =====
+
+# Collect keys from all buckets into array
+F hashmap_collect_keys(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+    I bucket_idx >= cap { arr_idx }
+    E {
+        entry_ptr := load_i64(buckets + bucket_idx * 8)
+        new_idx := hashmap_collect_keys_chain(entry_ptr, arr, arr_idx)
+        hashmap_collect_keys(buckets, cap, arr, bucket_idx + 1, new_idx)
+    }
+}
+
+F hashmap_collect_keys_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+    I entry_ptr == 0 { arr_idx }
+    E {
+        store_i64(arr + arr_idx * 8, load_i64(entry_ptr))
+        next := load_i64(entry_ptr + 16)
+        hashmap_collect_keys_chain(next, arr, arr_idx + 1)
+    }
+}
+
+# Collect values from all buckets into array
+F hashmap_collect_values(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+    I bucket_idx >= cap { arr_idx }
+    E {
+        entry_ptr := load_i64(buckets + bucket_idx * 8)
+        new_idx := hashmap_collect_values_chain(entry_ptr, arr, arr_idx)
+        hashmap_collect_values(buckets, cap, arr, bucket_idx + 1, new_idx)
+    }
+}
+
+F hashmap_collect_values_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+    I entry_ptr == 0 { arr_idx }
+    E {
+        store_i64(arr + arr_idx * 8, load_i64(entry_ptr + 8))
+        next := load_i64(entry_ptr + 16)
+        hashmap_collect_values_chain(next, arr, arr_idx + 1)
+    }
+}
+
+# Collect entries (key-value pairs) from all buckets
+F hashmap_collect_entries(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+    I bucket_idx >= cap { arr_idx }
+    E {
+        entry_ptr := load_i64(buckets + bucket_idx * 8)
+        new_idx := hashmap_collect_entries_chain(entry_ptr, arr, arr_idx)
+        hashmap_collect_entries(buckets, cap, arr, bucket_idx + 1, new_idx)
+    }
+}
+
+F hashmap_collect_entries_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+    I entry_ptr == 0 { arr_idx }
+    E {
+        store_i64(arr + arr_idx * 16, load_i64(entry_ptr))          # key
+        store_i64(arr + arr_idx * 16 + 8, load_i64(entry_ptr + 8))  # value
+        next := load_i64(entry_ptr + 16)
+        hashmap_collect_entries_chain(next, arr, arr_idx + 1)
+    }
+}
+
+# Apply function to each key-value pair in all buckets
+F hashmap_for_each_bucket(buckets: i64, cap: i64, f: fn(i64, i64) -> i64, bucket_idx: i64) -> i64 {
+    I bucket_idx >= cap { 0 }
+    E {
+        entry_ptr := load_i64(buckets + bucket_idx * 8)
+        hashmap_for_each_chain(entry_ptr, f)
+        hashmap_for_each_bucket(buckets, cap, f, bucket_idx + 1)
+    }
+}
+
+F hashmap_for_each_chain(entry_ptr: i64, f: fn(i64, i64) -> i64) -> i64 {
+    I entry_ptr == 0 { 0 }
+    E {
+        f(load_i64(entry_ptr), load_i64(entry_ptr + 8))
+        next := load_i64(entry_ptr + 16)
+        hashmap_for_each_chain(next, f)
     }
 }
 

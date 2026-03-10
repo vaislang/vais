@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 135 완료, Parser -9.9% 최적화)
+> **현재 버전**: 0.1.0 (Phase 136 완료, Stdlib 실전 강화)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-10 (Phase 135 완료)
+> **최종 업데이트**: 2026-03-10 (Phase 136 완료)
 
 ---
 
@@ -444,6 +444,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 검증: E2E 전체 통과 + 성능 회귀 없음 (Opus) ✅ 2026-03-10
   결과: E2E 2,313 pass / 1 pre-existing fail / 0 regression, Clippy 0건
 진행률: 5/5 (100%)
+
+### Phase 136: Stdlib 실전 강화 — 컴파일 검증 & 에러 처리 표준화 & 누락 기능 보완
+
+> **목표**: 표준 라이브러리 79개 모듈의 실전 적용 가능성 검증 — E2E 컴파일 테스트, Result 패턴 통일, 핵심 컬렉션 기능 보완
+> **기대 효과**: 대형 프로젝트 stdlib 의존 가능, 에러 처리 일관성, 실제 동작 검증 완료
+
+모드: 자동진행
+
+- [x] 1. stdlib 컴파일 검증 E2E — 핵심 모듈 15개 import+사용 테스트 (Sonnet) ✅ 2026-03-10
+  변경: phase136_stdlib.rs (+31 E2E — Vec/String/HashMap/Option/Result/Math/JSON/IO/File/Memory/Hash/Set/Deque/Arena/Base64)
+- [x] 2. stdlib 에러 처리 표준화 — -1 리턴 → Result 패턴 통일 (Sonnet) ✅ 2026-03-10
+  변경: std/file.vais (+9 Result 래퍼), std/io.vais (+2 Result 래퍼) — 기존 API 유지, 신규 *_result() 함수 추가
+- [x] 3. stdlib 누락 기능 보완 — Vec/String/HashMap 메서드 확충 (Sonnet) ✅ 2026-03-10
+  변경: std/vec.vais (+8 메서드: contains/insert/remove/reverse/sort/first/last/swap), std/string.vais (+8: starts_with/ends_with/to_upper/lower/parse_int/char_count/contains_str/index_of), std/hashmap.vais (+5: contains_key/keys/values/entries/for_each)
+- [x] 4. 검증: cargo test 전체 통과 + E2E 카운트 확인 (Opus) ✅ 2026-03-10
+  변경: E2E 2,345 (2,344 pass / 1 pre-existing fail / 0 regression), Clippy 0건
+진행률: 4/4 (100%)
 
 ---
 

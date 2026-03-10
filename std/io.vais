@@ -11,6 +11,7 @@
 # - max_len values are positive and within reasonable bounds (1..=1048576)
 
 U std/option
+U std/result
 # U std/string  # Temporarily disabled due to String type issues
 
 # Buffer size for input operations
@@ -230,6 +231,28 @@ X F getchar() -> i64
 # Read a character from stdin (wrapper)
 F read_char() -> i64 {
     getchar()
+}
+
+# Read a character from stdin using Result type
+# Returns Ok(char) on success, Err(ERR_IO()) on EOF/error
+F read_char_result() -> Result<i64, i64> {
+    c := getchar()
+    I c < 0 { Err(ERR_IO()) } E { Ok(c) }
+}
+
+# Read an i64 integer using Result type
+# Returns Ok(value) on success, Err(ERR_IO()) on read failure
+F read_i64_result() -> Result<i64, i64> {
+    buffer := malloc(64)
+    result := read_line(buffer, 64)
+    I result == 0 {
+        free(buffer)
+        Err(ERR_IO())
+    } E {
+        value := atol_ptr(buffer)
+        free(buffer)
+        Ok(value)
+    }
 }
 
 # Print a prompt and read a line
