@@ -250,6 +250,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 131~133 | 커버리지 · ICE 정리 · unsafe 감사 | +150 단위 테스트, eprintln→Error 8건, SAFETY 주석 29건 | 2,052 |
 | 134~136 | E2E 2,345 · 성능 R2 · Stdlib 강화 | +262 E2E, Result 표준화, Vec/String/HashMap 메서드 확충 | 2,345 |
 | 137~139 | 감사 기반 개선 | SAFETY 주석 44건, 모듈 분할 R14 (comptime/concurrent), async recursive ICE 수정 | 2,345 |
+| 140 | 코드 커버리지 강화 | 6개 crate 단위/통합 테스트 추가, 전체 11,357 tests, 0 fail | 2,345 |
 
 ## 📋 예정 작업
 
@@ -284,6 +285,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: type_inference.rs, expr_visitor.rs — __poll suffix stripping으로 async 내 @ 호출 정상 해결
 - [x] 6. 검증: E2E 2,345 pass / 0 fail / 0 regression, Clippy 0건 (Opus) ✅ 2026-03-10
 진행률: 2/2 (100%)
+
+### Phase 140: 코드 커버리지 강화 — 68% → 80%+ 목표
+
+> **목표**: 커버리지 낮은 6개 crate에 단위/통합 테스트 추가, 전체 커버리지 80%+ 달성
+> **기대 효과**: Codecov 12%+ 상승, 프로덕션 품질 기준 충족
+
+모드: 자동진행
+- [x] 1. vais-codegen advanced_opt/ 단위 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-codegen/tests/advanced_opt_tests.rs (dead_code/inline/const_fold/loop_unroll 등 27 테스트)
+- [x] 2. vais-lsp 핸들러 단위 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-lsp/tests/handler_tests.rs (completion/symbols/goto_def/references/formatting 등 27 테스트)
+- [x] 3. vais-registry-server API 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-registry-server/tests/api_coverage_tests.rs (unyank/categories/owners/web/auth 등 27 테스트)
+- [x] 4. vais-dynload WASM 샌드박스 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-dynload/src/wasm_sandbox.rs (sandbox config/capabilities/wasm instance 등 테스트 추가)
+- [x] 5. vais-macro 단위 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-macro/tests/coverage_tests.rs (macro expander/hygiene/declarative macro 테스트 추가)
+- [x] 6. vais-gpu 백엔드별 테스트 추가 (Opus 직접) ✅ 2026-03-11
+  변경: crates/vais-gpu/tests/gpu_tests.rs (CUDA/Metal/OpenCL/WebGPU/SIMD 백엔드별 29 테스트)
+- [x] 7. 검증: cargo test 전체 통과 + 커버리지 측정 (Opus 직접) ✅ 2026-03-11
+  변경: 전체 11,357 passed / 0 failed / 131 ignored, Clippy 0건
+진행률: 7/7 (100%)
 
 ---
 
