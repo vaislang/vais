@@ -45,7 +45,7 @@ cargo build --release
 
 ```bash
 ./target/release/vaisc --version
-# 出力されるべき内容: Vais 1.0.0
+# 出力されるべき内容: Vais 0.1.0
 ```
 
 ---

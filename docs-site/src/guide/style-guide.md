@@ -78,7 +78,7 @@ x := 0                      # 의미 없는 한 글자 (루프 제외)
 G MAX_BUFFER_SIZE: i64 = 1024
 G DEFAULT_TIMEOUT: i64 = 30
 G PI: f64 = 3.14159
-G APP_VERSION: str = "1.0.0"
+G APP_VERSION: str = "0.1.0"
 G ERROR_FILE_NOT_FOUND: i64 = 1
 
 # 나쁜 예

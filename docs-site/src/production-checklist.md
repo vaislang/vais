@@ -175,7 +175,7 @@ Example Vais.toml:
 ```toml
 [package]
 name = "my-lib"
-version = "1.0.0"
+version = "0.1.0"
 authors = ["Your Name"]
 description = "Brief description"
 repository = "https://github.com/user/my-lib"
