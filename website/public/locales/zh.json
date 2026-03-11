@@ -12,7 +12,7 @@
     "blog": "博客"
   },
   "hero": {
-    "badge": "v1.0.0 — 生产就绪",
+    "badge": "v0.0.5 — 生产就绪",
     "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
     "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。单字符关键字、表达式导向语法和 LLVM 驱动的原生速度。",
     "tryBrowser": "在浏览器中试用",

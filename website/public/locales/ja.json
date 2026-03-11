@@ -12,7 +12,7 @@
     "blog": "ブログ"
   },
   "hero": {
-    "badge": "v1.0.0 — プロダクション対応",
+    "badge": "v0.0.5 — プロダクション対応",
     "title": "<span class=\"gradient-text\">少ないトークン</span>で書き、<br><span class=\"gradient-text\">ネイティブパフォーマンス</span>を得る",
     "subtitle": "Vais（Vibe AI Language for Systems）は、AIコード生成に最適化されたシステムプログラミング言語です。単一文字キーワード、式指向構文、LLVMベースのネイティブ速度を提供します。",
     "tryBrowser": "ブラウザで試す",
