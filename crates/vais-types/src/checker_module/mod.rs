@@ -59,31 +59,29 @@ impl TypeChecker {
     ///
     /// Ok(()) if type checking succeeds, or a TypeError on failure.
     pub fn check_module(&mut self, module: &Module) -> TypeResult<()> {
-        // First pass: collect all type definitions
+        // First pass (1a): Register type definitions (structs, enums, traits)
+        // These must be registered BEFORE impl blocks, because impl blocks
+        // look up the target struct/enum by name.
         for item in &module.items {
             match &item.node {
-                Item::Function(f) => self.register_function(f)?,
                 Item::Struct(s) => self.register_struct(s)?,
                 Item::Enum(e) => self.register_enum(e)?,
                 Item::Union(u) => self.register_union(u)?,
                 Item::TypeAlias(t) => self.register_type_alias(t)?,
                 Item::TraitAlias(ta) => self.register_trait_alias(ta)?,
-                Item::Use(_use_stmt) => {
-                    // Use statements are handled at the compiler level (AST merging)
-                    // by the time we reach type checking, all imports are already resolved
-                }
                 Item::Trait(t) => self.register_trait(t)?,
+                _ => {} // Handled in pass 1b
+            }
+        }
+
+        // First pass (1b): Register functions, impl blocks, constants, externs
+        // Now that all structs/enums/traits are registered, impl blocks can find their targets.
+        for item in &module.items {
+            match &item.node {
+                Item::Function(f) => self.register_function(f)?,
                 Item::Impl(impl_block) => {
                     // Register impl methods to the target type
                     self.register_impl(impl_block)?;
-                }
-                Item::Macro(_) => {
-                    // Macro definitions are handled at the expansion phase
-                    // before type checking
-                }
-                Item::Error { .. } => {
-                    // Error nodes from recovery mode are skipped during type checking.
-                    // They represent parsing failures that have already been reported.
                 }
                 Item::ExternBlock(ext) => {
                     // Register extern functions
@@ -97,9 +95,11 @@ impl TypeChecker {
                     self.constants
                         .insert(const_def.name.node.clone(), const_type);
                 }
-                Item::Global(_global_def) => {
-                    // Global variable definitions
-                    // Type checking happens during code generation
+                Item::Use(_) | Item::Macro(_) | Item::Error { .. }
+                | Item::Global(_) | Item::Struct(_) | Item::Enum(_)
+                | Item::Union(_) | Item::TypeAlias(_) | Item::TraitAlias(_)
+                | Item::Trait(_) => {
+                    // Already handled in pass 1a, or not needed here
                 }
             }
         }

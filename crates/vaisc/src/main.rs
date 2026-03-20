@@ -789,9 +789,10 @@ fn main() {
                 // Configure parallel compilation
                 let parallel_config = parallel.map(vais_codegen::parallel::ParallelConfig::new);
 
-                // Default to inkwell when feature is available
+                // Default to inkwell when feature is available, unless VAIS_SINGLE_MODULE
+                // is set (monolithic build for VaisDB — use text backend for compatibility)
                 #[cfg(feature = "inkwell")]
-                let use_inkwell = true;
+                let use_inkwell = !std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
                 #[cfg(not(feature = "inkwell"))]
                 let use_inkwell = _build_inkwell || cli.inkwell;
                 commands::build::cmd_build_with_timing(

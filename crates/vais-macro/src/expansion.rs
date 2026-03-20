@@ -567,6 +567,97 @@ impl<'a> AstExpander<'a> {
         })
     }
 
+    /// Expand vec![...] into AST directly: { __v := mut Vec.with_capacity(N); __v.push(e1); ...; __v }
+    fn expand_vec_macro(
+        &mut self,
+        invoke: &MacroInvoke,
+        span: Span,
+    ) -> ExpansionResult<Spanned<Expr>> {
+        // Parse the tokens as comma-separated expressions
+        let token_string = tokens_to_string(&invoke.tokens);
+        let elements: Vec<Spanned<Expr>> = if token_string.trim().is_empty() {
+            vec![]
+        } else {
+            // Parse each comma-separated element
+            let wrapper = format!("F __vec_macro_wrapper() = [{}]", token_string);
+            let parsed = parse(&wrapper).map_err(|e| {
+                ExpansionError::ParseError(format!(
+                    "Failed to parse vec! elements '{}': {:?}",
+                    token_string, e
+                ))
+            })?;
+            if let Some(item) = parsed.items.first() {
+                if let Item::Function(func) = &item.node {
+                    if let FunctionBody::Expr(body) = &func.body {
+                        if let Expr::Array(elems) = &body.node {
+                            elems.clone()
+                        } else {
+                            vec![(**body).clone()]
+                        }
+                    } else {
+                        return Err(ExpansionError::ParseError(
+                            "vec! wrapper parsed as block".to_string(),
+                        ));
+                    }
+                } else {
+                    return Err(ExpansionError::ParseError(
+                        "vec! wrapper did not parse as function".to_string(),
+                    ));
+                }
+            } else {
+                vec![]
+            }
+        };
+
+        let cap = elements.len() as i64;
+        let var_name = format!("__vec_tmp_{}", self.hygienic.current_context());
+
+        // Build: __v := mut Vec.with_capacity(N)
+        let let_stmt = Spanned::new(
+            Stmt::Let {
+                name: Spanned::new(var_name.clone(), span),
+                ty: None,
+                value: Box::new(Spanned::new(
+                    Expr::StaticMethodCall {
+                        type_name: Spanned::new("Vec".to_string(), span),
+                        method: Spanned::new("with_capacity".to_string(), span),
+                        args: vec![Spanned::new(Expr::Int(cap), span)],
+                    },
+                    span,
+                )),
+                is_mut: true,
+                ownership: Ownership::Regular,
+            },
+            span,
+        );
+
+        let mut stmts = vec![let_stmt];
+
+        // Build: __v.push(elem) for each element
+        for elem in elements {
+            let push_stmt = Spanned::new(
+                Stmt::Expr(Box::new(Spanned::new(
+                    Expr::MethodCall {
+                        receiver: Box::new(Spanned::new(Expr::Ident(var_name.clone()), span)),
+                        method: Spanned::new("push".to_string(), span),
+                        args: vec![elem],
+                    },
+                    span,
+                ))),
+                span,
+            );
+            stmts.push(push_stmt);
+        }
+
+        // Final expression: __v
+        stmts.push(Spanned::new(
+            Stmt::Expr(Box::new(Spanned::new(Expr::Ident(var_name), span))),
+            span,
+        ));
+
+        Ok(Spanned::new(Expr::Block(stmts), span))
+    }
+
     fn expand_macro_invoke(
         &mut self,
         invoke: MacroInvoke,
@@ -581,6 +672,14 @@ impl<'a> AstExpander<'a> {
         }
 
         self.hygienic.push_context();
+
+        // Special handling for vec! macro — expand directly to AST
+        if invoke.name.node == "vec" {
+            let result = self.expand_vec_macro(&invoke, span);
+            self.hygienic.pop_context();
+            self.depth -= 1;
+            return result;
+        }
 
         let expanded_tokens = self.expander.expand(&invoke)?;
         let token_string = tokens_to_string(&expanded_tokens);

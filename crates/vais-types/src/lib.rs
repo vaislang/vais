@@ -235,7 +235,7 @@ impl TypeChecker {
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                if self.multi_error_mode && self.collected_errors.len() < 20 {
+                if self.multi_error_mode && self.collected_errors.len() < 200 {
                     self.collected_errors.push(e);
                     Ok(())
                 } else {
@@ -299,6 +299,23 @@ impl TypeChecker {
     /// Get all function signatures (for passing resolved types to codegen)
     pub fn get_all_functions(&self) -> &HashMap<String, FunctionSig> {
         &self.functions
+    }
+
+    /// Get all function signatures INCLUDING struct methods with mangled names.
+    /// E.g., TestSuite's `new` method becomes key `TestSuite_new`.
+    /// This is needed for codegen return type resolution in monolithic builds
+    /// where methods from imported modules may not be in the flat `functions` map.
+    pub fn get_all_functions_with_methods(&self) -> HashMap<String, FunctionSig> {
+        let mut result = self.functions.clone();
+        for (struct_name, struct_def) in &self.structs {
+            for (method_name, method_sig) in &struct_def.methods {
+                let mangled = format!("{}_{}", struct_name, method_name);
+                if !result.contains_key(&mangled) {
+                    result.insert(mangled, method_sig.clone());
+                }
+            }
+        }
+        result
     }
 
     /// Get all type aliases (for passing to codegen)

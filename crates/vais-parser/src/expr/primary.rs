@@ -96,7 +96,41 @@ impl Parser {
         let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
 
         let expr = match tok.token {
-            Token::Int(n) => Expr::Int(n),
+            Token::Int(n) => {
+                // Check for type suffix: 0u16, 1i32, etc.
+                // If next token is a type keyword (U8, U16, U32, U64, I8, I16, I32, I64, F32, F64),
+                // treat the whole thing as a typed integer literal → cast expression
+                if let Some(next) = self.peek() {
+                    let cast_type = match &next.token {
+                        Token::U8 => Some("u8"),
+                        Token::U16 => Some("u16"),
+                        Token::U32 => Some("u32"),
+                        Token::U64 => Some("u64"),
+                        Token::I8 => Some("i8"),
+                        Token::I16 => Some("i16"),
+                        Token::I32 => Some("i32"),
+                        Token::I64 => Some("i64"),
+                        Token::F32 => Some("f32"),
+                        Token::F64 => Some("f64"),
+                        _ => None,
+                    };
+                    if let Some(type_name) = cast_type {
+                        self.advance_skip(); // consume type suffix
+                        let end = self.prev_span().end;
+                        Expr::Cast {
+                            expr: Box::new(Spanned::new(Expr::Int(n), Span::new(start, end))),
+                            ty: Spanned::new(
+                                vais_ast::Type::Named { name: type_name.to_string(), generics: vec![] },
+                                Span::new(start, end),
+                            ),
+                        }
+                    } else {
+                        Expr::Int(n)
+                    }
+                } else {
+                    Expr::Int(n)
+                }
+            }
             Token::Float(n) => Expr::Float(n),
             Token::True => Expr::Bool(true),
             Token::False => Expr::Bool(false),
@@ -225,6 +259,25 @@ impl Parser {
                         ));
                     } else {
                         exprs.push(self.parse_expr()?);
+                    }
+                    // Check for array repeat syntax: [expr; count]
+                    if self.check(&Token::Semi) && exprs.len() == 1 {
+                        self.advance(); // consume ';'
+                        let count_expr = self.parse_expr()?;
+                        self.expect_skip(&Token::RBracket)?;
+                        let end = self.prev_span().end;
+                        // Extract count as integer
+                        let count = match &count_expr.node {
+                            Expr::Int(n) => *n as usize,
+                            _ => 1, // fallback
+                        };
+                        // Expand [expr; count] into [expr, expr, expr, ...]
+                        let elem = exprs.remove(0);
+                        let mut repeated = Vec::with_capacity(count);
+                        for _ in 0..count {
+                            repeated.push(elem.clone());
+                        }
+                        return Ok(Spanned::new(Expr::Array(repeated), Span::new(start, end)));
                     }
                     if !self.check(&Token::RBracket) {
                         self.expect_skip(&Token::Comma)?;
@@ -666,6 +719,58 @@ impl Parser {
                             pattern: Box::new(inner_pattern),
                         }
                     }
+                    // Check for qualified variant pattern: `EnumType.Variant` / `EnumType.Variant(x)` / `EnumType.Variant { field }`
+                    else if self.check(&Token::Dot) {
+                        self.advance(); // skip '.'
+                        let variant_span = self.current_span();
+                        let variant_tok = self.advance().ok_or(ParseError::UnexpectedEof { span: variant_span })?;
+                        let variant_name = if let Token::Ident(s) = variant_tok.token {
+                            s
+                        } else {
+                            self.exit_depth();
+                            return Err(ParseError::UnexpectedToken {
+                                found: variant_tok.token,
+                                span: variant_tok.span,
+                                expected: "variant name after '.'".into(),
+                            });
+                        };
+                        // Check for payload: `Variant(x)` or `Variant { field }`
+                        if self.check(&Token::LParen) {
+                            self.advance_skip();
+                            let mut fields = Vec::new();
+                            while !self.check(&Token::RParen) && !self.is_at_end() {
+                                fields.push(self.parse_pattern()?);
+                                if !self.check(&Token::RParen) {
+                                    self.expect_skip(&Token::Comma)?;
+                                }
+                            }
+                            self.expect_skip(&Token::RParen)?;
+                            Pattern::Variant {
+                                name: Spanned::new(variant_name, Span::new(start, start)),
+                                fields,
+                            }
+                        } else if self.check(&Token::LBrace) {
+                            self.advance_skip();
+                            let mut fields = Vec::new();
+                            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                                fields.push(self.parse_pattern()?);
+                                if !self.check(&Token::RBrace) {
+                                    self.expect_skip(&Token::Comma)?;
+                                }
+                            }
+                            self.expect_skip(&Token::RBrace)?;
+                            Pattern::Variant {
+                                name: Spanned::new(variant_name, Span::new(start, start)),
+                                fields,
+                            }
+                        } else {
+                            // Simple qualified variant: `EnumType.Variant`
+                            Pattern::Variant {
+                                name: Spanned::new(variant_name, Span::new(start, start)),
+                                fields: vec![],
+                            }
+                        }
+                    }
                     // Check for variant pattern: `Some(x)`
                     else if self.check(&Token::LParen) {
                         self.advance_skip();
@@ -678,6 +783,36 @@ impl Parser {
                         }
                         self.expect_skip(&Token::RParen)?;
                         Pattern::Variant {
+                            name: Spanned::new(name, Span::new(start, start)),
+                            fields,
+                        }
+                    }
+                    // Check for struct destructure pattern: `Name { field, .. }`
+                    else if self.check(&Token::LBrace) {
+                        self.advance_skip();
+                        let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> = Vec::new();
+                        while !self.check(&Token::RBrace) && !self.is_at_end() {
+                            // Check for rest pattern `..`
+                            if self.check(&Token::DotDot) {
+                                self.advance();
+                                // `..` in struct pattern — skip remaining fields
+                                break;
+                            }
+                            let field_name = self.parse_ident()?;
+                            // Check for `: pattern`
+                            let field_pat = if self.check(&Token::Colon) {
+                                self.advance_skip();
+                                Some(self.parse_pattern()?)
+                            } else {
+                                None // shorthand: `x` means `x: x`
+                            };
+                            fields.push((field_name, field_pat));
+                            if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
+                                self.expect_skip(&Token::Comma)?;
+                            }
+                        }
+                        self.expect_skip(&Token::RBrace)?;
+                        Pattern::Struct {
                             name: Spanned::new(name, Span::new(start, start)),
                             fields,
                         }
@@ -720,6 +855,11 @@ impl Parser {
                     } else {
                         Pattern::Literal(Literal::Int(n))
                     }
+                }
+                Token::Float(f) => {
+                    let f = *f;
+                    self.advance();
+                    Pattern::Literal(Literal::Float(f))
                 }
                 Token::True => {
                     self.advance();

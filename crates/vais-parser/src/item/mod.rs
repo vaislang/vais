@@ -65,7 +65,13 @@ impl Parser {
             Item::Macro(self.parse_macro_def(is_pub)?)
         } else if self.check(&Token::Extern) {
             self.advance_skip();
-            Item::ExternBlock(self.parse_extern_block()?)
+            // Check if this is a single extern function: N F name(...)
+            if self.check(&Token::Function) {
+                self.advance_skip();
+                Item::ExternBlock(self.parse_single_extern_function(attributes.clone())?)
+            } else {
+                Item::ExternBlock(self.parse_extern_block()?)
+            }
         } else if self.check(&Token::Continue) {
             // C at top level is a constant definition, not continue
             self.advance_skip();

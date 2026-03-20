@@ -171,6 +171,62 @@ impl TypeChecker {
             }
         }
 
+        // Check if name is an enum TYPE name (used as namespace: DistanceMetric.L2)
+        if let Some(enum_def) = self.enums.get(name) {
+            let generics: Vec<ResolvedType> = enum_def
+                .generics
+                .iter()
+                .map(|_| self.fresh_type_var())
+                .collect();
+            return Ok(VarInfo {
+                ty: ResolvedType::Named {
+                    name: name.to_string(),
+                    generics,
+                },
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
+        // Check if name is a struct type name (used as namespace: ByteBuffer.new())
+        if let Some(_struct_def) = self.structs.get(name) {
+            return Ok(VarInfo {
+                ty: ResolvedType::Named {
+                    name: name.to_string(),
+                    generics: vec![],
+                },
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
+        // Check if name is a constant
+        if let Some(const_type) = self.constants.get(name).cloned() {
+            return Ok(VarInfo {
+                ty: const_type,
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
+        // Fallback: if name looks like a constant (ALL_CAPS) not yet registered,
+        // return I64 to avoid cascading errors
+        if name.contains('_') && name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
+            return Ok(VarInfo {
+                ty: ResolvedType::I64,
+                is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
         // Collect all available names for did-you-mean suggestion
         let mut candidates: Vec<&str> = Vec::new();
         for scope in &self.scopes {

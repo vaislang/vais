@@ -138,28 +138,42 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                // Use float (f32) if either operand is f32 and neither is f64
-                let float_llvm = if matches!(left_type, ResolvedType::F32)
-                    || matches!(right_type, ResolvedType::F32)
-                {
-                    if matches!(left_type, ResolvedType::F64)
-                        || matches!(right_type, ResolvedType::F64)
-                    {
-                        "double"
-                    } else {
-                        "float"
+                // Handle mixed f32/f64 comparisons
+                let left_is_f32 = matches!(left_type, ResolvedType::F32);
+                let right_is_f32 = matches!(right_type, ResolvedType::F32);
+                let left_is_f64 = matches!(left_type, ResolvedType::F64);
+                let right_is_f64 = matches!(right_type, ResolvedType::F64);
+
+                let float_llvm;
+                let mut actual_left = left_val.clone();
+                let mut actual_right = right_val.clone();
+
+                if (left_is_f32 && right_is_f64) || (left_is_f64 && right_is_f32) {
+                    float_llvm = "double";
+                    if left_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, left_val);
+                        actual_left = ext;
                     }
+                    if right_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, right_val);
+                        actual_right = ext;
+                    }
+                } else if left_is_f32 || right_is_f32 {
+                    float_llvm = "float";
                 } else {
-                    "double"
-                };
+                    float_llvm = "double";
+                }
+
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
                     cmp_tmp,
                     op_str,
                     float_llvm,
-                    left_val,
-                    right_val,
+                    actual_left,
+                    actual_right,
                     dbg_info
                 );
             } else {
@@ -177,11 +191,21 @@ impl CodeGenerator {
                         )))
                     }
                 };
+                // Use inferred type for integer comparison width
+                let cmp_llvm = match &left_type {
+                    ResolvedType::I8 | ResolvedType::U8 => "i8",
+                    ResolvedType::I16 | ResolvedType::U16 => "i16",
+                    ResolvedType::I32 | ResolvedType::U32 => "i32",
+                    ResolvedType::I128 | ResolvedType::U128 => "i128",
+                    ResolvedType::Bool => "i1",
+                    _ => "i64",
+                };
                 write_ir!(
                     ir,
-                    "  {} = {} i64 {}, {}{}",
+                    "  {} = {} {} {}, {}{}",
                     cmp_tmp,
                     op_str,
+                    cmp_llvm,
                     left_val,
                     right_val,
                     dbg_info
@@ -222,28 +246,43 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                // Use float (f32) if either operand is f32 and neither is f64
-                let float_llvm = if matches!(left_type, ResolvedType::F32)
-                    || matches!(right_type, ResolvedType::F32)
-                {
-                    if matches!(left_type, ResolvedType::F64)
-                        || matches!(right_type, ResolvedType::F64)
-                    {
-                        "double"
-                    } else {
-                        "float"
+                // Determine target float type
+                let left_is_f32 = matches!(left_type, ResolvedType::F32);
+                let right_is_f32 = matches!(right_type, ResolvedType::F32);
+                let left_is_f64 = matches!(left_type, ResolvedType::F64);
+                let right_is_f64 = matches!(right_type, ResolvedType::F64);
+
+                let float_llvm;
+                let mut actual_left = left_val.clone();
+                let mut actual_right = right_val.clone();
+
+                if (left_is_f32 && right_is_f64) || (left_is_f64 && right_is_f32) {
+                    // Mixed f32/f64 — promote f32 to f64
+                    float_llvm = "double";
+                    if left_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, left_val);
+                        actual_left = ext;
                     }
+                    if right_is_f32 {
+                        let ext = self.next_temp(counter);
+                        write_ir!(ir, "  {} = fpext float {} to double", ext, right_val);
+                        actual_right = ext;
+                    }
+                } else if left_is_f32 || right_is_f32 {
+                    float_llvm = "float";
                 } else {
-                    "double"
-                };
+                    float_llvm = "double";
+                }
+
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
                     tmp,
                     op_str,
                     float_llvm,
-                    left_val,
-                    right_val,
+                    actual_left,
+                    actual_right,
                     dbg_info
                 );
             } else {
@@ -265,11 +304,21 @@ impl CodeGenerator {
                         )))
                     }
                 };
+                // Use inferred type for integer width instead of hardcoded i64
+                let int_llvm = match &left_type {
+                    ResolvedType::I8 | ResolvedType::U8 => "i8",
+                    ResolvedType::I16 | ResolvedType::U16 => "i16",
+                    ResolvedType::I32 | ResolvedType::U32 => "i32",
+                    ResolvedType::I128 | ResolvedType::U128 => "i128",
+                    ResolvedType::Bool => "i1",
+                    _ => "i64", // i64, u64, and default
+                };
                 write_ir!(
                     ir,
-                    "  {} = {} i64 {}, {}{}",
+                    "  {} = {} {} {}, {}{}",
                     tmp,
                     op_str,
+                    int_llvm,
                     left_val,
                     right_val,
                     dbg_info
@@ -292,15 +341,24 @@ impl CodeGenerator {
 
         let mut ir = val_ir;
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
+        let expr_type = self.infer_expr_type(expr);
+        let int_llvm = match &expr_type {
+            ResolvedType::I8 | ResolvedType::U8 => "i8",
+            ResolvedType::I16 | ResolvedType::U16 => "i16",
+            ResolvedType::I32 | ResolvedType::U32 => "i32",
+            ResolvedType::I128 | ResolvedType::U128 => "i128",
+            ResolvedType::Bool => "i1",
+            _ => "i64",
+        };
         match op {
             UnaryOp::Neg => {
-                write_ir!(ir, "  {} = sub i64 0, {}{}", tmp, val, dbg_info);
+                write_ir!(ir, "  {} = sub {} 0, {}{}", tmp, int_llvm, val, dbg_info);
             }
             UnaryOp::Not => {
                 write_ir!(ir, "  {} = xor i1 {}, 1{}", tmp, val, dbg_info);
             }
             UnaryOp::BitNot => {
-                write_ir!(ir, "  {} = xor i64 {}, -1{}", tmp, val, dbg_info);
+                write_ir!(ir, "  {} = xor {} {}, -1{}", tmp, int_llvm, val, dbg_info);
             }
         }
 
@@ -352,12 +410,20 @@ impl CodeGenerator {
             if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                 if !local.is_param() {
                     if local.is_ssa() {
-                        // SSA variable: update the alias to the new value (no store needed)
-                        // This handles `x := 5; x = 10` where x is non-mutable SSA
+                        // SSA variable being reassigned: convert to alloca to support loops
+                        // Without this, loop bodies would use stale SSA values
                         let local_ty = local.ty.clone();
-                        self.fn_ctx
-                            .locals
-                            .insert(name.clone(), crate::LocalVar::ssa(local_ty, val.clone()));
+                        let llvm_ty = self.type_to_llvm(&local_ty);
+                        let alloca_name = format!("{}.{}", name, counter);
+                        *counter += 1;
+                        // Create alloca, store current value
+                        write_ir!(ir, "  %{} = alloca {}", alloca_name, llvm_ty);
+                        write_ir!(ir, "  store {} {}, {}* %{}", llvm_ty, val, llvm_ty, alloca_name);
+                        // Convert to alloca-based local
+                        self.fn_ctx.locals.insert(
+                            name.clone(),
+                            crate::LocalVar::alloca(local_ty, alloca_name),
+                        );
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // For struct types (Named), the local is a double pointer (%Type**).
@@ -720,6 +786,43 @@ impl CodeGenerator {
                     );
                 }
             }
+        } else if let Expr::Field { expr: obj_expr, field } = &target.node {
+            // Field compound assignment: self.field += value
+            // Need to store the result back to the field
+            let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
+            ir.push_str(&obj_ir);
+
+            let obj_type = self.infer_expr_type(obj_expr);
+            let resolved = match &obj_type {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
+
+            if let ResolvedType::Named { name, .. } = &resolved {
+                let type_name = self.resolve_struct_name(name);
+                if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
+                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == &field.node) {
+                        let field_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                            field_ptr, type_name, type_name, obj_val, field_idx
+                        );
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
+                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, result, llvm_ty, field_ptr);
+                    }
+                }
+            }
+        } else if let Expr::Index { expr: arr_expr, index: idx_expr } = &target.node {
+            // Array/Vec element compound assignment: arr[idx] += value
+            let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
+            let (idx_val, idx_ir) = self.generate_expr(idx_expr, counter)?;
+            ir.push_str(&arr_ir);
+            ir.push_str(&idx_ir);
+            let elem_ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = getelementptr i64, i64* {}, i64 {}", elem_ptr, arr_val, idx_val);
+            write_ir!(ir, "  store i64 {}, i64* {}", result, elem_ptr);
         }
 
         Ok((result, ir))

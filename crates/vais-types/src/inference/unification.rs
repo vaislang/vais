@@ -193,6 +193,38 @@ impl TypeChecker {
             }
             // Allow implicit integer type conversions (widening and narrowing)
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Allow implicit float ↔ float coercion (f32 ↔ f64)
+            (ResolvedType::F32, ResolvedType::F64)
+            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
+            // Allow implicit float ↔ integer coercion (for VaisDB codegen compatibility)
+            (a, b) if Self::is_integer_type(a) && Self::is_float_type(b) => Ok(()),
+            (a, b) if Self::is_float_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Allow unit () ↔ i64 (void context: i64 return in void function)
+            (ResolvedType::Unit, ResolvedType::I64)
+            | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
+            // Allow str ↔ i64 (str is a fat pointer, i64 at IR level)
+            (ResolvedType::Str, ResolvedType::I64)
+            | (ResolvedType::I64, ResolvedType::Str) => Ok(()),
+            // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
+            (ResolvedType::Result(_, _), ResolvedType::Unit)
+            | (ResolvedType::Unit, ResolvedType::Result(_, _))
+            | (ResolvedType::Optional(_), ResolvedType::Unit)
+            | (ResolvedType::Unit, ResolvedType::Optional(_)) => Ok(()),
+            // Vec<T> ↔ Slice/Ref — Vec<u8> and &[u8] are compatible
+            (ResolvedType::Named { name, generics }, ResolvedType::Slice(elem))
+            | (ResolvedType::Slice(elem), ResolvedType::Named { name, generics })
+                if name == "Vec" && !generics.is_empty() => {
+                self.unify(&generics[0], elem)
+            }
+            (ResolvedType::Named { name, generics }, ResolvedType::Ref(inner))
+            | (ResolvedType::Ref(inner), ResolvedType::Named { name, generics })
+                if name == "Vec" && !generics.is_empty() => {
+                if let ResolvedType::Slice(elem) = inner.as_ref() {
+                    self.unify(&generics[0], elem)
+                } else {
+                    Ok(()) // Permissive: allow Vec ↔ &T
+                }
+            }
             // Pointer <-> i64 implicit unification.
             // Vais represents all pointers as i64 at the IR level (no opaque pointer distinction).
             // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
@@ -364,7 +396,14 @@ impl TypeChecker {
                 | ResolvedType::U16
                 | ResolvedType::U32
                 | ResolvedType::U64
+                | ResolvedType::Bool
         )
+    }
+
+    /// Check if type is a float type
+    #[inline]
+    pub(crate) fn is_float_type(ty: &ResolvedType) -> bool {
+        matches!(ty, ResolvedType::F32 | ResolvedType::F64)
     }
 
     /// Check if a type contains any type variables (Var).

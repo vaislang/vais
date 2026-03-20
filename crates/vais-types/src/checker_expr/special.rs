@@ -73,8 +73,12 @@ impl TypeChecker {
                     ResolvedType::Optional(inner) => Some(Ok(*inner.clone())),
                     ResolvedType::Result(ok, _err) => Some(Ok(*ok.clone())),
                     // Support user-defined Result/Option enums
-                    ResolvedType::Named { name, .. } if name == "Result" => {
-                        if let Some(enum_def) = self.enums.get("Result") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Result" => {
+                        if !generics.is_empty() {
+                            // Result<T, E> — first generic is the Ok type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Result") {
                             if let Some(VariantFieldTypes::Tuple(types)) =
                                 enum_def.variants.get("Ok")
                             {
@@ -90,8 +94,11 @@ impl TypeChecker {
                             Some(Ok(ResolvedType::I64))
                         }
                     }
-                    ResolvedType::Named { name, .. } if name == "Option" => {
-                        if let Some(enum_def) = self.enums.get("Option") {
+                    ResolvedType::Named { name, generics } if name == "Option" => {
+                        if !generics.is_empty() {
+                            // Option<T> — first generic is the inner type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Option") {
                             if let Some(VariantFieldTypes::Tuple(types)) =
                                 enum_def.variants.get("Some")
                             {

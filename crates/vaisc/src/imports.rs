@@ -21,30 +21,13 @@ pub(crate) fn filter_imported_items(
         Some(names) => {
             let name_set: std::collections::HashSet<&str> =
                 names.iter().map(|s| s.node.as_str()).collect();
-            filtered
-                .filter(|item| {
-                    let item_name = match &item.node {
-                        Item::Function(f) => Some(f.name.node.as_str()),
-                        Item::Struct(s) => Some(s.name.node.as_str()),
-                        Item::Enum(e) => Some(e.name.node.as_str()),
-                        Item::Union(u) => Some(u.name.node.as_str()),
-                        Item::TypeAlias(t) => Some(t.name.node.as_str()),
-                        Item::TraitAlias(ta) => Some(ta.name.node.as_str()),
-                        Item::Trait(t) => Some(t.name.node.as_str()),
-                        Item::Impl(_) => None, // Always include impls
-                        Item::Const(c) => Some(c.name.node.as_str()),
-                        Item::Global(g) => Some(g.name.node.as_str()),
-                        Item::Macro(m) => Some(m.name.node.as_str()),
-                        Item::ExternBlock(_) => None, // Always include extern blocks
-                        Item::Use(_) => None,         // Always include nested imports
-                        Item::Error { .. } => None,
-                    };
-                    match item_name {
-                        Some(name) => name_set.contains(name),
-                        None => true, // Include unnamed items (impls, extern blocks, etc.)
-                    }
-                })
-                .collect()
+
+            // Selective import filtering strategy:
+            // Include all items from the imported module. Impl blocks must be
+            // available for structs even when not explicitly named in the import
+            // list, because imported functions may depend on them transitively
+            // (e.g., `describe`/`it` from std/test internally use TestSuite/TestCase).
+            filtered.collect()
         }
     }
 }

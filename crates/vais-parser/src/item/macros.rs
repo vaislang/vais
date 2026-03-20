@@ -251,6 +251,26 @@ impl Parser {
             Token::Break => MacroToken::Ident("B".to_string()),
             Token::Continue => MacroToken::Ident("C".to_string()),
             Token::Mut => MacroToken::Ident("mut".to_string()),
+            // Type suffix keywords (u16, i32, etc.) as identifiers in macro context
+            Token::I8 => MacroToken::Ident("i8".to_string()),
+            Token::I16 => MacroToken::Ident("i16".to_string()),
+            Token::I32 => MacroToken::Ident("i32".to_string()),
+            Token::I64 => MacroToken::Ident("i64".to_string()),
+            Token::U8 => MacroToken::Ident("u8".to_string()),
+            Token::U16 => MacroToken::Ident("u16".to_string()),
+            Token::U32 => MacroToken::Ident("u32".to_string()),
+            Token::U64 => MacroToken::Ident("u64".to_string()),
+            Token::F32 => MacroToken::Ident("f32".to_string()),
+            Token::F64 => MacroToken::Ident("f64".to_string()),
+            // Other keywords that may appear in macro context
+            Token::Use => MacroToken::Ident("U".to_string()),
+            Token::Pub => MacroToken::Ident("P".to_string()),
+            Token::Trait => MacroToken::Ident("W".to_string()),
+            Token::TypeKeyword => MacroToken::Ident("T".to_string()),
+            Token::Async => MacroToken::Ident("A".to_string()),
+            Token::Impl => MacroToken::Ident("X".to_string()),
+            Token::As => MacroToken::Ident("as".to_string()),
+            Token::Tilde => MacroToken::Punct('~'),
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token.clone(),

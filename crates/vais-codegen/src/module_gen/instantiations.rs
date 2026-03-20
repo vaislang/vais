@@ -214,7 +214,26 @@ impl CodeGenerator {
                     continue;
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
-                if let Some(method_fn) = method_templates.get(&key).cloned() {
+                // Try method-level generic templates first, then fall back to struct-level
+                // generic methods from the struct definition.
+                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
+                    // For struct-level generics (e.g., Vec<T>.push(T)),
+                    // the method itself has no generics — they come from the struct.
+                    // Find the method from the struct's inline methods or impl blocks.
+                    self.generics
+                        .struct_defs
+                        .get(struct_name)
+                        .and_then(|s| {
+                            s.methods.iter().find(|m| m.node.name.node == inst.base_name)
+                                .map(|m| std::rc::Rc::new(m.node.clone()))
+                        })
+                });
+                if let Some(method_fn) = method_fn_opt {
+                    // For struct-level generics, the generic params come from the struct,
+                    // not the method. Use the struct's generics for substitution.
+                    let struct_generics = self.generics.struct_defs.get(struct_name)
+                        .map(|s| s.generics.clone())
+                        .unwrap_or_default();
                     let method_base_name = format!("{}_{}", struct_name, inst.base_name);
 
                     // Build instantiation mapping for method
@@ -224,10 +243,19 @@ impl CodeGenerator {
                         .or_default()
                         .push((inst.type_args.clone(), inst.mangled_name.clone()));
 
-                    let mut substitutions: HashMap<String, ResolvedType> = method_fn
-                        .generics
+                    // Build substitution map: use method's own generics if present,
+                    // otherwise use struct-level generics.
+                    let generic_params: Vec<_> = if !method_fn.generics.is_empty() {
+                        method_fn.generics.iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .collect()
+                    } else {
+                        struct_generics.iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .collect()
+                    };
+                    let mut substitutions: HashMap<String, ResolvedType> = generic_params
                         .iter()
-                        .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
                         .zip(inst.type_args.iter())
                         .map(|(g, t)| (g.name.node.to_string(), t.clone()))
                         .collect();
@@ -238,6 +266,13 @@ impl CodeGenerator {
                             .entry(name.clone())
                             .or_insert(ResolvedType::I64);
                     }
+
+                    // Add "Self" substitution for struct methods returning Self
+                    let struct_concrete = ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: inst.type_args.clone(),
+                    };
+                    substitutions.insert("Self".to_string(), struct_concrete);
 
                     let params: Vec<_> = method_fn
                         .params
@@ -459,7 +494,17 @@ impl CodeGenerator {
                     continue;
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
-                if let Some(method_fn) = method_templates.get(&key).cloned() {
+                // Try method-level templates first, then struct-level generic methods
+                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
+                    self.generics
+                        .struct_defs
+                        .get(struct_name)
+                        .and_then(|s| {
+                            s.methods.iter().find(|m| m.node.name.node == inst.base_name)
+                                .map(|m| std::rc::Rc::new(m.node.clone()))
+                        })
+                });
+                if let Some(method_fn) = method_fn_opt {
                     // Reuse generate_specialized_function by treating the method as a function
                     // with the mangled base name (StructName_methodName)
                     let method_key = format!("{}_{}", struct_name, inst.base_name);
@@ -502,8 +547,20 @@ impl CodeGenerator {
             match &item.node {
                 Item::Function(f) => {
                     if f.generics.is_empty() {
-                        body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
-                        body_ir.push('\n');
+                        match self.generate_function_with_span(f, item.span) {
+                            Ok(ir_fragment) => {
+                                body_ir.push_str(&ir_fragment);
+                                body_ir.push('\n');
+                            }
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                                let span = self.last_error_span.unwrap_or(item.span);
+                                self.collected_errors.push(crate::SpannedCodegenError {
+                                    error: e,
+                                    span: Some(span),
+                                });
+                            }
+                            Err(e) => return Err(e),
+                        }
                     } else if !self.generics.fn_instantiations.contains_key(&f.name.node)
                         && !self.generics.generated_functions.contains_key(&f.name.node)
                         && is_function_called_in_module(&f.name.node, module)
@@ -528,12 +585,24 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     if s.generics.is_empty() {
                         for method in &s.methods {
-                            body_ir.push_str(&self.generate_method_with_span(
+                            match self.generate_method_with_span(
                                 &s.name.node,
                                 &method.node,
                                 method.span,
-                            )?);
-                            body_ir.push('\n');
+                            ) {
+                                Ok(ir_fragment) => {
+                                    body_ir.push_str(&ir_fragment);
+                                    body_ir.push('\n');
+                                }
+                                Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                                    let span = self.last_error_span.unwrap_or(method.span);
+                                    self.collected_errors.push(crate::SpannedCodegenError {
+                                        error: e,
+                                        span: Some(span),
+                                    });
+                                }
+                                Err(e) => return Err(e),
+                            }
                         }
                     }
                 }
@@ -543,12 +612,24 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        body_ir.push_str(&self.generate_method_with_span(
+                        match self.generate_method_with_span(
                             &type_name,
                             &method.node,
                             method.span,
-                        )?);
-                        body_ir.push('\n');
+                        ) {
+                            Ok(ir_fragment) => {
+                                body_ir.push_str(&ir_fragment);
+                                body_ir.push('\n');
+                            }
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                                let span = self.last_error_span.unwrap_or(method.span);
+                                self.collected_errors.push(crate::SpannedCodegenError {
+                                    error: e,
+                                    span: Some(span),
+                                });
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
                 }
                 Item::Enum(_)

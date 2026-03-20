@@ -164,6 +164,20 @@ impl TypeChecker {
                             return Some(Ok(field_type.clone()));
                         }
                     }
+                    // Check enum variant access: EnumType.Variant
+                    if let Some(enum_def) = self.enums.get(&name) {
+                        if enum_def.variants.contains_key(&field.node) {
+                            let generics: Vec<ResolvedType> = enum_def
+                                .generics
+                                .iter()
+                                .map(|_| self.fresh_type_var())
+                                .collect();
+                            return Some(Ok(ResolvedType::Named {
+                                name: name.clone(),
+                                generics,
+                            }));
+                        }
+                    }
                     // Check union fields
                     if let Some(union_def) = self.unions.get(&name) {
                         if let Some(field_type) = union_def.fields.get(&field.node) {
@@ -274,6 +288,40 @@ impl TypeChecker {
                         } else {
                             Some(Ok(*elem_type))
                         }
+                    }
+                    // Vec<T> is indexable — vec[idx] returns T
+                    ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
+                        if is_slice {
+                            Some(Ok(ResolvedType::Pointer(Box::new(generics[0].clone()))))
+                        } else if !index_type.is_integer() {
+                            Some(Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: Some(index.span),
+                            }))
+                        } else {
+                            Some(Ok(generics[0].clone()))
+                        }
+                    }
+                    // Ref to Vec<T> is also indexable
+                    ResolvedType::Ref(ref inner) => {
+                        if let ResolvedType::Named { ref name, ref generics } = **inner {
+                            if name == "Vec" && !generics.is_empty() {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                return Some(Ok(generics[0].clone()));
+                            }
+                        }
+                        Some(Err(TypeError::Mismatch {
+                            expected: "indexable type".to_string(),
+                            found: inner_type.to_string(),
+                            span: Some(expr.span),
+                        }))
                     }
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),

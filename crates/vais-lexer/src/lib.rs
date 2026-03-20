@@ -185,6 +185,21 @@ pub enum Token {
 
     // === Literals ===
     // Note: negative sign is handled by unary operator, not here
+    #[regex(r"0[xX][0-9a-fA-F][0-9a-fA-F_]*", |lex| {
+        let s = lex.slice().replace('_', "");
+        let hex_str = &s[2..]; // skip "0x"
+        i64::from_str_radix(hex_str, 16).ok()
+    })]
+    #[regex(r"0[bB][01][01_]*", |lex| {
+        let s = lex.slice().replace('_', "");
+        let bin_str = &s[2..]; // skip "0b"
+        i64::from_str_radix(bin_str, 2).ok()
+    })]
+    #[regex(r"0[oO][0-7][0-7_]*", |lex| {
+        let s = lex.slice().replace('_', "");
+        let oct_str = &s[2..]; // skip "0o"
+        i64::from_str_radix(oct_str, 8).ok()
+    })]
     #[regex(r"[0-9][0-9_]*", |lex| lex.slice().replace('_', "").parse::<i64>().ok())]
     Int(i64),
 
@@ -591,7 +606,63 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
         }
     }
 
+    // Post-process: split identifiers that start with single-char keywords.
+    // logos longest-match makes "EI" → Ident("EI") instead of Enum + If.
+    // Split these into keyword + remaining identifier.
+    let tokens = split_keyword_idents(tokens);
+
     Ok(tokens)
+}
+
+/// Split specific two-char identifiers that are actually keyword pairs.
+/// Only splits known keyword combinations that appear in Vais syntax:
+/// - "EI" → E (Else) + I (If) — else-if chain
+fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
+    let mut result = Vec::with_capacity(tokens.len());
+    for tok in tokens {
+        if let Token::Ident(ref s) = tok.token {
+            // Only split "EI" — the only known keyword pair that gets merged by logos
+            if s == "EI" {
+                let start = tok.span.start;
+                result.push(SpannedToken {
+                    token: Token::Enum, // E = Else
+                    span: start..start + 1,
+                });
+                result.push(SpannedToken {
+                    token: Token::If, // I = If
+                    span: start + 1..start + 2,
+                });
+                continue;
+            }
+        }
+        result.push(tok);
+    }
+    result
+}
+
+fn char_to_keyword(c: char) -> Token {
+    match c {
+        'F' => Token::Function,
+        'S' => Token::Struct,
+        'E' => Token::Enum,
+        'I' => Token::If,
+        'L' => Token::Loop,
+        'M' => Token::Match,
+        'A' => Token::Async,
+        'R' => Token::Return,
+        'B' => Token::Break,
+        'C' => Token::Continue,
+        'T' => Token::TypeKeyword,
+        'U' => Token::Use,
+        'P' => Token::Pub,
+        'W' => Token::Trait,
+        'X' => Token::Impl,
+        'D' => Token::Defer,
+        'O' => Token::Union,
+        'N' => Token::Extern,
+        'G' => Token::Global,
+        _ => Token::Ident(c.to_string()),
+    }
 }
 
 #[cfg(test)]

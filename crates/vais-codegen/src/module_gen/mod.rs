@@ -156,7 +156,7 @@ impl CodeGenerator {
                             body_ir.push_str(&ir_fragment);
                             body_ir.push('\n');
                         }
-                        Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                        Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
                             let span = self.last_error_span.unwrap_or(item.span);
                             self.collected_errors.push(SpannedCodegenError {
                                 error: e,
@@ -178,7 +178,7 @@ impl CodeGenerator {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');
                             }
-                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
                                 let span = self.last_error_span.unwrap_or(method.span);
                                 self.collected_errors.push(SpannedCodegenError {
                                     error: e,
@@ -203,7 +203,7 @@ impl CodeGenerator {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');
                             }
-                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 20 => {
+                            Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
                                 let span = self.last_error_span.unwrap_or(method.span);
                                 self.collected_errors.push(SpannedCodegenError {
                                     error: e,

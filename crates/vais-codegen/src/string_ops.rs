@@ -338,6 +338,14 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
                 Ok((result, ir))
             }
+            "clone" | "to_string" | "as_str" => {
+                // Strings are immutable fat pointers — clone is identity
+                Ok((recv_val.to_string(), ir))
+            }
+            "as_bytes" => {
+                // as_bytes returns the raw pointer (first field of fat pointer)
+                Ok((recv_ptr, ir))
+            }
             _ => Err(CodegenError::Unsupported(format!(
                 "string method '{}' not supported",
                 method_name

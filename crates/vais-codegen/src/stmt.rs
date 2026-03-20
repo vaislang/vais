@@ -161,7 +161,16 @@ impl CodeGenerator {
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
                         write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
+                        // If the value expression is not a value (e.g., block returning
+                        // a struct-typed local), we need to load the struct first
+                        let actual_val = if !self.is_expr_value(value) {
+                            let loaded = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                            loaded
+                        } else {
+                            val.clone()
+                        };
+                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, actual_val, llvm_ty, tmp_ptr);
                         write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
                         write_ir!(
                             ir,
@@ -322,6 +331,20 @@ impl CodeGenerator {
                         } else {
                             val
                         }
+                    } else if ret_type.starts_with('%') && !ret_type.ends_with('*')
+                        && val.starts_with('%')
+                        && !matches!(&expr.node, Expr::Ident(_))
+                    {
+                        // Non-ident expression returning struct type (e.g., Ok(...), Err(...))
+                        // The val is likely a pointer from enum variant constructor — load it
+                        let loaded = format!("%ret.{}", counter);
+                        *counter += 1;
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded, ret_type, ret_type, val
+                        );
+                        loaded
                     } else {
                         val
                     };

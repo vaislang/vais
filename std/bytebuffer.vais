@@ -38,7 +38,7 @@ X ByteBuffer {
     # Ensure capacity
     F ensure_capacity(&self, needed: i64) -> i64 {
         I needed <= self.cap { R self.cap }
-        new_cap := self.cap
+        new_cap := mut self.cap
         L {
             I new_cap >= needed { B 0 }
             new_cap = new_cap * 2
@@ -250,5 +250,50 @@ X ByteBuffer {
         self.cap = 0
         self.pos = 0
         0
+    }
+
+    # Create empty ByteBuffer with default capacity
+    F new() -> ByteBuffer {
+        ByteBuffer.with_capacity(64)
+    }
+
+    # Wrap existing mutable byte buffer (takes ownership of data pointer)
+    F wrap(data: i64, len: i64) -> ByteBuffer {
+        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
+    }
+
+    # Wrap existing read-only byte buffer (copies data)
+    F wrap_readonly(data: i64, len: i64) -> ByteBuffer {
+        buf := malloc(len)
+        memcpy(buf, data, len)
+        ByteBuffer { data: buf, len: len, cap: len, pos: 0 }
+    }
+
+    # Create ByteBuffer by copying from another ByteBuffer
+    F from_buf(other: &ByteBuffer) -> ByteBuffer {
+        buf := malloc(other.len)
+        memcpy(buf, other.data, other.len)
+        ByteBuffer { data: buf, len: other.len, cap: other.len, pos: 0 }
+    }
+
+    # Get raw bytes as pointer + length pair (returns data pointer)
+    F as_bytes(&self) -> i64 {
+        self.data
+    }
+
+    # Convert to Vec<u8> (copies data into a new Vec)
+    F to_vec(&self) -> Vec<u8> {
+        result := mut Vec.with_capacity(self.len)
+        i := mut 0
+        L i < self.len {
+            result.push(load_byte(self.data + i) as u8)
+            i = i + 1
+        }
+        result
+    }
+
+    # Clone the ByteBuffer (deep copy)
+    F clone(&self) -> ByteBuffer {
+        ByteBuffer.from_buf(&self)
     }
 }

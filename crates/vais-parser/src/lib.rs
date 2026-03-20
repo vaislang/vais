@@ -299,12 +299,12 @@ impl Parser {
                     }
                     // Item-level keywords - if we hit these, we've gone too far
                     // (likely missing a closing brace in the function body)
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
                     | Token::Union
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -344,13 +344,13 @@ impl Parser {
             if let Some(tok) = self.peek() {
                 match &tok.token {
                     // Top-level item keywords
+                    // Note: Token::Trait (W) excluded — also used as while loop keyword
                     Token::Function
                     | Token::Struct
                     | Token::Enum
                     | Token::Union
                     | Token::TypeKeyword
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
@@ -383,8 +383,38 @@ impl Parser {
     /// inserted into the AST. Use `errors()` to retrieve all collected errors.
     pub fn parse_module(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
+        let mut describe_test_names: Vec<String> = Vec::new();
 
         while !self.is_at_end() {
+            // Check for describe("...", |t| { ... }) test blocks
+            if self.check_ident("describe") {
+                match self.parse_describe_block() {
+                    Ok(test_fns) => {
+                        for (name, func) in test_fns {
+                            describe_test_names.push(name);
+                            items.push(func);
+                        }
+                        continue;
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            let start = self.current_span().start;
+                            let message = e.to_string();
+                            self.record_error(e);
+                            let skipped_tokens = self.synchronize_item();
+                            let end = self.prev_span().end;
+                            items.push(Spanned::new(
+                                Item::Error { message, skipped_tokens },
+                                Span::new(start, end),
+                            ));
+                            continue;
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+
             match self.parse_item() {
                 Ok(item) => {
                     // Apply cfg filtering: skip items whose #[cfg(...)] doesn't match
@@ -415,6 +445,51 @@ impl Parser {
                         return Err(e);
                     }
                 }
+            }
+        }
+
+        // If we found describe blocks, generate a main() function that calls all test functions
+        if !describe_test_names.is_empty() {
+            // Check if a main already exists
+            let has_main = items.iter().any(|item| {
+                matches!(&item.node, Item::Function(f) if f.name.node == "main")
+            });
+            if !has_main {
+                let span = Span::new(0, 0);
+                let mut stmts = Vec::new();
+                for name in &describe_test_names {
+                    // Generate: test_name();
+                    stmts.push(Spanned::new(
+                        Stmt::Expr(Box::new(Spanned::new(
+                            Expr::Call {
+                                func: Box::new(Spanned::new(Expr::Ident(name.clone()), span)),
+                                args: vec![],
+                            },
+                            span,
+                        ))),
+                        span,
+                    ));
+                }
+                // return 0
+                stmts.push(Spanned::new(
+                    Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+                    span,
+                ));
+                let main_fn = Function {
+                    name: Spanned::new("main".to_string(), span),
+                    generics: vec![],
+                    params: vec![],
+                    ret_type: Some(Spanned::new(Type::Named {
+                        name: "i64".to_string(),
+                        generics: vec![],
+                    }, span)),
+                    body: FunctionBody::Block(stmts),
+                    is_pub: false,
+                    is_async: false,
+                    attributes: vec![],
+                    where_clause: vec![],
+                };
+                items.push(Spanned::new(Item::Function(main_fn), span));
             }
         }
 
@@ -855,6 +930,221 @@ impl Parser {
         }
     }
 
+    /// Parse a describe("name", |t| { it("test", || { body }); ... }); block
+    /// and desugar it into individual test functions.
+    ///
+    /// Returns a list of (function_name, Item::Function) pairs.
+    fn parse_describe_block(&mut self) -> ParseResult<Vec<(String, Spanned<Item>)>> {
+        let start = self.current_span().start;
+
+        // consume "describe"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for describe name
+        let describe_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for describe name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): describe("name") { ... }
+        // Form 2 (closure): describe("name", |t| { ... })
+        if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then skip closure params until "{"
+            self.advance_skip();
+            let mut brace_depth = 0;
+            while !self.is_at_end() {
+                if self.check(&Token::LBrace) {
+                    if brace_depth == 0 {
+                        break;
+                    }
+                }
+                if let Some(tok) = self.peek() {
+                    if tok.token == Token::LBrace {
+                        brace_depth += 1;
+                    } else if tok.token == Token::RBrace {
+                        brace_depth -= 1;
+                    }
+                }
+                self.advance();
+            }
+            self.expect_skip(&Token::LBrace)?;
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after describe name".into(),
+            });
+        }
+
+        let mut test_fns = Vec::new();
+
+        // Parse it() blocks inside describe
+        while !self.is_at_end() && !self.check(&Token::RBrace) {
+            if self.check_ident("it") {
+                match self.parse_it_block(&describe_name, start) {
+                    Ok((name, func)) => {
+                        test_fns.push((name, func));
+                    }
+                    Err(e) => {
+                        if self.recovery_mode {
+                            self.record_error(e);
+                            self.synchronize_item();
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            } else {
+                // Skip non-it content (comments, etc.)
+                self.advance();
+            }
+        }
+
+        // consume "}" of describe block
+        if self.check(&Token::RBrace) {
+            self.advance_skip();
+        }
+
+        // consume ");" at the end of describe(...)
+        if self.check(&Token::RParen) {
+            self.advance_skip();
+        }
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        Ok(test_fns)
+    }
+
+    /// Parse an it("test name", || { body }); block inside a describe block.
+    /// Returns (function_name, Item::Function).
+    fn parse_it_block(
+        &mut self,
+        describe_name: &str,
+        outer_start: usize,
+    ) -> ParseResult<(String, Spanned<Item>)> {
+        let start = self.current_span().start;
+
+        // consume "it"
+        self.advance_skip();
+
+        // expect "("
+        self.expect_skip(&Token::LParen)?;
+
+        // expect string literal for test name
+        let test_name = if let Some(tok) = self.peek() {
+            if let Token::String(s) = &tok.token {
+                let name = s.clone();
+                self.advance_skip();
+                name
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "string literal for it test name".into(),
+                });
+            }
+        } else {
+            return Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        };
+
+        // Handle two syntax forms:
+        // Form 1 (VaisDB): it("name") { ... }
+        // Form 2 (closure): it("name", || { ... })
+        let stmts = if self.check(&Token::RParen) {
+            // Form 1: consume ")" then expect "{"
+            self.advance_skip();
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            stmts
+        } else if self.check(&Token::Comma) {
+            // Form 2: consume "," then "||" then "{"
+            self.advance_skip();
+            if self.check(&Token::Pipe) {
+                self.advance_skip();
+                if self.check(&Token::Pipe) {
+                    self.advance_skip();
+                }
+            }
+            self.expect_skip(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect_skip(&Token::RBrace)?;
+            self.expect_skip(&Token::RParen)?;
+            stmts
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Semi),
+                span: self.current_span(),
+                expected: "')' or ',' after it test name".into(),
+            });
+        };
+
+        // optional ";"
+        if self.check(&Token::Semi) {
+            self.advance_skip();
+        }
+
+        // Build function name: test_{describe_snake}_{it_snake}
+        let fn_name = format!(
+            "test_{}_{}",
+            to_snake_case(describe_name),
+            to_snake_case(&test_name)
+        );
+
+        let span = Span::new(start, self.prev_span().end);
+
+        // Add "return 0" at the end
+        let mut body_stmts = stmts;
+        body_stmts.push(Spanned::new(
+            Stmt::Return(Some(Box::new(Spanned::new(Expr::Int(0), span)))),
+            span,
+        ));
+
+        let func = Function {
+            name: Spanned::new(fn_name.clone(), span),
+            generics: vec![],
+            params: vec![],
+            ret_type: Some(Spanned::new(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                span,
+            )),
+            body: FunctionBody::Block(body_stmts),
+            is_pub: false,
+            is_async: false,
+            attributes: vec![],
+            where_clause: vec![],
+        };
+
+        Ok((fn_name, Spanned::new(Item::Function(func), span)))
+    }
+
     pub(crate) fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
@@ -872,6 +1162,28 @@ impl Parser {
             0..0
         }
     }
+}
+
+/// Convert a string to snake_case for test function naming.
+/// "name returns correct string" → "name_returns_correct_string"
+/// "HybridCost" → "hybridcost"
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            result.push(c.to_ascii_lowercase());
+        } else if c == ' ' || c == '-' || c == '_' {
+            if !result.is_empty() && !result.ends_with('_') {
+                result.push('_');
+            }
+        }
+        // Skip other chars (punctuation, etc.)
+    }
+    // Remove trailing underscore
+    while result.ends_with('_') {
+        result.pop();
+    }
+    result
 }
 
 /// Parses Vais source code into an Abstract Syntax Tree.

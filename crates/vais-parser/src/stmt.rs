@@ -28,13 +28,13 @@ impl Parser {
                     | Token::Enum
                     | Token::Union
                     | Token::Use
-                    | Token::Trait
                     | Token::Impl
                     | Token::Macro
                     | Token::Pub
                     | Token::Async
                     | Token::Extern => {
                         // We've hit a top-level item keyword - stop parsing block contents
+                        // Note: Token::Trait (W) is excluded because W is also used for while loops
                         break;
                     }
                     _ => {}
@@ -273,8 +273,19 @@ impl Parser {
                 self.advance_skip();
             }
             let ty = self.parse_type()?;
-            self.expect_skip(&Token::Eq)?;
-            (Some(ty), is_mut, ownership)
+            // Accept both `= expr` and `:= [mut] expr` after type annotation
+            if self.check(&Token::ColonEq) {
+                self.advance_skip();
+                // Re-check for mut after :=
+                let is_mut2 = is_mut || self.check(&Token::Mut) || self.check(&Token::Tilde);
+                if !is_mut && is_mut2 {
+                    self.advance_skip();
+                }
+                (Some(ty), is_mut2, ownership)
+            } else {
+                self.expect_skip(&Token::Eq)?;
+                (Some(ty), is_mut, ownership)
+            }
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self

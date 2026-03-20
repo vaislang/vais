@@ -61,6 +61,10 @@ impl Parser {
 
         if self.check(&Token::Amp) {
             self.advance_skip();
+            // Skip optional 'mut' keyword: &mut expr → Ref(expr)
+            if self.check(&Token::Mut) {
+                self.advance_skip();
+            }
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             return Ok(Spanned::new(

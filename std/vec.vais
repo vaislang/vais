@@ -11,6 +11,72 @@ S Vec<T> {
     elem_size: i64  # Size of each element in bytes (sizeof(T))
 }
 
+# ===== Vec helper functions (recursive, non-method) =====
+# Placed before X Vec<T> to avoid forward reference errors in type checker.
+
+# Shift elements right by one starting from index
+F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
+    I len <= index { 0 }
+    E {
+        # Move element at len-1 to len
+        src := data + (len - 1) * elem_size
+        dst := data + len * elem_size
+        store_i64(dst, load_i64(src))
+        vec_shift_right(data, elem_size, index, len - 1)
+    }
+}
+
+# Shift elements left by one starting from index
+F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
+    I index >= len - 1 { 0 }
+    E {
+        src := data + (index + 1) * elem_size
+        dst := data + index * elem_size
+        store_i64(dst, load_i64(src))
+        vec_shift_left(data, elem_size, index + 1, len)
+    }
+}
+
+# Reverse helper: swap elements from both ends toward center
+F vec_reverse_helper(data: i64, elem_size: i64, lo: i64, hi: i64) -> i64 {
+    I lo >= hi { 0 }
+    E {
+        a := load_i64(data + lo * elem_size)
+        b := load_i64(data + hi * elem_size)
+        store_i64(data + lo * elem_size, b)
+        store_i64(data + hi * elem_size, a)
+        vec_reverse_helper(data, elem_size, lo + 1, hi - 1)
+    }
+}
+
+# Insertion sort (simple, stable, O(n^2))
+F vec_insertion_sort(data: i64, elem_size: i64, len: i64) -> i64 {
+    vec_insertion_sort_outer(data, elem_size, len, 1)
+}
+
+F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
+    I i >= len { 0 }
+    E {
+        key := load_i64(data + i * elem_size)
+        vec_insertion_sort_inner(data, elem_size, i, key)
+        vec_insertion_sort_outer(data, elem_size, len, i + 1)
+    }
+}
+
+F vec_insertion_sort_inner(data: i64, elem_size: i64, j: i64, key: i64) -> i64 {
+    I j <= 0 { store_i64(data + j * elem_size, key) 0 }
+    E {
+        prev := load_i64(data + (j - 1) * elem_size)
+        I prev > key {
+            store_i64(data + j * elem_size, prev)
+            vec_insertion_sort_inner(data, elem_size, j - 1, key)
+        } E {
+            store_i64(data + j * elem_size, key)
+            0
+        }
+    }
+}
+
 X Vec<T> {
     # Create a new empty Vec with given capacity
     F with_capacity(capacity: i64) -> Vec<T> {
@@ -295,71 +361,6 @@ X Vec<T> {
         store_typed(self.data + i * self.elem_size, b)
         store_typed(self.data + j * self.elem_size, a)
         1
-    }
-}
-
-# ===== Vec helper functions (recursive, non-method) =====
-
-# Shift elements right by one starting from index
-F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
-    I len <= index { 0 }
-    E {
-        # Move element at len-1 to len
-        src := data + (len - 1) * elem_size
-        dst := data + len * elem_size
-        store_i64(dst, load_i64(src))
-        vec_shift_right(data, elem_size, index, len - 1)
-    }
-}
-
-# Shift elements left by one starting from index
-F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
-    I index >= len - 1 { 0 }
-    E {
-        src := data + (index + 1) * elem_size
-        dst := data + index * elem_size
-        store_i64(dst, load_i64(src))
-        vec_shift_left(data, elem_size, index + 1, len)
-    }
-}
-
-# Reverse helper: swap elements from both ends toward center
-F vec_reverse_helper(data: i64, elem_size: i64, lo: i64, hi: i64) -> i64 {
-    I lo >= hi { 0 }
-    E {
-        a := load_i64(data + lo * elem_size)
-        b := load_i64(data + hi * elem_size)
-        store_i64(data + lo * elem_size, b)
-        store_i64(data + hi * elem_size, a)
-        vec_reverse_helper(data, elem_size, lo + 1, hi - 1)
-    }
-}
-
-# Insertion sort (simple, stable, O(n^2))
-F vec_insertion_sort(data: i64, elem_size: i64, len: i64) -> i64 {
-    vec_insertion_sort_outer(data, elem_size, len, 1)
-}
-
-F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
-    I i >= len { 0 }
-    E {
-        key := load_i64(data + i * elem_size)
-        vec_insertion_sort_inner(data, elem_size, i, key)
-        vec_insertion_sort_outer(data, elem_size, len, i + 1)
-    }
-}
-
-F vec_insertion_sort_inner(data: i64, elem_size: i64, j: i64, key: i64) -> i64 {
-    I j <= 0 { store_i64(data + j * elem_size, key) 0 }
-    E {
-        prev := load_i64(data + (j - 1) * elem_size)
-        I prev > key {
-            store_i64(data + j * elem_size, prev)
-            vec_insertion_sort_inner(data, elem_size, j - 1, key)
-        } E {
-            store_i64(data + j * elem_size, key)
-            0
-        }
     }
 }
 

@@ -211,7 +211,16 @@ impl CodeGenerator {
                 // For struct values (e.g., from function returns)
                 let tmp_ptr = format!("%{}.struct", llvm_name);
                 write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
+                // If the value expression is not a value (e.g., block returning
+                // a struct-typed local), we need to load the struct first
+                let actual_val = if !self.is_expr_value(value) {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                    loaded
+                } else {
+                    val.clone()
+                };
+                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, actual_val, llvm_ty, tmp_ptr);
                 write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
                 write_ir!(
                     ir,

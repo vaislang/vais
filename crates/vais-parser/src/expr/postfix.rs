@@ -86,6 +86,51 @@ impl Parser {
                                 Span::new(start, end),
                             );
                         }
+                    } else if self.check(&Token::LBrace) && self.allow_struct_literal {
+                        // Check for enum variant struct construction: Type.Variant { field: value }
+                        let is_type = if let Expr::Ident(name) = &expr.node {
+                            name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                        } else {
+                            false
+                        };
+                        if is_type {
+                            // Parse as struct literal with variant name
+                            self.advance_skip(); // skip '{'
+                            let mut fields = Vec::new();
+                            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                                let fname = self.parse_ident()?;
+                                let fval = if self.check(&Token::Colon) {
+                                    self.advance_skip();
+                                    self.parse_expr()?
+                                } else {
+                                    // Shorthand: `{ x }` means `{ x: x }`
+                                    let sp = fname.span;
+                                    Spanned::new(Expr::Ident(fname.node.clone()), sp)
+                                };
+                                fields.push((fname, fval));
+                                if !self.check(&Token::RBrace) {
+                                    self.expect_skip(&Token::Comma)?;
+                                }
+                            }
+                            self.expect_skip(&Token::RBrace)?;
+                            let end = self.prev_span().end;
+                            expr = Spanned::new(
+                                Expr::StructLit {
+                                    name: field,
+                                    fields,
+                                },
+                                Span::new(start, end),
+                            );
+                        } else {
+                            let end = field.span.end;
+                            expr = Spanned::new(
+                                Expr::Field {
+                                    expr: Box::new(expr),
+                                    field,
+                                },
+                                Span::new(start, end),
+                            );
+                        }
                     } else {
                         let end = field.span.end;
                         expr = Spanned::new(

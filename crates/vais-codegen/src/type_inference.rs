@@ -14,7 +14,30 @@ impl CodeGenerator {
         // Look at the last statement to determine block type
         if let Some(last_stmt) = stmts.last() {
             match &last_stmt.node {
-                Stmt::Expr(expr) => self.infer_expr_type(expr),
+                Stmt::Expr(expr) => {
+                    let ty = self.infer_expr_type(expr);
+                    // If the last expression is an Ident that returns I64 (fallback),
+                    // check if there's a Let in this block that defines it —
+                    // this handles vec![] macro blocks where the var isn't in locals yet
+                    if let Expr::Ident(var_name) = &expr.node {
+                        let in_locals = self.fn_ctx.locals.get(var_name).is_some();
+                        if !in_locals || matches!(ty, ResolvedType::I64) {
+                            // Search block for a Let defining this variable
+                            for stmt in stmts.iter().rev().skip(1) {
+                                if let Stmt::Let { name, value, .. } = &stmt.node {
+                                    if name.node == *var_name {
+                                        let resolved = self.infer_expr_type(value);
+                                        if !matches!(resolved, ResolvedType::I64) {
+                                            return resolved;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ty
+                }
                 Stmt::Return(Some(expr)) => self.infer_expr_type(expr),
                 _ => ResolvedType::I64,
             }
@@ -30,7 +53,27 @@ impl CodeGenerator {
     pub(crate) fn is_block_result_value(&self, stmts: &[Spanned<Stmt>]) -> bool {
         if let Some(last_stmt) = stmts.last() {
             match &last_stmt.node {
-                Stmt::Expr(expr) => self.is_expr_value(expr),
+                Stmt::Expr(expr) => {
+                    // For Ident expressions referencing block-local Let bindings,
+                    // the variable will be stored as struct (Named type) → not a value
+                    if let Expr::Ident(var_name) = &expr.node {
+                        if self.fn_ctx.locals.get(var_name).is_none() {
+                            // Search block for a Let defining this variable
+                            for stmt in stmts.iter().rev().skip(1) {
+                                if let Stmt::Let { name, value, .. } = &stmt.node {
+                                    if name.node == *var_name {
+                                        let ty = self.infer_expr_type(value);
+                                        if matches!(ty, ResolvedType::Named { .. }) {
+                                            return false; // struct-typed local → pointer
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.is_expr_value(expr)
+                }
                 Stmt::Return(Some(expr)) => self.is_expr_value(expr),
                 _ => true,
             }
@@ -93,6 +136,10 @@ impl CodeGenerator {
                 } else {
                     true
                 }
+            }
+            Expr::Block(stmts) => {
+                // Block value-ness is determined by its last expression
+                self.is_block_result_value(stmts)
             }
             _ => true,
         }
@@ -206,6 +253,10 @@ impl CodeGenerator {
                             name: resolved,
                             generics: vec![],
                         };
+                    }
+                    // Fallback: check resolved_function_sigs from type checker
+                    if let Some(sig) = self.types.resolved_function_sigs.get(fn_name) {
+                        return sig.ret.clone();
                     }
                 }
                 ResolvedType::I64 // Default
@@ -352,6 +403,21 @@ impl CodeGenerator {
                     match inner_ty {
                         ResolvedType::Pointer(elem) => *elem,
                         ResolvedType::Array(elem) => *elem,
+                        ResolvedType::Slice(elem) => *elem,
+                        // Vec<T>[idx] → T
+                        ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
+                            generics[0].clone()
+                        }
+                        ResolvedType::Ref(ref inner) => {
+                            match inner.as_ref() {
+                                ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
+                                    generics[0].clone()
+                                }
+                                ResolvedType::Slice(elem) => *elem.clone(),
+                                ResolvedType::Array(elem) => *elem.clone(),
+                                _ => ResolvedType::I64,
+                            }
+                        }
                         _ => ResolvedType::I64,
                     }
                 }
@@ -377,12 +443,65 @@ impl CodeGenerator {
                     };
                 }
 
+                // Vec<T> method return types
+                let vec_elem = match &recv_type {
+                    ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => Some(generics[0].clone()),
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::Named { name, generics } = inner.as_ref() {
+                            if name == "Vec" && !generics.is_empty() { Some(generics[0].clone()) } else { None }
+                        } else { None }
+                    }
+                    _ => None,
+                };
+                if let Some(elem_ty) = vec_elem {
+                    return match method.node.as_str() {
+                        "len" | "capacity" => ResolvedType::U64,
+                        "push" | "insert" | "remove" | "clear" | "truncate" | "resize" | "swap" | "sort" | "reverse" => ResolvedType::I64,
+                        "pop" | "get" | "last" | "first" => elem_ty,
+                        "clone" => recv_type,
+                        "data" => ResolvedType::I64,
+                        _ => ResolvedType::I64,
+                    };
+                }
+
+                // ByteBuffer method return types
+                if let ResolvedType::Named { name, .. } = &recv_type {
+                    if name == "ByteBuffer" {
+                        return match method.node.as_str() {
+                            "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32" | "read_i32" | "read_u64" | "read_i64" => ResolvedType::I64,
+                            "read_f32" => ResolvedType::F32,
+                            "read_f64" => ResolvedType::F64,
+                            "read_str" | "read_string" => ResolvedType::Str,
+                            "read_bool" => ResolvedType::Bool,
+                            "len" | "position" | "remaining" | "capacity" => ResolvedType::I64,
+                            "to_vec" | "as_bytes" => ResolvedType::Named { name: "Vec".to_string(), generics: vec![ResolvedType::U8] },
+                            "clone" => recv_type,
+                            _ => ResolvedType::I64,
+                        };
+                    }
+
+                    // Mutex.lock() returns MutexGuard
+                    if name == "Mutex" && method.node == "lock" {
+                        return ResolvedType::Named { name: "MutexGuard".to_string(), generics: vec![] };
+                    }
+                }
+
                 if let ResolvedType::Named { name, .. } = &recv_type {
                     let method_name = format!("{}_{}", name, method.node);
                     if let Some(fn_info) = self.types.functions.get(&method_name) {
                         return fn_info.signature.ret.clone();
                     }
+                    // Fallback: check resolved_function_sigs from type checker
+                    if let Some(sig) = self.types.resolved_function_sigs.get(&method_name) {
+                        return sig.ret.clone();
+                    }
                 }
+
+                // clone on any type returns the same type
+                if method.node == "clone" {
+                    return recv_type;
+                }
+
                 ResolvedType::I64
             }
             Expr::StaticMethodCall {
@@ -393,6 +512,13 @@ impl CodeGenerator {
                 if let Some(fn_info) = self.types.functions.get(&method_name) {
                     return fn_info.signature.ret.clone();
                 }
+                // Fallback: check resolved_function_sigs from type checker
+                if let Some(sig) = self.types.resolved_function_sigs.get(&method_name) {
+                    return sig.ret.clone();
+                }
+                // Fallback: keep I64 as default for codegen (must match actual IR)
+                // The codegen's type inference must match the actual IR function signatures.
+                // Static methods on unknown types return i64 at IR level.
                 ResolvedType::I64
             }
             Expr::Comptime { body } => {
@@ -527,6 +653,58 @@ impl CodeGenerator {
                 }
             }
             Expr::Yield(inner) => self.infer_expr_type(inner),
+            Expr::Unwrap(inner) => {
+                // Unwrap: Result<T, E> → T, Optional<T> → T
+                let inner_ty = self.infer_expr_type(inner);
+                match inner_ty {
+                    ResolvedType::Result(ok, _) => *ok,
+                    ResolvedType::Optional(inner) => *inner,
+                    ResolvedType::Named { ref name, ref generics } if name == "Result" => {
+                        // Result<T, E> — first generic is the Ok type
+                        if !generics.is_empty() {
+                            generics[0].clone()
+                        } else {
+                            ResolvedType::I64
+                        }
+                    }
+                    ResolvedType::Named { ref name, ref generics } if name == "Option" => {
+                        // Option<T> — first generic is the inner type
+                        if !generics.is_empty() {
+                            generics[0].clone()
+                        } else {
+                            ResolvedType::I64
+                        }
+                    }
+                    other => other, // If not Result/Option, pass through
+                }
+            }
+            Expr::Try(inner) => {
+                // Try (?) operator: same unwrapping as Unwrap for type purposes
+                let inner_ty = self.infer_expr_type(inner);
+                match inner_ty {
+                    ResolvedType::Result(ok, _) => *ok,
+                    ResolvedType::Optional(inner) => *inner,
+                    ResolvedType::Named { ref name, ref generics } if name == "Result" => {
+                        if !generics.is_empty() {
+                            generics[0].clone()
+                        } else {
+                            ResolvedType::I64
+                        }
+                    }
+                    ResolvedType::Named { ref name, ref generics } if name == "Option" => {
+                        if !generics.is_empty() {
+                            generics[0].clone()
+                        } else {
+                            ResolvedType::I64
+                        }
+                    }
+                    other => other,
+                }
+            }
+            Expr::Block(stmts) => {
+                // Block returns the type of its last expression
+                self.infer_block_type(stmts)
+            }
             _ => ResolvedType::I64, // Default fallback for remaining expressions
         }
     }

@@ -193,20 +193,20 @@ X TestCase {
         }
 
         # Check result
-        L self.should_panic == 1 {
+        I self.should_panic == 1 {
             # Expected to panic
-            L panicked == 1 {
+            I panicked == 1 {
                 TestResult::passed(self.name, duration)
-            } ! {
+            } E {
                 TestResult::failed(self.name, "Expected panic but test completed normally", duration)
             }
-        } ! {
+        } E {
             # Normal test
-            L panicked == 1 {
+            I panicked == 1 {
                 TestResult::failed(self.name, "Test panicked", duration)
-            } EL result != 0 {
+            } E I result != 0 {
                 TestResult::failed(self.name, "Assertion failed", duration)
-            } ! {
+            } E {
                 TestResult::passed(self.name, duration)
             }
         }

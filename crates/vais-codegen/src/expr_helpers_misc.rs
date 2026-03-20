@@ -416,12 +416,50 @@ impl CodeGenerator {
                 inner_val
             );
         }
+        // For non-i64 types, convert ptrtoint'd pointer back to original type
+        let try_unwrap_type = match &inner_type {
+            ResolvedType::Result(ok, _) => Some(ok.as_ref().clone()),
+            ResolvedType::Optional(inner) => Some(inner.as_ref().clone()),
+            ResolvedType::Named { name, generics } if name == "Result" && !generics.is_empty() => {
+                Some(generics[0].clone())
+            }
+            ResolvedType::Named { name, generics } if name == "Option" && !generics.is_empty() => {
+                Some(generics[0].clone())
+            }
+            _ => None,
+        };
+
+        let final_value = if let Some(ref try_ty) = try_unwrap_type {
+            let try_llvm = self.type_to_llvm(try_ty);
+            let needs_cast = try_llvm != "i64" && try_llvm != "i32" && try_llvm != "i16"
+                && try_llvm != "i8" && try_llvm != "i1" && !try_llvm.ends_with('*');
+            if needs_cast {
+                // Value was stored directly in payload via bitcast
+                // Alloca Result, store, GEP payload, bitcast to T*, load T
+                let tmp_result = self.next_temp(counter);
+                write_ir!(ir, "  {} = alloca {}", tmp_result, llvm_type);
+                write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
+                let payload_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                    payload_ptr, llvm_type, llvm_type, tmp_result);
+                let cast_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, try_llvm);
+                let loaded = self.next_temp(counter);
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, cast_ptr);
+                loaded
+            } else {
+                value
+            }
+        } else {
+            value
+        };
+
         write_ir!(ir, "  br label %{}\n", merge_label);
 
         // Merge block
         write_ir!(ir, "{}:", merge_label);
 
-        Ok((value, ir))
+        Ok((final_value, ir))
     }
 
     /// Generate unwrap expression — delegates to the canonical aggregate extractvalue implementation
@@ -498,6 +536,41 @@ impl CodeGenerator {
         }
 
         self.needs_unwrap_panic = true;
+
+        // For non-i64 unwrap types, the payload is a ptrtoint'd pointer
+        // Need to inttoptr + load to recover the original type
+        let unwrap_type = match &inner_type {
+            ResolvedType::Result(ok, _) => Some(ok.as_ref().clone()),
+            ResolvedType::Optional(inner) => Some(inner.as_ref().clone()),
+            ResolvedType::Named { name, generics } if name == "Result" && !generics.is_empty() => {
+                Some(generics[0].clone())
+            }
+            ResolvedType::Named { name, generics } if name == "Option" && !generics.is_empty() => {
+                Some(generics[0].clone())
+            }
+            _ => None,
+        };
+
+        if let Some(ref unwrap_ty) = unwrap_type {
+            let unwrap_llvm = self.type_to_llvm(unwrap_ty);
+            let needs_cast = unwrap_llvm != "i64" && unwrap_llvm != "i32" && unwrap_llvm != "i16"
+                && unwrap_llvm != "i8" && unwrap_llvm != "i1" && !unwrap_llvm.ends_with('*');
+            if needs_cast {
+                // Value was stored directly into payload area via bitcast
+                // To extract: alloca Result, store, GEP to payload, bitcast to T*, load T
+                let tmp_result = self.next_temp(counter);
+                write_ir!(ir, "  {} = alloca {}", tmp_result, llvm_type);
+                write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
+                let payload_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                    payload_ptr, llvm_type, llvm_type, tmp_result);
+                let cast_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, unwrap_llvm);
+                let loaded = self.next_temp(counter);
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, cast_ptr);
+                return Ok((loaded, ir));
+            }
+        }
 
         Ok((value, ir))
     }

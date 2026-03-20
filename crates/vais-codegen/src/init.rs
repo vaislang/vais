@@ -166,6 +166,12 @@ impl CodeGenerator {
     /// Set resolved function signatures from the type checker.
     /// Used to provide inferred parameter types for functions with Type::Infer parameters.
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
+        // DEBUG: print keys containing "TestSuite" or "ByteBuffer"
+        for key in resolved.keys() {
+            if key.contains("TestSuite") || key.contains("ByteBuffer") || key.contains("TestCase") || key.contains("TestRunner") {
+                eprintln!("[DEBUG resolved_function_sigs] key={} ret={:?}", key, resolved[key].ret);
+            }
+        }
         self.types.resolved_function_sigs = resolved;
     }
 

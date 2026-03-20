@@ -209,6 +209,11 @@ impl CodeGenerator {
             return self.generate_string_method_call(&recv_val, &ir, method_name, args, counter);
         }
 
+        // clone() on any type — return the receiver value unchanged
+        if method_name == "clone" && args.is_empty() {
+            return Ok((recv_val, ir));
+        }
+
         // Slice .len() — extract length from fat pointer { i8*, i64 } field 1
         if method_name == "len" {
             let is_slice_type = match &recv_type {
@@ -232,10 +237,21 @@ impl CodeGenerator {
         }
 
         // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
-        // For non-generic structs, this is a no-op (Vec → Vec)
-        let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
+        // For generic structs with type args, try mangled name first (e.g., Vec_push$GraphNode)
+        let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
             let resolved = self.resolve_struct_name(name);
-            format!("{}_{}", resolved, method_name)
+            let base = format!("{}_{}", resolved, method_name);
+            if !generics.is_empty() {
+                // Try mangled specialized name (Vec_push$GraphNode format)
+                let mangled = vais_types::mangle_name(&base, generics);
+                if self.types.functions.contains_key(&mangled) {
+                    mangled
+                } else {
+                    base
+                }
+            } else {
+                base
+            }
         } else {
             method_name.clone()
         };
@@ -246,18 +262,58 @@ impl CodeGenerator {
             self.type_to_llvm(&recv_type)
         };
 
+        // Look up function info for parameter types
+        let fn_info = self.types.functions.get(&full_method_name).cloned();
+
         let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
 
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
             let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
-            let arg_type = self.infer_expr_type(arg);
-            let arg_llvm_ty = self.type_to_llvm(&arg_type);
+            let inferred_ty = self.infer_expr_type(arg);
+
+            // Method params: index 0 is self, so args[i] corresponds to params[i+1]
+            let param_ty = fn_info
+                .as_ref()
+                .and_then(|f| f.signature.params.get(i + 1))
+                .map(|(_, ty, _)| ty.clone());
+
+            // Use parameter type from signature if available, unless generic
+            let arg_llvm_ty = if let Some(ref pt) = param_ty {
+                if matches!(pt, ResolvedType::Generic(_)) {
+                    self.type_to_llvm(&inferred_ty)
+                } else {
+                    self.type_to_llvm(pt)
+                }
+            } else {
+                self.type_to_llvm(&inferred_ty)
+            };
+
+            // Integer width coercion
+            if let Some(ref pt) = param_ty {
+                let src_bits = self.get_integer_bits(&inferred_ty);
+                let dst_bits = self.get_integer_bits(pt);
+                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                    let conv_tmp = self.next_temp(counter);
+                    let src_ty = format!("i{}", src_bits);
+                    let dst_ty = format!("i{}", dst_bits);
+                    if src_bits > dst_bits {
+                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    } else {
+                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    }
+                    val = conv_tmp;
+                }
+            }
 
             // For struct types, load the value from pointer if the expression produces a pointer.
             // Struct literals and local struct variables return pointers (alloca),
             // but function params expect values.
-            if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+            let type_to_check = match &param_ty {
+                Some(ty) => ty.clone(),
+                None => inferred_ty,
+            };
+            if matches!(type_to_check, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
                 let loaded = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -284,6 +340,9 @@ impl CodeGenerator {
             let fn_info = self.types.functions.get(&full_method_name);
             if let Some(info) = fn_info {
                 self.type_to_llvm(&info.signature.ret)
+            } else if let Some(sig) = self.types.resolved_function_sigs.get(&full_method_name) {
+                // Fallback: use type checker's resolved signature
+                self.type_to_llvm(&sig.ret)
             } else {
                 // Fallback: check if any trait impl provides this method for the receiver type
                 if let ResolvedType::Named { name, .. } = &recv_type {
@@ -294,9 +353,6 @@ impl CodeGenerator {
                         }
                     }
                     if candidate_count > 1 {
-                        // Multiple trait impls provide this method — ambiguous dispatch.
-                        // The type checker should have caught this, but emit an ICE-level
-                        // warning for defense-in-depth.
                         self.emit_warning(crate::CodegenWarning::UnresolvedTypeFallback {
                             type_desc: format!(
                                 "ambiguous trait method dispatch for {}.{}() — {} trait impls",
@@ -351,15 +407,57 @@ impl CodeGenerator {
 
         let full_method_name = format!("{}_{}", type_name.node, method.node);
 
+        // Look up function info for parameter types
+        let fn_info = self.types.functions.get(&full_method_name).cloned();
+
         let mut arg_vals = Vec::with_capacity(args.len());
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
             let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
             ir.push_str(&arg_ir);
-            let arg_type = self.infer_expr_type(arg);
-            let arg_llvm_ty = self.type_to_llvm(&arg_type);
+            let inferred_ty = self.infer_expr_type(arg);
+
+            // Use parameter type from function signature if available
+            let param_ty = fn_info
+                .as_ref()
+                .and_then(|f| f.signature.params.get(i))
+                .map(|(_, ty, _)| ty.clone());
+
+            // Determine LLVM type: prefer parameter type over inferred type,
+            // unless param is generic (in which case use inferred)
+            let arg_llvm_ty = if let Some(ref pt) = param_ty {
+                if matches!(pt, ResolvedType::Generic(_)) {
+                    self.type_to_llvm(&inferred_ty)
+                } else {
+                    self.type_to_llvm(pt)
+                }
+            } else {
+                self.type_to_llvm(&inferred_ty)
+            };
+
+            // Integer width coercion: if param expects i32 but expr produces i64, trunc
+            if let Some(ref pt) = param_ty {
+                let src_bits = self.get_integer_bits(&inferred_ty);
+                let dst_bits = self.get_integer_bits(pt);
+                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                    let conv_tmp = self.next_temp(counter);
+                    let src_ty = format!("i{}", src_bits);
+                    let dst_ty = format!("i{}", dst_bits);
+                    if src_bits > dst_bits {
+                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    } else {
+                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    }
+                    val = conv_tmp;
+                }
+            }
 
             // For struct types, load the value from pointer if the expression produces a pointer.
-            if matches!(arg_type, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+            // Use param type OR inferred type to determine if this is a struct.
+            let type_to_check = match &param_ty {
+                Some(ty) => ty.clone(),
+                None => inferred_ty,
+            };
+            if matches!(type_to_check, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
                 let loaded = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -375,11 +473,16 @@ impl CodeGenerator {
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
-        let ret_type = self
-            .types
-            .functions
-            .get(&full_method_name)
+        let ret_type = fn_info
+            .as_ref()
             .map(|info| self.type_to_llvm(&info.signature.ret))
+            .or_else(|| {
+                // Fallback: check resolved_function_sigs from type checker
+                self.types
+                    .resolved_function_sigs
+                    .get(&full_method_name)
+                    .map(|sig| self.type_to_llvm(&sig.ret))
+            })
             .unwrap_or_else(|| "i64".to_string());
 
         let tmp = self.next_temp(counter);

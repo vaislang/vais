@@ -481,7 +481,7 @@ X TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } E I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
         } E {
             # Create socket
@@ -518,7 +518,7 @@ X TcpStream {
         # Validate inputs
         I host == 0 {
             TcpStream { fd: -1 }
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } E I port < MIN_PORT | port > MAX_PORT {
             TcpStream { fd: -1 }
         } E {
             # Create socket
@@ -557,9 +557,9 @@ X TcpStream {
     F read(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } E I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             recv(self.fd, buffer, len, 0)
@@ -571,9 +571,9 @@ X TcpStream {
     F write(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } E I data == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             send(self.fd, data, len, 0)
@@ -585,9 +585,9 @@ X TcpStream {
     F write_all(&self, data: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } E I data == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             total := 0
@@ -736,13 +736,13 @@ X UdpSocket {
     F send_to(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } E I data == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
-        } EI host == 0 {
+        } E I host == 0 {
             -1
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } E I port < MIN_PORT | port > MAX_PORT {
             -1
         } E {
             addr := make_sockaddr_in(host, port)
@@ -761,13 +761,13 @@ X UdpSocket {
     F send_to6(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI data == 0 {
+        } E I data == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
-        } EI host == 0 {
+        } E I host == 0 {
             -1
-        } EI port < MIN_PORT | port > MAX_PORT {
+        } E I port < MIN_PORT | port > MAX_PORT {
             -1
         } E {
             addr := make_sockaddr_in6(host, port)
@@ -786,9 +786,9 @@ X UdpSocket {
     F recv(&self, buffer: i64, len: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } E I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             recvfrom(self.fd, buffer, len, 0, 0, 0)
@@ -802,9 +802,9 @@ X UdpSocket {
     F recv_from(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } E I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             # Allocate sockaddr_in for source address
@@ -839,9 +839,9 @@ X UdpSocket {
     F recv_from6(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
         I self.fd < 0 {
             -1
-        } EI buffer == 0 {
+        } E I buffer == 0 {
             -1
-        } EI len <= 0 {
+        } E I len <= 0 {
             -1
         } E {
             # Allocate sockaddr_in6 for source address
@@ -1012,9 +1012,9 @@ F tcp_connect6_result(host: i64, port: i64) -> Result<i64, i64> {
 F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EI buffer == 0 {
+    } E I buffer == 0 {
         -1
-    } EI len <= 0 {
+    } E I len <= 0 {
         -1
     } E {
         recv(stream_fd, buffer, len, 0)
@@ -1026,9 +1026,9 @@ F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
 F tcp_write(stream_fd: i64, data: i64, len: i64) -> i64 {
     I stream_fd < 0 {
         -1
-    } EI data == 0 {
+    } E I data == 0 {
         -1
-    } EI len <= 0 {
+    } E I len <= 0 {
         -1
     } E {
         send(stream_fd, data, len, 0)
@@ -1064,13 +1064,13 @@ F udp_bind6(port: i64) -> i64 {
 F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI data == 0 {
+    } E I data == 0 {
         -1
-    } EI len <= 0 {
+    } E I len <= 0 {
         -1
-    } EI host == 0 {
+    } E I host == 0 {
         -1
-    } EI port < MIN_PORT | port > MAX_PORT {
+    } E I port < MIN_PORT | port > MAX_PORT {
         -1
     } E {
         addr := make_sockaddr_in(host, port)
@@ -1089,13 +1089,13 @@ F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 
 F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI data == 0 {
+    } E I data == 0 {
         -1
-    } EI len <= 0 {
+    } E I len <= 0 {
         -1
-    } EI host == 0 {
+    } E I host == 0 {
         -1
-    } EI port < MIN_PORT | port > MAX_PORT {
+    } E I port < MIN_PORT | port > MAX_PORT {
         -1
     } E {
         addr := make_sockaddr_in6(host, port)
@@ -1114,9 +1114,9 @@ F udp_send_to6(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64
 F udp_recv_from(socket_fd: i64, buffer: i64, len: i64) -> i64 {
     I socket_fd < 0 {
         -1
-    } EI buffer == 0 {
+    } E I buffer == 0 {
         -1
-    } EI len <= 0 {
+    } E I len <= 0 {
         -1
     } E {
         recvfrom(socket_fd, buffer, len, 0, 0, 0)
@@ -1156,17 +1156,17 @@ F is_valid_ip6(host: i64) -> i64 {
 # Convert error code to string (returns static string pointer)
 F net_error_string(err: i64) -> i64 {
     I err == NET_ERR_NONE { "Success" }
-    EI err == NET_ERR_SOCKET { "Socket creation failed" }
-    EI err == NET_ERR_BIND { "Bind failed" }
-    EI err == NET_ERR_LISTEN { "Listen failed" }
-    EI err == NET_ERR_ACCEPT { "Accept failed" }
-    EI err == NET_ERR_CONNECT { "Connect failed" }
-    EI err == NET_ERR_SEND { "Send failed" }
-    EI err == NET_ERR_RECV { "Receive failed" }
-    EI err == NET_ERR_CLOSE { "Close failed" }
-    EI err == NET_ERR_INVALID { "Invalid argument" }
-    EI err == NET_ERR_RESOLVE { "Address resolution failed" }
-    EI err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
-    EI err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
+    E I err == NET_ERR_SOCKET { "Socket creation failed" }
+    E I err == NET_ERR_BIND { "Bind failed" }
+    E I err == NET_ERR_LISTEN { "Listen failed" }
+    E I err == NET_ERR_ACCEPT { "Accept failed" }
+    E I err == NET_ERR_CONNECT { "Connect failed" }
+    E I err == NET_ERR_SEND { "Send failed" }
+    E I err == NET_ERR_RECV { "Receive failed" }
+    E I err == NET_ERR_CLOSE { "Close failed" }
+    E I err == NET_ERR_INVALID { "Invalid argument" }
+    E I err == NET_ERR_RESOLVE { "Address resolution failed" }
+    E I err == NET_ERR_INVALID_PORT { "Invalid port number (must be 0-65535)" }
+    E I err == NET_ERR_INVALID_BUFFER { "Invalid buffer (null or negative size)" }
     E { "Unknown error" }
 }

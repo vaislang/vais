@@ -10,10 +10,18 @@ impl CodeGenerator {
         counter: &mut usize,
         span: Span,
     ) -> CodegenResult<(String, String)> {
-        // Check if this is an enum variant constructor (e.g., Some(42))
+        // Check if this is an enum variant constructor (e.g., Some(42), Ok(val), Err(val))
         if let Expr::Ident(name) = &func.node {
             if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
                 return self.generate_enum_variant_constructor(&enum_name, tag, args, counter);
+            }
+            // Hardcoded Result/Option variant constructors
+            // (in case the enum definitions aren't registered from std)
+            match name.as_str() {
+                "Ok" => return self.generate_enum_variant_constructor("Result", 0, args, counter),
+                "Err" => return self.generate_enum_variant_constructor("Result", 1, args, counter),
+                "Some" => return self.generate_enum_variant_constructor("Option", 0, args, counter),
+                _ => {}
             }
 
             // Check if this is a SIMD intrinsic - do this BEFORE regular function lookup
@@ -139,8 +147,13 @@ impl CodeGenerator {
             }
 
             // Determine argument LLVM type - use parameter type if available, otherwise infer from expression
+            // For generic params, use the inferred (actual) type to avoid erasing fat pointers/structs to i64
             let arg_ty = if let Some(ref pt) = param_ty {
-                self.type_to_llvm(pt)
+                if matches!(pt, ResolvedType::Generic(_)) {
+                    self.type_to_llvm(&inferred_ty)
+                } else {
+                    self.type_to_llvm(pt)
+                }
             } else {
                 self.type_to_llvm(&inferred_ty)
             };
@@ -222,6 +235,15 @@ impl CodeGenerator {
         let ret_ty = fn_info
             .as_ref()
             .map(|f| self.type_to_llvm(&f.signature.ret))
+            .or_else(|| {
+                // Fallback: check resolved_function_sigs from type checker
+                // This handles methods from imported modules (e.g., TestSuite_new)
+                // that weren't registered in self.types.functions during codegen init.
+                self.types
+                    .resolved_function_sigs
+                    .get(&fn_name)
+                    .map(|sig| self.type_to_llvm(&sig.ret))
+            })
             .unwrap_or_else(|| "i64".to_string());
 
         let actual_fn_name = fn_info
@@ -460,7 +482,7 @@ impl CodeGenerator {
     }
 
     /// Generate enum variant constructor
-    fn generate_enum_variant_constructor(
+    pub(crate) fn generate_enum_variant_constructor(
         &mut self,
         enum_name: &str,
         tag: i32,
@@ -491,7 +513,7 @@ impl CodeGenerator {
         write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
 
         // Store payload fields
-        for (i, arg_val) in arg_vals.iter().enumerate() {
+        for (i, (arg_val, arg_expr)) in arg_vals.iter().zip(args.iter()).enumerate() {
             let payload_field_ptr = self.next_temp(counter);
             write_ir!(
                 ir,
@@ -502,7 +524,21 @@ impl CodeGenerator {
                 enum_ptr,
                 i
             );
-            write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
+            // Store payload into enum payload area
+            // For non-i64 types, bitcast the payload pointer to T* and store directly
+            // This copies the value INTO the Result struct (no dangling pointer)
+            let arg_type = self.infer_expr_type(arg_expr);
+            let llvm_ty = self.type_to_llvm(&arg_type);
+            let needs_cast = llvm_ty != "i64" && llvm_ty != "i32" && llvm_ty != "i16" && llvm_ty != "i8"
+                && llvm_ty != "i1" && !llvm_ty.ends_with('*');
+            if needs_cast && arg_val.starts_with('%') {
+                // Bitcast payload slot to T* and store value directly
+                let cast_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_field_ptr, llvm_ty);
+                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, arg_val, llvm_ty, cast_ptr);
+            } else {
+                write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
+            }
         }
 
         Ok((enum_ptr, ir))

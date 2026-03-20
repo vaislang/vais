@@ -16,6 +16,14 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         // Check if this is an enum variant constructor or builtin
         if let Expr::Ident(name) = &func.node {
+            // Hardcoded Result/Option variant constructors (Ok, Err, Some)
+            match name.as_str() {
+                "Ok" => return self.generate_enum_variant_constructor("Result", 0, args, counter),
+                "Err" => return self.generate_enum_variant_constructor("Result", 1, args, counter),
+                "Some" => return self.generate_enum_variant_constructor("Option", 0, args, counter),
+                _ => {}
+            }
+
             // Struct tuple literal: `Response(200, 1)` → desugar to StructLit
             let resolved = self.resolve_struct_name(name);
             if self.types.structs.contains_key(&resolved)
@@ -450,23 +458,46 @@ impl CodeGenerator {
                 }
             }
 
+            let inferred_ty = self.infer_expr_type(arg);
             let arg_ty = if let Some(ref ty) = param_ty {
-                self.type_to_llvm(ty)
+                if matches!(ty, ResolvedType::Generic(_)) {
+                    self.type_to_llvm(&inferred_ty)
+                } else {
+                    self.type_to_llvm(ty)
+                }
             } else {
                 // For vararg arguments, infer the type from the expression
-                let inferred_ty = self.infer_expr_type(arg);
                 self.type_to_llvm(&inferred_ty)
             };
 
+            // Integer width coercion: if param expects i32 but expr produces i64, trunc
+            if let Some(ref pt) = param_ty {
+                let src_bits = self.get_integer_bits(&inferred_ty);
+                let dst_bits = self.get_integer_bits(pt);
+                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                    let conv_tmp = self.next_temp(counter);
+                    let src_ty = format!("i{}", src_bits);
+                    let dst_ty = format!("i{}", dst_bits);
+                    if src_bits > dst_bits {
+                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    } else {
+                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                    }
+                    val = conv_tmp;
+                }
+            }
+
             // For struct arguments, load the value if we have a pointer
             // (struct literals generate alloca+stores, returning pointers)
-            if let Some(ResolvedType::Named { .. }) = &param_ty {
-                // Check if val looks like a pointer (starts with %)
-                if val.starts_with('%') {
-                    let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
-                    val = loaded;
-                }
+            // Use both param_ty and inferred_ty for struct detection
+            let type_to_check = match &param_ty {
+                Some(ty) => ty.clone(),
+                None => inferred_ty,
+            };
+            if matches!(type_to_check, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+                let loaded = self.next_temp(counter);
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
+                val = loaded;
             }
 
             // Trait object coercion: &ConcreteType -> &dyn Trait
@@ -651,6 +682,15 @@ impl CodeGenerator {
                 } else {
                     self.type_to_llvm(&f.signature.ret)
                 }
+            })
+            .or_else(|| {
+                // Fallback: check resolved_function_sigs from type checker.
+                // This handles methods from imported modules (e.g., TestSuite_new, ByteBuffer_new)
+                // that weren't registered in self.types.functions during codegen init.
+                self.types
+                    .resolved_function_sigs
+                    .get(&fn_name)
+                    .map(|sig| self.type_to_llvm(&sig.ret))
             })
             .unwrap_or_else(|| "i64".to_string());
 

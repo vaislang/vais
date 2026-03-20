@@ -51,8 +51,10 @@ pub(crate) fn generate_with_text_backend(
         }
     }
 
-    // Pass resolved function signatures to codegen (for inferred parameter types)
-    codegen.set_resolved_functions(checker.get_all_functions().clone());
+    // Pass resolved function signatures to codegen (for inferred parameter types).
+    // Use get_all_functions_with_methods() to include struct methods with mangled names
+    // (e.g., TestSuite_new, ByteBuffer_ensure_capacity) so codegen can resolve return types.
+    codegen.set_resolved_functions(checker.get_all_functions_with_methods());
     codegen.set_type_aliases(checker.get_type_aliases().clone());
 
     // Enable multi-error mode for graceful degradation:

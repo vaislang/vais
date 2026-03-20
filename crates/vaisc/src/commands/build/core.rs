@@ -307,6 +307,32 @@ pub(crate) fn cmd_build(
     // Macro expansion phase
     let macro_start = std::time::Instant::now();
     let mut macro_registry = MacroRegistry::new();
+
+    // Register builtin panic! macro: panic!("msg") => __panic("msg")
+    {
+        use vais_ast::{
+            MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned, Delimiter,
+        };
+        macro_registry.register(MacroDef {
+            name: Spanned::new("panic".to_string(), Span::new(0, 5)),
+            rules: vec![MacroRule {
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                    name: "msg".to_string(),
+                    kind: MetaVarKind::Expr,
+                }]),
+                template: MacroTemplate::Sequence(vec![
+                    MacroTemplateElement::Token(MacroToken::Ident("__panic".to_string())),
+                    MacroTemplateElement::Group {
+                        delimiter: Delimiter::Paren,
+                        content: vec![MacroTemplateElement::MetaVar("msg".to_string())],
+                    },
+                ]),
+            }],
+            is_pub: false,
+        });
+    }
+
     collect_macros(&transformed_ast, &mut macro_registry);
 
     let macro_expanded_ast = expand_macros(transformed_ast, &macro_registry)
@@ -371,7 +397,9 @@ pub(crate) fn cmd_build(
     }
 
     // Per-module codegen path
-    let use_per_module = per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1);
+    // VAIS_SINGLE_MODULE=1 forces single-module codegen (avoids per-module item index issues)
+    let force_single = std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
+    let use_per_module = !force_single && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
@@ -645,40 +673,70 @@ fn run_type_check(
             checker.check_module(final_ast)
         };
 
-        // Handle type checking result
+        // Handle type checking result — non-fatal mode: convert errors to warnings
+        // and continue to codegen (partial IR generation)
+        let tc_non_fatal = std::env::var("VAIS_TC_NONFATAL").is_ok();
         if let Err(e) = tc_result {
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
             }
-            for collected_err in checker.get_collected_errors() {
-                eprintln!(
-                    "{}",
-                    error_formatter::format_type_error(collected_err, main_source, input)
-                );
-            }
-            if let Some(ref mut c) = cache {
-                incremental::update_tc_cache(c, final_ast, false);
-            }
             let total_errors = 1 + checker.get_collected_errors().len();
-            if total_errors > 1 {
-                eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
+            if tc_non_fatal {
+                eprintln!(
+                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
+                    "warning".yellow().bold(),
+                    total_errors
+                );
+                for collected_err in checker.get_collected_errors() {
+                    eprintln!(
+                        "{}",
+                        error_formatter::format_type_error(collected_err, main_source, input)
+                    );
+                }
+            } else {
+                for collected_err in checker.get_collected_errors() {
+                    eprintln!(
+                        "{}",
+                        error_formatter::format_type_error(collected_err, main_source, input)
+                    );
+                }
+                if let Some(ref mut c) = cache {
+                    incremental::update_tc_cache(c, final_ast, false);
+                }
+                if total_errors > 1 {
+                    eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
+                }
+                return Err(error_formatter::format_type_error(&e, main_source, input));
             }
-            return Err(error_formatter::format_type_error(&e, main_source, input));
         }
 
         // Even if check_module succeeded, there may be collected errors
         if !checker.get_collected_errors().is_empty() {
-            for collected_err in checker.get_collected_errors() {
-                eprintln!(
-                    "{}",
-                    error_formatter::format_type_error(collected_err, main_source, input)
-                );
-            }
-            if let Some(ref mut c) = cache {
-                incremental::update_tc_cache(c, final_ast, false);
-            }
             let total_errors = checker.get_collected_errors().len();
-            return Err(format!("{} type error(s) found", total_errors));
+            if tc_non_fatal {
+                eprintln!(
+                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
+                    "warning".yellow().bold(),
+                    total_errors
+                );
+                for collected_err in checker.get_collected_errors() {
+                    eprintln!(
+                        "{}",
+                        error_formatter::format_type_error(collected_err, main_source, input)
+                    );
+                }
+            } else {
+                for collected_err in checker.get_collected_errors() {
+                    eprintln!(
+                        "{}",
+                        error_formatter::format_type_error(collected_err, main_source, input)
+                    );
+                }
+                if let Some(ref mut c) = cache {
+                    incremental::update_tc_cache(c, final_ast, false);
+                }
+                return Err(format!("{} type error(s) found", total_errors));
+            }
         }
 
         // Update cache: TC passed
