@@ -153,29 +153,34 @@ impl CodeGenerator {
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                     String::from("i64")
                 } else if !generics.is_empty() {
-                    // In Vais, all values are i64-sized, so struct/enum/union layout is the same
-                    // regardless of type arguments. Use base name for enums, structs, and unions.
-                    if self.types.enums.contains_key(name)
-                        || self.types.structs.contains_key(name)
-                        || self.types.unions.contains_key(name)
-                    {
-                        format!("%{}", name)
-                    } else {
-                        // Generic struct with type arguments (not in our structs map - external?)
-                        // Check if all generics are concrete (not Generic or Var types)
-                        let all_concrete = generics
-                            .iter()
-                            .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    // Check if all generics are concrete (not Generic or Var types)
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
-                        if all_concrete {
-                            // Use mangled name for concrete instantiations
-                            let mangled = self.mangle_struct_name(name, generics);
+                    if all_concrete {
+                        // Use mangled name for concrete instantiations.
+                        // Check if a specialized struct type was generated (e.g., Vec$MyStruct).
+                        let mangled = self.mangle_struct_name(name, generics);
+                        if self.types.structs.contains_key(&mangled)
+                            || self.generics.generated_structs.contains_key(&mangled)
+                        {
                             format!("%{}", mangled)
-                        } else {
-                            // For generic types with unresolved parameters, use base struct name
-                            // In Vais, all values are i64-sized, so struct layout is the same
+                        } else if self.types.enums.contains_key(name)
+                            || self.types.structs.contains_key(name)
+                            || self.types.unions.contains_key(name)
+                        {
+                            // Base type exists but no specialization — use base name.
+                            // This is correct for enums/unions where layout is type-independent.
                             format!("%{}", name)
+                        } else {
+                            // External or not-yet-generated specialization
+                            format!("%{}", mangled)
                         }
+                    } else {
+                        // For generic types with unresolved parameters, use base struct name.
+                        // Layout is i64-uniform when type args can't be resolved.
+                        format!("%{}", name)
                     }
                 } else {
                     // Non-generic struct/enum/union - return type without pointer
@@ -725,7 +730,19 @@ impl CodeGenerator {
                     .map(|field| self.estimate_type_size(field.trim()))
                     .sum()
             }
-            s if s.starts_with('%') => 8, // Named types default to 8
+            s if s.starts_with('%') => {
+                // Try to look up the named struct in our type registry
+                let type_name = &s[1..]; // strip '%' prefix
+                if let Some(struct_info) = self.types.structs.get(type_name) {
+                    struct_info
+                        .fields
+                        .iter()
+                        .map(|(_name, ty)| self.compute_sizeof(ty) as usize)
+                        .sum()
+                } else {
+                    8 // Unknown named type — default to i64 size
+                }
+            }
             _ => 8,                       // Default fallback
         }
     }
@@ -742,19 +759,52 @@ impl CodeGenerator {
             ResolvedType::Str => 16, // fat pointer { i8*, i64 }
             ResolvedType::Unit => 0,
             ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
-            ResolvedType::Array(_) => 8,     // pointer to heap
-            ResolvedType::Optional(_) => 8,  // tag + value in i64
-            ResolvedType::Result(_, _) => 8, // tag + value in i64
+            ResolvedType::Array(_) => 8, // pointer to heap
+            ResolvedType::Optional(inner) => {
+                // Option<T> is { i8 tag, T value } — actual size depends on T
+                let inner_size = self.compute_sizeof(inner);
+                1 + inner_size // i8 tag + payload
+            }
+            ResolvedType::Result(ok, err) => {
+                // Result<T, E> is { i8 tag, max(T, E) value }
+                let ok_size = self.compute_sizeof(ok);
+                let err_size = self.compute_sizeof(err);
+                1 + std::cmp::max(ok_size, err_size) // i8 tag + largest payload
+            }
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
+                // First try the base name (non-generic or already resolved struct)
                 if let Some(struct_info) = self.types.structs.get(name) {
-                    struct_info
+                    return struct_info
                         .fields
                         .iter()
                         .map(|(_name, ty)| self.compute_sizeof(ty))
-                        .sum()
+                        .sum();
+                }
+                // For generic Named types, try the mangled (specialized) name
+                if !generics.is_empty() {
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = self.mangle_struct_name(name, generics);
+                        if let Some(struct_info) = self.types.structs.get(&mangled) {
+                            return struct_info
+                                .fields
+                                .iter()
+                                .map(|(_name, ty)| self.compute_sizeof(ty))
+                                .sum();
+                        }
+                    }
+                }
+                8 // enum (tag + payload) or unknown named type
+            }
+            ResolvedType::Generic(param) => {
+                // Check if we have a substitution for this generic parameter
+                if let Some(concrete) = self.get_generic_substitution(param) {
+                    self.compute_sizeof(&concrete)
                 } else {
-                    8 // enum (tag + payload) or unknown named type
+                    8 // default i64 size for unresolved generics
                 }
             }
             _ => 8, // default for complex types
@@ -775,21 +825,54 @@ impl CodeGenerator {
             | ResolvedType::Ref(_)
             | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 1,
+            ResolvedType::Optional(inner) => {
+                // Option<T> alignment is max(1, align(T))
+                std::cmp::max(1, self.compute_alignof(inner))
+            }
+            ResolvedType::Result(ok, err) => {
+                // Result<T, E> alignment is max(1, align(T), align(E))
+                std::cmp::max(1, std::cmp::max(self.compute_alignof(ok), self.compute_alignof(err)))
+            }
             ResolvedType::Tuple(elems) => elems
                 .iter()
                 .map(|e| self.compute_alignof(e))
                 .max()
                 .unwrap_or(8),
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
+                // First try the base name
                 if let Some(struct_info) = self.types.structs.get(name) {
-                    struct_info
+                    return struct_info
                         .fields
                         .iter()
                         .map(|(_name, ty)| self.compute_alignof(ty))
                         .max()
-                        .unwrap_or(8)
+                        .unwrap_or(8);
+                }
+                // For generic Named types, try the mangled name
+                if !generics.is_empty() {
+                    let all_concrete = generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    if all_concrete {
+                        let mangled = self.mangle_struct_name(name, generics);
+                        if let Some(struct_info) = self.types.structs.get(&mangled) {
+                            return struct_info
+                                .fields
+                                .iter()
+                                .map(|(_name, ty)| self.compute_alignof(ty))
+                                .max()
+                                .unwrap_or(8);
+                        }
+                    }
+                }
+                8 // enum or unknown named type
+            }
+            ResolvedType::Generic(param) => {
+                // Check if we have a substitution for this generic parameter
+                if let Some(concrete) = self.get_generic_substitution(param) {
+                    self.compute_alignof(&concrete)
                 } else {
-                    8 // enum or unknown named type
+                    8 // default i64 alignment for unresolved generics
                 }
             }
             _ => 8, // default for complex types

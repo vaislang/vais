@@ -246,15 +246,33 @@ fn test_sizeof_array() {
 #[test]
 fn test_sizeof_optional() {
     let gen = CodeGenerator::new("test");
+    // Option<i64> = { i8 tag, i64 value } = 1 + 8 = 9
     let opt = ResolvedType::Optional(Box::new(ResolvedType::I64));
-    assert_eq!(gen.compute_sizeof(&opt), 8);
+    assert_eq!(gen.compute_sizeof(&opt), 9);
+}
+
+#[test]
+fn test_sizeof_optional_small() {
+    let gen = CodeGenerator::new("test");
+    // Option<bool> = { i8 tag, i1 value } = 1 + 1 = 2
+    let opt = ResolvedType::Optional(Box::new(ResolvedType::Bool));
+    assert_eq!(gen.compute_sizeof(&opt), 2);
 }
 
 #[test]
 fn test_sizeof_result() {
     let gen = CodeGenerator::new("test");
+    // Result<i64, str> = { i8 tag, max(i64=8, str=16) } = 1 + 16 = 17
     let res = ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str));
-    assert_eq!(gen.compute_sizeof(&res), 8);
+    assert_eq!(gen.compute_sizeof(&res), 17);
+}
+
+#[test]
+fn test_sizeof_result_same_types() {
+    let gen = CodeGenerator::new("test");
+    // Result<i32, i32> = { i8 tag, max(i32=4, i32=4) } = 1 + 4 = 5
+    let res = ResolvedType::Result(Box::new(ResolvedType::I32), Box::new(ResolvedType::I32));
+    assert_eq!(gen.compute_sizeof(&res), 5);
 }
 
 #[test]

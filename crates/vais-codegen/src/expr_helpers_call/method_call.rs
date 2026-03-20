@@ -276,7 +276,16 @@ impl CodeGenerator {
             let param_ty = fn_info
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i + 1))
-                .map(|(_, ty, _)| ty.clone());
+                .map(|(_, ty, _)| ty.clone())
+                // Fallback: check resolved_function_sigs from type checker
+                // This handles cross-module methods not registered in self.types.functions
+                .or_else(|| {
+                    self.types
+                        .resolved_function_sigs
+                        .get(&full_method_name)
+                        .and_then(|sig| sig.params.get(i + 1))
+                        .map(|(_, ty, _)| ty.clone())
+                });
 
             // Use parameter type from signature if available, unless generic
             let arg_llvm_ty = if let Some(ref pt) = param_ty {
@@ -420,7 +429,16 @@ impl CodeGenerator {
             let param_ty = fn_info
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i))
-                .map(|(_, ty, _)| ty.clone());
+                .map(|(_, ty, _)| ty.clone())
+                // Fallback: check resolved_function_sigs from type checker
+                // This handles cross-module static methods not registered in self.types.functions
+                .or_else(|| {
+                    self.types
+                        .resolved_function_sigs
+                        .get(&full_method_name)
+                        .and_then(|sig| sig.params.get(i))
+                        .map(|(_, ty, _)| ty.clone())
+                });
 
             // Determine LLVM type: prefer parameter type over inferred type,
             // unless param is generic (in which case use inferred)

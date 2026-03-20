@@ -134,7 +134,16 @@ impl CodeGenerator {
             let param_ty = fn_info
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i))
-                .map(|(_, ty, _)| ty.clone());
+                .map(|(_, ty, _)| ty.clone())
+                // Fallback: check resolved_function_sigs from type checker
+                // This handles cross-module methods not registered in self.types.functions
+                .or_else(|| {
+                    self.types
+                        .resolved_function_sigs
+                        .get(&fn_name)
+                        .and_then(|sig| sig.params.get(i))
+                        .map(|(_, ty, _)| ty.clone())
+                });
 
             let inferred_ty = self.infer_expr_type(arg);
 
