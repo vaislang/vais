@@ -33,6 +33,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();
         self.fn_ctx.async_poll_context = None;
+        self.fn_ctx.temp_var_types.clear();
     }
 
     /// Map a type to LLVM for extern C ABI declarations.

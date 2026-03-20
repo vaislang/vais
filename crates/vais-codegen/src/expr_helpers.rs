@@ -200,14 +200,21 @@ impl CodeGenerator {
                     ResolvedType::Bool => "i1",
                     _ => "i64",
                 };
+                // Coerce operands to the comparison width if they differ
+                let actual_left_ty = self.llvm_type_of(&left_val);
+                let actual_right_ty = self.llvm_type_of(&right_val);
+                let coerced_left =
+                    self.coerce_int_width(&left_val, &actual_left_ty, cmp_llvm, counter, &mut ir);
+                let coerced_right =
+                    self.coerce_int_width(&right_val, &actual_right_ty, cmp_llvm, counter, &mut ir);
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
                     cmp_tmp,
                     op_str,
                     cmp_llvm,
-                    left_val,
-                    right_val,
+                    coerced_left,
+                    coerced_right,
                     dbg_info
                 );
             }
@@ -313,14 +320,22 @@ impl CodeGenerator {
                     ResolvedType::Bool => "i1",
                     _ => "i64", // i64, u64, and default
                 };
+                // Coerce operands to the target width if they differ
+                // (e.g., left is i8 from a function call, but right is i64 literal)
+                let actual_left_ty = self.llvm_type_of(&left_val);
+                let actual_right_ty = self.llvm_type_of(&right_val);
+                let coerced_left =
+                    self.coerce_int_width(&left_val, &actual_left_ty, int_llvm, counter, &mut ir);
+                let coerced_right =
+                    self.coerce_int_width(&right_val, &actual_right_ty, int_llvm, counter, &mut ir);
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
                     tmp,
                     op_str,
                     int_llvm,
-                    left_val,
-                    right_val,
+                    coerced_left,
+                    coerced_right,
                     dbg_info
                 );
             }
@@ -416,9 +431,12 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&local_ty);
                         let alloca_name = format!("{}.{}", name, counter);
                         *counter += 1;
-                        // Create alloca, store current value
+                        // Create alloca, store current value (coerce width if mismatched)
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        let coerced_val =
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         write_ir!(ir, "  %{} = alloca {}", alloca_name, llvm_ty);
-                        write_ir!(ir, "  store {} {}, {}* %{}", llvm_ty, val, llvm_ty, alloca_name);
+                        write_ir!(ir, "  store {} {}, {}* %{}", llvm_ty, coerced_val, llvm_ty, alloca_name);
                         // Convert to alloca-based local
                         self.fn_ctx.locals.insert(
                             name.clone(),
@@ -426,12 +444,16 @@ impl CodeGenerator {
                         );
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
+                        // Coerce value width to match local variable type
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        let coerced_val =
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         // For struct types (Named), the local is a double pointer (%Type**).
                         // We need to alloca a new struct, store the value, then update the pointer.
                         if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
                             let tmp_ptr = self.next_temp(counter);
                             write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                            write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val, llvm_ty, tmp_ptr);
+                            write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, coerced_val, llvm_ty, tmp_ptr);
                             write_ir!(
                                 ir,
                                 "  store {}* {}, {}** %{}",
@@ -445,7 +467,7 @@ impl CodeGenerator {
                                 ir,
                                 "  store {} {}, {}* %{}",
                                 llvm_ty,
-                                val,
+                                coerced_val,
                                 llvm_ty,
                                 local.llvm_name
                             );
@@ -492,11 +514,15 @@ impl CodeGenerator {
                             obj_val,
                             field_idx
                         );
+                        // Coerce value width to match field type
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        let coerced_val =
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         write_ir!(
                             ir,
                             "  store {} {}, {}* {}",
                             llvm_ty,
-                            val,
+                            coerced_val,
                             llvm_ty,
                             field_ptr
                         );

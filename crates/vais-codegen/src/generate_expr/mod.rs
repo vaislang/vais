@@ -39,7 +39,11 @@ impl CodeGenerator {
         // to construct a SpannedCodegenError with source location.
         self.last_error_span = Some(expr.span);
 
-        match &expr.node {
+        // Infer the resolved type BEFORE code generation (read-only).
+        // Used to populate temp_var_types for named temporaries produced below.
+        let inferred_type = self.infer_expr_type(expr);
+
+        let result = match &expr.node {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
@@ -626,6 +630,17 @@ impl CodeGenerator {
                 use crate::visitor::ExprVisitor;
                 self.visit_force(inner, counter)
             }
+        };
+
+        // Register the resolved type for named temporaries (%tN format).
+        // This enables downstream passes (store, binary, icmp, call) to emit
+        // correct LLVM IR types instead of defaulting to i64.
+        if let Ok((ref val, _)) = result {
+            if val.starts_with("%t") {
+                self.fn_ctx.register_temp_type(val, inferred_type);
+            }
         }
+
+        result
     }
 }

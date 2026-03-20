@@ -404,16 +404,25 @@ impl CodeGenerator {
         let ret_llvm = self.type_to_llvm(ret_type);
 
         // Build call instruction with all arguments
-        let result = self.next_temp(counter);
-        ir.push_str(&format!(
-            "  {} = call {} @{}({})\n",
-            result,
-            ret_llvm,
-            func_name,
-            args.join(", ")
-        ));
-
-        Ok((result, ir))
+        if ret_llvm == "void" {
+            // Void-returning calls must not be assigned to a named variable
+            ir.push_str(&format!(
+                "  call void @{}({})\n",
+                func_name,
+                args.join(", ")
+            ));
+            Ok(("void".to_string(), ir))
+        } else {
+            let result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call {} @{}({})\n",
+                result,
+                ret_llvm,
+                func_name,
+                args.join(", ")
+            ));
+            Ok((result, ir))
+        }
     }
 }
 

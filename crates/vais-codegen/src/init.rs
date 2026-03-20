@@ -60,6 +60,7 @@ impl CodeGenerator {
                 future_poll_fns: HashMap::new(),
                 async_poll_context: None,
                 alloc_tracker: Vec::new(),
+                temp_var_types: HashMap::with_capacity(64),
             },
             strings: StringPool {
                 constants: Vec::with_capacity(16),

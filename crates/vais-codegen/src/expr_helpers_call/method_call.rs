@@ -391,17 +391,26 @@ impl CodeGenerator {
             }
         };
 
-        let tmp = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = call {} @{}({})",
-            tmp,
-            ret_type,
-            full_method_name,
-            arg_vals.join(", ")
-        );
-
-        Ok((tmp, ir))
+        if ret_type == "void" {
+            write_ir!(
+                ir,
+                "  call void @{}({})",
+                full_method_name,
+                arg_vals.join(", ")
+            );
+            Ok(("void".to_string(), ir))
+        } else {
+            let tmp = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = call {} @{}({})",
+                tmp,
+                ret_type,
+                full_method_name,
+                arg_vals.join(", ")
+            );
+            Ok((tmp, ir))
+        }
     }
 
     /// Generate static method call expression
@@ -503,17 +512,26 @@ impl CodeGenerator {
             })
             .unwrap_or_else(|| "i64".to_string());
 
-        let tmp = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = call {} @{}({})",
-            tmp,
-            ret_type,
-            full_method_name,
-            arg_vals.join(", ")
-        );
-
-        Ok((tmp, ir))
+        if ret_type == "void" {
+            write_ir!(
+                ir,
+                "  call void @{}({})",
+                full_method_name,
+                arg_vals.join(", ")
+            );
+            Ok(("void".to_string(), ir))
+        } else {
+            let tmp = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = call {} @{}({})",
+                tmp,
+                ret_type,
+                full_method_name,
+                arg_vals.join(", ")
+            );
+            Ok((tmp, ir))
+        }
     }
 
     /// Generate str_to_ptr builtin call

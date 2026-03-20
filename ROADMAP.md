@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 141 완료, R1 Generic Monomorphization)
+> **현재 버전**: 0.1.0 (Phase 142 완료, R2 IR Type Tracking Phase 1)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-20 (Phase 141 완료)
+> **최종 업데이트**: 2026-03-21 (Phase 142 완료)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 10,400+ (E2E 2,372+, 단위 8,400+) |
+| 전체 테스트 | 10,400+ (E2E 2,383+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 58.8ms (850K lines/s) |
@@ -322,6 +322,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. E2E tests: generic monomorphization 정확성 검증 (Opus 직접) ✅ 2026-03-20
   변경: phase141_generic_mono.rs — 27개 E2E 테스트 (sizeof struct, type_size generic, specialization, method arg types, nested generics)
 - [x] 5. 검증: E2E 2330 passed + 40 pre-existing + 0 regression, Clippy 0 new warnings (Opus 직접) ✅ 2026-03-20
+진행률: 5/5 (100%)
+
+### Phase 142: R2 IR Type Tracking Phase 1 — temp_var_types 레지스트리 + void/width 수정
+
+> **목표**: codegen에서 모든 임시 변수의 LLVM 타입을 추적하는 인프라 구축. void call naming + integer width mismatch 수정.
+> **기대 효과**: IR postprocessor Fix 4b(void) + Fix 5(width) 제거, ~60-90건 수정 자동화
+> **설계**: FunctionContext에 temp_var_types: HashMap<String, ResolvedType> 추가 (Option B — 시그니처 변경 없이)
+
+모드: 자동진행
+- [x] 1. temp_var_types 레지스트리를 FunctionContext에 추가 (impl-sonnet) ✅ 2026-03-21
+- [x] 2. core generate_expr 경로에서 temp_var_types 채우기 (impl-sonnet) ✅ 2026-03-21
+- [x] 3. void call naming 수정: %var = call void 제거 (impl-sonnet) ✅ 2026-03-21
+- [x] 4. integer width mismatch 수정: store/binary/icmp (impl-sonnet) ✅ 2026-03-21
+- [x] 5. 검증: E2E 2341 passed + 40 pre-existing + 0 regression, Clippy 0 new warnings (Opus 직접) ✅ 2026-03-21
 진행률: 5/5 (100%)
 
 ---

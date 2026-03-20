@@ -89,6 +89,28 @@ pub(crate) struct FunctionContext {
     /// At function exit, all tracked pointers are freed automatically.
     /// Each entry is the LLVM register name holding the i8* pointer (e.g., "%tmp.5").
     pub(crate) alloc_tracker: Vec<String>,
+
+    /// Maps temporary variable names (e.g., "%5", "%t.3") to their resolved types.
+    /// Used by downstream passes to emit correct LLVM IR types instead of
+    /// falling back to i64 for every temporary. Populated by generate_expr paths
+    /// and consumed by store/binary/icmp/call emission to fix width mismatches
+    /// and void-call naming issues (R2 IR Type Tracking).
+    pub(crate) temp_var_types: HashMap<String, ResolvedType>,
+}
+
+impl FunctionContext {
+    /// Register the resolved type of a named temporary variable.
+    ///
+    /// Only call this for named temporaries (`%N` format). Constants and
+    /// literals do not need registration.
+    pub(crate) fn register_temp_type(&mut self, name: &str, ty: ResolvedType) {
+        self.temp_var_types.insert(name.to_string(), ty);
+    }
+
+    /// Look up the resolved type of a temporary variable.
+    pub(crate) fn get_temp_type(&self, name: &str) -> Option<&ResolvedType> {
+        self.temp_var_types.get(name)
+    }
 }
 
 /// Lambda, closure, and async function state
