@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773185686121,
+  "lastUpdate": 1773981790357,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32237,6 +32237,336 @@ window.BENCHMARK_DATA = {
             "name": "largescale_incremental/second_compile_10k",
             "value": 18725326,
             "range": "± 290522",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "bcf1be57e2ad6e010eee87f93d7946b9439779f3",
+          "message": "fix: resolve 8 root cause compiler issues (C1-C8) for VaisDB test compilation\n\nRoot cause fixes (C1-C8):\n- C1: TC pass order separation — register struct/enum/constant before impl/functions\n- C4: SSA→alloca auto-conversion for reassigned variables in loops\n- C5: Lexer EI post-process split — `EI` token → `E` + `I` keywords\n- C7: Compound assignment on fields — self.field += 1 store fix\n- C8: Function argument type erasure — pass struct/Vec args with correct types\n\nParser additions:\n- Hex/bin/oct literals (0xFF, 0b1010, 0o77)\n- `&mut expr` mutable reference syntax\n- `Type.Variant { ... }` qualified enum patterns\n- Struct destructure patterns in match\n- `[expr; count]` array repeat syntax\n- `describe`/`it` test DSL blocks\n- `N F name(...)` extern function declarations\n\nType checker improvements:\n- Vec<T> indexing returns element type T\n- Result<T,E> unwrap → T type inference\n- f32↔f64, Vec↔Slice, Bool↔integer implicit coercion\n- Enum/struct/constant lookup via proper namespace resolution\n- Removed 179 lines of hack code (H5-H10 builtin method fallbacks)\n\nCodegen improvements:\n- Ok/Err/Some enum variant constructor generation\n- String clone as identity (fat pointer copy)\n- Float width coercion (fpext f32↔f64)\n- Struct payload bitcast store/load for enum variants\n- Block expression type inference for struct arguments\n- Integer width coercion in function calls (i32↔i64)\n\nStdlib fixes:\n- `EI` → `E I` keyword split in file.vais, net.vais\n- `str` variable naming conflict avoidance\n- `mut` loop variable alloca pattern in bytebuffer.vais\n\nVerified: test_graph 37/45 fork pass (82%), TC errors 674→5 (-99%)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-20T13:21:36+09:00",
+          "tree_id": "7353e26d4975b73c3d5655d708b0480f063ae633",
+          "url": "https://github.com/vaislang/vais/commit/bcf1be57e2ad6e010eee87f93d7946b9439779f3"
+        },
+        "date": 1773981789599,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 4000,
+            "range": "± 83",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7082,
+            "range": "± 87",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8388,
+            "range": "± 308",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14703,
+            "range": "± 180",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19002,
+            "range": "± 876",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36165,
+            "range": "± 139",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32599,
+            "range": "± 123",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70112,
+            "range": "± 589",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 295601,
+            "range": "± 1570",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 449266,
+            "range": "± 1650",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 105692,
+            "range": "± 636",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 772634,
+            "range": "± 3443",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 148640,
+            "range": "± 2386",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 174002,
+            "range": "± 1883",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 180439,
+            "range": "± 633",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 223530,
+            "range": "± 831",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 515658,
+            "range": "± 9632",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 726731,
+            "range": "± 2891",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 385954,
+            "range": "± 2861",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1164893,
+            "range": "± 37792",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 53346,
+            "range": "± 525",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 261050,
+            "range": "± 2389",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 523784,
+            "range": "± 6349",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 2561077,
+            "range": "± 24170",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/1011lines",
+            "value": 4977010,
+            "range": "± 8437",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/5009lines",
+            "value": 48437250,
+            "range": "± 478676",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/10007lines",
+            "value": 157948056,
+            "range": "± 1494621",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/25005lines",
+            "value": 848298488,
+            "range": "± 5013675",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_full_pipeline/compile/50004lines",
+            "value": 3228029718,
+            "range": "± 33057871",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/1011lines",
+            "value": 175891,
+            "range": "± 1089",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/5009lines",
+            "value": 889150,
+            "range": "± 6977",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/10007lines",
+            "value": 1746869,
+            "range": "± 8234",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/25005lines",
+            "value": 4308047,
+            "range": "± 29623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_lexer/tokenize/50004lines",
+            "value": 8569785,
+            "range": "± 44780",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/1011lines",
+            "value": 787010,
+            "range": "± 1044",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/5009lines",
+            "value": 3875075,
+            "range": "± 6683",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/10007lines",
+            "value": 7734518,
+            "range": "± 93884",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/25005lines",
+            "value": 20196692,
+            "range": "± 320542",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_parser/parse/50004lines",
+            "value": 42793082,
+            "range": "± 392789",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/1011lines",
+            "value": 3234691,
+            "range": "± 6994",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/5009lines",
+            "value": 39808562,
+            "range": "± 171476",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/10007lines",
+            "value": 139744627,
+            "range": "± 797868",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/25005lines",
+            "value": 792676055,
+            "range": "± 2677914",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_typechecker/check/50004lines",
+            "value": 3107715747,
+            "range": "± 13860086",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/1011lines",
+            "value": 835564,
+            "range": "± 1063",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/5009lines",
+            "value": 3532002,
+            "range": "± 16518",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/10007lines",
+            "value": 7135656,
+            "range": "± 93856",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/25005lines",
+            "value": 19366664,
+            "range": "± 434230",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_codegen/generate/50004lines",
+            "value": 43352848,
+            "range": "± 701301",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_incremental/full_10k",
+            "value": 156128998,
+            "range": "± 709077",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "largescale_incremental/second_compile_10k",
+            "value": 156032466,
+            "range": "± 920395",
             "unit": "ns/iter"
           }
         ]
