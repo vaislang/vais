@@ -454,6 +454,11 @@ impl CodeGenerator {
             value
         };
 
+        // Register the Try result type for downstream tracking
+        if let Some(ref try_ty) = try_unwrap_type {
+            self.fn_ctx.register_temp_type(&final_value, try_ty.clone());
+        }
+
         write_ir!(ir, "  br label %{}\n", merge_label);
 
         // Merge block
@@ -568,8 +573,12 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, unwrap_llvm);
                 let loaded = self.next_temp(counter);
                 write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, cast_ptr);
+                // Register the unwrapped result type
+                self.fn_ctx.register_temp_type(&loaded, unwrap_ty.clone());
                 return Ok((loaded, ir));
             }
+            // Register the unwrapped result type for non-cast path
+            self.fn_ctx.register_temp_type(&value, unwrap_ty.clone());
         }
 
         Ok((value, ir))

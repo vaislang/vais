@@ -37,6 +37,10 @@ pub(crate) struct TypeRegistry {
     /// Default parameter expressions: `function_name -> Vec<Option<Box<Spanned<Expr>>>>`
     /// Each element corresponds to a parameter; Some(expr) means it has a default value.
     pub(crate) default_params: HashMap<String, Vec<Option<Box<vais_ast::Spanned<vais_ast::Expr>>>>>,
+    /// Drop trait registry: type_name -> drop function IR name.
+    /// Populated when `X Type: Drop { F drop(&self) { ... } }` is registered.
+    /// Used at scope exit to emit automatic drop calls for local variables.
+    pub(crate) drop_registry: HashMap<String, String>,
 }
 
 /// Generic type system state — templates, instantiations, substitutions

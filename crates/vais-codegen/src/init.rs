@@ -38,6 +38,7 @@ impl CodeGenerator {
                 resolved_function_sigs: HashMap::with_capacity(64),
                 type_aliases: HashMap::with_capacity(16),
                 default_params: HashMap::new(),
+                drop_registry: HashMap::new(),
             },
             generics: GenericState {
                 struct_defs: HashMap::new(),

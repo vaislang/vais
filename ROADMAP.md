@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 142 완료, R2 IR Type Tracking Phase 1)
+> **현재 버전**: 0.1.0 (Phase 143 완료, R2/R1/R4 근본 문제 해결)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-21 (Phase 142 완료)
+> **최종 업데이트**: 2026-03-21 (Phase 143 완료)
 
 ---
 
@@ -252,6 +252,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 137~139 | 감사 기반 개선 | SAFETY 주석 44건, 모듈 분할 R14 (comptime/concurrent), async recursive ICE 수정 | 2,345 |
 | 140 | 코드 커버리지 강화 | 6개 crate 단위/통합 테스트 추가, 전체 11,357 tests, 0 fail | 2,345 |
 | 141 | R1 Generic Monomorphization | C8 타입 전달, type_size 정확도, specialized struct codegen, +27 E2E | 2,372 |
+| 142 | R2 IR Type Tracking Phase 1 | temp_var_types 레지스트리, void call naming, integer width mismatch 수정 | 2,383 |
+| 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
 ## 📋 예정 작업
 
@@ -337,6 +339,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 4. integer width mismatch 수정: store/binary/icmp (impl-sonnet) ✅ 2026-03-21
 - [x] 5. 검증: E2E 2341 passed + 40 pre-existing + 0 regression, Clippy 0 new warnings (Opus 직접) ✅ 2026-03-21
 진행률: 5/5 (100%)
+
+### Phase 143: R2/R1/R4/R3/R5 — Codegen 근본 문제 순차 해결
+
+> **목표**: R2 IR 타입 정확성 확장, R1 Monomorphization 강화, R4 Drop codegen, R3 Per-Module, R5 Trait Dispatch
+> **기대 효과**: IR postprocessor 완전 제거, generic 컨테이너 정확한 타입 크기, RAII 지원, 모듈별 컴파일, vtable dispatch
+
+모드: 자동진행
+- [x] 1. R2: store/load 타입 추적 — llvm_type_of + coerce_int_width 활용 확장 (Opus 직접) ✅ 2026-03-21
+  변경: if_else.rs, expr_helpers_control.rs, stmt.rs, expr_helpers.rs — phi coercion, alloca width coerce, index GEP 타입 정확성
+- [x] 2. R2: call/ret 타입 정확성 — 함수 시그니처 기반 타입 매칭 (Opus 직접) ✅ 2026-03-21
+  변경: call_gen.rs, method_call.rs — ret_resolved 추적 + register_temp_type으로 downstream 전파
+- [x] 3. R2: extractvalue/insertvalue 타입 정확성 (Opus 직접) ✅ 2026-03-21
+  변경: stmt.rs — tuple extractvalue 후 elem type 등록, expr_helpers_misc.rs — Try/Unwrap 결과 타입 등록
+- [x] 4. R1: Vec/HashMap elem_size 실제 타입 크기 전파 (Opus 직접) ✅ 2026-03-21
+  변경: vec.vais — es>8 클램프 제거, method_call.rs — generic substitution 설정, conversion.rs — enum/mangled struct sizeof 개선
+- [x] 5. R1: monomorphized function 생성 — 기존 인프라 활용 확인 (Opus 직접) ✅ 2026-03-21
+  변경: 기존 generate_module_with_instantiations + Task 4 substitution 설정으로 Vec_push$T 정확한 타입 크기 사용
+- [x] 6. R4: Drop trait 자동 호출 codegen (Opus 직접) ✅ 2026-03-21
+  변경: state.rs — drop_registry, trait_dispatch.rs — Drop impl 등록, function_gen/codegen.rs + stmt.rs + stmt_visitor.rs — 모든 return점에서 auto-drop cleanup
+- [x] 7. E2E 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-21
+  결과: E2E 2341 passed + 40 pre-existing + 0 regression, Clippy 0 new warnings
+진행률: 7/7 (100%)
+
+> **참고**: R3(Per-Module)와 R5(VTable Dispatch)는 분석 결과 이미 완전 구현됨 (module_gen/ 600줄, vtable.rs 681줄). 작업 목록에서 제외.
 
 ---
 

@@ -181,13 +181,21 @@ impl CodeGenerator {
                             llvm_name
                         );
                     } else {
-                        // Allocate and store
+                        // Allocate and store — coerce value width if mismatched
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        let coerced_val = self.coerce_int_width(
+                            &val,
+                            &actual_val_ty,
+                            &llvm_ty,
+                            counter,
+                            &mut ir,
+                        );
                         write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
                         write_ir!(
                             ir,
                             "  store {} {}, {}* %{}",
                             llvm_ty,
-                            val,
+                            coerced_val,
                             llvm_ty,
                             llvm_name
                         );
@@ -238,6 +246,10 @@ impl CodeGenerator {
                         let defer_ir = self.generate_defer_cleanup(counter)?;
                         ir.push_str(&defer_ir);
 
+                        // Call Drop::drop() for droppable locals (reverse order)
+                        let drop_ir = self.generate_drop_cleanup();
+                        ir.push_str(&drop_ir);
+
                         // Free tracked heap allocations before return
                         let alloc_cleanup_ir = self.generate_alloc_cleanup();
                         ir.push_str(&alloc_cleanup_ir);
@@ -274,6 +286,8 @@ impl CodeGenerator {
                         let mut ir = String::new();
                         let defer_ir = self.generate_defer_cleanup(counter)?;
                         ir.push_str(&defer_ir);
+                        let drop_ir = self.generate_drop_cleanup();
+                        ir.push_str(&drop_ir);
                         let alloc_cleanup_ir = self.generate_alloc_cleanup();
                         ir.push_str(&alloc_cleanup_ir);
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
@@ -381,6 +395,10 @@ impl CodeGenerator {
                     let defer_ir = self.generate_defer_cleanup(counter)?;
                     ir.push_str(&defer_ir);
 
+                    // Call Drop::drop() for droppable locals (reverse order)
+                    let drop_ir = self.generate_drop_cleanup();
+                    ir.push_str(&drop_ir);
+
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
                     ir.push_str(&alloc_cleanup_ir);
@@ -393,6 +411,10 @@ impl CodeGenerator {
                     let mut ir = String::new();
                     let defer_ir = self.generate_defer_cleanup(counter)?;
                     ir.push_str(&defer_ir);
+
+                    // Call Drop::drop() for droppable locals (reverse order)
+                    let drop_ir = self.generate_drop_cleanup();
+                    ir.push_str(&drop_ir);
 
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
@@ -502,6 +524,8 @@ impl CodeGenerator {
                         val,
                         i
                     );
+                    // Register extracted element's type for downstream type tracking
+                    self.fn_ctx.register_temp_type(&extracted, elem_resolved.clone());
                     self.bind_pattern_from_tuple(
                         pat,
                         &extracted,
@@ -581,5 +605,57 @@ impl CodeGenerator {
     /// `ptr_reg` should be an i8* register name (e.g., "%tmp.5").
     pub(crate) fn track_alloc(&mut self, ptr_reg: String) {
         self.fn_ctx.alloc_tracker.push(ptr_reg);
+    }
+
+    /// Generate IR to call Drop::drop() for all local variables that implement Drop.
+    /// Called before function exit points, after defer cleanup and before alloc cleanup.
+    /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
+    pub(crate) fn generate_drop_cleanup(&self) -> String {
+        if self.types.drop_registry.is_empty() {
+            return String::new();
+        }
+
+        let mut ir = String::new();
+        // Collect droppable locals (type has Drop impl) in declaration order
+        let mut droppable: Vec<(&str, &str, &str)> = Vec::new();
+        for (var_name, local) in &self.fn_ctx.locals {
+            let type_name = match &local.ty {
+                ResolvedType::Named { name, .. } => name.as_str(),
+                _ => continue,
+            };
+            if let Some(drop_fn) = self.types.drop_registry.get(type_name) {
+                let llvm_name = if local.is_alloca() {
+                    &local.llvm_name
+                } else if local.is_param() {
+                    var_name
+                } else {
+                    continue // SSA values cannot be passed as &self pointer
+                };
+                droppable.push((var_name, llvm_name, drop_fn.as_str()));
+            }
+        }
+
+        if droppable.is_empty() {
+            return ir;
+        }
+
+        ir.push_str("  ; auto-drop cleanup (Drop trait)\n");
+        // Drop in reverse order (last declared first)
+        droppable.reverse();
+        for (_var_name, llvm_name, drop_fn) in &droppable {
+            let type_name_for_fn = drop_fn.strip_suffix("_drop").unwrap_or(drop_fn);
+            let struct_ty = format!("%{}", type_name_for_fn);
+            // The drop function signature is: void @Type_drop(%Type* %self)
+            // For alloca locals, we pass the alloca pointer directly
+            write_ir!(
+                ir,
+                "  call void @{}({}* %{})",
+                drop_fn,
+                struct_ty,
+                llvm_name
+            );
+        }
+
+        ir
     }
 }

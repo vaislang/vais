@@ -82,7 +82,7 @@ X Vec<T> {
     F with_capacity(capacity: i64) -> Vec<T> {
         es := type_size()  # Returns sizeof(T) — resolved at monomorphization
         # For backward compatibility: if sizeof returns 0 (e.g., Unit), default to 8
-        elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+        elem_sz := I es <= 0 { 8 } E { es }
         data := malloc(capacity * elem_sz)
         Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
     }

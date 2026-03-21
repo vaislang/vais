@@ -241,19 +241,18 @@ impl CodeGenerator {
             }
         }
 
-        let ret_ty = fn_info
+        // Resolve function return type from signature
+        let ret_resolved = fn_info
             .as_ref()
-            .map(|f| self.type_to_llvm(&f.signature.ret))
+            .map(|f| f.signature.ret.clone())
             .or_else(|| {
-                // Fallback: check resolved_function_sigs from type checker
-                // This handles methods from imported modules (e.g., TestSuite_new)
-                // that weren't registered in self.types.functions during codegen init.
                 self.types
                     .resolved_function_sigs
                     .get(&fn_name)
-                    .map(|sig| self.type_to_llvm(&sig.ret))
+                    .map(|sig| sig.ret.clone())
             })
-            .unwrap_or_else(|| "i64".to_string());
+            .unwrap_or(ResolvedType::I64);
+        let ret_ty = self.type_to_llvm(&ret_resolved);
 
         let actual_fn_name = fn_info
             .as_ref()
@@ -262,7 +261,7 @@ impl CodeGenerator {
             .to_string(); // single clone at end instead of two branches
 
         // Generate the appropriate call based on function type
-        self.generate_call_ir(
+        let result = self.generate_call_ir(
             &fn_name,
             &actual_fn_name,
             is_indirect,
@@ -271,7 +270,14 @@ impl CodeGenerator {
             counter,
             span,
             &mut ir,
-        )
+        )?;
+
+        // Register the call result's resolved type for downstream type tracking
+        if result.0.starts_with('%') {
+            self.fn_ctx.register_temp_type(&result.0, ret_resolved);
+        }
+
+        Ok(result)
     }
 
     /// Generate the IR for a function call

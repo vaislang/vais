@@ -242,6 +242,18 @@ impl CodeGenerator {
             let resolved = self.resolve_struct_name(name);
             let base = format!("{}_{}", resolved, method_name);
             if !generics.is_empty() {
+                // Set generic substitutions so that compute_sizeof/type_size resolve T correctly
+                // when processing method arguments for generic containers like Vec<T>
+                if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
+                    for (param, concrete) in struct_def.generics.iter().zip(generics.iter()) {
+                        if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                            self.generics
+                                .substitutions
+                                .entry(param.name.node.clone())
+                                .or_insert_with(|| concrete.clone());
+                        }
+                    }
+                }
                 // Try mangled specialized name (Vec_push$GraphNode format)
                 let mangled = vais_types::mangle_name(&base, generics);
                 if self.types.functions.contains_key(&mangled) {
@@ -345,13 +357,13 @@ impl CodeGenerator {
         // method name for a type and the codegen-level resolution hasn't registered
         // the correct mangled name. The type checker is responsible for detecting
         // ambiguous trait method dispatch (E039); here we emit a best-effort fallback.
-        let ret_type = {
+        let (ret_type, ret_resolved) = {
             let fn_info = self.types.functions.get(&full_method_name);
             if let Some(info) = fn_info {
-                self.type_to_llvm(&info.signature.ret)
+                (self.type_to_llvm(&info.signature.ret), info.signature.ret.clone())
             } else if let Some(sig) = self.types.resolved_function_sigs.get(&full_method_name) {
                 // Fallback: use type checker's resolved signature
-                self.type_to_llvm(&sig.ret)
+                (self.type_to_llvm(&sig.ret), sig.ret.clone())
             } else {
                 // Fallback: check if any trait impl provides this method for the receiver type
                 if let ResolvedType::Named { name, .. } = &recv_type {
@@ -387,7 +399,7 @@ impl CodeGenerator {
                         backend: String::from("text"),
                     });
                 }
-                "i64".to_string()
+                ("i64".to_string(), ResolvedType::I64)
             }
         };
 
@@ -409,6 +421,8 @@ impl CodeGenerator {
                 full_method_name,
                 arg_vals.join(", ")
             );
+            // Register the call result's resolved type for downstream type tracking
+            self.fn_ctx.register_temp_type(&tmp, ret_resolved);
             Ok((tmp, ir))
         }
     }

@@ -166,6 +166,10 @@ impl CodeGenerator {
                 let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                 ir.push_str(&defer_ir);
 
+                // Call Drop::drop() for droppable locals (reverse order)
+                let drop_ir = self.generate_drop_cleanup();
+                ir.push_str(&drop_ir);
+
                 // Free tracked heap allocations before return
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
@@ -224,6 +228,10 @@ impl CodeGenerator {
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                     ir.push_str(&defer_ir);
+
+                    // Call Drop::drop() for droppable locals (reverse order)
+                    let drop_ir = self.generate_drop_cleanup();
+                    ir.push_str(&drop_ir);
 
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
@@ -425,6 +433,10 @@ impl CodeGenerator {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
 
+                // Call Drop::drop() for droppable locals (reverse order)
+                let drop_ir = self.generate_drop_cleanup();
+                ir.push_str(&drop_ir);
+
                 // Free tracked heap allocations before return
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
@@ -474,6 +486,10 @@ impl CodeGenerator {
                     // Block already has a terminator, no need for ret
                     // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
+                    // Call Drop::drop() for droppable locals (reverse order)
+                    let drop_ir = self.generate_drop_cleanup();
+                    ir.push_str(&drop_ir);
+
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
                     ir.push_str(&alloc_cleanup_ir);

@@ -797,7 +797,25 @@ impl CodeGenerator {
                         }
                     }
                 }
-                8 // enum (tag + payload) or unknown named type
+                // Try enums: { i8 tag, i64 payload } = 9 but typically padded to 16
+                if self.types.enums.contains_key(name) {
+                    return 16; // { i8, i64 } with alignment padding
+                }
+                // Try with generic-mangled names in generated_structs
+                if !generics.is_empty() {
+                    let mangled = self.mangle_struct_name(name, generics);
+                    if self.generics.generated_structs.contains_key(&mangled) {
+                        // Generated but not in types.structs — estimate from fields
+                        if let Some(struct_def) = self.generics.struct_defs.get(name) {
+                            return struct_def
+                                .fields
+                                .iter()
+                                .map(|f| self.compute_sizeof(&self.ast_type_to_resolved(&f.ty.node)))
+                                .sum();
+                        }
+                    }
+                }
+                8 // unknown named type fallback
             }
             ResolvedType::Generic(param) => {
                 // Check if we have a substitution for this generic parameter

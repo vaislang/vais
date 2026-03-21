@@ -846,9 +846,17 @@ impl CodeGenerator {
             let (idx_val, idx_ir) = self.generate_expr(idx_expr, counter)?;
             ir.push_str(&arr_ir);
             ir.push_str(&idx_ir);
+            // Use inferred element type instead of hardcoded i64
+            let arr_type = self.infer_expr_type(arr_expr);
+            let elem_llvm = match &arr_type {
+                ResolvedType::Array(inner) | ResolvedType::Pointer(inner) => {
+                    self.type_to_llvm(inner)
+                }
+                _ => self.llvm_type_of(&arr_val),
+            };
             let elem_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = getelementptr i64, i64* {}, i64 {}", elem_ptr, arr_val, idx_val);
-            write_ir!(ir, "  store i64 {}, i64* {}", result, elem_ptr);
+            write_ir!(ir, "  {} = getelementptr {}, {}* {}, i64 {}", elem_ptr, elem_llvm, elem_llvm, arr_val, idx_val);
+            write_ir!(ir, "  store {} {}, {}* {}", elem_llvm, result, elem_llvm, elem_ptr);
         }
 
         Ok((result, ir))

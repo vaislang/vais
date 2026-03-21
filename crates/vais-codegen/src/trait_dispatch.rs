@@ -98,13 +98,29 @@ impl CodeGenerator {
         self.register_trait(trait_def);
     }
 
-    /// Register a trait implementation for vtable generation
+    /// Register a trait implementation for vtable generation.
+    /// If the trait is "Drop", also registers the drop function in drop_registry
+    /// so that scope-exit codegen can automatically call it.
     pub fn register_trait_impl(
         &mut self,
         impl_type: &str,
         trait_name: &str,
         method_impls: HashMap<String, String>,
     ) {
+        // If this is a Drop trait impl, register the drop function for auto-call at scope exit
+        if trait_name == "Drop" {
+            if let Some(drop_fn_name) = method_impls.get("drop") {
+                self.types
+                    .drop_registry
+                    .insert(impl_type.to_string(), drop_fn_name.clone());
+            } else {
+                // Convention: Type_drop is the mangled name for Drop.drop()
+                let drop_fn_name = format!("{}_drop", impl_type);
+                self.types
+                    .drop_registry
+                    .insert(impl_type.to_string(), drop_fn_name);
+            }
+        }
         self.types.trait_impl_methods.insert(
             (impl_type.to_string(), trait_name.to_string()),
             method_impls,

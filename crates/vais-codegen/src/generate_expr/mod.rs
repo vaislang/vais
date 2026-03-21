@@ -632,11 +632,12 @@ impl CodeGenerator {
             }
         };
 
-        // Register the resolved type for named temporaries (%tN format).
-        // This enables downstream passes (store, binary, icmp, call) to emit
+        // Register the resolved type for named temporaries.
+        // This enables downstream passes (store, binary, icmp, call, phi) to emit
         // correct LLVM IR types instead of defaulting to i64.
+        // Covers %tN temporaries, %name.N locals, and other %-prefixed registers.
         if let Ok((ref val, _)) = result {
-            if val.starts_with("%t") {
+            if val.starts_with('%') {
                 self.fn_ctx.register_temp_type(val, inferred_type);
             }
         }

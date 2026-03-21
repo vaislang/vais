@@ -65,6 +65,10 @@ impl CodeGenerator {
                     );
 
                     loaded
+                } else if !then_terminated {
+                    // Coerce integer width if the value type differs from the phi type
+                    let actual_ty = self.llvm_type_of(&then_val);
+                    self.coerce_int_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir)
                 } else {
                     then_val // move: not used after
                 };
@@ -108,6 +112,10 @@ impl CodeGenerator {
                     );
 
                     loaded
+                } else if !else_terminated && has_else {
+                    // Coerce integer width if the value type differs from the phi type
+                    let actual_ty = self.llvm_type_of(&else_val);
+                    self.coerce_int_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir)
                 } else {
                     else_val // move: not used after
                 };

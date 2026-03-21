@@ -339,6 +339,8 @@ impl CodeGenerator {
                 // Cleanup after expression evaluation, before ret
                 let defer_ir = self.generate_defer_cleanup(counter)?;
                 ir.push_str(&defer_ir);
+                let drop_ir = self.generate_drop_cleanup();
+                ir.push_str(&drop_ir);
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
 
@@ -360,6 +362,8 @@ impl CodeGenerator {
             } else {
                 let defer_ir = self.generate_defer_cleanup(counter)?;
                 ir.push_str(&defer_ir);
+                let drop_ir = self.generate_drop_cleanup();
+                ir.push_str(&drop_ir);
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
 
@@ -404,6 +408,10 @@ impl CodeGenerator {
             let defer_ir = self.generate_defer_cleanup(counter)?;
             ir.push_str(&defer_ir);
 
+            // Call Drop::drop() for droppable locals (reverse order)
+            let drop_ir = self.generate_drop_cleanup();
+            ir.push_str(&drop_ir);
+
             // Free tracked heap allocations before return
             let alloc_cleanup_ir = self.generate_alloc_cleanup();
             ir.push_str(&alloc_cleanup_ir);
@@ -413,6 +421,10 @@ impl CodeGenerator {
             // Execute deferred expressions before return (LIFO order)
             let defer_ir = self.generate_defer_cleanup(counter)?;
             ir.push_str(&defer_ir);
+
+            // Call Drop::drop() for droppable locals (reverse order)
+            let drop_ir = self.generate_drop_cleanup();
+            ir.push_str(&drop_ir);
 
             // Free tracked heap allocations before return
             let alloc_cleanup_ir = self.generate_alloc_cleanup();
