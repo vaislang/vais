@@ -15,12 +15,23 @@ impl CodeGenerator {
             if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
                 return self.generate_enum_variant_constructor(&enum_name, tag, args, counter);
             }
-            // Hardcoded Result/Option variant constructors
+            // Fallback Result/Option variant constructors
             // (in case the enum definitions aren't registered from std)
+            // Look up actual tag from enum registry; hardcode default values
+            // based on standard definitions: Result { Ok=0, Err=1 }, Option { None=0, Some=1 }
             match name.as_str() {
-                "Ok" => return self.generate_enum_variant_constructor("Result", 0, args, counter),
-                "Err" => return self.generate_enum_variant_constructor("Result", 1, args, counter),
-                "Some" => return self.generate_enum_variant_constructor("Option", 0, args, counter),
+                "Ok" => {
+                    let tag = self.get_enum_variant_tag("Ok");
+                    return self.generate_enum_variant_constructor("Result", tag, args, counter);
+                }
+                "Err" => {
+                    let tag = self.get_enum_variant_tag("Err");
+                    return self.generate_enum_variant_constructor("Result", tag, args, counter);
+                }
+                "Some" => {
+                    let tag = self.get_enum_variant_tag("Some");
+                    return self.generate_enum_variant_constructor("Option", tag, args, counter);
+                }
                 _ => {}
             }
 

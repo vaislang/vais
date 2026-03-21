@@ -18,9 +18,18 @@ impl TypeChecker {
 
                 if let Some(else_branch) = else_ {
                     let else_type = self.check_if_else(else_branch)?;
-                    // If branch types don't unify, treat as statement (Unit type)
+                    // If branch types don't unify:
+                    // - If both branches produce values (non-Unit), report a mismatch error
+                    // - Otherwise, treat as statement (Unit type)
                     if self.unify(&then_type, &else_type).is_ok() {
                         return Ok(then_type);
+                    }
+                    if then_type != ResolvedType::Unit && else_type != ResolvedType::Unit {
+                        return Err(crate::types::TypeError::Mismatch {
+                            expected: then_type.to_string(),
+                            found: else_type.to_string(),
+                            span: None,
+                        });
                     }
                     return Ok(ResolvedType::Unit);
                 }
@@ -90,9 +99,18 @@ impl TypeChecker {
                         Ok(t) => t,
                         Err(e) => return Some(Err(e)),
                     };
-                    // If branch types don't unify, treat if-else as statement (Unit type)
+                    // If branch types don't unify:
+                    // - If both branches produce values (non-Unit), report a mismatch error
+                    // - Otherwise, treat as statement (Unit type)
                     if self.unify(&then_type, &else_type).is_ok() {
                         Some(Ok(then_type))
+                    } else if then_type != ResolvedType::Unit && else_type != ResolvedType::Unit {
+                        // Both branches produce values but types don't match — error
+                        Some(Err(crate::types::TypeError::Mismatch {
+                            expected: then_type.to_string(),
+                            found: else_type.to_string(),
+                            span: Some(expr.span),
+                        }))
                     } else {
                         Some(Ok(ResolvedType::Unit))
                     }

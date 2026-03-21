@@ -202,9 +202,9 @@ impl TypeChecker {
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
-            // Allow str ↔ i64 (str is a fat pointer, i64 at IR level)
-            (ResolvedType::Str, ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Str) => Ok(()),
+            // NOTE: Str ↔ I64 coercion removed in Phase 144.
+            // Str is { i8*, i64 } fat pointer at IR level — not an i64.
+            // Codegen handles str→i64 and i64→str conversions explicitly where needed.
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
             | (ResolvedType::Unit, ResolvedType::Result(_, _))
@@ -384,6 +384,8 @@ impl TypeChecker {
     }
 
     /// Check if type is an integer type
+    /// NOTE: Bool is intentionally excluded — it is a distinct type (i1) and should not
+    /// implicitly coerce to/from integers. Codegen handles bool↔i64 conversion explicitly.
     #[inline]
     pub(crate) fn is_integer_type(ty: &ResolvedType) -> bool {
         matches!(
@@ -396,7 +398,6 @@ impl TypeChecker {
                 | ResolvedType::U16
                 | ResolvedType::U32
                 | ResolvedType::U64
-                | ResolvedType::Bool
         )
     }
 

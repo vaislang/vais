@@ -119,6 +119,30 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
+        // Explicit return type with empty/void body: detect missing return value.
+        // If the function has an explicit non-Unit return type and the body is Unit
+        // (empty block or void expression), this is almost certainly a bug.
+        if !ret_type_inferred
+            && ret_type != ResolvedType::Unit
+            && body_type == ResolvedType::Unit
+        {
+            // Allow special case: body that explicitly returns via R statement
+            // (check_block returns Unit for blocks ending with R, but the return was checked)
+            let has_explicit_return = match &f.body {
+                FunctionBody::Block(stmts) => stmts.iter().any(|s| {
+                    matches!(s.node, Stmt::Return(_))
+                }),
+                FunctionBody::Expr(_) => false,
+            };
+            if !has_explicit_return {
+                return Err(TypeError::Mismatch {
+                    expected: ret_type.to_string(),
+                    found: "()".to_string(),
+                    span: Some(f.name.span),
+                });
+            }
+        }
+
         // Check return type (with auto-deref: &T unifies with T)
         let expected_ret = self.current_fn_ret.clone().expect(
             "Internal compiler error: current_fn_ret should be set during function checking",

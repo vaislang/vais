@@ -16,11 +16,22 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         // Check if this is an enum variant constructor or builtin
         if let Expr::Ident(name) = &func.node {
-            // Hardcoded Result/Option variant constructors (Ok, Err, Some)
+            // Result/Option variant constructors: look up actual tag from enum registry,
+            // falling back to hardcoded values if not registered.
+            // NOTE: Tag must match the enum definition order (e.g., E Option { None=0, Some=1 })
             match name.as_str() {
-                "Ok" => return self.generate_enum_variant_constructor("Result", 0, args, counter),
-                "Err" => return self.generate_enum_variant_constructor("Result", 1, args, counter),
-                "Some" => return self.generate_enum_variant_constructor("Option", 0, args, counter),
+                "Ok" => {
+                    let tag = self.get_enum_variant_tag("Ok");
+                    return self.generate_enum_variant_constructor("Result", tag, args, counter);
+                }
+                "Err" => {
+                    let tag = self.get_enum_variant_tag("Err");
+                    return self.generate_enum_variant_constructor("Result", tag, args, counter);
+                }
+                "Some" => {
+                    let tag = self.get_enum_variant_tag("Some");
+                    return self.generate_enum_variant_constructor("Option", tag, args, counter);
+                }
                 _ => {}
             }
 
@@ -617,33 +628,11 @@ impl CodeGenerator {
                 }
             }
 
-            // Insert integer conversion if needed (trunc for narrowing, sext for widening)
-            if let Some(param_type) = &param_ty {
-                let src_bits = self.get_integer_bits_from_val(&val);
-                let dst_bits = self.get_integer_bits(param_type);
-
-                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
-                    let conv_tmp = self.next_temp(counter);
-                    let src_ty = format!("i{}", src_bits);
-                    let dst_ty = format!("i{}", dst_bits);
-
-                    if src_bits > dst_bits {
-                        // Truncate
-                        write_ir!(
-                            ir,
-                            "  {} = trunc {} {} to {}",
-                            conv_tmp,
-                            src_ty,
-                            val,
-                            dst_ty
-                        );
-                    } else {
-                        // Sign extend
-                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
-                    }
-                    val = conv_tmp;
-                }
-            }
+            // NOTE: Integer width coercion is already handled above (lines 496-511)
+            // using the type system (infer_expr_type + get_integer_bits).
+            // A duplicate conversion was removed here in Phase 144 because
+            // get_integer_bits_from_val() incorrectly assumed all %vars are i64,
+            // causing double trunc (e.g., trunc i64 %t0 to i32 when %t0 is already i32).
 
             // Convert i64 to str fat pointer { i8*, i64 } when parameter expects str but arg is i64
             if let Some(ref param_type) = param_ty {

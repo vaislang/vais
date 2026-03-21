@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 143 완료, R2/R1/R4 근본 문제 해결)
+> **현재 버전**: 0.1.0 (Phase 144 완료, Pre-existing 39건 해결)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-21 (Phase 143 완료)
+> **최종 업데이트**: 2026-03-21 (Phase 144 완료)
 
 ---
 
@@ -97,7 +97,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | unsafe SAFETY 주석 | 44/44 문서화 (100%) | ✅ |
 | 의존성 버전 | 전부 최신 안정 버전 | ✅ |
 | 보안 (입력 검증/인젝션/시크릿) | 이슈 없음 | ✅ |
-| pre-existing 테스트 실패 | 0건 (Phase 139에서 해결) | ✅ |
+| pre-existing 테스트 실패 | E2E 1건, 단위 5건 (Phase 144에서 39건 해결) | ⚠️ |
 
 ### 릴리즈 상태: v0.1.0 (프리릴리스)
 
@@ -363,6 +363,25 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 진행률: 7/7 (100%)
 
 > **참고**: R3(Per-Module)와 R5(VTable Dispatch)는 분석 결과 이미 완전 구현됨 (module_gen/ 600줄, vtable.rs 681줄). 작업 목록에서 제외.
+
+### Phase 144: Pre-existing E2E 실패 39건 해결 — TC 강화 + R2 잔여 + Option 수정 ✅
+
+> **결과**: E2E 2380 passed (+35), 1 failed (pre-existing bytebuffer), 2 ignored
+> **단위 테스트**: 343 passed (+10), 5 failed (pre-existing float/complex type)
+
+모드: 자동진행
+- [x] 1. TC 타입 불일치 검출 강화 — Bool/Str coercion 제거 + if-branch mismatch + empty-body check
+- [x] 2. R2 잔여 IR 타입 오류 수정 — 중복 integer width coercion 제거 (7/8 해결, 1건 pre-existing)
+- [x] 3. Option codegen 수정 — Some variant tag 0→1 (동적 lookup으로 전환)
+- [x] 4. E2E 검증 + ROADMAP 업데이트
+진행률: 4/4 (100%)
+
+**변경 파일**:
+- `vais-types/src/inference/unification.rs` — Bool 제거 from is_integer_type(), Str↔I64 coercion 제거
+- `vais-types/src/checker_expr/control_flow.rs` — if-branch type mismatch 에러 (both non-Unit)
+- `vais-types/src/checker_fn.rs` — explicit return type with empty body → mismatch 에러
+- `vais-codegen/src/generate_expr_call.rs` — 중복 trunc 제거, Some tag 동적 lookup
+- `vais-codegen/src/expr_helpers_call/call_gen.rs` — Some/Ok/Err tag 동적 lookup
 
 ---
 
