@@ -62,6 +62,26 @@ impl CodeGenerator {
         }
     }
 
+    /// Emit global variable declarations.
+    pub(crate) fn emit_global_vars(&self, ir: &mut String) {
+        if self.types.globals.is_empty() {
+            return;
+        }
+        for (name, info) in &self.types.globals {
+            let llvm_ty = self.type_to_llvm(&info._ty);
+            // Evaluate constant initializer to a literal value
+            let init_val = match &info._value.node {
+                vais_ast::Expr::Int(n) => n.to_string(),
+                vais_ast::Expr::Bool(b) => if *b { "1".to_string() } else { "0".to_string() },
+                vais_ast::Expr::Float(f) => format!("{}", f),
+                _ => "0".to_string(), // Default zero-initialize for complex expressions
+            };
+            let linkage = if info._is_mutable { "global" } else { "constant" };
+            write_ir!(ir, "@{} = {} {} {}", name, linkage, llvm_ty, init_val);
+        }
+        ir.push('\n');
+    }
+
     /// Emit body IR, lambda functions, and vtable globals.
     pub(crate) fn emit_body_lambdas_vtables(&self, ir: &mut String, body_ir: &str) {
         ir.push_str(body_ir);

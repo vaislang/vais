@@ -149,6 +149,34 @@ impl CodeGenerator {
                     // Without concrete type args, we'd emit undefined symbols.
                     // Use generate_module_with_instantiations() for generic codegen.
                     if !f.generics.is_empty() {
+                        // Fallback: if the generic function IS called from within this module
+                        // but TC produced no instantiations (e.g., T cannot be inferred from
+                        // args because it only appears in a struct field that TC can't track),
+                        // emit a fallback version treating all type params as i64.
+                        if instantiations::is_function_called_in_module(&f.name.node, module) {
+                            let param_names: Vec<String> =
+                                f.generics.iter().map(|g| g.name.node.clone()).collect();
+                            self.emit_warning(CodegenWarning::UninstantiatedGeneric {
+                                function_name: f.name.node.clone(),
+                                params: param_names,
+                            });
+                            if let Ok(()) = self.register_function(f) {
+                                match self.generate_function_with_span(f, item.span) {
+                                    Ok(ir_fragment) => {
+                                        body_ir.push_str(&ir_fragment);
+                                        body_ir.push('\n');
+                                    }
+                                    Err(e) if self.multi_error_mode && self.collected_errors.len() < 200 => {
+                                        let span = self.last_error_span.unwrap_or(item.span);
+                                        self.collected_errors.push(SpannedCodegenError {
+                                            error: e,
+                                            span: Some(span),
+                                        });
+                                    }
+                                    Err(_) => {} // Ignore errors in fallback generic codegen
+                                }
+                            }
+                        }
                         continue;
                     }
                     match self.generate_function_with_span(f, item.span) {
@@ -234,6 +262,7 @@ impl CodeGenerator {
         }
 
         self.emit_string_constants(&mut ir, true);
+        self.emit_global_vars(&mut ir);
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime functions if targeting WebAssembly

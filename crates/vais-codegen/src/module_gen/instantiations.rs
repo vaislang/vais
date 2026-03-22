@@ -647,6 +647,7 @@ impl CodeGenerator {
         }
 
         self.emit_string_constants(&mut ir, true);
+        self.emit_global_vars(&mut ir);
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime if targeting WebAssembly
@@ -696,7 +697,7 @@ impl CodeGenerator {
 /// (excluding its own definition). This is used to determine whether an uninstantiated
 /// generic function needs a fallback version -- if no other function calls it, it can
 /// be safely omitted.
-fn is_function_called_in_module(name: &str, module: &Module) -> bool {
+pub(super) fn is_function_called_in_module(name: &str, module: &Module) -> bool {
     fn expr_calls(name: &str, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, args } => {

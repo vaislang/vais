@@ -47,6 +47,10 @@ impl StmtVisitor for CodeGenerator {
     }
 
     fn visit_block_stmts(&mut self, stmts: &[Spanned<Stmt>], counter: &mut usize) -> BlockResult {
+        // Push a new scope frame so Named-type locals declared in this block
+        // are tracked for Drop cleanup when the block exits.
+        self.enter_scope();
+
         let mut ir = String::new();
         let mut last_value = "0".to_string();
         let mut terminated = false;
@@ -67,6 +71,23 @@ impl StmtVisitor for CodeGenerator {
                 _ => {}
             }
         }
+
+        // Pop the scope and collect variables declared in this block.
+        let scope_vars = self.exit_scope();
+
+        if !terminated {
+            // Block reached natural end (no early return/break/continue):
+            // drop Named-type locals in LIFO order, then remove from fn_ctx.locals
+            // so the function-level cleanup at return/implicit-exit doesn't double-drop them.
+            let drop_ir = self.generate_scope_drop_cleanup(&scope_vars);
+            if !drop_ir.is_empty() {
+                ir.push_str(&drop_ir);
+            }
+            self.remove_scope_locals(&scope_vars);
+        }
+        // If terminated (Return/Break/Continue): the Return stmt already called
+        // generate_drop_cleanup() for ALL current locals (including sub-scope vars).
+        // We skip scope cleanup here to avoid double-drop.
 
         Ok((last_value, ir, terminated))
     }
@@ -255,10 +276,19 @@ impl CodeGenerator {
                     .insert(name.node.clone(), lazy_info);
             }
 
+            // Track Named-type locals in the current scope for block-scoped drop cleanup.
+            // Only Named types can implement Drop, so only they need scope tracking.
+            let is_named = matches!(resolved_ty, ResolvedType::Named { .. });
+
             // Insert local var AFTER generating IR to avoid borrow conflicts
             self.fn_ctx
                 .locals
                 .insert(name.node.clone(), LocalVar::alloca(resolved_ty, llvm_name));
+
+            // Register in current scope for block-scoped drop (if inside a scope block)
+            if is_named {
+                self.track_scope_local(&name.node);
+            }
 
             // Track future→poll function mapping for variable-based await
             if let Some(poll_fn) = self.resolve_poll_func_name(&value.node) {

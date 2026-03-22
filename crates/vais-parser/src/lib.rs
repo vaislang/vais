@@ -127,11 +127,11 @@ pub struct Parser {
     /// Compile-time cfg key-value pairs for conditional compilation.
     /// When set, items with `#[cfg(key = "value")]` are filtered out if they don't match.
     cfg_values: std::collections::HashMap<String, String>,
-    /// Pending `>` token from a split `>>` (Token::Shr) in nested generics.
-    /// When `Vec<Vec<i64>>` is tokenized, the `>>` becomes Token::Shr.
-    /// We split it into two `>` tokens: the first closes the inner generic,
-    /// and this flag records that a second `>` is still pending for the outer generic.
-    pending_gt: bool,
+    /// Pending `>` count from splitting `>>` (Token::Shr) or `>>>` (Token::Shr + Token::Gt) in nested generics.
+    /// When `Vec<Vec<Vec<i64>>>` is tokenized, multiple `>>` tokens appear.
+    /// We split each into two `>` tokens: the first closes the inner generic,
+    /// and this counter records how many additional `>` tokens are still pending.
+    pending_gt_count: usize,
 }
 
 /// Build a sorted vec of byte positions where '\n' occurs in source.
@@ -157,7 +157,7 @@ impl Parser {
             source: String::new(),
             newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
-            pending_gt: false,
+            pending_gt_count: 0,
         }
     }
 
@@ -179,7 +179,7 @@ impl Parser {
             source: source.to_string(),
             newline_positions,
             cfg_values: std::collections::HashMap::new(),
-            pending_gt: false,
+            pending_gt_count: 0,
         }
     }
 
@@ -198,7 +198,7 @@ impl Parser {
             source: String::new(),
             newline_positions: Vec::new(),
             cfg_values: std::collections::HashMap::new(),
-            pending_gt: false,
+            pending_gt_count: 0,
         }
     }
 
@@ -607,7 +607,7 @@ impl Parser {
     /// Restore the parser to a previously saved position
     pub(crate) fn restore_position(&mut self, pos: usize) {
         self.pos = pos;
-        self.pending_gt = false;
+        self.pending_gt_count = 0;
     }
 
     /// Check if the current "token" is `>`, accounting for a pending `>`
@@ -615,7 +615,7 @@ impl Parser {
     /// Also returns true for `>>` (Token::Shr) because `>>` will be split into
     /// two `>` tokens when consumed via `consume_gt()`.
     pub(crate) fn check_gt(&self) -> bool {
-        if self.pending_gt {
+        if self.pending_gt_count > 0 {
             return true;
         }
         matches!(
@@ -627,13 +627,13 @@ impl Parser {
     /// Consume a single `>`, which may either be:
     /// 1. A pending second `>` from a previously split `>>`, or
     /// 2. A real `Token::Gt` in the stream, or
-    /// 3. A `Token::Shr` (`>>`) which we split: consume it and set `pending_gt = true`
+    /// 3. A `Token::Shr` (`>>`) which we split: consume it and increment `pending_gt_count`
     ///    so the next `consume_gt()` call returns the second `>`.
     ///
     /// Returns a synthetic `>` SpannedToken in the pending-gt and Shr cases.
     pub(crate) fn consume_gt(&mut self) -> ParseResult<SpannedToken> {
-        if self.pending_gt {
-            self.pending_gt = false;
+        if self.pending_gt_count > 0 {
+            self.pending_gt_count -= 1;
             // Return a synthetic Gt token at the current span
             let span = self.current_span();
             return Ok(SpannedToken {
@@ -651,7 +651,7 @@ impl Parser {
             let tok = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
                 span: self.current_span(),
             })?;
-            self.pending_gt = true;
+            self.pending_gt_count += 1;
             // Return a synthetic Gt with the span of the Shr token
             return Ok(SpannedToken {
                 token: Token::Gt,

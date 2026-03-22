@@ -21,3 +21,30 @@ fn main() {
         println!("{}", diagnostic);
     }
 }
+
+// Quick test for container
+fn test_container_instantiations() {
+    let source = r#"
+S Container<T> {
+    items: i64,
+    count: i64
+}
+
+F test_container<T>(c: Container<T>) -> i64 {
+    c.count
+}
+
+F main() -> i64 {
+    c := Container { items: 0, count: 42 }
+    test_container(c)
+}
+"#;
+    let module = vais_parser::parse(source).expect("parse failed");
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).expect("type check failed");
+    let insts = checker.get_generic_instantiations();
+    eprintln!("[Container test] TC instantiations: {}", insts.len());
+    for inst in insts {
+        eprintln!("  {:?}: {} -> {} {:?}", inst.kind, inst.base_name, inst.mangled_name, inst.type_args);
+    }
+}

@@ -104,6 +104,7 @@ pub struct TypeChecker {
     pub(crate) traits: HashMap<String, TraitDef>,
     pub(crate) trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
     pub(crate) constants: HashMap<String, ResolvedType>, // Constant name -> type
+    pub(crate) globals: HashMap<String, ResolvedType>,   // Global variable name -> type
 
     // Scope stack
     pub(crate) scopes: Vec<HashMap<String, VarInfo>>,
@@ -188,6 +189,7 @@ impl TypeChecker {
             traits: HashMap::with_capacity(16),
             trait_impls: Vec::with_capacity(16),
             constants: HashMap::with_capacity(16),
+            globals: HashMap::with_capacity(16),
             scopes: vec![HashMap::with_capacity(32)],
             current_fn_ret: None,
             current_fn_name: None,
@@ -355,6 +357,7 @@ impl TypeChecker {
         self.traits = other.traits.clone();
         self.trait_impls = other.trait_impls.clone();
         self.constants = other.constants.clone();
+        self.globals = other.globals.clone();
     }
 
     /// Merge type definitions from another checker (for parallel type-checking).
@@ -369,6 +372,7 @@ impl TypeChecker {
         self.traits.extend(other.traits);
         self.trait_impls.extend(other.trait_impls);
         self.constants.extend(other.constants);
+        self.globals.extend(other.globals);
         self.warnings.extend(other.warnings);
         self.collected_errors.extend(other.collected_errors);
 

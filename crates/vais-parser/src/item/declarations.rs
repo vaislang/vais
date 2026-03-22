@@ -231,7 +231,7 @@ impl Parser {
                 self.advance(); // consume ident
                 let has_plus = self.check(&Token::Plus);
                 self.pos = saved_pos; // restore
-                self.pending_gt = false;
+                self.pending_gt_count = 0;
                 has_plus
             } else {
                 false

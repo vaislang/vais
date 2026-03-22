@@ -100,6 +100,12 @@ pub(crate) struct FunctionContext {
     /// and consumed by store/binary/icmp/call emission to fix width mismatches
     /// and void-call naming issues (R2 IR Type Tracking).
     pub(crate) temp_var_types: HashMap<String, ResolvedType>,
+
+    /// Scope stack for block-scoped drop cleanup.
+    /// Each entry is a list of variable names declared in that scope (in declaration order).
+    /// When a block exits, variables declared in that scope are dropped in LIFO order.
+    /// The outer Vec is a stack of scopes (innermost scope last).
+    pub(crate) scope_stack: Vec<Vec<String>>,
 }
 
 impl FunctionContext {

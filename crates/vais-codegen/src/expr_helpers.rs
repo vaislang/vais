@@ -474,6 +474,10 @@ impl CodeGenerator {
                         }
                     }
                 }
+            } else if let Some(global_ty) = self.types.globals.get(name).map(|g| g._ty.clone()) {
+                // Global variable assignment: store to @name
+                let llvm_ty = self.type_to_llvm(&global_ty);
+                write_ir!(ir, "  store {} {}, {}* @{}", llvm_ty, val, llvm_ty, name);
             }
         } else if let Expr::Field {
             expr: obj_expr,
@@ -661,6 +665,12 @@ impl CodeGenerator {
         } else if let Some(const_info) = self.types.constants.get(name).cloned() {
             // Constant reference - inline the constant value
             self.generate_expr(&const_info.value, counter)
+        } else if let Some(global_info) = self.types.globals.get(name).cloned() {
+            // Global variable access - load from @name
+            let llvm_ty = self.type_to_llvm(&global_info._ty);
+            let tmp = self.next_temp(counter);
+            let ir = format!("  {} = load {}, {}* @{}\n", tmp, llvm_ty, llvm_ty, name);
+            Ok((tmp, ir))
         } else if let Some(fn_info) = self.types.functions.get(name).cloned() {
             // Function reference used as a value — convert function pointer to i64
             let ret_ty = self.type_to_llvm(&fn_info.signature.ret);

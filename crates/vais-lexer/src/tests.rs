@@ -761,3 +761,59 @@ fn test_macro_with_repetition() {
     let dollar_count = tokens.iter().filter(|t| t.token == Token::Dollar).count();
     assert!(dollar_count >= 2);
 }
+
+#[test]
+fn test_split_keyword_idents_ei() {
+    // "EI" must split into Enum (E=else) + If
+    let source = "I x>0{}EI x>5{}E{}";
+    let tokens = tokenize(source).unwrap();
+    // Find the Enum token that comes after '}'
+    let enum_positions: Vec<_> = tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.token == Token::Enum)
+        .map(|(i, _)| i)
+        .collect();
+    assert!(!enum_positions.is_empty(), "should have at least one Enum token");
+    // The token after the first Enum that resulted from split must be If
+    for &pos in &enum_positions {
+        if pos + 1 < tokens.len() && tokens[pos + 1].token == Token::If {
+            return; // found E followed by I from the split
+        }
+    }
+    panic!("Expected Enum followed by If from EI split");
+}
+
+#[test]
+fn test_split_keyword_idents_ee() {
+    // "EE" (two E's) must split into Enum + Enum
+    let tokens = tokenize("EE").unwrap();
+    assert_eq!(tokens.len(), 2, "EE should produce exactly 2 tokens");
+    assert_eq!(tokens[0].token, Token::Enum);
+    assert_eq!(tokens[1].token, Token::Enum);
+}
+
+#[test]
+fn test_split_keyword_idents_if() {
+    // "IF" must split into If + Function
+    let tokens = tokenize("IF").unwrap();
+    assert_eq!(tokens.len(), 2, "IF should produce exactly 2 tokens");
+    assert_eq!(tokens[0].token, Token::If);
+    assert_eq!(tokens[1].token, Token::Function);
+}
+
+#[test]
+fn test_split_keyword_idents_no_split_lowercase() {
+    // Lowercase idents must never be split
+    let tokens = tokenize("abc").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::Ident("abc".to_string()));
+}
+
+#[test]
+fn test_split_keyword_idents_no_split_mixed() {
+    // Mixed case idents containing non-keyword chars must not be split
+    let tokens = tokenize("Foo").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::Ident("Foo".to_string()));
+}

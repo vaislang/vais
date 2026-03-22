@@ -144,6 +144,17 @@ impl TypeChecker {
             });
         }
 
+        // Check if it's a global variable (globals are mutable by default)
+        if let Some(global_type) = self.globals.get(name) {
+            return Ok(VarInfo {
+                ty: global_type.clone(),
+                is_mut: true,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
+            });
+        }
+
         // Implicit self: if in a method context, check struct fields
         if let Ok(self_info) = self.lookup_self_var_info() {
             let inner_type = match &self_info.ty {
@@ -204,17 +215,6 @@ impl TypeChecker {
             });
         }
 
-        // Check if name is a constant
-        if let Some(const_type) = self.constants.get(name).cloned() {
-            return Ok(VarInfo {
-                ty: const_type,
-                is_mut: false,
-                linearity: Linearity::Unrestricted,
-                use_count: 0,
-                defined_at: None,
-            });
-        }
-
         // Fallback: if name looks like a constant (ALL_CAPS) not yet registered,
         // return I64 to avoid cascading errors
         if name.contains('_') && name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
@@ -234,6 +234,7 @@ impl TypeChecker {
         }
         candidates.extend(self.functions.keys().map(|s| s.as_str()));
         candidates.extend(self.constants.keys().map(|s| s.as_str()));
+        candidates.extend(self.globals.keys().map(|s| s.as_str()));
         for enum_def in self.enums.values() {
             candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
         }

@@ -286,3 +286,96 @@ F main() -> i64 {
     // count = 30 (loop), defer runs after return value captured
     assert_exit_code(source, 30);
 }
+
+// ===== Block-scoped Drop tests =====
+
+#[test]
+fn e2e_phase145_block_scope_drop_ir() {
+    // Block-scoped drop: variable in if-block should have drop in that block's IR
+    let source = r#"
+S Guard { id: i64 }
+
+W Drop {
+    F drop(&self) -> i64
+}
+
+X Guard: Drop {
+    F drop(&self) -> i64 { 0 }
+}
+
+F use_guard(flag: bool) -> i64 {
+    I flag {
+        g := Guard { id: 7 }
+        0
+    } E {
+        1
+    }
+}
+
+F main() -> i64 {
+    use_guard(true)
+}
+"#;
+    let ir = compile_to_ir(source).expect("should compile");
+    assert!(
+        ir.contains("Guard_drop"),
+        "IR should contain Guard_drop call for block-scoped drop, got:\n{}",
+        &ir[..ir.len().min(3000)]
+    );
+}
+
+#[test]
+fn e2e_phase145_block_scope_drop_compiles() {
+    // Struct created in nested block scope — compiles and runs correctly
+    let source = r#"
+S Token { value: i64 }
+
+W Drop {
+    F drop(&self) -> i64
+}
+
+X Token: Drop {
+    F drop(&self) -> i64 { 0 }
+}
+
+F process(flag: bool) -> i64 {
+    result := mut 0
+    I flag {
+        t := Token { value: 42 }
+        result = t.value
+    }
+    result
+}
+
+F main() -> i64 {
+    process(true)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_phase145_block_scope_drop_function_level() {
+    // Function-level variable is also dropped at function exit (scope cleanup)
+    let source = r#"
+S Counter { n: i64 }
+
+W Drop {
+    F drop(&self) -> i64
+}
+
+X Counter: Drop {
+    F drop(&self) -> i64 { 0 }
+}
+
+F count_to(limit: i64) -> i64 {
+    c := Counter { n: limit }
+    c.n
+}
+
+F main() -> i64 {
+    count_to(42)
+}
+"#;
+    assert_exit_code(source, 42);
+}

@@ -614,24 +614,25 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
     Ok(tokens)
 }
 
-/// Split specific two-char identifiers that are actually keyword pairs.
-/// Only splits known keyword combinations that appear in Vais syntax:
-/// - "EI" → E (Else) + I (If) — else-if chain
+/// Split identifiers that consist entirely of single-char keyword letters.
+/// logos longest-match can merge adjacent keywords into one Ident token
+/// (e.g. "EI" → Ident("EI") instead of Enum + If).
+/// Uses char_to_keyword to detect all known single-char keywords.
 fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
     let mut result = Vec::with_capacity(tokens.len());
     for tok in tokens {
         if let Token::Ident(ref s) = tok.token {
-            // Only split "EI" — the only known keyword pair that gets merged by logos
-            if s == "EI" {
+            // Split only if the ident has 2+ chars and every char is a keyword letter
+            let all_keywords = s.len() >= 2
+                && s.chars().all(|c| !matches!(char_to_keyword(c), Token::Ident(_)));
+            if all_keywords {
                 let start = tok.span.start;
-                result.push(SpannedToken {
-                    token: Token::Enum, // E = Else
-                    span: start..start + 1,
-                });
-                result.push(SpannedToken {
-                    token: Token::If, // I = If
-                    span: start + 1..start + 2,
-                });
+                for (i, c) in s.chars().enumerate() {
+                    result.push(SpannedToken {
+                        token: char_to_keyword(c),
+                        span: start + i..start + i + 1,
+                    });
+                }
                 continue;
             }
         }

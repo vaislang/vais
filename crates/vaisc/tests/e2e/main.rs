@@ -101,3 +101,6 @@ mod phase145_r1_generic_mono;
 mod phase145_r2_type_accuracy;
 mod phase145_r4_drop;
 mod phase145_r6_nonfatal_removed;
+mod phase146_global_scope;
+mod phase146_keyword_split;
+mod phase146_nested_generics;

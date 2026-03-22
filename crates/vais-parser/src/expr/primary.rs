@@ -317,13 +317,13 @@ impl Parser {
                         } else {
                             // Not a map literal, restore position and parse as block
                             self.pos = saved_pos;
-                            self.pending_gt = false;
+                            self.pending_gt_count = 0;
                             self.errors.truncate(saved_errors_len);
                         }
                     } else {
                         // Not a map literal, restore position and parse as block
                         self.pos = saved_pos;
-                        self.pending_gt = false;
+                        self.pending_gt_count = 0;
                         self.errors.truncate(saved_errors_len);
                     }
                 }
@@ -554,7 +554,7 @@ impl Parser {
         // This is a while loop: `L condition { ... }`
         // Reset position and parse as expression
         self.pos = saved_pos;
-        self.pending_gt = false;
+        self.pending_gt_count = 0;
 
         // Disable struct literals in condition to avoid ambiguity with block start
         // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal

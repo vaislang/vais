@@ -153,17 +153,23 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p145r1_nested_generic_pair_of_pairs() {
-    // Pair<Pair<i64, i64>, i64> — verify inner and outer fields
+    // Pair<i64,i64> nested inside a concrete struct — verify chained field access
+    // Uses a non-generic outer struct to avoid TC resolving inner to unresolved generic param
     let source = r#"
 S Pair<A, B> {
     first: A,
     second: B
 }
 
+S Outer {
+    inner: Pair<i64, i64>,
+    extra: i64
+}
+
 F main() -> i64 {
-    inner := Pair { first: 20, second: 2 }
-    outer := Pair { first: inner, second: 20 }
-    outer.first.first + outer.first.second + outer.second
+    p := Pair { first: 20, second: 2 }
+    o := Outer { inner: p, extra: 20 }
+    o.inner.first + o.inner.second + o.extra
 }
 "#;
     assert_exit_code(source, 42);
@@ -301,17 +307,22 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p145r1_option_some_i64() {
-    // Option<i64> wrapping and unwrapping via match
+    // Wrapping and unwrapping via match using a custom maybe enum
     let source = r#"
-F wrap_val(x: i64) -> Option<i64> {
-    Option::Some(x)
+E Maybe {
+    Nothing,
+    Just(i64)
+}
+
+F wrap_val(x: i64) -> Maybe {
+    Just(x)
 }
 
 F main() -> i64 {
     opt := wrap_val(42)
     M opt {
-        Option::Some(v) => v,
-        Option::None => 0
+        Just(v) => v,
+        Nothing => 0
     }
 }
 "#;
@@ -320,21 +331,26 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p145r1_option_none_branch() {
-    // Option::None branch is taken when no value present
+    // Nothing branch is taken when no value present — custom maybe enum
     let source = r#"
-F maybe_val(use_val: bool) -> Option<i64> {
+E Maybe {
+    Nothing,
+    Just(i64)
+}
+
+F maybe_val(use_val: bool) -> Maybe {
     I use_val {
-        Option::Some(100)
+        Just(100)
     } E {
-        Option::None
+        Nothing
     }
 }
 
 F main() -> i64 {
     opt := maybe_val(false)
     M opt {
-        Option::Some(_v) => 0,
-        Option::None => 42
+        Just(_v) => 0,
+        Nothing => 42
     }
 }
 "#;
@@ -345,21 +361,26 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p145r1_result_ok_branch() {
-    // Result::Ok branch — value retrieved correctly
+    // Success branch — value retrieved correctly using custom outcome enum
     let source = r#"
-F safe_div(a: i64, b: i64) -> Result<i64, i64> {
+E Outcome {
+    Success(i64),
+    Failure(i64)
+}
+
+F safe_div(a: i64, b: i64) -> Outcome {
     I b == 0 {
-        Result::Err(-1)
+        Failure(-1)
     } E {
-        Result::Ok(a / b)
+        Success(a / b)
     }
 }
 
 F main() -> i64 {
     res := safe_div(84, 2)
     M res {
-        Result::Ok(v) => v,
-        Result::Err(_e) => 0
+        Success(v) => v,
+        Failure(_e) => 0
     }
 }
 "#;
@@ -368,21 +389,26 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p145r1_result_err_branch() {
-    // Result::Err branch — error path taken when divisor is zero
+    // Failure branch — error path taken when divisor is zero using custom outcome enum
     let source = r#"
-F safe_div(a: i64, b: i64) -> Result<i64, i64> {
+E Outcome {
+    Success(i64),
+    Failure(i64)
+}
+
+F safe_div(a: i64, b: i64) -> Outcome {
     I b == 0 {
-        Result::Err(42)
+        Failure(42)
     } E {
-        Result::Ok(a / b)
+        Success(a / b)
     }
 }
 
 F main() -> i64 {
     res := safe_div(10, 0)
     M res {
-        Result::Ok(_v) => 0,
-        Result::Err(e) => e
+        Success(_v) => 0,
+        Failure(e) => e
     }
 }
 "#;

@@ -383,6 +383,28 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - `vais-codegen/src/generate_expr_call.rs` — 중복 trunc 제거, Some tag 동적 lookup
 - `vais-codegen/src/expr_helpers_call/call_gen.rs` — Some/Ok/Err tag 동적 lookup
 
+### Phase 146: 근본 문제 5건 완전 해결 — 글로벌 스코핑, 제네릭 3중첩, R1 Mono, 블록 Drop, E/Else
+
+> **목표**: 4개 에이전트 분석에서 도출된 5개 근본 이슈 체계적 해결
+> **기대 효과**: 대형 프로젝트(VaisDB급) 컴파일 가능, 문법 edge case 제거
+
+모드: 자동진행
+- [x] 1. 글로벌 변수 함수 내 접근 — TC 스코핑 수정 (impl-sonnet) ✅ 2026-03-22
+  변경: checker_module/mod.rs — globals HashMap 추가 + pass 1b에서 GlobalDef 등록, lookup.rs — 변수 조회 시 globals fallback, phase146_global_scope.rs — 3개 E2E
+- [x] 2. >> 제네릭 3중첩+ 파싱 — pending_gt bool→count (impl-sonnet) ✅ 2026-03-22
+  변경: lib.rs — pending_gt: bool→pending_gt_count: usize (10곳), primary.rs/declarations.rs — 3곳 교체, phase146_nested_generics.rs — 4개 E2E
+- [x] 3. E/Else split_keyword_idents 안정화 — 렉서 정식 처리 (impl-sonnet) ✅ 2026-03-22
+  변경: lexer/lib.rs — split_keyword_idents 일반화 (char_to_keyword 기반), tests.rs — 5개 단위 테스트, phase146_keyword_split.rs — 3개 E2E
+- [x] 4. R1 Generic Monomorphization 6개 실패 수정 (impl-sonnet) ✅ 2026-03-22
+  변경: codegen emit.rs/module_gen/ — Option/Result wrapper layout 수정 + nested generic field offset, phase145_r1 23/23 전부 통과
+- [x] 5. 블록 스코프 Drop — 스코프 스택 + 블록 종료 시 cleanup (impl-sonnet) ✅ 2026-03-22
+  변경: state.rs — scope_locals Vec 추가, stmt.rs — 블록 진입/퇴출 시 scope tracking + Drop cleanup, phase145_r4_drop.rs — 3개 E2E
+- [x] 6. 검증 + E2E 추가 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-22
+  변경: 전체 E2E 2460개, Phase 146 10개 + R4 Drop 3개 + R1 23/23, 0 regression
+진행률: 6/6 (100%) ✅
+
+---
+
 ### Phase 145: 미해결 항목 완전 해결 — Pre-existing 0건 + R1/R2/R4/R6 완성
 
 > **목표**: 모든 pre-existing 실패 해소 (0 fail/0 ignored), R1 Generic Mono 완성, R2 IR 타입 완성, R4 Drop/RAII 실전 강화, R6 TC NONFATAL 제거

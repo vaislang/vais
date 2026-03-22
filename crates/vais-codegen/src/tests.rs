@@ -1831,3 +1831,131 @@ F main() -> i64 = add(1, 2)
         "Pure function should not have auto-free cleanup"
     );
 }
+
+#[test]
+fn test_generic_container_fallback() {
+    // Test that a generic function with un-inferrable T gets a fallback definition
+    let source = r#"
+S Container<T> {
+    items: i64,
+    count: i64
+}
+
+F test_container<T>(c: Container<T>) -> i64 {
+    c.count
+}
+
+F main() -> i64 {
+    c := Container { items: 0, count: 42 }
+    test_container(c)
+}
+"#;
+    let module = parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let insts = checker.get_generic_instantiations();
+    
+    let mut gen = CodeGenerator::new("test");
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
+
+    eprintln!("TC insts count: {}", insts.len());
+    for inst in &insts {
+        eprintln!("  {:?}: {} -> {} {:?}", inst.kind, inst.base_name, inst.mangled_name, inst.type_args);
+    }
+
+    let result = if insts.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &insts)
+    };
+
+    assert!(result.is_ok(), "Codegen failed: {:?}", result.err());
+    let ir = result.unwrap();
+
+    // test_container should be defined (not just declared)
+    assert!(ir.contains("define i64 @test_container") || ir.contains("define i64 @\"test_container"),
+        "test_container should be defined, IR contains:\n{}",
+        ir.lines().filter(|l| l.contains("test_container")).collect::<Vec<_>>().join("\n"));
+}
+
+#[test]
+fn test_drop_function_level_no_recursion() {
+    // Regression: Counter_drop must NOT recursively call itself.
+    // The `self` param is a reference; only alloca-declared locals are auto-dropped.
+    let source = r#"
+S Counter { n: i64 }
+W Drop { F drop(&self) -> i64 }
+X Counter: Drop { F drop(&self) -> i64 { 0 } }
+F count_to(limit: i64) -> i64 {
+    c := Counter { n: limit }
+    c.n
+}
+F main() -> i64 { count_to(42) }
+"#;
+    let module = parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = CodeGenerator::new("test");
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
+    let insts = checker.get_generic_instantiations();
+    let ir = if insts.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &insts)
+    }.unwrap();
+    // Counter_drop should be defined (not just called)
+    assert!(ir.contains("define i64 @Counter_drop"), "Counter_drop should be defined");
+    // Counter_drop body should NOT contain a recursive call to itself
+    let drop_body: String = ir.lines()
+        .skip_while(|l| !l.contains("define i64 @Counter_drop"))
+        .skip(1)
+        .take_while(|l| !l.starts_with("define "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !drop_body.contains("call i64 @Counter_drop"),
+        "Counter_drop must not recursively call itself, got:\n{}",
+        drop_body
+    );
+}
+
+#[test]
+fn test_block_scope_drop_ir_correct() {
+    // Block-scoped named locals should have drop call in that block's IR,
+    // using a loaded pointer (not the double-pointer directly).
+    let source = r#"
+S Token { value: i64 }
+W Drop { F drop(&self) -> i64 }
+X Token: Drop { F drop(&self) -> i64 { 0 } }
+F process(flag: bool) -> i64 {
+    result := mut 0
+    I flag {
+        t := Token { value: 42 }
+        result = t.value
+    }
+    result
+}
+F main() -> i64 { process(true) }
+"#;
+    let module = parse(source).unwrap();
+    let mut checker = vais_types::TypeChecker::new();
+    checker.check_module(&module).unwrap();
+    let mut gen = CodeGenerator::new("test");
+    gen.set_resolved_functions(checker.get_all_functions().clone());
+    gen.set_type_aliases(checker.get_type_aliases().clone());
+    let insts = checker.get_generic_instantiations();
+    let ir = if insts.is_empty() {
+        gen.generate_module(&module)
+    } else {
+        gen.generate_module_with_instantiations(&module, &insts)
+    }.unwrap();
+    // IR must contain Token_drop call in the then-block (block-scope drop)
+    assert!(ir.contains("Token_drop"), "IR must contain Token_drop call");
+    // The drop call must load the inner %Token* first (correct pointer indirection)
+    assert!(
+        ir.contains("load %Token*, %Token**") || ir.contains("__drop_ptr_"),
+        "Drop must load inner pointer before calling Token_drop"
+    );
+}

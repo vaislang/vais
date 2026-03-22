@@ -95,8 +95,14 @@ impl TypeChecker {
                     self.constants
                         .insert(const_def.name.node.clone(), const_type);
                 }
+                Item::Global(global_def) => {
+                    // Register global variable with its type
+                    let global_type = self.resolve_type(&global_def.ty.node);
+                    self.globals
+                        .insert(global_def.name.node.clone(), global_type);
+                }
                 Item::Use(_) | Item::Macro(_) | Item::Error { .. }
-                | Item::Global(_) | Item::Struct(_) | Item::Enum(_)
+                | Item::Struct(_) | Item::Enum(_)
                 | Item::Union(_) | Item::TypeAlias(_) | Item::TraitAlias(_)
                 | Item::Trait(_) => {
                     // Already handled in pass 1a, or not needed here

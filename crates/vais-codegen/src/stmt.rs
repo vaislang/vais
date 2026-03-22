@@ -573,6 +573,102 @@ impl CodeGenerator {
         self.fn_ctx.defer_stack.clear();
     }
 
+    /// Push a new scope frame onto the scope stack.
+    /// Called at the start of a block (if branch, loop body, explicit block expr, etc.).
+    pub(crate) fn enter_scope(&mut self) {
+        self.fn_ctx.scope_stack.push(Vec::new());
+    }
+
+    /// Pop the current scope frame from the scope stack.
+    /// Returns the list of variable names declared in that scope (in declaration order).
+    /// The caller is responsible for removing these variables from fn_ctx.locals.
+    pub(crate) fn exit_scope(&mut self) -> Vec<String> {
+        self.fn_ctx.scope_stack.pop().unwrap_or_default()
+    }
+
+    /// Register a variable in the current innermost scope (if any scope is active).
+    /// Only tracks Named type locals — primitive SSA values don't need Drop.
+    pub(crate) fn track_scope_local(&mut self, name: &str) {
+        if let Some(scope) = self.fn_ctx.scope_stack.last_mut() {
+            scope.push(name.to_string());
+        }
+    }
+
+    /// Generate drop cleanup IR for a set of Named-type locals leaving scope.
+    /// Emits drop calls in LIFO order (last declared first), then removes the
+    /// variables from fn_ctx.locals to prevent double-drop at function exit.
+    ///
+    /// For struct literal locals, the llvm_name is a `%Type**` (double pointer)
+    /// because the codegen pattern is: `alloca %Type` → actual struct, then
+    /// `alloca %Type*` → pointer stored in locals. We must load the inner
+    /// `%Type*` before passing it to the drop function.
+    pub(crate) fn generate_scope_drop_cleanup(&mut self, scope_vars: &[String]) -> String {
+        if scope_vars.is_empty() || self.types.drop_registry.is_empty() {
+            return String::new();
+        }
+
+        // Collect (type_name, llvm_name, drop_fn, is_double_ptr) in declaration order.
+        // is_double_ptr=true when the local is a struct literal stored as %Type**.
+        let mut droppable: Vec<(String, String, String, bool)> = Vec::new();
+        for var_name in scope_vars {
+            if let Some(local) = self.fn_ctx.locals.get(var_name) {
+                let type_name = match &local.ty {
+                    vais_types::ResolvedType::Named { name, .. } => name.clone(),
+                    _ => continue,
+                };
+                if let Some(drop_fn) = self.types.drop_registry.get(&type_name).cloned() {
+                    if local.is_alloca() {
+                        // Alloca locals for struct literals are double-pointers (%Type**)
+                        // because the codegen stores a %Type* in an alloca.
+                        // Parameters and SSA values are not owned by this block — skip them.
+                        droppable.push((type_name, local.llvm_name.clone(), drop_fn, true));
+                    }
+                    // Parameters: passed by reference — caller owns them, do not drop.
+                    // SSA values: no alloca pointer to pass to drop — skip.
+                }
+            }
+        }
+
+        if droppable.is_empty() {
+            return String::new();
+        }
+
+        let mut ir = String::new();
+        ir.push_str("  ; block-scope drop cleanup\n");
+        // Drop in reverse order (last declared first — LIFO)
+        for (_type_name, llvm_name, drop_fn, is_double_ptr) in droppable.iter().rev() {
+            let type_name_for_fn = drop_fn.strip_suffix("_drop").unwrap_or(drop_fn);
+            let struct_ty = format!("%{}", type_name_for_fn);
+            // Drop functions return i64 per the Drop trait definition (F drop(&self) -> i64).
+            // Use a temp to capture the return value and discard it.
+            let id = self.fn_ctx.label_counter;
+            self.fn_ctx.label_counter += 1;
+            if *is_double_ptr {
+                // Need to load the inner %Type* from the %Type** before calling drop
+                let ptr_tmp = format!("__drop_ptr_{}", id);
+                let ret_tmp = format!("__drop_ret_{}", id);
+                write_ir!(
+                    ir,
+                    "  %{} = load {}*, {}** %{}",
+                    ptr_tmp, struct_ty, struct_ty, llvm_name
+                );
+                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, ptr_tmp);
+            } else {
+                let ret_tmp = format!("__drop_ret_{}", id);
+                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, llvm_name);
+            }
+        }
+        ir
+    }
+
+    /// Remove scope variables from fn_ctx.locals (called after scope drop cleanup).
+    /// This prevents the function-level drop cleanup from double-dropping.
+    pub(crate) fn remove_scope_locals(&mut self, scope_vars: &[String]) {
+        for name in scope_vars {
+            self.fn_ctx.locals.remove(name);
+        }
+    }
+
     /// Generate IR to free all tracked heap allocations (scope-based auto free).
     /// Called before function exit points, after defer cleanup.
     /// Note: free is declared as `void @free(i64)` in the Text IR path
@@ -610,50 +706,61 @@ impl CodeGenerator {
     /// Generate IR to call Drop::drop() for all local variables that implement Drop.
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
-    pub(crate) fn generate_drop_cleanup(&self) -> String {
+    pub(crate) fn generate_drop_cleanup(&mut self) -> String {
         if self.types.drop_registry.is_empty() {
             return String::new();
         }
 
-        let mut ir = String::new();
-        // Collect droppable locals (type has Drop impl) in declaration order
-        let mut droppable: Vec<(&str, &str, &str)> = Vec::new();
+        // Collect (var_name, llvm_name, drop_fn, is_double_ptr) in declaration order.
+        // Struct literal alloca locals are stored as %Type** (double pointer), so we
+        // need to load the inner %Type* before calling drop.
+        let mut droppable: Vec<(String, String, String, bool)> = Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
             let type_name = match &local.ty {
-                ResolvedType::Named { name, .. } => name.as_str(),
+                ResolvedType::Named { name, .. } => name.clone(),
                 _ => continue,
             };
-            if let Some(drop_fn) = self.types.drop_registry.get(type_name) {
-                let llvm_name = if local.is_alloca() {
-                    &local.llvm_name
-                } else if local.is_param() {
-                    var_name
-                } else {
-                    continue // SSA values cannot be passed as &self pointer
-                };
-                droppable.push((var_name, llvm_name, drop_fn.as_str()));
+            if let Some(drop_fn) = self.types.drop_registry.get(&type_name).cloned() {
+                if local.is_alloca() {
+                    // Alloca-style struct locals are double pointers (%Type**)
+                    // because the codegen stores a %Type* in an alloca.
+                    // Parameters and SSA values are not owned by this function — skip them.
+                    droppable.push((var_name.clone(), local.llvm_name.clone(), drop_fn, true));
+                }
+                // Parameters: passed by reference (&self) or by-value but caller-owned — do not drop.
+                // SSA values: no alloca pointer to pass to drop — skip.
             }
         }
 
         if droppable.is_empty() {
-            return ir;
+            return String::new();
         }
 
+        let mut ir = String::new();
         ir.push_str("  ; auto-drop cleanup (Drop trait)\n");
         // Drop in reverse order (last declared first)
         droppable.reverse();
-        for (_var_name, llvm_name, drop_fn) in &droppable {
+        for (_var_name, llvm_name, drop_fn, is_double_ptr) in &droppable {
             let type_name_for_fn = drop_fn.strip_suffix("_drop").unwrap_or(drop_fn);
             let struct_ty = format!("%{}", type_name_for_fn);
-            // The drop function signature is: void @Type_drop(%Type* %self)
-            // For alloca locals, we pass the alloca pointer directly
-            write_ir!(
-                ir,
-                "  call void @{}({}* %{})",
-                drop_fn,
-                struct_ty,
-                llvm_name
-            );
+            // Drop functions return i64 per the Drop trait definition (F drop(&self) -> i64).
+            // Use a temp to capture the return value and discard it.
+            let id = self.fn_ctx.label_counter;
+            self.fn_ctx.label_counter += 1;
+            if *is_double_ptr {
+                // Load the inner %Type* from the %Type** before calling drop
+                let ptr_tmp = format!("__drop_ptr_{}", id);
+                let ret_tmp = format!("__drop_ret_{}", id);
+                write_ir!(
+                    ir,
+                    "  %{} = load {}*, {}** %{}",
+                    ptr_tmp, struct_ty, struct_ty, llvm_name
+                );
+                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, ptr_tmp);
+            } else {
+                let ret_tmp = format!("__drop_ret_{}", id);
+                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, llvm_name);
+            }
         }
 
         ir

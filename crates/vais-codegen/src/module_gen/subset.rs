@@ -222,6 +222,7 @@ impl CodeGenerator {
         }
 
         self.emit_string_constants(&mut ir, is_main_module);
+        self.emit_global_vars(&mut ir);
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime for main module
