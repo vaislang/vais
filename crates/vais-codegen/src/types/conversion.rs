@@ -805,12 +805,25 @@ impl CodeGenerator {
                 if !generics.is_empty() {
                     let mangled = self.mangle_struct_name(name, generics);
                     if self.generics.generated_structs.contains_key(&mangled) {
-                        // Generated but not in types.structs — estimate from fields
+                        // Generated but not in types.structs — compute from fields
+                        // with proper substitution of generic parameters
                         if let Some(struct_def) = self.generics.struct_defs.get(name) {
+                            // Build substitution map: generic param -> concrete type arg
+                            let subst: std::collections::HashMap<String, ResolvedType> = struct_def
+                                .generics
+                                .iter()
+                                .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                                .zip(generics.iter())
+                                .map(|(g, t)| (g.name.node.clone(), t.clone()))
+                                .collect();
                             return struct_def
                                 .fields
                                 .iter()
-                                .map(|f| self.compute_sizeof(&self.ast_type_to_resolved(&f.ty.node)))
+                                .map(|f| {
+                                    let field_ty = self.ast_type_to_resolved(&f.ty.node);
+                                    let concrete_ty = vais_types::substitute_type(&field_ty, &subst);
+                                    self.compute_sizeof(&concrete_ty)
+                                })
                                 .sum();
                         }
                     }
@@ -967,6 +980,48 @@ impl CodeGenerator {
             "i64" => 64,
             "i128" => 128,
             _ => 0,
+        }
+    }
+
+    /// Coerce an IR value to a target float LLVM type, emitting fpext/fptrunc if needed.
+    ///
+    /// Returns the (possibly new) value name that has the target type.
+    /// If the value already has the target type, returns it unchanged.
+    /// Appends any needed conversion IR to `ir`.
+    ///
+    /// - float → double: `fpext float %val to double`
+    /// - double → float: `fptrunc double %val to float`
+    ///
+    /// This helper centralises float-width coercion that was previously
+    /// duplicated across expr_helpers.rs and generate_expr_call.rs.
+    #[allow(dead_code)]
+    pub(crate) fn coerce_float_width(
+        &self,
+        val: &str,
+        actual_ty: &str,
+        target_ty: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        if actual_ty == target_ty {
+            return val.to_string();
+        }
+        // Only handle float<->double coercions
+        match (actual_ty, target_ty) {
+            ("float", "double") => {
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = fpext float {} to double", tmp, val);
+                tmp
+            }
+            ("double", "float") => {
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, val);
+                tmp
+            }
+            _ => {
+                // Not a float coercion — return unchanged
+                val.to_string()
+            }
         }
     }
 }

@@ -198,6 +198,9 @@ pub struct CodeGenerator {
     // Flag to emit __sync_spawn__poll function for sync spawn→Future wrapping
     needs_sync_spawn_poll: bool,
 
+    // Flag to emit llvm.memcpy intrinsic declaration (used by typed memory ops on large structs)
+    needs_llvm_memcpy: bool,
+
     // Flag to emit string helper functions
     needs_string_helpers: bool,
 

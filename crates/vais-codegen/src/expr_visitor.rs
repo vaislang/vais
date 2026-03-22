@@ -813,6 +813,11 @@ impl ExprVisitor for CodeGenerator {
             inner_llvm_ty: inner_llvm_ty.clone(),
         });
 
+        // Register the lazy struct type for the result temp so downstream code
+        // can resolve its type via temp_var_types (R2 IR Type Tracking).
+        self.fn_ctx
+            .register_temp_type(&result, ResolvedType::Lazy(Box::new(inner_type)));
+
         Ok((result, ir))
     }
 
@@ -998,6 +1003,10 @@ impl ExprVisitor for CodeGenerator {
                     compute_label
                 );
 
+                // Register the forced value type for downstream type resolution (R2).
+                self.fn_ctx
+                    .register_temp_type(&result, inner_type.clone());
+
                 return Ok((result, ir));
             }
         }
@@ -1014,6 +1023,10 @@ impl ExprVisitor for CodeGenerator {
             lazy_ty,
             lazy_val
         );
+
+        // Register forced value type (R2 IR Type Tracking).
+        self.fn_ctx
+            .register_temp_type(&result, inner_type.clone());
 
         Ok((result, ir))
     }

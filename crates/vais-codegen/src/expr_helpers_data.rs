@@ -359,9 +359,19 @@ impl CodeGenerator {
             }
             // Str indexing → byte access
             vais_types::ResolvedType::Str => ("i8".to_string(), true),
-            ref other => {
-                // Fallback: treat as i64 pointer
+            // Named types (non-Vec) that may have operator overloading or custom indexing
+            vais_types::ResolvedType::Named { .. }
+            | vais_types::ResolvedType::Unknown
+            | vais_types::ResolvedType::Generic(_) => {
+                // Fallback: treat as i64 pointer for named/unknown types
                 ("i64".to_string(), false)
+            }
+            ref other => {
+                // Concrete non-indexable types (i64, f64, bool, etc.) — return error
+                return Err(CodegenError::TypeError(format!(
+                    "Cannot index into type '{}' — indexing requires an array, slice, pointer, Vec, or string type",
+                    other
+                )));
             }
         };
 
@@ -584,10 +594,11 @@ impl CodeGenerator {
             }
         }
 
-        // Fallback: return i64 (field access on unknown type)
-        // The value is treated as an opaque i64
-        let result = self.next_temp(counter);
-        write_ir!(ir, "  {} = add i64 {}, 0  ; unknown field '{}' fallback", result, obj_val, field.node);
-        Ok((result, ir))
+        // Field access on non-struct/non-union type is an error
+        let type_desc = format!("{}", self.infer_expr_type(obj));
+        Err(CodegenError::TypeError(format!(
+            "Cannot access field '{}' on type '{}' — field access requires a struct or union type",
+            field.node, type_desc
+        )))
     }
 }

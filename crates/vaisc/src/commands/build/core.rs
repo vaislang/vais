@@ -673,70 +673,40 @@ fn run_type_check(
             checker.check_module(final_ast)
         };
 
-        // Handle type checking result — non-fatal mode: convert errors to warnings
-        // and continue to codegen (partial IR generation)
-        let tc_non_fatal = std::env::var("VAIS_TC_NONFATAL").is_ok();
+        // Handle type checking result
         if let Err(e) = tc_result {
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
             }
             let total_errors = 1 + checker.get_collected_errors().len();
-            if tc_non_fatal {
+            for collected_err in checker.get_collected_errors() {
                 eprintln!(
-                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
-                    "warning".yellow().bold(),
-                    total_errors
+                    "{}",
+                    error_formatter::format_type_error(collected_err, main_source, input)
                 );
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-            } else {
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                if total_errors > 1 {
-                    eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
-                }
-                return Err(error_formatter::format_type_error(&e, main_source, input));
             }
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
+            }
+            if total_errors > 1 {
+                eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
+            }
+            return Err(error_formatter::format_type_error(&e, main_source, input));
         }
 
         // Even if check_module succeeded, there may be collected errors
         if !checker.get_collected_errors().is_empty() {
             let total_errors = checker.get_collected_errors().len();
-            if tc_non_fatal {
+            for collected_err in checker.get_collected_errors() {
                 eprintln!(
-                    "{}: {} type error(s) demoted to warnings (VAIS_TC_NONFATAL)",
-                    "warning".yellow().bold(),
-                    total_errors
+                    "{}",
+                    error_formatter::format_type_error(collected_err, main_source, input)
                 );
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-            } else {
-                for collected_err in checker.get_collected_errors() {
-                    eprintln!(
-                        "{}",
-                        error_formatter::format_type_error(collected_err, main_source, input)
-                    );
-                }
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                return Err(format!("{} type error(s) found", total_errors));
             }
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
+            }
+            return Err(format!("{} type error(s) found", total_errors));
         }
 
         // Update cache: TC passed

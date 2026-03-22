@@ -96,3 +96,8 @@ mod phase91_monomorphization;
 mod phase95_coverage;
 mod phase141_generic_mono;
 mod phase142_ir_type_tracking;
+mod phase145_large_struct_mono;
+mod phase145_r1_generic_mono;
+mod phase145_r2_type_accuracy;
+mod phase145_r4_drop;
+mod phase145_r6_nonfatal_removed;

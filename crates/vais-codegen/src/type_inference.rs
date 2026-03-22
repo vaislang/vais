@@ -104,6 +104,16 @@ impl CodeGenerator {
                     {
                         return false;
                     }
+                    // load_typed() for large structs returns an alloca pointer, not a value
+                    if name == "load_typed" {
+                        if let Some(concrete) = self.get_generic_substitution("T") {
+                            if matches!(concrete, ResolvedType::Named { .. })
+                                && self.compute_sizeof(&concrete) > 8
+                            {
+                                return false;
+                            }
+                        }
+                    }
                 }
                 true // regular function call produces a value
             }
@@ -216,6 +226,14 @@ impl CodeGenerator {
                             name: enum_name,
                             generics: vec![],
                         };
+                    }
+                    // Builtins: load_typed returns T, type_size returns i64, sizeof returns i64
+                    if fn_name == "load_typed" {
+                        // load_typed(ptr) -> T where T is the current generic substitution
+                        if let Some(concrete) = self.get_generic_substitution("T") {
+                            return concrete;
+                        }
+                        return ResolvedType::I64;
                     }
                     // Check function info
                     if let Some(fn_info) = self.types.functions.get(fn_name) {
@@ -464,7 +482,21 @@ impl CodeGenerator {
                     };
                 }
 
-                // ByteBuffer method return types
+                // Look up registered function signature first — this is the ground truth
+                // from the type checker and always takes priority over hardcoded heuristics.
+                if let ResolvedType::Named { name, .. } = &recv_type {
+                    let method_name = format!("{}_{}", name, method.node);
+                    if let Some(fn_info) = self.types.functions.get(&method_name) {
+                        return fn_info.signature.ret.clone();
+                    }
+                    // Fallback: check resolved_function_sigs from type checker
+                    if let Some(sig) = self.types.resolved_function_sigs.get(&method_name) {
+                        return sig.ret.clone();
+                    }
+                }
+
+                // Hardcoded heuristics for types without registered signatures
+                // (e.g., std library types used without explicit impl blocks in scope)
                 if let ResolvedType::Named { name, .. } = &recv_type {
                     if name == "ByteBuffer" {
                         return match method.node.as_str() {
@@ -483,17 +515,6 @@ impl CodeGenerator {
                     // Mutex.lock() returns MutexGuard
                     if name == "Mutex" && method.node == "lock" {
                         return ResolvedType::Named { name: "MutexGuard".to_string(), generics: vec![] };
-                    }
-                }
-
-                if let ResolvedType::Named { name, .. } = &recv_type {
-                    let method_name = format!("{}_{}", name, method.node);
-                    if let Some(fn_info) = self.types.functions.get(&method_name) {
-                        return fn_info.signature.ret.clone();
-                    }
-                    // Fallback: check resolved_function_sigs from type checker
-                    if let Some(sig) = self.types.resolved_function_sigs.get(&method_name) {
-                        return sig.ret.clone();
                     }
                 }
 

@@ -57,6 +57,9 @@ impl CodeGenerator {
             // Bounds check uses abort() for OOB access
             ir.push_str("declare void @abort()\n\n");
         }
+        if self.needs_llvm_memcpy {
+            ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
+        }
     }
 
     /// Emit body IR, lambda functions, and vtable globals.

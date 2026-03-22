@@ -1,0 +1,6 @@
+# std/bytes - ByteBuffer compatibility facade
+#
+# Older code imports `std/bytes` for ByteBuffer. Re-export `std/bytebuffer`
+# so those imports keep working.
+
+U std/bytebuffer

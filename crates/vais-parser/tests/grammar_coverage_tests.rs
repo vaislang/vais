@@ -1331,8 +1331,8 @@ mod negative {
 
     #[test]
     fn grammar_neg_extern_without_brace() {
-        // N without braces should fail
-        assert_parse_fails("N F foo() -> i64");
+        // N without F or { should fail — N F foo() is valid (single extern function)
+        assert_parse_fails("N foo()");
     }
 
     #[test]

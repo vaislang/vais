@@ -196,9 +196,10 @@ impl TypeChecker {
             // Allow implicit float ↔ float coercion (f32 ↔ f64)
             (ResolvedType::F32, ResolvedType::F64)
             | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
-            // Allow implicit float ↔ integer coercion (for VaisDB codegen compatibility)
-            (a, b) if Self::is_integer_type(a) && Self::is_float_type(b) => Ok(()),
-            (a, b) if Self::is_float_type(a) && Self::is_integer_type(b) => Ok(()),
+            // NOTE: float ↔ integer implicit coercion removed.
+            // Integer literals (e.g., 42) are inferred as the target type by the TC,
+            // so explicit float/int mixing requires explicit casts.
+            // Codegen handles numeric conversions (sitofp/fptosi) at call sites.
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
@@ -282,6 +283,8 @@ impl TypeChecker {
                 self.unify(ea, eb)
             }
             // Vector: element type unification + lanes equality
+            // SIMD vectors require exact element type match (no implicit float coercion)
+            // because <4 x f32> (128-bit) is fundamentally different from <4 x f64> (256-bit).
             (
                 ResolvedType::Vector {
                     element: ea,
@@ -299,7 +302,23 @@ impl TypeChecker {
                         span: None,
                     });
                 }
-                self.unify(ea, eb)
+                // Strict element comparison: resolve substitutions and compare directly
+                let ea_resolved = self.apply_substitutions(ea);
+                let eb_resolved = self.apply_substitutions(eb);
+                if ea_resolved == eb_resolved {
+                    Ok(())
+                } else if let (ResolvedType::Var(_), _) | (_, ResolvedType::Var(_)) =
+                    (&ea_resolved, &eb_resolved)
+                {
+                    // Allow type variable unification (inference)
+                    self.unify(ea, eb)
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                }
             }
             // Map: key and value recursive unification
             (ResolvedType::Map(ka, va), ResolvedType::Map(kb, vb)) => {
@@ -403,6 +422,7 @@ impl TypeChecker {
 
     /// Check if type is a float type
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn is_float_type(ty: &ResolvedType) -> bool {
         matches!(ty, ResolvedType::F32 | ResolvedType::F64)
     }

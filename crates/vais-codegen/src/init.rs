@@ -84,6 +84,7 @@ impl CodeGenerator {
             needs_unwrap_panic: false,
             needs_bounds_check: false,
             needs_sync_spawn_poll: false,
+            needs_llvm_memcpy: false,
             needs_string_helpers: false,
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::with_capacity(64)),

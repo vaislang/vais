@@ -207,12 +207,24 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
                     }
                     n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. }) => {
-                        // Large struct: load as multi-word via memcpy to stack alloca
-                        // The value is a pointer (i64 holding address), we copy the struct out
+                        // Large struct: copy via memcpy from the array slot to a stack
+                        // alloca. Return the alloca pointer — struct values in Text IR
+                        // are pointer-based, and field access uses GEP on typed pointers.
+                        self.needs_llvm_memcpy = true;
+                        let llvm_ty = self.type_to_llvm(&resolved_t);
+                        // Use result as the alloca directly
+                        write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
+                        let dst_ptr = self.next_temp(counter);
+                        write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
                         let src_ptr = self.next_temp(counter);
                         write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
-                        // For simplicity, return the pointer as i64 (caller treats struct values as pointers)
-                        write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, src_ptr);
+                        write_ir!(
+                            ir,
+                            "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                            dst_ptr,
+                            src_ptr,
+                            n
+                        );
                     }
                     _ => {
                         let tmp1 = self.next_temp(counter);
@@ -274,11 +286,20 @@ impl CodeGenerator {
                     }
                     n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. }) => {
                         // Large struct: store via memcpy from struct pointer to destination
-                        // val_val is an i64 holding the struct pointer, ptr_val is the dest addr
+                        // val_val may be a typed pointer (%StructType*) from an alloca,
+                        // or an i64 holding the struct address. Use bitcast for typed ptrs.
+                        self.needs_llvm_memcpy = true;
                         let dst_ptr = self.next_temp(counter);
                         write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
                         let src_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, val_val);
+                        let llvm_ty = self.type_to_llvm(&resolved_t);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* {} to i8*",
+                            src_ptr,
+                            llvm_ty,
+                            val_val
+                        );
                         write_ir!(
                             ir,
                             "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
