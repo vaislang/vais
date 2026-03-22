@@ -614,26 +614,33 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
     Ok(tokens)
 }
 
-/// Split identifiers that consist entirely of single-char keyword letters.
+/// Split specific two-char identifiers that are actually keyword pairs.
 /// logos longest-match can merge adjacent keywords into one Ident token
 /// (e.g. "EI" → Ident("EI") instead of Enum + If).
-/// Uses char_to_keyword to detect all known single-char keywords.
+/// Only splits exactly 2-char sequences where both chars are keyword letters.
+/// Longer identifiers like "BASE", "MAX", "EOF" are NOT split (they are
+/// legitimate constant/variable names that happen to consist of keyword chars).
 fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
     let mut result = Vec::with_capacity(tokens.len());
     for tok in tokens {
         if let Token::Ident(ref s) = tok.token {
-            // Split only if the ident has 2+ chars and every char is a keyword letter
-            let all_keywords = s.len() >= 2
-                && s.chars().all(|c| !matches!(char_to_keyword(c), Token::Ident(_)));
-            if all_keywords {
-                let start = tok.span.start;
-                for (i, c) in s.chars().enumerate() {
+            // Only split exactly 2-char idents where both chars are keyword letters
+            if s.len() == 2 {
+                let chars: Vec<char> = s.chars().collect();
+                let first = char_to_keyword(chars[0]);
+                let second = char_to_keyword(chars[1]);
+                if !matches!(first, Token::Ident(_)) && !matches!(second, Token::Ident(_)) {
+                    let start = tok.span.start;
                     result.push(SpannedToken {
-                        token: char_to_keyword(c),
-                        span: start + i..start + i + 1,
+                        token: first,
+                        span: start..start + 1,
                     });
+                    result.push(SpannedToken {
+                        token: second,
+                        span: start + 1..start + 2,
+                    });
+                    continue;
                 }
-                continue;
             }
         }
         result.push(tok);
