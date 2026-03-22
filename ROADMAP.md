@@ -383,6 +383,52 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - `vais-codegen/src/generate_expr_call.rs` — 중복 trunc 제거, Some tag 동적 lookup
 - `vais-codegen/src/expr_helpers_call/call_gen.rs` — Some/Ok/Err tag 동적 lookup
 
+### Phase 147: R3 Per-Module Codegen 완성 — 크로스모듈 제네릭 + impl 전파
+
+> **목표**: VAIS_SINGLE_MODULE=1 없이 대형 프로젝트(VaisDB급) 다중 모듈 컴파일 가능
+> **기대 효과**: 컴파일 시간 선형→병렬, 증분 컴파일 기반 구축, VaisDB 정상 빌드
+
+모드: 대기 중
+- [ ] 1. 크로스모듈 제네릭 인스턴스 전파 — 모듈 A에서 Vec<MyStruct>를 사용하면 Vec의 impl 메서드 인스턴스가 해당 모듈에서 생성 또는 extern 참조되어야 함 (impl-sonnet)
+  대상: vais-codegen/src/module_gen/subset.rs — generate_module_subset에서 GenericInstantiation이 모듈 경계를 넘도록 수정
+- [ ] 2. 크로스모듈 impl 메서드 해석 — 모듈 A의 struct에 대한 impl이 모듈 B에 있을 때, A에서 해당 메서드 호출 시 extern 선언 자동 생성 (impl-sonnet)
+  대상: vais-codegen/src/module_gen/subset.rs — cross-module impl method extern declaration
+- [ ] 3. 크로스모듈 trait dispatch — trait impl이 다른 모듈에 있을 때 vtable/dispatch 해석 (impl-sonnet) [blockedBy: 2]
+  대상: vais-codegen/src/trait_dispatch.rs, module_gen/subset.rs
+- [ ] 4. 다중 모듈 E2E 테스트 — VaisDB 패턴 시뮬레이션 (impl-sonnet) [blockedBy: 1,2,3]
+  대상: vaisc/tests/e2e/phase147_per_module.rs
+- [ ] 5. VAIS_SINGLE_MODULE 제거 또는 경고 전환 (Opus 직접) [blockedBy: 4]
+  대상: vaisc/src/commands/build/core.rs
+- [ ] 6. 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4,5]
+진행률: 0/6 (0%)
+
+### Phase 148: 실전 안전성 강화 — 단일문자 키워드 충돌 + enum 네임스페이스 + move semantics
+
+> **목표**: VaisDB 실전 사용에서 부딪힐 안전성/편의성 이슈 사전 해결
+> **기대 효과**: 대문자 상수명 자유 사용, enum 정규 접근, use-after-move 방지
+
+모드: 대기 중
+- [ ] 1. 단일문자 키워드와 타입/변수명 충돌 해결 — `C`(Continue), `B`(Break) 등 대문자 1글자가 struct/변수명으로 사용 불가 문제 (impl-sonnet)
+  증상: `S C { b: B }` → `C`가 Continue로 파싱됨. `B`도 Break로 파싱
+  방향: 파서 컨텍스트에서 아이템 위치(struct/enum 정의, 타입 위치)에서는 단일문자를 식별자로 허용하거나, 문서에 예약어 목록을 명시하고 에러 메시지 개선
+  대상: vais-parser/src/item/, vais-parser/src/types.rs
+- [ ] 2. Enum :: 네임스페이스 접근 — `Color::Red`, `Option::Some(x)` 문법 지원 (impl-sonnet)
+  증상: `Status::Ok` → 파서 에러 (data-less variant에서 `(` 기대)
+  방향: `::` 경로 접근 시 enum variant를 올바르게 resolve, data-less variant는 `()` 없이 접근 가능
+  대상: vais-parser/src/expr/, vais-types/src/checker_expr.rs, vais-codegen/src/
+- [ ] 3. Move semantics 기초 — use-after-move 감지 (impl-sonnet) [blockedBy: 1,2]
+  증상: struct를 함수에 전달 후 다시 사용해도 에러 없이 복사됨 (안전성 위험)
+  방향: TC에서 struct 타입의 변수가 함수 인자로 전달된 후 재사용 시 경고 또는 에러
+  대상: vais-types/src/checker_expr.rs — ownership tracking
+- [ ] 4. IR phi node 경고 해결 — enum match에서 phi instruction 순서 경고 (impl-sonnet)
+  증상: `[IR verify] phi instruction after non-phi instruction` 경고
+  방향: match codegen에서 phi node를 basic block 시작부에 배치
+  대상: vais-codegen/src/control_flow.rs
+- [ ] 5. 검증 + E2E + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4]
+진행률: 0/5 (0%)
+
+---
+
 ### Phase 146: 근본 문제 5건 완전 해결 — 글로벌 스코핑, 제네릭 3중첩, R1 Mono, 블록 Drop, E/Else
 
 > **목표**: 4개 에이전트 분석에서 도출된 5개 근본 이슈 체계적 해결
