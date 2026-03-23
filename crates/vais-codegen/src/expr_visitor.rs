@@ -107,6 +107,39 @@ impl ExprVisitor for CodeGenerator {
             Expr::Assume(inner) => self.visit_assume(inner, counter),
             Expr::Lazy(inner) => self.visit_lazy(inner, counter),
             Expr::Force(inner) => self.visit_force(inner, counter),
+            // Enum namespace access: EnumName::VariantName
+            // Delegate to the same unit-enum-variant path used for bare variant names.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => {
+                // Unit variant: look up by variant name (same as bare Ident path)
+                if self.is_unit_enum_variant(variant) {
+                    self.generate_unit_enum_variant(variant, counter)
+                } else {
+                    self.visit_ident(variant, counter)
+                }
+            }
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                // Tuple variant with data: treat as a call `VariantName(data)`
+                let span = expr.span;
+                let call_expr = vais_ast::Spanned::new(
+                    vais_ast::Expr::Call {
+                        func: Box::new(vais_ast::Spanned::new(
+                            vais_ast::Expr::Ident(variant.clone()),
+                            span,
+                        )),
+                        args: vec![*data_expr.clone()],
+                    },
+                    span,
+                );
+                self.generate_expr(&call_expr, counter)
+            }
             Expr::Error { message, .. } => {
                 // Error nodes should not reach codegen - they indicate parsing failures
                 Err(CodegenError::Unsupported(format!(

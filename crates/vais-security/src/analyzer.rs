@@ -387,6 +387,11 @@ impl SecurityAnalyzer {
                     self.analyze_expr(&v.node, v.span);
                 }
             }
+            Expr::EnumAccess { data, .. } => {
+                if let Some(d) = data {
+                    self.analyze_expr(&d.node, d.span);
+                }
+            }
             Expr::Int(_)
             | Expr::Float(_)
             | Expr::Bool(_)

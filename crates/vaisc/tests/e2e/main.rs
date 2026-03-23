@@ -105,3 +105,4 @@ mod phase146_global_scope;
 mod phase146_keyword_split;
 mod phase146_nested_generics;
 mod phase147_per_module;
+mod phase148_safety;

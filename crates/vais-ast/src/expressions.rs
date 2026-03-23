@@ -193,6 +193,13 @@ pub enum Expr {
     /// Force expression: `force expr` - Force evaluation of lazy value
     /// Evaluates a lazy thunk and returns the cached result.
     Force(Box<Spanned<Expr>>),
+    /// Enum variant access via namespace: `EnumName::VariantName`
+    /// Optionally carries tuple-variant data: `EnumName::VariantName(data)`
+    EnumAccess {
+        enum_name: String,
+        variant: String,
+        data: Option<Box<Spanned<Expr>>>,
+    },
 }
 
 /// If-else branch

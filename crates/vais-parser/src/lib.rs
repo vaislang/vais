@@ -591,6 +591,44 @@ impl Parser {
 
     // === Helper methods ===
 
+    /// Parse an identifier, also accepting single-character keyword tokens
+    /// in positions where an identifier is expected (e.g., type names, struct names).
+    /// This allows `S C { }` where C is a struct name, not Continue.
+    pub(crate) fn parse_ident_or_keyword(&mut self) -> ParseResult<Spanned<String>> {
+        // parse_ident() already accepts all single-char keyword tokens as identifiers,
+        // so this is a thin wrapper that makes the intent explicit at call sites.
+        self.parse_ident()
+    }
+
+    /// Convert a single-character keyword token to its string representation
+    /// for use as an identifier. Returns None for non-keyword tokens.
+    #[allow(dead_code)]
+    pub(crate) fn keyword_to_ident(token: &Token) -> Option<&'static str> {
+        match token {
+            Token::Break => Some("B"),
+            Token::Continue => Some("C"),
+            Token::Enum => Some("E"),
+            Token::Function => Some("F"),
+            Token::Global => Some("G"),
+            Token::If => Some("I"),
+            Token::Loop => Some("L"),
+            Token::Match => Some("M"),
+            Token::Extern => Some("N"),
+            Token::Union => Some("O"),
+            Token::Pub => Some("P"),
+            Token::Return => Some("R"),
+            Token::Struct => Some("S"),
+            Token::TypeKeyword => Some("T"),
+            Token::Use => Some("U"),
+            Token::Trait => Some("W"),
+            Token::Impl => Some("X"),
+            Token::Await => Some("Y"),
+            Token::Async => Some("A"),
+            Token::Defer => Some("D"),
+            _ => None,
+        }
+    }
+
     pub(crate) fn peek(&self) -> Option<&SpannedToken> {
         self.tokens.get(self.pos)
     }

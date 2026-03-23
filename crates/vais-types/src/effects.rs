@@ -427,6 +427,15 @@ impl EffectInferrer {
                 }
                 effects
             }
+
+            // Enum variant access is pure; data expression (if any) may have effects
+            Expr::EnumAccess { data, .. } => {
+                if let Some(d) = data {
+                    self.infer_expr_effects(&d.node, functions)
+                } else {
+                    EffectSet::pure()
+                }
+            }
         }
     }
 

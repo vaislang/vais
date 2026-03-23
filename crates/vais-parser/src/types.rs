@@ -742,6 +742,13 @@ impl Parser {
             Token::Continue => "C",
             Token::Use => "U",
             Token::Pub => "P",
+            Token::Global => "G",
+            Token::Extern => "N",
+            Token::Union => "O",
+            Token::Trait => "W",
+            Token::Impl => "X",
+            Token::Await => "Y",
+            Token::Defer => "D",
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token.clone(),

@@ -14,7 +14,7 @@ mod var;
 
 // Re-export the main generate_expr implementation
 use inkwell::values::BasicValueEnum;
-use vais_ast::{BinOp, Expr};
+use vais_ast::{BinOp, Expr, Spanned};
 
 use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
@@ -188,6 +188,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     let callee = Expr::Ident(method.node.clone());
                     self.generate_call(&callee, args)
                 }
+            }
+
+            // Enum namespace access: EnumName::VariantName (unit variant)
+            // Delegate to generate_var which already handles enum_variants lookup.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => self.generate_var(variant),
+
+            // Enum namespace access with data: EnumName::VariantName(data)
+            // Treat as a call `VariantName(data)` — same as tuple variant construction.
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                let callee = vais_ast::Expr::Ident(variant.clone());
+                let args_slice = [*data_expr.clone()];
+                self.generate_call(&callee, &args_slice)
             }
 
             // String interpolation

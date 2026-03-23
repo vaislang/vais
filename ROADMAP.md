@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 147 완료, R3 Per-Module Codegen 크로스모듈 제네릭)
+> **현재 버전**: 0.1.0 (Phase 148 완료, 실전 안전성 강화)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-23 (Phase 147 완료)
+> **최종 업데이트**: 2026-03-23 (Phase 148 완료)
 
 ---
 
@@ -408,25 +408,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: VaisDB 실전 사용에서 부딪힐 안전성/편의성 이슈 사전 해결
 > **기대 효과**: 대문자 상수명 자유 사용, enum 정규 접근, use-after-move 방지
 
-모드: 대기 중
-- [ ] 1. 단일문자 키워드와 타입/변수명 충돌 해결 — `C`(Continue), `B`(Break) 등 대문자 1글자가 struct/변수명으로 사용 불가 문제 (impl-sonnet)
-  증상: `S C { b: B }` → `C`가 Continue로 파싱됨. `B`도 Break로 파싱
-  방향: 파서 컨텍스트에서 아이템 위치(struct/enum 정의, 타입 위치)에서는 단일문자를 식별자로 허용하거나, 문서에 예약어 목록을 명시하고 에러 메시지 개선
-  대상: vais-parser/src/item/, vais-parser/src/types.rs
-- [ ] 2. Enum :: 네임스페이스 접근 — `Color::Red`, `Option::Some(x)` 문법 지원 (impl-sonnet)
-  증상: `Status::Ok` → 파서 에러 (data-less variant에서 `(` 기대)
-  방향: `::` 경로 접근 시 enum variant를 올바르게 resolve, data-less variant는 `()` 없이 접근 가능
-  대상: vais-parser/src/expr/, vais-types/src/checker_expr.rs, vais-codegen/src/
-- [ ] 3. Move semantics 기초 — use-after-move 감지 (impl-sonnet) [blockedBy: 1,2]
-  증상: struct를 함수에 전달 후 다시 사용해도 에러 없이 복사됨 (안전성 위험)
-  방향: TC에서 struct 타입의 변수가 함수 인자로 전달된 후 재사용 시 경고 또는 에러
-  대상: vais-types/src/checker_expr.rs — ownership tracking
-- [ ] 4. IR phi node 경고 해결 — enum match에서 phi instruction 순서 경고 (impl-sonnet)
-  증상: `[IR verify] phi instruction after non-phi instruction` 경고
-  방향: match codegen에서 phi node를 basic block 시작부에 배치
-  대상: vais-codegen/src/control_flow.rs
-- [ ] 5. 검증 + E2E + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4]
-진행률: 0/5 (0%)
+모드: 자동진행
+- [x] 1. 단일문자 키워드와 타입/변수명 충돌 해결 — parse_ident_or_keyword 헬퍼 + 선언 위치 허용 (impl-sonnet) ✅ 2026-03-23
+  변경: lib.rs — parse_ident_or_keyword/keyword_to_ident 헬퍼, declarations.rs/traits.rs — struct/enum/union/trait name 위치, types.rs — G/N/O/W/X/Y/D 추가
+- [x] 2. Enum :: 네임스페이스 접근 — Expr::EnumAccess + 전체 파이프라인 (impl-sonnet) ✅ 2026-03-23
+  변경: AST EnumAccess variant, postfix.rs :: 분기, checker_expr EnumAccess 검증, codegen/JS/security/macro exhaustiveness
+- [x] 3. Move semantics 기초 — moved_vars 추적 + use-after-move 경고 (impl-sonnet) ✅ 2026-03-23
+  변경: lib.rs — moved_vars HashSet, checker_expr — 함수 호출 시 struct 인자 move 마킹 + 사용 시 경고, primitive 타입 제외
+- [x] 4. IR phi node 경고 해결 — match codegen void/Unit 체크 추가 (impl-sonnet) ✅ 2026-03-23
+  변경: match_gen.rs — is_void_result 체크 + void_placeholder_ir 사용 (if_else.rs 패턴과 동일)
+- [x] 5. 검증 + E2E + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-23
+  결과: E2E 2,487+ passed (phase148 +17개), Clippy 0 new warnings
+진행률: 5/5 (100%) ✅
 
 ---
 

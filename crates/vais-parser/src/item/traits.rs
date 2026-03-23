@@ -6,7 +6,7 @@ use crate::{ParseResult, Parser};
 impl Parser {
     /// Parse trait definition: `W Name { methods }`
     pub(super) fn parse_trait(&mut self, is_pub: bool) -> ParseResult<Trait> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         // Parse super traits: `W Iterator: Iterable + Clone`

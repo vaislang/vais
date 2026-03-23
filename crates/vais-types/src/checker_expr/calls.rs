@@ -99,6 +99,17 @@ impl TypeChecker {
                 // Type-check provided arguments against param types
                 for (i, arg) in args.iter().enumerate() {
                     let arg_type = self.check_expr(arg)?;
+                    // Track struct-typed variables passed by value as moved
+                    if i < sig.params.len() {
+                        let param_ty = self.apply_substitutions(&sig.params[i].1);
+                        if let ResolvedType::Named { name: ref type_name, .. } = param_ty {
+                            if self.structs.contains_key(type_name.as_str()) {
+                                if let Expr::Ident(var_name) = &arg.node {
+                                    self.moved_vars.insert(var_name.clone());
+                                }
+                            }
+                        }
+                    }
                     if i < sig.params.len() {
                         self.unify(&sig.params[i].1, &arg_type)?;
                         // Check dependent type refinement for literal arguments

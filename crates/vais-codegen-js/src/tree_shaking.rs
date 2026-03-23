@@ -510,6 +510,12 @@ impl TreeShaker {
             | Expr::Unit
             | Expr::SelfCall
             | Expr::Error { .. } => {}
+            Expr::EnumAccess { enum_name, data, .. } => {
+                deps.insert(enum_name.clone());
+                if let Some(d) = data {
+                    Self::collect_expr_deps(&d.node, deps);
+                }
+            }
         }
     }
 

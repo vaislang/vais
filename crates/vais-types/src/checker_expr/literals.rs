@@ -29,6 +29,13 @@ impl TypeChecker {
             }
             Expr::Unit => Some(Ok(ResolvedType::Unit)),
             Expr::Ident(name) => {
+                // Warn if the variable has been moved (passed by value as a struct to a function)
+                if self.moved_vars.contains(name.as_str()) {
+                    self.warnings.push(format!(
+                        "warning: use of moved variable '{}' — value may have been moved",
+                        name
+                    ));
+                }
                 // Mark variable as used for linear type tracking
                 self.mark_var_used(name);
                 Some(self.lookup_var_or_err(name))

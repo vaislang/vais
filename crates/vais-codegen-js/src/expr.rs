@@ -300,6 +300,9 @@ impl JsCodeGenerator {
                 ))
             }
             Expr::Error { message, .. } => Ok(format!("/* codegen error: {} */", message)),
+            Expr::EnumAccess { enum_name, variant, .. } => {
+                Ok(format!("{}.{}", sanitize_js_ident(enum_name), sanitize_js_ident(variant)))
+            }
         }
     }
 

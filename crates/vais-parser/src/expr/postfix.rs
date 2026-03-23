@@ -143,25 +143,41 @@ impl Parser {
                     }
                 }
             } else if self.check(&Token::ColonColon) {
-                // Static method call: Type::method(args)
+                // `Type::name` — either static method call or enum variant access.
                 self.advance_skip();
-                let method = self.parse_ident()?;
-                self.expect_skip(&Token::LParen)?;
-                let args = self.parse_args()?;
-                self.expect_skip(&Token::RParen)?;
-                let end = self.prev_span().end;
+                let method_or_variant = self.parse_ident()?;
 
                 if let Expr::Ident(type_name) = &expr.node {
                     let tn = type_name.clone();
                     let sp = expr.span;
-                    expr = Spanned::new(
-                        Expr::StaticMethodCall {
-                            type_name: Spanned::new(tn, sp),
-                            method,
-                            args,
-                        },
-                        Span::new(start, end),
-                    );
+
+                    if !self.check(&Token::LParen) {
+                        // No argument list → enum variant access (unit variant)
+                        // e.g. Color::Red, Status::Ok
+                        let end = method_or_variant.span.end;
+                        expr = Spanned::new(
+                            Expr::EnumAccess {
+                                enum_name: tn,
+                                variant: method_or_variant.node,
+                                data: None,
+                            },
+                            Span::new(start, end),
+                        );
+                    } else {
+                        // `(` follows — static method call: Type::method(args)
+                        self.advance_skip(); // consume '('
+                        let args = self.parse_args()?;
+                        self.expect_skip(&Token::RParen)?;
+                        let end = self.prev_span().end;
+                        expr = Spanned::new(
+                            Expr::StaticMethodCall {
+                                type_name: Spanned::new(tn, sp),
+                                method: method_or_variant,
+                                args,
+                            },
+                            Span::new(start, end),
+                        );
+                    }
                 } else {
                     return Err(ParseError::UnexpectedToken {
                         found: Token::ColonColon,

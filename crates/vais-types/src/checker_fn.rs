@@ -11,6 +11,9 @@ impl TypeChecker {
     pub(crate) fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
 
+        // Reset move tracking for each new function body
+        self.moved_vars.clear();
+
         // Set current generic parameters
         let saved = self.set_generics(&f.generics);
 
@@ -472,6 +475,9 @@ impl TypeChecker {
         struct_generics: &[GenericParam],
     ) -> TypeResult<()> {
         self.push_scope();
+
+        // Reset move tracking for each new method body
+        self.moved_vars.clear();
 
         // Get the type name for self
         let self_type_name = match target_type {

@@ -68,7 +68,7 @@ impl Parser {
         is_pub: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Struct> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         // Parse where clause
@@ -130,7 +130,7 @@ impl Parser {
         is_pub: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Enum> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         let lbrace_span = self.current_span();
@@ -192,7 +192,7 @@ impl Parser {
 
     /// Parse union: `Name{fields}` (untagged union, C-style)
     pub(super) fn parse_union(&mut self, is_pub: bool) -> ParseResult<Union> {
-        let name = self.parse_ident()?;
+        let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
         let lbrace_span = self.current_span();

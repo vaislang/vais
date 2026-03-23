@@ -460,6 +460,18 @@ impl<'a> AstExpander<'a> {
                     .collect::<ExpansionResult<Vec<_>>>()?;
                 Expr::StringInterp(expanded_parts)
             }
+            Expr::EnumAccess {
+                enum_name,
+                variant,
+                data,
+            } => Expr::EnumAccess {
+                enum_name,
+                variant,
+                data: match data {
+                    Some(d) => Some(Box::new(self.expand_expr(*d)?)),
+                    None => None,
+                },
+            },
             // Leaf expressions - no expansion needed
             e @ (Expr::Int(_)
             | Expr::Float(_)

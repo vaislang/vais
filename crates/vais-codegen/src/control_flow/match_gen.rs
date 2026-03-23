@@ -270,6 +270,18 @@ impl CodeGenerator {
                 ResolvedType::I64
             };
 
+            // Check if all arms produce void/Unit — phi void is invalid in LLVM IR.
+            // Use a placeholder add instruction instead, same pattern as if_else.rs.
+            let llvm_type_str = self.type_to_llvm(&arm_body_type);
+            let is_void_type = crate::helpers::is_void_result(&llvm_type_str, &arm_body_type);
+
+            let phi_result = self.next_temp(counter);
+
+            if is_void_type {
+                ir.push_str(&crate::helpers::void_placeholder_ir(&phi_result));
+                return Ok((phi_result, ir));
+            }
+
             let is_named_type = matches!(&arm_body_type, ResolvedType::Named { .. });
             let phi_type = match &arm_body_type {
                 ResolvedType::Named { .. } => {
@@ -287,7 +299,6 @@ impl CodeGenerator {
                 _ => "i64".to_string(),
             };
 
-            let phi_result = self.next_temp(counter);
             let phi_args: Vec<String> = arm_values
                 .iter()
                 .map(|(val, label)| format!("[ {}, %{} ]", val, label))

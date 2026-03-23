@@ -630,6 +630,24 @@ impl CodeGenerator {
                 use crate::visitor::ExprVisitor;
                 self.visit_force(inner, counter)
             }
+
+            // Enum variant access: EnumName::Variant or EnumName::Variant(data)
+            // Unit variant: treat as identifier lookup (same as Expr::Ident(variant))
+            // Tuple variant with data: treat as call Variant(data)
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: None,
+            } => self.generate_ident_expr(variant, counter),
+            Expr::EnumAccess {
+                enum_name: _,
+                variant,
+                data: Some(data_expr),
+            } => {
+                let callee = Spanned::new(Expr::Ident(variant.clone()), data_expr.span);
+                let args = vec![*data_expr.clone()];
+                self.generate_call_expr(&callee, &args, counter, data_expr.span)
+            }
         };
 
         // Register the resolved type for named temporaries.

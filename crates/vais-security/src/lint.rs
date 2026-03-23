@@ -442,6 +442,11 @@ impl LintAnalyzer {
                     self.collect_usages_in_expr(&v.node);
                 }
             }
+            Expr::EnumAccess { data, .. } => {
+                if let Some(d) = data {
+                    self.collect_usages_in_expr(&d.node);
+                }
+            }
             Expr::String(_)
             | Expr::Int(_)
             | Expr::Float(_)

@@ -174,6 +174,9 @@ pub struct TypeChecker {
 
     // Loop nesting depth — used to validate break/continue are inside a loop
     pub(crate) loop_depth: usize,
+
+    // Variables that have been moved (passed by value to a function as a struct type)
+    pub(crate) moved_vars: HashSet<String>,
 }
 
 impl TypeChecker {
@@ -212,6 +215,7 @@ impl TypeChecker {
             collected_errors: Vec::new(),
             dependent_predicates: RefCell::new(HashMap::new()),
             loop_depth: 0,
+            moved_vars: HashSet::new(),
         };
         checker.register_builtins();
         checker
