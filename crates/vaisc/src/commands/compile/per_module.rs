@@ -47,7 +47,8 @@ pub(crate) fn compile_per_module(
     let effective_opt_level = if debug { 0 } else { opt_level };
     let resolved_functions = checker.get_all_functions().clone();
     let resolved_type_aliases = checker.get_type_aliases().clone();
-    let _instantiations = checker.get_generic_instantiations();
+    let instantiations = checker.get_generic_instantiations();
+    let instantiations = &instantiations;
 
     // Phase 1: Generate IR for all modules (parallelized with rayon)
     // Collect (module_stem, is_main, ir_string) tuples
@@ -85,7 +86,7 @@ pub(crate) fn compile_per_module(
             }
 
             // Generate IR for this module's subset
-            let result = codegen.generate_module_subset(final_ast, item_indices, is_main);
+            let result = codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
             let raw_ir = result.map_err(|e| {
                 let spanned = vais_codegen::SpannedCodegenError {
                     span: codegen.last_error_span(),

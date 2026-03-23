@@ -397,8 +397,11 @@ pub(crate) fn cmd_build(
     }
 
     // Per-module codegen path
-    // VAIS_SINGLE_MODULE=1 forces single-module codegen (avoids per-module item index issues)
+    // VAIS_SINGLE_MODULE=1 forces single-module codegen (deprecated — per-module now supports generics)
     let force_single = std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
+    if force_single && verbose {
+        eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
+    }
     let use_per_module = !force_single && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {

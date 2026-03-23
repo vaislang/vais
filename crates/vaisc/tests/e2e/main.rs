@@ -104,3 +104,4 @@ mod phase145_r6_nonfatal_removed;
 mod phase146_global_scope;
 mod phase146_keyword_split;
 mod phase146_nested_generics;
+mod phase147_per_module;

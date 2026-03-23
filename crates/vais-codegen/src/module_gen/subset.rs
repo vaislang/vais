@@ -10,6 +10,7 @@ impl CodeGenerator {
         &mut self,
         full_module: &Module,
         item_indices: &[usize],
+        instantiations: &[vais_types::GenericInstantiation],
         is_main_module: bool,
     ) -> CodegenResult<String> {
         // Validate item_indices are within bounds
@@ -55,12 +56,25 @@ impl CodeGenerator {
             let is_ours = index_set.contains(&idx);
             match &item.node {
                 Item::Function(f) => {
-                    self.register_function(f)?;
+                    self.types.declared_functions.insert(f.name.node.clone());
+                    if !f.generics.is_empty() {
+                        // Store generic function template for later specialization
+                        self.generics
+                            .function_templates
+                            .insert(f.name.node.clone(), std::rc::Rc::new(f.clone()));
+                    } else {
+                        self.register_function(f)?;
+                    }
                     if is_ours {
                         module_functions.insert(f.name.node.clone());
                     }
                 }
                 Item::Struct(s) => {
+                    if !s.generics.is_empty() {
+                        self.generics
+                            .struct_defs
+                            .insert(s.name.node.clone(), std::rc::Rc::new(s.clone()));
+                    }
                     self.register_struct(s)?;
                     for method in &s.methods {
                         self.register_method(&s.name.node, &method.node)?;
@@ -117,8 +131,325 @@ impl CodeGenerator {
             }
         }
 
-        // Generate struct types (all modules need these)
+        // Pre-build method template lookup: (struct_name, method_name) -> Function AST
+        let mut method_templates: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
+        for item in &full_module.items {
+            match &item.node {
+                Item::Impl(impl_block) => {
+                    let type_name = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => name.clone(),
+                        _ => continue,
+                    };
+                    for method in &impl_block.methods {
+                        if !method.node.generics.is_empty() {
+                            method_templates.insert(
+                                (type_name.clone(), method.node.name.node.clone()),
+                                std::rc::Rc::new(method.node.clone()),
+                            );
+                        }
+                    }
+                }
+                Item::Struct(s) => {
+                    for method in &s.methods {
+                        if !method.node.generics.is_empty() {
+                            method_templates.insert(
+                                (s.name.node.clone(), method.node.name.node.clone()),
+                                std::rc::Rc::new(method.node.clone()),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Register specialized function signatures from instantiations
+        // (mirrors generate_module_with_instantiations lines 128-324)
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Function = inst.kind {
+                if inst
+                    .type_args
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                {
+                    continue;
+                }
+                if let Some(generic_fn) = self
+                    .generics
+                    .function_templates
+                    .get(&inst.base_name)
+                    .cloned()
+                {
+                    self.generics
+                        .fn_instantiations
+                        .entry(inst.base_name.clone())
+                        .or_default()
+                        .push((inst.type_args.clone(), inst.mangled_name.clone()));
+
+                    let mut substitutions: HashMap<String, ResolvedType> = generic_fn
+                        .generics
+                        .iter()
+                        .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                        .zip(inst.type_args.iter())
+                        .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                        .collect();
+
+                    for (name, _value) in &inst.const_args {
+                        substitutions
+                            .entry(name.clone())
+                            .or_insert(ResolvedType::I64);
+                    }
+
+                    let params: Vec<_> = generic_fn
+                        .params
+                        .iter()
+                        .map(|p| {
+                            let ty = self.ast_type_to_resolved(&p.ty.node);
+                            let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
+                            (p.name.node.to_string(), concrete_ty, p.is_mut)
+                        })
+                        .collect();
+
+                    let ret_type = generic_fn
+                        .ret_type
+                        .as_ref()
+                        .map(|t| {
+                            let ty = self.ast_type_to_resolved(&t.node);
+                            vais_types::substitute_type(&ty, &substitutions)
+                        })
+                        .unwrap_or(ResolvedType::Unit);
+
+                    let mangled = inst.mangled_name.clone();
+                    self.types.functions.insert(
+                        mangled.clone(),
+                        FunctionInfo {
+                            signature: vais_types::FunctionSig {
+                                name: mangled,
+                                params,
+                                ret: ret_type,
+                                is_async: generic_fn.is_async,
+                                ..Default::default()
+                            },
+                            is_extern: false,
+                            _extern_abi: None,
+                        },
+                    );
+                }
+            }
+            // Handle Method instantiations
+            if let vais_types::InstantiationKind::Method { ref struct_name } = inst.kind {
+                if inst
+                    .type_args
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                {
+                    continue;
+                }
+                let key = (struct_name.clone(), inst.base_name.clone());
+                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
+                    self.generics
+                        .struct_defs
+                        .get(struct_name)
+                        .and_then(|s| {
+                            s.methods
+                                .iter()
+                                .find(|m| m.node.name.node == inst.base_name)
+                                .map(|m| std::rc::Rc::new(m.node.clone()))
+                        })
+                });
+                if let Some(method_fn) = method_fn_opt {
+                    let struct_generics = self
+                        .generics
+                        .struct_defs
+                        .get(struct_name)
+                        .map(|s| s.generics.clone())
+                        .unwrap_or_default();
+                    let method_base_name = format!("{}_{}", struct_name, inst.base_name);
+
+                    self.generics
+                        .fn_instantiations
+                        .entry(method_base_name.clone())
+                        .or_default()
+                        .push((inst.type_args.clone(), inst.mangled_name.clone()));
+
+                    let generic_params: Vec<_> = if !method_fn.generics.is_empty() {
+                        method_fn
+                            .generics
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .collect()
+                    } else {
+                        struct_generics
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .collect()
+                    };
+                    let mut substitutions: HashMap<String, ResolvedType> = generic_params
+                        .iter()
+                        .zip(inst.type_args.iter())
+                        .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                        .collect();
+
+                    for (name, _value) in &inst.const_args {
+                        substitutions
+                            .entry(name.clone())
+                            .or_insert(ResolvedType::I64);
+                    }
+
+                    let struct_concrete = ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: inst.type_args.clone(),
+                    };
+                    substitutions.insert("Self".to_string(), struct_concrete);
+
+                    let params: Vec<_> = method_fn
+                        .params
+                        .iter()
+                        .map(|p| {
+                            if p.name.node == "self" {
+                                (
+                                    "self".to_string(),
+                                    ResolvedType::Ref(Box::new(ResolvedType::Named {
+                                        name: struct_name.clone(),
+                                        generics: vec![],
+                                    })),
+                                    false,
+                                )
+                            } else {
+                                let ty = self.ast_type_to_resolved(&p.ty.node);
+                                let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
+                                (p.name.node.to_string(), concrete_ty, p.is_mut)
+                            }
+                        })
+                        .collect();
+
+                    let ret_type = method_fn
+                        .ret_type
+                        .as_ref()
+                        .map(|t| {
+                            let ty = self.ast_type_to_resolved(&t.node);
+                            vais_types::substitute_type(&ty, &substitutions)
+                        })
+                        .unwrap_or(ResolvedType::Unit);
+
+                    let mangled = inst.mangled_name.clone();
+                    self.types.functions.insert(
+                        mangled.clone(),
+                        FunctionInfo {
+                            signature: vais_types::FunctionSig {
+                                name: mangled,
+                                params,
+                                ret: ret_type,
+                                is_async: method_fn.is_async,
+                                ..Default::default()
+                            },
+                            is_extern: false,
+                            _extern_abi: None,
+                        },
+                    );
+                }
+            }
+        }
+
+        // Generate specialized struct types from explicit Struct instantiations
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Struct = inst.kind {
+                if let Some(generic_struct) =
+                    self.generics.struct_defs.get(&inst.base_name).cloned()
+                {
+                    self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+                }
+            }
+        }
+
+        // Synthesize concrete struct instantiations from function instantiations
+        {
+            let mut synthetic_insts: Vec<vais_types::GenericInstantiation> = Vec::new();
+            for inst in instantiations {
+                if let vais_types::InstantiationKind::Function = inst.kind {
+                    if inst
+                        .type_args
+                        .iter()
+                        .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                    {
+                        continue;
+                    }
+                    if let Some(generic_fn) =
+                        self.generics.function_templates.get(&inst.base_name)
+                    {
+                        let subst: HashMap<String, ResolvedType> = generic_fn
+                            .generics
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .zip(inst.type_args.iter())
+                            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                            .collect();
+
+                        let types_to_check: Vec<vais_ast::Type> = generic_fn
+                            .ret_type
+                            .as_ref()
+                            .map(|t| vec![t.node.clone()])
+                            .unwrap_or_default()
+                            .into_iter()
+                            .chain(generic_fn.params.iter().map(|p| p.ty.node.clone()))
+                            .collect();
+
+                        for ast_ty in &types_to_check {
+                            if let Type::Named {
+                                name: sname,
+                                generics: type_params,
+                            } = ast_ty
+                            {
+                                if !type_params.is_empty()
+                                    && self.generics.struct_defs.contains_key(sname)
+                                {
+                                    let concrete_args: Vec<ResolvedType> = type_params
+                                        .iter()
+                                        .map(|tp| {
+                                            let resolved = self.ast_type_to_resolved(&tp.node);
+                                            vais_types::substitute_type(&resolved, &subst)
+                                        })
+                                        .collect();
+
+                                    let all_concrete = concrete_args.iter().all(|t| {
+                                        !matches!(
+                                            t,
+                                            ResolvedType::Generic(_) | ResolvedType::Var(_)
+                                        )
+                                    });
+                                    if all_concrete {
+                                        let mangled =
+                                            vais_types::mangle_name(sname, &concrete_args);
+                                        if !self.generics.generated_structs.contains_key(&mangled) {
+                                            synthetic_insts.push(vais_types::GenericInstantiation {
+                                                kind: vais_types::InstantiationKind::Struct,
+                                                base_name: sname.clone(),
+                                                mangled_name: mangled,
+                                                type_args: concrete_args,
+                                                const_args: Vec::new(),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for inst in synthetic_insts {
+                if let Some(generic_struct) =
+                    self.generics.struct_defs.get(&inst.base_name).cloned()
+                {
+                    self.generate_specialized_struct_type(&generic_struct, &inst, &mut ir)?;
+                }
+            }
+        }
+
+        // Generate non-specialized struct types (skip already-emitted specialized generics)
         for (name, info) in &self.types.structs {
+            if self.generics.generated_structs.contains_key(name) {
+                continue;
+            }
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
@@ -186,22 +517,103 @@ impl CodeGenerator {
 
         // Generate function bodies only for this module's items
         let mut body_ir = String::new();
+
+        // Generate specialized function/method bodies from instantiations —
+        // only for functions/methods defined in this module subset
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Function = inst.kind {
+                // Only generate body if this module owns the generic function
+                if !module_functions.contains(&inst.base_name) {
+                    continue;
+                }
+                if let Some(generic_fn) = self
+                    .generics
+                    .function_templates
+                    .get(&inst.base_name)
+                    .cloned()
+                {
+                    body_ir.push_str(&self.generate_specialized_function(&generic_fn, inst)?);
+                    body_ir.push('\n');
+                }
+            }
+            if let vais_types::InstantiationKind::Method { ref struct_name } = inst.kind {
+                if inst
+                    .type_args
+                    .iter()
+                    .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                {
+                    continue;
+                }
+                let method_key = format!("{}_{}", struct_name, inst.base_name);
+                // Only generate body if this module owns the method
+                if !module_functions.contains(&method_key) {
+                    continue;
+                }
+                let key = (struct_name.clone(), inst.base_name.clone());
+                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
+                    self.generics
+                        .struct_defs
+                        .get(struct_name)
+                        .and_then(|s| {
+                            s.methods
+                                .iter()
+                                .find(|m| m.node.name.node == inst.base_name)
+                                .map(|m| std::rc::Rc::new(m.node.clone()))
+                        })
+                });
+                if let Some(method_fn) = method_fn_opt {
+                    let method_inst = vais_types::GenericInstantiation {
+                        kind: vais_types::InstantiationKind::Function,
+                        base_name: method_key.clone(),
+                        mangled_name: inst.mangled_name.clone(),
+                        type_args: inst.type_args.clone(),
+                        const_args: inst.const_args.clone(),
+                    };
+                    // Temporarily register the method as a function template
+                    self.generics
+                        .function_templates
+                        .insert(method_key.clone(), method_fn);
+                    let template = self
+                        .generics
+                        .function_templates
+                        .get(&method_key)
+                        .ok_or_else(|| {
+                            CodegenError::InternalError(format!(
+                                "method template '{}' missing after insert",
+                                method_key
+                            ))
+                        })?
+                        .clone();
+                    body_ir.push_str(&self.generate_specialized_function(&template, &method_inst)?);
+                    body_ir.push('\n');
+                    self.generics.function_templates.remove(&method_key);
+                }
+            }
+        }
+
+        // Generate non-generic function/method bodies for this module's items
         for &idx in &valid_indices {
             let item = &full_module.items[idx];
             match &item.node {
                 Item::Function(f) => {
-                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
-                    body_ir.push('\n');
-                }
-                Item::Struct(s) => {
-                    for method in &s.methods {
-                        body_ir.push_str(&self.generate_method_with_span(
-                            &s.name.node,
-                            &method.node,
-                            method.span,
-                        )?);
+                    if f.generics.is_empty() {
+                        body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                         body_ir.push('\n');
                     }
+                    // generic functions are handled by the instantiation loop above
+                }
+                Item::Struct(s) => {
+                    if s.generics.is_empty() {
+                        for method in &s.methods {
+                            body_ir.push_str(&self.generate_method_with_span(
+                                &s.name.node,
+                                &method.node,
+                                method.span,
+                            )?);
+                            body_ir.push('\n');
+                        }
+                    }
+                    // generic struct methods handled by instantiation loop above
                 }
                 Item::Impl(impl_block) => {
                     let type_name = match &impl_block.target_type.node {

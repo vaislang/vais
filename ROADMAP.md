@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 145 완료, R4 Drop/RAII + R6 NONFATAL 제거)
+> **현재 버전**: 0.1.0 (Phase 147 완료, R3 Per-Module Codegen 크로스모듈 제네릭)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-22 (Phase 145 완료)
+> **최종 업데이트**: 2026-03-23 (Phase 147 완료)
 
 ---
 
@@ -77,7 +77,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 10,400+ (E2E 2,383+, 단위 8,400+) |
+| 전체 테스트 | 10,400+ (E2E 2,468+, 단위 8,400+) |
 | 표준 라이브러리 | 74개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 50,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
 | 컴파일 성능 | 50K lines → 58.8ms (850K lines/s) |
@@ -388,19 +388,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **목표**: VAIS_SINGLE_MODULE=1 없이 대형 프로젝트(VaisDB급) 다중 모듈 컴파일 가능
 > **기대 효과**: 컴파일 시간 선형→병렬, 증분 컴파일 기반 구축, VaisDB 정상 빌드
 
-모드: 대기 중
-- [ ] 1. 크로스모듈 제네릭 인스턴스 전파 — 모듈 A에서 Vec<MyStruct>를 사용하면 Vec의 impl 메서드 인스턴스가 해당 모듈에서 생성 또는 extern 참조되어야 함 (impl-sonnet)
-  대상: vais-codegen/src/module_gen/subset.rs — generate_module_subset에서 GenericInstantiation이 모듈 경계를 넘도록 수정
-- [ ] 2. 크로스모듈 impl 메서드 해석 — 모듈 A의 struct에 대한 impl이 모듈 B에 있을 때, A에서 해당 메서드 호출 시 extern 선언 자동 생성 (impl-sonnet)
-  대상: vais-codegen/src/module_gen/subset.rs — cross-module impl method extern declaration
-- [ ] 3. 크로스모듈 trait dispatch — trait impl이 다른 모듈에 있을 때 vtable/dispatch 해석 (impl-sonnet) [blockedBy: 2]
-  대상: vais-codegen/src/trait_dispatch.rs, module_gen/subset.rs
-- [ ] 4. 다중 모듈 E2E 테스트 — VaisDB 패턴 시뮬레이션 (impl-sonnet) [blockedBy: 1,2,3]
-  대상: vaisc/tests/e2e/phase147_per_module.rs
-- [ ] 5. VAIS_SINGLE_MODULE 제거 또는 경고 전환 (Opus 직접) [blockedBy: 4]
-  대상: vaisc/src/commands/build/core.rs
-- [ ] 6. 검증 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 1,2,3,4,5]
-진행률: 0/6 (0%)
+모드: 자동진행
+- [x] 1. 크로스모듈 제네릭 인스턴스 전파 — generate_module_subset에 instantiations 파라미터 추가 (impl-sonnet) ✅ 2026-03-23
+  변경: subset.rs — generic template 수집, instantiation 등록, specialized struct/function body 생성, module_functions 기반 소유권 분기
+- [x] 2. 크로스모듈 impl 메서드 해석 — method instantiation 처리 + 호출자 3곳 수정 (impl-sonnet) ✅ 2026-03-23
+  변경: subset.rs — method_templates, Method instantiation 등록/body 생성, per_module.rs + parallel.rs — instantiations 전달
+- [x] 3. 크로스모듈 trait dispatch — 분석 결과 Task 1+2로 이미 동작 (Opus 직접) ✅ 2026-03-23
+  변경: 추가 코드 불필요 — trait defs/impls는 전체 모듈에서 등록, vtable 함수 참조는 extern decl로 커버, 링커가 심볼 해석
+- [x] 4. 다중 모듈 E2E 테스트 — 10개 테스트 (제네릭/impl/trait/Drop) (impl-sonnet) ✅ 2026-03-23
+  변경: phase147_per_module.rs — compile_per_module 헬퍼 + 10개 IR 검증 테스트
+- [x] 5. VAIS_SINGLE_MODULE 경고 전환 — 기능 유지 + deprecation warning (Opus 직접) ✅ 2026-03-23
+  변경: core.rs + main.rs — VAIS_SINGLE_MODULE=1 시 deprecation 경고 출력 (기능은 유지)
+- [x] 6. 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-23
+  결과: E2E 2,468 passed / 0 failed / 2 ignored, Clippy 0 new warnings, 1 pre-existing JS test failure (무관)
+진행률: 6/6 (100%) ✅
 
 ### Phase 148: 실전 안전성 강화 — 단일문자 키워드 충돌 + enum 네임스페이스 + move semantics
 
