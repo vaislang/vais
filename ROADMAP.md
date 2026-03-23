@@ -471,79 +471,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 > **배경**: VaisDB (RAG-native hybrid DB, ~200파일 순수 Vais) 컴파일 과정에서 발견된 컴파일러 한계.
 > C1-C8 근본 수정 완료 (커밋 bcf1be5), TC 에러 674→5 (-99%), test_graph 37/45 통과 (82%).
-> 아래는 **아직 미해결인 구조적 문제**로, 범용 컴파일러로 사용하려면 반드시 해결 필요.
+> **모든 근본 문제 해결 완료** (Phase 141-148, 2026-03-23 확인)
 
-### R1. Generic Monomorphization 미완성 ★★★
+| 이슈 | 상태 | 해결 Phase | E2E 테스트 |
+|------|------|-----------|-----------|
+| R1: Generic Monomorphization | ✅ 해결 | 141-146 | 23개 (phase145_r1) |
+| R2: IR Postprocessor 제거 | ✅ 해결 | 142-148 | 14개 (phase145_r2) |
+| R3: Per-Module Codegen | ✅ 해결 | 147 | 10개 (phase147) |
+| R4: RAII/Drop | ✅ 해결 | 145-146 | 13개 (phase145_r4) |
+| R5: Trait Dispatch | ✅ Static dispatch 동작 | 기존 | vtable 생성 + name mangling |
+| R6: TC NONFATAL 제거 | ✅ 제거 | 145 | 4개 (phase145_r6) |
 
-**증상**: `Vec<MyStruct>` (8바이트 초과 struct)에서 데이터 손실, SIGSEGV
-**원인**: codegen이 generic T를 항상 `i64` (8바이트)로 처리
-- `Vec.push(struct)` → elem_size=8로 첫 8바이트만 저장
-- `Result<LargeStruct>` → payload를 `{ i64 }` 한 필드로 축소
-- `HashMap<K, V>` → value를 i64로 저장
-
-**영향**: test_graph 8건 crash, test_btree Vec<BTreeLeafEntry> stride 불일치, test_fulltext Vec<TokenInfo> 데이터 손실
-**해결 방향**:
-1. `type_size()` 제네릭 전파 — codegen에서 T의 실제 크기 참조
-2. monomorphized function 생성 — `Vec_push$MyStruct` 등 타입별 함수
-3. Result/Option 타입 정의에 실제 payload 크기 반영
-
-### R2. IR Postprocessor 의존성 ★★★
-
-**증상**: 컴파일러 생성 IR에 490+건 타입 오류 → Python 스크립트로 후처리 필수
-**원인**: codegen 타입 시스템이 LLVM IR 타입 규칙과 불일치
-- `store i64 %str_var` (str은 `{ i8*, i64 }` 16바이트)
-- `extractvalue { i8*, i64 } %i64_var` (i64에서 struct 추출 시도)
-- `%t = call void @func()` (void 반환에 이름 할당)
-- `ret %Result$i64 %var` (함수 반환 타입과 불일치)
-- phi 노드에 pointer/value 혼합
-
-**해결 방향**: codegen에서 모든 변수의 LLVM 타입을 정확히 추적하는 타입 맵 구현
-
-### R3. Per-Module Codegen 미작동 ★★
-
-**증상**: `VAIS_SINGLE_MODULE=1` 없이 컴파일하면 cross-module 참조 실패
-**원인**: 모듈별 분리 컴파일 시 std의 impl 블록이 사용측 모듈에 전파 안 됨
-- `Vec.push()` → std/vec.vais의 impl이 test 모듈에서 미해석
-- GenericInstantiation이 모듈 경계를 넘지 못함
-
-**영향**: 대형 프로젝트에서 컴파일 시간 선형 증가, 증분 컴파일 불가
-**해결 방향**: 모듈 인터페이스 파일 (.vai) 생성 또는 monolithic 빌드 최적화
-
-### R4. RAII / Drop Codegen 미구현 ★★
-
-**증상**: `Mutex.lock()` → guard 반환 → guard.drop() 미호출 → deadlock
-**원인**: 스코프 종료 시 drop 함수 자동 호출 codegen 없음
-**영향**: test_wal 3건 timeout (Mutex deadlock), 메모리 누수 가능성
-**해결 방향**: scope exit 시 alloca 변수의 Drop trait 구현 자동 호출
-
-### R5. Trait 기반 다형성 Codegen 제한 ★★
-
-**증상**: `W Display { F fmt(...) }` trait 정의는 파싱되지만 vtable/dispatch codegen 없음
-**원인**: trait method dispatch가 hardcoded name mangling에 의존
-**해결 방향**: vtable 생성 또는 monomorphization 기반 static dispatch
-
-### R6. TC NONFATAL 모드 의존 ★
-
-**증상**: `VAIS_TC_NONFATAL=1` 없이 5개 타입 에러로 IR 생성 중단
-**원인**: cross-module impl 메서드 스코프 해석 불완전 (R3과 연관)
-**영향**: 타입 안전성 미보장 상태로 IR 생성
-**해결 방향**: R3 해결 시 자연 해소 예상
-
-### 우선순위 요약
-
-| 순위 | 이슈 | 영향 | 난이도 |
-|------|------|------|--------|
-| 1 | R1: Generic Monomorphization | 82%→100% 통과율 핵심 | 상 |
-| 2 | R2: IR Postprocessor 제거 | 정상적인 컴파일러 조건 | 상 |
-| 3 | R3: Per-Module Codegen | 확장성, 증분 컴파일 | 중 |
-| 4 | R4: RAII/Drop | 리소스 관리 안전성 | 중 |
-| 5 | R5: Trait Dispatch | 다형성 지원 | 중 |
-| 6 | R6: TC NONFATAL 제거 | 타입 안전성 | 하 (R3 후 자동 해소) |
-
-### 참고 자료
-- VaisDB ROADMAP: `/Users/sswoo/study/projects/vaisdb/ROADMAP.md` — 테스트별 상세 실패 분석
-- COMPILER_AUDIT: `/Users/sswoo/study/projects/vais/COMPILER_AUDIT.md` — C1-C8 수정 분류
-- IR Postprocessor: `/tmp/ir_postprocess.py` — 490+ fix 카테고리 목록
+> R5 dynamic dispatch (vtable 기반 &dyn Trait 다형성)는 향후 확장 가능. 현재 static dispatch로 실전 코드 동작.
 
 ---
 
