@@ -238,7 +238,12 @@ impl CodeGenerator {
 
         // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
         // For generic structs with type args, try mangled name first (e.g., Vec_push$GraphNode)
-        let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
+        // Unwrap Ref/RefMut to get the inner Named type
+        let inner_recv_type = match &recv_type {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            other => other,
+        };
+        let full_method_name = if let ResolvedType::Named { name, generics } = inner_recv_type {
             let resolved = self.resolve_struct_name(name);
             let base = format!("{}_{}", resolved, method_name);
             if !generics.is_empty() {

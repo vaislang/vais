@@ -52,6 +52,34 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         // Check if this is a direct call to a known function
         if let Expr::Ident(func_name) = &func.node {
+            // Enum variant constructor: Ok(value), Err(err), Some(value)
+            if !self.functions.contains_key(func_name) && !self.structs.contains_key(func_name) {
+                // Search all enums for a variant with this name
+                let found_enum = self.enums.iter()
+                    .find(|(_, def)| def.variants.contains_key(func_name))
+                    .map(|(name, def)| (name.clone(), def.clone()));
+                if let Some((enum_name, enum_def)) = found_enum {
+                    if let Some(variant_fields) = enum_def.variants.get(func_name) {
+                        match variant_fields {
+                            crate::types::VariantFieldTypes::Tuple(field_types) => {
+                                if args.len() == field_types.len() {
+                                    for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
+                                        let arg_ty = self.check_expr(arg)?;
+                                        self.unify(expected_ty, &arg_ty)?;
+                                    }
+                                }
+                            }
+                            crate::types::VariantFieldTypes::Unit => {}
+                            _ => {}
+                        }
+                    }
+                    return Ok(ResolvedType::Named {
+                        name: enum_name,
+                        generics: enum_def.generics.iter().map(|_| self.fresh_type_var()).collect(),
+                    });
+                }
+            }
+
             // Struct tuple literal: `Response(200, 1)` → `Response { status: 200, body: 1 }`
             if !self.functions.contains_key(func_name) {
                 if let Some(struct_def) = self.structs.get(func_name).cloned() {
@@ -75,6 +103,7 @@ impl TypeChecker {
                         Expr::StructLit {
                             name: vais_ast::Spanned::new(func_name.clone(), func.span),
                             fields,
+                            enum_name: None,
                         },
                         expr_span,
                     );
@@ -100,12 +129,19 @@ impl TypeChecker {
                 for (i, arg) in args.iter().enumerate() {
                     let arg_type = self.check_expr(arg)?;
                     // Track struct-typed variables passed by value as moved
+                    // Skip if parameter type is a reference (&T or &mut T)
                     if i < sig.params.len() {
                         let param_ty = self.apply_substitutions(&sig.params[i].1);
-                        if let ResolvedType::Named { name: ref type_name, .. } = param_ty {
-                            if self.structs.contains_key(type_name.as_str()) {
-                                if let Expr::Ident(var_name) = &arg.node {
-                                    self.moved_vars.insert(var_name.clone());
+                        let is_ref = matches!(&param_ty,
+                            ResolvedType::Ref(_)
+                            | ResolvedType::RefMut(_)
+                        );
+                        if !is_ref {
+                            if let ResolvedType::Named { name: ref type_name, .. } = param_ty {
+                                if self.structs.contains_key(type_name.as_str()) {
+                                    if let Expr::Ident(var_name) = &arg.node {
+                                        self.moved_vars.insert(var_name.clone());
+                                    }
                                 }
                             }
                         }
@@ -273,6 +309,28 @@ impl TypeChecker {
                 } else {
                     ret_type_raw
                 };
+
+                // Record generic instantiation for monomorphization
+                if !receiver_generics.is_empty() {
+                    let inferred_type_args: Vec<_> = receiver_generics.iter()
+                        .map(|t| self.apply_substitutions(t))
+                        .collect();
+                    let all_concrete = inferred_type_args
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                    if all_concrete {
+                        // Record struct instantiation (e.g., Vec<i64>)
+                        let struct_inst = crate::types::GenericInstantiation::struct_type(
+                            &inner_type, inferred_type_args.clone(),
+                        );
+                        self.add_instantiation(struct_inst);
+                        // Record method instantiation (e.g., Vec_push<i64>)
+                        let method_inst = crate::types::GenericInstantiation::method(
+                            &inner_type, &method.node, inferred_type_args,
+                        );
+                        self.add_instantiation(method_inst);
+                    }
+                }
 
                 return Ok(ret_type);
             }
@@ -518,7 +576,7 @@ impl TypeChecker {
 
                     let all_concrete = inferred_type_args
                         .iter()
-                        .all(|t| !matches!(t, ResolvedType::Var(_)));
+                        .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
                     if all_concrete {
                         let inst =
                             GenericInstantiation::struct_type(&type_name.node, inferred_type_args.clone());

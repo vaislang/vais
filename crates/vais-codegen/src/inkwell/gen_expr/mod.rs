@@ -58,7 +58,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             } => self.generate_match(match_expr, arms),
 
             // Struct
-            Expr::StructLit { name, fields } => self.generate_struct_literal(&name.node, fields),
+            Expr::StructLit { name, fields, .. } => self.generate_struct_literal(&name.node, fields),
             Expr::Field { expr: obj, field } => self.generate_field_access(&obj.node, &field.node),
 
             // Array/Tuple/Index

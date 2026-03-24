@@ -151,4 +151,21 @@ impl CodeGenerator {
             )))
         }
     }
+
+    /// Generate enum struct variant construction: Shape.Circle { radius: 5.0 }
+    pub(crate) fn generate_enum_variant_struct(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        fields: &[(Spanned<String>, Spanned<Expr>)],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let tag = self.get_enum_variant_tag(variant_name);
+
+        // Convert named fields to positional args
+        let spanned_fields: Vec<Spanned<Expr>> =
+            fields.iter().map(|(_, expr)| expr.clone()).collect();
+
+        self.generate_enum_variant_constructor(enum_name, tag, &spanned_fields, counter)
+    }
 }

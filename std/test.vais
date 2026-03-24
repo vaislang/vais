@@ -422,17 +422,19 @@ X TestSuiteResult {
             self.capacity = new_capacity
         }
 
+        status := result.status
+        dur := result.duration_ns
         __store_test_result(self.results + self.result_count * 48, &result)
         self.result_count = self.result_count + 1
 
-        M result.status {
+        M status {
             0 => { self.passed = self.passed + 1 },
             1 => { self.failed = self.failed + 1 },
             2 => { self.skipped = self.skipped + 1 },
             _ => {}
         }
 
-        self.total_duration_ns = self.total_duration_ns + result.duration_ns
+        self.total_duration_ns = self.total_duration_ns + dur
         0
     }
 
@@ -443,7 +445,7 @@ X TestSuiteResult {
 
     # Check if all tests passed
     F all_passed(&self) -> i64 {
-        self.failed == 0
+        I self.failed == 0 { 1 } E { 0 }
     }
 
     # Print summary
@@ -654,7 +656,7 @@ F assert_not_null(ptr: i64) -> i64 {
 
 # Assert with approximate equality for floats
 F assert_approx(actual: f64, expected: f64, epsilon: f64) -> i64 {
-    diff := L actual > expected { actual - expected } ! { expected - actual }
+    diff := I actual > expected { actual - expected } E { expected - actual }
     L diff > epsilon {
         __panic("Assertion failed: values not approximately equal")
     }
@@ -738,10 +740,9 @@ X TestRunner {
             suite_ptr := __load_ptr(self.suites + i * 8)
             suite := suite_ptr as &TestSuite
 
-            result := L __strlen(self.filter) > 0 {
-                suite.run_filtered(self.filter)
-            } ! {
-                suite.run()
+            result := mut suite.run()
+            I __strlen(self.filter) > 0 {
+                result = suite.run_filtered(self.filter)
             }
 
             result.print_summary()
@@ -750,7 +751,7 @@ X TestRunner {
             total_failed = total_failed + result.failed
             total_skipped = total_skipped + result.skipped
 
-            L self.fail_fast == 1 & result.failed > 0 {
+            I self.fail_fast == 1 & result.failed > 0 {
                 B
             }
 
@@ -777,7 +778,7 @@ X TestRunner {
         __print_str("\n═══════════════════════════════════════\n\n")
 
         # Return 0 if all passed, 1 if any failed
-        L total_failed > 0 { 1 } ! { 0 }
+        I total_failed > 0 { 1 } E { 0 }
     }
 }
 

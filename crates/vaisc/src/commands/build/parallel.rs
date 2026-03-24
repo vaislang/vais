@@ -121,6 +121,9 @@ pub(crate) fn run_per_module_emit_ir(
     let resolved_functions = checker.get_all_functions().clone();
     let resolved_type_aliases = checker.get_type_aliases().clone();
     let instantiations = checker.get_generic_instantiations();
+    for inst in &instantiations {
+        eprintln!("  [INST] base={}, mangled={}, kind={:?}, args={:?}", inst.base_name, inst.mangled_name, inst.kind, inst.type_args);
+    }
     let instantiations = &instantiations;
 
     let codegen_start = std::time::Instant::now();

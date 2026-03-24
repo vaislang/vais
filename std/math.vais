@@ -2,7 +2,7 @@
 # Provides basic math operations, trigonometry, and logarithms
 
 # Mathematical constants
-C PI: f64 = 3.141592653589793
+C pi: f64 = 3.141592653589793
 C EULER: f64 = 2.718281828459045
 C TAU: f64 = 6.283185307179586
 
@@ -122,12 +122,12 @@ X F exp(x: f64) -> f64
 
 # Helper: Convert degrees to radians
 F deg_to_rad(degrees: f64) -> f64 {
-    degrees * PI / 180.0
+    degrees * pi / 180.0
 }
 
 # Helper: Convert radians to degrees
 F rad_to_deg(radians: f64) -> f64 {
-    radians * 180.0 / PI
+    radians * 180.0 / pi
 }
 
 # Helper: Check if number is approximately equal (within epsilon)

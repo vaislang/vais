@@ -152,16 +152,33 @@ impl CodeGenerator {
 
         // Create substitution map from generic params to concrete types
         // Filter out lifetime params (they don't have runtime representation)
+        // NOTE: For method specializations, also sets Self → concrete struct type
         let type_params: Vec<_> = generic_fn
             .generics
             .iter()
             .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
             .collect();
-        let substitutions: HashMap<String, ResolvedType> = type_params
+        let mut substitutions: HashMap<String, ResolvedType> = type_params
             .iter()
             .zip(inst.type_args.iter())
-            .map(|(g, t)| (g.name.node.to_string(), t.clone())) // clone required: type_args is &[ResolvedType]
+            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
             .collect();
+
+        // For method specializations (base_name contains '_'), set Self → concrete struct type
+        if let Some(underscore_pos) = inst.base_name.find('_') {
+            let struct_name = &inst.base_name[..underscore_pos];
+            if self.types.structs.contains_key(struct_name)
+                || self.generics.struct_defs.contains_key(struct_name)
+            {
+                substitutions.insert(
+                    "Self".to_string(),
+                    ResolvedType::Named {
+                        name: struct_name.to_string(),
+                        generics: inst.type_args.clone(),
+                    },
+                );
+            }
+        }
 
         // Save and set generic substitutions
         let old_subst = std::mem::replace(&mut self.generics.substitutions, substitutions);

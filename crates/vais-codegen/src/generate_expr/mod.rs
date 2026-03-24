@@ -357,9 +357,15 @@ impl CodeGenerator {
             // Tuple literal: (a, b, c)
             Expr::Tuple(elements) => self.generate_tuple_expr(elements, counter),
 
-            // Struct literal: Point{x:1, y:2}
-            Expr::StructLit { name, fields } => {
-                self.generate_expr_struct_lit(name, fields, counter)
+            // Struct literal: Point{x:1, y:2} or enum variant: Shape.Circle{radius:5.0}
+            Expr::StructLit { name, fields, enum_name } => {
+                if let Some(ref ename) = enum_name {
+                    // Enum struct variant — generate as enum variant constructor
+                    let variant = &name.node;
+                    self.generate_enum_variant_struct(ename, variant, fields, counter)
+                } else {
+                    self.generate_expr_struct_lit(name, fields, counter)
+                }
             }
 
             // Index: arr[idx] or slice: arr[start..end]

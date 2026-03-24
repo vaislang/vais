@@ -95,6 +95,12 @@ impl Parser {
                         };
                         if is_type {
                             // Parse as struct literal with variant name
+                            // If expr is an Ident (type name), this could be EnumType.Variant { fields }
+                            let parent_type_name = if let Expr::Ident(name) = &expr.node {
+                                Some(name.clone())
+                            } else {
+                                None
+                            };
                             self.advance_skip(); // skip '{'
                             let mut fields = Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -118,6 +124,7 @@ impl Parser {
                                 Expr::StructLit {
                                     name: field,
                                     fields,
+                                    enum_name: parent_type_name,
                                 },
                                 Span::new(start, end),
                             );

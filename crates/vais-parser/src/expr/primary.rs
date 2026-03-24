@@ -215,6 +215,7 @@ impl Parser {
                         Expr::StructLit {
                             name: Spanned::new(name, Span::new(start, start + name_len)),
                             fields,
+                            enum_name: None,
                         },
                         Span::new(start, end),
                     ));

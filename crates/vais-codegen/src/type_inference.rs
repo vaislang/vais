@@ -306,7 +306,7 @@ impl CodeGenerator {
                 ResolvedType::RefMut(inner) => *inner,
                 _ => ResolvedType::I64,
             },
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 // First try to get the struct from non-generic structs
                 if let Some(struct_info) = self.types.structs.get(&name.node) {
                     // Collect generic parameters from struct fields
@@ -484,7 +484,12 @@ impl CodeGenerator {
 
                 // Look up registered function signature first — this is the ground truth
                 // from the type checker and always takes priority over hardcoded heuristics.
-                if let ResolvedType::Named { name, .. } = &recv_type {
+                // Unwrap Ref/RefMut to get the inner Named type
+                let inner_recv = match &recv_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if let ResolvedType::Named { name, .. } = inner_recv {
                     let method_name = format!("{}_{}", name, method.node);
                     if let Some(fn_info) = self.types.functions.get(&method_name) {
                         return fn_info.signature.ret.clone();
@@ -497,7 +502,7 @@ impl CodeGenerator {
 
                 // Hardcoded heuristics for types without registered signatures
                 // (e.g., std library types used without explicit impl blocks in scope)
-                if let ResolvedType::Named { name, .. } = &recv_type {
+                if let ResolvedType::Named { name, .. } = inner_recv {
                     if name == "ByteBuffer" {
                         return match method.node.as_str() {
                             "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32" | "read_i32" | "read_u64" | "read_i64" => ResolvedType::I64,

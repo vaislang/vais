@@ -200,13 +200,14 @@ F str_contains_char(s: String, c: i64) -> i64 {
     i := 0
     L {
         I i >= s.len {
-            B 0
+            R 0
         }
         I s.char_at(i) == c {
-            B 1
+            R 1
         }
         i = i + 1
     }
+    0
 }
 
 # Helper: Compare two strings

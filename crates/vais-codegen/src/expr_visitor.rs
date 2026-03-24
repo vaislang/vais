@@ -46,7 +46,7 @@ impl ExprVisitor for CodeGenerator {
                 self.generate_expr(expr, counter)
             }
             Expr::Tuple(elements) => self.visit_tuple(elements, counter),
-            Expr::StructLit { name, fields } => self.visit_struct_lit(name, fields, counter),
+            Expr::StructLit { name, fields, .. } => self.visit_struct_lit(name, fields, counter),
             Expr::Index { expr: array, index } => {
                 // Check if this is a slice operation (index is a Range expression)
                 if let Expr::Range {

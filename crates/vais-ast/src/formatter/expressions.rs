@@ -214,7 +214,7 @@ impl Formatter {
                 format!("({})", items_str.join(", "))
             }
 
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let fields_str: Vec<String> = fields
                     .iter()
                     .map(|(n, v)| format!("{}: {}", n.node, self.format_expr(&v.node)))

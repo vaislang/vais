@@ -198,7 +198,7 @@ impl VaisBackend {
                     self.collect_expr_refs(elem, refs);
                 }
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 refs.push(SymbolRef {
                     name: name.node.clone(),
                     span: name.span,

@@ -142,7 +142,7 @@ impl JsCodeGenerator {
                     items.iter().map(|e| self.generate_expr(&e.node)).collect();
                 Ok(format!("[{}]", parts?.join(", ")))
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 let field_strs: std::result::Result<Vec<String>, _> = fields
                     .iter()
                     .map(|(fname, fval)| {

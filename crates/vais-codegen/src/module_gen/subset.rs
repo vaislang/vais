@@ -98,6 +98,15 @@ impl CodeGenerator {
                                 .insert(format!("{}_{}", type_name, method.node.name.node));
                         }
                     }
+                    // Add impl methods to struct_defs for generic monomorphization
+                    if let Some(struct_def) = self.generics.struct_defs.get_mut(&type_name) {
+                        let struct_mut = std::rc::Rc::make_mut(struct_def);
+                        for method in &impl_block.methods {
+                            if !struct_mut.methods.iter().any(|m| m.node.name.node == method.node.name.node) {
+                                struct_mut.methods.push(method.clone());
+                            }
+                        }
+                    }
                     if let Some(ref trait_name) = impl_block.trait_name {
                         let mut method_impls = HashMap::new();
                         for method in &impl_block.methods {
@@ -545,7 +554,7 @@ impl CodeGenerator {
                     continue;
                 }
                 let method_key = format!("{}_{}", struct_name, inst.base_name);
-                // Only generate body if this module owns the method
+                // Generate body if this module owns the base method OR the struct's impl
                 if !module_functions.contains(&method_key) {
                     continue;
                 }
@@ -569,10 +578,36 @@ impl CodeGenerator {
                         type_args: inst.type_args.clone(),
                         const_args: inst.const_args.clone(),
                     };
+                    // Set up struct-level generic substitutions before specialization
+                    // This ensures T → concrete type is available for self.field access
+                    let struct_generics_params = self.generics.struct_defs.get(struct_name)
+                        .map(|s| s.generics.clone()).unwrap_or_default();
+                    for (param, concrete) in struct_generics_params.iter()
+                        .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                        .zip(inst.type_args.iter())
+                    {
+                        self.generics.substitutions.insert(param.name.node.clone(), concrete.clone());
+                    }
+                    // Also set Self → struct type
+                    self.generics.substitutions.insert("Self".to_string(), ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: inst.type_args.clone(),
+                    });
+
                     // Temporarily register the method as a function template
+                    // with the struct's generics so generate_specialized_function can find them
+                    let mut method_fn_with_generics = (*method_fn).clone();
+                    if method_fn_with_generics.generics.is_empty() {
+                        method_fn_with_generics.generics = struct_generics_params
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .cloned()
+                            .collect();
+                    }
+                    let method_fn_rc = std::rc::Rc::new(method_fn_with_generics);
                     self.generics
                         .function_templates
-                        .insert(method_key.clone(), method_fn);
+                        .insert(method_key.clone(), method_fn_rc);
                     let template = self
                         .generics
                         .function_templates
@@ -584,7 +619,8 @@ impl CodeGenerator {
                             ))
                         })?
                         .clone();
-                    body_ir.push_str(&self.generate_specialized_function(&template, &method_inst)?);
+                    let specialized_ir = self.generate_specialized_function(&template, &method_inst)?;
+                    body_ir.push_str(&specialized_ir);
                     body_ir.push('\n');
                     self.generics.function_templates.remove(&method_key);
                 }

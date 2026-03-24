@@ -747,6 +747,31 @@ impl CodeGenerator {
         }
     }
 
+    /// Check if a type recursively contains a specific generic parameter
+    fn type_contains_generic(ty: &ResolvedType, param: &str) -> bool {
+        match ty {
+            ResolvedType::Generic(p) => p == param,
+            ResolvedType::Named { generics, .. } => {
+                generics.iter().any(|g| Self::type_contains_generic(g, param))
+            }
+            ResolvedType::Optional(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner) => {
+                Self::type_contains_generic(inner, param)
+            }
+            ResolvedType::Result(ok, err) => {
+                Self::type_contains_generic(ok, param)
+                    || Self::type_contains_generic(err, param)
+            }
+            ResolvedType::Tuple(elems) => {
+                elems.iter().any(|e| Self::type_contains_generic(e, param))
+            }
+            _ => false,
+        }
+    }
+
     /// Compute sizeof for a ResolvedType (in bytes)
     /// Returns the size in Vais's runtime representation
     pub(crate) fn compute_sizeof(&self, ty: &ResolvedType) -> i64 {
@@ -833,7 +858,13 @@ impl CodeGenerator {
             ResolvedType::Generic(param) => {
                 // Check if we have a substitution for this generic parameter
                 if let Some(concrete) = self.get_generic_substitution(param) {
-                    self.compute_sizeof(&concrete)
+                    // Guard against infinite recursion: if the substitution still
+                    // contains the same generic parameter, use default size
+                    if Self::type_contains_generic(&concrete, param) {
+                        8
+                    } else {
+                        self.compute_sizeof(&concrete)
+                    }
                 } else {
                     8 // default i64 size for unresolved generics
                 }

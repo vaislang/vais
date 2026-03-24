@@ -348,7 +348,7 @@ impl<'a> AstExpander<'a> {
                 expr: Box::new(self.expand_expr(*inner)?),
                 field,
             },
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, enum_name } => {
                 let expanded_fields = fields
                     .into_iter()
                     .map(|(n, e)| Ok((n, self.expand_expr(e)?)))
@@ -356,6 +356,7 @@ impl<'a> AstExpander<'a> {
                 Expr::StructLit {
                     name,
                     fields: expanded_fields,
+                    enum_name,
                 }
             }
             Expr::Array(elements) => {

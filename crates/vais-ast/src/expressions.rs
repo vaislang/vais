@@ -106,10 +106,12 @@ pub enum Expr {
     Array(Vec<Spanned<Expr>>),
     /// Tuple literal: `(a, b, c)`
     Tuple(Vec<Spanned<Expr>>),
-    /// Struct literal: `Point{x:1,y:2}`
+    /// Struct literal: `Point{x:1,y:2}` or enum struct variant: `Shape.Circle{radius:5.0}`
     StructLit {
         name: Spanned<String>,
         fields: Vec<(Spanned<String>, Spanned<Expr>)>,
+        /// If this is an enum struct variant, the enum type name (e.g., "Shape" for Shape.Circle{...})
+        enum_name: Option<String>,
     },
     /// Range: `start..end`
     Range {

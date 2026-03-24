@@ -53,6 +53,7 @@ impl CodeGenerator {
                         Expr::StructLit {
                             name: vais_ast::Spanned::new(name.clone(), func.span),
                             fields,
+                            enum_name: None,
                         },
                         span,
                     );

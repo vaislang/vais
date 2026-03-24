@@ -339,7 +339,7 @@ impl TreeShaker {
                     Self::collect_expr_deps(&arg.node, deps);
                 }
             }
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, .. } => {
                 deps.insert(name.node.clone());
                 for (_, value) in fields {
                     Self::collect_expr_deps(&value.node, deps);

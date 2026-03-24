@@ -51,11 +51,27 @@ impl CodeGenerator {
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let ty = if i < registered_param_types.len() {
+                let mut ty = if i < registered_param_types.len() {
                     registered_param_types[i].clone()
                 } else {
                     self.ast_type_to_resolved(&p.ty.node)
                 };
+                // For "self" parameters, if type resolved to I64 but we're inside a method,
+                // use the struct type from the function name (e.g., TestSuiteResult_add → &TestSuiteResult)
+                if p.name.node == "self" || p.name.node == "mut self" {
+                }
+                if (p.name.node == "self" || p.name.node == "mut self") && ty == ResolvedType::I64 {
+                    // Extract struct name from function name (StructName_method)
+                    if let Some(underscore_pos) = f.name.node.rfind('_') {
+                        let struct_name = &f.name.node[..underscore_pos];
+                        if self.types.structs.contains_key(struct_name) {
+                            ty = ResolvedType::Ref(Box::new(ResolvedType::Named {
+                                name: struct_name.to_string(),
+                                generics: vec![],
+                            }));
+                        }
+                    }
+                }
                 let llvm_ty = self.type_to_llvm(&ty);
 
                 // Register parameter as local (SSA value, not alloca)

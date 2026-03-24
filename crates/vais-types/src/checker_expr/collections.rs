@@ -419,7 +419,37 @@ impl TypeChecker {
                 )))
             }
 
-            Expr::StructLit { name, fields } => {
+            Expr::StructLit { name, fields, enum_name } => {
+                // Check for enum struct variant first (e.g., Shape.Circle { radius: 5.0 })
+                if let Some(ref ename) = enum_name {
+                    eprintln!("[TC DEBUG] enum_name={}, has_enum={}", ename, self.enums.contains_key(ename));
+                    if let Some(enum_def) = self.enums.get(ename).cloned() {
+                        let variant_name = &name.node;
+                        if let Some(variant_fields) = enum_def.variants.get(variant_name) {
+                            // It's a valid enum variant — check the fields
+                            if let crate::types::VariantFieldTypes::Struct(expected_fields) = variant_fields {
+                                // Check each provided field
+                                for (field_name, value) in fields {
+                                    let value_type = match self.check_expr(value) {
+                                        Ok(t) => t,
+                                        Err(e) => return Some(Err(e)),
+                                    };
+                                    if let Some(expected_type) = expected_fields.get(&field_name.node) {
+                                        if let Err(e) = self.unify(expected_type, &value_type) {
+                                            return Some(Err(e));
+                                        }
+                                    }
+                                }
+                            }
+                            // Return the enum type
+                            return Some(Ok(ResolvedType::Named {
+                                name: ename.clone(),
+                                generics: enum_def.generics.iter().map(|_| self.fresh_type_var()).collect(),
+                            }));
+                        }
+                    }
+                }
+
                 // First check for struct
                 if let Some(struct_def) = self.structs.get(&name.node).cloned() {
                     // Create fresh type variables for generic parameters

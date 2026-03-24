@@ -32,8 +32,13 @@ impl OwnershipChecker {
             return self.report_error(err);
         }
 
-        // If not Copy, this use moves the value
-        if !info.is_copy {
+        // If not Copy and not a reference type, this use moves the value
+        // Reference types (&T, &mut T) are reborrowed, not moved
+        let is_ref = matches!(&info.ty,
+            ResolvedType::Ref(_) | ResolvedType::RefMut(_)
+            | ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+        );
+        if !info.is_copy && !is_ref {
             if let Some(owner_info) = self.lookup_var_mut(name) {
                 owner_info.state = OwnershipState::Moved {
                     moved_to: "<used>".to_string(),

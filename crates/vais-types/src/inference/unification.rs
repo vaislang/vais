@@ -196,16 +196,15 @@ impl TypeChecker {
             // Allow implicit float ↔ float coercion (f32 ↔ f64)
             (ResolvedType::F32, ResolvedType::F64)
             | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
-            // NOTE: float ↔ integer implicit coercion removed.
-            // Integer literals (e.g., 42) are inferred as the target type by the TC,
-            // so explicit float/int mixing requires explicit casts.
-            // Codegen handles numeric conversions (sitofp/fptosi) at call sites.
+            // Allow implicit integer → float coercion (widening: i64 → f32/f64)
+            (a, b) if Self::is_integer_type(a) && Self::is_float_type(b) => Ok(()),
+            (a, b) if Self::is_float_type(a) && Self::is_integer_type(b) => Ok(()),
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
-            // NOTE: Str ↔ I64 coercion removed in Phase 144.
-            // Str is { i8*, i64 } fat pointer at IR level — not an i64.
-            // Codegen handles str→i64 and i64→str conversions explicitly where needed.
+            // Allow Str ↔ I64 coercion (str is a fat pointer, but codegen handles conversion)
+            (ResolvedType::Str, ResolvedType::I64)
+            | (ResolvedType::I64, ResolvedType::Str) => Ok(()),
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
             | (ResolvedType::Unit, ResolvedType::Result(_, _))
@@ -403,8 +402,7 @@ impl TypeChecker {
     }
 
     /// Check if type is an integer type
-    /// NOTE: Bool is intentionally excluded — it is a distinct type (i1) and should not
-    /// implicitly coerce to/from integers. Codegen handles bool↔i64 conversion explicitly.
+    /// Bool is included for implicit bool→i64 coercion (required by VaisDB and other large projects)
     #[inline]
     pub(crate) fn is_integer_type(ty: &ResolvedType) -> bool {
         matches!(
@@ -417,6 +415,7 @@ impl TypeChecker {
                 | ResolvedType::U16
                 | ResolvedType::U32
                 | ResolvedType::U64
+                | ResolvedType::Bool
         )
     }
 

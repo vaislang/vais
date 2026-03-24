@@ -169,6 +169,7 @@ fn generate_clone_impl(s: &Struct) -> Impl {
     let clone_body = Expr::StructLit {
         name: sp(name.clone()),
         fields,
+        enum_name: None,
     };
 
     let self_param = make_param(
@@ -291,6 +292,7 @@ fn generate_default_impl(s: &Struct) -> Impl {
     let default_body = Expr::StructLit {
         name: sp(name.clone()),
         fields,
+        enum_name: None,
     };
 
     let ret = Type::Named {

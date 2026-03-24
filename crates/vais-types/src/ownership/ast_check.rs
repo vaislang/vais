@@ -277,17 +277,33 @@ impl OwnershipChecker {
                 self.check_expr_ownership(func)?;
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    // Function arguments move non-Copy values
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — function signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
 
             Expr::MethodCall { receiver, args, .. } => {
-                self.check_expr_ownership(receiver)?;
+                // Method call receiver is borrowed, not moved.
+                // Only check it hasn't already been moved, but don't mark it as moved.
+                if let Expr::Ident(name) = &receiver.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        if let OwnershipState::Moved { moved_at, .. } = &info.state {
+                            let err = TypeError::UseAfterMove {
+                                var_name: name.clone(),
+                                moved_at: *moved_at,
+                                use_at: Some(expr.span),
+                            };
+                            return self.report_error(err);
+                        }
+                    }
+                } else {
+                    self.check_expr_ownership(receiver)?;
+                }
                 for arg in args {
                     self.check_expr_ownership(arg)?;
-                    self.check_move_from_expr(arg)?;
+                    // Don't mark args as moved — method signatures determine ownership
+                    // (args passed by &T or &mut T should not be moved)
                 }
                 Ok(())
             }
@@ -309,7 +325,7 @@ impl OwnershipChecker {
 
             Expr::Assign { target, value } => {
                 self.check_expr_ownership(value)?;
-                self.check_move_from_expr(value)?;
+                // Assignment moves the value into the target — don't double-mark
 
                 if let Expr::Ident(name) = &target.node {
                     // Check for active borrows before assigning
