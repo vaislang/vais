@@ -222,10 +222,10 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         let receiver_type = self.check_expr(receiver)?;
 
-        // Extract the inner type if receiver is a reference
+        // Extract the inner type if receiver is a reference or pointer (auto-deref)
         let (inner_type, receiver_generics) = match &receiver_type {
             ResolvedType::Named { name, generics } => (name.clone(), generics.clone()),
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
                 if let ResolvedType::Named { name, generics } = inner.as_ref() {
                     (name.clone(), generics.clone())
                 } else {

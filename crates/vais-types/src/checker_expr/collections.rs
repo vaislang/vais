@@ -144,10 +144,10 @@ impl TypeChecker {
                     Err(e) => return Some(Err(e)),
                 };
 
-                // Handle both direct Named types and references to Named types
+                // Handle direct Named types, references, and pointers (auto-deref)
                 let type_name = match &inner_type {
                     ResolvedType::Named { name, .. } => Some(name.clone()),
-                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
                         if let ResolvedType::Named { name, .. } = inner.as_ref() {
                             Some(name.clone())
                         } else {
