@@ -754,8 +754,13 @@ impl Parser {
                             self.advance_skip();
                             let mut fields = Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
+                                // Support `..` rest pattern in variant struct patterns
+                                if self.check(&Token::DotDot) {
+                                    self.advance();
+                                    break;
+                                }
                                 fields.push(self.parse_pattern()?);
-                                if !self.check(&Token::RBrace) {
+                                if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
                                     self.expect_skip(&Token::Comma)?;
                                 }
                             }

@@ -133,18 +133,40 @@ impl Parser {
         let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
 
-        let lbrace_span = self.current_span();
-        self.expect(&Token::LBrace)?;
         let mut variants = Vec::new();
 
-        while !self.check(&Token::RBrace) && !self.is_at_end() {
-            variants.push(self.parse_variant()?);
-            if !self.check(&Token::RBrace) {
-                self.expect(&Token::Comma)?;
+        // Support both syntaxes:
+        // E Name { V1, V2 { field: T }, V3 }     (brace syntax)
+        // E Name = V1 | V2 { field: T } | V3;    (pipe syntax)
+        if self.check(&Token::Eq) {
+            // Pipe syntax: E Name = V1 | V2 | V3;
+            self.advance(); // consume '='
+            loop {
+                variants.push(self.parse_variant()?);
+                if self.check(&Token::Pipe) {
+                    self.advance(); // consume '|'
+                } else {
+                    break;
+                }
             }
-        }
+            // Optional trailing semicolon
+            if self.check(&Token::Semi) {
+                self.advance();
+            }
+        } else {
+            // Brace syntax: E Name { V1, V2, V3 }
+            let lbrace_span = self.current_span();
+            self.expect(&Token::LBrace)?;
 
-        self.expect_closing(&Token::RBrace, lbrace_span)?;
+            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                variants.push(self.parse_variant()?);
+                if !self.check(&Token::RBrace) {
+                    self.expect(&Token::Comma)?;
+                }
+            }
+
+            self.expect_closing(&Token::RBrace, lbrace_span)?;
+        }
 
         Ok(Enum {
             name,
