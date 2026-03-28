@@ -620,6 +620,21 @@ match.merge: phi %Vec* [ %t8, %arm7 ], [ %t20, %arm9 ]   ← 타입 불일치!
   결과: 워크스페이스 빌드 통과, E2E 2437 passed / 48 failed (전부 pre-existing) / 2 ignored, 0 regression
 진행률: 5/5 (100%) ✅
 
+### Phase 151: Pre-existing E2E 실패 48건 해소
+
+> **목표**: Phase 150 이전부터 존재하는 48개 E2E 실패를 카테고리별로 수정
+> **기대 효과**: E2E 0 fail 달성, 컴파일러 정확성 향상
+
+모드: 자동진행
+- [x] 1. 카테고리 A: TC 에러 미감지 22개 — 타입 불일치 에러 감지 복원 (impl-sonnet) ✅ 2026-03-28
+  변경: unification.rs — Bool제거 from is_integer_type, Str↔I64/Float↔Int coercion 제거
+- [ ] 2. 카테고리 B: Generic struct field access 16개 — monomorphization 타입 전파 (Opus 직접)
+  진행: self param Self substitution 수정 → TypeError 해결, 런타임 exit code 불일치 잔존
+- [ ] 3. 카테고리 C: Closure/Async IR 에러 4개 — IR 타입 불일치 수정 (Opus 직접)
+  진행: closure body block 내 변수 alloca 미생성 문제 미해결
+- [ ] 4. 검증: E2E 전체 통과 + ROADMAP 업데이트 (Opus 직접) [blockedBy: 2, 3]
+진행률: 1/4 (25%)
+
 #### Phase 150-A: compute_sizeof 수정 (우선순위 1, 예상 0.5일)
 - [ ] `types/conversion.rs`: compute_sizeof에 Named type struct 필드 합산 추가
 - [ ] `generate_expr_call.rs`: store_typed/load_typed에서 compute_sizeof 결과 사용

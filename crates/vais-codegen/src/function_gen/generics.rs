@@ -254,9 +254,17 @@ impl CodeGenerator {
             .params
             .iter()
             .map(|p| {
+                let name = p.name.node.to_string();
+                // Special case: `self` parameter has Type::Infer in AST, which resolves
+                // to Unknown. Use the Self substitution directly instead.
+                if name == "self" {
+                    if let Some(self_ty) = self.generics.substitutions.get("Self").cloned() {
+                        return (name, self_ty);
+                    }
+                }
                 let ty = self.ast_type_to_resolved(&p.ty.node);
                 let concrete_ty = vais_types::substitute_type(&ty, &self.generics.substitutions);
-                (p.name.node.to_string(), concrete_ty)
+                (name, concrete_ty)
             })
             .collect();
 

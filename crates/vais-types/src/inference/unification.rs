@@ -192,19 +192,11 @@ impl TypeChecker {
                 Ok(())
             }
             // Allow implicit integer type conversions (widening and narrowing)
+            // Bool is excluded: bool is not an integer type in Vais's type system.
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
-            // Allow implicit float ↔ float coercion (f32 ↔ f64)
-            (ResolvedType::F32, ResolvedType::F64)
-            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
-            // Allow implicit integer → float coercion (widening: i64 → f32/f64)
-            (a, b) if Self::is_integer_type(a) && Self::is_float_type(b) => Ok(()),
-            (a, b) if Self::is_float_type(a) && Self::is_integer_type(b) => Ok(()),
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
-            // Allow Str ↔ I64 coercion (str is a fat pointer, but codegen handles conversion)
-            (ResolvedType::Str, ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Str) => Ok(()),
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
             | (ResolvedType::Unit, ResolvedType::Result(_, _))
@@ -401,8 +393,8 @@ impl TypeChecker {
         }
     }
 
-    /// Check if type is an integer type
-    /// Bool is included for implicit bool→i64 coercion (required by VaisDB and other large projects)
+    /// Check if type is an integer type.
+    /// Bool is NOT included: bool is a distinct type in Vais's type system.
     #[inline]
     pub(crate) fn is_integer_type(ty: &ResolvedType) -> bool {
         matches!(
@@ -415,7 +407,6 @@ impl TypeChecker {
                 | ResolvedType::U16
                 | ResolvedType::U32
                 | ResolvedType::U64
-                | ResolvedType::Bool
         )
     }
 

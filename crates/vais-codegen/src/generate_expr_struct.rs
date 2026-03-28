@@ -7,6 +7,7 @@ use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, C
 
 impl CodeGenerator {
     /// Handle struct and union literal expressions
+    #[inline(never)]
     pub(crate) fn generate_expr_struct_lit(
         &mut self,
         name: &Spanned<String>,
@@ -20,9 +21,9 @@ impl CodeGenerator {
         if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
             let mut ir = String::new();
 
-            // Allocate struct on stack
+            // Allocate struct on stack (hoisted to entry block)
             let struct_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = alloca %{}", struct_ptr, type_name);
+            self.emit_entry_alloca(&struct_ptr, &format!("%{}", type_name));
 
             // Store each field
             for (field_name, field_expr) in fields {
@@ -90,9 +91,9 @@ impl CodeGenerator {
         } else if let Some(union_info) = self.types.unions.get(type_name).cloned() {
             let mut ir = String::new();
 
-            // Allocate union on stack
+            // Allocate union on stack (hoisted to entry block)
             let union_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = alloca %{}", union_ptr, type_name);
+            self.emit_entry_alloca(&union_ptr, &format!("%{}", type_name));
 
             // Union should have exactly one field in the literal
             if fields.len() != 1 {
@@ -153,6 +154,7 @@ impl CodeGenerator {
     }
 
     /// Generate enum struct variant construction: Shape.Circle { radius: 5.0 }
+    #[inline(never)]
     pub(crate) fn generate_enum_variant_struct(
         &mut self,
         enum_name: &str,

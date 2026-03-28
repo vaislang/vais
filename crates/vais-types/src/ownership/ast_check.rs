@@ -351,14 +351,36 @@ impl OwnershipChecker {
 
             Expr::If { cond, then, else_ } => {
                 self.check_expr_ownership(cond)?;
+
+                // Save ownership state before branches for proper merge
+                let before_snapshot = self.save_ownership_snapshot();
+
+                // Check then-branch
                 self.push_scope();
                 for stmt in then {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_branch) = else_ {
+                    // Restore to pre-then state before checking else
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_branch)?;
+
+                    let after_else_snapshot = self.save_ownership_snapshot();
+
+                    // Merge: variable is moved only if BOTH branches moved it
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
+                // If no else branch, keep the then-branch state as-is
+                // (conservative: if then might move, assume it could happen)
+
                 Ok(())
             }
 
@@ -521,13 +543,26 @@ impl OwnershipChecker {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_branch) => {
                 self.check_expr_ownership(cond)?;
+
+                let before_snapshot = self.save_ownership_snapshot();
+
                 self.push_scope();
                 for stmt in stmts {
                     self.check_stmt(stmt)?;
                 }
                 self.pop_scope();
+
+                let after_then_snapshot = self.save_ownership_snapshot();
+
                 if let Some(else_b) = else_branch {
+                    self.restore_ownership_snapshot(before_snapshot.clone());
                     self.check_if_else(else_b)?;
+                    let after_else_snapshot = self.save_ownership_snapshot();
+                    self.merge_branch_ownership(
+                        &before_snapshot,
+                        &after_then_snapshot,
+                        &after_else_snapshot,
+                    );
                 }
                 Ok(())
             }
