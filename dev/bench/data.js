@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774706193492,
+  "lastUpdate": 1774706292659,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32663,6 +32663,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 798958,
             "range": "± 4523",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "e807d5e83e83eaa04120819a39654065d77a9fac",
+          "message": "style: cargo fmt — 61 files formatted for CI compliance\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-28T22:53:11+09:00",
+          "tree_id": "d7916310dc31dc5967ad6d3ef1c7b55945c6f7e8",
+          "url": "https://github.com/vaislang/vais/commit/e807d5e83e83eaa04120819a39654065d77a9fac"
+        },
+        "date": 1774706291843,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3221,
+            "range": "± 65",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6591,
+            "range": "± 149",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7811,
+            "range": "± 81",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 13705,
+            "range": "± 325",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17873,
+            "range": "± 149",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34272,
+            "range": "± 249",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31505,
+            "range": "± 110",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67473,
+            "range": "± 238",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 290957,
+            "range": "± 769",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 439573,
+            "range": "± 1831",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 119061,
+            "range": "± 2667",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 745698,
+            "range": "± 2114",
             "unit": "ns/iter"
           }
         ]
