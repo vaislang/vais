@@ -257,6 +257,43 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 156: Codecov 68% → 80% — 핵심 crate 단위 테스트 대량 추가
+
+> **현황**: cargo-llvm-cov 68.2% (65,553/96,156줄), CI 제외: python/node/dap/playground-server/tutorial
+> **목표**: 80%+ (≈77,000줄 커버) → **+11,500줄 추가 커버 필요**
+> **전략**: 테스트 비율 최하위 crate부터 집중 투자, crate별 병렬 실행
+
+#### 대상 crate 우선순위 (테스트/소스 비율 순)
+
+| 순위 | crate | 소스줄 | 테스트비율 | 예상 추가 커버 | 작업 |
+|------|-------|--------|-----------|--------------|------|
+| 1 | vais-codegen | 52,114줄 | 34% | +5,000줄 | 핵심 codegen 경로 단위 테스트 (expr, stmt, types, module_gen) |
+| 2 | vais-types | 20,436줄 | — | +3,000줄 | checker_expr, checker_fn, inference 단위 테스트 |
+| 3 | vais-macro | 4,057줄 | 17% | +800줄 | expansion, hygiene, declarative macro 테스트 |
+| 4 | vais-gpu | 5,226줄 | — | +1,000줄 | CUDA/Metal/OpenCL/WebGPU 백엔드별 테스트 |
+| 5 | vais-hotreload | 1,463줄 | 18% | +300줄 | watcher, reload 로직 테스트 |
+| 6 | vais-dynload | 4,954줄 | 22% | +500줄 | WASM sandbox, module loader 테스트 |
+| 7 | vais-gc | 2,941줄 | 31% | +400줄 | generational GC, mark/sweep 테스트 |
+
+모드: 대기 중
+- [ ] 1. vais-codegen 단위 테스트 — expr_helpers, stmt, control_flow, module_gen (impl-sonnet)
+- [ ] 2. vais-types 단위 테스트 — checker_expr, checker_fn, inference, ownership (impl-sonnet) ∥1
+- [ ] 3. vais-macro + vais-gpu 단위 테스트 (impl-sonnet) ∥1 ∥2
+- [ ] 4. vais-hotreload + vais-dynload + vais-gc 단위 테스트 (impl-sonnet) ∥1 ∥2 ∥3
+- [ ] 5. CI 검증 — cargo llvm-cov 실행 + Codecov 확인 (Opus 직접) [blockedBy: 1,2,3,4]
+진행률: 0/5 (0%)
+
+### Phase 157: Codecov 80% → 85% — E2E 포함 + 잔여 crate 보강
+
+> **전략**: CI의 llvm-cov에 E2E 테스트 포함 설정 변경 (가장 큰 커버리지 점프) + 잔여 crate 보강
+> **예상 효과**: E2E 2,487개 테스트가 커버리지에 포함되면 codegen/types/parser 커버 대폭 상승
+
+모드: 대기 중
+- [ ] 1. CI llvm-cov에 E2E 테스트 포함 — ci.yml coverage job에 --include-e2e 또는 vaisc 포함 (impl-sonnet)
+- [ ] 2. vais-registry-server + vais-profiler 단위 테스트 보강 (impl-sonnet) ∥1
+- [ ] 3. CI 검증 — push 후 Codecov 85%+ 확인 (Opus 직접) [blockedBy: 1,2]
+진행률: 0/3 (0%)
+
 ### Phase 155: 대형 파일 모듈 분할 R15 — auto_vectorize + conversion
 
 > **목표**: 1,100줄+ 대형 파일 2개를 의미적 서브모듈로 분할
