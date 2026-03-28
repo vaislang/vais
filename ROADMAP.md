@@ -257,6 +257,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 155: 대형 파일 모듈 분할 R15 — auto_vectorize + conversion
+
+> **목표**: 1,100줄+ 대형 파일 2개를 의미적 서브모듈로 분할
+> **기대 효과**: 모듈 응집력 향상, 코드 탐색 용이성, generate_expr_call.rs(1,211줄)는 함수 3개로 분할 부적합 — 제외
+
+모드: 자동진행
+- [x] 1. auto_vectorize.rs 분할 — 590줄 + vectorize_utils.rs 280줄 (impl-sonnet) ✅ 2026-03-28
+  변경: auto_vectorize.rs — 유틸 함수 11개 → vectorize_utils.rs, #[path] attr로 서브모듈 선언
+- [x] 2. conversion.rs 분할 — 634줄 + type_gen.rs 74줄 + sizeof.rs 293줄 + coercion.rs 120줄 (impl-sonnet) ✅ 2026-03-28
+  변경: types/mod.rs에 3개 pub mod 추가, impl CodeGenerator 블록 분산
+- [x] 3. 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-28
+  결과: cargo check 0 warnings, 전체 테스트 통과 (E2E 37건 pre-existing runtime failure — 모듈 분할 무관)
+진행률: 3/3 (100%) ✅
+
 ### Phase 154: vais-bindgen 안정성 — Regex LazyLock 전환 + unwrap 제거
 
 > **목표**: parser.rs 13개 Regex::new().unwrap()을 LazyLock static으로 전환 (성능+안전성), tokens.last().unwrap() 수정

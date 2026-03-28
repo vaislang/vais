@@ -6,6 +6,9 @@
 //! - `tests`: Unit tests for type mapping and sizeof/alignof
 
 mod conversion;
+pub mod type_gen;
+pub mod sizeof;
+pub mod coercion;
 
 #[cfg(test)]
 mod tests;
