@@ -16,8 +16,11 @@ pub fn compile_to_ir(source: &str) -> Result<String, String> {
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("e2e_test");
     // Pass resolved function signatures for inferred parameter type support
-    gen.set_resolved_functions(checker.get_all_functions().clone());
+    // Use get_all_functions_with_methods() to include struct methods with mangled names
+    // (e.g., Container_get) so codegen can resolve return types in monomorphized functions.
+    gen.set_resolved_functions(checker.get_all_functions_with_methods());
     gen.set_type_aliases(checker.get_type_aliases().clone());
+    gen.set_expr_types(checker.get_expr_types().clone());
     let instantiations = checker.get_generic_instantiations();
     let ir = if instantiations.is_empty() {
         gen.generate_module(&module)
