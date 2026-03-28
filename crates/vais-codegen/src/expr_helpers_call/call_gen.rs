@@ -173,7 +173,10 @@ impl CodeGenerator {
                 let is_slice_param = match pt {
                     ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                        matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                        matches!(
+                            inner.as_ref(),
+                            ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                        )
                     }
                     _ => false,
                 };
@@ -196,19 +199,40 @@ impl CodeGenerator {
                         val.clone()
                     };
                     let data_field = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0", data_field, vec_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                        data_field,
+                        vec_ptr
+                    );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
                     let data_ptr = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
                     let len_field = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1", len_field, vec_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1",
+                        len_field,
+                        vec_ptr
+                    );
                     let len_val = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_field);
                     let fat1 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0", fat1, data_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                        fat1,
+                        data_ptr
+                    );
                     let fat2 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1", fat2, fat1, len_val);
+                    write_ir!(
+                        ir,
+                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                        fat2,
+                        fat1,
+                        len_val
+                    );
                     val = fat2;
                     arg_vals.push(format!("{{ i8*, i64 }} {}", val));
                     continue;
@@ -623,20 +647,56 @@ impl CodeGenerator {
             } else {
                 (llvm_ty.clone(), type_size)
             };
-            let needs_cast = effective_ty != "i64" && effective_ty != "i32" && effective_ty != "i16" && effective_ty != "i8"
-                && effective_ty != "i1" && !effective_ty.ends_with('*');
+            let needs_cast = effective_ty != "i64"
+                && effective_ty != "i32"
+                && effective_ty != "i16"
+                && effective_ty != "i8"
+                && effective_ty != "i1"
+                && !effective_ty.ends_with('*');
             if needs_cast && effective_size > 8 && arg_val.starts_with('%') {
                 // Large struct (> 8 bytes): heap-allocate to avoid payload overflow.
                 let heap_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = call i8* @malloc(i64 {})", heap_ptr, effective_size);
+                write_ir!(
+                    ir,
+                    "  {} = call i8* @malloc(i64 {})",
+                    heap_ptr,
+                    effective_size
+                );
                 let typed_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i8* {} to {}*", typed_ptr, heap_ptr, effective_ty);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_ptr,
+                    heap_ptr,
+                    effective_ty
+                );
                 if !self.is_expr_value(arg_expr) {
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, effective_ty, effective_ty, arg_val);
-                    write_ir!(ir, "  store {} {}, {}* {}", effective_ty, loaded, effective_ty, typed_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        effective_ty,
+                        effective_ty,
+                        arg_val
+                    );
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        effective_ty,
+                        loaded,
+                        effective_ty,
+                        typed_ptr
+                    );
                 } else {
-                    write_ir!(ir, "  store {} {}, {}* {}", effective_ty, arg_val, effective_ty, typed_ptr);
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        effective_ty,
+                        arg_val,
+                        effective_ty,
+                        typed_ptr
+                    );
                 }
                 let ptr_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", ptr_i64, heap_ptr);
@@ -644,8 +704,21 @@ impl CodeGenerator {
             } else if needs_cast && arg_val.starts_with('%') {
                 // Small struct (≤ 8 bytes): bitcast payload slot and store directly
                 let cast_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_field_ptr, effective_ty);
-                write_ir!(ir, "  store {} {}, {}* {}", effective_ty, arg_val, effective_ty, cast_ptr);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i64* {} to {}*",
+                    cast_ptr,
+                    payload_field_ptr,
+                    effective_ty
+                );
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* {}",
+                    effective_ty,
+                    arg_val,
+                    effective_ty,
+                    cast_ptr
+                );
             } else {
                 write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
             }

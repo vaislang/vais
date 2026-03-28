@@ -47,16 +47,14 @@ async fn init(service: &LspService<VaisBackend>) {
 async fn open_doc(service: &LspService<VaisBackend>, uri: &Url, text: &str) {
     let _ = tokio::time::timeout(
         Duration::from_secs(5),
-        service
-            .inner()
-            .did_open(DidOpenTextDocumentParams {
-                text_document: TextDocumentItem {
-                    uri: uri.clone(),
-                    language_id: "vais".to_string(),
-                    version: 1,
-                    text: text.to_string(),
-                },
-            }),
+        service.inner().did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "vais".to_string(),
+                version: 1,
+                text: text.to_string(),
+            },
+        }),
     )
     .await;
 }
@@ -104,7 +102,10 @@ async fn test_completion_after_dot_method() {
     assert!(result.is_some());
     if let Some(CompletionResponse::Array(items)) = result {
         // Should have method completions (at least generic ones like len, clone, etc.)
-        assert!(!items.is_empty(), "Should provide method completions after dot");
+        assert!(
+            !items.is_empty(),
+            "Should provide method completions after dot"
+        );
     }
 }
 
@@ -199,7 +200,10 @@ async fn test_document_symbols_with_functions() {
 
     assert!(result.is_some());
     if let Some(DocumentSymbolResponse::Flat(symbols)) = result {
-        assert!(symbols.len() >= 2, "Should have at least 2 function symbols");
+        assert!(
+            symbols.len() >= 2,
+            "Should have at least 2 function symbols"
+        );
         let names: Vec<_> = symbols.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"foo"));
         assert!(names.contains(&"bar"));
@@ -700,19 +704,17 @@ async fn test_did_change_updates_ast() {
     // Now change to add another function (timeout for publish_diagnostics)
     let _ = tokio::time::timeout(
         Duration::from_secs(5),
-        service
-            .inner()
-            .did_change(DidChangeTextDocumentParams {
-                text_document: VersionedTextDocumentIdentifier {
-                    uri: uri.clone(),
-                    version: 2,
-                },
-                content_changes: vec![TextDocumentContentChangeEvent {
-                    range: None,
-                    range_length: None,
-                    text: "F foo() -> i64 = 1\nF bar() -> i64 = 2\n".to_string(),
-                }],
-            }),
+        service.inner().did_change(DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 2,
+            },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "F foo() -> i64 = 1\nF bar() -> i64 = 2\n".to_string(),
+            }],
+        }),
     )
     .await;
 
@@ -729,7 +731,10 @@ async fn test_did_change_updates_ast() {
     if let Some(DocumentSymbolResponse::Flat(symbols)) = result {
         let names: Vec<_> = symbols.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"foo"));
-        assert!(names.contains(&"bar"), "Should see new function after didChange");
+        assert!(
+            names.contains(&"bar"),
+            "Should see new function after didChange"
+        );
     }
 }
 

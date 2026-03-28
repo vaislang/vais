@@ -457,12 +457,18 @@ impl CodeGenerator {
                         let coerced_val =
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
-                        write_ir!(ir, "  store {} {}, {}* %{}", llvm_ty, coerced_val, llvm_ty, alloca_name);
-                        // Convert to alloca-based local
-                        self.fn_ctx.locals.insert(
-                            name.clone(),
-                            crate::LocalVar::alloca(local_ty, alloca_name),
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* %{}",
+                            llvm_ty,
+                            coerced_val,
+                            llvm_ty,
+                            alloca_name
                         );
+                        // Convert to alloca-based local
+                        self.fn_ctx
+                            .locals
+                            .insert(name.clone(), crate::LocalVar::alloca(local_ty, alloca_name));
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // Coerce value width to match local variable type
@@ -845,7 +851,11 @@ impl CodeGenerator {
                     );
                 }
             }
-        } else if let Expr::Field { expr: obj_expr, field } = &target.node {
+        } else if let Expr::Field {
+            expr: obj_expr,
+            field,
+        } = &target.node
+        {
             // Field compound assignment: self.field += value
             // Need to store the result back to the field
             let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
@@ -860,20 +870,39 @@ impl CodeGenerator {
             if let ResolvedType::Named { name, .. } = &resolved {
                 let type_name = self.resolve_struct_name(name);
                 if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
-                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == &field.node) {
+                    if let Some(field_idx) = struct_info
+                        .fields
+                        .iter()
+                        .position(|(n, _)| n == &field.node)
+                    {
                         let field_ptr = self.next_temp(counter);
                         write_ir!(
                             ir,
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
-                            field_ptr, type_name, type_name, obj_val, field_idx
+                            field_ptr,
+                            type_name,
+                            type_name,
+                            obj_val,
+                            field_idx
                         );
                         let field_ty = &struct_info.fields[field_idx].1;
                         let llvm_ty = self.type_to_llvm(field_ty);
-                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, result, llvm_ty, field_ptr);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_ty,
+                            result,
+                            llvm_ty,
+                            field_ptr
+                        );
                     }
                 }
             }
-        } else if let Expr::Index { expr: arr_expr, index: idx_expr } = &target.node {
+        } else if let Expr::Index {
+            expr: arr_expr,
+            index: idx_expr,
+        } = &target.node
+        {
             // Array/Vec element compound assignment: arr[idx] += value
             let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
             let (idx_val, idx_ir) = self.generate_expr(idx_expr, counter)?;
@@ -888,8 +917,23 @@ impl CodeGenerator {
                 _ => self.llvm_type_of(&arr_val),
             };
             let elem_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = getelementptr {}, {}* {}, i64 {}", elem_ptr, elem_llvm, elem_llvm, arr_val, idx_val);
-            write_ir!(ir, "  store {} {}, {}* {}", elem_llvm, result, elem_llvm, elem_ptr);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {}* {}, i64 {}",
+                elem_ptr,
+                elem_llvm,
+                elem_llvm,
+                arr_val,
+                idx_val
+            );
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                elem_llvm,
+                result,
+                elem_llvm,
+                elem_ptr
+            );
         }
 
         Ok((result, ir))

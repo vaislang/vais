@@ -176,8 +176,15 @@ impl CodeGenerator {
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
         // DEBUG: print keys containing "TestSuite" or "ByteBuffer"
         for key in resolved.keys() {
-            if key.contains("TestSuite") || key.contains("ByteBuffer") || key.contains("TestCase") || key.contains("TestRunner") {
-                eprintln!("[DEBUG resolved_function_sigs] key={} ret={:?}", key, resolved[key].ret);
+            if key.contains("TestSuite")
+                || key.contains("ByteBuffer")
+                || key.contains("TestCase")
+                || key.contains("TestRunner")
+            {
+                eprintln!(
+                    "[DEBUG resolved_function_sigs] key={} ret={:?}",
+                    key, resolved[key].ret
+                );
             }
         }
         self.types.resolved_function_sigs = resolved;

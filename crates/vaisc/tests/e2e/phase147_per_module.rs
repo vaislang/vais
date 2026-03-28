@@ -34,8 +34,7 @@ fn compile_per_module(source: &str) -> Result<(String, String), String> {
     let main_indices: Vec<usize> = (split_point..total_items).collect();
 
     // Generate IR for the "other" (non-main) module.
-    let mut gen_other =
-        CodeGenerator::new_with_target("other", vais_codegen::TargetTriple::Native);
+    let mut gen_other = CodeGenerator::new_with_target("other", vais_codegen::TargetTriple::Native);
     gen_other.set_resolved_functions(resolved_fns.clone());
     gen_other.set_type_aliases(type_aliases.clone());
     let other_ir = gen_other

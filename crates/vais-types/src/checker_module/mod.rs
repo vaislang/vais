@@ -101,9 +101,14 @@ impl TypeChecker {
                     self.globals
                         .insert(global_def.name.node.clone(), global_type);
                 }
-                Item::Use(_) | Item::Macro(_) | Item::Error { .. }
-                | Item::Struct(_) | Item::Enum(_)
-                | Item::Union(_) | Item::TypeAlias(_) | Item::TraitAlias(_)
+                Item::Use(_)
+                | Item::Macro(_)
+                | Item::Error { .. }
+                | Item::Struct(_)
+                | Item::Enum(_)
+                | Item::Union(_)
+                | Item::TypeAlias(_)
+                | Item::TraitAlias(_)
                 | Item::Trait(_) => {
                     // Already handled in pass 1a, or not needed here
                 }

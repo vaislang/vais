@@ -60,19 +60,16 @@ impl CodeGenerator {
     fn type_contains_generic(ty: &ResolvedType, param: &str) -> bool {
         match ty {
             ResolvedType::Generic(p) => p == param,
-            ResolvedType::Named { generics, .. } => {
-                generics.iter().any(|g| Self::type_contains_generic(g, param))
-            }
+            ResolvedType::Named { generics, .. } => generics
+                .iter()
+                .any(|g| Self::type_contains_generic(g, param)),
             ResolvedType::Optional(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::RefMut(inner)
             | ResolvedType::Slice(inner)
-            | ResolvedType::SliceMut(inner) => {
-                Self::type_contains_generic(inner, param)
-            }
+            | ResolvedType::SliceMut(inner) => Self::type_contains_generic(inner, param),
             ResolvedType::Result(ok, err) => {
-                Self::type_contains_generic(ok, param)
-                    || Self::type_contains_generic(err, param)
+                Self::type_contains_generic(ok, param) || Self::type_contains_generic(err, param)
             }
             ResolvedType::Tuple(elems) => {
                 elems.iter().any(|e| Self::type_contains_generic(e, param))
@@ -146,7 +143,9 @@ impl CodeGenerator {
                             let subst: std::collections::HashMap<String, ResolvedType> = struct_def
                                 .generics
                                 .iter()
-                                .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                                .filter(|g| {
+                                    !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                                })
                                 .zip(generics.iter())
                                 .map(|(g, t)| (g.name.node.clone(), t.clone()))
                                 .collect();
@@ -155,7 +154,8 @@ impl CodeGenerator {
                                 .iter()
                                 .map(|f| {
                                     let field_ty = self.ast_type_to_resolved(&f.ty.node);
-                                    let concrete_ty = vais_types::substitute_type(&field_ty, &subst);
+                                    let concrete_ty =
+                                        vais_types::substitute_type(&field_ty, &subst);
                                     self.compute_sizeof(&concrete_ty)
                                 })
                                 .sum();
@@ -166,7 +166,8 @@ impl CodeGenerator {
                 if let Some(alias_ty) = self.types.type_aliases.get(name) {
                     let alias_ty = alias_ty.clone();
                     // Guard against alias pointing back to same name to avoid infinite recursion
-                    if !matches!(&alias_ty, ResolvedType::Named { name: alias_name, .. } if alias_name == name) {
+                    if !matches!(&alias_ty, ResolvedType::Named { name: alias_name, .. } if alias_name == name)
+                    {
                         return self.compute_sizeof(&alias_ty);
                     }
                 }
@@ -243,7 +244,10 @@ impl CodeGenerator {
             }
             ResolvedType::Result(ok, err) => {
                 // Result<T, E> alignment is max(1, align(T), align(E))
-                std::cmp::max(1, std::cmp::max(self.compute_alignof(ok), self.compute_alignof(err)))
+                std::cmp::max(
+                    1,
+                    std::cmp::max(self.compute_alignof(ok), self.compute_alignof(err)),
+                )
             }
             ResolvedType::Tuple(elems) => elems
                 .iter()

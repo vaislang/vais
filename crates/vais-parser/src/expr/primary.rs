@@ -120,7 +120,10 @@ impl Parser {
                         Expr::Cast {
                             expr: Box::new(Spanned::new(Expr::Int(n), Span::new(start, end))),
                             ty: Spanned::new(
-                                vais_ast::Type::Named { name: type_name.to_string(), generics: vec![] },
+                                vais_ast::Type::Named {
+                                    name: type_name.to_string(),
+                                    generics: vec![],
+                                },
                                 Span::new(start, end),
                             ),
                         }
@@ -724,7 +727,9 @@ impl Parser {
                     else if self.check(&Token::Dot) {
                         self.advance(); // skip '.'
                         let variant_span = self.current_span();
-                        let variant_tok = self.advance().ok_or(ParseError::UnexpectedEof { span: variant_span })?;
+                        let variant_tok = self
+                            .advance()
+                            .ok_or(ParseError::UnexpectedEof { span: variant_span })?;
                         let variant_name = if let Token::Ident(s) = variant_tok.token {
                             s
                         } else {
@@ -796,7 +801,8 @@ impl Parser {
                     // Check for struct destructure pattern: `Name { field, .. }`
                     else if self.check(&Token::LBrace) {
                         self.advance_skip();
-                        let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> = Vec::new();
+                        let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> =
+                            Vec::new();
                         while !self.check(&Token::RBrace) && !self.is_at_end() {
                             // Check for rest pattern `..`
                             if self.check(&Token::DotDot) {

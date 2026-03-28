@@ -61,8 +61,7 @@ F main() -> i64 {
     // The IR must NOT contain a pattern like "%t<N> = call void"
     let has_void_assignment = ir.lines().any(|line| {
         let trimmed = line.trim();
-        trimmed.starts_with("%t")
-            && trimmed.contains("= call void")
+        trimmed.starts_with("%t") && trimmed.contains("= call void")
     });
     assert!(
         !has_void_assignment,

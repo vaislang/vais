@@ -630,5 +630,4 @@ impl CodeGenerator {
             _ => ResolvedType::Unknown,
         }
     }
-
 }

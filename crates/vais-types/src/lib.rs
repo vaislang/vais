@@ -104,7 +104,7 @@ pub struct TypeChecker {
     pub(crate) traits: HashMap<String, TraitDef>,
     pub(crate) trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
     pub(crate) constants: HashMap<String, ResolvedType>, // Constant name -> type
-    pub(crate) globals: HashMap<String, ResolvedType>,   // Global variable name -> type
+    pub(crate) globals: HashMap<String, ResolvedType>, // Global variable name -> type
 
     // Scope stack
     pub(crate) scopes: Vec<HashMap<String, VarInfo>>,

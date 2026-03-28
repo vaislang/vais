@@ -147,7 +147,9 @@ impl TypeChecker {
                 // Handle direct Named types, references, and pointers (auto-deref)
                 let type_name = match &inner_type {
                     ResolvedType::Named { name, .. } => Some(name.clone()),
-                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
+                    ResolvedType::Ref(inner)
+                    | ResolvedType::RefMut(inner)
+                    | ResolvedType::Pointer(inner) => {
                         if let ResolvedType::Named { name, .. } = inner.as_ref() {
                             Some(name.clone())
                         } else {
@@ -290,7 +292,10 @@ impl TypeChecker {
                         }
                     }
                     // Vec<T> is indexable — vec[idx] returns T
-                    ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Vec" && !generics.is_empty() => {
                         if is_slice {
                             Some(Ok(ResolvedType::Pointer(Box::new(generics[0].clone()))))
                         } else if !index_type.is_integer() {
@@ -305,7 +310,11 @@ impl TypeChecker {
                     }
                     // Ref to Vec<T> is also indexable
                     ResolvedType::Ref(ref inner) => {
-                        if let ResolvedType::Named { ref name, ref generics } = **inner {
+                        if let ResolvedType::Named {
+                            ref name,
+                            ref generics,
+                        } = **inner
+                        {
                             if name == "Vec" && !generics.is_empty() {
                                 if !index_type.is_integer() {
                                     return Some(Err(TypeError::Mismatch {
@@ -419,22 +428,34 @@ impl TypeChecker {
                 )))
             }
 
-            Expr::StructLit { name, fields, enum_name } => {
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } => {
                 // Check for enum struct variant first (e.g., Shape.Circle { radius: 5.0 })
                 if let Some(ref ename) = enum_name {
-                    eprintln!("[TC DEBUG] enum_name={}, has_enum={}", ename, self.enums.contains_key(ename));
+                    eprintln!(
+                        "[TC DEBUG] enum_name={}, has_enum={}",
+                        ename,
+                        self.enums.contains_key(ename)
+                    );
                     if let Some(enum_def) = self.enums.get(ename).cloned() {
                         let variant_name = &name.node;
                         if let Some(variant_fields) = enum_def.variants.get(variant_name) {
                             // It's a valid enum variant — check the fields
-                            if let crate::types::VariantFieldTypes::Struct(expected_fields) = variant_fields {
+                            if let crate::types::VariantFieldTypes::Struct(expected_fields) =
+                                variant_fields
+                            {
                                 // Check each provided field
                                 for (field_name, value) in fields {
                                     let value_type = match self.check_expr(value) {
                                         Ok(t) => t,
                                         Err(e) => return Some(Err(e)),
                                     };
-                                    if let Some(expected_type) = expected_fields.get(&field_name.node) {
+                                    if let Some(expected_type) =
+                                        expected_fields.get(&field_name.node)
+                                    {
                                         if let Err(e) = self.unify(expected_type, &value_type) {
                                             return Some(Err(e));
                                         }
@@ -444,7 +465,11 @@ impl TypeChecker {
                             // Return the enum type
                             return Some(Ok(ResolvedType::Named {
                                 name: ename.clone(),
-                                generics: enum_def.generics.iter().map(|_| self.fresh_type_var()).collect(),
+                                generics: enum_def
+                                    .generics
+                                    .iter()
+                                    .map(|_| self.fresh_type_var())
+                                    .collect(),
                             }));
                         }
                     }

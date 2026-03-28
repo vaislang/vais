@@ -217,7 +217,11 @@ impl TypeChecker {
 
         // Fallback: if name looks like a constant (ALL_CAPS) not yet registered,
         // return I64 to avoid cascading errors
-        if name.contains('_') && name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
+        if name.contains('_')
+            && name
+                .chars()
+                .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+        {
             return Ok(VarInfo {
                 ty: ResolvedType::I64,
                 is_mut: false,

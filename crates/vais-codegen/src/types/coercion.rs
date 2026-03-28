@@ -55,10 +55,24 @@ impl CodeGenerator {
         let tmp = self.next_temp(counter);
         if actual_width < target_width {
             // Sign-extend to wider type
-            write_ir!(ir, "  {} = sext {} {} to {}", tmp, actual_ty, val, target_ty);
+            write_ir!(
+                ir,
+                "  {} = sext {} {} to {}",
+                tmp,
+                actual_ty,
+                val,
+                target_ty
+            );
         } else {
             // Truncate to narrower type
-            write_ir!(ir, "  {} = trunc {} {} to {}", tmp, actual_ty, val, target_ty);
+            write_ir!(
+                ir,
+                "  {} = trunc {} {} to {}",
+                tmp,
+                actual_ty,
+                val,
+                target_ty
+            );
         }
         tmp
     }

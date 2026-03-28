@@ -14,7 +14,10 @@ impl CodeGenerator {
         DEPTH.with(|d| {
             let current = d.get();
             if current > 10 {
-                return Err(CodegenError::InternalError(format!("recursion limit in generate_function: {}", f.name.node)));
+                return Err(CodegenError::InternalError(format!(
+                    "recursion limit in generate_function: {}",
+                    f.name.node
+                )));
             }
             d.set(current + 1);
             let result = self.generate_function_with_span(f, Span::default());
@@ -80,8 +83,7 @@ impl CodeGenerator {
                 };
                 // For "self" parameters, if type resolved to I64 but we're inside a method,
                 // use the struct type from the function name (e.g., TestSuiteResult_add → &TestSuiteResult)
-                if p.name.node == "self" || p.name.node == "mut self" {
-                }
+                if p.name.node == "self" || p.name.node == "mut self" {}
                 if (p.name.node == "self" || p.name.node == "mut self") && ty == ResolvedType::I64 {
                     // Extract struct name from function name (StructName_method)
                     if let Some(underscore_pos) = f.name.node.rfind('_') {

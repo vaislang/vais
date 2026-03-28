@@ -388,7 +388,14 @@ impl CodeGenerator {
                     let src_ty = format!("i{}", src_bits);
                     let dst_ty = format!("i{}", dst_bits);
                     if src_bits > dst_bits {
-                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                        write_ir!(
+                            ir,
+                            "  {} = trunc {} {} to {}",
+                            conv_tmp,
+                            src_ty,
+                            val,
+                            dst_ty
+                        );
                     } else {
                         write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
@@ -1179,19 +1186,33 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
                 let llvm_ty = self.type_to_llvm(&resolved_t);
                 // If val is a value (not pointer), alloca+store to get a pointer
-                let src_ptr = if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
-                    let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
-                    *counter += 1;
-                    self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
-                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val_val, llvm_ty, tmp_alloca);
-                    let cast = self.next_temp(counter);
-                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, tmp_alloca);
-                    cast
-                } else {
-                    let cast = self.next_temp(counter);
-                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
-                    cast
-                };
+                let src_ptr =
+                    if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
+                        let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
+                        *counter += 1;
+                        self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_ty,
+                            val_val,
+                            llvm_ty,
+                            tmp_alloca
+                        );
+                        let cast = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* {} to i8*",
+                            cast,
+                            llvm_ty,
+                            tmp_alloca
+                        );
+                        cast
+                    } else {
+                        let cast = self.next_temp(counter);
+                        write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
+                        cast
+                    };
                 write_ir!(
                     ir,
                     "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",

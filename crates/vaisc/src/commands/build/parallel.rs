@@ -122,7 +122,10 @@ pub(crate) fn run_per_module_emit_ir(
     let resolved_type_aliases = checker.get_type_aliases().clone();
     let instantiations = checker.get_generic_instantiations();
     for inst in &instantiations {
-        eprintln!("  [INST] base={}, mangled={}, kind={:?}, args={:?}", inst.base_name, inst.mangled_name, inst.kind, inst.type_args);
+        eprintln!(
+            "  [INST] base={}, mangled={}, kind={:?}, args={:?}",
+            inst.base_name, inst.mangled_name, inst.kind, inst.type_args
+        );
     }
     let instantiations = &instantiations;
 
@@ -164,7 +167,8 @@ pub(crate) fn run_per_module_emit_ir(
             }
 
             // Generate IR for this module's subset
-            let result = codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
+            let result =
+                codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
             let raw_ir = result.map_err(|e| {
                 let spanned = vais_codegen::SpannedCodegenError {
                     span: codegen.last_error_span(),

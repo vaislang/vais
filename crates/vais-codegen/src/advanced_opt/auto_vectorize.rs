@@ -280,8 +280,7 @@ impl AutoVectorizer {
                         let mut best_latch: Option<String> = None;
                         for src in sources {
                             if !src.is_empty() && src != label {
-                                let src_idx =
-                                    label_order.get(src.as_str()).copied().unwrap_or(0);
+                                let src_idx = label_order.get(src.as_str()).copied().unwrap_or(0);
                                 if src_idx >= header_idx {
                                     // This is a back edge - src is at or after header
                                     best_latch = Some(src.clone());

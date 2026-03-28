@@ -1854,14 +1854,17 @@ F main() -> i64 {
     let mut checker = vais_types::TypeChecker::new();
     checker.check_module(&module).unwrap();
     let insts = checker.get_generic_instantiations();
-    
+
     let mut gen = CodeGenerator::new("test");
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
 
     eprintln!("TC insts count: {}", insts.len());
     for inst in &insts {
-        eprintln!("  {:?}: {} -> {} {:?}", inst.kind, inst.base_name, inst.mangled_name, inst.type_args);
+        eprintln!(
+            "  {:?}: {} -> {} {:?}",
+            inst.kind, inst.base_name, inst.mangled_name, inst.type_args
+        );
     }
 
     let result = if insts.is_empty() {
@@ -1874,9 +1877,14 @@ F main() -> i64 {
     let ir = result.unwrap();
 
     // test_container should be defined (not just declared)
-    assert!(ir.contains("define i64 @test_container") || ir.contains("define i64 @\"test_container"),
+    assert!(
+        ir.contains("define i64 @test_container") || ir.contains("define i64 @\"test_container"),
         "test_container should be defined, IR contains:\n{}",
-        ir.lines().filter(|l| l.contains("test_container")).collect::<Vec<_>>().join("\n"));
+        ir.lines()
+            .filter(|l| l.contains("test_container"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }
 
 #[test]
@@ -1904,11 +1912,16 @@ F main() -> i64 { count_to(42) }
         gen.generate_module(&module)
     } else {
         gen.generate_module_with_instantiations(&module, &insts)
-    }.unwrap();
+    }
+    .unwrap();
     // Counter_drop should be defined (not just called)
-    assert!(ir.contains("define i64 @Counter_drop"), "Counter_drop should be defined");
+    assert!(
+        ir.contains("define i64 @Counter_drop"),
+        "Counter_drop should be defined"
+    );
     // Counter_drop body should NOT contain a recursive call to itself
-    let drop_body: String = ir.lines()
+    let drop_body: String = ir
+        .lines()
         .skip_while(|l| !l.contains("define i64 @Counter_drop"))
         .skip(1)
         .take_while(|l| !l.starts_with("define "))
@@ -1950,7 +1963,8 @@ F main() -> i64 { process(true) }
         gen.generate_module(&module)
     } else {
         gen.generate_module_with_instantiations(&module, &insts)
-    }.unwrap();
+    }
+    .unwrap();
     // IR must contain Token_drop call in the then-block (block-scope drop)
     assert!(ir.contains("Token_drop"), "IR must contain Token_drop call");
     // With single-pointer layout, drop is called directly with %var (no load needed)

@@ -195,8 +195,9 @@ impl TypeChecker {
             // Bool is excluded: bool is not an integer type in Vais's type system.
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
             // Allow unit () ↔ i64 (void context: i64 return in void function)
-            (ResolvedType::Unit, ResolvedType::I64)
-            | (ResolvedType::I64, ResolvedType::Unit) => Ok(()),
+            (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
+                Ok(())
+            }
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
             | (ResolvedType::Unit, ResolvedType::Result(_, _))
@@ -205,12 +206,14 @@ impl TypeChecker {
             // Vec<T> ↔ Slice/Ref — Vec<u8> and &[u8] are compatible
             (ResolvedType::Named { name, generics }, ResolvedType::Slice(elem))
             | (ResolvedType::Slice(elem), ResolvedType::Named { name, generics })
-                if name == "Vec" && !generics.is_empty() => {
+                if name == "Vec" && !generics.is_empty() =>
+            {
                 self.unify(&generics[0], elem)
             }
             (ResolvedType::Named { name, generics }, ResolvedType::Ref(inner))
             | (ResolvedType::Ref(inner), ResolvedType::Named { name, generics })
-                if name == "Vec" && !generics.is_empty() => {
+                if name == "Vec" && !generics.is_empty() =>
+            {
                 if let ResolvedType::Slice(elem) = inner.as_ref() {
                     self.unify(&generics[0], elem)
                 } else {

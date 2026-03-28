@@ -26,7 +26,9 @@ impl StmtVisitor for CodeGenerator {
                 ..
             } => self.generate_let_destructure(pattern, value, *is_mut, counter),
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
-            Stmt::Return(expr) => self.generate_return_stmt_visitor(expr.as_ref().map(|e| &**e), counter),
+            Stmt::Return(expr) => {
+                self.generate_return_stmt_visitor(expr.as_ref().map(|e| &**e), counter)
+            }
             Stmt::Break(value) => self.generate_break_stmt(value.as_ref().map(|v| &**v), counter),
             Stmt::Continue => self.generate_continue_stmt(),
             Stmt::Defer(expr) => {

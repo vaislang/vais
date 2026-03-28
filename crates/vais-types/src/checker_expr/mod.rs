@@ -113,16 +113,18 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         use crate::types::{TypeError, VariantFieldTypes};
 
-        let enum_def = self.enums.get(enum_name).cloned().ok_or_else(|| {
-            TypeError::UndefinedType {
-                name: format!(
-                    "enum '{}' not found (in '{}::{}')",
-                    enum_name, enum_name, variant
-                ),
-                span: Some(span),
-                suggestion: None,
-            }
-        })?;
+        let enum_def =
+            self.enums
+                .get(enum_name)
+                .cloned()
+                .ok_or_else(|| TypeError::UndefinedType {
+                    name: format!(
+                        "enum '{}' not found (in '{}::{}')",
+                        enum_name, enum_name, variant
+                    ),
+                    span: Some(span),
+                    suggestion: None,
+                })?;
 
         if !enum_def.variants.contains_key(variant) {
             return Err(TypeError::UndefinedVar {

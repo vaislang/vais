@@ -289,7 +289,14 @@ impl CodeGenerator {
                 // Strategy 2: No fn_instantiations entry, but the struct is a known
                 // generic container. Infer T from the first argument's type and try
                 // to construct the mangled name directly.
-                else if (self.generics.struct_defs.contains_key(name) || self.generics.generic_method_bodies.keys().any(|(s, _)| s == name)) && !args.is_empty() {
+                else if (self.generics.struct_defs.contains_key(name)
+                    || self
+                        .generics
+                        .generic_method_bodies
+                        .keys()
+                        .any(|(s, _)| s == name))
+                    && !args.is_empty()
+                {
                     let arg_types: Vec<ResolvedType> =
                         args.iter().map(|a| self.infer_expr_type(a)).collect();
                     // Filter out non-informative types (I64 is the default fallback)
@@ -348,15 +355,17 @@ impl CodeGenerator {
                                 }
                             }
 
-                            let mangled =
-                                vais_types::mangle_name(&base, &inferred_type_args);
+                            let mangled = vais_types::mangle_name(&base, &inferred_type_args);
                             if self.types.functions.contains_key(&mangled) {
                                 mangled
                             } else {
                                 // Try on-demand specialization: generate the specialized
                                 // function if we have the method template and type args
                                 let generated = self.try_generate_vec_specialization(
-                                    name, method_name, &inferred_type_args, counter,
+                                    name,
+                                    method_name,
+                                    &inferred_type_args,
+                                    counter,
                                 );
                                 if let Some(gen_name) = generated {
                                     gen_name
@@ -387,9 +396,7 @@ impl CodeGenerator {
             }
             // Also check resolved_function_sigs from type checker
             for fn_name in self.types.resolved_function_sigs.keys() {
-                if fn_name.ends_with(&method_suffix)
-                    && !candidates.contains(fn_name)
-                {
+                if fn_name.ends_with(&method_suffix) && !candidates.contains(fn_name) {
                     candidates.push(fn_name.clone());
                 }
             }
@@ -461,7 +468,14 @@ impl CodeGenerator {
                     let src_ty = format!("i{}", src_bits);
                     let dst_ty = format!("i{}", dst_bits);
                     if src_bits > dst_bits {
-                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                        write_ir!(
+                            ir,
+                            "  {} = trunc {} {} to {}",
+                            conv_tmp,
+                            src_ty,
+                            val,
+                            dst_ty
+                        );
                     } else {
                         write_ir!(ir, "  {} = zext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
@@ -490,12 +504,34 @@ impl CodeGenerator {
             // EXCEPT: if a specialized function exists for this arg type, skip the conversion
             // and pass the struct value directly.
             let arg_inferred = self.infer_expr_type(arg);
-            let skip_erasure = if matches!(&arg_inferred, ResolvedType::Named { .. } | ResolvedType::Str) {
+            let skip_erasure = if matches!(
+                &arg_inferred,
+                ResolvedType::Named { .. } | ResolvedType::Str
+            ) {
                 // Check if a specialized version exists for this method + arg type
-                let spec_name = vais_types::mangle_name(&format!("{}_{}", self.resolve_struct_name(if let ResolvedType::Named { name, .. } = &recv_type { name } else { "Unknown" }), method_name), &[arg_inferred.clone()]);
+                let spec_name = vais_types::mangle_name(
+                    &format!(
+                        "{}_{}",
+                        self.resolve_struct_name(
+                            if let ResolvedType::Named { name, .. } = &recv_type {
+                                name
+                            } else {
+                                "Unknown"
+                            }
+                        ),
+                        method_name
+                    ),
+                    &[arg_inferred.clone()],
+                );
                 self.types.functions.contains_key(&spec_name)
-                    || self.generics.generic_method_bodies.contains_key(
-                        &(if let ResolvedType::Named { name, .. } = &recv_type { name.clone() } else { String::new() }, method_name.to_string()))
+                    || self.generics.generic_method_bodies.contains_key(&(
+                        if let ResolvedType::Named { name, .. } = &recv_type {
+                            name.clone()
+                        } else {
+                            String::new()
+                        },
+                        method_name.to_string(),
+                    ))
             } else {
                 false
             };
@@ -506,20 +542,46 @@ impl CodeGenerator {
                     if self.is_expr_value(arg) {
                         let alloca_tmp = self.next_temp(counter);
                         self.emit_entry_alloca(&alloca_tmp, &struct_llvm);
-                        write_ir!(ir, "  store {} {}, {}* {}", struct_llvm, val, struct_llvm, alloca_tmp);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            struct_llvm,
+                            val,
+                            struct_llvm,
+                            alloca_tmp
+                        );
                         let ptr_tmp = self.next_temp(counter);
-                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", ptr_tmp, struct_llvm, alloca_tmp);
+                        write_ir!(
+                            ir,
+                            "  {} = ptrtoint {}* {} to i64",
+                            ptr_tmp,
+                            struct_llvm,
+                            alloca_tmp
+                        );
                         val = ptr_tmp;
                     } else {
                         // val is already a pointer — just ptrtoint
                         let ptr_tmp = self.next_temp(counter);
-                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", ptr_tmp, struct_llvm, val);
+                        write_ir!(
+                            ir,
+                            "  {} = ptrtoint {}* {} to i64",
+                            ptr_tmp,
+                            struct_llvm,
+                            val
+                        );
                         val = ptr_tmp;
                     }
                 } else if !self.is_expr_value(arg) {
                     // Non-generic struct param: load from pointer
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_llvm_ty, arg_llvm_ty, val);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        arg_llvm_ty,
+                        arg_llvm_ty,
+                        val
+                    );
                     val = loaded;
                 }
             }
@@ -537,7 +599,10 @@ impl CodeGenerator {
         let (ret_type, ret_resolved) = {
             let fn_info = self.types.functions.get(&full_method_name);
             if let Some(info) = fn_info {
-                (self.type_to_llvm(&info.signature.ret), info.signature.ret.clone())
+                (
+                    self.type_to_llvm(&info.signature.ret),
+                    info.signature.ret.clone(),
+                )
             } else if let Some(sig) = self.types.resolved_function_sigs.get(&full_method_name) {
                 // Fallback: use type checker's resolved signature
                 (self.type_to_llvm(&sig.ret), sig.ret.clone())
@@ -582,27 +647,50 @@ impl CodeGenerator {
 
         // Vec elem_size patch: before calling a specialized Vec method,
         // set self.elem_size to sizeof(T) and adjust capacity.
-        if (full_method_name.starts_with("Vec_push") || full_method_name.starts_with("Vec_insert") || full_method_name.starts_with("Vec_set")) && full_method_name.contains('$') && !arg_vals.is_empty() {
+        if (full_method_name.starts_with("Vec_push")
+            || full_method_name.starts_with("Vec_insert")
+            || full_method_name.starts_with("Vec_set"))
+            && full_method_name.contains('$')
+            && !arg_vals.is_empty()
+        {
             if let Some(dollar_pos) = full_method_name.find('$') {
                 let type_suffix = &full_method_name[dollar_pos + 1..];
                 let elem_size: i64 = match type_suffix {
-                    "u8" | "i8" => 1, "u16" | "i16" => 2,
+                    "u8" | "i8" => 1,
+                    "u16" | "i16" => 2,
                     "u32" | "i32" | "f32" => 4,
                     "u64" | "i64" | "f64" => 8,
                     "str" => 16,
-                    _ => self.types.structs.get(type_suffix)
+                    _ => self
+                        .types
+                        .structs
+                        .get(type_suffix)
                         .map(|s| s.fields.iter().map(|(_, ty)| self.compute_sizeof(ty)).sum())
                         .unwrap_or(0),
                 };
                 if elem_size > 0 && elem_size != 8 {
-                    let self_ptr = arg_vals[0].split_whitespace().last().unwrap_or("").to_string();
+                    let self_ptr = arg_vals[0]
+                        .split_whitespace()
+                        .last()
+                        .unwrap_or("")
+                        .to_string();
                     if !self_ptr.is_empty() {
                         let es_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3", es_ptr, self_ptr);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3",
+                            es_ptr,
+                            self_ptr
+                        );
                         write_ir!(ir, "  store i64 {}, i64* {}", elem_size, es_ptr);
                         // Adjust capacity to match new elem_size
                         let cap_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 2", cap_ptr, self_ptr);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 2",
+                            cap_ptr,
+                            self_ptr
+                        );
                         let old_cap = self.next_temp(counter);
                         write_ir!(ir, "  {} = load i64, i64* {}", old_cap, cap_ptr);
                         let bytes = self.next_temp(counter);
@@ -659,7 +747,12 @@ impl CodeGenerator {
         let full_method_name = if self.types.functions.contains_key(&base_method_name) {
             // Already found directly — use as-is
             base_method_name.clone()
-        } else if let Some(inst_list) = self.generics.fn_instantiations.get(&base_method_name).cloned() {
+        } else if let Some(inst_list) = self
+            .generics
+            .fn_instantiations
+            .get(&base_method_name)
+            .cloned()
+        {
             let arg_types: Vec<ResolvedType> =
                 args.iter().map(|a| self.infer_expr_type(a)).collect();
             let resolved = self.resolve_generic_call(&base_method_name, &arg_types, &inst_list);
@@ -757,7 +850,14 @@ impl CodeGenerator {
                     let src_ty = format!("i{}", src_bits);
                     let dst_ty = format!("i{}", dst_bits);
                     if src_bits > dst_bits {
-                        write_ir!(ir, "  {} = trunc {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                        write_ir!(
+                            ir,
+                            "  {} = trunc {} {} to {}",
+                            conv_tmp,
+                            src_ty,
+                            val,
+                            dst_ty
+                        );
                     } else {
                         write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
@@ -909,17 +1009,23 @@ impl CodeGenerator {
         };
 
         // Find the method template from struct definitions or impl blocks
-        let method_fn = self.generics.struct_defs.get(struct_name).and_then(|s| {
-            s.methods
-                .iter()
-                .find(|m| m.node.name.node == method_name)
-                .map(|m| std::rc::Rc::new(m.node.clone()))
-        }).or_else(|| {
-            // Try generic_method_bodies (from impl blocks on generic structs)
-            self.generics.generic_method_bodies
-                .get(&(struct_name.to_string(), method_name.to_string()))
-                .cloned()
-        });
+        let method_fn = self
+            .generics
+            .struct_defs
+            .get(struct_name)
+            .and_then(|s| {
+                s.methods
+                    .iter()
+                    .find(|m| m.node.name.node == method_name)
+                    .map(|m| std::rc::Rc::new(m.node.clone()))
+            })
+            .or_else(|| {
+                // Try generic_method_bodies (from impl blocks on generic structs)
+                self.generics
+                    .generic_method_bodies
+                    .get(&(struct_name.to_string(), method_name.to_string()))
+                    .cloned()
+            });
 
         if let Some(method_fn) = method_fn {
             // Skip if already generated (prevent infinite recursion)

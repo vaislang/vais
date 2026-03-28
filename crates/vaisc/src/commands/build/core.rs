@@ -311,8 +311,8 @@ pub(crate) fn cmd_build(
     // Register builtin panic! macro: panic!("msg") => __panic("msg")
     {
         use vais_ast::{
-            MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
-            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned, Delimiter,
+            Delimiter, MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned,
         };
         macro_registry.register(MacroDef {
             name: Spanned::new("panic".to_string(), Span::new(0, 5)),
@@ -402,7 +402,8 @@ pub(crate) fn cmd_build(
     if force_single && verbose {
         eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
     }
-    let use_per_module = !force_single && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
+    let use_per_module = !force_single
+        && (per_module || final_ast.modules_map.as_ref().is_some_and(|m| m.len() > 1));
     if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
@@ -665,19 +666,18 @@ fn run_type_check(
                 // In multi_error_mode (VAIS_TC_NONFATAL), add parallel TC errors
                 // to collected_errors as non-fatal instead of failing immediately.
                 // This allows codegen to proceed with partially type-checked code.
-                let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL")
-                    .map_or(false, |v| v == "1");
+                let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
                 if tc_nonfatal {
                     for err_msg in &all_errors {
-                        checker.collected_errors.push(
-                            vais_types::TypeError::InferFailed {
+                        checker
+                            .collected_errors
+                            .push(vais_types::TypeError::InferFailed {
                                 kind: "module".to_string(),
                                 name: "parallel_tc".to_string(),
                                 context: err_msg.clone(),
                                 span: None,
                                 suggestion: None,
-                            },
-                        );
+                            });
                     }
                     Ok(())
                 } else {
@@ -698,8 +698,7 @@ fn run_type_check(
 
         // Handle type checking result
         if let Err(e) = tc_result {
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL")
-                .map_or(false, |v| v == "1");
+            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
 
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
@@ -733,8 +732,7 @@ fn run_type_check(
         // Even if check_module succeeded, there may be collected errors
         if !checker.get_collected_errors().is_empty() {
             let total_errors = checker.get_collected_errors().len();
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL")
-                .map_or(false, |v| v == "1");
+            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
 
             for collected_err in checker.get_collected_errors() {
                 eprintln!(

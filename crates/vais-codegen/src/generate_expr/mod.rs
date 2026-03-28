@@ -76,7 +76,9 @@ impl CodeGenerator {
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => self.generate_string_literal_expr(s, counter),
-            Expr::StringInterp(parts) => self.generate_string_interp_expr(parts, expr.span, counter),
+            Expr::StringInterp(parts) => {
+                self.generate_string_interp_expr(parts, expr.span, counter)
+            }
             Expr::Unit => Ok(("void".to_string(), String::new())),
 
             Expr::Ident(name) => self.generate_ident_expr(name, counter),
@@ -144,7 +146,11 @@ impl CodeGenerator {
             Expr::Tuple(elements) => self.generate_tuple_expr(elements, counter),
 
             // Struct literal: Point{x:1, y:2} or enum variant: Shape.Circle{radius:5.0}
-            Expr::StructLit { name, fields, enum_name } => {
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } => {
                 if let Some(ref ename) = enum_name {
                     // Enum struct variant — generate as enum variant constructor
                     let variant = &name.node;

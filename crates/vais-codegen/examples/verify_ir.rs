@@ -46,6 +46,9 @@ F main() -> i64 {
     let insts = checker.get_generic_instantiations();
     eprintln!("[Container test] TC instantiations: {}", insts.len());
     for inst in insts {
-        eprintln!("  {:?}: {} -> {} {:?}", inst.kind, inst.base_name, inst.mangled_name, inst.type_args);
+        eprintln!(
+            "  {:?}: {} -> {} {:?}",
+            inst.kind, inst.base_name, inst.mangled_name, inst.type_args
+        );
     }
 }

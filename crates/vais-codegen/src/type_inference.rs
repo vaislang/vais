@@ -474,19 +474,19 @@ impl CodeGenerator {
                         ResolvedType::Array(elem) => *elem,
                         ResolvedType::Slice(elem) => *elem,
                         // Vec<T>[idx] → T
-                        ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
-                            generics[0].clone()
-                        }
-                        ResolvedType::Ref(ref inner) => {
-                            match inner.as_ref() {
-                                ResolvedType::Named { ref name, ref generics } if name == "Vec" && !generics.is_empty() => {
-                                    generics[0].clone()
-                                }
-                                ResolvedType::Slice(elem) => *elem.clone(),
-                                ResolvedType::Array(elem) => *elem.clone(),
-                                _ => ResolvedType::I64,
-                            }
-                        }
+                        ResolvedType::Named {
+                            ref name,
+                            ref generics,
+                        } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
+                        ResolvedType::Ref(ref inner) => match inner.as_ref() {
+                            ResolvedType::Named {
+                                ref name,
+                                ref generics,
+                            } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
+                            ResolvedType::Slice(elem) => *elem.clone(),
+                            ResolvedType::Array(elem) => *elem.clone(),
+                            _ => ResolvedType::I64,
+                        },
                         _ => ResolvedType::I64,
                     }
                 }
@@ -514,18 +514,29 @@ impl CodeGenerator {
 
                 // Vec<T> method return types
                 let vec_elem = match &recv_type {
-                    ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => Some(generics[0].clone()),
+                    ResolvedType::Named { name, generics }
+                        if name == "Vec" && !generics.is_empty() =>
+                    {
+                        Some(generics[0].clone())
+                    }
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                         if let ResolvedType::Named { name, generics } = inner.as_ref() {
-                            if name == "Vec" && !generics.is_empty() { Some(generics[0].clone()) } else { None }
-                        } else { None }
+                            if name == "Vec" && !generics.is_empty() {
+                                Some(generics[0].clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     }
                     _ => None,
                 };
                 if let Some(elem_ty) = vec_elem {
                     return match method.node.as_str() {
                         "len" | "capacity" => ResolvedType::U64,
-                        "push" | "insert" | "remove" | "clear" | "truncate" | "resize" | "swap" | "sort" | "reverse" => ResolvedType::I64,
+                        "push" | "insert" | "remove" | "clear" | "truncate" | "resize" | "swap"
+                        | "sort" | "reverse" => ResolvedType::I64,
                         "pop" | "get" | "last" | "first" => elem_ty,
                         "clone" => recv_type,
                         "data" => ResolvedType::I64,
@@ -556,13 +567,17 @@ impl CodeGenerator {
                 if let ResolvedType::Named { name, .. } = inner_recv {
                     if name == "ByteBuffer" {
                         return match method.node.as_str() {
-                            "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32" | "read_i32" | "read_u64" | "read_i64" => ResolvedType::I64,
+                            "read_u8" | "read_i8" | "read_u16" | "read_i16" | "read_u32"
+                            | "read_i32" | "read_u64" | "read_i64" => ResolvedType::I64,
                             "read_f32" => ResolvedType::F32,
                             "read_f64" => ResolvedType::F64,
                             "read_str" | "read_string" => ResolvedType::Str,
                             "read_bool" => ResolvedType::Bool,
                             "len" | "position" | "remaining" | "capacity" => ResolvedType::I64,
-                            "to_vec" | "as_bytes" => ResolvedType::Named { name: "Vec".to_string(), generics: vec![ResolvedType::U8] },
+                            "to_vec" | "as_bytes" => ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![ResolvedType::U8],
+                            },
                             "clone" => recv_type,
                             _ => ResolvedType::I64,
                         };
@@ -570,7 +585,10 @@ impl CodeGenerator {
 
                     // Mutex.lock() returns MutexGuard
                     if name == "Mutex" && method.node == "lock" {
-                        return ResolvedType::Named { name: "MutexGuard".to_string(), generics: vec![] };
+                        return ResolvedType::Named {
+                            name: "MutexGuard".to_string(),
+                            generics: vec![],
+                        };
                     }
                 }
 
@@ -775,7 +793,10 @@ impl CodeGenerator {
                 match inner_ty {
                     ResolvedType::Result(ok, _) => *ok,
                     ResolvedType::Optional(inner) => *inner,
-                    ResolvedType::Named { ref name, ref generics } if name == "Result" => {
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Result" => {
                         // Result<T, E> — first generic is the Ok type
                         if !generics.is_empty() {
                             generics[0].clone()
@@ -783,7 +804,10 @@ impl CodeGenerator {
                             ResolvedType::I64
                         }
                     }
-                    ResolvedType::Named { ref name, ref generics } if name == "Option" => {
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Option" => {
                         // Option<T> — first generic is the inner type
                         if !generics.is_empty() {
                             generics[0].clone()
@@ -800,14 +824,20 @@ impl CodeGenerator {
                 match inner_ty {
                     ResolvedType::Result(ok, _) => *ok,
                     ResolvedType::Optional(inner) => *inner,
-                    ResolvedType::Named { ref name, ref generics } if name == "Result" => {
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Result" => {
                         if !generics.is_empty() {
                             generics[0].clone()
                         } else {
                             ResolvedType::I64
                         }
                     }
-                    ResolvedType::Named { ref name, ref generics } if name == "Option" => {
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Option" => {
                         if !generics.is_empty() {
                             generics[0].clone()
                         } else {

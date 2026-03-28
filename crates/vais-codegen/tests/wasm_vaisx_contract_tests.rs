@@ -19,8 +19,14 @@ fn test_wasm_simple_numeric_function() {
     let funcs = vec![WitFunction {
         name: "add".to_string(),
         params: vec![
-            WitParam { name: "a".to_string(), ty: WitType::S32 },
-            WitParam { name: "b".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "a".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "b".to_string(),
+                ty: WitType::S32,
+            },
         ],
         results: Some(WitResult::Anon(WitType::S32)),
         docs: Some("Add two numbers".to_string()),
@@ -28,11 +34,23 @@ fn test_wasm_simple_numeric_function() {
 
     let js = gen.generate_js_bindings(&funcs);
 
-    assert!(js.contains("class VaisModule"), "Should contain VaisModule class");
-    assert!(js.contains("add(a, b)"), "Should contain function signature");
-    assert!(js.contains("this.exports.add(a, b)"), "Should call WASM export");
+    assert!(
+        js.contains("class VaisModule"),
+        "Should contain VaisModule class"
+    );
+    assert!(
+        js.contains("add(a, b)"),
+        "Should contain function signature"
+    );
+    assert!(
+        js.contains("this.exports.add(a, b)"),
+        "Should call WASM export"
+    );
     assert!(js.contains("return result"), "Should return result");
-    assert!(js.contains("loadcomponent"), "Should contain loader function");
+    assert!(
+        js.contains("loadcomponent"),
+        "Should contain loader function"
+    );
 }
 
 #[test]
@@ -41,8 +59,14 @@ fn test_wasm_simple_numeric_function_ts() {
     let funcs = vec![WitFunction {
         name: "add".to_string(),
         params: vec![
-            WitParam { name: "a".to_string(), ty: WitType::S32 },
-            WitParam { name: "b".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "a".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "b".to_string(),
+                ty: WitType::S32,
+            },
         ],
         results: Some(WitResult::Anon(WitType::S32)),
         docs: None,
@@ -50,8 +74,14 @@ fn test_wasm_simple_numeric_function_ts() {
 
     let ts = gen.generate_ts_declarations(&funcs);
 
-    assert!(ts.contains("add(a: number, b: number): number"), "TS should have typed signature");
-    assert!(ts.contains("loadcomponent(): Promise<VaisModule>"), "TS should have loader");
+    assert!(
+        ts.contains("add(a: number, b: number): number"),
+        "TS should have typed signature"
+    );
+    assert!(
+        ts.contains("loadcomponent(): Promise<VaisModule>"),
+        "TS should have loader"
+    );
 }
 
 // ============================================================================
@@ -63,15 +93,24 @@ fn test_wasm_string_param_conversion() {
     let gen = WasmBindgenGenerator::new("greet_module");
     let funcs = vec![WitFunction {
         name: "greet".to_string(),
-        params: vec![WitParam { name: "name".to_string(), ty: WitType::String }],
+        params: vec![WitParam {
+            name: "name".to_string(),
+            ty: WitType::String,
+        }],
         results: Some(WitResult::Anon(WitType::String)),
         docs: None,
     }];
 
     let js = gen.generate_js_bindings(&funcs);
 
-    assert!(js.contains("_convert_string(name)"), "Should convert string param");
-    assert!(js.contains("_convert_from_string(result)"), "Should convert string result");
+    assert!(
+        js.contains("_convert_string(name)"),
+        "Should convert string param"
+    );
+    assert!(
+        js.contains("_convert_from_string(result)"),
+        "Should convert string result"
+    );
     assert!(js.contains("TextEncoder"), "Should include encoder helper");
     assert!(js.contains("TextDecoder"), "Should include decoder helper");
 }
@@ -81,14 +120,20 @@ fn test_wasm_string_param_ts_declaration() {
     let gen = WasmBindgenGenerator::new("greet_module");
     let funcs = vec![WitFunction {
         name: "greet".to_string(),
-        params: vec![WitParam { name: "name".to_string(), ty: WitType::String }],
+        params: vec![WitParam {
+            name: "name".to_string(),
+            ty: WitType::String,
+        }],
         results: Some(WitResult::Anon(WitType::String)),
         docs: None,
     }];
 
     let ts = gen.generate_ts_declarations(&funcs);
 
-    assert!(ts.contains("greet(name: string): string"), "TS should have string types");
+    assert!(
+        ts.contains("greet(name: string): string"),
+        "TS should have string types"
+    );
 }
 
 // ============================================================================
@@ -110,8 +155,14 @@ fn test_wasm_list_param_conversion() {
 
     let js = gen.generate_js_bindings(&funcs);
 
-    assert!(js.contains("_convert_list(raw)"), "Should convert list param");
-    assert!(js.contains("_convert_from_list(result)"), "Should convert list result");
+    assert!(
+        js.contains("_convert_list(raw)"),
+        "Should convert list param"
+    );
+    assert!(
+        js.contains("_convert_from_list(result)"),
+        "Should convert list result"
+    );
 }
 
 #[test]
@@ -129,8 +180,14 @@ fn test_wasm_list_ts_declaration() {
 
     let ts = gen.generate_ts_declarations(&funcs);
 
-    assert!(ts.contains("raw: Array<number>"), "TS should have Array<number> param");
-    assert!(ts.contains("Array<number>"), "TS should have Array<number> return");
+    assert!(
+        ts.contains("raw: Array<number>"),
+        "TS should have Array<number> param"
+    );
+    assert!(
+        ts.contains("Array<number>"),
+        "TS should have Array<number> return"
+    );
 }
 
 // ============================================================================
@@ -144,8 +201,14 @@ fn test_wasm_multiple_functions() {
         WitFunction {
             name: "add".to_string(),
             params: vec![
-                WitParam { name: "a".to_string(), ty: WitType::F64 },
-                WitParam { name: "b".to_string(), ty: WitType::F64 },
+                WitParam {
+                    name: "a".to_string(),
+                    ty: WitType::F64,
+                },
+                WitParam {
+                    name: "b".to_string(),
+                    ty: WitType::F64,
+                },
             ],
             results: Some(WitResult::Anon(WitType::F64)),
             docs: None,
@@ -153,8 +216,14 @@ fn test_wasm_multiple_functions() {
         WitFunction {
             name: "multiply".to_string(),
             params: vec![
-                WitParam { name: "x".to_string(), ty: WitType::F64 },
-                WitParam { name: "y".to_string(), ty: WitType::F64 },
+                WitParam {
+                    name: "x".to_string(),
+                    ty: WitType::F64,
+                },
+                WitParam {
+                    name: "y".to_string(),
+                    ty: WitType::F64,
+                },
             ],
             results: Some(WitResult::Anon(WitType::F64)),
             docs: None,
@@ -164,7 +233,10 @@ fn test_wasm_multiple_functions() {
     let js = gen.generate_js_bindings(&funcs);
 
     assert!(js.contains("add(a, b)"), "Should contain first function");
-    assert!(js.contains("multiply(x, y)"), "Should contain second function");
+    assert!(
+        js.contains("multiply(x, y)"),
+        "Should contain second function"
+    );
 }
 
 // ============================================================================
@@ -204,10 +276,8 @@ fn test_vais_type_to_wit_containers() {
     );
 
     // Result<i32, str> → result<s32, string>
-    let result_type = ResolvedType::Result(
-        Box::new(ResolvedType::I32),
-        Box::new(ResolvedType::Str),
-    );
+    let result_type =
+        ResolvedType::Result(Box::new(ResolvedType::I32), Box::new(ResolvedType::Str));
     assert_eq!(
         vais_type_to_wit(&result_type),
         Some(WitType::Result_ {
@@ -238,7 +308,11 @@ fn test_vais_type_to_wit_unmappable() {
         ret: Box::new(ResolvedType::Bool),
         effects: Some(Box::new(vais_types::EffectSet::pure())),
     };
-    assert_eq!(vais_type_to_wit(&fn_type), None, "Fn type should not map to WIT");
+    assert_eq!(
+        vais_type_to_wit(&fn_type),
+        None,
+        "Fn type should not map to WIT"
+    );
 }
 
 // ============================================================================
@@ -251,7 +325,10 @@ fn test_wasm_serializer_generates_complete_serde_module() {
     let module = ser.generate_js_serde_module();
 
     // Must include all helper methods for VaisX codegen_wasm to use
-    assert!(module.contains("class WasmSerde"), "Missing WasmSerde class");
+    assert!(
+        module.contains("class WasmSerde"),
+        "Missing WasmSerde class"
+    );
     assert!(module.contains("writeString"), "Missing writeString");
     assert!(module.contains("readString"), "Missing readString");
     assert!(module.contains("writeArray"), "Missing writeArray");
@@ -274,12 +351,24 @@ fn test_wasm_named_result_js() {
     let funcs = vec![WitFunction {
         name: "divmod".to_string(),
         params: vec![
-            WitParam { name: "a".to_string(), ty: WitType::S32 },
-            WitParam { name: "b".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "a".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "b".to_string(),
+                ty: WitType::S32,
+            },
         ],
         results: Some(WitResult::Named(vec![
-            WitParam { name: "quotient".to_string(), ty: WitType::S32 },
-            WitParam { name: "remainder".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "quotient".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "remainder".to_string(),
+                ty: WitType::S32,
+            },
         ])),
         docs: None,
     }];
@@ -295,19 +384,37 @@ fn test_wasm_named_result_ts() {
     let funcs = vec![WitFunction {
         name: "divmod".to_string(),
         params: vec![
-            WitParam { name: "a".to_string(), ty: WitType::S32 },
-            WitParam { name: "b".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "a".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "b".to_string(),
+                ty: WitType::S32,
+            },
         ],
         results: Some(WitResult::Named(vec![
-            WitParam { name: "quotient".to_string(), ty: WitType::S32 },
-            WitParam { name: "remainder".to_string(), ty: WitType::S32 },
+            WitParam {
+                name: "quotient".to_string(),
+                ty: WitType::S32,
+            },
+            WitParam {
+                name: "remainder".to_string(),
+                ty: WitType::S32,
+            },
         ])),
         docs: None,
     }];
 
     let ts = gen.generate_ts_declarations(&funcs);
-    assert!(ts.contains("quotient: number"), "TS should have named result fields");
-    assert!(ts.contains("remainder: number"), "TS should have named result fields");
+    assert!(
+        ts.contains("quotient: number"),
+        "TS should have named result fields"
+    );
+    assert!(
+        ts.contains("remainder: number"),
+        "TS should have named result fields"
+    );
 }
 
 // ============================================================================
@@ -319,7 +426,10 @@ fn test_wasm_void_function() {
     let gen = WasmBindgenGenerator::new("side_effects");
     let funcs = vec![WitFunction {
         name: "logMessage".to_string(),
-        params: vec![WitParam { name: "msg".to_string(), ty: WitType::String }],
+        params: vec![WitParam {
+            name: "msg".to_string(),
+            ty: WitType::String,
+        }],
         results: None,
         docs: None,
     }];
@@ -342,13 +452,19 @@ fn test_wasm_option_result_ts_types() {
     let funcs = vec![
         WitFunction {
             name: "findItem".to_string(),
-            params: vec![WitParam { name: "id".to_string(), ty: WitType::U32 }],
+            params: vec![WitParam {
+                name: "id".to_string(),
+                ty: WitType::U32,
+            }],
             results: Some(WitResult::Anon(WitType::Option_(Box::new(WitType::String)))),
             docs: None,
         },
         WitFunction {
             name: "parseNumber".to_string(),
-            params: vec![WitParam { name: "s".to_string(), ty: WitType::String }],
+            params: vec![WitParam {
+                name: "s".to_string(),
+                ty: WitType::String,
+            }],
             results: Some(WitResult::Anon(WitType::Result_ {
                 ok: Some(Box::new(WitType::S32)),
                 err: Some(Box::new(WitType::String)),
@@ -358,7 +474,10 @@ fn test_wasm_option_result_ts_types() {
     ];
 
     let ts = gen.generate_ts_declarations(&funcs);
-    assert!(ts.contains("string | null"), "Option should map to T | null");
+    assert!(
+        ts.contains("string | null"),
+        "Option should map to T | null"
+    );
     assert!(ts.contains("{ ok: number }"), "Result ok should be typed");
     assert!(ts.contains("{ err: string }"), "Result err should be typed");
 }
@@ -372,14 +491,23 @@ fn test_wasm_docs_in_js_bindings() {
     let gen = WasmBindgenGenerator::new("documented");
     let funcs = vec![WitFunction {
         name: "calculate".to_string(),
-        params: vec![WitParam { name: "x".to_string(), ty: WitType::F64 }],
+        params: vec![WitParam {
+            name: "x".to_string(),
+            ty: WitType::F64,
+        }],
         results: Some(WitResult::Anon(WitType::F64)),
         docs: Some("Calculate the square root".to_string()),
     }];
 
     let js = gen.generate_js_bindings(&funcs);
-    assert!(js.contains("Calculate the square root"), "JS should preserve docs");
+    assert!(
+        js.contains("Calculate the square root"),
+        "JS should preserve docs"
+    );
 
     let ts = gen.generate_ts_declarations(&funcs);
-    assert!(ts.contains("Calculate the square root"), "TS should preserve docs");
+    assert!(
+        ts.contains("Calculate the square root"),
+        "TS should preserve docs"
+    );
 }

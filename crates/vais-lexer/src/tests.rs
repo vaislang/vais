@@ -774,7 +774,10 @@ fn test_split_keyword_idents_ei() {
         .filter(|(_, t)| t.token == Token::Enum)
         .map(|(i, _)| i)
         .collect();
-    assert!(!enum_positions.is_empty(), "should have at least one Enum token");
+    assert!(
+        !enum_positions.is_empty(),
+        "should have at least one Enum token"
+    );
     // The token after the first Enum that resulted from split must be If
     for &pos in &enum_positions {
         if pos + 1 < tokens.len() && tokens[pos + 1].token == Token::If {

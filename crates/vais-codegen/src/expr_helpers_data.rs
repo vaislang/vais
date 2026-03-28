@@ -336,25 +336,25 @@ impl CodeGenerator {
             vais_types::ResolvedType::Slice(ref elem)
             | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true),
             // Vec<T>[idx] → element type T, access via data pointer
-            vais_types::ResolvedType::Named { ref name, ref generics }
-                if name == "Vec" && !generics.is_empty() =>
-            {
-                (self.type_to_llvm(&generics[0]), false)
-            }
+            vais_types::ResolvedType::Named {
+                ref name,
+                ref generics,
+            } if name == "Vec" && !generics.is_empty() => (self.type_to_llvm(&generics[0]), false),
             // &Vec<T>[idx]
-            vais_types::ResolvedType::Ref(ref inner) | vais_types::ResolvedType::RefMut(ref inner) => {
+            vais_types::ResolvedType::Ref(ref inner)
+            | vais_types::ResolvedType::RefMut(ref inner) => {
                 match inner.as_ref() {
-                    vais_types::ResolvedType::Named { ref name, ref generics }
-                        if name == "Vec" && !generics.is_empty() =>
-                    {
+                    vais_types::ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if name == "Vec" && !generics.is_empty() => {
                         (self.type_to_llvm(&generics[0]), false)
                     }
-                    vais_types::ResolvedType::Slice(ref elem) | vais_types::ResolvedType::SliceMut(ref elem) => {
+                    vais_types::ResolvedType::Slice(ref elem)
+                    | vais_types::ResolvedType::SliceMut(ref elem) => {
                         (self.type_to_llvm(elem), true)
                     }
-                    vais_types::ResolvedType::Array(ref elem) => {
-                        (self.type_to_llvm(elem), false)
-                    }
+                    vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false),
                     _ => {
                         // Treat as i64 pointer indexing
                         ("i64".to_string(), false)
@@ -382,13 +382,14 @@ impl CodeGenerator {
         // Extend index to i64 if necessary (i8, i16, i32 → i64)
         let idx_type = self.infer_expr_type(index);
         let idx_llvm = self.type_to_llvm(&idx_type);
-        let idx_val = if idx_llvm != "i64" && (idx_llvm == "i8" || idx_llvm == "i16" || idx_llvm == "i32") {
-            let ext = self.next_temp(counter);
-            write_ir!(ir, "  {} = sext {} {} to i64", ext, idx_llvm, idx_val);
-            ext
-        } else {
-            idx_val
-        };
+        let idx_val =
+            if idx_llvm != "i64" && (idx_llvm == "i8" || idx_llvm == "i16" || idx_llvm == "i32") {
+                let ext = self.next_temp(counter);
+                write_ir!(ir, "  {} = sext {} {} to i64", ext, idx_llvm, idx_val);
+                ext
+            } else {
+                idx_val
+            };
 
         // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
         // Also insert runtime bounds check: idx < len, abort on OOB
@@ -459,7 +460,12 @@ impl CodeGenerator {
             if is_vec {
                 // Load data pointer from Vec.data (field 0)
                 let data_field = self.next_temp(counter);
-                write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0", data_field, arr_val);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                    data_field,
+                    arr_val
+                );
                 let data_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
 
@@ -467,19 +473,49 @@ impl CodeGenerator {
                 // This handles both specialized push (elem_size=16 for str) and
                 // generic push (elem_size=8 for i64) transparently.
                 let es_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3", es_ptr, arr_val);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3",
+                    es_ptr,
+                    arr_val
+                );
                 let elem_size_val = self.next_temp(counter);
                 write_ir!(ir, "  {} = load i64, i64* {}", elem_size_val, es_ptr);
                 let data_ptr = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
                 let byte_offset = self.next_temp(counter);
-                write_ir!(ir, "  {} = mul i64 {}, {}", byte_offset, idx_val, elem_size_val);
+                write_ir!(
+                    ir,
+                    "  {} = mul i64 {}, {}",
+                    byte_offset,
+                    idx_val,
+                    elem_size_val
+                );
                 let elem_ptr_i8 = self.next_temp(counter);
-                write_ir!(ir, "  {} = getelementptr i8, i8* {}, i64 {}", elem_ptr_i8, data_ptr, byte_offset);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    elem_ptr_i8,
+                    data_ptr,
+                    byte_offset
+                );
                 let typed_elem_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i8* {} to {}*", typed_elem_ptr, elem_ptr_i8, elem_llvm_ty);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_elem_ptr,
+                    elem_ptr_i8,
+                    elem_llvm_ty
+                );
                 let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = load {}, {}* {}", result, elem_llvm_ty, elem_llvm_ty, typed_elem_ptr);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    result,
+                    elem_llvm_ty,
+                    elem_llvm_ty,
+                    typed_elem_ptr
+                );
                 return Ok((result, ir));
             } else {
                 arr_val.clone()
@@ -510,13 +546,18 @@ impl CodeGenerator {
         // Register the element type for downstream codegen (e.g., Option/Result construction).
         // For Vec<str>, elem_llvm_ty = "{ i8*, i64 }" → ResolvedType::Str
         if elem_llvm_ty == "{ i8*, i64 }" {
-            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+            self.fn_ctx
+                .register_temp_type(&result, vais_types::ResolvedType::Str);
         } else if elem_llvm_ty.starts_with('%') {
             // Named struct type
             let name = elem_llvm_ty.trim_start_matches('%');
-            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Named {
-                name: name.to_string(), generics: vec![],
-            });
+            self.fn_ctx.register_temp_type(
+                &result,
+                vais_types::ResolvedType::Named {
+                    name: name.to_string(),
+                    generics: vec![],
+                },
+            );
         }
 
         Ok((result, ir))

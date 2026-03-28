@@ -404,7 +404,10 @@ impl Parser {
                             let skipped_tokens = self.synchronize_item();
                             let end = self.prev_span().end;
                             items.push(Spanned::new(
-                                Item::Error { message, skipped_tokens },
+                                Item::Error {
+                                    message,
+                                    skipped_tokens,
+                                },
                                 Span::new(start, end),
                             ));
                             continue;
@@ -451,9 +454,9 @@ impl Parser {
         // If we found describe blocks, generate a main() function that calls all test functions
         if !describe_test_names.is_empty() {
             // Check if a main already exists
-            let has_main = items.iter().any(|item| {
-                matches!(&item.node, Item::Function(f) if f.name.node == "main")
-            });
+            let has_main = items
+                .iter()
+                .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "main"));
             if !has_main {
                 let span = Span::new(0, 0);
                 let mut stmts = Vec::new();
@@ -479,10 +482,13 @@ impl Parser {
                     name: Spanned::new("main".to_string(), span),
                     generics: vec![],
                     params: vec![],
-                    ret_type: Some(Spanned::new(Type::Named {
-                        name: "i64".to_string(),
-                        generics: vec![],
-                    }, span)),
+                    ret_type: Some(Spanned::new(
+                        Type::Named {
+                            name: "i64".to_string(),
+                            generics: vec![],
+                        },
+                        span,
+                    )),
                     body: FunctionBody::Block(stmts),
                     is_pub: false,
                     is_async: false,

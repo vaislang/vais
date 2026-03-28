@@ -5,10 +5,10 @@
 //! - `conversion`: CodeGenerator methods for type-to-LLVM conversion
 //! - `tests`: Unit tests for type mapping and sizeof/alignof
 
-mod conversion;
-pub mod type_gen;
-pub mod sizeof;
 pub mod coercion;
+mod conversion;
+pub mod sizeof;
+pub mod type_gen;
 
 #[cfg(test)]
 mod tests;

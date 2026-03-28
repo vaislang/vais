@@ -352,7 +352,11 @@ impl Formatter {
             }
             Expr::Lazy(inner) => format!("lazy {}", self.format_expr(&inner.node)),
             Expr::Force(inner) => format!("force {}", self.format_expr(&inner.node)),
-            Expr::EnumAccess { enum_name, variant, data } => {
+            Expr::EnumAccess {
+                enum_name,
+                variant,
+                data,
+            } => {
                 if let Some(d) = data {
                     format!("{}::{}({})", enum_name, variant, self.format_expr(&d.node))
                 } else {

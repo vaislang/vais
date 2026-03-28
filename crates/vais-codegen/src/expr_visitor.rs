@@ -1037,8 +1037,7 @@ impl ExprVisitor for CodeGenerator {
                 );
 
                 // Register the forced value type for downstream type resolution (R2).
-                self.fn_ctx
-                    .register_temp_type(&result, inner_type.clone());
+                self.fn_ctx.register_temp_type(&result, inner_type.clone());
 
                 return Ok((result, ir));
             }
@@ -1058,8 +1057,7 @@ impl ExprVisitor for CodeGenerator {
         );
 
         // Register forced value type (R2 IR Type Tracking).
-        self.fn_ctx
-            .register_temp_type(&result, inner_type.clone());
+        self.fn_ctx.register_temp_type(&result, inner_type.clone());
 
         Ok((result, ir))
     }

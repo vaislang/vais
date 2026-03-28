@@ -53,7 +53,8 @@ pub(crate) fn estimate_llvm_type_size(ty: &str) -> usize {
         t if t.starts_with("{ ") && t.ends_with(" }") => {
             // Struct type: sum of field sizes
             let inner = &t[2..t.len() - 2];
-            inner.split(',')
+            inner
+                .split(',')
                 .map(|f| estimate_llvm_type_size(f.trim()))
                 .sum()
         }

@@ -102,7 +102,11 @@ impl CodeGenerator {
                     if let Some(struct_def) = self.generics.struct_defs.get_mut(&type_name) {
                         let struct_mut = std::rc::Rc::make_mut(struct_def);
                         for method in &impl_block.methods {
-                            if !struct_mut.methods.iter().any(|m| m.node.name.node == method.node.name.node) {
+                            if !struct_mut
+                                .methods
+                                .iter()
+                                .any(|m| m.node.name.node == method.node.name.node)
+                            {
                                 struct_mut.methods.push(method.clone());
                             }
                         }
@@ -143,13 +147,18 @@ impl CodeGenerator {
         // Pre-build method template lookup: (struct_name, method_name) -> Function AST
         let mut method_templates: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
         // Also collect methods from impl blocks on generic structs (struct-level generics)
-        let mut generic_impl_methods: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
+        let mut generic_impl_methods: HashMap<(String, String), std::rc::Rc<Function>> =
+            HashMap::new();
         for item in &full_module.items {
             match &item.node {
                 Item::Impl(impl_block) => {
-                    if let Type::Named { name, generics: type_params } = &impl_block.target_type.node {
-                        let is_generic_impl = !impl_block.generics.is_empty()
-                            || !type_params.is_empty();
+                    if let Type::Named {
+                        name,
+                        generics: type_params,
+                    } = &impl_block.target_type.node
+                    {
+                        let is_generic_impl =
+                            !impl_block.generics.is_empty() || !type_params.is_empty();
                         for method in &impl_block.methods {
                             if !method.node.generics.is_empty() {
                                 method_templates.insert(
@@ -267,19 +276,18 @@ impl CodeGenerator {
                     continue;
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
-                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
-                    self.generics
-                        .struct_defs
-                        .get(struct_name)
-                        .and_then(|s| {
+                let method_fn_opt = method_templates
+                    .get(&key)
+                    .cloned()
+                    .or_else(|| {
+                        self.generics.struct_defs.get(struct_name).and_then(|s| {
                             s.methods
                                 .iter()
                                 .find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
-                }).or_else(|| {
-                    generic_impl_methods.get(&key).cloned()
-                });
+                    })
+                    .or_else(|| generic_impl_methods.get(&key).cloned());
                 if let Some(method_fn) = method_fn_opt {
                     let struct_generics = self
                         .generics
@@ -397,8 +405,7 @@ impl CodeGenerator {
                     {
                         continue;
                     }
-                    if let Some(generic_fn) =
-                        self.generics.function_templates.get(&inst.base_name)
+                    if let Some(generic_fn) = self.generics.function_templates.get(&inst.base_name)
                     {
                         let subst: HashMap<String, ResolvedType> = generic_fn
                             .generics
@@ -444,13 +451,15 @@ impl CodeGenerator {
                                         let mangled =
                                             vais_types::mangle_name(sname, &concrete_args);
                                         if !self.generics.generated_structs.contains_key(&mangled) {
-                                            synthetic_insts.push(vais_types::GenericInstantiation {
-                                                kind: vais_types::InstantiationKind::Struct,
-                                                base_name: sname.clone(),
-                                                mangled_name: mangled,
-                                                type_args: concrete_args,
-                                                const_args: Vec::new(),
-                                            });
+                                            synthetic_insts.push(
+                                                vais_types::GenericInstantiation {
+                                                    kind: vais_types::InstantiationKind::Struct,
+                                                    base_name: sname.clone(),
+                                                    mangled_name: mangled,
+                                                    type_args: concrete_args,
+                                                    const_args: Vec::new(),
+                                                },
+                                            );
                                         }
                                     }
                                 }
@@ -573,19 +582,18 @@ impl CodeGenerator {
                     continue;
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
-                let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
-                    self.generics
-                        .struct_defs
-                        .get(struct_name)
-                        .and_then(|s| {
+                let method_fn_opt = method_templates
+                    .get(&key)
+                    .cloned()
+                    .or_else(|| {
+                        self.generics.struct_defs.get(struct_name).and_then(|s| {
                             s.methods
                                 .iter()
                                 .find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
-                }).or_else(|| {
-                    generic_impl_methods.get(&key).cloned()
-                });
+                    })
+                    .or_else(|| generic_impl_methods.get(&key).cloned());
                 if let Some(method_fn) = method_fn_opt {
                     let method_inst = vais_types::GenericInstantiation {
                         kind: vais_types::InstantiationKind::Function,
@@ -596,19 +604,29 @@ impl CodeGenerator {
                     };
                     // Set up struct-level generic substitutions before specialization
                     // This ensures T → concrete type is available for self.field access
-                    let struct_generics_params = self.generics.struct_defs.get(struct_name)
-                        .map(|s| s.generics.clone()).unwrap_or_default();
-                    for (param, concrete) in struct_generics_params.iter()
+                    let struct_generics_params = self
+                        .generics
+                        .struct_defs
+                        .get(struct_name)
+                        .map(|s| s.generics.clone())
+                        .unwrap_or_default();
+                    for (param, concrete) in struct_generics_params
+                        .iter()
                         .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
                         .zip(inst.type_args.iter())
                     {
-                        self.generics.substitutions.insert(param.name.node.clone(), concrete.clone());
+                        self.generics
+                            .substitutions
+                            .insert(param.name.node.clone(), concrete.clone());
                     }
                     // Also set Self → struct type
-                    self.generics.substitutions.insert("Self".to_string(), ResolvedType::Named {
-                        name: struct_name.clone(),
-                        generics: inst.type_args.clone(),
-                    });
+                    self.generics.substitutions.insert(
+                        "Self".to_string(),
+                        ResolvedType::Named {
+                            name: struct_name.clone(),
+                            generics: inst.type_args.clone(),
+                        },
+                    );
 
                     // Temporarily register the method as a function template
                     // with the struct's generics so generate_specialized_function can find them
@@ -635,7 +653,8 @@ impl CodeGenerator {
                             ))
                         })?
                         .clone();
-                    let specialized_ir = self.generate_specialized_function(&template, &method_inst)?;
+                    let specialized_ir =
+                        self.generate_specialized_function(&template, &method_inst)?;
                     body_ir.push_str(&specialized_ir);
                     body_ir.push('\n');
                     self.generics.function_templates.remove(&method_key);

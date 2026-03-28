@@ -72,11 +72,21 @@ impl CodeGenerator {
             // Evaluate constant initializer to a literal value
             let init_val = match &info._value.node {
                 vais_ast::Expr::Int(n) => n.to_string(),
-                vais_ast::Expr::Bool(b) => if *b { "1".to_string() } else { "0".to_string() },
+                vais_ast::Expr::Bool(b) => {
+                    if *b {
+                        "1".to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                }
                 vais_ast::Expr::Float(f) => format!("{}", f),
                 _ => "0".to_string(), // Default zero-initialize for complex expressions
             };
-            let linkage = if info._is_mutable { "global" } else { "constant" };
+            let linkage = if info._is_mutable {
+                "global"
+            } else {
+                "constant"
+            };
             write_ir!(ir, "@{} = {} {} {}", name, linkage, llvm_ty, init_val);
         }
         ir.push('\n');

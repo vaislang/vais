@@ -55,7 +55,9 @@ impl TypeChecker {
             // Enum variant constructor: Ok(value), Err(err), Some(value)
             if !self.functions.contains_key(func_name) && !self.structs.contains_key(func_name) {
                 // Search all enums for a variant with this name
-                let found_enum = self.enums.iter()
+                let found_enum = self
+                    .enums
+                    .iter()
                     .find(|(_, def)| def.variants.contains_key(func_name))
                     .map(|(name, def)| (name.clone(), def.clone()));
                 if let Some((enum_name, enum_def)) = found_enum {
@@ -75,7 +77,11 @@ impl TypeChecker {
                     }
                     return Ok(ResolvedType::Named {
                         name: enum_name,
-                        generics: enum_def.generics.iter().map(|_| self.fresh_type_var()).collect(),
+                        generics: enum_def
+                            .generics
+                            .iter()
+                            .map(|_| self.fresh_type_var())
+                            .collect(),
                     });
                 }
             }
@@ -132,12 +138,14 @@ impl TypeChecker {
                     // Skip if parameter type is a reference (&T or &mut T)
                     if i < sig.params.len() {
                         let param_ty = self.apply_substitutions(&sig.params[i].1);
-                        let is_ref = matches!(&param_ty,
-                            ResolvedType::Ref(_)
-                            | ResolvedType::RefMut(_)
-                        );
+                        let is_ref =
+                            matches!(&param_ty, ResolvedType::Ref(_) | ResolvedType::RefMut(_));
                         if !is_ref {
-                            if let ResolvedType::Named { name: ref type_name, .. } = param_ty {
+                            if let ResolvedType::Named {
+                                name: ref type_name,
+                                ..
+                            } = param_ty
+                            {
                                 if self.structs.contains_key(type_name.as_str()) {
                                     if let Expr::Ident(var_name) = &arg.node {
                                         self.moved_vars.insert(var_name.clone());
@@ -225,7 +233,9 @@ impl TypeChecker {
         // Extract the inner type if receiver is a reference or pointer (auto-deref)
         let (inner_type, receiver_generics) = match &receiver_type {
             ResolvedType::Named { name, generics } => (name.clone(), generics.clone()),
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => {
                 if let ResolvedType::Named { name, generics } = inner.as_ref() {
                     (name.clone(), generics.clone())
                 } else {
@@ -312,7 +322,8 @@ impl TypeChecker {
 
                 // Record generic instantiation for monomorphization
                 if !receiver_generics.is_empty() {
-                    let inferred_type_args: Vec<_> = receiver_generics.iter()
+                    let inferred_type_args: Vec<_> = receiver_generics
+                        .iter()
                         .map(|t| self.apply_substitutions(t))
                         .collect();
                     let all_concrete = inferred_type_args
@@ -321,12 +332,15 @@ impl TypeChecker {
                     if all_concrete {
                         // Record struct instantiation (e.g., Vec<i64>)
                         let struct_inst = crate::types::GenericInstantiation::struct_type(
-                            &inner_type, inferred_type_args.clone(),
+                            &inner_type,
+                            inferred_type_args.clone(),
                         );
                         self.add_instantiation(struct_inst);
                         // Record method instantiation (e.g., Vec_push<i64>)
                         let method_inst = crate::types::GenericInstantiation::method(
-                            &inner_type, &method.node, inferred_type_args,
+                            &inner_type,
+                            &method.node,
+                            inferred_type_args,
                         );
                         self.add_instantiation(method_inst);
                     }
@@ -472,15 +486,22 @@ impl TypeChecker {
         }
         // serialize: writes to ByteBuffer, returns unit
         if method.node == "serialize" {
-            for arg in args { let _ = self.check_expr(arg)?; }
+            for arg in args {
+                let _ = self.check_expr(arg)?;
+            }
             return Ok(ResolvedType::Unit);
         }
         // deserialize: reads from ByteBuffer, returns Result<Self, VaisError>
         if method.node == "deserialize" {
-            for arg in args { let _ = self.check_expr(arg)?; }
+            for arg in args {
+                let _ = self.check_expr(arg)?;
+            }
             return Ok(ResolvedType::Result(
                 Box::new(receiver_type.clone()),
-                Box::new(ResolvedType::Named { name: "VaisError".to_string(), generics: vec![] }),
+                Box::new(ResolvedType::Named {
+                    name: "VaisError".to_string(),
+                    generics: vec![],
+                }),
             ));
         }
 
@@ -578,8 +599,10 @@ impl TypeChecker {
                         .iter()
                         .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
                     if all_concrete {
-                        let inst =
-                            GenericInstantiation::struct_type(&type_name.node, inferred_type_args.clone());
+                        let inst = GenericInstantiation::struct_type(
+                            &type_name.node,
+                            inferred_type_args.clone(),
+                        );
                         self.add_instantiation(inst);
 
                         // Also record method instantiation for cross-module specialization.
@@ -661,8 +684,11 @@ impl TypeChecker {
         }
 
         // Fallback: for unknown types, if method returns Self type
-        if method.node == "new" || method.node.starts_with("create") || method.node.starts_with("from")
-            || method.node == "clone" || method.node == "default"
+        if method.node == "new"
+            || method.node.starts_with("create")
+            || method.node.starts_with("from")
+            || method.node == "clone"
+            || method.node == "default"
         {
             for arg in args {
                 let _ = self.check_expr(arg)?;
@@ -673,8 +699,11 @@ impl TypeChecker {
             });
         }
         // Methods that return Result<Self, VaisError>
-        if method.node == "deserialize" || method.node == "load" || method.node == "read"
-            || method.node == "parse" || method.node == "read_from_page"
+        if method.node == "deserialize"
+            || method.node == "load"
+            || method.node == "read"
+            || method.node == "parse"
+            || method.node == "read_from_page"
         {
             for arg in args {
                 let _ = self.check_expr(arg)?;
@@ -685,7 +714,10 @@ impl TypeChecker {
             };
             return Ok(ResolvedType::Result(
                 Box::new(self_type),
-                Box::new(ResolvedType::Named { name: "VaisError".to_string(), generics: vec![] }),
+                Box::new(ResolvedType::Named {
+                    name: "VaisError".to_string(),
+                    generics: vec![],
+                }),
             ));
         }
         // For other static methods on unknown types, check args and return i64

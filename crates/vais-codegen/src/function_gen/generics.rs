@@ -140,18 +140,33 @@ impl CodeGenerator {
         // deeply nested Named fields (depth >= 2), as single-level Named fields are fine.
         let has_complex_type = inst.type_args.iter().any(|t| {
             if let ResolvedType::Named { name, .. } = t {
-                let fields = self.types.structs.get(name)
+                let fields = self
+                    .types
+                    .structs
+                    .get(name)
                     .map(|s| &s.fields[..])
                     .unwrap_or(&[]);
-                let generic_fields = self.generics.struct_defs.get(name)
+                let generic_fields = self
+                    .generics
+                    .struct_defs
+                    .get(name)
                     .map(|s| s.fields.len())
                     .unwrap_or(0);
                 // Check for deeply nested Named types (depth 2: Named field whose own fields
                 // are also Named). Single-level Named fields (e.g., Vec<Point>) are allowed.
                 let has_deeply_nested = fields.iter().any(|(_, ty)| {
-                    if let ResolvedType::Named { name: inner_name, .. } = ty {
-                        self.types.structs.get(inner_name)
-                            .map(|s| s.fields.iter().any(|(_, ft)| matches!(ft, ResolvedType::Named { .. })))
+                    if let ResolvedType::Named {
+                        name: inner_name, ..
+                    } = ty
+                    {
+                        self.types
+                            .structs
+                            .get(inner_name)
+                            .map(|s| {
+                                s.fields
+                                    .iter()
+                                    .any(|(_, ft)| matches!(ft, ResolvedType::Named { .. }))
+                            })
                             .unwrap_or(false)
                     } else {
                         false
@@ -159,10 +174,14 @@ impl CodeGenerator {
                 });
                 // Complex if: >6 fields, OR deeply nested Named fields (depth >= 2)
                 fields.len() > 6 || generic_fields > 6 || has_deeply_nested
-            } else { false }
+            } else {
+                false
+            }
         });
         if has_complex_type {
-            self.generics.generated_functions.insert(inst.mangled_name.clone(), true);
+            self.generics
+                .generated_functions
+                .insert(inst.mangled_name.clone(), true);
             return Ok(String::new());
         }
 
@@ -174,8 +193,6 @@ impl CodeGenerator {
         {
             return Ok(String::new());
         }
-
-
 
         // Guard against infinite recursive monomorphization.
         // Count how many specializations have been generated for this base function

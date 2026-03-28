@@ -170,7 +170,14 @@ impl CodeGenerator {
                         } else {
                             val.clone()
                         };
-                        write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, actual_val, llvm_ty, tmp_ptr);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_ty,
+                            actual_val,
+                            llvm_ty,
+                            tmp_ptr
+                        );
                         write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
                         write_ir!(
                             ir,
@@ -183,13 +190,8 @@ impl CodeGenerator {
                     } else {
                         // Allocate and store — coerce value width if mismatched
                         let actual_val_ty = self.llvm_type_of(&val);
-                        let coerced_val = self.coerce_int_width(
-                            &val,
-                            &actual_val_ty,
-                            &llvm_ty,
-                            counter,
-                            &mut ir,
-                        );
+                        let coerced_val =
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
                         write_ir!(
                             ir,
@@ -345,7 +347,8 @@ impl CodeGenerator {
                         } else {
                             val
                         }
-                    } else if ret_type.starts_with('%') && !ret_type.ends_with('*')
+                    } else if ret_type.starts_with('%')
+                        && !ret_type.ends_with('*')
                         && val.starts_with('%')
                         && !matches!(&expr.node, Expr::Ident(_))
                     {
@@ -356,7 +359,10 @@ impl CodeGenerator {
                         write_ir!(
                             ir,
                             "  {} = load {}, {}* {}",
-                            loaded, ret_type, ret_type, val
+                            loaded,
+                            ret_type,
+                            ret_type,
+                            val
                         );
                         loaded
                     } else {
@@ -525,7 +531,8 @@ impl CodeGenerator {
                         i
                     );
                     // Register extracted element's type for downstream type tracking
-                    self.fn_ctx.register_temp_type(&extracted, elem_resolved.clone());
+                    self.fn_ctx
+                        .register_temp_type(&extracted, elem_resolved.clone());
                     self.bind_pattern_from_tuple(
                         pat,
                         &extracted,
@@ -650,12 +657,29 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  %{} = load {}*, {}** %{}",
-                    ptr_tmp, struct_ty, struct_ty, llvm_name
+                    ptr_tmp,
+                    struct_ty,
+                    struct_ty,
+                    llvm_name
                 );
-                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, ptr_tmp);
+                write_ir!(
+                    ir,
+                    "  %{} = call i64 @{}({}* %{})",
+                    ret_tmp,
+                    drop_fn,
+                    struct_ty,
+                    ptr_tmp
+                );
             } else {
                 let ret_tmp = format!("__drop_ret_{}", id);
-                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, llvm_name);
+                write_ir!(
+                    ir,
+                    "  %{} = call i64 @{}({}* %{})",
+                    ret_tmp,
+                    drop_fn,
+                    struct_ty,
+                    llvm_name
+                );
             }
         }
         ir
@@ -754,12 +778,29 @@ impl CodeGenerator {
                 write_ir!(
                     ir,
                     "  %{} = load {}*, {}** %{}",
-                    ptr_tmp, struct_ty, struct_ty, llvm_name
+                    ptr_tmp,
+                    struct_ty,
+                    struct_ty,
+                    llvm_name
                 );
-                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, ptr_tmp);
+                write_ir!(
+                    ir,
+                    "  %{} = call i64 @{}({}* %{})",
+                    ret_tmp,
+                    drop_fn,
+                    struct_ty,
+                    ptr_tmp
+                );
             } else {
                 let ret_tmp = format!("__drop_ret_{}", id);
-                write_ir!(ir, "  %{} = call i64 @{}({}* %{})", ret_tmp, drop_fn, struct_ty, llvm_name);
+                write_ir!(
+                    ir,
+                    "  %{} = call i64 @{}({}* %{})",
+                    ret_tmp,
+                    drop_fn,
+                    struct_ty,
+                    llvm_name
+                );
             }
         }
 

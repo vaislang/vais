@@ -89,7 +89,10 @@ impl Parser {
                     } else if self.check(&Token::LBrace) && self.allow_struct_literal {
                         // Check for enum variant struct construction: Type.Variant { field: value }
                         let is_type = if let Expr::Ident(name) = &expr.node {
-                            name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                            name.chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
                         } else {
                             false
                         };

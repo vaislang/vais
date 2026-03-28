@@ -487,7 +487,7 @@ fn main() {
         .expect("failed to spawn main thread");
 
     match child.join() {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) => {
             eprintln!("vaisc panicked: {:?}", e);
             std::process::exit(1);

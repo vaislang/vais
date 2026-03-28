@@ -86,7 +86,8 @@ pub(crate) fn compile_per_module(
             }
 
             // Generate IR for this module's subset
-            let result = codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
+            let result =
+                codegen.generate_module_subset(final_ast, item_indices, instantiations, is_main);
             let raw_ir = result.map_err(|e| {
                 let spanned = vais_codegen::SpannedCodegenError {
                     span: codegen.last_error_span(),

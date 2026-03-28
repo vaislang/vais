@@ -435,29 +435,72 @@ impl CodeGenerator {
 
         let final_value = if let Some(ref try_ty) = try_unwrap_type {
             let try_llvm = self.type_to_llvm(try_ty);
-            let needs_cast = try_llvm != "i64" && try_llvm != "i32" && try_llvm != "i16"
-                && try_llvm != "i8" && try_llvm != "i1" && !try_llvm.ends_with('*');
+            let needs_cast = try_llvm != "i64"
+                && try_llvm != "i32"
+                && try_llvm != "i16"
+                && try_llvm != "i8"
+                && try_llvm != "i1"
+                && !try_llvm.ends_with('*');
             if needs_cast {
                 let type_size = self.compute_sizeof(try_ty);
                 if type_size > 8 {
                     // Large struct: payload holds a heap pointer (from Ok/Err constructor)
                     let typed_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", typed_ptr, value, try_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        value,
+                        try_llvm
+                    );
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, typed_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        try_llvm,
+                        try_llvm,
+                        typed_ptr
+                    );
                     loaded
                 } else {
                     // Small struct: stored directly via bitcast in payload
                     let tmp_result = self.next_temp(counter);
                     self.emit_entry_alloca(&tmp_result, &llvm_type);
-                    write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        llvm_type,
+                        inner_val,
+                        llvm_type,
+                        tmp_result
+                    );
                     let payload_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
-                        payload_ptr, llvm_type, llvm_type, tmp_result);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                        payload_ptr,
+                        llvm_type,
+                        llvm_type,
+                        tmp_result
+                    );
                     let cast_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, try_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast i64* {} to {}*",
+                        cast_ptr,
+                        payload_ptr,
+                        try_llvm
+                    );
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, cast_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        try_llvm,
+                        try_llvm,
+                        cast_ptr
+                    );
                     loaded
                 }
             } else {
@@ -574,30 +617,73 @@ impl CodeGenerator {
 
         if let Some(ref unwrap_ty) = unwrap_type {
             let unwrap_llvm = self.type_to_llvm(unwrap_ty);
-            let needs_cast = unwrap_llvm != "i64" && unwrap_llvm != "i32" && unwrap_llvm != "i16"
-                && unwrap_llvm != "i8" && unwrap_llvm != "i1" && !unwrap_llvm.ends_with('*');
+            let needs_cast = unwrap_llvm != "i64"
+                && unwrap_llvm != "i32"
+                && unwrap_llvm != "i16"
+                && unwrap_llvm != "i8"
+                && unwrap_llvm != "i1"
+                && !unwrap_llvm.ends_with('*');
             if needs_cast {
                 let type_size = self.compute_sizeof(unwrap_ty);
                 if type_size > 8 {
                     // Large struct: payload is a heap pointer
                     let typed_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", typed_ptr, value, unwrap_llvm);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        value,
+                        unwrap_llvm
+                    );
                     let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, typed_ptr);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        unwrap_llvm,
+                        unwrap_llvm,
+                        typed_ptr
+                    );
                     self.fn_ctx.register_temp_type(&loaded, unwrap_ty.clone());
                     return Ok((loaded, ir));
                 }
                 // Small struct: stored via bitcast in payload
                 let tmp_result = self.next_temp(counter);
                 self.emit_entry_alloca(&tmp_result, &llvm_type);
-                write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* {}",
+                    llvm_type,
+                    inner_val,
+                    llvm_type,
+                    tmp_result
+                );
                 let payload_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
-                    payload_ptr, llvm_type, llvm_type, tmp_result);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                    payload_ptr,
+                    llvm_type,
+                    llvm_type,
+                    tmp_result
+                );
                 let cast_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, unwrap_llvm);
+                write_ir!(
+                    ir,
+                    "  {} = bitcast i64* {} to {}*",
+                    cast_ptr,
+                    payload_ptr,
+                    unwrap_llvm
+                );
                 let loaded = self.next_temp(counter);
-                write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, cast_ptr);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    unwrap_llvm,
+                    unwrap_llvm,
+                    cast_ptr
+                );
                 self.fn_ctx.register_temp_type(&loaded, unwrap_ty.clone());
                 return Ok((loaded, ir));
             }

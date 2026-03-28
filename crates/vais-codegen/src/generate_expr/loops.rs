@@ -57,8 +57,7 @@ impl CodeGenerator {
             ir.push_str(&cond_ir);
 
             // Convert to i1 for branch (type-aware: skips for bool/i1)
-            let (cond_bool, conv_ir) =
-                self.generate_cond_to_i1(iter_expr, &cond_val, counter);
+            let (cond_bool, conv_ir) = self.generate_cond_to_i1(iter_expr, &cond_val, counter);
             ir.push_str(&conv_ir);
             write_ir!(
                 ir,
@@ -70,8 +69,7 @@ impl CodeGenerator {
 
             // Loop body
             write_ir!(ir, "{}:", loop_body);
-            let (_body_val, body_ir, body_terminated) =
-                self.generate_block_stmts(body, counter)?;
+            let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
             ir.push_str(&body_ir);
             // Only emit loop back if body doesn't terminate
             if !body_terminated {
@@ -81,8 +79,7 @@ impl CodeGenerator {
             // Infinite loop: L { body } - must use break to exit
             write_ir!(ir, "  br label %{}", loop_start);
             write_ir!(ir, "{}:", loop_start);
-            let (_body_val, body_ir, body_terminated) =
-                self.generate_block_stmts(body, counter)?;
+            let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
             ir.push_str(&body_ir);
             // Only emit loop back if body doesn't terminate
             if !body_terminated {
@@ -142,8 +139,7 @@ impl CodeGenerator {
 
         // Loop body
         write_ir!(ir, "{}:", loop_body);
-        let (_body_val, body_ir, body_terminated) =
-            self.generate_block_stmts(body, counter)?;
+        let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
         ir.push_str(&body_ir);
 
         // Jump back to condition if body doesn't terminate

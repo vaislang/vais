@@ -5,23 +5,18 @@ use std::sync::LazyLock;
 
 // ── Compiled regex statics (compiled once, reused on every call) ─────────────
 
-static COMMENT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"/\*.*?\*/").unwrap());
+static COMMENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/\*.*?\*/").unwrap());
 
 static TYPEDEF_STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"typedef\s+struct\s*\{([^}]*)\}\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
 });
 
 static SIMPLE_TYPEDEF_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;",
-    )
-    .unwrap()
+    Regex::new(r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
 });
 
-static STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap()
-});
+static STRUCT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap());
 
 static OPAQUE_STRUCT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap());
@@ -30,23 +25,18 @@ static STRUCT_FIELD_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
 });
 
-static ENUM_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap()
-});
+static ENUM_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap());
 
 static ENUM_VARIANT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*(-?\d+))?").unwrap());
 
 static FUNC_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;",
-    )
-    .unwrap()
+    Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;").unwrap()
 });
 
-static NAMESPACE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}").unwrap()
-});
+static NAMESPACE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}").unwrap());
 
 static CLASS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -55,9 +45,8 @@ static CLASS_RE: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
-static TEMPLATE_PARAM_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?:typename|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap()
-});
+static TEMPLATE_PARAM_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?:typename|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap());
 
 static CLASS_METHOD_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(

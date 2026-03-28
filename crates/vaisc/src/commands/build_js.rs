@@ -110,8 +110,8 @@ pub(crate) fn cmd_build_js(
     // Register builtin panic! macro: panic!("msg") => __panic("msg")
     {
         use vais_ast::{
-            MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
-            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned, Delimiter,
+            Delimiter, MacroDef, MacroPattern, MacroPatternElement, MacroRule, MacroTemplate,
+            MacroTemplateElement, MacroToken, MetaVarKind, Span, Spanned,
         };
         macro_registry.register(MacroDef {
             name: Spanned::new("panic".to_string(), Span::new(0, 5)),
