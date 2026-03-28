@@ -47,6 +47,7 @@ impl CodeGenerator {
                 function_templates: HashMap::new(),
                 fn_instantiations: HashMap::new(),
                 generated_functions: HashMap::with_capacity(16),
+                generic_method_bodies: HashMap::new(),
                 substitutions: HashMap::new(),
             },
             fn_ctx: FunctionContext {
@@ -63,6 +64,8 @@ impl CodeGenerator {
                 alloc_tracker: Vec::new(),
                 temp_var_types: HashMap::with_capacity(64),
                 scope_stack: Vec::with_capacity(8),
+                entry_allocas: Vec::new(),
+                pending_specialized_ir: Vec::new(),
             },
             strings: StringPool {
                 constants: Vec::with_capacity(16),
@@ -110,6 +113,7 @@ impl CodeGenerator {
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),
             ref_constant_counter: 0,
+            expr_types: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -184,6 +188,13 @@ impl CodeGenerator {
         self.types.type_aliases = aliases;
     }
 
+    /// Set expression types from the type checker.
+    /// These are used by `infer_expr_type` to look up TC-resolved types before
+    /// falling back to the legacy heuristic inference.
+    pub fn set_expr_types(&mut self, types: HashMap<(usize, usize), vais_types::ResolvedType>) {
+        self.expr_types = types;
+    }
+
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
     pub fn set_string_prefix(&mut self, prefix: &str) {
         self.strings.prefix = Some(prefix.to_string());
@@ -237,6 +248,7 @@ impl CodeGenerator {
     ///
     /// Uses interior mutability (`RefCell`) so this can be called from `&self` methods
     /// such as `type_to_llvm` which cannot take `&mut self`.
+    #[inline(never)]
     pub(crate) fn emit_warning(&self, warning: crate::CodegenWarning) {
         self.warnings.borrow_mut().push(warning);
     }
@@ -246,6 +258,7 @@ impl CodeGenerator {
     /// In strict mode, [`CodegenWarning::UnresolvedTypeFallback`] is promoted to
     /// [`CodegenError::InternalError`]. Other warning types (e.g., `GenericFallback`)
     /// remain warnings in all modes.
+    #[inline(never)]
     pub(crate) fn emit_warning_or_error(
         &self,
         warning: crate::CodegenWarning,

@@ -2,6 +2,7 @@ use super::*;
 
 impl CodeGenerator {
     /// Generate code for match expression
+    #[inline(never)]
     pub(crate) fn generate_match(
         &mut self,
         match_expr: &Spanned<Expr>,
@@ -21,7 +22,7 @@ impl CodeGenerator {
         let match_val = if is_enum_or_struct && is_value {
             let llvm_type = self.type_to_llvm(&match_type);
             let stack_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = alloca {}", stack_ptr, llvm_type);
+            self.emit_entry_alloca(&stack_ptr, &llvm_type);
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
@@ -225,8 +226,44 @@ impl CodeGenerator {
                     ir.push_str(&bind_ir);
                 }
 
-                let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                let (mut body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
+
+                // Coerce arm values to match the phi type.
+                // Skip if the body_val is a placeholder (void/ret arms).
+                if !body_val.is_empty()
+                    && body_val != "void"
+                    && !body_ir.trim_end().ends_with("unreachable")
+                {
+                    let arm_inferred = self.infer_expr_type(&arm.body);
+                    if matches!(arm_inferred, ResolvedType::Bool) {
+                        let coerced = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i1 {} to i64", coerced, body_val);
+                        body_val = coerced;
+                    } else if matches!(arm_inferred, ResolvedType::Named { .. }) {
+                        // Named type (struct/enum): phi uses pointer type (%T*).
+                        // If this arm body produced a value (e.g., function return),
+                        // we must alloca+store it to get a pointer for the phi node.
+                        // If the arm body already produced a pointer (e.g., struct literal,
+                        // local variable, enum constructor), use it as-is.
+                        if self.is_expr_value(&arm.body) {
+                            let llvm_ty = self.type_to_llvm(&arm_inferred);
+                            let alloca = self.next_temp(counter);
+                            self.emit_entry_alloca(&alloca, &llvm_ty);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                llvm_ty,
+                                body_val,
+                                llvm_ty,
+                                alloca
+                            );
+                            body_val = alloca;
+                        }
+                        // else: already a pointer, use as-is
+                    }
+                }
+
                 // Use actual current block (may differ from arm_body_label if body
                 // inserted intermediate labels, e.g., division-by-zero guard)
                 let actual_block = self.fn_ctx.current_block.clone();
@@ -247,7 +284,7 @@ impl CodeGenerator {
                     | ResolvedType::Ref(_)
                     | ResolvedType::RefMut(_) => "null".to_string(),
                     ResolvedType::F64 => "0.0".to_string(),
-                    ResolvedType::Bool => "false".to_string(),
+                    ResolvedType::Bool => "0".to_string(), // Bool → i64 in phi
                     _ => "0".to_string(),
                 }
             } else {
@@ -295,7 +332,7 @@ impl CodeGenerator {
                     format!("{}*", inner_ty)
                 }
                 ResolvedType::F64 => "double".to_string(),
-                ResolvedType::Bool => "i1".to_string(),
+                ResolvedType::Bool => "i64".to_string(), // Bool is zext'd to i64 in codegen
                 _ => "i64".to_string(),
             };
 

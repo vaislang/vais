@@ -119,7 +119,7 @@ impl CodeGenerator {
             }
             Expr::MethodCall { .. } => true, // method call produces a value
             Expr::StaticMethodCall { .. } => true, // static method call produces a value
-            // Struct-typed local variables are stored as pointers (double-pointer)
+            // Struct-typed local variables are stored as pointers (single alloca %T*)
             // so generate_expr returns a pointer, not a value
             Expr::Ident(name) => {
                 // Unit enum variants (e.g., None) produce pointers
@@ -140,7 +140,7 @@ impl CodeGenerator {
                     if local.is_param() {
                         return true;
                     }
-                    // Struct/enum local variables are stored as double-pointers (%Struct** %var)
+                    // Struct/enum local variables are stored as single-pointer alloca (%Struct* %var)
                     // so generate_expr returns a pointer, not a value
                     !matches!(local.ty, ResolvedType::Named { .. })
                 } else {
@@ -157,6 +157,23 @@ impl CodeGenerator {
 
     /// Infer type of expression (simple version for let statement)
     pub(crate) fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            self.infer_expr_type_inner(expr)
+        })
+    }
+
+    /// Get the TC-resolved type for an expression, if available.
+    /// This is more accurate than infer_expr_type but may not be available for all expressions.
+    /// Use for targeted lookups where TC accuracy is critical (e.g., generic type resolution).
+    #[allow(dead_code)]
+    pub(crate) fn tc_expr_type(&self, expr: &Spanned<Expr>) -> Option<&ResolvedType> {
+        let span_key = (expr.span.start, expr.span.end);
+        self.expr_types.get(&span_key)
+    }
+
+    #[inline(never)]
+    fn infer_expr_type_inner(&self, expr: &Spanned<Expr>) -> ResolvedType {
+        use std::sync::atomic::{AtomicUsize, Ordering};
         match &expr.node {
             Expr::Int(_) => ResolvedType::I64,
             Expr::Float(_) => ResolvedType::F64,
@@ -187,8 +204,43 @@ impl CodeGenerator {
                         }
                     }
                     ResolvedType::I64
+                } else if let Some(const_info) = self.types.constants.get(name) {
+                    // Cross-module constant: infer type from constant's declared type
+                    let ty = const_info._ty.clone();
+                    if matches!(ty, ResolvedType::Unknown) {
+                        // Fallback: infer from constant value expression
+                        self.infer_expr_type(&const_info.value.clone())
+                    } else {
+                        ty
+                    }
+                } else if self.types.structs.contains_key(name) {
+                    // Bare struct name used as a type reference (e.g., DistanceMetric in DistanceMetric.Cosine)
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: vec![],
+                    }
+                } else if self.types.enums.contains_key(name) {
+                    // Bare enum name used as a type reference (e.g., DistanceMetric enum)
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: vec![],
+                    }
+                } else if self.generics.struct_aliases.contains_key(name) {
+                    // Generic struct alias (e.g., "Vec" -> "Vec$i64")
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: vec![],
+                    }
+                } else if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    // PascalCase identifier not found in locals — likely a cross-module
+                    // struct/enum type name. Return Named type so downstream field access
+                    // and method call resolution can work.
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: vec![],
+                    }
                 } else {
-                    ResolvedType::I64 // Default
+                    ResolvedType::I64 // Default for lowercase identifiers
                 }
             }
             Expr::Call { func, args } => {
@@ -528,6 +580,32 @@ impl CodeGenerator {
                     return recv_type;
                 }
 
+                // Fallback: when receiver type is not Named (I64/Unknown fallback),
+                // search self.types.functions for any `StructName_method` that matches.
+                // This handles cross-module method calls where the receiver type
+                // couldn't be resolved from locals alone.
+                if !matches!(inner_recv, ResolvedType::Named { .. }) {
+                    let method_suffix = format!("_{}", method.node);
+                    let mut candidates = Vec::new();
+                    for (fn_name, fn_info) in &self.types.functions {
+                        if fn_name.ends_with(&method_suffix) {
+                            candidates.push((fn_name.clone(), fn_info.signature.ret.clone()));
+                        }
+                    }
+                    // Also check resolved_function_sigs
+                    for (fn_name, sig) in &self.types.resolved_function_sigs {
+                        if fn_name.ends_with(&method_suffix)
+                            && !candidates.iter().any(|(n, _)| n == fn_name)
+                        {
+                            candidates.push((fn_name.clone(), sig.ret.clone()));
+                        }
+                    }
+                    // If exactly one match, use it unambiguously
+                    if candidates.len() == 1 {
+                        return candidates[0].1.clone();
+                    }
+                }
+
                 ResolvedType::I64
             }
             Expr::StaticMethodCall {
@@ -583,15 +661,28 @@ impl CodeGenerator {
             } => {
                 // Get the type of the object being accessed
                 let obj_type = self.infer_expr_type(obj_expr);
+
+                // Unwrap Ref/RefMut/Pointer to get the inner type
+                let inner_type = match &obj_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                    ResolvedType::Pointer(inner) => inner.as_ref(),
+                    other => other,
+                };
+
                 // If it's a named type (struct), look up the field type
                 if let ResolvedType::Named {
                     name: struct_name, ..
-                } = &obj_type
+                } = inner_type
                 {
-                    if let Some(struct_info) = self.types.structs.get(struct_name) {
-                        for (field_name, field_type) in &struct_info.fields {
-                            if field_name == &field.node {
-                                return field_type.clone();
+                    // Try direct name, then resolved alias name
+                    let resolved = self.resolve_struct_name(struct_name);
+                    let names_to_try = [struct_name.as_str(), resolved.as_str()];
+                    for candidate in &names_to_try {
+                        if let Some(struct_info) = self.types.structs.get(*candidate) {
+                            for (field_name, field_type) in &struct_info.fields {
+                                if field_name == &field.node {
+                                    return field_type.clone();
+                                }
                             }
                         }
                     }

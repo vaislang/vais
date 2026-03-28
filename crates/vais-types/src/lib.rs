@@ -177,6 +177,10 @@ pub struct TypeChecker {
 
     // Variables that have been moved (passed by value to a function as a struct type)
     pub(crate) moved_vars: HashSet<String>,
+
+    /// Expression types from type checking, keyed by expression span.
+    /// Used by codegen to get accurate types instead of re-inferring.
+    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
 }
 
 impl TypeChecker {
@@ -216,6 +220,7 @@ impl TypeChecker {
             dependent_predicates: RefCell::new(HashMap::new()),
             loop_depth: 0,
             moved_vars: HashSet::new(),
+            expr_types: HashMap::new(),
         };
         checker.register_builtins();
         checker
@@ -327,6 +332,12 @@ impl TypeChecker {
     /// Get all type aliases (for passing to codegen)
     pub fn get_type_aliases(&self) -> &HashMap<String, ResolvedType> {
         &self.type_aliases
+    }
+
+    /// Get expression types recorded during type checking (for passing to codegen).
+    /// Keyed by (span.start, span.end) tuples.
+    pub fn get_expr_types(&self) -> &HashMap<(usize, usize), ResolvedType> {
+        &self.expr_types
     }
 
     /// Get the struct definition (for codegen)

@@ -86,18 +86,20 @@ impl CodeGenerator {
 
     /// Internal implementation of type_to_llvm without caching
     fn type_to_llvm_impl(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
-        // Track recursion depth
-        self.enter_type_recursion("type_to_llvm")?;
-
-        let result = self.type_to_llvm_impl_inner(ty);
-
-        // Always exit recursion, even on error
-        self.exit_type_recursion();
-        result
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static TTL_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let c = TTL_COUNT.fetch_add(1, Ordering::Relaxed);
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            self.enter_type_recursion("type_to_llvm")?;
+            let result = self.type_to_llvm_impl_inner(ty);
+            self.exit_type_recursion();
+            result
+        })
     }
 
     /// Inner implementation of type_to_llvm (actual conversion logic)
     fn type_to_llvm_impl_inner(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
         Ok(match ty {
             ResolvedType::I8 => String::from("i8"),
             ResolvedType::I16 => String::from("i16"),
@@ -182,6 +184,9 @@ impl CodeGenerator {
                         // Layout is i64-uniform when type args can't be resolved.
                         format!("%{}", name)
                     }
+                } else if let Some(subst) = self.get_generic_substitution(name) {
+                    // Named type that has a substitution (e.g., "Self" → Option)
+                    self.type_to_llvm(&subst)
                 } else {
                     // Non-generic struct/enum/union - return type without pointer
                     format!("%{}", name)
@@ -471,6 +476,7 @@ impl CodeGenerator {
 
     /// Internal implementation of ast_type_to_resolved
     fn ast_type_to_resolved_impl(&self, ty: &Type) -> ResolvedType {
+        use std::sync::atomic::{AtomicUsize, Ordering};
         match ty {
             Type::Named { name, generics } => match name.as_str() {
                 "i8" => ResolvedType::I8,
@@ -853,6 +859,47 @@ impl CodeGenerator {
                         }
                     }
                 }
+                // Try type aliases: Named type might be an alias for a known type
+                if let Some(alias_ty) = self.types.type_aliases.get(name) {
+                    let alias_ty = alias_ty.clone();
+                    // Guard against alias pointing back to same name to avoid infinite recursion
+                    if !matches!(&alias_ty, ResolvedType::Named { name: alias_name, .. } if alias_name == name) {
+                        return self.compute_sizeof(&alias_ty);
+                    }
+                }
+                // Try struct_aliases: e.g., "Box" -> "Box$i64" (generic alias registered by name)
+                if let Some(mangled) = self.generics.struct_aliases.get(name) {
+                    let mangled = mangled.clone();
+                    if let Some(struct_info) = self.types.structs.get(&mangled) {
+                        return struct_info
+                            .fields
+                            .iter()
+                            .map(|(_name, ty)| self.compute_sizeof(ty))
+                            .sum();
+                    }
+                }
+                // Try struct_defs directly (AST-level struct definitions not yet in types.structs)
+                // This handles structs that were registered in the AST but not yet resolved into
+                // types.structs — compute size from AST field types directly.
+                if let Some(struct_def) = self.generics.struct_defs.get(name) {
+                    if struct_def.generics.is_empty() {
+                        // Non-generic struct — compute directly from AST fields
+                        return struct_def
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                let field_ty = self.ast_type_to_resolved(&f.ty.node);
+                                self.compute_sizeof(&field_ty)
+                            })
+                            .sum();
+                    }
+                }
+                // Unknown named type: warn and fall back to pointer-sized i64
+                eprintln!(
+                    "[vais-codegen] compute_sizeof: unknown Named type '{}' (generics={:?}), \
+                     falling back to 8 bytes. This may cause incorrect elem_size in Vec/Array ops.",
+                    name, generics
+                );
                 8 // unknown named type fallback
             }
             ResolvedType::Generic(param) => {
@@ -961,7 +1008,7 @@ impl CodeGenerator {
         if let Some(local) = self.fn_ctx.locals.get(local_name) {
             return self.type_to_llvm(&local.ty);
         }
-        // 3. Legacy fallback
+        // 3. Legacy fallback — assume i64 (generic erasure default)
         String::from("i64")
     }
 

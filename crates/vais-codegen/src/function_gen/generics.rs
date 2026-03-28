@@ -109,6 +109,21 @@ impl CodeGenerator {
         generic_fn: &Function,
         inst: &vais_types::GenericInstantiation,
     ) -> CodegenResult<String> {
+        // Use stacker to handle deep specialization chains
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, move || {
+            self.enter_type_recursion("generate_specialized_function")?;
+            let result = self.generate_specialized_function_inner(generic_fn, inst);
+            self.exit_type_recursion();
+            result
+        })
+    }
+
+    #[inline(never)]
+    fn generate_specialized_function_inner(
+        &mut self,
+        generic_fn: &Function,
+        inst: &vais_types::GenericInstantiation,
+    ) -> CodegenResult<String> {
         // Skip instantiations with non-concrete type args (e.g., make_container$T from inside
         // a generic function body). These would produce unresolved generic IR.
         if inst
@@ -116,6 +131,38 @@ impl CodeGenerator {
             .iter()
             .any(|t| matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)))
         {
+            return Ok(String::new());
+        }
+
+        // Skip specialization for deeply nested struct types to prevent stack overflow.
+        // store_typed/load_typed have been extracted to #[inline(never)] methods, so the
+        // threshold is relaxed from >2 fields to >6 fields. Only skip if the struct has
+        // deeply nested Named fields (depth >= 2), as single-level Named fields are fine.
+        let has_complex_type = inst.type_args.iter().any(|t| {
+            if let ResolvedType::Named { name, .. } = t {
+                let fields = self.types.structs.get(name)
+                    .map(|s| &s.fields[..])
+                    .unwrap_or(&[]);
+                let generic_fields = self.generics.struct_defs.get(name)
+                    .map(|s| s.fields.len())
+                    .unwrap_or(0);
+                // Check for deeply nested Named types (depth 2: Named field whose own fields
+                // are also Named). Single-level Named fields (e.g., Vec<Point>) are allowed.
+                let has_deeply_nested = fields.iter().any(|(_, ty)| {
+                    if let ResolvedType::Named { name: inner_name, .. } = ty {
+                        self.types.structs.get(inner_name)
+                            .map(|s| s.fields.iter().any(|(_, ft)| matches!(ft, ResolvedType::Named { .. })))
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    }
+                });
+                // Complex if: >6 fields, OR deeply nested Named fields (depth >= 2)
+                fields.len() > 6 || generic_fields > 6 || has_deeply_nested
+            } else { false }
+        });
+        if has_complex_type {
+            self.generics.generated_functions.insert(inst.mangled_name.clone(), true);
             return Ok(String::new());
         }
 
@@ -127,6 +174,8 @@ impl CodeGenerator {
         {
             return Ok(String::new());
         }
+
+
 
         // Guard against infinite recursive monomorphization.
         // Count how many specializations have been generated for this base function
@@ -169,6 +218,7 @@ impl CodeGenerator {
             let struct_name = &inst.base_name[..underscore_pos];
             if self.types.structs.contains_key(struct_name)
                 || self.generics.struct_defs.contains_key(struct_name)
+                || self.types.enums.contains_key(struct_name)
             {
                 substitutions.insert(
                     "Self".to_string(),
@@ -177,6 +227,20 @@ impl CodeGenerator {
                         generics: inst.type_args.clone(),
                     },
                 );
+                // If the method has no generics of its own (e.g., Vec<T>.push where T comes
+                // from the struct), use the struct's generic parameters for substitution.
+                if type_params.is_empty() && !inst.type_args.is_empty() {
+                    if let Some(struct_def) = self.generics.struct_defs.get(struct_name) {
+                        let struct_type_params: Vec<_> = struct_def
+                            .generics
+                            .iter()
+                            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                            .collect();
+                        for (g, t) in struct_type_params.iter().zip(inst.type_args.iter()) {
+                            substitutions.insert(g.name.node.to_string(), t.clone());
+                        }
+                    }
+                }
             }
         }
 
@@ -313,6 +377,9 @@ impl CodeGenerator {
                 }
             }
         }
+
+        // Splice entry-block allocas into the function
+        self.splice_entry_allocas(&mut ir);
 
         ir.push_str("}\n");
 

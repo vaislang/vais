@@ -122,7 +122,7 @@ use vais_types::ResolvedType;
 
 /// Maximum recursion depth for type resolution to prevent stack overflow
 /// This limit protects against infinite recursive types like: type A = B; type B = A;
-const MAX_TYPE_RECURSION_DEPTH: usize = 128;
+const MAX_TYPE_RECURSION_DEPTH: usize = 64;
 
 /// Escape a string for use in LLVM IR string constants.
 ///
@@ -271,6 +271,11 @@ pub struct CodeGenerator {
 
     // Counter for unique global constant names
     pub(crate) ref_constant_counter: usize,
+
+    // Expression types from type checker, keyed by (span.start, span.end).
+    // Used by infer_expr_type to look up TC-resolved types before falling back
+    // to the legacy inference heuristics.
+    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
 }
 
 #[cfg(test)]

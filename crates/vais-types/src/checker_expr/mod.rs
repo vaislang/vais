@@ -16,6 +16,17 @@ use vais_ast::*;
 impl TypeChecker {
     /// Check an expression - main dispatcher
     pub(crate) fn check_expr(&mut self, expr: &Spanned<Expr>) -> TypeResult<ResolvedType> {
+        let result = self.check_expr_inner(expr);
+        // Store the resolved type in expr_types for codegen to reference later
+        if let Ok(ref ty) = result {
+            let span_key = (expr.span.start, expr.span.end);
+            self.expr_types.insert(span_key, ty.clone());
+        }
+        result
+    }
+
+    /// Inner dispatcher for check_expr (without span recording)
+    fn check_expr_inner(&mut self, expr: &Spanned<Expr>) -> TypeResult<ResolvedType> {
         // Try each category of expression checkers in order
 
         // 1. Literals and identifiers

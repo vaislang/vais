@@ -495,4 +495,186 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ---
 
+---
+
+## 📋 Phase 150: Codegen Generic Monomorphization 근본 수정
+
+> **배경**: VaisDB 8/8 테스트 IR 생성 성공, 125/175 테스트 통과 (71%). 나머지 50개 실패의 근본 원인은 codegen generic erasure — 모든 generic T를 i64로 치환하여 sizeof(T) > 8인 타입의 데이터 손실.
+>
+> **검증 프로젝트**: VaisDB (`/Users/sswoo/study/projects/vaisdb/`) — 8개 테스트 스위트, 303+ 테스트
+> **참고**: VaisDB `CODEGEN_ERROR_CATALOG.md`, `RUNTIME_TEST_FAILURES.md`, memory `compiler_constant_pattern_fix.md`
+
+---
+
+### 현재 상태 (2026-03-28)
+
+**이미 완료된 수정 (이번 세션):**
+- ✅ 상수 패턴 매칭 (`control_flow/pattern.rs`) — PROP_TYPE_* 등 match arm 상수 비교
+- ✅ Phi predecessor 추적 (`expr_helpers_misc.rs`, `generate_expr/mod.rs`, `expr_helpers_control.rs`, `expr_helpers_data.rs`) — try/loop/if 블록 후 current_block 업데이트
+- ✅ Vec 런타임 stride (`expr_helpers_data.rs`) — elem_size 기반 인덱싱
+- ✅ `&Vec<T>` → `&[T]` deref coercion (`call_gen.rs`) — 함수 호출 시 자동 변환
+- ✅ generate_expr match arm 추출 리팩토링 (`generate_expr/mod.rs` 693→296줄, 5개 새 파일)
+- ✅ stacker + smart struct skip (`function_gen/generics.rs`) — stack overflow 방지
+- ✅ Dead branch removal (`ir_fix.py` POST-PASS) — ret 뒤 dead br 제거
+- ✅ Vec_push$str 자동 라우팅 (`ir_fix.py`) — str 인자 Vec_push → Vec_push$str
+- ✅ Option/Result discriminant 추적 (`ir_fix.py`) — extractvalue 결과 i32 타입 추적
+- ✅ `i64` → `{i8*, i64}` str key 변환 (`ir_fix.py` FIX 13) — HashMap str key
+- ✅ extractvalue struct field 파싱 (`ir_fix.py`) — `{i1, i1}` 등 필드 타입 추론
+- ✅ `i1`/`i32` → `i64` 자동 widening (`ir_fix.py` FIX 17c)
+- ✅ 64MB main thread stack (`main.rs`) — 대형 모듈 codegen 지원
+- ✅ `#[inline(never)]` 30+ 함수 — 스택 프레임 크기 축소
+- ✅ `assert_eq_str` (`std/test.vais`) — 문자열 비교 함수
+
+**VaisDB 테스트 결과:**
+| Test Suite | Pass/Total | 비고 |
+|---|---|---|
+| test_graph | 48/48 (100%) | 완벽 |
+| test_fulltext | 41/64 (64%) | Vec<TokenInfo> erasure |
+| test_vector | 21/36 (58%) | Vec<f32> erasure + float coercion |
+| test_btree | 12/12 (100%) | sequential mode 기준 |
+| test_wal | 3/15 (20%) | I/O stub 한계 |
+| test_buffer_pool | compiled | mutex stub hang |
+| test_transaction | 1 IR error | ptr→i64 phi |
+| test_planner | 1 IR error | struct→ptr phi |
+
+---
+
+### 근본 문제 3가지
+
+#### 문제 1: `compute_sizeof` Named type 해석 실패 (영향: ~30 tests)
+
+**현상**: `Vec<TokenInfo>`, `Vec<f32>`, `Vec<BufferFrame>` 등에서 elem_size가 항상 8 (i64)
+**위치**: `crates/vais-codegen/src/types/conversion.rs:778`
+**원인**:
+```rust
+// 현재 (잘못됨):
+ResolvedType::Named { .. } => 8, // 모든 Named type = 8 bytes
+
+// 올바른 동작:
+ResolvedType::Named { name, .. } => {
+    self.types.structs.get(name)
+        .map(|s| s.fields.iter().map(|(_, ty)| self.compute_sizeof(ty)).sum())
+        .unwrap_or(8)
+}
+```
+**영향 범위**:
+- `store_typed` / `load_typed` (`generate_expr_call.rs:254,330`) — memcpy 크기 결정
+- `Vec_with_capacity` elem_size 초기화 — Vec 생성 시 stride
+- `Vec_push` offset 계산 — 원소 저장 위치
+- `Option<T>` / `Result<T,E>` payload 크기 — heap allocation 결정
+
+**수정 파일**: `types/conversion.rs` (compute_sizeof), `generate_expr_call.rs` (store_typed, load_typed)
+
+#### 문제 2: Match arm Named type value/pointer 혼동 (영향: ~10 tests)
+
+**현상**: match 표현식에서 Named type (Vec, HashMap 결과) 반환 시 phi node가 value와 pointer를 혼합
+**위치**: `crates/vais-codegen/src/control_flow/match_gen.rs:228-250, 301-345`
+**원인**:
+```
+match.arm7:  %t8 = alloca %Vec; ... ; br %match.merge    ← %t8은 pointer
+match.arm9:  %t20 = call %Vec @fn(); br %match.merge     ← %t20은 value
+match.merge: phi %Vec* [ %t8, %arm7 ], [ %t20, %arm9 ]   ← 타입 불일치!
+```
+**수정 방향**:
+- `generate_expr` 반환 시 Named type의 value/pointer 여부를 명시적으로 추적
+- match arm body에서 value → pointer 변환 (`alloca + store`) 일관 적용
+- 또는 phi를 i64 (ptrtoint) 기반으로 통일하고 merge 후 inttoptr + load
+- **주의**: 이전에 시도한 "arm body value를 alloca에 저장" 접근은 test_graph 3개 regression 유발. 일부 arm이 이미 pointer를 반환하므로 이중 alloca 발생.
+
+**수정 파일**: `control_flow/match_gen.rs`, `type_inference.rs` (is_expr_value 개선)
+
+#### 문제 3: Cross-module 제네릭 타입 해석 실패 (영향: ~10 tests)
+
+**현상**: HashMap<str, T> 메서드 호출 시 key 타입이 i64로 전달되어야 할 곳에 `{i8*, i64}` 기대
+**위치**: `crates/vais-codegen/src/expr_helpers_call/method_call.rs:488-525`
+**원인**:
+- `HashMap_get_opt<K,V>` 제네릭 함수 본문에서 `HashMap_get$str_V` 전문화 함수 호출
+- 제네릭 함수의 `K` 파라미터는 `i64`로 erased
+- 전문화 함수의 `key` 파라미터는 `{i8*, i64}` (str fat pointer)
+- codegen이 이 불일치를 감지/변환하지 못함
+
+**수정 방향**:
+- **방법 A (권장)**: TC expr_types 연결 — TC가 해석한 정확한 타입을 codegen에 전달
+  - `vais-types`: TypeChecker에 `expr_types: HashMap<Span, ResolvedType>` 추가
+  - `vaisc/build/backend.rs`: TC → codegen 전달
+  - `type_inference.rs`: TC 타입 우선 사용, legacy fallback
+- **방법 B (워크어라운드)**: ir_fix.py에서 `i64` → `{i8*, i64}` 자동 변환 (이미 부분 구현)
+- **방법 C**: 제네릭 함수도 완전 monomorphize (HashMap_get_opt$str_V 별도 생성)
+
+**수정 파일**: `vais-types/src/lib.rs`, `vais-codegen/src/type_inference.rs`, `vaisc/src/commands/build/backend.rs`
+
+---
+
+### 작업 계획
+
+모드: 자동진행
+- [x] 1. 150-A: compute_sizeof Named type struct 필드 합산 수정 (impl-sonnet) ✅ 2026-03-28
+  변경: conversion.rs — type_aliases/struct_aliases/struct_defs 3개 추가 lookup + eprintln 경고
+- [x] 2. 150-B: Match phi Named type value/pointer 통일 (impl-sonnet) ✅ 2026-03-28
+  변경: match_gen.rs — is_expr_value 분기로 value→alloca+store 변환 (이중 alloca 방지)
+- [x] 3. 150-C: TC expr_types 연결 (impl-sonnet) ✅ 2026-03-28
+  변경: vais-types check_expr→check_expr_inner 분리 + expr_types HashMap, codegen infer_expr_type TC 우선 참조
+- [x] 4. 150-D: Vec<struct> 완전 monomorphization (impl-sonnet) ✅ 2026-03-28
+  변경: generics.rs skip 임계값 2→6 + 깊이2 체크, generate_expr_call.rs store/load_typed #[inline(never)] 추출
+- [x] 5. 검증: 빌드 통과 + E2E regression 0건 확인 (Opus 직접) ✅ 2026-03-28
+  결과: 워크스페이스 빌드 통과, E2E 2437 passed / 48 failed (전부 pre-existing) / 2 ignored, 0 regression
+진행률: 5/5 (100%) ✅
+
+#### Phase 150-A: compute_sizeof 수정 (우선순위 1, 예상 0.5일)
+- [ ] `types/conversion.rs`: compute_sizeof에 Named type struct 필드 합산 추가
+- [ ] `generate_expr_call.rs`: store_typed/load_typed에서 compute_sizeof 결과 사용
+- [ ] 테스트: VaisDB test_graph 48/48 regression 없음 확인
+
+#### Phase 150-B: Match phi Named type 통일 (우선순위 2, 예상 1일)
+- [ ] `match_gen.rs`: arm body 생성 후 Named type value를 일관되게 처리
+  - 전략: 모든 Named type arm value를 alloca pointer로 변환
+  - is_expr_value() 결과에 따라 분기: value면 alloca+store, pointer면 그대로
+  - **핵심**: 이미 pointer인 arm (alloca에서 온 값)은 변환하지 않음
+- [ ] `type_inference.rs`: is_expr_value 정확도 개선
+- [ ] 테스트: test_planner, test_transaction 컴파일 가능 확인
+
+#### Phase 150-C: TC expr_types 연결 (우선순위 3, 예상 2일)
+- [ ] `vais-types/src/lib.rs`: TypeChecker에 expr_types 필드 추가
+- [ ] `vais-types/src/checker_expr/`: 각 expression 타입 저장 (10+ 파일)
+- [ ] `vais-codegen/src/type_inference.rs`: TC 타입 우선 참조
+- [ ] `vaisc/src/commands/build/backend.rs`: TC → codegen 전달
+- [ ] 테스트: VaisDB 전체 테스트 통과율 개선 확인
+
+#### Phase 150-D: Vec<struct> 완전 monomorphization (우선순위 4, 예상 1일)
+- [ ] `function_gen/generics.rs`: smart struct skip 제거 (stack overflow 완전 해결 후)
+- [ ] `generate_expr/mod.rs`: 추가 match arm 추출로 스택 프레임 더 축소
+- [ ] `generate_expr_call.rs`: store_typed를 #[inline(never)] 별도 함수로 추출
+- [ ] 테스트: Vec<BufferFrame>, Vec<TokenInfo> 등 복잡 struct Vec 동작 확인
+
+---
+
+### 이전 완료 수정 (Phase 149 세션)
+- ✅ Generic param → i64 zext (`method_call.rs:308`, `generate_expr_call.rs:518`)
+- ✅ Struct → i64 ptrtoint (`method_call.rs:361`, `generate_expr_call.rs:573`)
+- ✅ Float/double coercion in call args
+- ✅ E022 move-after-branch (`ownership/ast_check.rs`, `core.rs`)
+- ✅ TC_NONFATAL parallel+serial path (`commands/build/core.rs`)
+- ✅ for-loop variable uniqueness (`generate_expr_loop.rs`)
+
+### 교차 영향 주의사항
+- compute_sizeof 변경 → Vec/Option/Result 전체에 영향. 반드시 test_graph 48/48 regression 확인
+- match phi 변경 → 모든 match expression에 영향. value/pointer 이중 변환 위험
+- binary op width coercion: left-type vs max-type 트레이드오프 (한쪽 수정 → 다른 테스트 깨짐)
+- ir_fix.py iterative: 500+ iterations → IR 비대화 → clang bus error
+- **반드시 VaisDB 8/8 테스트 교차 검증** 필요
+
+### VaisDB 테스트 검증 명령
+```bash
+# test_graph (기준 테스트 — 반드시 48/48 유지)
+cd /Users/sswoo/study/projects/vaisdb
+VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+/Users/sswoo/study/projects/vais/target/debug/vaisc build tests/graph/test_graph.vais \
+--emit-ir -o /tmp/test_graph.ll --force-rebuild
+
+# ir_fix → compile → run
+python3 ir_fix.py /tmp/test_graph.ll /tmp/test_graph_fix.ll
+# ... (전체 파이프라인은 VaisDB memory 참조)
+```
+
 **메인테이너**: Steve

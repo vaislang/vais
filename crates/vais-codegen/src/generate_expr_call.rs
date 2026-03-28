@@ -7,6 +7,7 @@ use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, C
 
 impl CodeGenerator {
     /// Handle function call expressions (builtins, regular calls, indirect calls)
+    #[inline(never)]
     pub(crate) fn generate_expr_call(
         &mut self,
         func: &Spanned<Expr>,
@@ -161,161 +162,13 @@ impl CodeGenerator {
             // load_typed(ptr) -> T — type-aware memory load
             // Dispatches to correct LLVM load based on generic type T
             if name == "load_typed" && !args.is_empty() {
-                let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = ptr_ir;
-                // Resolve T from generic substitutions
-                let resolved_t = self
-                    .get_generic_substitution("T")
-                    .unwrap_or(ResolvedType::I64);
-                let size = self.compute_sizeof(&resolved_t);
-                let result = self.next_temp(counter);
-                match size {
-                    1 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
-                        write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
-                    }
-                    2 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
-                        write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
-                    }
-                    4 if matches!(resolved_t, ResolvedType::F32) => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        let tmp3 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
-                        write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
-                        write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
-                    }
-                    4 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
-                        write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
-                    }
-                    _ if matches!(resolved_t, ResolvedType::F64) => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
-                        write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
-                    }
-                    n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. }) => {
-                        // Large struct: copy via memcpy from the array slot to a stack
-                        // alloca. Return the alloca pointer — struct values in Text IR
-                        // are pointer-based, and field access uses GEP on typed pointers.
-                        self.needs_llvm_memcpy = true;
-                        let llvm_ty = self.type_to_llvm(&resolved_t);
-                        // Use result as the alloca directly
-                        write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
-                        let dst_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
-                        let src_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
-                        write_ir!(
-                            ir,
-                            "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
-                            dst_ptr,
-                            src_ptr,
-                            n
-                        );
-                    }
-                    _ => {
-                        let tmp1 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
-                    }
-                }
-                return Ok((result, ir));
+                return self.generate_load_typed(args, counter);
             }
 
             // store_typed(ptr, val) — type-aware memory store
             // Dispatches to correct LLVM store based on generic type T
             if name == "store_typed" && args.len() >= 2 {
-                let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
-                let (val_val, val_ir) = self.generate_expr(&args[1], counter)?;
-                let mut ir = ptr_ir;
-                ir.push_str(&val_ir);
-                let resolved_t = self
-                    .get_generic_substitution("T")
-                    .unwrap_or(ResolvedType::I64);
-                let size = self.compute_sizeof(&resolved_t);
-                match size {
-                    1 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
-                        write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
-                    }
-                    2 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
-                        write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
-                    }
-                    4 if matches!(resolved_t, ResolvedType::F32) => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        let tmp3 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
-                        write_ir!(ir, "  {} = fptrunc double {} to float", tmp3, tmp2);
-                        write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
-                    }
-                    4 => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
-                        write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
-                    }
-                    _ if matches!(resolved_t, ResolvedType::F64) => {
-                        let tmp1 = self.next_temp(counter);
-                        let tmp2 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
-                        write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
-                        write_ir!(ir, "  store double {}, double* {}", tmp2, tmp1);
-                    }
-                    n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. }) => {
-                        // Large struct: store via memcpy from struct pointer to destination
-                        // val_val may be a typed pointer (%StructType*) from an alloca,
-                        // or an i64 holding the struct address. Use bitcast for typed ptrs.
-                        self.needs_llvm_memcpy = true;
-                        let dst_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
-                        let src_ptr = self.next_temp(counter);
-                        let llvm_ty = self.type_to_llvm(&resolved_t);
-                        write_ir!(
-                            ir,
-                            "  {} = bitcast {}* {} to i8*",
-                            src_ptr,
-                            llvm_ty,
-                            val_val
-                        );
-                        write_ir!(
-                            ir,
-                            "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
-                            dst_ptr,
-                            src_ptr,
-                            n
-                        );
-                    }
-                    _ => {
-                        let tmp1 = self.next_temp(counter);
-                        write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
-                        write_ir!(ir, "  store i64 {}, i64* {}", val_val, tmp1);
-                    }
-                }
-                return Ok(("0".to_string(), ir));
+                return self.generate_store_typed(args, counter);
             }
 
             // swap(ptr, idx1, idx2) — delegate to __swap helper
@@ -1180,5 +1033,179 @@ impl CodeGenerator {
 
             Ok((tmp, ir))
         }
+    }
+
+    /// Type-aware memory load for generic type T.
+    /// Extracted from generate_expr_call to reduce stack frame size.
+    #[inline(never)]
+    fn generate_load_typed(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+        let mut ir = ptr_ir;
+        // Resolve T from generic substitutions
+        let resolved_t = self
+            .get_generic_substitution("T")
+            .unwrap_or(ResolvedType::I64);
+        let size = self.compute_sizeof(&resolved_t);
+        let result = self.next_temp(counter);
+        match size {
+            1 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
+                write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
+            }
+            2 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
+                write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
+            }
+            4 if matches!(resolved_t, ResolvedType::F32) => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                let tmp3 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
+                write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
+                write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
+            }
+            4 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
+                write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
+            }
+            _ if matches!(resolved_t, ResolvedType::F64) => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
+                write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
+            }
+            n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
+                // Large struct: copy via memcpy from the array slot to a stack
+                // alloca. Return the alloca pointer — struct values in Text IR
+                // are pointer-based, and field access uses GEP on typed pointers.
+                self.needs_llvm_memcpy = true;
+                let llvm_ty = self.type_to_llvm(&resolved_t);
+                // Use result as the alloca directly
+                write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
+                let dst_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
+                let src_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
+                write_ir!(
+                    ir,
+                    "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                    dst_ptr,
+                    src_ptr,
+                    n
+                );
+            }
+            _ => {
+                let tmp1 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
+            }
+        }
+        Ok((result, ir))
+    }
+
+    /// Type-aware memory store for generic type T.
+    /// Extracted from generate_expr_call to reduce stack frame size.
+    #[inline(never)]
+    fn generate_store_typed(
+        &mut self,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
+        let (val_val, val_ir) = self.generate_expr(&args[1], counter)?;
+        let mut ir = ptr_ir;
+        ir.push_str(&val_ir);
+        let resolved_t = self
+            .get_generic_substitution("T")
+            .unwrap_or(ResolvedType::I64);
+        let size = self.compute_sizeof(&resolved_t);
+        match size {
+            1 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
+                write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
+            }
+            2 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
+                write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
+            }
+            4 if matches!(resolved_t, ResolvedType::F32) => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                let tmp3 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
+                write_ir!(ir, "  {} = fptrunc double {} to float", tmp3, tmp2);
+                write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
+            }
+            4 => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
+                write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
+            }
+            _ if matches!(resolved_t, ResolvedType::F64) => {
+                let tmp1 = self.next_temp(counter);
+                let tmp2 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
+                write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
+                write_ir!(ir, "  store double {}, double* {}", tmp2, tmp1);
+            }
+            n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
+                // Large type: store via memcpy
+                self.needs_llvm_memcpy = true;
+                let dst_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
+                let llvm_ty = self.type_to_llvm(&resolved_t);
+                // If val is a value (not pointer), alloca+store to get a pointer
+                let src_ptr = if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
+                    let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
+                    *counter += 1;
+                    self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val_val, llvm_ty, tmp_alloca);
+                    let cast = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, tmp_alloca);
+                    cast
+                } else {
+                    let cast = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
+                    cast
+                };
+                write_ir!(
+                    ir,
+                    "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                    dst_ptr,
+                    src_ptr,
+                    n
+                );
+            }
+            _ => {
+                let tmp1 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
+                write_ir!(ir, "  store i64 {}, i64* {}", val_val, tmp1);
+            }
+        }
+        Ok(("0".to_string(), ir))
     }
 }
