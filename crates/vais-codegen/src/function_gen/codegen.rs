@@ -1,18 +1,40 @@
 //! Core function and method code generation
 
 use crate::types::LocalVar;
-use crate::{CodeGenerator, CodegenResult};
+use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{Function, FunctionBody, Span};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Convenience wrapper for generate_function_with_span with default span.
-    #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
-        self.generate_function_with_span(f, Span::default())
+        use std::cell::Cell;
+        thread_local! { static DEPTH: Cell<usize> = Cell::new(0); }
+        DEPTH.with(|d| {
+            let current = d.get();
+            if current > 10 {
+                return Err(CodegenError::InternalError(format!("recursion limit in generate_function: {}", f.name.node)));
+            }
+            d.set(current + 1);
+            let result = self.generate_function_with_span(f, Span::default());
+            d.set(current);
+            result
+        })
     }
 
     pub(crate) fn generate_function_with_span(
+        &mut self,
+        f: &Function,
+        span: Span,
+    ) -> CodegenResult<String> {
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            self.generate_function_with_span_inner(f, span)
+        })
+    }
+
+    #[inline(never)]
+    fn generate_function_with_span_inner(
         &mut self,
         f: &Function,
         span: Span,
@@ -146,6 +168,32 @@ impl CodeGenerator {
                 self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
                     LocalVar::ssa(ty.clone(), param_ptr),
+                );
+            }
+            // For &str parameters (Ref(Str)), the LLVM param type is { i8*, i64 }*
+            // (pointer to fat pointer). The body code uses extractvalue { i8*, i64 } %param, N
+            // which expects the fat pointer by value. Load it at function entry.
+            let is_ref_str = matches!(
+                &ty,
+                ResolvedType::Ref(inner) if matches!(inner.as_ref(), ResolvedType::Str)
+            ) || matches!(
+                &ty,
+                ResolvedType::RefMut(inner) if matches!(inner.as_ref(), ResolvedType::Str)
+            );
+            if is_ref_str {
+                let src_llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
+                let loaded_name = format!("__{}_val", p.name.node);
+                let loaded = format!("%{}", loaded_name);
+                write_ir!(
+                    ir,
+                    "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* %{}",
+                    loaded,
+                    src_llvm_name
+                );
+                // Update locals to use the loaded fat pointer value (SSA)
+                self.fn_ctx.locals.insert(
+                    p.name.node.to_string(),
+                    LocalVar::ssa(ResolvedType::Str, loaded),
                 );
             }
         }
@@ -313,6 +361,9 @@ impl CodeGenerator {
         }
 
         ir.push_str("}\n");
+
+        // Hoist collected entry-block allocas into the entry block
+        self.splice_entry_allocas(&mut ir);
 
         self.fn_ctx.current_function = None;
         self.fn_ctx.current_return_type = None;
@@ -556,6 +607,9 @@ impl CodeGenerator {
         }
 
         ir.push_str("}\n");
+
+        // Hoist collected entry-block allocas into the entry block
+        self.splice_entry_allocas(&mut ir);
 
         self.fn_ctx.current_function = None;
         self.fn_ctx.current_return_type = None;

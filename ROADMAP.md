@@ -257,6 +257,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 153: 테스트 건강도 — pre-existing 0건 + 테스트 경고 0건
+
+> **목표**: 유일한 pre-existing 실패 (js_tree_shake_const) 수정 + 테스트 컴파일 경고 전수 제거
+> **기대 효과**: cargo test 0 failed / 0 warnings
+
+모드: 자동진행
+- [x] 1. PI/UNUSED 키워드 충돌 수정 — js_coverage_tests, vaisx_contract_tests, grammar_coverage_tests 3곳 PI→pi (impl-sonnet + Opus) ✅ 2026-03-28
+- [x] 2. 테스트 컴파일 경고 정리 — 10건 수정: unused imports 2건, dead code 6건, unused comparison 1건, unused doc comment 1건 (impl-sonnet + Opus) ✅ 2026-03-28
+- [x] 3. 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-28
+  결과: cargo test 8,292 passed / 0 failed / 39 ignored / 0 warnings, cargo check 0 warnings
+진행률: 3/3 (100%) ✅
+
+### Phase 152: 빌드 정리 — LSP 테스트 수정 + warnings 0건 달성
+
+> **목표**: Phase 151 미커밋 변경사항의 빌드 정리 (LSP 테스트 컴파일 에러 + codegen/vaisc/parser 16 warnings 해결)
+> **기대 효과**: cargo test 전체 통과, cargo check warnings 0건
+
+모드: 자동진행
+- [x] 1. StructLit enum_name 누락 수정 — LSP/codegen/codegen-js/AST/parser 테스트 8곳 + grammar_coverage EnumAccess 추가 (impl-sonnet + Opus) ✅ 2026-03-28
+- [x] 2. vais-codegen 14 warnings 해결 — unused imports 5건, inline 충돌 5건, unused vars 2건, dead code 2건 (impl-sonnet) ✅ 2026-03-28
+- [x] 3. vaisc/parser 2 warnings 해결 — imports.rs _name_set, lib.rs _outer_start (impl-sonnet) ✅ 2026-03-28
+- [x] 4. 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-28
+  결과: cargo check 0 warnings, cargo test 2,377 passed / 1 failed (pre-existing js_tree_shake_const) / 0 ignored
+진행률: 4/4 (100%) ✅
 
 ### Phase 137: unsafe SAFETY 주석 완전 문서화 — 44건 미문서화 블록 해소
 

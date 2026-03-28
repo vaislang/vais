@@ -23,6 +23,7 @@ fn main() {
 }
 
 // Quick test for container
+#[allow(dead_code)]
 fn test_container_instantiations() {
     let source = r#"
 S Container<T> {

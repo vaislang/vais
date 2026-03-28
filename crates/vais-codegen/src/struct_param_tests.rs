@@ -117,6 +117,7 @@ mod tests {
                             Spanned::new(Expr::Int(20), Span::default()),
                         ),
                     ],
+                    enum_name: None,
                 },
                 Span::default(),
             )],
@@ -132,11 +133,8 @@ mod tests {
         // 3. LOAD the struct value before passing it
         // 4. Call with the loaded value
 
-        assert!(
-            call_ir.contains("alloca %Point"),
-            "Should allocate Point on stack, got:\n{}",
-            call_ir
-        );
+        // The alloca is hoisted to the entry block (via emit_entry_alloca),
+        // so it's not in the inline IR. Check the load and call patterns.
         assert!(
             call_ir.contains("load %Point, %Point*"),
             "Should load Point value from pointer before passing to function, got:\n{}",
@@ -170,20 +168,15 @@ mod tests {
                     Spanned::new(Expr::Int(2), Span::default()),
                 ),
             ],
+            enum_name: None,
         };
 
-        let (val, ir) = codegen
+        let (val, _ir) = codegen
             .generate_expr(&Spanned::new(struct_lit, Span::default()), &mut counter)
             .unwrap();
 
-        // Struct literal should allocate on stack
-        assert!(
-            ir.contains("alloca %Point"),
-            "Struct literal should use alloca, got:\n{}",
-            ir
-        );
-
-        // The returned value should be a pointer (temp variable)
+        // The alloca is hoisted to the entry block (via emit_entry_alloca),
+        // so it's not in the inline IR. The returned value should be a pointer (temp variable).
         assert!(
             val.starts_with('%'),
             "Struct literal should return a pointer (temp var), got: {}",
@@ -286,6 +279,7 @@ mod tests {
                                 Spanned::new(Expr::Int(2), Span::default()),
                             ),
                         ],
+                        enum_name: None,
                     },
                     Span::default(),
                 ),
@@ -302,6 +296,7 @@ mod tests {
                                 Spanned::new(Expr::Int(4), Span::default()),
                             ),
                         ],
+                        enum_name: None,
                     },
                     Span::default(),
                 ),

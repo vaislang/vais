@@ -478,6 +478,24 @@ enum Commands {
 }
 
 fn main() {
+    // Run the actual main logic in a thread with 64MB stack to handle
+    // deep codegen for complex struct specializations (e.g., Vec<BufferFrame>)
+    let child = std::thread::Builder::new()
+        .name("vaisc-main".to_string())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(main_inner)
+        .expect("failed to spawn main thread");
+
+    match child.join() {
+        Ok(()) => {},
+        Err(e) => {
+            eprintln!("vaisc panicked: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn main_inner() {
     let cli = Cli::parse();
 
     // Install panic handler for crash reporting

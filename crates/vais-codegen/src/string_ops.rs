@@ -9,6 +9,7 @@ use vais_ast::{BinOp, Expr, Spanned};
 
 impl CodeGenerator {
     /// Extract the i8* pointer from a string fat pointer { i8*, i64 }
+    #[inline(never)]
     pub(crate) fn extract_str_ptr(
         &self,
         fat_ptr: &str,
@@ -21,6 +22,7 @@ impl CodeGenerator {
     }
 
     /// Extract the i64 length from a string fat pointer { i8*, i64 }
+    #[inline(never)]
     pub(crate) fn extract_str_len(
         &self,
         fat_ptr: &str,
@@ -33,6 +35,7 @@ impl CodeGenerator {
     }
 
     /// Build a string fat pointer { i8*, i64 } from a raw pointer and length
+    #[inline(never)]
     pub(crate) fn build_str_fat_ptr(
         &self,
         ptr: &str,
@@ -59,6 +62,7 @@ impl CodeGenerator {
     }
 
     /// Generate LLVM IR for string binary operations (+, ==, !=, <, >)
+    #[inline(never)]
     pub(crate) fn generate_string_binary_op(
         &mut self,
         op: &BinOp,
@@ -165,6 +169,7 @@ impl CodeGenerator {
 
     /// Generate LLVM IR for string method calls.
     /// recv_val is a string fat pointer { i8*, i64 }.
+    #[inline(never)]
     pub(crate) fn generate_string_method_call(
         &mut self,
         recv_val: &str,
@@ -359,6 +364,7 @@ impl CodeGenerator {
     ///
     /// Pre-allocates a buffer large enough for all helper functions to avoid
     /// intermediate reallocations during the push_str chain (~3.5KB total).
+    #[inline(never)]
     pub(crate) fn generate_string_helper_functions(&self) -> String {
         let mut ir = String::with_capacity(4096);
 
@@ -454,6 +460,7 @@ impl CodeGenerator {
     }
 
     /// Generate extern declarations for string runtime functions (only new ones not in builtins)
+    #[inline(never)]
     pub(crate) fn generate_string_extern_declarations(&self) -> String {
         let mut ir = String::with_capacity(256);
         ir.push_str("\n; String runtime extern declarations\n");

@@ -337,6 +337,7 @@ fn test_generate_struct_literal() {
                 Spanned::new(Expr::Int(2), Span::new(15, 16)),
             ),
         ],
+        enum_name: None,
     };
     let result = gen.generate_expr(&expr).unwrap();
     assert!(result.contains("new Point"));

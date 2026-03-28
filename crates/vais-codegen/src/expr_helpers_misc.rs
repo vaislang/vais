@@ -13,6 +13,7 @@ impl CodeGenerator {
     /// Spawn expressions: if the inner call targets a non-async function, Spawn
     /// codegen wraps the result in a sync wrapper struct and we must use
     /// `__sync_spawn__poll` (not the inner function's `__poll`).
+    #[inline(never)]
     pub(crate) fn resolve_poll_func_name(&self, expr: &Expr) -> Option<String> {
         match expr {
             Expr::Call { func, .. } => {
@@ -57,6 +58,7 @@ impl CodeGenerator {
         }
     }
 
+    #[inline(never)]
     pub(crate) fn generate_await_expr(
         &mut self,
         inner: &Spanned<Expr>,
@@ -174,6 +176,7 @@ impl CodeGenerator {
     }
 
     /// Generate lambda expression with capture mode support.
+    #[inline(never)]
     pub(crate) fn generate_lambda_expr(
         &mut self,
         params: &[Param],
@@ -341,6 +344,7 @@ impl CodeGenerator {
     }
 
     /// Generate try expression — delegates to the canonical aggregate extractvalue implementation
+    #[inline(never)]
     pub(crate) fn generate_try_expr(
         &mut self,
         inner: &Spanned<Expr>,
@@ -434,19 +438,28 @@ impl CodeGenerator {
             let needs_cast = try_llvm != "i64" && try_llvm != "i32" && try_llvm != "i16"
                 && try_llvm != "i8" && try_llvm != "i1" && !try_llvm.ends_with('*');
             if needs_cast {
-                // Value was stored directly in payload via bitcast
-                // Alloca Result, store, GEP payload, bitcast to T*, load T
-                let tmp_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca {}", tmp_result, llvm_type);
-                write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
-                let payload_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
-                    payload_ptr, llvm_type, llvm_type, tmp_result);
-                let cast_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, try_llvm);
-                let loaded = self.next_temp(counter);
-                write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, cast_ptr);
-                loaded
+                let type_size = self.compute_sizeof(try_ty);
+                if type_size > 8 {
+                    // Large struct: payload holds a heap pointer (from Ok/Err constructor)
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", typed_ptr, value, try_llvm);
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, typed_ptr);
+                    loaded
+                } else {
+                    // Small struct: stored directly via bitcast in payload
+                    let tmp_result = self.next_temp(counter);
+                    self.emit_entry_alloca(&tmp_result, &llvm_type);
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
+                    let payload_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
+                        payload_ptr, llvm_type, llvm_type, tmp_result);
+                    let cast_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, try_llvm);
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, try_llvm, try_llvm, cast_ptr);
+                    loaded
+                }
             } else {
                 value
             }
@@ -463,11 +476,13 @@ impl CodeGenerator {
 
         // Merge block
         write_ir!(ir, "{}:", merge_label);
+        self.fn_ctx.current_block.clone_from(&merge_label);
 
         Ok((final_value, ir))
     }
 
     /// Generate unwrap expression — delegates to the canonical aggregate extractvalue implementation
+    #[inline(never)]
     pub(crate) fn generate_unwrap_expr(
         &mut self,
         inner: &Spanned<Expr>,
@@ -521,6 +536,7 @@ impl CodeGenerator {
 
         // Ok branch: extract value
         write_ir!(ir, "{}:", ok_label);
+        self.fn_ctx.current_block.clone_from(&ok_label);
         let value = self.next_temp(counter);
         if extract_payload {
             write_ir!(
@@ -561,10 +577,19 @@ impl CodeGenerator {
             let needs_cast = unwrap_llvm != "i64" && unwrap_llvm != "i32" && unwrap_llvm != "i16"
                 && unwrap_llvm != "i8" && unwrap_llvm != "i1" && !unwrap_llvm.ends_with('*');
             if needs_cast {
-                // Value was stored directly into payload area via bitcast
-                // To extract: alloca Result, store, GEP to payload, bitcast to T*, load T
+                let type_size = self.compute_sizeof(unwrap_ty);
+                if type_size > 8 {
+                    // Large struct: payload is a heap pointer
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", typed_ptr, value, unwrap_llvm);
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, typed_ptr);
+                    self.fn_ctx.register_temp_type(&loaded, unwrap_ty.clone());
+                    return Ok((loaded, ir));
+                }
+                // Small struct: stored via bitcast in payload
                 let tmp_result = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca {}", tmp_result, llvm_type);
+                self.emit_entry_alloca(&tmp_result, &llvm_type);
                 write_ir!(ir, "  store {} {}, {}* {}", llvm_type, inner_val, llvm_type, tmp_result);
                 let payload_ptr = self.next_temp(counter);
                 write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1, i32 0",
@@ -573,7 +598,6 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_ptr, unwrap_llvm);
                 let loaded = self.next_temp(counter);
                 write_ir!(ir, "  {} = load {}, {}* {}", loaded, unwrap_llvm, unwrap_llvm, cast_ptr);
-                // Register the unwrapped result type
                 self.fn_ctx.register_temp_type(&loaded, unwrap_ty.clone());
                 return Ok((loaded, ir));
             }
@@ -587,7 +611,7 @@ impl CodeGenerator {
     // === SIMD Intrinsic Support ===
 
     /// Check if a function name is a SIMD intrinsic
-    #[inline]
+    #[inline(never)]
     pub(crate) fn is_simd_intrinsic(name: &str) -> bool {
         name.starts_with("vec")
             && (name.ends_with("f32")
@@ -598,6 +622,7 @@ impl CodeGenerator {
     }
 
     /// Generate SIMD intrinsic call
+    #[inline(never)]
     pub(crate) fn generate_simd_intrinsic(
         &mut self,
         fn_name: &str,

@@ -42,6 +42,7 @@ fn assert_parses_expr(source: &str) {
     assert_parses(&wrapped);
 }
 
+#[allow(dead_code)]
 fn assert_expr_fails(source: &str) {
     let wrapped = format!("F __test__() -> i64 {{ {} }}", source);
     assert_parse_fails(&wrapped);
@@ -421,7 +422,7 @@ mod items {
 
     #[test]
     fn grammar_item_const_public() {
-        let m = parse_ok("P C PI: f64 = 3.14");
+        let m = parse_ok("P C pi: f64 = 3.14");
         match &m.items[0].node {
             Item::Const(c) => assert!(c.is_pub),
             other => panic!("Expected Const, got {:?}", other),
@@ -1421,10 +1422,11 @@ fn grammar_sync_expr_variants() {
             | Expr::Assume(_)
             | Expr::Error { .. }
             | Expr::Lazy(_)
-            | Expr::Force(_) => {}
+            | Expr::Force(_)
+            | Expr::EnumAccess { .. } => {}
         }
     }
-    // Count: 46 variants as of Phase 64
+    // Count: 47 variants as of Phase 152
 }
 
 /// Compile-time guard: if Item variants change, this match will fail to compile.

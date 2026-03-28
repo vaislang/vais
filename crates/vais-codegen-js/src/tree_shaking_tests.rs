@@ -114,6 +114,7 @@ fn test_struct_lit_marks_struct_reachable() {
                 Expr::StructLit {
                     name: Spanned::new("Point".to_string(), Span::new(0, 5)),
                     fields: vec![],
+                    enum_name: None,
                 },
             ),
             Spanned::new(

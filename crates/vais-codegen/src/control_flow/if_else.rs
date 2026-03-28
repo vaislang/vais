@@ -4,6 +4,7 @@ impl CodeGenerator {
     /// Generate code for if-else branches with termination tracking
     /// Returns (value, ir, is_terminated, last_block_name)
     /// last_block_name is the block that actually branches to the outer merge
+    #[inline(never)]
     pub(crate) fn generate_if_else_with_term(
         &mut self,
         if_else: &IfElse,

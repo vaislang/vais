@@ -11,6 +11,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Extract the raw i8* pointer from a string fat pointer `{ ptr, i64 }`.
     /// If the value is already a pointer, returns it as-is.
     /// If the value is a struct (fat pointer), extracts field 0 (the raw ptr).
+    #[inline(never)]
     pub(crate) fn extract_str_raw_ptr(
         &self,
         val: BasicValueEnum<'ctx>,
@@ -41,6 +42,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// - FloatValue: bitcast f64 to i64
     /// - PointerValue: ptrtoint to i64
     /// - StructValue: extract first int field, or return 0
+    #[inline(never)]
     pub(crate) fn coerce_to_i64(&self, v: BasicValueEnum<'ctx>) -> CodegenResult<IntValue<'ctx>> {
         let i64_type = self.context.i64_type();
         if v.is_int_value() {

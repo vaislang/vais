@@ -12,6 +12,7 @@ impl CodeGenerator {
     /// For async function calls, the inner expression already returns a state pointer.
     /// For sync expressions, spawn wraps the value in a Future struct:
     ///   malloc {i64 state=-1, i64 result=value}, return pointer as i64.
+    #[inline(never)]
     pub(crate) fn generate_spawn_expr(
         &mut self,
         inner: &Spanned<Expr>,
@@ -72,6 +73,7 @@ impl CodeGenerator {
     }
 
     /// Generate code for comptime expression: evaluate at compile time and emit constant.
+    #[inline(never)]
     pub(crate) fn generate_comptime_expr(
         &mut self,
         body: &Spanned<Expr>,
@@ -132,7 +134,7 @@ impl CodeGenerator {
                 *counter += 1;
                 let len = elements.len();
 
-                write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
+                self.emit_entry_alloca(&array_name, &format!("[{} x i64]", len));
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
@@ -156,6 +158,7 @@ impl CodeGenerator {
 
     /// Generate code for range expression: `start..end` or `start..=end`
     /// Produces `{ i64 start, i64 end, i1 inclusive }` struct.
+    #[inline(never)]
     pub(crate) fn generate_range_expr(
         &mut self,
         start: &Option<Box<Spanned<Expr>>>,

@@ -11,6 +11,7 @@ use vais_ast::{ExternFunction, Function, Struct, VariantFields};
 use vais_types::{FunctionSig, ResolvedType};
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn register_function(&mut self, f: &Function) -> CodegenResult<()> {
         // Use resolved function signatures from type checker when available
         // (needed for functions with inferred parameter types - Type::Infer)
@@ -106,6 +107,7 @@ impl CodeGenerator {
     }
 
     /// Register a method as a function with Type_methodName naming convention
+    #[inline(never)]
     pub(crate) fn register_method(&mut self, type_name: &str, f: &Function) -> CodegenResult<()> {
         let method_name = format!("{}_{}", type_name, f.name.node);
 
@@ -178,6 +180,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_struct(&mut self, s: &Struct) -> CodegenResult<()> {
         let fields: Vec<_> = s
             .fields
@@ -217,6 +220,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_enum(&mut self, e: &vais_ast::Enum) -> CodegenResult<()> {
         let mut variants = Vec::new();
 
@@ -268,6 +272,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_union(&mut self, u: &vais_ast::Union) -> CodegenResult<()> {
         let fields: Vec<_> = u
             .fields
@@ -290,6 +295,7 @@ impl CodeGenerator {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn register_extern_function(
         &mut self,
         func: &ExternFunction,
@@ -361,6 +367,7 @@ impl CodeGenerator {
     }
 
     /// Register a constant definition
+    #[inline(never)]
     pub(crate) fn register_const(&mut self, const_def: &vais_ast::ConstDef) -> CodegenResult<()> {
         let const_name = const_def.name.node.clone();
         // Store constant in the constants map for later lookup
@@ -376,6 +383,7 @@ impl CodeGenerator {
     }
 
     /// Register a global variable definition
+    #[inline(never)]
     pub(crate) fn register_global(
         &mut self,
         global_def: &vais_ast::GlobalDef,

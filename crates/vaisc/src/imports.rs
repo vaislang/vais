@@ -19,7 +19,7 @@ pub(crate) fn filter_imported_items(
     match selected {
         None => filtered.collect(),
         Some(names) => {
-            let name_set: std::collections::HashSet<&str> =
+            let _name_set: std::collections::HashSet<&str> =
                 names.iter().map(|s| s.node.as_str()).collect();
 
             // Selective import filtering strategy:

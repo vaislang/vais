@@ -4,7 +4,7 @@
 //! struct/enum/function name resolution, generic type resolution.
 
 use vais_parser::parse;
-use vais_types::{ResolvedType, TypeChecker};
+use vais_types::TypeChecker;
 
 fn check_ok(source: &str) -> TypeChecker {
     let module = parse(source).unwrap_or_else(|e| panic!("Parse failed: {:?}", e));

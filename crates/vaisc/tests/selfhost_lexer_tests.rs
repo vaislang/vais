@@ -37,6 +37,7 @@ fn compile_file_to_ir(path: &str) -> Result<String, String> {
 }
 
 /// Assert that the given source compiles to LLVM IR successfully.
+#[allow(dead_code)]
 fn assert_compiles(source: &str) {
     match compile_to_ir(source) {
         Ok(_ir) => {}

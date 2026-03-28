@@ -6,7 +6,7 @@
 //! Strategy: Unit-test public functions directly + gen_ok/gen_result for internal paths.
 
 use vais_codegen::abi::{
-    self, alignment, check_abi_compatibility, struct_layout, vtable, AbiCompatibility,
+    alignment, check_abi_compatibility, struct_layout, vtable, AbiCompatibility,
     CallingConvention, ABI_VERSION,
 };
 use vais_codegen::cross_compile::{CrossCompileConfig, CrossCompileError, RuntimeLibs};

@@ -40,6 +40,28 @@ pub(crate) fn void_placeholder_ir(result: &str) -> String {
     format!("  {} = add i64 0, 0  ; void/Unit placeholder\n", result)
 }
 
+/// Estimate LLVM type size in bytes from the type string.
+/// For struct types like `{ i8*, i64 }`, sums field sizes.
+#[allow(dead_code)]
+pub(crate) fn estimate_llvm_type_size(ty: &str) -> usize {
+    match ty {
+        "i1" | "i8" => 1,
+        "i16" => 2,
+        "i32" | "float" => 4,
+        "i64" | "double" | "ptr" => 8,
+        t if t.ends_with('*') => 8, // pointer
+        t if t.starts_with("{ ") && t.ends_with(" }") => {
+            // Struct type: sum of field sizes
+            let inner = &t[2..t.len() - 2];
+            inner.split(',')
+                .map(|f| estimate_llvm_type_size(f.trim()))
+                .sum()
+        }
+        t if t.starts_with('%') => 8, // named type, assume pointer-sized
+        _ => 8,
+    }
+}
+
 /// Sanitize a parameter name to avoid collision with LLVM block labels.
 /// Returns `Cow::Borrowed` when no rename is needed (zero allocation).
 pub(crate) fn sanitize_param_name(name: &str) -> Cow<'_, str> {
@@ -82,8 +104,55 @@ pub(crate) fn sanitize_llvm_name(name: &str, disambiguation_suffix: Option<usize
 }
 
 impl CodeGenerator {
+    /// Record a static-size alloca to be hoisted into the function entry block.
+    ///
+    /// Instead of emitting `alloca` inline (which may land inside an if/else or loop block),
+    /// this method records the instruction and returns the variable name. The collected
+    /// allocas are spliced into the entry block by [`Self::splice_entry_allocas`] after
+    /// the full function body IR has been generated.
+    ///
+    /// # Arguments
+    /// * `var_name` - The LLVM temporary name (e.g., `%tmp.5`)
+    /// * `llvm_type` - The LLVM type to allocate (e.g., `%MyStruct`, `[10 x i64]`)
+    #[inline(never)]
+    pub(crate) fn emit_entry_alloca(&mut self, var_name: &str, llvm_type: &str) {
+        self.fn_ctx
+            .entry_allocas
+            .push(format!("  {} = alloca {}", var_name, llvm_type));
+    }
+
+    /// Splice collected entry-block allocas into function IR.
+    ///
+    /// Searches for the `entry:` label in the given IR string and inserts all
+    /// collected allocas immediately after it. This ensures LLVM can optimize
+    /// all stack allocations and avoids domination errors from non-entry allocas.
+    ///
+    /// Must be called after the function body has been fully generated but before
+    /// the IR is returned.
+    #[inline(never)]
+    pub(crate) fn splice_entry_allocas(&mut self, ir: &mut String) {
+        if self.fn_ctx.entry_allocas.is_empty() {
+            return;
+        }
+
+        // Build the alloca block to insert
+        let mut alloca_block = String::new();
+        for alloca_line in &self.fn_ctx.entry_allocas {
+            alloca_block.push_str(alloca_line);
+            alloca_block.push('\n');
+        }
+
+        // Find "entry:\n" and insert allocas right after it
+        if let Some(pos) = ir.find("entry:\n") {
+            let insert_pos = pos + "entry:\n".len();
+            ir.insert_str(insert_pos, &alloca_block);
+        }
+
+        self.fn_ctx.entry_allocas.clear();
+    }
+
     /// Generate a unique string constant name, with optional module prefix
-    #[inline]
+    #[inline(never)]
     pub(crate) fn make_string_name(&self) -> String {
         use std::fmt::Write;
         let mut name = String::with_capacity(16);
@@ -101,7 +170,7 @@ impl CodeGenerator {
     /// returns the existing constant name without creating a new one.
     /// This reduces IR size and binary size when the same string literal
     /// appears multiple times in source code.
-    #[inline]
+    #[inline(never)]
     pub(crate) fn get_or_create_string_constant(&mut self, value: &str) -> String {
         // Check dedup cache first
         if let Some(existing_name) = self.strings.dedup_cache.get(value) {
@@ -121,7 +190,7 @@ impl CodeGenerator {
     }
 
     /// Generate a unique label with the given prefix
-    #[inline]
+    #[inline(never)]
     pub(crate) fn next_label(&mut self, prefix: &str) -> String {
         debug_assert!(
             !prefix.is_empty() && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_'),
@@ -136,7 +205,7 @@ impl CodeGenerator {
     }
 
     /// Generate a unique temporary register name
-    #[inline]
+    #[inline(never)]
     pub(crate) fn next_temp(&self, counter: &mut usize) -> String {
         use std::fmt::Write;
         let mut tmp = String::with_capacity(8); // "%t" + up to 6 digits
@@ -146,6 +215,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function call is recursive (calls the current function with decreases clause)
+    #[inline(never)]
     pub(crate) fn is_recursive_call(&self, fn_name: &str) -> bool {
         // Check if we have a decreases clause for this function
         if let Some(ref decreases_info) = self.contracts.current_decreases_info {
@@ -157,12 +227,14 @@ impl CodeGenerator {
     }
 
     /// Check if a function has the #[gc] attribute
+    #[inline(never)]
     pub(crate) fn _has_gc_attribute(attributes: &[Attribute]) -> bool {
         attributes.iter().any(|attr| attr.name == "gc")
     }
 
     /// Enter a type recursion level and check depth limit
     /// Returns an error if recursion limit is exceeded
+    #[inline(never)]
     pub(crate) fn enter_type_recursion(&self, context: &str) -> CodegenResult<()> {
         let depth = self.type_recursion_depth.get();
         if depth >= MAX_TYPE_RECURSION_DEPTH {
@@ -176,12 +248,14 @@ impl CodeGenerator {
     }
 
     /// Exit a type recursion level
+    #[inline(never)]
     pub(crate) fn exit_type_recursion(&self) {
         let depth = self.type_recursion_depth.get();
         self.type_recursion_depth.set(depth.saturating_sub(1));
     }
 
     /// Get the size of a type in bytes (for generic operations)
+    #[inline(never)]
     pub(crate) fn _type_size(&self, ty: &ResolvedType) -> usize {
         // Track recursion depth
         if self.enter_type_recursion("type_size").is_err() {
@@ -226,6 +300,7 @@ impl CodeGenerator {
     /// Generate allocation call (malloc or gc_alloc depending on GC mode)
     ///
     /// Returns: (result_register, IR code)
+    #[inline(never)]
     pub(crate) fn _generate_alloc(
         &self,
         size_arg: &str,
@@ -258,6 +333,7 @@ impl CodeGenerator {
     }
 
     /// Generate code for a block expression (used in if/else branches)
+    #[inline(never)]
     pub(crate) fn _generate_block_expr(
         &mut self,
         expr: &Spanned<Expr>,
@@ -274,6 +350,7 @@ impl CodeGenerator {
 
     /// Generate code for a block of statements
     /// Returns (value, ir_code, is_terminated)
+    #[inline(never)]
     pub(crate) fn generate_block_stmts(
         &mut self,
         stmts: &[Spanned<Stmt>],
@@ -286,6 +363,7 @@ impl CodeGenerator {
 
     /// Generate code for array slicing: arr[start..end]
     /// Returns a new array (allocated on heap) containing the slice
+    #[inline(never)]
     pub(crate) fn generate_slice(
         &mut self,
         array_expr: &Spanned<Expr>,
@@ -384,7 +462,7 @@ impl CodeGenerator {
 
         // Copy elements using a loop
         let loop_idx_ptr = self.next_temp(counter);
-        write_ir!(ir, "  {} = alloca i64", loop_idx_ptr);
+        self.emit_entry_alloca(&loop_idx_ptr, "i64");
         write_ir!(ir, "  store i64 0, i64* {}", loop_idx_ptr);
 
         let loop_start = self.next_label("slice_loop");

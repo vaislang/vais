@@ -15,7 +15,6 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         self.emit_module_header(&mut ir);
-
         // First pass: collect declarations (including generic templates)
         for item in &module.items {
             match &item.node {
@@ -95,17 +94,30 @@ impl CodeGenerator {
         // Collects methods from impl blocks and struct inline methods that have their own
         // generic parameters (method-level generics, not struct-level generics).
         let mut method_templates: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
+        // Also collect methods from impl blocks on generic structs where the method itself
+        // has no generics but inherits type parameters from the struct (e.g., Vec<T>.push(T)).
+        // These are stored separately because they need struct-level generic substitution.
+        let mut generic_impl_methods: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
         for item in &module.items {
             match &item.node {
                 Item::Impl(impl_block) => {
-                    let type_name = match &impl_block.target_type.node {
-                        Type::Named { name, .. } => name.clone(),
+                    let (impl_type_name, is_generic_impl) = match &impl_block.target_type.node {
+                        Type::Named { name, generics: type_params } => {
+                            (name.clone(), !impl_block.generics.is_empty() || !type_params.is_empty())
+                        }
                         _ => continue,
                     };
                     for method in &impl_block.methods {
                         if !method.node.generics.is_empty() {
+                            // Method-level generics
                             method_templates.insert(
-                                (type_name.clone(), method.node.name.node.clone()),
+                                (impl_type_name.clone(), method.node.name.node.clone()),
+                                std::rc::Rc::new(method.node.clone()),
+                            );
+                        } else if is_generic_impl {
+                            // Struct-level generics inherited by method (e.g., Vec<T>.push)
+                            generic_impl_methods.insert(
+                                (impl_type_name.clone(), method.node.name.node.clone()),
                                 std::rc::Rc::new(method.node.clone()),
                             );
                         }
@@ -118,6 +130,12 @@ impl CodeGenerator {
                                 (s.name.node.clone(), method.node.name.node.clone()),
                                 std::rc::Rc::new(method.node.clone()),
                             );
+                        } else if !s.generics.is_empty() {
+                            // Struct-level generics inherited by inline method
+                            generic_impl_methods.insert(
+                                (s.name.node.clone(), method.node.name.node.clone()),
+                                std::rc::Rc::new(method.node.clone()),
+                            );
                         }
                     }
                 }
@@ -125,11 +143,19 @@ impl CodeGenerator {
             }
         }
 
+        // Persist generic impl methods for on-demand specialization during codegen
+        for ((sname, mname), func) in &generic_impl_methods {
+            self.generics.generic_method_bodies.insert(
+                (sname.clone(), mname.clone()),
+                func.clone(),
+            );
+        }
+
         // Build generic function instantiation mapping and register specialized function signatures.
         // Only process concrete instantiations (all type args are resolved, non-generic).
         // Non-concrete instantiations (e.g., make_container$T from inside a generic function body)
         // are skipped — they would produce unresolved generic IR like `@identity$T`.
-        for inst in instantiations {
+        for (_inst_idx, inst) in instantiations.iter().enumerate() {
             if let vais_types::InstantiationKind::Function = inst.kind {
                 // Skip instantiations with non-concrete type args
                 if inst
@@ -215,11 +241,11 @@ impl CodeGenerator {
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
                 // Try method-level generic templates first, then fall back to struct-level
-                // generic methods from the struct definition.
+                // generic methods from the struct definition, then impl block methods.
                 let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
                     // For struct-level generics (e.g., Vec<T>.push(T)),
                     // the method itself has no generics — they come from the struct.
-                    // Find the method from the struct's inline methods or impl blocks.
+                    // Find the method from the struct's inline methods.
                     self.generics
                         .struct_defs
                         .get(struct_name)
@@ -227,6 +253,9 @@ impl CodeGenerator {
                             s.methods.iter().find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
+                }).or_else(|| {
+                    // Fall back to impl block methods on generic structs (e.g., X Vec<T> { ... })
+                    generic_impl_methods.get(&key).cloned()
                 });
                 if let Some(method_fn) = method_fn_opt {
                     // For struct-level generics, the generic params come from the struct,
@@ -428,7 +457,6 @@ impl CodeGenerator {
                 }
             }
         }
-
         // Generate non-generic struct types (skip already-emitted specialized generics)
         for (name, info) in &self.types.structs {
             if self.generics.generated_structs.contains_key(name) {
@@ -437,7 +465,6 @@ impl CodeGenerator {
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
-
         // Generate enum types
         for (name, info) in &self.types.enums {
             ir.push_str(&self.generate_enum_type(name, info));
@@ -470,8 +497,8 @@ impl CodeGenerator {
 
         // Generate string constants (after processing functions to collect all strings)
         let mut body_ir = String::new();
-
         // Generate specialized functions from instantiations
+        eprintln!("[P1.7] generating {} specialized functions", instantiations.len());
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
                 if let Some(generic_fn) = self
@@ -480,7 +507,10 @@ impl CodeGenerator {
                     .get(&inst.base_name)
                     .cloned()
                 {
-                    body_ir.push_str(&self.generate_specialized_function(&generic_fn, inst)?);
+                    let spec_result = stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                        self.generate_specialized_function(&generic_fn, inst)
+                    });
+                    body_ir.push_str(&spec_result?);
                     body_ir.push('\n');
                 }
             }
@@ -494,7 +524,8 @@ impl CodeGenerator {
                     continue;
                 }
                 let key = (struct_name.clone(), inst.base_name.clone());
-                // Try method-level templates first, then struct-level generic methods
+                // Try method-level templates first, then struct-level generic methods,
+                // then impl block methods on generic structs
                 let method_fn_opt = method_templates.get(&key).cloned().or_else(|| {
                     self.generics
                         .struct_defs
@@ -503,6 +534,9 @@ impl CodeGenerator {
                             s.methods.iter().find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
+                }).or_else(|| {
+                    // Fall back to impl block methods on generic structs (e.g., X Vec<T> { ... })
+                    generic_impl_methods.get(&key).cloned()
                 });
                 if let Some(method_fn) = method_fn_opt {
                     // Reuse generate_specialized_function by treating the method as a function
@@ -537,7 +571,6 @@ impl CodeGenerator {
                 }
             }
         }
-
         // Second pass: generate non-generic function bodies.
         // For generic functions that have NO concrete specialized version (e.g., `identity<T>`
         // only appears inside another generic function body), generate a "fallback" un-specialized
@@ -547,7 +580,9 @@ impl CodeGenerator {
             match &item.node {
                 Item::Function(f) => {
                     if f.generics.is_empty() {
-                        match self.generate_function_with_span(f, item.span) {
+                        match stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                            self.generate_function_with_span(f, item.span)
+                        }) {
                             Ok(ir_fragment) => {
                                 body_ir.push_str(&ir_fragment);
                                 body_ir.push('\n');

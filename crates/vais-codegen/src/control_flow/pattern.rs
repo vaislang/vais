@@ -4,6 +4,7 @@ use crate::types::LocalVar;
 impl CodeGenerator {
     /// Generate code to check if a pattern matches (with explicit match type for correct type
     /// propagation, especially for nested tuple patterns where element types may be non-i64).
+    #[inline(never)]
     pub(crate) fn generate_pattern_check_typed(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -55,6 +56,20 @@ impl CodeGenerator {
                         expected_tag
                     );
 
+                    Ok((result, ir))
+                } else if let Some(const_val) = self.resolve_const_int_value(name) {
+                    // Named constant pattern — compare match value against constant
+                    let mut ir = String::new();
+                    let result = self.next_temp(counter);
+                    // Codegen widens all narrow integers (u8, i8, u16, etc.) to i64,
+                    // so always use i64 for the comparison — matches Pattern::Literal(Int) behavior.
+                    write_ir!(
+                        ir,
+                        "  {} = icmp eq i64 {}, {}",
+                        result,
+                        match_val,
+                        const_val
+                    );
                     Ok((result, ir))
                 } else {
                     // Identifier pattern always matches (binding)
@@ -344,6 +359,7 @@ impl CodeGenerator {
 
     /// Generate code to check if a pattern matches (untyped: assumes i64 elements for tuples).
     /// Prefer `generate_pattern_check_typed` when the match type is known.
+    #[inline(never)]
     pub(crate) fn generate_pattern_check(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -354,6 +370,7 @@ impl CodeGenerator {
     }
 
     /// Get the tag value for an enum variant
+    #[inline(never)]
     pub(crate) fn get_enum_variant_tag(&self, variant_name: &str) -> i32 {
         for enum_info in self.types.enums.values() {
             for (i, variant) in enum_info.variants.iter().enumerate() {
@@ -362,10 +379,18 @@ impl CodeGenerator {
                 }
             }
         }
-        0 // Default to 0 if not found
+        // Hardcoded fallback for std Result/Option
+        match variant_name {
+            "Ok" => 0,
+            "Err" => 1,
+            "None" => 0,
+            "Some" => 1,
+            _ => 0,
+        }
     }
 
     /// Get the enum name that contains a given variant
+    #[inline(never)]
     pub(crate) fn get_enum_name_for_variant(&self, variant_name: &str) -> Option<String> {
         for enum_info in self.types.enums.values() {
             for variant in &enum_info.variants {
@@ -378,6 +403,7 @@ impl CodeGenerator {
     }
 
     /// Check if a name is a unit enum variant (not a binding)
+    #[inline(never)]
     pub(crate) fn is_unit_enum_variant(&self, name: &str) -> bool {
         use crate::types::EnumVariantFields;
         for enum_info in self.types.enums.values() {
@@ -391,6 +417,7 @@ impl CodeGenerator {
     }
 
     /// Check if a name is a tuple enum variant and get its enum name and tag
+    #[inline(never)]
     pub(crate) fn get_tuple_variant_info(&self, name: &str) -> Option<(String, i32)> {
         use crate::types::EnumVariantFields;
         for enum_info in self.types.enums.values() {
@@ -403,7 +430,34 @@ impl CodeGenerator {
         None
     }
 
+    /// Resolve a constant name to its integer value, if it is a known integer constant.
+    /// Returns None if the name is not a constant or not an integer literal.
+    #[inline(never)]
+    pub(crate) fn resolve_const_int_value(&self, name: &str) -> Option<i64> {
+        use vais_ast::Expr;
+        let const_info = self.types.constants.get(name)?;
+        match &const_info.value.node {
+            Expr::Int(n) => Some(*n),
+            // Handle `as` casts like `0 as u8` — extract the inner literal
+            Expr::Cast { expr, .. } => {
+                if let Expr::Int(n) = &expr.node {
+                    Some(*n)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if a name is a known constant (for pattern matching disambiguation)
+    #[inline(never)]
+    pub(crate) fn is_known_constant(&self, name: &str) -> bool {
+        self.types.constants.contains_key(name)
+    }
+
     /// Generate pattern bindings (assign matched values to pattern variables)
+    #[inline(never)]
     pub(crate) fn generate_pattern_bindings(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -415,6 +469,7 @@ impl CodeGenerator {
 
     /// Generate pattern bindings with explicit match type for correct type propagation.
     /// Called from generate_match where the matched expression type is known.
+    #[inline(never)]
     pub(crate) fn generate_pattern_bindings_typed(
         &mut self,
         pattern: &Spanned<Pattern>,
@@ -427,6 +482,12 @@ impl CodeGenerator {
                 // Check if this is a unit enum variant (like None)
                 // Unit variants don't bind anything
                 if self.is_unit_enum_variant(name) {
+                    return Ok(String::new());
+                }
+
+                // Check if this is a named constant (like PROP_TYPE_INT)
+                // Constants don't bind — they are compared in pattern check
+                if self.is_known_constant(name) {
                     return Ok(String::new());
                 }
 

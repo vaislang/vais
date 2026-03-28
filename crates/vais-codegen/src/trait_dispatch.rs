@@ -11,6 +11,7 @@ impl CodeGenerator {
     }
 
     /// Register a trait from AST definition (converts AST Trait to TraitDef)
+    #[inline(never)]
     pub(crate) fn register_trait_from_ast(&mut self, t: &vais_ast::Trait) {
         let mut methods = HashMap::new();
         for m in &t.methods {

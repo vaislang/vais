@@ -4,7 +4,6 @@
 //! Focus: lib.rs error recovery, item/macros.rs, types.rs advanced parsing
 
 use vais_ast::*;
-use vais_lexer::tokenize;
 use vais_parser::parse;
 
 fn parse_ok(source: &str) -> Module {

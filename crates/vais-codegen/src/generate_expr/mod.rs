@@ -6,6 +6,11 @@
 //! # Submodules
 //!
 //! - `special` — Spawn, Comptime, Range (extracted from inline match arms)
+//! - `loops` — Loop, While (extracted for stack frame isolation)
+//! - `ref_deref` — Ref, Deref (extracted for stack frame isolation)
+//! - `map_lit` — MapLit (extracted for stack frame isolation)
+//! - `string_lit` — String, StringInterp (extracted for stack frame isolation)
+//! - `misc_expr` — Old, Assume, Yield, EnumAccess (extracted for stack frame isolation)
 //!
 //! Most expression types delegate to pre-existing helper modules:
 //! - `expr_helpers` — Binary, Unary, Ident, Assign, AssignOp, Cast
@@ -22,14 +27,37 @@
 //! - `helpers` — Slice
 
 use vais_ast::*;
-use vais_types::ResolvedType;
 
-use crate::{CodeGenerator, CodegenError, CodegenResult, LoopLabels};
+use crate::{CodeGenerator, CodegenError, CodegenResult};
 
+mod loops;
+mod map_lit;
+mod misc_expr;
+mod ref_deref;
 mod special;
+mod string_lit;
 
 impl CodeGenerator {
     pub(crate) fn generate_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        // Use stacker to grow the stack on demand, preventing stack overflow
+        // for deeply nested expressions (e.g., complex struct specializations)
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+            let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+            if count > 100000 {
+                std::process::abort();
+            }
+            self.generate_expr_inner(expr, counter)
+        })
+    }
+
+    #[inline(never)]
+    fn generate_expr_inner(
         &mut self,
         expr: &Spanned<Expr>,
         counter: &mut usize,
@@ -47,46 +75,8 @@ impl CodeGenerator {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
-            Expr::String(s) => {
-                // Create a global string constant and wrap in fat pointer { i8*, i64 }
-                // Uses dedup cache: identical string literals share the same global constant
-                let name = self.get_or_create_string_constant(s);
-                let byte_len = s.len() + 1; // includes null terminator for global
-                let str_len = s.len() as i64; // actual string length (no null)
-                let gep = format!(
-                    "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
-                    byte_len, byte_len, name
-                );
-                // Build fat pointer: { i8* ptr, i64 len }
-                let t0 = self.next_temp(counter);
-                let t1 = self.next_temp(counter);
-                let ir = format!(
-                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0\n  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1\n",
-                    t0, gep, t1, t0, str_len
-                );
-                Ok((t1, ir))
-            }
-            Expr::StringInterp(parts) => {
-                // Desugar string interpolation into a format() call.
-                let mut format_str_parts = Vec::with_capacity(parts.len());
-                let mut interp_args = Vec::with_capacity(parts.len());
-                for part in parts {
-                    match part {
-                        vais_ast::StringInterpPart::Lit(s) => {
-                            format_str_parts.push(s.clone());
-                        }
-                        vais_ast::StringInterpPart::Expr(e) => {
-                            format_str_parts.push("{}".to_string());
-                            interp_args.push(e.as_ref().clone());
-                        }
-                    }
-                }
-                let fmt_string = format_str_parts.join("");
-                let mut args: Vec<Spanned<Expr>> = Vec::with_capacity(interp_args.len() + 1);
-                args.push(Spanned::new(Expr::String(fmt_string), expr.span));
-                args.extend(interp_args);
-                self.generate_format_call(&args, counter, expr.span)
-            }
+            Expr::String(s) => self.generate_string_literal_expr(s, counter),
+            Expr::StringInterp(parts) => self.generate_string_interp_expr(parts, expr.span, counter),
             Expr::Unit => Ok(("void".to_string(), String::new())),
 
             Expr::Ident(name) => self.generate_ident_expr(name, counter),
@@ -123,135 +113,11 @@ impl CodeGenerator {
                 pattern,
                 iter,
                 body,
-            } => {
-                // Check if this is a range-based for loop
-                let is_range_loop = iter
-                    .as_ref()
-                    .is_some_and(|it| matches!(&it.node, Expr::Range { .. }));
-
-                if is_range_loop {
-                    if let (Some(pat), Some(it)) = (pattern.as_ref(), iter.as_ref()) {
-                        // Range-based for loop: L pattern : start..end { body }
-                        return self.generate_range_for_loop(pat, it, body, counter);
-                    }
-                }
-
-                // Conditional or infinite loop
-                let loop_start = self.next_label("loop.start");
-                let loop_body = self.next_label("loop.body");
-                let loop_end = self.next_label("loop.end");
-
-                // Push loop labels for break/continue
-                self.fn_ctx.loop_stack.push(LoopLabels {
-                    continue_label: loop_start.clone(), // keep: used in continue stmt
-                    break_label: loop_end.clone(),      // keep: used in break stmt
-                });
-
-                let mut ir = String::new();
-
-                // Check if this is a conditional loop (L cond { body }) or infinite loop
-                if let Some(iter_expr) = iter {
-                    // Conditional loop: L condition { body }
-                    write_ir!(ir, "  br label %{}", loop_start);
-                    write_ir!(ir, "{}:", loop_start);
-
-                    // Evaluate condition
-                    let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
-                    ir.push_str(&cond_ir);
-
-                    // Convert to i1 for branch (type-aware: skips for bool/i1)
-                    let (cond_bool, conv_ir) =
-                        self.generate_cond_to_i1(iter_expr, &cond_val, counter);
-                    ir.push_str(&conv_ir);
-                    write_ir!(
-                        ir,
-                        "  br i1 {}, label %{}, label %{}",
-                        cond_bool,
-                        loop_body,
-                        loop_end
-                    );
-
-                    // Loop body
-                    write_ir!(ir, "{}:", loop_body);
-                    let (_body_val, body_ir, body_terminated) =
-                        self.generate_block_stmts(body, counter)?;
-                    ir.push_str(&body_ir);
-                    // Only emit loop back if body doesn't terminate
-                    if !body_terminated {
-                        write_ir!(ir, "  br label %{}", loop_start);
-                    }
-                } else {
-                    // Infinite loop: L { body } - must use break to exit
-                    write_ir!(ir, "  br label %{}", loop_start);
-                    write_ir!(ir, "{}:", loop_start);
-                    let (_body_val, body_ir, body_terminated) =
-                        self.generate_block_stmts(body, counter)?;
-                    ir.push_str(&body_ir);
-                    // Only emit loop back if body doesn't terminate
-                    if !body_terminated {
-                        write_ir!(ir, "  br label %{}", loop_start);
-                    }
-                }
-
-                // Loop end
-                write_ir!(ir, "{}:", loop_end);
-
-                self.fn_ctx.loop_stack.pop();
-
-                // Loop returns void by default (use break with value for expression)
-                Ok(("0".to_string(), ir))
-            }
+            } => self.generate_loop_with_pattern(pattern.as_ref(), iter.as_ref(), body, counter),
 
             // While loop expression
             Expr::While { condition, body } => {
-                let loop_start = self.next_label("while.start");
-                let loop_body = self.next_label("while.body");
-                let loop_end = self.next_label("while.end");
-
-                // Push loop labels for break/continue
-                self.fn_ctx.loop_stack.push(LoopLabels {
-                    continue_label: loop_start.clone(), // keep: used in continue stmt
-                    break_label: loop_end.clone(),      // keep: used in break stmt
-                });
-
-                let mut ir = String::new();
-
-                // Jump to condition check
-                write_ir!(ir, "  br label %{}", loop_start);
-                write_ir!(ir, "{}:", loop_start);
-
-                // Evaluate condition
-                let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
-                ir.push_str(&cond_ir);
-
-                // Convert to i1 for branch (type-aware: skips for bool/i1)
-                let (cond_bool, conv_ir) = self.generate_cond_to_i1(condition, &cond_val, counter);
-                ir.push_str(&conv_ir);
-                write_ir!(
-                    ir,
-                    "  br i1 {}, label %{}, label %{}",
-                    cond_bool,
-                    loop_body,
-                    loop_end
-                );
-
-                // Loop body
-                write_ir!(ir, "{}:", loop_body);
-                let (_body_val, body_ir, body_terminated) =
-                    self.generate_block_stmts(body, counter)?;
-                ir.push_str(&body_ir);
-
-                // Jump back to condition if body doesn't terminate
-                if !body_terminated {
-                    write_ir!(ir, "  br label %{}", loop_start);
-                }
-
-                // Loop end
-                write_ir!(ir, "{}:", loop_end);
-
-                self.fn_ctx.loop_stack.pop();
-
-                Ok(("0".to_string(), ir))
+                self.generate_while_loop_expr(condition, body, counter)
             }
 
             // Block expression
@@ -272,87 +138,7 @@ impl CodeGenerator {
             Expr::Array(elements) => self.generate_array_expr(elements, counter),
 
             // Map literal: {k: v, ...}
-            // Stored as parallel arrays of keys and values on the stack
-            Expr::MapLit(pairs) => {
-                let mut ir = String::new();
-                let len = pairs.len();
-
-                // Infer key/value types
-                let (key_ty, val_ty) = if let Some((k, v)) = pairs.first() {
-                    let kt = self.type_to_llvm(&self.infer_expr_type(k));
-                    let vt = self.type_to_llvm(&self.infer_expr_type(v));
-                    (kt, vt)
-                } else {
-                    ("i64".to_string(), "i64".to_string())
-                };
-
-                let keys_arr_ty = format!("[{} x {}]", len, key_ty);
-                let vals_arr_ty = format!("[{} x {}]", len, val_ty);
-
-                // Allocate key and value arrays on stack
-                let keys_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca {}", keys_ptr, keys_arr_ty);
-                let vals_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca {}", vals_ptr, vals_arr_ty);
-
-                // Store each key-value pair
-                for (i, (k, v)) in pairs.iter().enumerate() {
-                    let (kval, k_ir) = self.generate_expr(k, counter)?;
-                    ir.push_str(&k_ir);
-                    let k_elem_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                        k_elem_ptr,
-                        keys_arr_ty,
-                        keys_arr_ty,
-                        keys_ptr,
-                        i
-                    );
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        key_ty,
-                        kval,
-                        key_ty,
-                        k_elem_ptr
-                    );
-
-                    let (vval, v_ir) = self.generate_expr(v, counter)?;
-                    ir.push_str(&v_ir);
-                    let v_elem_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                        v_elem_ptr,
-                        vals_arr_ty,
-                        vals_arr_ty,
-                        vals_ptr,
-                        i
-                    );
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        val_ty,
-                        vval,
-                        val_ty,
-                        v_elem_ptr
-                    );
-                }
-
-                // Return pointer to keys array (map is represented as parallel arrays)
-                let result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
-                    result,
-                    keys_arr_ty,
-                    keys_arr_ty,
-                    keys_ptr
-                );
-
-                Ok((result, ir))
-            }
+            Expr::MapLit(pairs) => self.generate_map_lit_expr(pairs, counter),
 
             // Tuple literal: (a, b, c)
             Expr::Tuple(elements) => self.generate_tuple_expr(elements, counter),
@@ -398,140 +184,10 @@ impl CodeGenerator {
             Expr::Spread(inner) => self.generate_expr(inner, counter),
 
             // Reference: &expr
-            Expr::Ref(inner) => {
-                // Special case: &[elem, ...] array literal -> slice fat pointer { i8*, i64 }
-                if let Expr::Array(elements) = &inner.node {
-                    let len = elements.len();
-                    let mut ir = String::new();
-
-                    // Infer element type
-                    let elem_ty = if let Some(first) = elements.first() {
-                        let resolved = self.infer_expr_type(first);
-                        self.type_to_llvm(&resolved)
-                    } else {
-                        "i64".to_string()
-                    };
-                    let arr_ty = format!("[{}  x {}]", len, elem_ty);
-
-                    // Allocate array on stack
-                    let arr_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = alloca {}", arr_ptr, arr_ty);
-
-                    // Store each element
-                    for (i, elem) in elements.iter().enumerate() {
-                        let (val, elem_ir) = self.generate_expr(elem, counter)?;
-                        ir.push_str(&elem_ir);
-
-                        let elem_ptr = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = getelementptr {}, {}* {}, i64 0, i64 {}",
-                            elem_ptr,
-                            arr_ty,
-                            arr_ty,
-                            arr_ptr,
-                            i
-                        );
-                        write_ir!(ir, "  store {} {}, {}* {}", elem_ty, val, elem_ty, elem_ptr);
-                    }
-
-                    // Get pointer to first element
-                    let data_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr {}, {}* {}, i64 0, i64 0",
-                        data_ptr,
-                        arr_ty,
-                        arr_ty,
-                        arr_ptr
-                    );
-
-                    // Bitcast to i8*
-                    let data_i8 = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = bitcast {}* {} to i8*",
-                        data_i8,
-                        elem_ty,
-                        data_ptr
-                    );
-
-                    // Build fat pointer: { i8*, i64 }
-                    let fat1 = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
-                        fat1,
-                        data_i8
-                    );
-                    let fat2 = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
-                        fat2,
-                        fat1,
-                        len
-                    );
-
-                    return Ok((fat2, ir));
-                }
-
-                // For simple references, just return the address
-                if let Expr::Ident(name) = &inner.node {
-                    if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
-                        if local.is_alloca() {
-                            // Alloca variables already have an address
-                            return Ok((format!("%{}", local.llvm_name), String::new()));
-                        } else {
-                            // SSA/Param values need to be spilled to stack to take their address
-                            let mut ir = String::new();
-                            let llvm_ty = self.type_to_llvm(&local.ty);
-                            let (val, val_ir) = self.generate_expr(inner, counter)?;
-                            ir.push_str(&val_ir);
-                            let tmp_alloca = self.next_temp(counter);
-                            write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
-                            write_ir!(
-                                ir,
-                                "  store {} {}, {}* {}",
-                                llvm_ty,
-                                val,
-                                llvm_ty,
-                                tmp_alloca
-                            );
-                            return Ok((tmp_alloca, ir));
-                        }
-                    }
-                }
-                // For complex expressions, evaluate and return
-                self.generate_expr(inner, counter)
-            }
+            Expr::Ref(inner) => self.generate_ref_expr(inner, counter),
 
             // Dereference: *expr
-            Expr::Deref(inner) => {
-                let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
-                let mut ir = ptr_ir;
-
-                // Infer the pointee type from the pointer expression
-                let ptr_type = self.infer_expr_type(inner);
-                let pointee_llvm = match &ptr_type {
-                    ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
-                    ResolvedType::Ref(inner) => self.type_to_llvm(inner),
-                    ResolvedType::RefMut(inner) => self.type_to_llvm(inner),
-                    _ => "i64".to_string(),
-                };
-
-                let result = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = load {}, {}* {}",
-                    result,
-                    pointee_llvm,
-                    pointee_llvm,
-                    ptr_val
-                );
-
-                Ok((result, ir))
-            }
+            Expr::Deref(inner) => self.generate_deref_expr(inner, counter),
 
             // Type cast: expr as Type
             Expr::Cast { expr, ty } => self.generate_cast_expr(expr, ty, counter),
@@ -556,10 +212,7 @@ impl CodeGenerator {
             Expr::Spawn(inner) => self.generate_spawn_expr(inner, counter),
 
             // Yield expression: yield a value from a generator.
-            Expr::Yield(inner) => {
-                let (val, ir) = self.generate_expr(inner, counter)?;
-                Ok((val, ir))
-            }
+            Expr::Yield(inner) => self.generate_yield_expr(inner, counter),
 
             // Comptime expression: evaluate at compile time and emit constant
             Expr::Comptime { body } => self.generate_comptime_expr(body, counter),
@@ -571,25 +224,7 @@ impl CodeGenerator {
             ))),
 
             // Old expression for contract ensures clauses
-            Expr::Old(inner) => {
-                // old(expr) references a pre-snapshot value
-                let old_var_name = format!("__old_{}", counter);
-                *counter += 1;
-
-                if let Some(snapshot_var) = self.contracts.old_snapshots.get(&old_var_name) {
-                    let ty = self.infer_expr_type(inner);
-                    let llvm_ty = self.type_to_llvm(&ty);
-                    let result = self.next_temp(counter);
-                    let ir = format!(
-                        "  {} = load {}, {}* %{}\n",
-                        result, llvm_ty, llvm_ty, snapshot_var
-                    );
-                    Ok((result, ir))
-                } else {
-                    // Fallback: just evaluate the expression (for non-ensures contexts)
-                    self.generate_expr(inner, counter)
-                }
-            }
+            Expr::Old(inner) => self.generate_old_expr(inner, counter),
 
             // Assert expression
             Expr::Assert { condition, message } => {
@@ -597,15 +232,7 @@ impl CodeGenerator {
             }
 
             // Assume expression (verification hint, no runtime effect in release)
-            Expr::Assume(inner) => {
-                if self.release_mode {
-                    // In release mode, assume is a no-op
-                    Ok(("0".to_string(), String::new()))
-                } else {
-                    // In debug mode, assume acts like assert but with different error message
-                    self.generate_assume(inner, counter)
-                }
-            }
+            Expr::Assume(inner) => self.generate_assume_expr(inner, counter),
 
             // Lambda expression with captures
             Expr::Lambda {
@@ -649,11 +276,7 @@ impl CodeGenerator {
                 enum_name: _,
                 variant,
                 data: Some(data_expr),
-            } => {
-                let callee = Spanned::new(Expr::Ident(variant.clone()), data_expr.span);
-                let args = vec![*data_expr.clone()];
-                self.generate_call_expr(&callee, &args, counter, data_expr.span)
-            }
+            } => self.generate_enum_access_data_expr(variant, data_expr, counter),
         };
 
         // Register the resolved type for named temporaries.

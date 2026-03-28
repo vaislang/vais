@@ -57,6 +57,10 @@ pub(crate) struct GenericState {
     pub(crate) fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
     /// Generated function instantiations (mangled_name -> already_generated)
     pub(crate) generated_functions: HashMap<String, bool>,
+    /// Generic method bodies from impl blocks on generic structs.
+    /// Populated during module processing for on-demand specialization.
+    /// Key: (struct_name, method_name), Value: Function AST
+    pub(crate) generic_method_bodies: HashMap<(String, String), std::rc::Rc<vais_ast::Function>>,
     /// Generic substitutions for current function/method
     pub(crate) substitutions: HashMap<String, ResolvedType>,
 }
@@ -106,6 +110,25 @@ pub(crate) struct FunctionContext {
     /// When a block exits, variables declared in that scope are dropped in LIFO order.
     /// The outer Vec is a stack of scopes (innermost scope last).
     pub(crate) scope_stack: Vec<Vec<String>>,
+
+    /// Collected alloca instructions to be hoisted to the function entry block.
+    ///
+    /// LLVM can only optimize alloca instructions that appear in the entry basic block.
+    /// Non-entry-block allocas (e.g., inside if/else branches) cause "Instruction does
+    /// not dominate all uses" errors when the allocated pointer is referenced from
+    /// another basic block.
+    ///
+    /// During expression/statement codegen, static-size allocas (struct, union, enum,
+    /// array literals) are recorded here instead of being emitted inline. After the
+    /// full function body is generated, these are spliced into the entry block.
+    ///
+    /// Each entry is a complete IR line, e.g., `"  %tmp.5 = alloca %MyStruct"`.
+    pub(crate) entry_allocas: Vec<String>,
+
+    /// IR code for on-demand generated specialized functions (e.g., Vec$str_push).
+    /// Accumulated during method call processing and emitted after the current
+    /// function's body in the final IR output.
+    pub(crate) pending_specialized_ir: Vec<String>,
 }
 
 impl FunctionContext {

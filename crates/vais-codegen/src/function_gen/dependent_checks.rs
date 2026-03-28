@@ -48,6 +48,7 @@ impl CodeGenerator {
     ///
     /// dep_ok_N:
     /// ```
+    #[inline(never)]
     pub(crate) fn generate_dependent_type_assertions(
         &mut self,
         params: &[Param],

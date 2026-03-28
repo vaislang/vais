@@ -10,6 +10,7 @@ fn parse_ok(source: &str) -> Module {
     parse(source).unwrap_or_else(|e| panic!("Parse failed for: {}\nErr: {:?}", source, e))
 }
 
+#[allow(dead_code)]
 fn parse_err(source: &str) {
     assert!(
         parse(source).is_err(),

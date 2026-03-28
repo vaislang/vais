@@ -88,7 +88,7 @@ impl CodeGenerator {
     fn type_to_llvm_impl(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static TTL_COUNT: AtomicUsize = AtomicUsize::new(0);
-        let c = TTL_COUNT.fetch_add(1, Ordering::Relaxed);
+        let _c = TTL_COUNT.fetch_add(1, Ordering::Relaxed);
         stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
             self.enter_type_recursion("type_to_llvm")?;
             let result = self.type_to_llvm_impl_inner(ty);
@@ -99,7 +99,6 @@ impl CodeGenerator {
 
     /// Inner implementation of type_to_llvm (actual conversion logic)
     fn type_to_llvm_impl_inner(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         Ok(match ty {
             ResolvedType::I8 => String::from("i8"),
             ResolvedType::I16 => String::from("i16"),
@@ -476,7 +475,6 @@ impl CodeGenerator {
 
     /// Internal implementation of ast_type_to_resolved
     fn ast_type_to_resolved_impl(&self, ty: &Type) -> ResolvedType {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         match ty {
             Type::Named { name, generics } => match name.as_str() {
                 "i8" => ResolvedType::I8,

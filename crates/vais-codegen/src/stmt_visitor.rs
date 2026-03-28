@@ -18,7 +18,7 @@ impl StmtVisitor for CodeGenerator {
                 value,
                 is_mut,
                 ..
-            } => self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter),
+            } => self.generate_let_stmt_visitor(name, ty.as_ref(), value, *is_mut, counter),
             Stmt::LetDestructure {
                 pattern,
                 value,
@@ -26,7 +26,7 @@ impl StmtVisitor for CodeGenerator {
                 ..
             } => self.generate_let_destructure(pattern, value, *is_mut, counter),
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
-            Stmt::Return(expr) => self.generate_return_stmt(expr.as_ref().map(|e| &**e), counter),
+            Stmt::Return(expr) => self.generate_return_stmt_visitor(expr.as_ref().map(|e| &**e), counter),
             Stmt::Break(value) => self.generate_break_stmt(value.as_ref().map(|v| &**v), counter),
             Stmt::Continue => self.generate_continue_stmt(),
             Stmt::Defer(expr) => {
@@ -95,7 +95,8 @@ impl StmtVisitor for CodeGenerator {
 
 impl CodeGenerator {
     /// Generate let statement with SSA optimization for immutable simple types
-    fn generate_let_stmt(
+    /// (visitor variant: uses single-pointer pattern and entry-block allocas)
+    fn generate_let_stmt_visitor(
         &mut self,
         name: &Spanned<String>,
         ty: Option<&Spanned<vais_ast::Type>>,
@@ -217,21 +218,25 @@ impl CodeGenerator {
             let mut ir = val_ir;
             let llvm_ty = self.type_to_llvm(&resolved_ty);
 
-            // For struct literals and enum variant constructors, the value is already an alloca'd pointer
+            // For struct literals and enum variant constructors, the value is already an alloca'd pointer.
+            // Single-pointer pattern: alloca %T, then load+store from the source pointer.
             if is_struct_lit || is_enum_variant_call || is_unit_variant {
-                write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
+                self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
+                // Load the struct value from the source pointer and store into our alloca
+                let loaded = self.next_temp(counter);
+                write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
                 write_ir!(
                     ir,
-                    "  store {}* {}, {}** %{}",
+                    "  store {} {}, {}* %{}",
                     llvm_ty,
-                    val,
+                    loaded,
                     llvm_ty,
                     llvm_name
                 );
             } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
                 // For struct values (e.g., from function returns)
-                let tmp_ptr = format!("%{}.struct", llvm_name);
-                write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
+                // Single-pointer: alloca %T, store value directly
+                self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
                 // If the value expression is not a value (e.g., block returning
                 // a struct-typed local), we need to load the struct first
                 let actual_val = if !self.is_expr_value(value) {
@@ -241,23 +246,38 @@ impl CodeGenerator {
                 } else {
                     val.clone()
                 };
-                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, actual_val, llvm_ty, tmp_ptr);
-                write_ir!(ir, "  %{} = alloca {}*", llvm_name, llvm_ty);
-                write_ir!(
-                    ir,
-                    "  store {}* {}, {}** %{}",
-                    llvm_ty,
-                    tmp_ptr,
-                    llvm_ty,
-                    llvm_name
-                );
-            } else {
-                write_ir!(ir, "  %{} = alloca {}", llvm_name, llvm_ty);
                 write_ir!(
                     ir,
                     "  store {} {}, {}* %{}",
                     llvm_ty,
-                    val,
+                    actual_val,
+                    llvm_ty,
+                    llvm_name
+                );
+            } else {
+                self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
+                // Coerce the value width to match the alloca type (fixes P8: binary op
+                // result may be wider than the declared variable type, e.g., i64 result
+                // stored into an i16 alloca).
+                let val_llvm_ty = self.llvm_type_of(&val);
+                let store_val = if val_llvm_ty.starts_with('i')
+                    && llvm_ty.starts_with('i')
+                    && val_llvm_ty != llvm_ty
+                {
+                    self.coerce_int_width(&val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
+                } else if (val_llvm_ty == "float" || val_llvm_ty == "double")
+                    && (llvm_ty == "float" || llvm_ty == "double")
+                    && val_llvm_ty != llvm_ty
+                {
+                    self.coerce_float_width(&val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
+                } else {
+                    val.clone()
+                };
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* %{}",
+                    llvm_ty,
+                    store_val,
                     llvm_ty,
                     llvm_name
                 );
@@ -342,7 +362,8 @@ impl CodeGenerator {
     }
 
     /// Generate return statement with actual ret instruction
-    fn generate_return_stmt(
+    /// (visitor variant: uses current_return_type from fn_ctx)
+    fn generate_return_stmt_visitor(
         &mut self,
         expr: Option<&Spanned<Expr>>,
         counter: &mut usize,
@@ -433,6 +454,27 @@ impl CodeGenerator {
                 } else {
                     val
                 };
+
+            // Coerce return value to match declared function return type
+            let ret_val = if llvm_ty != "void" {
+                let expr_type = self.infer_expr_type(expr);
+                let val_llvm_ty = self.type_to_llvm(&expr_type);
+                if val_llvm_ty != llvm_ty {
+                    if (val_llvm_ty == "float" || val_llvm_ty == "double")
+                        && (llvm_ty == "float" || llvm_ty == "double")
+                    {
+                        self.coerce_float_width(&ret_val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
+                    } else if val_llvm_ty.starts_with('i') && llvm_ty.starts_with('i') {
+                        self.coerce_int_width(&ret_val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
+                    } else {
+                        ret_val
+                    }
+                } else {
+                    ret_val
+                }
+            } else {
+                ret_val
+            };
 
             // Execute deferred expressions before return (LIFO order)
             let defer_ir = self.generate_defer_cleanup(counter)?;

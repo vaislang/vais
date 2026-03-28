@@ -142,19 +142,26 @@ impl CodeGenerator {
 
         // Pre-build method template lookup: (struct_name, method_name) -> Function AST
         let mut method_templates: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
+        // Also collect methods from impl blocks on generic structs (struct-level generics)
+        let mut generic_impl_methods: HashMap<(String, String), std::rc::Rc<Function>> = HashMap::new();
         for item in &full_module.items {
             match &item.node {
                 Item::Impl(impl_block) => {
-                    let type_name = match &impl_block.target_type.node {
-                        Type::Named { name, .. } => name.clone(),
-                        _ => continue,
-                    };
-                    for method in &impl_block.methods {
-                        if !method.node.generics.is_empty() {
-                            method_templates.insert(
-                                (type_name.clone(), method.node.name.node.clone()),
-                                std::rc::Rc::new(method.node.clone()),
-                            );
+                    if let Type::Named { name, generics: type_params } = &impl_block.target_type.node {
+                        let is_generic_impl = !impl_block.generics.is_empty()
+                            || !type_params.is_empty();
+                        for method in &impl_block.methods {
+                            if !method.node.generics.is_empty() {
+                                method_templates.insert(
+                                    (name.clone(), method.node.name.node.clone()),
+                                    std::rc::Rc::new(method.node.clone()),
+                                );
+                            } else if is_generic_impl {
+                                generic_impl_methods.insert(
+                                    (name.clone(), method.node.name.node.clone()),
+                                    std::rc::Rc::new(method.node.clone()),
+                                );
+                            }
                         }
                     }
                 }
@@ -162,6 +169,11 @@ impl CodeGenerator {
                     for method in &s.methods {
                         if !method.node.generics.is_empty() {
                             method_templates.insert(
+                                (s.name.node.clone(), method.node.name.node.clone()),
+                                std::rc::Rc::new(method.node.clone()),
+                            );
+                        } else if !s.generics.is_empty() {
+                            generic_impl_methods.insert(
                                 (s.name.node.clone(), method.node.name.node.clone()),
                                 std::rc::Rc::new(method.node.clone()),
                             );
@@ -265,6 +277,8 @@ impl CodeGenerator {
                                 .find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
+                }).or_else(|| {
+                    generic_impl_methods.get(&key).cloned()
                 });
                 if let Some(method_fn) = method_fn_opt {
                     let struct_generics = self
@@ -569,6 +583,8 @@ impl CodeGenerator {
                                 .find(|m| m.node.name.node == inst.base_name)
                                 .map(|m| std::rc::Rc::new(m.node.clone()))
                         })
+                }).or_else(|| {
+                    generic_impl_methods.get(&key).cloned()
                 });
                 if let Some(method_fn) = method_fn_opt {
                     let method_inst = vais_types::GenericInstantiation {

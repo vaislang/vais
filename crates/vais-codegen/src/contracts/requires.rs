@@ -8,6 +8,7 @@ impl CodeGenerator {
     ///
     /// Inserts condition checks after function entry, calling __contract_fail
     /// if any precondition fails.
+    #[inline(never)]
     pub(crate) fn generate_requires_checks(
         &mut self,
         f: &Function,

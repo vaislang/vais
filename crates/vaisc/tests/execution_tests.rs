@@ -197,6 +197,7 @@ fn assert_stdout_lines(source: &str, expected_lines: &[&str]) {
 }
 
 /// Assert that source fails to compile (expected compilation error)
+#[allow(dead_code)]
 fn assert_compile_error(source: &str) {
     assert!(
         compile_to_ir(source).is_err(),
@@ -205,6 +206,7 @@ fn assert_compile_error(source: &str) {
 }
 
 /// Assert that source compiles and runs without crashing (exit code 0, no stderr panic)
+#[allow(dead_code)]
 fn assert_no_crash(source: &str) {
     match compile_and_run(source) {
         Ok(result) => {

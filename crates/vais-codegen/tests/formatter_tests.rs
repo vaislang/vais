@@ -428,6 +428,7 @@ fn test_format_struct_with_methods() {
                 (ident("x"), spanned(ident_expr("x"))),
                 (ident("y"), spanned(int_expr(0))),
             ],
+            enum_name: None,
         }))),
         is_pub: true,
         is_async: false,
@@ -977,6 +978,7 @@ fn test_format_struct_literal() {
             (ident("x"), spanned(int_expr(10))),
             (ident("y"), spanned(int_expr(20))),
         ],
+        enum_name: None,
     };
 
     let func = Function {

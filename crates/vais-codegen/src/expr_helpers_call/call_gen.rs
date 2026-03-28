@@ -3,6 +3,7 @@ use vais_ast::{Expr, Span, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_call_expr(
         &mut self,
         func: &Spanned<Expr>,
@@ -164,6 +165,54 @@ impl CodeGenerator {
                 val = raw_ptr;
                 arg_vals.push(format!("i8* {}", val));
                 continue;
+            }
+
+            // Deref coercion: &Vec<T> → &[T] when parameter expects a slice
+            // Extract data pointer and length from Vec to create a fat pointer { i8*, i64 }
+            if let Some(ref pt) = param_ty {
+                let is_slice_param = match pt {
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+                    }
+                    _ => false,
+                };
+                let is_vec_arg = match &inferred_ty {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        matches!(inner.as_ref(), ResolvedType::Named { name, .. } if name == "Vec")
+                    }
+                    ResolvedType::Named { name, .. } => name == "Vec",
+                    _ => false,
+                };
+                if is_slice_param && is_vec_arg {
+                    // Vec ref → slice: extract data ptr and length
+                    let vec_ptr = if self.is_expr_value(arg) {
+                        // Value: need to store first to get pointer
+                        let tmp = self.next_temp(counter);
+                        self.emit_entry_alloca(&tmp, "%Vec");
+                        write_ir!(ir, "  store %Vec {}, %Vec* {}", val, tmp);
+                        tmp
+                    } else {
+                        val.clone()
+                    };
+                    let data_field = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0", data_field, vec_ptr);
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
+                    let len_field = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1", len_field, vec_ptr);
+                    let len_val = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_field);
+                    let fat1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0", fat1, data_ptr);
+                    let fat2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1", fat2, fat1, len_val);
+                    val = fat2;
+                    arg_vals.push(format!("{{ i8*, i64 }} {}", val));
+                    continue;
+                }
             }
 
             // Determine argument LLVM type - use parameter type if available, otherwise infer from expression
@@ -508,6 +557,7 @@ impl CodeGenerator {
     }
 
     /// Generate enum variant constructor
+    #[inline(never)]
     pub(crate) fn generate_enum_variant_constructor(
         &mut self,
         enum_name: &str,
@@ -555,13 +605,47 @@ impl CodeGenerator {
             // This copies the value INTO the Result struct (no dangling pointer)
             let arg_type = self.infer_expr_type(arg_expr);
             let llvm_ty = self.type_to_llvm(&arg_type);
-            let needs_cast = llvm_ty != "i64" && llvm_ty != "i32" && llvm_ty != "i16" && llvm_ty != "i8"
-                && llvm_ty != "i1" && !llvm_ty.ends_with('*');
-            if needs_cast && arg_val.starts_with('%') {
-                // Bitcast payload slot to T* and store value directly
+            let type_size = self.compute_sizeof(&arg_type);
+            // Check temp_var_types for more accurate type info when infer_expr_type returns I64.
+            // This handles Vec<str>[i] → {i8*, i64} which infer_expr_type can't resolve.
+            let (effective_ty, effective_size) = if matches!(&arg_type, ResolvedType::I64) {
+                if let Some(temp_ty) = self.fn_ctx.temp_var_types.get(arg_val) {
+                    let ty = self.type_to_llvm(temp_ty);
+                    let sz = self.compute_sizeof(temp_ty);
+                    if sz > 8 {
+                        (ty, sz)
+                    } else {
+                        (llvm_ty.clone(), type_size)
+                    }
+                } else {
+                    (llvm_ty.clone(), type_size)
+                }
+            } else {
+                (llvm_ty.clone(), type_size)
+            };
+            let needs_cast = effective_ty != "i64" && effective_ty != "i32" && effective_ty != "i16" && effective_ty != "i8"
+                && effective_ty != "i1" && !effective_ty.ends_with('*');
+            if needs_cast && effective_size > 8 && arg_val.starts_with('%') {
+                // Large struct (> 8 bytes): heap-allocate to avoid payload overflow.
+                let heap_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = call i8* @malloc(i64 {})", heap_ptr, effective_size);
+                let typed_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i8* {} to {}*", typed_ptr, heap_ptr, effective_ty);
+                if !self.is_expr_value(arg_expr) {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, effective_ty, effective_ty, arg_val);
+                    write_ir!(ir, "  store {} {}, {}* {}", effective_ty, loaded, effective_ty, typed_ptr);
+                } else {
+                    write_ir!(ir, "  store {} {}, {}* {}", effective_ty, arg_val, effective_ty, typed_ptr);
+                }
+                let ptr_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", ptr_i64, heap_ptr);
+                write_ir!(ir, "  store i64 {}, i64* {}", ptr_i64, payload_field_ptr);
+            } else if needs_cast && arg_val.starts_with('%') {
+                // Small struct (≤ 8 bytes): bitcast payload slot and store directly
                 let cast_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_field_ptr, llvm_ty);
-                write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, arg_val, llvm_ty, cast_ptr);
+                write_ir!(ir, "  {} = bitcast i64* {} to {}*", cast_ptr, payload_field_ptr, effective_ty);
+                write_ir!(ir, "  store {} {}, {}* {}", effective_ty, arg_val, effective_ty, cast_ptr);
             } else {
                 write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
             }

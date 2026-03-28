@@ -8,6 +8,7 @@ impl CodeGenerator {
     /// Converts Vais format strings like `print("x = {}", x)` to printf calls.
     /// `{}` placeholders are replaced with the appropriate C format specifier
     /// based on the inferred type of each argument.
+    #[inline(never)]
     pub(crate) fn generate_print_call(
         &mut self,
         fn_name: &str,
@@ -238,6 +239,7 @@ impl CodeGenerator {
     ///
     /// Uses snprintf(NULL, 0, fmt, ...) to measure, malloc to allocate,
     /// then snprintf(buf, len+1, fmt, ...) to write.
+    #[inline(never)]
     pub(crate) fn generate_format_call(
         &mut self,
         args: &[Spanned<Expr>],
@@ -417,6 +419,7 @@ impl CodeGenerator {
     }
 
     /// Generate await expression
+    #[inline(never)]
     pub(crate) fn generate_print_i64_builtin(
         &mut self,
         args: &[Spanned<Expr>],
@@ -454,6 +457,7 @@ impl CodeGenerator {
     }
 
     /// Generate print_f64 builtin call
+    #[inline(never)]
     pub(crate) fn generate_print_f64_builtin(
         &mut self,
         args: &[Spanned<Expr>],

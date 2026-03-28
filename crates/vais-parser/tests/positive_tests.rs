@@ -1172,7 +1172,7 @@ fn test_parse_struct_literal() {
         Item::Function(f) => match &f.body {
             FunctionBody::Block(stmts) => match &stmts[0].node {
                 Stmt::Return(Some(expr)) => match &expr.node {
-                    Expr::StructLit { name, fields } => {
+                    Expr::StructLit { name, fields, .. } => {
                         assert_eq!(name.node, "Point");
                         assert_eq!(fields.len(), 2);
                     }

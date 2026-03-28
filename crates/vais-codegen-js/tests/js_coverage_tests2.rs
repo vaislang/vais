@@ -21,6 +21,7 @@ fn gen_js_with_config(source: &str, config: JsConfig) -> String {
         .unwrap_or_else(|e| panic!("JS codegen failed: {}", e))
 }
 
+#[allow(dead_code)]
 fn gen_js_result(source: &str) -> Result<String, String> {
     let module = parse(source).map_err(|e| format!("{:?}", e))?;
     let mut gen = JsCodeGenerator::new();

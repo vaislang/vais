@@ -133,6 +133,7 @@ impl CodeGenerator {
     }
 
     /// Validate all types in an extern function signature
+    #[inline(never)]
     pub(crate) fn _validate_ffi_function(
         &self,
         func_name: &str,
@@ -153,6 +154,7 @@ impl CodeGenerator {
     }
 
     /// Generate LLVM IR for extern block
+    #[inline(never)]
     pub(crate) fn _generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
         let mut ir = String::new();
 
@@ -357,6 +359,7 @@ impl CodeGenerator {
     }
 
     /// Generate function pointer type in LLVM
+    #[inline(never)]
     pub(crate) fn _generate_fn_ptr_type(
         &self,
         params: &[ResolvedType],
@@ -378,6 +381,7 @@ impl CodeGenerator {
 
     /// Generate variadic function call
     /// For vararg calls, extra arguments are passed without type checking
+    #[inline(never)]
     pub(crate) fn _generate_vararg_call(
         &mut self,
         func_name: &str,

@@ -1924,7 +1924,7 @@ F main() -> i64 { count_to(42) }
 #[test]
 fn test_block_scope_drop_ir_correct() {
     // Block-scoped named locals should have drop call in that block's IR,
-    // using a loaded pointer (not the double-pointer directly).
+    // using the single-pointer alloca directly.
     let source = r#"
 S Token { value: i64 }
 W Drop { F drop(&self) -> i64 }
@@ -1953,9 +1953,9 @@ F main() -> i64 { process(true) }
     }.unwrap();
     // IR must contain Token_drop call in the then-block (block-scope drop)
     assert!(ir.contains("Token_drop"), "IR must contain Token_drop call");
-    // The drop call must load the inner %Token* first (correct pointer indirection)
+    // With single-pointer layout, drop is called directly with %var (no load needed)
     assert!(
-        ir.contains("load %Token*, %Token**") || ir.contains("__drop_ptr_"),
-        "Drop must load inner pointer before calling Token_drop"
+        ir.contains("__drop_ret_"),
+        "Drop must call Token_drop with direct pointer"
     );
 }

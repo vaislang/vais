@@ -22,6 +22,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.module.add_function("abort", fn_type, None)
     }
 
+    #[inline(never)]
     pub(crate) fn generate_int_binary(
         &mut self,
         op: BinOp,
@@ -98,6 +99,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
+    #[inline(never)]
     pub(crate) fn generate_float_binary(
         &mut self,
         op: BinOp,
@@ -161,6 +163,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Handle binary operations on string fat pointers { ptr, i64 }.
     /// Supports: Add (concatenation), Eq, Neq (comparison via strcmp).
+    #[inline(never)]
     pub(crate) fn generate_string_binary(
         &mut self,
         op: BinOp,

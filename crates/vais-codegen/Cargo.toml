@@ -19,6 +19,7 @@ rayon = { workspace = true }
 
 # LLVM (optional - requires LLVM 17 installed)
 inkwell = { workspace = true, optional = true }
+stacker = "0.1"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

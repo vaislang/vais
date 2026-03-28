@@ -8,37 +8,48 @@ use vais_ast::{BinOp, Expr, Span, Spanned, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_unit_enum_variant(
         &mut self,
         name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
+        let mut found = None;
         for enum_info in self.types.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
                 if variant.name == name {
-                    let mut ir = String::new();
-                    let enum_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
-                    // Store tag
-                    let tag_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                        tag_ptr,
-                        enum_info.name,
-                        enum_info.name,
-                        enum_ptr
-                    );
-                    write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
-                    return Ok((enum_ptr, ir));
+                    found = Some((enum_info.name.clone(), tag));
+                    break;
                 }
             }
+            if found.is_some() {
+                break;
+            }
+        }
+        if let Some((enum_name, tag)) = found {
+            let mut ir = String::new();
+            let enum_ptr = self.next_temp(counter);
+            self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
+            // Store tag
+            let tag_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                tag_ptr,
+                enum_name,
+                enum_name,
+                enum_ptr
+            );
+            write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
+            return Ok((enum_ptr, ir));
         }
         // Fallback if not found (shouldn't happen)
         Ok((format!("@{}", name), String::new()))
     }
 
     /// Generate binary expression
+    #[inline(never)]
     pub(crate) fn generate_binary_expr(
         &mut self,
         op: &BinOp,
@@ -311,23 +322,30 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                // Use inferred type for integer width instead of hardcoded i64
-                let int_llvm = match &left_type {
-                    ResolvedType::I8 | ResolvedType::U8 => "i8",
-                    ResolvedType::I16 | ResolvedType::U16 => "i16",
-                    ResolvedType::I32 | ResolvedType::U32 => "i32",
-                    ResolvedType::I128 | ResolvedType::U128 => "i128",
-                    ResolvedType::Bool => "i1",
-                    _ => "i64", // i64, u64, and default
+                // Use MAX of both operand widths as the target so that narrower
+                // operands are promoted before the instruction (fixes P3: e.g.,
+                // shl i16 %t20, %t23 where %t20 is actually i8).
+                let left_bits = self.get_integer_bits(&left_type);
+                let right_bits = self.get_integer_bits(&right_type);
+                let target_bits = if left_bits > 0 && right_bits > 0 {
+                    std::cmp::max(left_bits, right_bits)
+                } else if left_bits > 0 {
+                    left_bits
+                } else if right_bits > 0 {
+                    right_bits
+                } else {
+                    64 // default
                 };
-                // Coerce operands to the target width if they differ
-                // (e.g., left is i8 from a function call, but right is i64 literal)
-                let actual_left_ty = self.llvm_type_of(&left_val);
-                let actual_right_ty = self.llvm_type_of(&right_val);
+                let int_llvm_owned = format!("i{}", target_bits);
+                let int_llvm: &str = &int_llvm_owned;
+
+                // Coerce both operands to the target width (using inferred types, not llvm_type_of)
+                let left_ty_str = format!("i{}", if left_bits > 0 { left_bits } else { 64 });
+                let right_ty_str = format!("i{}", if right_bits > 0 { right_bits } else { 64 });
                 let coerced_left =
-                    self.coerce_int_width(&left_val, &actual_left_ty, int_llvm, counter, &mut ir);
+                    self.coerce_int_width(&left_val, &left_ty_str, int_llvm, counter, &mut ir);
                 let coerced_right =
-                    self.coerce_int_width(&right_val, &actual_right_ty, int_llvm, counter, &mut ir);
+                    self.coerce_int_width(&right_val, &right_ty_str, int_llvm, counter, &mut ir);
                 write_ir!(
                     ir,
                     "  {} = {} {} {}, {}{}",
@@ -344,6 +362,7 @@ impl CodeGenerator {
     }
 
     /// Generate unary expression
+    #[inline(never)]
     pub(crate) fn generate_unary_expr(
         &mut self,
         op: &UnaryOp,
@@ -381,6 +400,7 @@ impl CodeGenerator {
     }
 
     /// Generate ternary expression
+    #[inline(never)]
     pub(crate) fn generate_cast_expr(
         &mut self,
         expr: &Spanned<Expr>,
@@ -412,6 +432,7 @@ impl CodeGenerator {
     }
 
     /// Generate assign expression
+    #[inline(never)]
     pub(crate) fn generate_assign_expr(
         &mut self,
         target: &Spanned<Expr>,
@@ -435,7 +456,7 @@ impl CodeGenerator {
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val =
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
-                        write_ir!(ir, "  %{} = alloca {}", alloca_name, llvm_ty);
+                        self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
                         write_ir!(ir, "  store {} {}, {}* %{}", llvm_ty, coerced_val, llvm_ty, alloca_name);
                         // Convert to alloca-based local
                         self.fn_ctx.locals.insert(
@@ -448,17 +469,14 @@ impl CodeGenerator {
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val =
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
-                        // For struct types (Named), the local is a double pointer (%Type**).
-                        // We need to alloca a new struct, store the value, then update the pointer.
+                        // For struct types (Named), the local is a single pointer (%Type*).
+                        // Store the struct value directly into the alloca.
                         if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
-                            let tmp_ptr = self.next_temp(counter);
-                            write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                            write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, coerced_val, llvm_ty, tmp_ptr);
                             write_ir!(
                                 ir,
-                                "  store {}* {}, {}** %{}",
+                                "  store {} {}, {}* %{}",
                                 llvm_ty,
-                                tmp_ptr,
+                                coerced_val,
                                 llvm_ty,
                                 local.llvm_name
                             );
@@ -601,6 +619,7 @@ impl CodeGenerator {
     }
 
     /// Generate identifier expression
+    #[inline(never)]
     pub(crate) fn generate_ident_expr(
         &mut self,
         name: &str,
@@ -614,15 +633,9 @@ impl CodeGenerator {
                 // SSA variables: use the stored value directly, no load needed
                 Ok((local.llvm_name.clone(), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
-                // Struct variables store a pointer to the struct
-                // Load the pointer (the struct address)
-                let tmp = self.next_temp(counter);
-                let llvm_ty = self.type_to_llvm(&local.ty);
-                let ir = format!(
-                    "  {} = load {}*, {}** %{}\n",
-                    tmp, llvm_ty, llvm_ty, local.llvm_name
-                );
-                Ok((tmp, ir))
+                // Single-pointer layout: struct alloca locals are %Type* (%var = alloca %Type).
+                // Return the alloca pointer directly — it IS the struct address.
+                Ok((format!("%{}", local.llvm_name), String::new()))
             } else {
                 // Local variables need to be loaded from alloca
                 let tmp = self.next_temp(counter);
@@ -639,26 +652,35 @@ impl CodeGenerator {
         } else if self.is_unit_enum_variant(name) {
             // Unit enum variant (e.g., None)
             // Create enum value on stack with just the tag
+            // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
+            let mut found = None;
             for enum_info in self.types.enums.values() {
                 for (tag, variant) in enum_info.variants.iter().enumerate() {
                     if variant.name == name {
-                        let mut ir = String::new();
-                        let enum_ptr = self.next_temp(counter);
-                        write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_info.name);
-                        // Store tag
-                        let tag_ptr = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                            tag_ptr,
-                            enum_info.name,
-                            enum_info.name,
-                            enum_ptr
-                        );
-                        write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
-                        return Ok((enum_ptr, ir));
+                        found = Some((enum_info.name.clone(), tag));
+                        break;
                     }
                 }
+                if found.is_some() {
+                    break;
+                }
+            }
+            if let Some((enum_name, tag)) = found {
+                let mut ir = String::new();
+                let enum_ptr = self.next_temp(counter);
+                self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
+                // Store tag
+                let tag_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                    tag_ptr,
+                    enum_name,
+                    enum_name,
+                    enum_ptr
+                );
+                write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
+                return Ok((enum_ptr, ir));
             }
             // Fallback if not found (shouldn't happen)
             Ok((format!("@{}", name), String::new()))
@@ -771,6 +793,7 @@ impl CodeGenerator {
     }
 
     /// Generate compound assignment expression
+    #[inline(never)]
     pub(crate) fn generate_assign_op_expr(
         &mut self,
         op: &BinOp,

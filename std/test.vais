@@ -574,6 +574,14 @@ F assert_eq(actual: i64, expected: i64) -> i64 {
     0
 }
 
+# Assert two strings are equal (uses strcmp instead of pointer comparison)
+F assert_eq_str(actual: str, expected: str) -> i64 {
+    L __str_eq(actual, expected) == 0 {
+        __panic_str_mismatch("Assertion failed: strings not equal", actual, expected)
+    }
+    0
+}
+
 # Assert two values are not equal
 F assert_ne(actual: i64, expected: i64) -> i64 {
     L actual == expected {

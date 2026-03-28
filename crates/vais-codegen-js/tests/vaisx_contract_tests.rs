@@ -191,8 +191,8 @@ fn test_const_declaration() {
 
 #[test]
 fn test_public_const_exports() {
-    let js = parse_and_generate("P C PI: f64 = 3.14");
-    assert!(js.contains("export const PI"), "Public const should export");
+    let js = parse_and_generate("P C pi: f64 = 3.14");
+    assert!(js.contains("export const pi"), "Public const should export");
 }
 
 // ============================================================================

@@ -7,6 +7,7 @@ use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_array_expr(
         &mut self,
         elements: &[Spanned<Expr>],
@@ -58,6 +59,7 @@ impl CodeGenerator {
     }
 
     /// Generate tuple literal expression
+    #[inline(never)]
     pub(crate) fn generate_tuple_expr(
         &mut self,
         elements: &[Spanned<Expr>],
@@ -111,6 +113,7 @@ impl CodeGenerator {
     }
 
     /// Generate struct or union literal expression
+    #[inline(never)]
     pub(crate) fn generate_struct_lit_expr(
         &mut self,
         name: &Spanned<String>,
@@ -295,6 +298,7 @@ impl CodeGenerator {
     }
 
     /// Generate index expression
+    #[inline(never)]
     pub(crate) fn generate_index_expr(
         &mut self,
         array: &Spanned<Expr>,
@@ -426,6 +430,7 @@ impl CodeGenerator {
 
             // Safe path: continue with element access
             write_ir!(ir, "{}:", safe_label);
+            self.fn_ctx.current_block.clone_from(&safe_label);
 
             let data_ptr = self.next_temp(counter);
             write_ir!(
@@ -444,7 +449,41 @@ impl CodeGenerator {
             );
             typed_ptr
         } else {
-            arr_val.clone()
+            // For Vec<T>, arr_val is a pointer to the Vec struct (%Vec*).
+            // Extract the data pointer (field 0) and cast to element type pointer.
+            let is_vec = matches!(&arr_ty,
+                vais_types::ResolvedType::Named { name, .. } if name == "Vec")
+                || matches!(&arr_ty,
+                    vais_types::ResolvedType::Ref(inner) | vais_types::ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), vais_types::ResolvedType::Named { name, .. } if name == "Vec"));
+            if is_vec {
+                // Load data pointer from Vec.data (field 0)
+                let data_field = self.next_temp(counter);
+                write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0", data_field, arr_val);
+                let data_i64 = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+
+                // Use runtime elem_size from Vec.elem_size (field 3) for correct stride.
+                // This handles both specialized push (elem_size=16 for str) and
+                // generic push (elem_size=8 for i64) transparently.
+                let es_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 3", es_ptr, arr_val);
+                let elem_size_val = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", elem_size_val, es_ptr);
+                let data_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_ptr, data_i64);
+                let byte_offset = self.next_temp(counter);
+                write_ir!(ir, "  {} = mul i64 {}, {}", byte_offset, idx_val, elem_size_val);
+                let elem_ptr_i8 = self.next_temp(counter);
+                write_ir!(ir, "  {} = getelementptr i8, i8* {}, i64 {}", elem_ptr_i8, data_ptr, byte_offset);
+                let typed_elem_ptr = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i8* {} to {}*", typed_elem_ptr, elem_ptr_i8, elem_llvm_ty);
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = load {}, {}* {}", result, elem_llvm_ty, elem_llvm_ty, typed_elem_ptr);
+                return Ok((result, ir));
+            } else {
+                arr_val.clone()
+            }
         };
 
         let elem_ptr = self.next_temp(counter);
@@ -468,6 +507,18 @@ impl CodeGenerator {
             elem_ptr
         );
 
+        // Register the element type for downstream codegen (e.g., Option/Result construction).
+        // For Vec<str>, elem_llvm_ty = "{ i8*, i64 }" → ResolvedType::Str
+        if elem_llvm_ty == "{ i8*, i64 }" {
+            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+        } else if elem_llvm_ty.starts_with('%') {
+            // Named struct type
+            let name = elem_llvm_ty.trim_start_matches('%');
+            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Named {
+                name: name.to_string(), generics: vec![],
+            });
+        }
+
         Ok((result, ir))
     }
 
@@ -475,6 +526,7 @@ impl CodeGenerator {
     ///
     /// Supports both simple (`obj.field`) and nested (`obj.a.b.c`) field access
     /// by using `infer_expr_type` to determine the struct type of any sub-expression.
+    #[inline(never)]
     pub(crate) fn generate_field_expr(
         &mut self,
         obj: &Spanned<Expr>,

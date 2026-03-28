@@ -8,6 +8,7 @@ use vais_ast::{Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    #[inline(never)]
     pub(crate) fn generate_ternary_expr(
         &mut self,
         cond: &Spanned<Expr>,
@@ -39,18 +40,23 @@ impl CodeGenerator {
 
         // Then branch
         write_ir!(ir, "{}:", then_label);
+        self.fn_ctx.current_block.clone_from(&then_label);
         let (then_val, then_ir) = self.generate_expr(then, counter)?;
         ir.push_str(&then_ir);
+        let then_actual = self.fn_ctx.current_block.clone();
         write_ir!(ir, "  br label %{}", merge_label);
 
         // Else branch
         write_ir!(ir, "{}:", else_label);
+        self.fn_ctx.current_block.clone_from(&else_label);
         let (else_val, else_ir) = self.generate_expr(else_, counter)?;
         ir.push_str(&else_ir);
+        let else_actual = self.fn_ctx.current_block.clone();
         write_ir!(ir, "  br label %{}", merge_label);
 
-        // Merge with phi — infer actual type from the then-branch
+        // Merge with phi — use actual blocks (may differ if body inserted labels)
         write_ir!(ir, "{}:", merge_label);
+        self.fn_ctx.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
         let phi_type = self.infer_expr_type(then);
         let phi_llvm = self.type_to_llvm(&phi_type);
@@ -60,15 +66,16 @@ impl CodeGenerator {
             result,
             phi_llvm,
             then_val,
-            then_label,
+            then_actual,
             else_val,
-            else_label
+            else_actual
         );
 
         Ok((result, ir))
     }
 
     /// Generate function call expression
+    #[inline(never)]
     pub(crate) fn generate_if_expr(
         &mut self,
         cond: &Spanned<Expr>,
@@ -228,6 +235,7 @@ impl CodeGenerator {
     }
 
     /// Generate loop expression
+    #[inline(never)]
     pub(crate) fn generate_loop_expr(
         &mut self,
         iter: Option<&Spanned<Expr>>,
@@ -288,6 +296,7 @@ impl CodeGenerator {
     }
 
     /// Generate while loop expression
+    #[inline(never)]
     pub(crate) fn generate_while_expr(
         &mut self,
         condition: &Spanned<Expr>,
@@ -336,6 +345,7 @@ impl CodeGenerator {
 
         // Loop end
         write_ir!(ir, "{}:", loop_end);
+        self.fn_ctx.current_block.clone_from(&loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))

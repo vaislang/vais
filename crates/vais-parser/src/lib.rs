@@ -1080,7 +1080,7 @@ impl Parser {
     fn parse_it_block(
         &mut self,
         describe_name: &str,
-        outer_start: usize,
+        _outer_start: usize,
     ) -> ParseResult<(String, Spanned<Item>)> {
         let start = self.current_span().start;
 

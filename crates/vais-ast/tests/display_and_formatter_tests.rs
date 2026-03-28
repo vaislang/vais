@@ -754,8 +754,9 @@ fn test_expr_struct_lit() {
             (sp_str("x"), sp_expr(Expr::Int(1))),
             (sp_str("y"), sp_expr(Expr::Int(2))),
         ],
+        enum_name: None,
     };
-    if let Expr::StructLit { name, fields } = expr {
+    if let Expr::StructLit { name, fields, .. } = expr {
         assert_eq!(name.node, "Point");
         assert_eq!(fields.len(), 2);
     }
@@ -1659,6 +1660,7 @@ fn test_formatter_format_impl() {
                         (sp_str("x"), sp_expr(Expr::Int(0))),
                         (sp_str("y"), sp_expr(Expr::Int(0))),
                     ],
+                    enum_name: None,
                 }))),
                 is_pub: false,
                 is_async: false,

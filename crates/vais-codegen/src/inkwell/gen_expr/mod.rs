@@ -14,7 +14,7 @@ mod var;
 
 // Re-export the main generate_expr implementation
 use inkwell::values::BasicValueEnum;
-use vais_ast::{BinOp, Expr, Spanned};
+use vais_ast::{BinOp, Expr};
 
 use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};

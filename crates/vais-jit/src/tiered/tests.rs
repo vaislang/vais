@@ -1,6 +1,5 @@
 use super::*;
 use std::sync::atomic::Ordering;
-use vais_ast::*;
 use vais_parser::parse;
 
 #[test]

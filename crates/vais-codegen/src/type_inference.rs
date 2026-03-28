@@ -173,7 +173,6 @@ impl CodeGenerator {
 
     #[inline(never)]
     fn infer_expr_type_inner(&self, expr: &Spanned<Expr>) -> ResolvedType {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         match &expr.node {
             Expr::Int(_) => ResolvedType::I64,
             Expr::Float(_) => ResolvedType::F64,
