@@ -257,6 +257,18 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 154: vais-bindgen 안정성 — Regex LazyLock 전환 + unwrap 제거
+
+> **목표**: parser.rs 13개 Regex::new().unwrap()을 LazyLock static으로 전환 (성능+안전성), tokens.last().unwrap() 수정
+> **기대 효과**: 파싱 성능 향상 (Regex 재컴파일 제거), production unwrap 0건
+
+모드: 자동진행
+- [x] 1. parser.rs 14개 Regex→LazyLock 전환 + tokens.last().unwrap()→인덱싱 (impl-sonnet) ✅ 2026-03-28
+  변경: parser.rs — 14개 LazyLock<Regex> static 추가, 인라인 Regex::new() 제거, tokens 안전 인덱싱
+- [x] 2. 검증 + ROADMAP 업데이트 (Opus 직접) ✅ 2026-03-28
+  결과: cargo test -p vais-bindgen 27 passed / 0 failed, cargo check 0 warnings
+진행률: 2/2 (100%) ✅
+
 ### Phase 153: 테스트 건강도 — pre-existing 0건 + 테스트 경고 0건
 
 > **목표**: 유일한 pre-existing 실패 (js_tree_shake_const) 수정 + 테스트 컴파일 경고 전수 제거

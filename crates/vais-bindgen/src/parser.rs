@@ -1,6 +1,74 @@
 use crate::config::BindgenConfig;
 use crate::{BindgenError, Result};
 use regex::Regex;
+use std::sync::LazyLock;
+
+// ── Compiled regex statics (compiled once, reused on every call) ─────────────
+
+static COMMENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/\*.*?\*/").unwrap());
+
+static TYPEDEF_STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"typedef\s+struct\s*\{([^}]*)\}\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
+});
+
+static SIMPLE_TYPEDEF_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;",
+    )
+    .unwrap()
+});
+
+static STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap()
+});
+
+static OPAQUE_STRUCT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap());
+
+static STRUCT_FIELD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
+});
+
+static ENUM_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap()
+});
+
+static ENUM_VARIANT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*(-?\d+))?").unwrap());
+
+static FUNC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;",
+    )
+    .unwrap()
+});
+
+static NAMESPACE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}").unwrap()
+});
+
+static CLASS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?:template\s*<([^>]*)>\s*)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*(?:public|private|protected)\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*\{([^}]*)\}\s*;",
+    )
+    .unwrap()
+});
+
+static TEMPLATE_PARAM_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:typename|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap()
+});
+
+static CLASS_METHOD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?:(static|virtual)\s+)?([a-zA-Z_][a-zA-Z0-9_*]*(?:\s*\*)*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(const)?\s*(=\s*0)?\s*;",
+    )
+    .unwrap()
+});
+
+static CLASS_FIELD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap()
+});
 
 /// Represents a C type
 #[derive(Debug, Clone, PartialEq)]
@@ -225,16 +293,13 @@ impl<'a> Parser<'a> {
         }
 
         // Remove multi-line comments
-        let comment_re = Regex::new(r"/\*.*?\*/").unwrap();
-        comment_re.replace_all(&result, "").to_string()
+        COMMENT_RE.replace_all(&result, "").to_string()
     }
 
     fn parse_typedefs(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let typedef_re =
-            Regex::new(r"typedef\s+struct\s*\{([^}]*)\}\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
-        for cap in typedef_re.captures_iter(content) {
+        for cap in TYPEDEF_STRUCT_RE.captures_iter(content) {
             let name = cap[2].to_string();
             let fields_str = &cap[1];
             let fields = self.parse_struct_fields(fields_str)?;
@@ -247,11 +312,7 @@ impl<'a> Parser<'a> {
         }
 
         // Simple typedefs
-        let simple_typedef_re =
-            Regex::new(r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;")
-                .unwrap();
-
-        for cap in simple_typedef_re.captures_iter(content) {
+        for cap in SIMPLE_TYPEDEF_RE.captures_iter(content) {
             let type_str = cap[1].trim();
             let name = cap[2].to_string();
 
@@ -270,9 +331,8 @@ impl<'a> Parser<'a> {
 
     fn parse_structs(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let struct_re = Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap();
 
-        for cap in struct_re.captures_iter(content) {
+        for cap in STRUCT_RE.captures_iter(content) {
             let name = cap[1].to_string();
             let fields_str = &cap[2];
             let fields = self.parse_struct_fields(fields_str)?;
@@ -285,8 +345,7 @@ impl<'a> Parser<'a> {
         }
 
         // Opaque structs
-        let opaque_re = Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
-        for cap in opaque_re.captures_iter(content) {
+        for cap in OPAQUE_STRUCT_RE.captures_iter(content) {
             let name = cap[1].to_string();
             declarations.push(CDeclaration::Struct(CStruct {
                 name,
@@ -300,10 +359,8 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_fields(&self, fields_str: &str) -> Result<Vec<CField>> {
         let mut fields = Vec::new();
-        let field_re =
-            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
-        for cap in field_re.captures_iter(fields_str) {
+        for cap in STRUCT_FIELD_RE.captures_iter(fields_str) {
             let type_str = cap[1].trim();
             let name = cap[2].to_string();
 
@@ -320,9 +377,8 @@ impl<'a> Parser<'a> {
 
     fn parse_enums(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let enum_re = Regex::new(r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap();
 
-        for cap in enum_re.captures_iter(content) {
+        for cap in ENUM_RE.captures_iter(content) {
             let name = cap[1].to_string();
             let variants_str = &cap[2];
             let variants = self.parse_enum_variants(variants_str)?;
@@ -335,9 +391,8 @@ impl<'a> Parser<'a> {
 
     fn parse_enum_variants(&self, variants_str: &str) -> Result<Vec<(String, Option<i64>)>> {
         let mut variants = Vec::new();
-        let variant_re = Regex::new(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*(-?\d+))?").unwrap();
 
-        for cap in variant_re.captures_iter(variants_str) {
+        for cap in ENUM_VARIANT_RE.captures_iter(variants_str) {
             let name = cap[1].to_string();
             let value = cap.get(2).and_then(|m| m.as_str().parse().ok());
             variants.push((name, value));
@@ -348,11 +403,8 @@ impl<'a> Parser<'a> {
 
     fn parse_functions(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let func_re =
-            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;")
-                .unwrap();
 
-        for cap in func_re.captures_iter(content) {
+        for cap in FUNC_RE.captures_iter(content) {
             let return_type_str = cap[1].trim();
             let name = cap[2].to_string();
             let params_str = cap[3].trim();
@@ -393,7 +445,7 @@ impl<'a> Parser<'a> {
             let name = if tokens.len() == 1 {
                 format!("arg{}", idx)
             } else {
-                tokens.last().unwrap().trim_start_matches('*').to_string()
+                tokens[tokens.len() - 1].trim_start_matches('*').to_string()
             };
 
             let type_str = if tokens.len() == 1 {
@@ -479,10 +531,8 @@ impl<'a> Parser<'a> {
 
     fn parse_namespaces(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let namespace_re =
-            Regex::new(r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}").unwrap();
 
-        for cap in namespace_re.captures_iter(content) {
+        for cap in NAMESPACE_RE.captures_iter(content) {
             let name = cap[1].to_string();
             let namespace_content = &cap[2];
 
@@ -499,11 +549,7 @@ impl<'a> Parser<'a> {
         let mut declarations = Vec::new();
 
         // Parse class declarations with bodies
-        let class_re = Regex::new(
-            r"(?:template\s*<([^>]*)>\s*)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*(?:public|private|protected)\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*\{([^}]*)\}\s*;"
-        ).unwrap();
-
-        for cap in class_re.captures_iter(content) {
+        for cap in CLASS_RE.captures_iter(content) {
             let template_params_str = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let name = cap[2].to_string();
             let base_class = cap.get(3).map(|m| m.as_str().to_string());
@@ -539,9 +585,8 @@ impl<'a> Parser<'a> {
 
     fn parse_template_params(&self, params_str: &str) -> Result<Vec<String>> {
         let mut params = Vec::new();
-        let param_re = Regex::new(r"(?:typename|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
 
-        for cap in param_re.captures_iter(params_str) {
+        for cap in TEMPLATE_PARAM_RE.captures_iter(params_str) {
             params.push(cap[1].to_string());
         }
 
@@ -622,11 +667,7 @@ impl<'a> Parser<'a> {
         // Parse methods with a more flexible regex
         // Matches: [static|virtual] type name(params)[const][= 0];
         // Use word boundaries and be careful with greedy matching
-        let method_re = Regex::new(
-            r"(?:(static|virtual)\s+)?([a-zA-Z_][a-zA-Z0-9_*]*(?:\s*\*)*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(const)?\s*(=\s*0)?\s*;"
-        ).unwrap();
-
-        for cap in method_re.captures_iter(&cleaned) {
+        for cap in CLASS_METHOD_RE.captures_iter(&cleaned) {
             let modifier = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let return_type_str = cap[2].trim();
             let name = cap[3].to_string();
@@ -654,10 +695,7 @@ impl<'a> Parser<'a> {
         }
 
         // Parse fields - simpler pattern
-        let field_re =
-            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
-
-        for cap in field_re.captures_iter(&cleaned) {
+        for cap in CLASS_FIELD_RE.captures_iter(&cleaned) {
             let type_str = cap[1].trim();
             let name = cap[2].to_string();
 
