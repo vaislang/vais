@@ -574,15 +574,42 @@ impl CodeGenerator {
         field: &Spanned<String>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Handle EnumType.Variant pattern: Ident("EnumName").field("VariantName")
+        // The parser creates Field { expr: Ident(enum_name), field: variant_name }
+        // for unit enum variant access like `DistanceMetric.Cosine`
+        if let Expr::Ident(name) = &obj.node {
+            if let Some(enum_info) = self.types.enums.get(name).cloned() {
+                // Object is an enum type name — look up variant tag
+                for (tag, variant) in enum_info.variants.iter().enumerate() {
+                    if variant.name == field.node {
+                        // Unit enum variant — return tag value
+                        let mut ir = String::new();
+                        let enum_ptr = self.next_temp(counter);
+                        self.emit_entry_alloca(&enum_ptr, &format!("%{}", name));
+                        let tag_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                            tag_ptr, name, name, enum_ptr
+                        );
+                        write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
+                        return Ok((enum_ptr, ir));
+                    }
+                }
+                // Variant not found — check constants that start with enum name
+                // e.g., PAGE_SIZE_DEFAULT might be a constant
+            }
+        }
+
         let (obj_val, obj_ir) = self.generate_expr(obj, counter)?;
         let mut ir = obj_ir;
 
         // Infer the type of the object expression (works for both Ident and nested Field)
         let obj_type = self.infer_expr_type(obj);
 
-        // Unwrap Ref/RefMut to get the inner Named type (for &self patterns)
+        // Unwrap Ref/RefMut/Pointer to get the inner Named type (for &self and *T patterns)
         let resolved_type = match &obj_type {
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => inner.as_ref(),
             other => other,
         };
 
@@ -609,8 +636,15 @@ impl CodeGenerator {
                         ))
                     })?;
 
-                let field_ty = &struct_info.fields[field_idx].1;
-                let llvm_ty = self.type_to_llvm(field_ty);
+                let field_ty_raw = &struct_info.fields[field_idx].1;
+                // Apply generic substitutions if inside a specialized function body
+                // (e.g., Cell<T>.value: T → bool when T=bool)
+                let field_ty = if !self.generics.substitutions.is_empty() {
+                    vais_types::substitute_type(field_ty_raw, &self.generics.substitutions)
+                } else {
+                    field_ty_raw.clone()
+                };
+                let llvm_ty = self.type_to_llvm(&field_ty);
 
                 let field_ptr = self.next_temp(counter);
                 write_ir!(

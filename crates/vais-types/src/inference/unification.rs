@@ -192,8 +192,22 @@ impl TypeChecker {
                 Ok(())
             }
             // Allow implicit integer type conversions (widening and narrowing)
-            // Bool is excluded: bool is not an integer type in Vais's type system.
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Allow bool ↔ integer coercion (bool is 0/1 in Vais's runtime representation)
+            (ResolvedType::Bool, b) if Self::is_integer_type(b) => Ok(()),
+            (a, ResolvedType::Bool) if Self::is_integer_type(a) => Ok(()),
+            // Allow int ↔ float coercion (implicit numeric conversion)
+            (a, b)
+                if (Self::is_integer_type(a) && Self::is_float_type(b))
+                    || (Self::is_float_type(a) && Self::is_integer_type(b)) =>
+            {
+                Ok(())
+            }
+            // Allow f32 ↔ f64 coercion
+            (ResolvedType::F32, ResolvedType::F64)
+            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
+            // NOTE: str ↔ i64 coercion removed — it causes incorrect type inference
+            // (e.g., Vec_push$u32 instead of Vec_push$u16 for EdgeTypeTable operations)
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
                 Ok(())

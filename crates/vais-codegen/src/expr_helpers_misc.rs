@@ -274,6 +274,7 @@ impl CodeGenerator {
         // so empty self.fn_ctx.locals after take is acceptable (never accessed post-error).
         let saved_function = self.fn_ctx.current_function.take();
         let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
+        let saved_entry_allocas = std::mem::take(&mut self.fn_ctx.entry_allocas);
 
         self.fn_ctx.current_function = Some(lambda_name.clone());
 
@@ -308,6 +309,8 @@ impl CodeGenerator {
             lambda_name,
             param_strs.join(", ")
         );
+        // Splice entry allocas (for local variables in the lambda body) right after "entry:"
+        self.splice_entry_allocas(&mut lambda_ir);
         lambda_ir.push_str(&body_ir);
         write_ir!(lambda_ir, "  ret i64 {}\n}}", body_val);
 
@@ -315,6 +318,7 @@ impl CodeGenerator {
 
         self.fn_ctx.current_function = saved_function;
         self.fn_ctx.locals = saved_locals;
+        self.fn_ctx.entry_allocas = saved_entry_allocas;
 
         // Emit ptrtoint as a proper instruction (not a constant expression)
         // so the result is a clean SSA temp that can be used anywhere

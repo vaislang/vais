@@ -290,6 +290,8 @@ impl CodeGenerator {
             .iter()
             .map(|(name, concrete_ty)| {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
+                // void is invalid as a parameter type — use i8 for Unit parameters
+                let llvm_ty = if llvm_ty == "void" { "i8".to_string() } else { llvm_ty };
                 let llvm_name = crate::helpers::sanitize_param_name(name);
                 // For struct-type self parameter, pass as pointer (matches unspecialized convention)
                 let (actual_ty, actual_resolved) = if name == "self" && matches!(concrete_ty, ResolvedType::Named { .. }) {

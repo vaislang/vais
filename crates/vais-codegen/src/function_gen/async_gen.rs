@@ -125,6 +125,7 @@ impl CodeGenerator {
         self.fn_ctx.locals.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
+        self.fn_ctx.entry_allocas.clear();
 
         write_ir!(ir, "; Poll function for async {}", func_name);
         write_ir!(
@@ -194,6 +195,15 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => self.generate_expr(expr, &mut counter)?,
             FunctionBody::Block(stmts) => self.generate_block(stmts, &mut counter)?,
         };
+
+        // Insert entry allocas (for local variables in the async body) directly
+        // into the IR. We can't use splice_entry_allocas here because the IR
+        // contains multiple "entry:" blocks (wrapper + poll).
+        for alloca_line in &self.fn_ctx.entry_allocas {
+            ir.push_str(alloca_line);
+            ir.push('\n');
+        }
+        self.fn_ctx.entry_allocas.clear();
 
         ir.push_str(&body_result.1);
 
