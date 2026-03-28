@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1773981790357,
+  "lastUpdate": 1774706193492,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32567,6 +32567,102 @@ window.BENCHMARK_DATA = {
             "name": "largescale_incremental/second_compile_10k",
             "value": 156032466,
             "range": "± 920395",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "3c5a99ea31da84078cffd448ec909f1aaf3d5f47",
+          "message": "refactor(codegen): Phase 155 — module split R15: auto_vectorize + conversion\n\nSplit auto_vectorize.rs (1,152→590+280 lines): extract 11 free utility\nfunctions into vectorize_utils.rs submodule (#[path] attribute pattern).\n\nSplit conversion.rs (1,103→634+74+293+120 lines): extract struct/enum/union\ngeneration (type_gen.rs), sizeof/alignof (sizeof.rs), and coercion utilities\n(coercion.rs) into types/ submodules.\n\nResult: cargo check 0 warnings, all unit tests pass. generate_expr_call.rs\n(1,211 lines, 3 functions) excluded — splitting would create artificial\nboundaries.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-28T22:36:23+09:00",
+          "tree_id": "0d4ee42ad8f2849c5fa6eec9a8bcb122c2d43125",
+          "url": "https://github.com/vaislang/vais/commit/3c5a99ea31da84078cffd448ec909f1aaf3d5f47"
+        },
+        "date": 1774706193125,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3602,
+            "range": "± 113",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7169,
+            "range": "± 85",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8001,
+            "range": "± 71",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14528,
+            "range": "± 285",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18736,
+            "range": "± 76",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36279,
+            "range": "± 199",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32612,
+            "range": "± 163",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70863,
+            "range": "± 341",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 307026,
+            "range": "± 7305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 468970,
+            "range": "± 3912",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117200,
+            "range": "± 7879",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 798958,
+            "range": "± 4523",
             "unit": "ns/iter"
           }
         ]
