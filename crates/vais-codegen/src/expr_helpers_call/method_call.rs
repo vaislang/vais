@@ -198,7 +198,66 @@ impl CodeGenerator {
             }
         } else {
             let (recv_val, recv_ir) = self.generate_expr(receiver, counter)?;
-            let recv_type = self.infer_expr_type(receiver);
+            let mut recv_type = self.infer_expr_type(receiver);
+
+            // If receiver type has unresolved or missing generics (e.g., Vec<T> or Vec),
+            // try to recover concrete generics from the receiver expression context.
+            if let ResolvedType::Named { name, generics } = &recv_type {
+                let has_concrete_generics = !generics.is_empty()
+                    && generics.iter().all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                if !has_concrete_generics
+                    && (name == "Vec" || name == "HashMap" || name == "Option")
+                {
+                    // Strategy A: Field access — look up struct field type definition
+                    if let Expr::Field {
+                        expr: obj_expr,
+                        field,
+                    } = &receiver.node
+                    {
+                        let obj_type = self.infer_expr_type(obj_expr);
+                        let inner = match &obj_type {
+                            ResolvedType::Ref(i) | ResolvedType::RefMut(i) => i.as_ref(),
+                            ResolvedType::Pointer(i) => i.as_ref(),
+                            other => other,
+                        };
+                        if let ResolvedType::Named {
+                            name: sname,
+                            ..
+                        } = inner
+                        {
+                            let resolved = self.resolve_struct_name(sname);
+                            for candidate in &[sname.as_str(), resolved.as_str()] {
+                                if let Some(si) = self.types.structs.get(*candidate) {
+                                    for (fname, ftype) in &si.fields {
+                                        if fname == &field.node {
+                                            if let ResolvedType::Named { generics: fg, .. } = ftype {
+                                                if !fg.is_empty() {
+                                                    recv_type = ftype.clone();
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty()) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // Strategy B: TC expr_types — try TC-resolved type
+                    if matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty()) {
+                        if let Some(tc_ty) = self.tc_expr_type(receiver) {
+                            if let ResolvedType::Named { generics: tg, .. } = tc_ty {
+                                if !tg.is_empty() {
+                                    recv_type = tc_ty.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             (recv_val, recv_ir, recv_type)
         };
         let mut ir = recv_ir;
@@ -249,24 +308,85 @@ impl CodeGenerator {
             let base = format!("{}_{}", resolved, method_name);
 
             if !generics.is_empty() {
-                // Set generic substitutions so that compute_sizeof/type_size resolve T correctly
-                // when processing method arguments for generic containers like Vec<T>
-                if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
-                    for (param, concrete) in struct_def.generics.iter().zip(generics.iter()) {
-                        if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
-                            self.generics
-                                .substitutions
-                                .entry(param.name.node.clone())
-                                .or_insert_with(|| concrete.clone());
+                // Check if generics are all concrete (not Generic("T") or Var)
+                let all_concrete = generics.iter().all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+
+                if all_concrete {
+                    // Concrete generics: set substitutions and try mangled name
+                    if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
+                        for (param, concrete) in struct_def.generics.iter().zip(generics.iter()) {
+                            if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                                self.generics
+                                    .substitutions
+                                    .entry(param.name.node.clone())
+                                    .or_insert_with(|| concrete.clone());
+                            }
                         }
                     }
-                }
-                // Try mangled specialized name (Vec_push$GraphNode format)
-                let mangled = vais_types::mangle_name(&base, generics);
-                if self.types.functions.contains_key(&mangled) {
-                    mangled
+                    let mangled = vais_types::mangle_name(&base, generics);
+                    if self.types.functions.contains_key(&mangled) {
+                        mangled
+                    } else {
+                        base
+                    }
                 } else {
-                    base
+                    // Unresolved generics (e.g., Generic("T")): use fn_instantiations
+                    // to find the correct specialization based on argument types
+                    if let Some(inst_list) = self.generics.fn_instantiations.get(&base).cloned() {
+                        let arg_types: Vec<ResolvedType> =
+                            args.iter().map(|a| self.infer_expr_type(a)).collect();
+                        let resolved = self.resolve_generic_call(&base, &arg_types, &inst_list);
+                        if self.types.functions.contains_key(&resolved) {
+                            // Set substitutions for the resolved type
+                            if let Some(dollar_pos) = resolved.find('$') {
+                                let type_suffix = &resolved[dollar_pos + 1..];
+                                let resolved_type = self.resolve_type_suffix_to_resolved(type_suffix);
+                                if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
+                                    for param in struct_def.generics.iter() {
+                                        if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                                            self.generics
+                                                .substitutions
+                                                .insert(param.name.node.clone(), resolved_type.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            resolved
+                        } else {
+                            base
+                        }
+                    } else {
+                        // No instantiations registered — fall back to argument inference
+                        // (same as Strategy 2 in the empty generics path)
+                        let arg_types: Vec<ResolvedType> =
+                            args.iter().map(|a| self.infer_expr_type(a)).collect();
+                        let informative_args: Vec<&ResolvedType> = arg_types
+                            .iter()
+                            .filter(|t| !matches!(t, ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                            .collect();
+                        if !informative_args.is_empty() {
+                            let struct_def = self.generics.struct_defs.get(name).cloned();
+                            let n_generic_params = struct_def.as_ref().map(|s| {
+                                s.generics.iter().filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })).count()
+                            }).unwrap_or(1);
+                            let inferred_type_args: Vec<ResolvedType> = informative_args.iter().take(n_generic_params).map(|t| (*t).clone()).collect();
+                            if let Some(ref sd) = struct_def {
+                                for (param, concrete) in sd.generics.iter().zip(inferred_type_args.iter()) {
+                                    if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                                        self.generics.substitutions.entry(param.name.node.clone()).or_insert_with(|| concrete.clone());
+                                    }
+                                }
+                            }
+                            let mangled = vais_types::mangle_name(&base, &inferred_type_args);
+                            if self.types.functions.contains_key(&mangled) {
+                                mangled
+                            } else {
+                                base
+                            }
+                        } else {
+                            base
+                        }
+                    }
                 }
             } else {
                 // Generics are empty — this happens in SINGLE_MODULE mode where
@@ -408,14 +528,31 @@ impl CodeGenerator {
             }
         };
 
-        let recv_llvm_ty = if matches!(&recv_type, ResolvedType::Named { .. }) {
+        // Look up function info for parameter types
+        let fn_info = self.types.functions.get(&full_method_name).cloned();
+
+        // Determine receiver LLVM type.
+        // For specialized methods, use the function's actual self parameter type
+        // to match the calling convention (e.g., %Vec$u8* instead of %Vec*).
+        let recv_llvm_ty = if let Some(ref fi) = fn_info {
+            if let Some((_, self_ty, _)) = fi.signature.params.first() {
+                let self_llvm = self.type_to_llvm(self_ty);
+                // If the function expects by-pointer (e.g., %Vec$u8*), use that
+                if self_llvm.ends_with('*') {
+                    self_llvm
+                } else {
+                    format!("{}*", self_llvm)
+                }
+            } else if matches!(&recv_type, ResolvedType::Named { .. }) {
+                format!("{}*", self.type_to_llvm(&recv_type))
+            } else {
+                self.type_to_llvm(&recv_type)
+            }
+        } else if matches!(&recv_type, ResolvedType::Named { .. }) {
             format!("{}*", self.type_to_llvm(&recv_type))
         } else {
             self.type_to_llvm(&recv_type)
         };
-
-        // Look up function info for parameter types
-        let fn_info = self.types.functions.get(&full_method_name).cloned();
 
         let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
 
@@ -647,9 +784,8 @@ impl CodeGenerator {
 
         // Vec elem_size patch: before calling a specialized Vec method,
         // set self.elem_size to sizeof(T) and adjust capacity.
-        if (full_method_name.starts_with("Vec_push")
-            || full_method_name.starts_with("Vec_insert")
-            || full_method_name.starts_with("Vec_set"))
+        // Applied to ALL Vec methods that access elements (push/insert/set/get/pop/grow/etc.)
+        if full_method_name.starts_with("Vec_")
             && full_method_name.contains('$')
             && !arg_vals.is_empty()
         {
@@ -682,8 +818,29 @@ impl CodeGenerator {
                             es_ptr,
                             self_ptr
                         );
+                        // Read old elem_size; only adjust capacity if still default (8)
+                        let old_es = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, i64* {}", old_es, es_ptr);
                         write_ir!(ir, "  store i64 {}, i64* {}", elem_size, es_ptr);
-                        // Adjust capacity to match new elem_size
+                        let needs_adjust = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = icmp eq i64 {}, 8",
+                            needs_adjust,
+                            old_es
+                        );
+                        let lbl_adjust = format!("vec_es_adjust.{}", counter);
+                        let lbl_done = format!("vec_es_done.{}", counter);
+                        *counter += 1;
+                        write_ir!(
+                            ir,
+                            "  br i1 {}, label %{}, label %{}",
+                            needs_adjust,
+                            lbl_adjust,
+                            lbl_done
+                        );
+                        write_ir!(ir, "{}:", lbl_adjust);
+                        // Adjust capacity: old was in 8-byte slots, convert to elem_size slots
                         let cap_ptr = self.next_temp(counter);
                         write_ir!(
                             ir,
@@ -698,6 +855,8 @@ impl CodeGenerator {
                         let new_cap = self.next_temp(counter);
                         write_ir!(ir, "  {} = sdiv i64 {}, {}", new_cap, bytes, elem_size);
                         write_ir!(ir, "  store i64 {}, i64* {}", new_cap, cap_ptr);
+                        write_ir!(ir, "  br label %{}", lbl_done);
+                        write_ir!(ir, "{}:", lbl_done);
                     }
                 }
             }
@@ -1043,6 +1202,28 @@ impl CodeGenerator {
             }
         } else {
             None
+        }
+    }
+
+    /// Resolve a type suffix (from mangled name like "u8", "str", "GraphNode") to ResolvedType
+    fn resolve_type_suffix_to_resolved(&self, suffix: &str) -> ResolvedType {
+        match suffix {
+            "u8" => ResolvedType::U8,
+            "i8" => ResolvedType::I8,
+            "u16" => ResolvedType::U16,
+            "i16" => ResolvedType::I16,
+            "u32" => ResolvedType::U32,
+            "i32" => ResolvedType::I32,
+            "f32" => ResolvedType::F32,
+            "u64" => ResolvedType::U64,
+            "i64" => ResolvedType::I64,
+            "f64" => ResolvedType::F64,
+            "str" => ResolvedType::Str,
+            "bool" => ResolvedType::Bool,
+            other => ResolvedType::Named {
+                name: other.to_string(),
+                generics: vec![],
+            },
         }
     }
 }

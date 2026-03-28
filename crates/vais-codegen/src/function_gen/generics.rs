@@ -291,12 +291,18 @@ impl CodeGenerator {
             .map(|(name, concrete_ty)| {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
                 let llvm_name = crate::helpers::sanitize_param_name(name);
+                // For struct-type self parameter, pass as pointer (matches unspecialized convention)
+                let (actual_ty, actual_resolved) = if name == "self" && matches!(concrete_ty, ResolvedType::Named { .. }) {
+                    (format!("{}*", llvm_ty), ResolvedType::Ref(Box::new(concrete_ty.clone())))
+                } else {
+                    (llvm_ty, concrete_ty.clone())
+                };
                 // Register parameter as local initially (may be updated below for struct params)
                 self.fn_ctx.locals.insert(
                     name.to_string(),
-                    LocalVar::param(concrete_ty.clone(), llvm_name.to_string()),
+                    LocalVar::param(actual_resolved, llvm_name.to_string()),
                 );
-                format!("{} %{}", llvm_ty, llvm_name)
+                format!("{} %{}", actual_ty, llvm_name)
             })
             .collect();
 
