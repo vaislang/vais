@@ -340,27 +340,38 @@ impl CodeGenerator {
         ir.push_str("entry:\n");
         self.fn_ctx.current_block = "entry".to_string();
 
-        // For struct-by-value parameters, alloca+store so field access (GEP) works correctly.
-        // Without this, the param is an SSA struct value and GEP requires a pointer.
+        // For struct parameters, ensure field access (GEP) works correctly.
+        // - `self` passed as pointer: use the pointer directly (no copy needed)
+        // - other struct params passed by value: alloca+store so GEP works
         for (name, concrete_ty) in &param_infos {
             if matches!(concrete_ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
                 let src_llvm_name = crate::helpers::sanitize_param_name(name);
-                let param_ptr = format!("__{}_ptr", name);
-                write_ir!(ir, "  %{} = alloca {}", param_ptr, llvm_ty);
-                write_ir!(
-                    ir,
-                    "  store {} %{}, {}* %{}",
-                    llvm_ty,
-                    src_llvm_name,
-                    llvm_ty,
-                    param_ptr
-                );
-                // Update locals to use the alloca pointer as an SSA value so field access works
-                self.fn_ctx.locals.insert(
-                    name.to_string(),
-                    LocalVar::ssa(concrete_ty.clone(), format!("%{}", param_ptr)),
-                );
+
+                if name == "self" {
+                    // self is already a pointer (%Vec* %self) — use directly
+                    // This ensures mutations (self.len += 1) affect the original struct
+                    self.fn_ctx.locals.insert(
+                        name.to_string(),
+                        LocalVar::ssa(concrete_ty.clone(), format!("%{}", src_llvm_name)),
+                    );
+                } else {
+                    let param_ptr = format!("__{}_ptr", name);
+                    write_ir!(ir, "  %{} = alloca {}", param_ptr, llvm_ty);
+                    write_ir!(
+                        ir,
+                        "  store {} %{}, {}* %{}",
+                        llvm_ty,
+                        src_llvm_name,
+                        llvm_ty,
+                        param_ptr
+                    );
+                    // Update locals to use the alloca pointer as an SSA value so field access works
+                    self.fn_ctx.locals.insert(
+                        name.to_string(),
+                        LocalVar::ssa(concrete_ty.clone(), format!("%{}", param_ptr)),
+                    );
+                }
             }
         }
 
