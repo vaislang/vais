@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774706292659,
+  "lastUpdate": 1774706653394,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32759,6 +32759,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 745698,
             "range": "± 2114",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "39c0007185f956f1b34157d6722fa72dd721f1a2",
+          "message": "docs(roadmap): Phase 156-157 — Codecov 68%→85% coverage plan\n\nPhase 156: Unit tests for 7 lowest-coverage crates (codegen 34%,\ntypes, macro 17%, gpu, hotreload 18%, dynload 22%, gc 31%).\n4 parallel batches targeting +11,500 covered lines → 80%+.\n\nPhase 157: Include E2E tests in llvm-cov CI job for biggest\ncoverage jump, plus registry-server and profiler test boosts → 85%.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-28T22:59:12+09:00",
+          "tree_id": "2a7f8453189e4cbb6a898bc21aa312ff9f0357e3",
+          "url": "https://github.com/vaislang/vais/commit/39c0007185f956f1b34157d6722fa72dd721f1a2"
+        },
+        "date": 1774706652606,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3606,
+            "range": "± 198",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6858,
+            "range": "± 438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8221,
+            "range": "± 389",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 15054,
+            "range": "± 433",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19000,
+            "range": "± 76",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35714,
+            "range": "± 288",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32958,
+            "range": "± 396",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 71045,
+            "range": "± 294",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303919,
+            "range": "± 1519",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 463207,
+            "range": "± 1931",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117660,
+            "range": "± 1160",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 798972,
+            "range": "± 8813",
             "unit": "ns/iter"
           }
         ]
