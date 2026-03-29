@@ -193,20 +193,8 @@ impl TypeChecker {
             }
             // Allow implicit integer type unification (widening within same signedness family).
             // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
+            // bool↔integer, int↔float coercion is FORBIDDEN (Phase 158).
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
-            // Allow bool ↔ integer unification.
-            // bool is 0/1 in Vais runtime. Enables `I flag { ... }` and `count += is_active()`.
-            (ResolvedType::Bool, b) if Self::is_integer_type(b) => Ok(()),
-            (a, ResolvedType::Bool) if Self::is_integer_type(a) => Ok(()),
-            // Allow int ↔ float unification (numeric promotion).
-            // Integer literals like `0` should adapt to f32/f64 context.
-            // Enables `x: f32 = 0` and `distance := 0.0 + count`.
-            (a, b)
-                if (Self::is_integer_type(a) && Self::is_float_type(b))
-                    || (Self::is_float_type(a) && Self::is_integer_type(b)) =>
-            {
-                Ok(())
-            }
             // Allow f32 ↔ f64 unification (float literal inference).
             (ResolvedType::F32, ResolvedType::F64)
             | (ResolvedType::F64, ResolvedType::F32) => Ok(()),

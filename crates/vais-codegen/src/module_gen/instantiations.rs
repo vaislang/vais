@@ -159,7 +159,7 @@ impl CodeGenerator {
         // Only process concrete instantiations (all type args are resolved, non-generic).
         // Non-concrete instantiations (e.g., make_container$T from inside a generic function body)
         // are skipped — they would produce unresolved generic IR like `@identity$T`.
-        for (_inst_idx, inst) in instantiations.iter().enumerate() {
+        for inst in instantiations.iter() {
             if let vais_types::InstantiationKind::Function = inst.kind {
                 // Skip instantiations with non-concrete type args
                 if inst

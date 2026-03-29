@@ -10,7 +10,7 @@ impl CodeGenerator {
     #[allow(dead_code)]
     pub(crate) fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
         use std::cell::Cell;
-        thread_local! { static DEPTH: Cell<usize> = Cell::new(0); }
+        thread_local! { static DEPTH: Cell<usize> = const { Cell::new(0) }; }
         DEPTH.with(|d| {
             let current = d.get();
             if current > 10 {
@@ -92,7 +92,6 @@ impl CodeGenerator {
                 };
                 // For "self" parameters, if type resolved to I64 but we're inside a method,
                 // use the struct type from the function name (e.g., TestSuiteResult_add → &TestSuiteResult)
-                if p.name.node == "self" || p.name.node == "mut self" {}
                 if (p.name.node == "self" || p.name.node == "mut self") && ty == ResolvedType::I64 {
                     // Extract struct name from function name (StructName_method)
                     if let Some(underscore_pos) = f.name.node.rfind('_') {

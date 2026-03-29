@@ -115,7 +115,7 @@ impl CodeGenerator {
                 pattern,
                 iter,
                 body,
-            } => self.generate_loop_with_pattern(pattern.as_ref(), iter.as_ref(), body, counter),
+            } => self.generate_loop_with_pattern(pattern.as_ref(), iter.as_deref(), body, counter),
 
             // While loop expression
             Expr::While { condition, body } => {

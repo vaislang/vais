@@ -8,6 +8,37 @@ use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned};
 
 impl CodeGenerator {
+    /// Resolve an argument value to an i8* pointer for builtins (free, memcpy, strlen, puts_ptr).
+    /// Handles three cases:
+    /// 1. `{ i8*, i64 }` fat pointer → extractvalue field 0
+    /// 2. `i8*` raw pointer → use directly
+    /// 3. `i64` integer → inttoptr to i8*
+    pub(crate) fn resolve_arg_to_i8_ptr(
+        &self,
+        arg_full: &str,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        if arg_full.starts_with("{ i8*, i64 }") {
+            let val = arg_full
+                .strip_prefix("{ i8*, i64 } ")
+                .unwrap_or_else(|| arg_full.split_whitespace().last().unwrap_or("undef"));
+            let ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
+            ptr
+        } else if arg_full.starts_with("i8*") {
+            arg_full
+                .strip_prefix("i8* ")
+                .unwrap_or_else(|| arg_full.split_whitespace().last().unwrap_or("null"))
+                .to_string()
+        } else {
+            let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
+            let ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, arg_val);
+            ptr
+        }
+    }
+
     /// Extract the i8* pointer from a string fat pointer { i8*, i64 }
     #[inline(never)]
     pub(crate) fn extract_str_ptr(

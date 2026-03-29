@@ -20,7 +20,7 @@ impl CodeGenerator {
                     // check if there's a Let in this block that defines it —
                     // this handles vec![] macro blocks where the var isn't in locals yet
                     if let Expr::Ident(var_name) = &expr.node {
-                        let in_locals = self.fn_ctx.locals.get(var_name).is_some();
+                        let in_locals = self.fn_ctx.locals.contains_key(var_name.as_str());
                         if !in_locals || matches!(ty, ResolvedType::I64) {
                             // Search block for a Let defining this variable
                             for stmt in stmts.iter().rev().skip(1) {
@@ -57,7 +57,7 @@ impl CodeGenerator {
                     // For Ident expressions referencing block-local Let bindings,
                     // the variable will be stored as struct (Named type) → not a value
                     if let Expr::Ident(var_name) = &expr.node {
-                        if self.fn_ctx.locals.get(var_name).is_none() {
+                        if !self.fn_ctx.locals.contains_key(var_name.as_str()) {
                             // Search block for a Let defining this variable
                             for stmt in stmts.iter().rev().skip(1) {
                                 if let Stmt::Let { name, value, .. } = &stmt.node {
@@ -230,7 +230,7 @@ impl CodeGenerator {
                         name: name.clone(),
                         generics: vec![],
                     }
-                } else if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
                     // PascalCase identifier not found in locals — likely a cross-module
                     // struct/enum type name. Return Named type so downstream field access
                     // and method call resolution can work.

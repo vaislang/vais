@@ -321,9 +321,7 @@ impl TypeChecker {
         for (struct_name, struct_def) in &self.structs {
             for (method_name, method_sig) in &struct_def.methods {
                 let mangled = format!("{}_{}", struct_name, method_name);
-                if !result.contains_key(&mangled) {
-                    result.insert(mangled, method_sig.clone());
-                }
+                result.entry(mangled).or_insert_with(|| method_sig.clone());
             }
         }
         result

@@ -17,7 +17,7 @@ impl CodeGenerator {
     pub(crate) fn generate_loop_with_pattern(
         &mut self,
         pattern: Option<&Spanned<Pattern>>,
-        iter: Option<&Box<Spanned<Expr>>>,
+        iter: Option<&Spanned<Expr>>,
         body: &[Spanned<Stmt>],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {

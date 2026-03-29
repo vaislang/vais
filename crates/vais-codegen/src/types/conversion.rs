@@ -444,6 +444,7 @@ impl CodeGenerator {
     }
 
     /// Try to determine bit width from a value (heuristic based on SSA variable naming)
+    #[allow(dead_code)]
     pub(crate) fn get_integer_bits_from_val(&self, val: &str) -> u32 {
         // If it's a temp variable, we assume i64 (default Vais integer)
         // If it's a literal number, we assume i64

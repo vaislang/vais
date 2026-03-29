@@ -32,28 +32,32 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 // ==================== A. Forbidden Coercions (must error) ====================
 
-/// Phase 160: bool→i64 implicit coercion is allowed (bool is 0/1 in runtime).
+/// Phase 158 rule: bool→i64 implicit coercion is forbidden.
 #[test]
 fn e2e_phase158_strict_bool_to_i64_return() {
-    assert_compiles(r#"F main() -> i64 = true"#);
+    // `true` cannot be used where i64 is expected without explicit `as`
+    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
 }
 
-/// Phase 160: i64→bool implicit coercion is allowed.
+/// Phase 158 rule: i64→bool implicit coercion is forbidden.
 #[test]
 fn e2e_phase158_strict_i64_to_bool_return() {
-    assert_compiles(r#"F main() -> bool = 42"#);
+    // An integer literal cannot be returned as bool
+    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
 }
 
-/// Phase 160: int→float implicit coercion is allowed (numeric promotion).
+/// Phase 158 rule: int↔float implicit coercion is forbidden (i64→f64).
 #[test]
 fn e2e_phase158_strict_int_to_f64_return() {
-    assert_compiles(r#"F main() -> f64 = 42"#);
+    // An integer literal cannot be implicitly widened to f64
+    assert_error_contains(r#"F main() -> f64 = 42"#, "mismatch");
 }
 
-/// Phase 160: float→int implicit coercion is allowed (numeric promotion).
+/// Phase 158 rule: int↔float implicit coercion is forbidden (f64→i64).
 #[test]
 fn e2e_phase158_strict_f64_to_i64_return() {
-    assert_compiles(r#"F main() -> i64 = 3.14"#);
+    // A float literal cannot be implicitly truncated to i64
+    assert_error_contains(r#"F main() -> i64 = 3.14"#, "mismatch");
 }
 
 /// Float literal inference: f32 ↔ f64 unification is now allowed.
@@ -87,14 +91,14 @@ fn e2e_phase158_strict_str_to_i64_return() {
     assert_error_contains(r#"F main() -> i64 = "hello""#, "mismatch");
 }
 
-/// Bool cannot participate in arithmetic — `+` requires numeric, not bool.
-/// Use `x as i64 + 1` for explicit conversion.
+/// Phase 158 rule: bool cannot participate in arithmetic operations with integers.
 #[test]
 fn e2e_phase158_strict_bool_in_arithmetic() {
+    // `true + 1` is forbidden — bool cannot be added to an integer
     let source = r#"
 F main() -> i64 { x := true; x + 1 }
 "#;
-    assert_error_contains(source, "numeric");
+    assert_error_contains(source, "mismatch");
 }
 
 // ==================== B. Permitted Conversions (must succeed) ====================

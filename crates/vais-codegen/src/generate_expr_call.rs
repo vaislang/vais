@@ -710,25 +710,7 @@ impl CodeGenerator {
         } else if fn_name == "free" {
             // Special handling for free: handle str fat pointer, i8*, or i64
             let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-            let ptr_tmp = if arg_full.starts_with("{ i8*, i64 }") {
-                let val = arg_full
-                    .strip_prefix("{ i8*, i64 } ")
-                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-                ptr
-            } else if arg_full.starts_with("i8*") {
-                arg_full
-                    .split_whitespace()
-                    .last()
-                    .unwrap_or("null")
-                    .to_string()
-            } else {
-                let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, arg_val);
-                ptr
-            };
+            let ptr_tmp = self.resolve_arg_to_i8_ptr(arg_full, counter, &mut ir);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
             write_ir!(ir, "  call void @free(i8* {}){}", ptr_tmp, dbg_info);
             Ok(("void".to_string(), ir))
@@ -742,44 +724,10 @@ impl CodeGenerator {
                 .unwrap_or("0");
 
             // Handle dest pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
-            let dest_ptr = if dest_full.starts_with("{ i8*, i64 }") {
-                let val = dest_full
-                    .strip_prefix("{ i8*, i64 } ")
-                    .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-                ptr
-            } else if dest_full.starts_with("i8*") {
-                dest_full
-                    .strip_prefix("i8* ")
-                    .unwrap_or(dest_full.split_whitespace().last().unwrap_or("null"))
-                    .to_string()
-            } else {
-                let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, dest_val);
-                ptr
-            };
+            let dest_ptr = self.resolve_arg_to_i8_ptr(dest_full, counter, &mut ir);
 
             // Handle src pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
-            let src_ptr = if src_full.starts_with("{ i8*, i64 }") {
-                let val = src_full
-                    .strip_prefix("{ i8*, i64 } ")
-                    .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-                ptr
-            } else if src_full.starts_with("i8*") {
-                src_full
-                    .strip_prefix("i8* ")
-                    .unwrap_or(src_full.split_whitespace().last().unwrap_or("null"))
-                    .to_string()
-            } else {
-                let src_val = src_full.split_whitespace().last().unwrap_or("0");
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, src_val);
-                ptr
-            };
+            let src_ptr = self.resolve_arg_to_i8_ptr(src_full, counter, &mut ir);
 
             let result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
@@ -799,72 +747,21 @@ impl CodeGenerator {
         } else if fn_name == "strlen" {
             // Special handling for strlen: extract i8* from various argument types
             let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
+            let ptr_tmp = self.resolve_arg_to_i8_ptr(arg_full, counter, &mut ir);
             let result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-
-            // Handle different argument types: str fat pointer { i8*, i64 }, raw i8*, or i64
-            if arg_full.starts_with("{ i8*, i64 }") {
-                // String fat pointer — extract the raw i8* pointer
-                let val = arg_full
-                    .strip_prefix("{ i8*, i64 } ")
-                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
-                let ptr_tmp = self.next_temp(counter);
-                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr_tmp, val);
-                write_ir!(
-                    ir,
-                    "  {} = call i64 @strlen(i8* {}){}",
-                    result,
-                    ptr_tmp,
-                    dbg_info
-                );
-            } else if arg_full.starts_with("i8*") {
-                // Already a pointer, use directly
-                let ptr_val = arg_full
-                    .strip_prefix("i8* ")
-                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("null"));
-                write_ir!(
-                    ir,
-                    "  {} = call i64 @strlen(i8* {}){}",
-                    result,
-                    ptr_val,
-                    dbg_info
-                );
-            } else {
-                // Convert i64 to pointer
-                let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
-                let ptr_tmp = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_tmp, arg_val);
-                write_ir!(
-                    ir,
-                    "  {} = call i64 @strlen(i8* {}){}",
-                    result,
-                    ptr_tmp,
-                    dbg_info
-                );
-            }
+            write_ir!(
+                ir,
+                "  {} = call i64 @strlen(i8* {}){}",
+                result,
+                ptr_tmp,
+                dbg_info
+            );
             Ok((result, ir))
         } else if fn_name == "puts_ptr" {
             // Special handling for puts_ptr: handle str fat pointer, i8*, or i64
             let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-            let ptr_tmp = if arg_full.starts_with("{ i8*, i64 }") {
-                let val = arg_full
-                    .strip_prefix("{ i8*, i64 } ")
-                    .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-                ptr
-            } else if arg_full.starts_with("i8*") {
-                arg_full
-                    .split_whitespace()
-                    .last()
-                    .unwrap_or("null")
-                    .to_string()
-            } else {
-                let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, arg_val);
-                ptr
-            };
+            let ptr_tmp = self.resolve_arg_to_i8_ptr(arg_full, counter, &mut ir);
             let i32_result = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
             write_ir!(

@@ -2,6 +2,7 @@
 //!
 //! Recursive descent parser for AI-optimized syntax.
 
+mod error_display;
 mod expr;
 mod ffi;
 mod item;
@@ -884,94 +885,7 @@ impl Parser {
 
     /// Convert a token to a user-friendly name for error messages
     fn token_to_friendly_name(token: &Token) -> String {
-        match token {
-            // Delimiters
-            Token::LParen => "'('".to_string(),
-            Token::RParen => "')'".to_string(),
-            Token::LBrace => "'{'".to_string(),
-            Token::RBrace => "'}'".to_string(),
-            Token::LBracket => "'['".to_string(),
-            Token::RBracket => "']'".to_string(),
-            Token::Comma => "','".to_string(),
-            Token::Colon => "':'".to_string(),
-            Token::ColonColon => "'::'".to_string(),
-            Token::Semi => "';'".to_string(),
-            Token::Dot => "'.'".to_string(),
-            Token::DotDot => "'..'".to_string(),
-            Token::DotDotEq => "'..='".to_string(),
-            Token::Arrow => "'->'".to_string(),
-            Token::FatArrow => "'=>'".to_string(),
-            // Operators
-            Token::Eq => "'='".to_string(),
-            Token::ColonEq => "':=' (let binding)".to_string(),
-            Token::EqEq => "'=='".to_string(),
-            Token::Neq => "'!='".to_string(),
-            Token::Lt => "'<'".to_string(),
-            Token::Lte => "'<='".to_string(),
-            Token::Gt => "'>'".to_string(),
-            Token::Gte => "'>='".to_string(),
-            Token::Plus => "'+'".to_string(),
-            Token::PlusEq => "'+='".to_string(),
-            Token::Minus => "'-'".to_string(),
-            Token::MinusEq => "'-='".to_string(),
-            Token::Star => "'*'".to_string(),
-            Token::StarEq => "'*='".to_string(),
-            Token::Slash => "'/'".to_string(),
-            Token::SlashEq => "'/='".to_string(),
-            Token::Percent => "'%'".to_string(),
-            Token::PercentEq => "'%='".to_string(),
-            Token::Amp => "'&'".to_string(),
-            Token::AmpEq => "'&='".to_string(),
-            Token::PipeArrow => "'|>'".to_string(),
-            Token::Pipe => "'|'".to_string(),
-            Token::PipeEq => "'|='".to_string(),
-            Token::Bang => "'!'".to_string(),
-            Token::Tilde => "'~'".to_string(),
-            Token::Caret => "'^'".to_string(),
-            Token::CaretEq => "'^='".to_string(),
-            Token::Shl => "'<<'".to_string(),
-            Token::ShlEq => "'<<='".to_string(),
-            Token::Shr => "'>>'".to_string(),
-            Token::ShrEq => "'>>='".to_string(),
-            Token::Question => "'?'".to_string(),
-            Token::At => "'@' (self-recursion)".to_string(),
-            Token::HashBracket => "'#[' (attribute)".to_string(),
-            // Keywords
-            Token::Function => "function keyword 'F'".to_string(),
-            Token::Struct => "struct keyword 'S'".to_string(),
-            Token::Enum => "enum keyword 'E'".to_string(),
-            Token::Trait => "trait keyword 'W'".to_string(),
-            Token::Impl => "impl keyword 'X'".to_string(),
-            Token::If => "if keyword 'I'".to_string(),
-            Token::Loop => "loop keyword 'L'".to_string(),
-            Token::Match => "match keyword 'M'".to_string(),
-            Token::Return => "return keyword 'R'".to_string(),
-            Token::Break => "break keyword 'B'".to_string(),
-            Token::Continue => "continue keyword 'C'".to_string(),
-            Token::Use => "use keyword 'U'".to_string(),
-            Token::Pub => "pub keyword 'P'".to_string(),
-            Token::Async => "async keyword 'A'".to_string(),
-            Token::Await => "await keyword 'Y'".to_string(),
-            Token::Spawn => "'spawn' keyword".to_string(),
-            Token::Yield => "'yield' keyword".to_string(),
-            Token::True => "'true'".to_string(),
-            Token::False => "'false'".to_string(),
-            Token::Defer => "defer keyword 'D'".to_string(),
-            Token::Union => "union keyword 'O'".to_string(),
-            Token::Comptime => "'comptime' keyword".to_string(),
-            Token::Const => "'const' keyword".to_string(),
-            Token::Mut => "'mut' keyword".to_string(),
-            Token::SelfLower => "'self'".to_string(),
-            Token::SelfUpper => "'Self'".to_string(),
-            Token::TypeKeyword => "type keyword 'T'".to_string(),
-            // Literals
-            Token::Ident(name) => format!("identifier '{}'", name),
-            Token::Int(_) => "integer literal".to_string(),
-            Token::Float(_) => "float literal".to_string(),
-            Token::String(_) => "string literal".to_string(),
-            // Default for any other token
-            _ => format!("{:?}", token),
-        }
+        error_display::token_to_friendly_name(token)
     }
 
     /// Parse a describe("name", |t| { it("test", || { body }); ... }); block
@@ -1018,11 +932,10 @@ impl Parser {
             self.advance_skip();
             let mut brace_depth = 0;
             while !self.is_at_end() {
-                if self.check(&Token::LBrace) {
-                    if brace_depth == 0 {
+                if self.check(&Token::LBrace)
+                    && brace_depth == 0 {
                         break;
                     }
-                }
                 if let Some(tok) = self.peek() {
                     if tok.token == Token::LBrace {
                         brace_depth += 1;
@@ -1216,11 +1129,10 @@ fn to_snake_case(s: &str) -> String {
     for c in s.chars() {
         if c.is_alphanumeric() {
             result.push(c.to_ascii_lowercase());
-        } else if c == ' ' || c == '-' || c == '_' {
-            if !result.is_empty() && !result.ends_with('_') {
+        } else if (c == ' ' || c == '-' || c == '_')
+            && !result.is_empty() && !result.ends_with('_') {
                 result.push('_');
             }
-        }
         // Skip other chars (punctuation, etc.)
     }
     // Remove trailing underscore

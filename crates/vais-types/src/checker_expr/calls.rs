@@ -671,8 +671,8 @@ impl TypeChecker {
         }
 
         // Built-in Mutex static methods
-        if type_name.node == "Mutex" {
-            if method.node == "new" {
+        if type_name.node == "Mutex"
+            && method.node == "new" {
                 for arg in args {
                     let _ = self.check_expr(arg)?;
                 }
@@ -681,7 +681,6 @@ impl TypeChecker {
                     generics: vec![self.fresh_type_var()],
                 });
             }
-        }
 
         // Fallback: for unknown types, if method returns Self type
         if method.node == "new"

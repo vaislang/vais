@@ -1,184 +1,8 @@
 use super::*;
-use vais_ast::{Expr, Span, Spanned};
+use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    /// Generate memcpy call
-    pub(super) fn generate_memcpy_call(
-        &mut self,
-        arg_vals: &[String],
-        counter: &mut usize,
-        span: Span,
-        ir: &mut String,
-    ) -> CodegenResult<(String, String)> {
-        let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let dest_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-        let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
-        let n_val = arg_vals
-            .get(2)
-            .map(|s| s.split_whitespace().last().unwrap_or("0"))
-            .unwrap_or("0");
-
-        // Handle dest pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
-        let dest_ptr = if dest_full.starts_with("{ i8*, i64 }") {
-            let val = dest_full
-                .strip_prefix("{ i8*, i64 } ")
-                .unwrap_or(dest_full.split_whitespace().last().unwrap_or("undef"));
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-            ptr
-        } else if dest_full.starts_with("i8*") {
-            dest_full
-                .strip_prefix("i8* ")
-                .unwrap_or(dest_full.split_whitespace().last().unwrap_or("null"))
-                .to_string()
-        } else {
-            let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, dest_val);
-            ptr
-        };
-
-        // Handle src pointer — can be { i8*, i64 } (str fat ptr), i8*, or i64
-        let src_ptr = if src_full.starts_with("{ i8*, i64 }") {
-            let val = src_full
-                .strip_prefix("{ i8*, i64 } ")
-                .unwrap_or(src_full.split_whitespace().last().unwrap_or("undef"));
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-            ptr
-        } else if src_full.starts_with("i8*") {
-            src_full
-                .strip_prefix("i8* ")
-                .unwrap_or(src_full.split_whitespace().last().unwrap_or("null"))
-                .to_string()
-        } else {
-            let src_val = src_full.split_whitespace().last().unwrap_or("0");
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, src_val);
-            ptr
-        };
-
-        let result = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {}){}",
-            result,
-            dest_ptr,
-            src_ptr,
-            n_val,
-            dbg_info
-        );
-        let result_i64 = self.next_temp(counter);
-        write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
-        Ok((result_i64, std::mem::take(ir)))
-    }
-
-    /// Generate strlen call
-    pub(super) fn generate_strlen_call(
-        &mut self,
-        arg_vals: &[String],
-        counter: &mut usize,
-        span: Span,
-        ir: &mut String,
-    ) -> CodegenResult<(String, String)> {
-        let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-        let result = self.next_temp(counter);
-
-        // Handle different argument types: str fat pointer { i8*, i64 }, raw i8*, or i64
-        if arg_full.starts_with("{ i8*, i64 }") {
-            // String fat pointer — extract the raw i8* pointer
-            let arg_val = arg_full
-                .strip_prefix("{ i8*, i64 } ")
-                .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
-            let ptr_tmp = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                ptr_tmp,
-                arg_val
-            );
-            write_ir!(
-                ir,
-                "  {} = call i64 @strlen(i8* {}){}",
-                result,
-                ptr_tmp,
-                dbg_info
-            );
-        } else if arg_full.starts_with("i8*") {
-            // Already a raw pointer, use directly
-            let ptr_val = arg_full.split_whitespace().last().unwrap_or("null");
-            write_ir!(
-                ir,
-                "  {} = call i64 @strlen(i8* {}){}",
-                result,
-                ptr_val,
-                dbg_info
-            );
-        } else {
-            // Convert i64 to pointer
-            let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
-            let ptr_tmp = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_tmp, arg_val);
-            write_ir!(
-                ir,
-                "  {} = call i64 @strlen(i8* {}){}",
-                result,
-                ptr_tmp,
-                dbg_info
-            );
-        }
-        Ok((result, std::mem::take(ir)))
-    }
-
-    /// Generate puts_ptr call
-    pub(super) fn generate_puts_ptr_call(
-        &mut self,
-        arg_vals: &[String],
-        counter: &mut usize,
-        span: Span,
-        ir: &mut String,
-    ) -> CodegenResult<(String, String)> {
-        let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-
-        // Handle different argument types: str fat pointer { i8*, i64 }, raw i8*, or i64
-        let ptr_tmp = if arg_full.starts_with("{ i8*, i64 }") {
-            let val = arg_full
-                .strip_prefix("{ i8*, i64 } ")
-                .unwrap_or(arg_full.split_whitespace().last().unwrap_or("undef"));
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr, val);
-            ptr
-        } else if arg_full.starts_with("i8*") {
-            arg_full
-                .split_whitespace()
-                .last()
-                .unwrap_or("null")
-                .to_string()
-        } else {
-            let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
-            let ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr, arg_val);
-            ptr
-        };
-
-        let i32_result = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = call i32 @puts(i8* {}){}",
-            i32_result,
-            ptr_tmp,
-            dbg_info
-        );
-        // Convert i32 result to i64 for consistency
-        let result = self.next_temp(counter);
-        write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
-        Ok((result, std::mem::take(ir)))
-    }
-
-    /// Generate if expression
     #[inline(never)]
     pub(crate) fn generate_method_call_expr(
         &mut self,
@@ -358,34 +182,8 @@ impl CodeGenerator {
                     } else {
                         // No instantiations registered — fall back to argument inference
                         // (same as Strategy 2 in the empty generics path)
-                        let arg_types: Vec<ResolvedType> =
-                            args.iter().map(|a| self.infer_expr_type(a)).collect();
-                        let informative_args: Vec<&ResolvedType> = arg_types
-                            .iter()
-                            .filter(|t| !matches!(t, ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_)))
-                            .collect();
-                        if !informative_args.is_empty() {
-                            let struct_def = self.generics.struct_defs.get(name).cloned();
-                            let n_generic_params = struct_def.as_ref().map(|s| {
-                                s.generics.iter().filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })).count()
-                            }).unwrap_or(1);
-                            let inferred_type_args: Vec<ResolvedType> = informative_args.iter().take(n_generic_params).map(|t| (*t).clone()).collect();
-                            if let Some(ref sd) = struct_def {
-                                for (param, concrete) in sd.generics.iter().zip(inferred_type_args.iter()) {
-                                    if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
-                                        self.generics.substitutions.entry(param.name.node.clone()).or_insert_with(|| concrete.clone());
-                                    }
-                                }
-                            }
-                            let mangled = vais_types::mangle_name(&base, &inferred_type_args);
-                            if self.types.functions.contains_key(&mangled) {
-                                mangled
-                            } else {
-                                base
-                            }
-                        } else {
-                            base
-                        }
+                        self.resolve_method_generic_name(name, &base, args, counter)
+                            .unwrap_or(base)
                     }
                 }
             } else {
@@ -417,88 +215,14 @@ impl CodeGenerator {
                         .any(|(s, _)| s == name))
                     && !args.is_empty()
                 {
-                    let arg_types: Vec<ResolvedType> =
-                        args.iter().map(|a| self.infer_expr_type(a)).collect();
-                    // Filter out non-informative types (I64 is the default fallback)
-                    let informative_args: Vec<&ResolvedType> = arg_types
-                        .iter()
-                        .filter(|t| {
-                            !matches!(
-                                t,
-                                ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_)
-                            )
-                        })
-                        .collect();
-
-                    if !informative_args.is_empty() {
-                        // Build candidate type args from informative argument types.
-                        // For single-generic containers (Vec<T>), use the first
-                        // informative arg. For multi-generic (HashMap<K,V>), use
-                        // up to the number of struct generic params.
-                        let struct_def = self.generics.struct_defs.get(name).cloned();
-                        let n_generic_params = struct_def
-                            .as_ref()
-                            .map(|s| {
-                                s.generics
-                                    .iter()
-                                    .filter(|g| {
-                                        !matches!(
-                                            g.kind,
-                                            vais_ast::GenericParamKind::Lifetime { .. }
-                                        )
-                                    })
-                                    .count()
-                            })
-                            .unwrap_or(1);
-
-                        let inferred_type_args: Vec<ResolvedType> = informative_args
-                            .iter()
-                            .take(n_generic_params)
-                            .map(|t| (*t).clone())
-                            .collect();
-
-                        if !inferred_type_args.is_empty() {
-                            // Set generic substitutions so downstream code resolves T correctly
-                            if let Some(ref sd) = struct_def {
-                                for (param, concrete) in
-                                    sd.generics.iter().zip(inferred_type_args.iter())
-                                {
-                                    if !matches!(
-                                        param.kind,
-                                        vais_ast::GenericParamKind::Lifetime { .. }
-                                    ) {
-                                        self.generics
-                                            .substitutions
-                                            .entry(param.name.node.clone())
-                                            .or_insert_with(|| concrete.clone());
-                                    }
-                                }
-                            }
-
-                            let mangled = vais_types::mangle_name(&base, &inferred_type_args);
-                            if self.types.functions.contains_key(&mangled) {
-                                mangled
-                            } else {
-                                // Try on-demand specialization: generate the specialized
-                                // function if we have the method template and type args
-                                let generated = self.try_generate_vec_specialization(
-                                    name,
-                                    method_name,
-                                    &inferred_type_args,
-                                    counter,
-                                );
-                                if let Some(gen_name) = generated {
-                                    gen_name
-                                } else {
-                                    base
-                                }
-                            }
-                        } else {
-                            base
-                        }
-                    } else {
-                        base
-                    }
+                    self.resolve_method_generic_name_with_specialization(
+                        name,
+                        method_name,
+                        &base,
+                        args,
+                        counter,
+                    )
+                    .unwrap_or(base)
                 } else {
                     base
                 }
@@ -593,8 +317,8 @@ impl CodeGenerator {
             {
                 let src_bits = self.get_integer_bits(&inferred_ty);
                 // Parse dst_bits from arg_llvm_ty (e.g., "i64" -> 64)
-                let dst_bits = if arg_llvm_ty.starts_with('i') {
-                    arg_llvm_ty[1..].parse::<u32>().unwrap_or(0)
+                let dst_bits = if let Some(rest) = arg_llvm_ty.strip_prefix('i') {
+                    rest.parse::<u32>().unwrap_or(0)
                 } else if let Some(ref pt) = param_ty {
                     self.get_integer_bits(pt)
                 } else {
@@ -657,7 +381,7 @@ impl CodeGenerator {
                                 ),
                                 method_name
                             ),
-                            &[arg_inferred.clone()],
+                            std::slice::from_ref(&arg_inferred),
                         );
                         self.types.functions.contains_key(&spec_name)
                             || self.generics.generic_method_bodies.contains_key(&(
@@ -882,6 +606,146 @@ impl CodeGenerator {
         }
     }
 
+    /// Resolve a generic method name by inferring type arguments from call arguments.
+    ///
+    /// Collects argument types, filters out non-informative types (I64/Generic/Var),
+    /// looks up the struct's generic parameter count, infers type args, sets substitutions,
+    /// and attempts to mangle the base name. Returns `Some(mangled)` if a specialized
+    /// function exists, or `None` if no specialization was found.
+    fn resolve_method_generic_name(
+        &mut self,
+        struct_name: &str,
+        base: &str,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> Option<String> {
+        let _ = counter; // unused here, kept for API symmetry with the specialization variant
+        let arg_types: Vec<ResolvedType> =
+            args.iter().map(|a| self.infer_expr_type(a)).collect();
+        let informative_args: Vec<&ResolvedType> = arg_types
+            .iter()
+            .filter(|t| {
+                !matches!(
+                    t,
+                    ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                )
+            })
+            .collect();
+        if informative_args.is_empty() {
+            return None;
+        }
+        let struct_def = self.generics.struct_defs.get(struct_name).cloned();
+        let n_generic_params = struct_def
+            .as_ref()
+            .map(|s| {
+                s.generics
+                    .iter()
+                    .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                    .count()
+            })
+            .unwrap_or(1);
+        let inferred_type_args: Vec<ResolvedType> = informative_args
+            .iter()
+            .take(n_generic_params)
+            .map(|t| (*t).clone())
+            .collect();
+        if inferred_type_args.is_empty() {
+            return None;
+        }
+        // Set generic substitutions so downstream code resolves T correctly
+        if let Some(ref sd) = struct_def {
+            for (param, concrete) in sd.generics.iter().zip(inferred_type_args.iter()) {
+                if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                    self.generics
+                        .substitutions
+                        .entry(param.name.node.clone())
+                        .or_insert_with(|| concrete.clone());
+                }
+            }
+        }
+        let mangled = vais_types::mangle_name(base, &inferred_type_args);
+        if self.types.functions.contains_key(&mangled) {
+            Some(mangled)
+        } else {
+            None
+        }
+    }
+
+    /// Like [`resolve_method_generic_name`] but also attempts on-demand specialization
+    /// via `try_generate_vec_specialization` when the mangled name is not yet registered.
+    fn resolve_method_generic_name_with_specialization(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        base: &str,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> Option<String> {
+        let arg_types: Vec<ResolvedType> =
+            args.iter().map(|a| self.infer_expr_type(a)).collect();
+        // Filter out non-informative types (I64 is the default fallback)
+        let informative_args: Vec<&ResolvedType> = arg_types
+            .iter()
+            .filter(|t| {
+                !matches!(
+                    t,
+                    ResolvedType::I64 | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                )
+            })
+            .collect();
+        if informative_args.is_empty() {
+            return None;
+        }
+        // Build candidate type args from informative argument types.
+        // For single-generic containers (Vec<T>), use the first
+        // informative arg. For multi-generic (HashMap<K,V>), use
+        // up to the number of struct generic params.
+        let struct_def = self.generics.struct_defs.get(struct_name).cloned();
+        let n_generic_params = struct_def
+            .as_ref()
+            .map(|s| {
+                s.generics
+                    .iter()
+                    .filter(|g| {
+                        !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                    })
+                    .count()
+            })
+            .unwrap_or(1);
+        let inferred_type_args: Vec<ResolvedType> = informative_args
+            .iter()
+            .take(n_generic_params)
+            .map(|t| (*t).clone())
+            .collect();
+        if inferred_type_args.is_empty() {
+            return None;
+        }
+        // Set generic substitutions so downstream code resolves T correctly
+        if let Some(ref sd) = struct_def {
+            for (param, concrete) in sd.generics.iter().zip(inferred_type_args.iter()) {
+                if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                    self.generics
+                        .substitutions
+                        .entry(param.name.node.clone())
+                        .or_insert_with(|| concrete.clone());
+                }
+            }
+        }
+        let mangled = vais_types::mangle_name(base, &inferred_type_args);
+        if self.types.functions.contains_key(&mangled) {
+            Some(mangled)
+        } else {
+            // Try on-demand specialization: generate the specialized
+            // function if we have the method template and type args
+            self.try_generate_vec_specialization(
+                struct_name,
+                method_name,
+                &inferred_type_args,
+                counter,
+            )
+        }
+    }
+
     /// Generate static method call expression
     #[inline(never)]
     pub(crate) fn generate_static_method_call_expr(
@@ -1077,57 +941,6 @@ impl CodeGenerator {
             );
             Ok((tmp, ir))
         }
-    }
-
-    /// Generate str_to_ptr builtin call
-    pub(super) fn generate_str_to_ptr_builtin(
-        &mut self,
-        args: &[Spanned<Expr>],
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        if args.len() != 1 {
-            return Err(CodegenError::TypeError(
-                "str_to_ptr expects 1 argument".to_string(),
-            ));
-        }
-        let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
-        let mut ir = str_ir;
-        // String is now a fat pointer { i8*, i64 } — extract the raw i8* pointer
-        let raw_ptr = self.extract_str_ptr(&str_val, counter, &mut ir);
-        let result = self.next_temp(counter);
-        write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, raw_ptr);
-        Ok((result, ir))
-    }
-
-    /// Generate ptr_to_str builtin call — returns { i8*, i64 } fat pointer
-    pub(super) fn generate_ptr_to_str_builtin(
-        &mut self,
-        args: &[Spanned<Expr>],
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        if args.len() != 1 {
-            return Err(CodegenError::TypeError(
-                "ptr_to_str expects 1 argument".to_string(),
-            ));
-        }
-        let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
-        let mut ir = ptr_ir;
-        let arg_type = self.infer_expr_type(&args[0]);
-
-        // Convert i64 to raw i8* pointer if needed
-        let raw_ptr = if matches!(arg_type, vais_types::ResolvedType::I64) {
-            let tmp = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp, ptr_val);
-            tmp
-        } else {
-            ptr_val
-        };
-
-        // Call strlen to get the length, then build fat pointer { i8*, i64 }
-        let len = self.next_temp(counter);
-        write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, raw_ptr);
-        let result = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
-        Ok((result, ir))
     }
 
     /// Try to generate a specialized Vec/generic method on demand.

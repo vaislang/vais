@@ -257,6 +257,24 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
+
+> **목표**: team-refactor 분석 기반 4개 리팩토링
+> **결과**: ~700줄 순감소, 중복 call codegen 통합, 9개 i8* 패턴 헬퍼화, generic resolution 헬퍼 추출
+
+모드: 자동진행
+- [x] 1. resolve_arg_to_i8_ptr 헬퍼 추출 — 9개 중복 패턴 통합 (impl-sonnet) ✅ 2026-03-29
+  변경: string_ops.rs +헬퍼, generate_expr_call.rs + method_call.rs 9곳 중복 제거
+- [x] 2. duplicate call codegen 통합 — call_gen.rs thin wrapper (Opus) ✅ 2026-03-29
+  변경: call_gen.rs -568줄 → 8줄 thin wrapper, generate_expr_call.rs canonical 유지
+- [x] 3. generic method resolution 헬퍼 추출 — 130줄 중복 제거 (impl-sonnet) ✅ 2026-03-29
+  변경: method_call.rs — resolve_method_generic_name + _with_specialization 2개 헬퍼
+- [x] 4. token_to_friendly_name 추출 — parser 90줄 분리 (impl-sonnet) ✅ 2026-03-29
+  변경: parser/error_display.rs 신규, lib.rs thin wrapper 유지
+- [x] 5. 전체 검증 + Phase 158 coercion 규칙 복원 (Opus 직접) ✅ 2026-03-29
+  결과: E2E 2,501 passed / 0 failed, Clippy 0건, Phase 158 보호 테스트 16/16 통과
+진행률: 5/5 (100%) ✅
+
 ### Phase 160-A: TC 수정 — match arm Unit 복구 + Vec<T> type resolution + numeric promotion 복원 ✅
 
 > **배경**: Phase 158 strict coercion 적용 후 VaisDB TC 에러 221건 발생. VaisDB 실전 컴파일에서 3가지 TC 버그 발견.
