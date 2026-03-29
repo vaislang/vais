@@ -193,13 +193,21 @@ impl TypeChecker {
             }
             // Allow implicit integer type unification (widening within same signedness family).
             // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
-            // bool↔integer, int↔float, str↔i64 coercion is FORBIDDEN (Phase 158).
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Allow bool ↔ integer unification.
+            // bool is 0/1 in Vais runtime. Enables `I flag { ... }` and `count += is_active()`.
+            (ResolvedType::Bool, b) if Self::is_integer_type(b) => Ok(()),
+            (a, ResolvedType::Bool) if Self::is_integer_type(a) => Ok(()),
+            // Allow int ↔ float unification (numeric promotion).
+            // Integer literals like `0` should adapt to f32/f64 context.
+            // Enables `x: f32 = 0` and `distance := 0.0 + count`.
+            (a, b)
+                if (Self::is_integer_type(a) && Self::is_float_type(b))
+                    || (Self::is_float_type(a) && Self::is_integer_type(b)) =>
+            {
+                Ok(())
+            }
             // Allow f32 ↔ f64 unification (float literal inference).
-            // Float literals like `0.0` default to f64, but should adapt to the expected
-            // type when the context is f32 (same as Rust's float literal inference).
-            // f32→f64 is lossless widening; f64→f32 narrowing is intentional when the
-            // context expects f32. This is distinct from the forbidden int↔float coercion.
             (ResolvedType::F32, ResolvedType::F64)
             | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
             // Allow unit () ↔ i64 (void context: i64 return in void function)

@@ -160,8 +160,8 @@ fn test_integer_to_float_mismatch() {
     let source = "F f()->f64=42";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // Integer to float should be an error (no implicit conversion)
-    assert!(checker.check_module(&module).is_err());
+    // Phase 160: int→float numeric promotion is allowed
+    assert!(checker.check_module(&module).is_ok());
 }
 
 #[test]
@@ -249,8 +249,8 @@ fn test_if_condition_non_bool() {
     let source = "F f()->i64=I 42{1}E{0}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // Non-boolean if condition should fail
-    assert!(checker.check_module(&module).is_err());
+    // Phase 160: integer if condition is allowed (truthy: non-zero)
+    assert!(checker.check_module(&module).is_ok());
 }
 
 #[test]
@@ -1065,7 +1065,7 @@ fn test_all_numeric_type_combinations() {
 
 #[test]
 fn test_float_to_int_error() {
-    // Test float to int (should fail - no implicit conversion)
+    // Phase 160: float→int numeric promotion is allowed
     let source = r#"
         F convert()->i64{
             f:=3.14;
@@ -1075,7 +1075,7 @@ fn test_float_to_int_error() {
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    assert!(checker.check_module(&module).is_err());
+    assert!(checker.check_module(&module).is_ok());
 }
 
 // ==================== Unification Tests ====================
@@ -1121,7 +1121,8 @@ fn test_unify_const_array_different_element() {
         element: Box::new(ResolvedType::F64),
         size: crate::types::ResolvedConst::Value(5),
     };
-    assert!(checker.unify(&a, &b).is_err());
+    // Phase 160: i64↔f64 numeric promotion allows unification
+    assert!(checker.unify(&a, &b).is_ok());
 }
 
 #[test]
@@ -1230,7 +1231,8 @@ fn test_unify_map_different_value() {
     let mut checker = TypeChecker::new();
     let a = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::I64));
     let b = ResolvedType::Map(Box::new(ResolvedType::Str), Box::new(ResolvedType::F64));
-    assert!(checker.unify(&a, &b).is_err());
+    // Phase 160: i64↔f64 numeric promotion allows unification
+    assert!(checker.unify(&a, &b).is_ok());
 }
 
 #[test]
