@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774768994837,
+  "lastUpdate": 1774777663728,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32951,6 +32951,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 820406,
             "range": "± 4097",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "7add943d08c3e1adbba58a35cf93d89c5a0e0bf8",
+          "message": "fix: Phase 159 — Clippy 0건 복원 + stale worktree 정리 + ROADMAP 정리\n\nClippy 19건 수정: map_or→is_ok_and, to_vec(), contains_key 등.\nStale worktree 4개 + branch 삭제. ROADMAP stale Phase 150 세부계획\n제거, 건강도 테이블 갱신. Pre-existing E2E 6건은 regression 리스크로 보류.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T18:42:40+09:00",
+          "tree_id": "94202bce0d28681fcb7c33c78cfde353b8c24831",
+          "url": "https://github.com/vaislang/vais/commit/7add943d08c3e1adbba58a35cf93d89c5a0e0bf8"
+        },
+        "date": 1774777663330,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3542,
+            "range": "± 54",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6731,
+            "range": "± 156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8030,
+            "range": "± 223",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14494,
+            "range": "± 160",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19542,
+            "range": "± 154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36817,
+            "range": "± 202",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33172,
+            "range": "± 510",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 72417,
+            "range": "± 1648",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 310724,
+            "range": "± 1580",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 472436,
+            "range": "± 6970",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 120814,
+            "range": "± 880",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 813990,
+            "range": "± 18278",
             "unit": "ns/iter"
           }
         ]
