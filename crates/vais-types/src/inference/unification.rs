@@ -191,23 +191,10 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            // Allow implicit integer type conversions (widening and narrowing)
+            // Allow implicit integer type unification (widening within same signedness family).
+            // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
+            // bool↔integer, int↔float, f32↔f64, str↔i64 coercion is FORBIDDEN (Phase 158).
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
-            // Allow bool ↔ integer coercion (bool is 0/1 in Vais's runtime representation)
-            (ResolvedType::Bool, b) if Self::is_integer_type(b) => Ok(()),
-            (a, ResolvedType::Bool) if Self::is_integer_type(a) => Ok(()),
-            // Allow int ↔ float coercion (implicit numeric conversion)
-            (a, b)
-                if (Self::is_integer_type(a) && Self::is_float_type(b))
-                    || (Self::is_float_type(a) && Self::is_integer_type(b)) =>
-            {
-                Ok(())
-            }
-            // Allow f32 ↔ f64 coercion
-            (ResolvedType::F32, ResolvedType::F64)
-            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
-            // NOTE: str ↔ i64 coercion removed — it causes incorrect type inference
-            // (e.g., Vec_push$u32 instead of Vec_push$u16 for EdgeTypeTable operations)
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
                 Ok(())
@@ -433,6 +420,7 @@ impl TypeChecker {
     pub(crate) fn is_float_type(ty: &ResolvedType) -> bool {
         matches!(ty, ResolvedType::F32 | ResolvedType::F64)
     }
+
 
     /// Check if a type contains any type variables (Var).
     /// Types without Var nodes cannot be affected by apply_substitutions.

@@ -30,14 +30,15 @@ F main() -> i64 {
 #[test]
 fn e2e_p145_f32_param_basic() {
     // f32 parameter passed and returned correctly
+    // Phase 158: explicit f32/f64 cast required
     let source = r#"
 F identity_f32(x: f32) -> f32 {
     x
 }
 
 F main() -> i64 {
-    v := identity_f32(5.0)
-    I v > 4.0 { R 1 }
+    v := identity_f32(5.0 as f32)
+    I v > (4.0 as f32) { R 1 }
     R 0
 }
 "#;
@@ -97,14 +98,15 @@ F main() -> i64 {
 #[test]
 fn e2e_p145_f32_arithmetic() {
     // f32 arithmetic should compile and produce correct results
+    // Phase 158: explicit f32/f64 cast required
     let source = r#"
 F add_f32(a: f32, b: f32) -> f32 {
     a + b
 }
 
 F main() -> i64 {
-    result := add_f32(3.0, 4.0)
-    I result > 6.0 { R 1 }
+    result := add_f32(3.0 as f32, 4.0 as f32)
+    I result > (6.0 as f32) { R 1 }
     R 0
 }
 "#;
@@ -131,9 +133,10 @@ F main() -> i64 {
 #[test]
 fn e2e_p145_float_coerce_ir_fpext() {
     // IR for f32->f64 coercion must contain fpext instruction
+    // Phase 158: explicit f32/f64 cast required
     let source = r#"
 F widen(x: f32) -> f64 {
-    x
+    x as f64
 }
 
 F main() -> i64 {
@@ -147,9 +150,10 @@ F main() -> i64 {
 #[test]
 fn e2e_p145_float_coerce_ir_fptrunc() {
     // IR for f64->f32 coercion must contain fptrunc instruction
+    // Phase 158: explicit f32/f64 cast required
     let source = r#"
 F narrow(x: f64) -> f32 {
-    x
+    x as f32
 }
 
 F main() -> i64 {
