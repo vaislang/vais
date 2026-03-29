@@ -297,7 +297,7 @@ impl TypeChecker {
                         ref generics,
                     } if name == "Vec" && !generics.is_empty() => {
                         if is_slice {
-                            Some(Ok(ResolvedType::Pointer(Box::new(generics[0].clone()))))
+                            Some(Ok(ResolvedType::Pointer(Box::new(self.apply_substitutions(&generics[0])))))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -305,11 +305,11 @@ impl TypeChecker {
                                 span: Some(index.span),
                             }))
                         } else {
-                            Some(Ok(generics[0].clone()))
+                            Some(Ok(self.apply_substitutions(&generics[0])))
                         }
                     }
-                    // Ref to Vec<T> is also indexable
-                    ResolvedType::Ref(ref inner) => {
+                    // Ref or RefMut to Vec<T> is also indexable
+                    ResolvedType::Ref(ref inner) | ResolvedType::RefMut(ref inner) => {
                         if let ResolvedType::Named {
                             ref name,
                             ref generics,
@@ -323,7 +323,7 @@ impl TypeChecker {
                                         span: Some(index.span),
                                     }));
                                 }
-                                return Some(Ok(generics[0].clone()));
+                                return Some(Ok(self.apply_substitutions(&generics[0])));
                             }
                         }
                         Some(Err(TypeError::Mismatch {

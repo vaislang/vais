@@ -411,23 +411,36 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
+                // Use generate_block_stmts (visitor-based) which produces the
+                // single-pointer alloca pattern consistent with generate_ident_expr.
+                // The old generate_block path creates double-pointer allocas for
+                // struct locals which causes type mismatches on return.
+                let (value, block_ir, terminated) =
+                    self.generate_block_stmts(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
-                if ret_type == ResolvedType::Unit {
-                    ir.push_str("  ret void\n");
-                } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    let loaded = format!("%ret.{}", counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        loaded,
-                        ret_llvm,
-                        ret_llvm,
-                        value
-                    );
-                    write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
-                } else {
-                    write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                // If the block already contains a terminator (e.g., explicit `R 42`),
+                // do not emit a duplicate ret instruction.
+                if !terminated {
+                    if ret_type == ResolvedType::Unit {
+                        ir.push_str("  ret void\n");
+                    } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                        if self.is_block_result_value(stmts) {
+                            write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                        } else {
+                            let loaded = format!("%ret.{}", counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                value
+                            );
+                            write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
+                        }
+                    } else {
+                        write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                    }
                 }
             }
         }

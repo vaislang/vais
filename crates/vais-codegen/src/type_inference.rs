@@ -496,7 +496,7 @@ impl CodeGenerator {
                 ResolvedType::I64
             }
             Expr::MethodCall {
-                receiver, method, ..
+                receiver, method, args, ..
             } => {
                 // Get method return type from struct definition
                 let recv_type = self.infer_expr_type(receiver);
@@ -551,8 +551,31 @@ impl CodeGenerator {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
                     other => other,
                 };
-                if let ResolvedType::Named { name, .. } = inner_recv {
+                if let ResolvedType::Named { name, generics } = inner_recv {
                     let method_name = format!("{}_{}", name, method.node);
+                    // Check specialized versions first via fn_instantiations.
+                    // Strategy 1: use receiver's generic args to construct mangled name
+                    // (e.g., Cell<bool>.get() -> Cell_get$bool)
+                    if !generics.is_empty() {
+                        let mangled =
+                            vais_types::mangle_name(&method_name, generics);
+                        if let Some(fn_info) = self.types.functions.get(&mangled) {
+                            return fn_info.signature.ret.clone();
+                        }
+                    }
+                    // Strategy 2: use fn_instantiations + resolve from arg types
+                    // (e.g., Box_map -> Box_map$i64 when called with i64 args)
+                    if let Some(inst_list) =
+                        self.generics.fn_instantiations.get(&method_name).cloned()
+                    {
+                        let arg_types: Vec<ResolvedType> =
+                            args.iter().map(|a| self.infer_expr_type(a)).collect();
+                        let mangled =
+                            self.resolve_generic_call(&method_name, &arg_types, &inst_list);
+                        if let Some(fn_info) = self.types.functions.get(&mangled) {
+                            return fn_info.signature.ret.clone();
+                        }
+                    }
                     if let Some(fn_info) = self.types.functions.get(&method_name) {
                         return fn_info.signature.ret.clone();
                     }
@@ -626,10 +649,24 @@ impl CodeGenerator {
                 ResolvedType::I64
             }
             Expr::StaticMethodCall {
-                type_name, method, ..
+                type_name, method, args,
             } => {
-                // Get static method return type from function info
+                // Get static method return type from function info.
+                // Check specialized versions first via fn_instantiations so
+                // generic return types (e.g., Box<T>) are resolved to concrete
+                // types (e.g., Box<i64>) when a specialization exists.
                 let method_name = format!("{}_{}", type_name.node, method.node);
+                if let Some(inst_list) =
+                    self.generics.fn_instantiations.get(&method_name).cloned()
+                {
+                    let arg_types: Vec<ResolvedType> =
+                        args.iter().map(|a| self.infer_expr_type(a)).collect();
+                    let mangled =
+                        self.resolve_generic_call(&method_name, &arg_types, &inst_list);
+                    if let Some(fn_info) = self.types.functions.get(&mangled) {
+                        return fn_info.signature.ret.clone();
+                    }
+                }
                 if let Some(fn_info) = self.types.functions.get(&method_name) {
                     return fn_info.signature.ret.clone();
                 }

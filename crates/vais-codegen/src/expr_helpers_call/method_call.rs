@@ -899,10 +899,10 @@ impl CodeGenerator {
         // For generic containers like Vec/HashMap, the base name (e.g., "Vec_new")
         // may have specialized versions (e.g., "Vec_new$str") registered via
         // fn_instantiations.
-        let full_method_name = if self.types.functions.contains_key(&base_method_name) {
-            // Already found directly — use as-is
-            base_method_name.clone()
-        } else if let Some(inst_list) = self
+        // Prefer specialized versions over the base generic method so that the
+        // call signature matches the type inference (which also resolves to the
+        // specialized return type).
+        let full_method_name = if let Some(inst_list) = self
             .generics
             .fn_instantiations
             .get(&base_method_name)
@@ -916,6 +916,9 @@ impl CodeGenerator {
             } else {
                 base_method_name.clone()
             }
+        } else if self.types.functions.contains_key(&base_method_name) {
+            // Already found directly — use as-is
+            base_method_name.clone()
         } else if self.generics.struct_defs.contains_key(&type_name.node) && !args.is_empty() {
             // Infer type args from arguments for generic struct static methods
             let arg_types: Vec<ResolvedType> =

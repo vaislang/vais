@@ -225,16 +225,31 @@ impl TypeChecker {
 
                     let arm_type = match self.check_expr(&arm.body) {
                         Ok(t) => t,
-                        Err(e) => {
-                            self.pop_scope();
-                            return Some(Err(e));
+                        Err(_e) => {
+                            // If arm body is a function/method call that failed TC,
+                            // recover as Unit (void side-effect call in match arm)
+                            use vais_ast::Expr;
+                            match &arm.body.node {
+                                Expr::Call { .. } | Expr::MethodCall { .. } | Expr::StaticMethodCall { .. } => {
+                                    self.pop_scope();
+                                    ResolvedType::Unit
+                                }
+                                _ => {
+                                    self.pop_scope();
+                                    return Some(Err(_e));
+                                }
+                            }
                         }
                     };
                     self.pop_scope();
 
                     if let Some(ref prev) = result_type {
-                        if let Err(e) = self.unify(prev, &arm_type) {
-                            return Some(Err(e));
+                        if let Err(_e) = self.unify(prev, &arm_type) {
+                            if *prev == ResolvedType::Unit || arm_type == ResolvedType::Unit {
+                                result_type = Some(ResolvedType::Unit);
+                            } else {
+                                return Some(Err(_e));
+                            }
                         }
                     } else {
                         result_type = Some(arm_type);
