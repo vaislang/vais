@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774706653394,
+  "lastUpdate": 1774768994837,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -32855,6 +32855,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 798972,
             "range": "± 8813",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "de28eeed169f6f02bdd5f8954d0e7f844034dd06",
+          "message": "fix(parser): restore position when & not followed by self in parse_params\n\nSave parser position before consuming & token in parameter parsing.\nIf & is not followed by [mut] self, restore position so the token is\nnot silently lost. Fixes grammar ambiguity issue found in team-review.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T16:17:59+09:00",
+          "tree_id": "ce486c3c2099dbf51d9b00ab69f73f6fedfcf775",
+          "url": "https://github.com/vaislang/vais/commit/de28eeed169f6f02bdd5f8954d0e7f844034dd06"
+        },
+        "date": 1774768994045,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3541,
+            "range": "± 39",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6946,
+            "range": "± 201",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7919,
+            "range": "± 72",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14160,
+            "range": "± 104",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18562,
+            "range": "± 171",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35980,
+            "range": "± 191",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32245,
+            "range": "± 594",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70969,
+            "range": "± 438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 310458,
+            "range": "± 1285",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 476707,
+            "range": "± 3011",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118939,
+            "range": "± 2505",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 820406,
+            "range": "± 4097",
             "unit": "ns/iter"
           }
         ]
