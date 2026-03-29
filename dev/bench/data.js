@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774777663728,
+  "lastUpdate": 1774784574416,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33047,6 +33047,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 813990,
             "range": "± 18278",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "31c85837d38eeff644de959fc870dac4ea768890",
+          "message": "fix(codegen): Phase 159 — pre-existing E2E 6→0 failures, generic mono + large struct\n\nFix 6 pre-existing E2E failures with 3 codegen changes:\n- type_inference.rs: specialization-aware return type for MethodCall/StaticMethodCall\n- method_call.rs: fn_instantiations lookup before base method name\n- generics.rs: generate_block_stmts for Block bodies + terminated flag\n\nAllow f32↔f64 unification (float literal inference, matching Rust).\nE2E: 2,501 passed / 0 failed / 2 ignored, 0 regressions.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T20:37:21+09:00",
+          "tree_id": "7b26b88036a7877b8da1d6a7b3fdf7667263dde9",
+          "url": "https://github.com/vaislang/vais/commit/31c85837d38eeff644de959fc870dac4ea768890"
+        },
+        "date": 1774784573623,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3515,
+            "range": "± 63",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6808,
+            "range": "± 270",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7904,
+            "range": "± 141",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14870,
+            "range": "± 201",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18837,
+            "range": "± 105",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35831,
+            "range": "± 224",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32277,
+            "range": "± 310",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 69863,
+            "range": "± 514",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 304994,
+            "range": "± 935",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 467806,
+            "range": "± 3318",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117575,
+            "range": "± 1149",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 805037,
+            "range": "± 2444",
             "unit": "ns/iter"
           }
         ]
