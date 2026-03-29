@@ -353,7 +353,9 @@ impl Parser {
             }
 
             // Handle &self and &mut self (or &~ self)
+            // Save position so we can restore if & is not followed by [mut] self
             if self.check(&Token::Amp) {
+                let saved_pos = self.pos;
                 self.advance();
                 let is_self_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
                 if is_self_mut {
@@ -394,6 +396,8 @@ impl Parser {
                     }
                     continue;
                 }
+                // & not followed by [mut] self — restore position
+                self.pos = saved_pos;
             }
 
             let name = self.parse_ident()?;
