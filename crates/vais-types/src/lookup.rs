@@ -373,7 +373,29 @@ impl TypeChecker {
         // Handle built-in iterable types
         match iter_type {
             ResolvedType::Array(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::ConstArray { element, .. } => return Some((**element).clone()),
             ResolvedType::Range(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::Slice(elem_type) | ResolvedType::SliceMut(elem_type) => {
+                return Some((**elem_type).clone())
+            }
+            ResolvedType::Pointer(elem_type) => return Some((**elem_type).clone()),
+            // &Vec<T>, &[T], &mut Vec<T> — iterate yields &element_type
+            ResolvedType::Ref(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::Ref(Box::new(elem)));
+                }
+                return None;
+            }
+            ResolvedType::RefMut(inner) => {
+                if let Some(elem) = self.get_iterator_item_type_inner(inner, visited) {
+                    return Some(ResolvedType::RefMut(Box::new(elem)));
+                }
+                return None;
+            }
+            // Vec<T> — element is generics[0]
+            ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
+                return Some(generics[0].clone());
+            }
             _ => {}
         }
 

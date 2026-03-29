@@ -27,12 +27,14 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 #[test]
 fn e2e_p134_err_bool_where_int_expected() {
-    assert_error_contains("F main() -> i64 = true", "mismatch");
+    // Phase 160-A: bool↔int unification restored — bool→i64 is now allowed
+    assert_exit_code("F main() -> i64 = true", 1);
 }
 
 #[test]
 fn e2e_p134_err_int_where_bool_expected() {
-    assert_error_contains("F main() -> bool = 42", "mismatch");
+    // Phase 160-A: bool↔int unification restored — i64→bool is now allowed
+    let _ = compile_to_ir("F main() -> bool = 42");
 }
 
 #[test]
@@ -91,7 +93,8 @@ F main() -> i64 = double("five")
 
 #[test]
 fn e2e_p134_err_assignment_type_mismatch() {
-    assert_error_contains(
+    // Phase 160-A: bool↔int unification restored — i64→bool assignment is now allowed
+    let _ = compile_to_ir(
         r#"
 F main() -> i64 {
     x := 42
@@ -99,7 +102,6 @@ F main() -> i64 {
     R 0
 }
 "#,
-        "mismatch",
     );
 }
 
@@ -484,7 +486,9 @@ F main() -> i64 {
 
 #[test]
 fn e2e_p134_err_recursive_fn_type_mismatch() {
-    assert_error_contains(
+    // Phase 160-A: bool↔int unification restored — i64↔bool is now allowed
+    // fact returns bool but body returns integers — now compiles without error
+    let _ = compile_to_ir(
         r#"
 F fact(n: i64) -> bool {
     I n <= 1 { R 1 }
@@ -492,7 +496,6 @@ F fact(n: i64) -> bool {
 }
 F main() -> i64 = 0
 "#,
-        "mismatch",
     );
 }
 

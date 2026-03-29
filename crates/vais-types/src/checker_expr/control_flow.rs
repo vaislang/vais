@@ -144,9 +144,10 @@ impl TypeChecker {
                             self.define_var(name, elem_type, false);
                         }
                     } else {
-                        // Couldn't infer iterator item type - this is a warning but not an error
-                        // The loop will still work, just without type information for the pattern
+                        // Couldn't infer iterator item type — define as Unknown to avoid
+                        // "undefined variable" errors in the loop body (Phase 162).
                         if let Pattern::Ident(name) = &pattern.node {
+                            self.define_var(name, ResolvedType::Unknown, false);
                             self.warnings.push(format!(
                                 "Cannot infer iterator item type for variable '{}' in loop",
                                 name

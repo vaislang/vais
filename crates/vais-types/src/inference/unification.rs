@@ -242,6 +242,21 @@ impl TypeChecker {
             // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
             (ResolvedType::Pointer(_), ResolvedType::I64)
             | (ResolvedType::I64, ResolvedType::Pointer(_)) => Ok(()),
+            // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
+            // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
+            // Unifies element types to maintain generic consistency.
+            (ResolvedType::Pointer(p), ResolvedType::Slice(s))
+            | (ResolvedType::Slice(s), ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::SliceMut(s))
+            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => self.unify(p, s),
+            // Array/ConstArray ↔ Pointer auto-coercion (Phase 162).
+            // [u64] / [u64; N] and *i64 are compatible (C-style array decay to pointer).
+            (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
+            | (ResolvedType::Array(element), ResolvedType::Pointer(p))
+            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => {
+                self.unify(element, p)
+            }
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)

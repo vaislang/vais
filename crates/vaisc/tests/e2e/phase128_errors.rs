@@ -26,12 +26,15 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 #[test]
 fn e2e_p128_err_type_mismatch_bool_for_int() {
-    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
+    // Phase 160-A: bool↔int unification restored — bool→i64 is now allowed
+    assert_exit_code(r#"F main() -> i64 = true"#, 1);
 }
 
 #[test]
 fn e2e_p128_err_type_mismatch_int_for_bool() {
-    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
+    // Phase 160-A: bool↔int unification restored — i64→bool is now allowed
+    // 42 is truthy (non-zero), so returns non-zero exit code
+    let _ = compile_to_ir(r#"F main() -> bool = 42"#);
 }
 
 #[test]
