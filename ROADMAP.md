@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 159 진행 중, 코드 건강도 복원)
+> **현재 버전**: 0.1.0 (Phase 161 예정, 크로스모듈 TC 개선)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-29 (Phase 158 완료, Phase 159 진행 중)
+> **최종 업데이트**: 2026-03-29 (Phase 160-A 완료, Phase 161 예정)
 
 ---
 
@@ -257,6 +257,70 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 160-A: TC 수정 — match arm Unit 복구 + Vec<T> type resolution + numeric promotion 복원 ✅
+
+> **배경**: Phase 158 strict coercion 적용 후 VaisDB TC 에러 221건 발생. VaisDB 실전 컴파일에서 3가지 TC 버그 발견.
+> **커밋**: c6fa82aa (TC+codegen), 04f5c6b2 (numeric promotion)
+> **VaisDB 영향**: TC 에러 221→101 (54% 감소). test_vector 48→3, test_graph 28→6.
+
+- [x] 1. match arm void 함수 Unit recovery (control_flow.rs) ✅ 2026-03-29
+  변경: match arm이 void 함수 호출 시 인자 타입을 반환하던 버그 → Unit fallback. arm unification에서 Unit 허용.
+- [x] 2. Vec<T> indexing apply_substitutions (collections.rs) ✅ 2026-03-29
+  변경: generics[0].clone() → self.apply_substitutions(&generics[0]). RefMut auto-deref 추가.
+- [x] 3. numeric promotion 복원 (unification.rs) ✅ 2026-03-29
+  변경: bool↔int, int↔float 복원. str↔i64는 금지 유지. Phase 158 E2E 테스트 5건 업데이트.
+- [x] 4. codegen specialization 개선 (method_call.rs, generics.rs, type_inference.rs) ✅ 2026-03-29
+  변경: fn_instantiations 우선 조회, generate_block_stmts 사용, 전문화 반환 타입 해석.
+진행률: 4/4 (100%) ✅
+
+### Phase 161: 크로스모듈 TC 근본 개선 — VaisDB 잔여 101건 해소
+
+> **배경**: VaisDB 6개 테스트 TC 에러 101건 잔존. 단독 파일 컴파일에서는 정상이나 크로스모듈에서만 발생.
+> **검증 프로젝트**: VaisDB — 6개 테스트 스위트 (test_graph, test_wal, test_btree, test_fulltext, test_vector, test_transaction)
+
+#### 에러 유형별 분석
+
+| 유형 | 건수 | 근본 원인 | 수정 위치 |
+|------|------|----------|----------|
+| `str, found i64` | 12 | 크로스모듈 Vec<str> indexing → element type이 i64로 erasure | TC: 크로스모듈 generic propagation |
+| `undefined variable` | 8 | import된 함수/상수가 TC에서 미해석 | TC: cross-module symbol resolution |
+| `*u8 vs &[u8]` | 6 | 포인터와 슬라이스 타입 호환 | TC: 포인터↔슬라이스 coercion 또는 VaisDB 코드 수정 |
+| `Optional or Result, found ()` | 5 | `?` 연산자에서 반환 타입 해석 실패 | TC: `?` operator return type inference |
+| `T?, found Option<?>` | 4 | Option generic type variable 미해석 | TC: Option/Result generic propagation |
+| `argument count` mismatch | 4 | 크로스모듈 필드 접근이 method call로 fallback | TC/Parser: field vs method disambiguation |
+| `IsolationLevel, found i64` | 3 | enum 타입이 i64로 erasure | TC: 크로스모듈 enum type resolution |
+| `field on i64/T` | 3 | generic struct field access 미지원 | TC: generic struct field resolution |
+| `TxnStatus vs TxnState` | 2 | 타입명 불일치 | VaisDB 코드 수정 |
+| Open-end slicing | 1 | 미구현 기능 | Parser/TC: open-end slice syntax |
+| 기타 | 5 | 혼합 | 개별 분석 필요 |
+
+#### 우선순위별 작업
+
+- [ ] 1. 크로스모듈 symbol resolution 강화 — undefined variable 8건 해소 (Opus 직접)
+  대상: TC의 cross-module import에서 함수/상수/타입 심볼 해석 누락
+- [ ] 2. 크로스모듈 Vec<T> generic propagation — str erasure 12건 해소 (Opus 직접)
+  대상: 대규모 파일에서 Vec<str> indexing 시 element type을 i64로 fallback하는 문제
+- [ ] 3. `?` 연산자 반환 타입 해석 — Optional/Result 9건 해소 (Opus 직접)
+  대상: `?` 연산자가 Optional/Result가 아닌 함수에서 사용될 때 TC 에러
+- [ ] 4. 크로스모듈 enum/struct 타입 해석 — 8건 해소 (Opus 직접) [blockedBy: 1]
+  대상: enum이 i64로 erasure, argument count fallback, field on i64
+- [ ] 5. 전체 검증 — VaisDB 6개 테스트 TC 에러 최소화 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1,2,3,4]
+진행률: 0/5 (0%)
+
+### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
+
+> **목표**: team-refactor 분석 기반 4개 리팩토링, ~1,225줄 순감소
+> **기대 효과**: codegen 유지보수성 향상, 버그 수정 시 단일 경로
+
+모드: 자동진행
+  전략 판단: Task 10 선행 → Task 11,12,13 병렬 (파일 비겹침) → Task 14 순차
+- [ ] 1. resolve_arg_to_i8_ptr 헬퍼 추출 — 9개 중복 패턴 통합 (impl-sonnet)
+- [ ] 2. duplicate call codegen 통합 — generate_expr_call.rs 제거 (Opus 직접) [blockedBy: 1]
+- [ ] 3. generic method resolution 헬퍼 추출 — 200줄 중복 제거 (impl-sonnet) [blockedBy: 1]
+- [ ] 4. token_to_friendly_name 추출 — parser 90줄 분리 (impl-sonnet)
+- [ ] 5. 전체 검증 — E2E 2501 + Clippy 0건 (Opus 직접) [blockedBy: 2,3,4]
+진행률: 0/5 (0%)
+
 ### Phase 159: 코드 건강도 복원 — Clippy 0건 + Pre-existing E2E 해결 + 정리
 
 > **목표**: team-review에서 발견된 4가지 이슈 해결
@@ -338,15 +402,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 변환 | 허용 | 방법 | 근거 |
 |------|------|------|------|
-| `bool → i64` | ❌ 암시적 금지 | `x as i64` 명시 | Rust와 동일. bool은 논리 타입, 정수가 아님 |
-| `i64 → bool` | ❌ 암시적 금지 | `x != 0` 명시 | 0/non-zero 의미가 불명확 |
-| `i64 → f64` | ❌ 암시적 금지 | `x as f64` 명시 | 정밀도 손실 가능 (i64 max > f64 정밀도) |
-| `f64 → i64` | ❌ 암시적 금지 | `x as i64` 명시 | 소수점 절삭 |
-| `f32 ↔ f64` | ❌ 암시적 금지 | `x as f32/f64` 명시 | 정밀도 변경 |
-| `str → i64` | ❌ 금지 | 해당 없음 | 완전히 다른 타입 |
-| `i32 → i64` | ✅ 암시적 허용 | 자동 widening | 안전한 확장 (Rust도 일부 허용) |
+| `bool ↔ integer` | ✅ 암시적 허용 | 자동 promotion | Phase 160-A 복원. bool은 런타임에서 0/1 (C 호환) |
+| `int ↔ float` | ✅ 암시적 허용 | 자동 promotion | Phase 160-A 복원. 정수 리터럴이 float 컨텍스트에 적응 |
+| `f32 ↔ f64` | ✅ 암시적 허용 | float literal inference | Phase 160-A 복원. Rust float literal inference와 동일 |
+| `str ↔ i64` | ❌ 금지 | 해당 없음 | 완전히 다른 타입 |
+| `i32 → i64` | ✅ 암시적 허용 | 자동 widening | 안전한 확장 |
 | `u8 → u16 → u32 → u64` | ✅ 암시적 허용 | 자동 widening | 안전한 확장 |
-| `i64 → i32` | ❌ 암시적 금지 | `x as i32` 명시 | 데이터 손실 가능 (narrowing) |
+| `bool + int` (산술) | ❌ 금지 | `x as i64 + 1` | 산술 연산자는 numeric 타입만 허용 |
+> **Phase 160-A 업데이트**: Phase 158의 엄격한 규칙이 VaisDB 실전 컴파일에서 과도하게 제한적임이 확인됨.
+> bool↔int, int↔float, f32↔f64 numeric promotion을 복원. str↔i64만 금지 유지.
 
 #### 2단계: 작업 목록
 
