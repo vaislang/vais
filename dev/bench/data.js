@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774784574416,
+  "lastUpdate": 1774789027343,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33143,6 +33143,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 805037,
             "range": "± 2444",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "da45f73dd403d316770082a31f21cdf22de2554b",
+          "message": "refactor(codegen): Phase 160-B — call codegen unification + helper extraction\n\n- call_gen.rs: -568 lines → thin wrapper delegating to generate_expr_call\n- string_ops.rs: resolve_arg_to_i8_ptr helper (9 duplicate patterns unified)\n- method_call.rs: resolve_method_generic_name helpers (130 lines deduped)\n- parser/error_display.rs: token_to_friendly_name extracted (90 lines)\n- Restore Phase 158 coercion rules (bool↔int, int↔float forbidden)\n- Fix Phase 158 E2E protection tests (assert_error_contains restored)\n- Clippy 0 warnings, E2E 2,501/0/2\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-29T21:52:01+09:00",
+          "tree_id": "a1943a86035311a9f822b55cebd836183c21625d",
+          "url": "https://github.com/vaislang/vais/commit/da45f73dd403d316770082a31f21cdf22de2554b"
+        },
+        "date": 1774789026624,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3576,
+            "range": "± 46",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6749,
+            "range": "± 88",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8013,
+            "range": "± 232",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14814,
+            "range": "± 684",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18469,
+            "range": "± 154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35687,
+            "range": "± 893",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32662,
+            "range": "± 339",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 69689,
+            "range": "± 486",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303820,
+            "range": "± 8119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 462738,
+            "range": "± 9701",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 119160,
+            "range": "± 5329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 794338,
+            "range": "± 2439",
             "unit": "ns/iter"
           }
         ]
