@@ -122,7 +122,7 @@ use vais_types::ResolvedType;
 
 /// Maximum recursion depth for type resolution to prevent stack overflow
 /// This limit protects against infinite recursive types like: type A = B; type B = A;
-const MAX_TYPE_RECURSION_DEPTH: usize = 32;
+const MAX_TYPE_RECURSION_DEPTH: usize = 64;
 
 /// Escape a string for use in LLVM IR string constants.
 ///
