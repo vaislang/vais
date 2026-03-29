@@ -398,7 +398,7 @@ pub(crate) fn cmd_build(
 
     // Per-module codegen path
     // VAIS_SINGLE_MODULE=1 forces single-module codegen (deprecated — per-module now supports generics)
-    let force_single = std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
+    let force_single = std::env::var("VAIS_SINGLE_MODULE").is_ok_and(|v| v == "1");
     if force_single && verbose {
         eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
     }
@@ -666,7 +666,7 @@ fn run_type_check(
                 // In multi_error_mode (VAIS_TC_NONFATAL), add parallel TC errors
                 // to collected_errors as non-fatal instead of failing immediately.
                 // This allows codegen to proceed with partially type-checked code.
-                let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
+                let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
                 if tc_nonfatal {
                     for err_msg in &all_errors {
                         checker
@@ -698,7 +698,7 @@ fn run_type_check(
 
         // Handle type checking result
         if let Err(e) = tc_result {
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
+            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
 
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
@@ -732,7 +732,7 @@ fn run_type_check(
         // Even if check_module succeeded, there may be collected errors
         if !checker.get_collected_errors().is_empty() {
             let total_errors = checker.get_collected_errors().len();
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").map_or(false, |v| v == "1");
+            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
 
             for collected_err in checker.get_collected_errors() {
                 eprintln!(

@@ -811,7 +811,7 @@ fn main_inner() {
                 // is set (deprecated — per-module codegen now supports cross-module generics)
                 #[cfg(feature = "inkwell")]
                 let use_inkwell = {
-                    let single = std::env::var("VAIS_SINGLE_MODULE").map_or(false, |v| v == "1");
+                    let single = std::env::var("VAIS_SINGLE_MODULE").is_ok_and(|v| v == "1");
                     if single {
                         eprintln!("warning: VAIS_SINGLE_MODULE=1 is deprecated — per-module codegen now supports cross-module generics");
                     }

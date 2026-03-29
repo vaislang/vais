@@ -153,7 +153,7 @@ impl OwnershipChecker {
 
     /// Save ownership states of all variables in all scopes (for branch analysis)
     pub(super) fn save_ownership_snapshot(&self) -> Vec<HashMap<String, OwnershipInfo>> {
-        self.scopes.iter().map(|scope| scope.clone()).collect()
+        self.scopes.to_vec()
     }
 
     /// Restore ownership states from a snapshot (for branch analysis)

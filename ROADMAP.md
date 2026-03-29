@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 148 완료, 실전 안전성 강화)
+> **현재 버전**: 0.1.0 (Phase 159 진행 중, 코드 건강도 복원)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-23 (Phase 148 완료)
+> **최종 업데이트**: 2026-03-29 (Phase 158 완료, Phase 159 진행 중)
 
 ---
 
@@ -85,7 +85,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 컴파일 속도 비교 | C 대비 8.5x, Go 대비 8x, Rust 대비 19x faster (단일 파일 IR 생성) |
 | 실전 프로젝트 | 3개 (CLI, HTTP API, 데이터 파이프라인) |
 
-### 코드 건강도 (2026-03-10 감사)
+### 코드 건강도 (2026-03-29 감사)
 
 | 지표 | 값 | 상태 |
 |------|-----|------|
@@ -97,7 +97,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | unsafe SAFETY 주석 | 44/44 문서화 (100%) | ✅ |
 | 의존성 버전 | 전부 최신 안정 버전 | ✅ |
 | 보안 (입력 검증/인젝션/시크릿) | 이슈 없음 | ✅ |
-| pre-existing 테스트 실패 | E2E 1건, 단위 5건 (Phase 144에서 39건 해결) | ⚠️ |
+| pre-existing 테스트 실패 | E2E 6건 (generic mono 3, large struct 3) | ⚠️ |
 
 ### 릴리즈 상태: v0.1.0 (프리릴리스)
 
@@ -256,6 +256,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
 ## 📋 예정 작업
+
+### Phase 159: 코드 건강도 복원 — Clippy 0건 + Pre-existing E2E 해결 + 정리
+
+> **목표**: team-review에서 발견된 4가지 이슈 해결
+> **기대 효과**: Clippy 0건 복원, pre-existing E2E 6→0건, stale worktree 정리
+
+모드: 자동진행
+  전략 판단: 독립 작업 3개 (Task 6,7,9 파일 비겹침) + 순차 1개 (Task 8 blockedBy 6) → 독립 병렬 + 순차
+- [x] 1. Clippy 19건 수정 — 4 crate 경고 전수 해결 (impl-sonnet + Opus) ✅ 2026-03-29
+  변경: ownership/core.rs, type_inference.rs, build/core.rs, main.rs — map_or→is_ok_and, to_vec(), contains_key 등
+- [x] 2. Stale worktree 4개 정리 (Opus 직접) ✅ 2026-03-29
+  변경: 4개 worktree + branch 삭제 완료
+- [x] 3. ROADMAP 정리 — stale 항목 제거 + 건강도 업데이트 (Opus 직접) ✅ 2026-03-29
+  변경: stale Phase 150-A/B/C/D 세부계획 제거, 건강도 테이블 갱신, 헤더 날짜 업데이트
+- [ ] 4. Pre-existing E2E 6건 수정 — generic mono + large struct codegen (Opus 직접) ❌ 보류
+  사유: 수정 시도 시 where_clause regression 발생 → revert. 향후 별도 Phase에서 해결
+진행률: 3/4 (75%) — Task 4 보류
 
 ### Phase 156: Codecov 68% → 80% — 핵심 crate 단위 테스트 대량 추가
 
@@ -802,31 +819,7 @@ match.merge: phi %Vec* [ %t8, %arm7 ], [ %t20, %arm9 ]   ← 타입 불일치!
   잔여 9건: float coercion 4, generic mono return type 3, large struct 2
 진행률: 4/4 (100%) ✅
 
-#### Phase 150-A: compute_sizeof 수정 (우선순위 1, 예상 0.5일)
-- [ ] `types/conversion.rs`: compute_sizeof에 Named type struct 필드 합산 추가
-- [ ] `generate_expr_call.rs`: store_typed/load_typed에서 compute_sizeof 결과 사용
-- [ ] 테스트: VaisDB test_graph 48/48 regression 없음 확인
-
-#### Phase 150-B: Match phi Named type 통일 (우선순위 2, 예상 1일)
-- [ ] `match_gen.rs`: arm body 생성 후 Named type value를 일관되게 처리
-  - 전략: 모든 Named type arm value를 alloca pointer로 변환
-  - is_expr_value() 결과에 따라 분기: value면 alloca+store, pointer면 그대로
-  - **핵심**: 이미 pointer인 arm (alloca에서 온 값)은 변환하지 않음
-- [ ] `type_inference.rs`: is_expr_value 정확도 개선
-- [ ] 테스트: test_planner, test_transaction 컴파일 가능 확인
-
-#### Phase 150-C: TC expr_types 연결 (우선순위 3, 예상 2일)
-- [ ] `vais-types/src/lib.rs`: TypeChecker에 expr_types 필드 추가
-- [ ] `vais-types/src/checker_expr/`: 각 expression 타입 저장 (10+ 파일)
-- [ ] `vais-codegen/src/type_inference.rs`: TC 타입 우선 참조
-- [ ] `vaisc/src/commands/build/backend.rs`: TC → codegen 전달
-- [ ] 테스트: VaisDB 전체 테스트 통과율 개선 확인
-
-#### Phase 150-D: Vec<struct> 완전 monomorphization (우선순위 4, 예상 1일)
-- [ ] `function_gen/generics.rs`: smart struct skip 제거 (stack overflow 완전 해결 후)
-- [ ] `generate_expr/mod.rs`: 추가 match arm 추출로 스택 프레임 더 축소
-- [ ] `generate_expr_call.rs`: store_typed를 #[inline(never)] 별도 함수로 추출
-- [ ] 테스트: Vec<BufferFrame>, Vec<TokenInfo> 등 복잡 struct Vec 동작 확인
+> Phase 150-A/B/C/D 세부 계획은 Phase 150+151에서 해결 완료. 잔여 6건은 Phase 159에서 처리.
 
 ---
 
