@@ -293,11 +293,80 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > **전략**: CI의 llvm-cov에 E2E 테스트 포함 설정 변경 (가장 큰 커버리지 점프) + 잔여 crate 보강
 > **예상 효과**: E2E 2,487개 테스트가 커버리지에 포함되면 codegen/types/parser 커버 대폭 상승
 
+모드: 자동진행
+  전략 판단: 독립 작업 2개 (ci.yml vs test 파일, 파일 비겹침 확인) → 독립 병렬 선택
+- [x] 1. CI llvm-cov에 E2E 테스트 포함 — ci.yml coverage job에 3-step 접근법 (impl-sonnet) ✅ 2026-03-29
+  변경: ci.yml — timeout-minutes 60, --no-report 2단계(workspace + vaisc E2E) + report 합산
+- [x] 2. vais-registry-server +70 + vais-profiler +81 단위 테스트 보강 (impl-sonnet) ✅ 2026-03-29
+  변경: phase157_registry_coverage.rs (70), phase157_profiler_coverage.rs (81)
+- [x] 3. CI 검증 — cargo check 0 errors, +151 tests 추가 (Opus 직접) ✅ 2026-03-29
+  변경: 빌드 통과 확인 완료. CI llvm-cov는 Push 후 Codecov 확인 필요
+진행률: 3/3 (100%) ✅
+
+### Phase 158: 타입 시스템 엄격화 — Rust 스타일 타입 변환 규칙 확정 + E2E 보호
+
+> **배경**: VaisDB 실전 컴파일 과정에서 `bool↔i64`, `int↔float`, `str↔i64` implicit coercion이
+> 5회 이상 추가↔제거 반복됨 (요요 패턴). 근본 원인: 언어 스펙에 타입 변환 규칙이 명확히 정의되지 않아
+> 세션마다 에이전트가 다른 판단을 내림.
+>
+> **설계 결정**: **Rust 스타일 엄격한 타입 시스템** 채택.
+> 모든 타입 간 변환은 `as` 캐스트로 명시해야 하며, 암시적 변환(coercion)은 허용하지 않음.
+>
+> **영향 범위**: TC (unification.rs), codegen (coercion.rs), E2E 테스트, VaisDB 소스 코드
+>
+> **참고**: VaisDB 메모리 `coercion_yoyo_pattern.md` — 전체 토글 히스토리 기록
+
+#### 1단계: 타입 변환 규칙 확정 (언어 스펙)
+
+| 변환 | 허용 | 방법 | 근거 |
+|------|------|------|------|
+| `bool → i64` | ❌ 암시적 금지 | `x as i64` 명시 | Rust와 동일. bool은 논리 타입, 정수가 아님 |
+| `i64 → bool` | ❌ 암시적 금지 | `x != 0` 명시 | 0/non-zero 의미가 불명확 |
+| `i64 → f64` | ❌ 암시적 금지 | `x as f64` 명시 | 정밀도 손실 가능 (i64 max > f64 정밀도) |
+| `f64 → i64` | ❌ 암시적 금지 | `x as i64` 명시 | 소수점 절삭 |
+| `f32 ↔ f64` | ❌ 암시적 금지 | `x as f32/f64` 명시 | 정밀도 변경 |
+| `str → i64` | ❌ 금지 | 해당 없음 | 완전히 다른 타입 |
+| `i32 → i64` | ✅ 암시적 허용 | 자동 widening | 안전한 확장 (Rust도 일부 허용) |
+| `u8 → u16 → u32 → u64` | ✅ 암시적 허용 | 자동 widening | 안전한 확장 |
+| `i64 → i32` | ❌ 암시적 금지 | `x as i32` 명시 | 데이터 손실 가능 (narrowing) |
+
+#### 2단계: 작업 목록
+
 모드: 대기 중
-- [ ] 1. CI llvm-cov에 E2E 테스트 포함 — ci.yml coverage job에 --include-e2e 또는 vaisc 포함 (impl-sonnet)
-- [ ] 2. vais-registry-server + vais-profiler 단위 테스트 보강 (impl-sonnet) ∥1
-- [ ] 3. CI 검증 — push 후 Codecov 85%+ 확인 (Opus 직접) [blockedBy: 1,2]
-진행률: 0/3 (0%)
+- [ ] 1. TC unification.rs — 암시적 coercion 전체 제거 (Opus 직접)
+  - `bool↔integer` coercion 제거
+  - `int↔float` coercion 제거
+  - `str↔i64` coercion 제거 (이미 제거됨 확인)
+  - `f32↔f64` coercion 제거
+  - 정수 widening만 허용: `i8→i16→i32→i64`, `u8→u16→u32→u64`
+  - `i64→i32` 등 narrowing은 금지
+- [ ] 2. E2E 보호 테스트 추가 — coercion 금지를 검증하는 테스트 (Opus 직접) [blockedBy: 1]
+  - `F main() -> i64 = true` → 컴파일 에러 (bool→i64 금지)
+  - `F main() -> bool = 42` → 컴파일 에러 (i64→bool 금지)
+  - `F main() -> f64 = 42` → 컴파일 에러 (i64→f64 금지)
+  - `F main() -> i64 = 3.14` → 컴파일 에러 (f64→i64 금지)
+  - `F main() -> i64 { x := 1i32; x }` → 컴파일 성공 (i32→i64 widening 허용)
+  - `F main() -> i32 { x := 1i64; x }` → 컴파일 에러 (i64→i32 narrowing 금지)
+  - 각 규칙에 대해 "금지된 변환이 에러를 발생시키는지" + "허용된 변환이 성공하는지" 양방향 검증
+  - 이 테스트가 존재하면 coercion을 재추가할 때 E2E가 깨져서 **요요 패턴 방지**
+- [ ] 3. 기존 E2E 테스트 업데이트 — 새 규칙에 맞게 기대값 수정 (impl-sonnet) [blockedBy: 1]
+  - `error_type_mismatch_bool_vs_i64` — 유지 (에러 기대 맞음)
+  - `e2e_p128_err_type_mismatch_bool_for_int` — 유지
+  - coercion 허용 전제의 테스트 있으면 수정
+- [ ] 4. VaisDB 소스 코드 업데이트 — 암시적 변환을 명시적 `as` 캐스트로 변환 (impl-sonnet) [blockedBy: 1]
+  - `bool` 값을 `i64`에 할당하는 코드 → `as i64` 추가
+  - `i64` 값을 `f64` 연산에 사용하는 코드 → `as f64` 추가
+  - `read_u16_le_checked` 등 반환값 사용 → `as u16` 명시 (일부 이미 완료)
+  - 영향 범위 추정: ~50-100개소
+- [ ] 5. 전체 검증 — vais E2E 전체 통과 + VaisDB test_graph EXIT 0 유지 (Opus 직접) [blockedBy: 2,3,4]
+진행률: 0/5 (0%)
+
+#### 요요 패턴 방지 메커니즘
+
+1. **E2E 보호 테스트 (작업 2)**: coercion 금지 규칙을 "컴파일 에러 기대" 테스트로 보호.
+   coercion을 재추가하면 이 테스트가 깨짐 → 에이전트가 재추가 불가.
+2. **ROADMAP 규칙 명시**: 이 섹션의 "설계 결정" 표가 공식 스펙. 변경 시 RFC 필요.
+3. **CLAUDE.md 규칙 추가 (vais 프로젝트)**: "타입 변환은 Rust 스타일 엄격. 암시적 coercion 추가 금지."
 
 ### Phase 155: 대형 파일 모듈 분할 R15 — auto_vectorize + conversion
 

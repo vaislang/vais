@@ -281,6 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     if: github.event_name == 'push' || github.event_name == 'pull_request'
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -322,15 +323,33 @@ jobs:
         #   - No subprocess/fork coverage loss
         #   - Consistent results across Linux/macOS
         # Excluded crates match tarpaulin.toml: python, node, dap, playground-server
+        #
+        # Two-step approach to include E2E tests:
+        #   Step 1: Run workspace unit/integration tests (--no-report, accumulate profraw)
+        #   Step 2: Run vaisc E2E tests separately (--no-report, same profraw pool)
+        #     - E2E tests in crates/vaisc/tests/e2e/ exercise codegen/types/parser paths
+        #     - LLVM_PROFILE_FILE is set by cargo-llvm-cov so instrumented vaisc binary
+        #       called via Command::new within E2E tests also writes coverage data
+        #   Step 3: Merge all profraw into final lcov report
         run: |
           mkdir -p target/coverage
-          cargo llvm-cov \
+          # Step 1: unit + integration tests for all workspace crates (except excluded)
+          cargo llvm-cov --no-report \
             --workspace \
             --exclude vais-python \
             --exclude vais-node \
             --exclude vais-dap \
             --exclude vais-playground-server \
-            --exclude vais-tutorial \
+            --exclude vais-tutorial
+          # Step 2: E2E tests in vaisc (2,487+ tests exercising codegen/types/parser)
+          # cargo-llvm-cov sets LLVM_PROFILE_FILE so the instrumented vaisc binary
+          # spawned by E2E Command::new calls also emits profraw data into the same pool
+          cargo llvm-cov --no-report \
+            -p vaisc \
+            --test 'e2e*' \
+            -- --test-threads=4
+          # Step 3: merge all accumulated profraw data and emit lcov report
+          cargo llvm-cov report \
             --lcov \
             --output-path target/coverage/lcov.info
         continue-on-error: true
