@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 161 완료, 크로스모듈 TC imported body error 억제)
+> **현재 버전**: 0.1.0 (Phase 162 예정, TC 잔여 이슈 VaisDB 19→0)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-29 (Phase 161 완료)
+> **최종 업데이트**: 2026-03-30 (Phase 161 완료, Phase 162 예정)
 
 ---
 
@@ -314,7 +314,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 5. 전체 검증 — E2E 회귀 0건 + VaisDB 100→72 (Opus 직접) ✅ 2026-03-29
   결과: E2E 2,503 passed / 0 failed, Clippy 0건, Phase 158 보호 테스트 16/16, modules_system 79/79.
   VaisDB 잔여 72건: bool→i64(~40), f32→i64(~30), 기타(~2) — 모두 VaisDB 테스트 코드 수정 필요 (Phase 158 strict rules).
+  **후속 결과 (Phase 160-A numeric promotion 재적용):** VaisDB TC 에러 72→19. test_graph 0, test_vector 0 달성.
 진행률: 5/5 (100%) ✅
+
+### Phase 162: TC 잔여 이슈 — VaisDB 19→0 목표
+
+> **배경**: Phase 161 + 160-A numeric promotion 적용 후 VaisDB TC 에러 19건 잔존 (VaisDB 코드 수정 3건 제외하면 16건).
+> **검증 프로젝트**: VaisDB — test_wal(2), test_btree(3), test_fulltext(12), test_transaction(2)
+
+#### 컴파일러 수정 필요 항목 (16건)
+
+| 유형 | 건수 | 근본 원인 | 수정 방향 |
+|------|------|----------|----------|
+| `*u8` ↔ `&[u8]` | 3 | 포인터/슬라이스 타입 비호환 | TC unification에 `*u8`↔`&[u8]` coercion 추가 |
+| `i64, found str` (Vec<str>) | 6 | 크로스모듈 Vec<str> indexing element erasure | TC: 크로스모듈 generic element type propagation |
+| `field on T/i64` | 2 | generic struct field access 미지원 | TC: generic struct field resolution |
+| `undefined variable` (tok, tf, val) | 3 | 크로스모듈 import된 변수/함수 미해석 | TC: cross-module let binding / for-loop variable |
+| `[u64] vs *i64` | 1 | 배열↔포인터 타입 | TC: 배열/포인터 coercion |
+| `Open-end slicing` | 1 | 미구현 기능 (`arr[start..]`) | Parser/TC: open-end slice syntax 지원 |
+
+- [ ] 1. `*u8` ↔ `&[u8]` auto-coercion — TC unification rule 추가 (Opus 직접)
+- [ ] 2. 크로스모듈 Vec<str> element type propagation — 6건 해소 (Opus 직접)
+- [ ] 3. generic struct field access + undefined variable — 5건 해소 (Opus 직접)
+- [ ] 4. 전체 검증 — VaisDB TC 최소화 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1,2,3]
+진행률: 0/4 (0%)
 
 ### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
 
