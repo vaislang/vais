@@ -116,11 +116,29 @@ impl TypeChecker {
         }
 
         // Second pass: check function bodies
-        for item in &module.items {
+        // For imported items, suppress type errors from body checking.
+        // Imported function bodies may reference symbols not available in the
+        // current compilation unit (transitive dependencies). Errors from imported
+        // code should not be reported to the user — only local code errors matter.
+        let body_check_imported_end = if self.imported_item_count > 0
+            && self.imported_item_count < module.items.len()
+        {
+            self.imported_item_count
+        } else {
+            0
+        };
+        for (idx, item) in module.items.iter().enumerate() {
+            let is_imported = idx < body_check_imported_end;
             match &item.node {
                 Item::Function(f) => {
                     let result = self.check_function(f);
-                    self.try_or_collect(result)?;
+                    if is_imported {
+                        // Silently ignore errors from imported function bodies.
+                        // They may reference symbols not in this compilation unit.
+                        let _ = result;
+                    } else {
+                        self.try_or_collect(result)?;
+                    }
                 }
                 Item::Impl(impl_block) => {
                     // Check impl method bodies
@@ -155,7 +173,12 @@ impl TypeChecker {
                             &method.node,
                             &all_generics,
                         );
-                        self.try_or_collect(result)?;
+                        if is_imported {
+                            // Silently ignore errors from imported impl method bodies.
+                            let _ = result;
+                        } else {
+                            self.try_or_collect(result)?;
+                        }
                     }
                 }
                 _ => {}

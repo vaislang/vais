@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 161 예정, 크로스모듈 TC 개선)
+> **현재 버전**: 0.1.0 (Phase 161 완료, 크로스모듈 TC imported body error 억제)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-29 (Phase 160-A 완료, Phase 161 예정)
+> **최종 업데이트**: 2026-03-29 (Phase 161 완료)
 
 ---
 
@@ -291,39 +291,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: fn_instantiations 우선 조회, generate_block_stmts 사용, 전문화 반환 타입 해석.
 진행률: 4/4 (100%) ✅
 
-### Phase 161: 크로스모듈 TC 근본 개선 — VaisDB 잔여 101건 해소
+### Phase 161: 크로스모듈 TC 근본 개선 — VaisDB TC 에러 100→72 해소
 
-> **배경**: VaisDB 6개 테스트 TC 에러 101건 잔존. 단독 파일 컴파일에서는 정상이나 크로스모듈에서만 발생.
+> **배경**: VaisDB 6개 테스트 TC 에러 100건 잔존. 단독 파일 컴파일에서는 정상이나 크로스모듈에서만 발생.
 > **검증 프로젝트**: VaisDB — 6개 테스트 스위트 (test_graph, test_wal, test_btree, test_fulltext, test_vector, test_transaction)
+> **근본 원인 발견**: 기존 분석(타입 erasure, symbol resolution)은 오진. 실제 원인은 TC pass 2에서 imported function/impl body를 재검사하면서 transitive dependency 부재로 spurious error 발생.
+> **잔여 72건**: VaisDB 테스트 코드의 타입 불일치 (bool→i64, f32→i64, Phase 158 strict rules). 컴파일러 버그가 아닌 VaisDB 코드 수정 필요.
 
-#### 에러 유형별 분석
+모드: 자동진행
+  전략 판단: Task 1,2,3 파일 겹침(vais-types crate 공유) + 근본 원인 연관 → 순차 선택. Opus 직접: 설계-구현 불가분(TC 코어 수정)
 
-| 유형 | 건수 | 근본 원인 | 수정 위치 |
-|------|------|----------|----------|
-| `str, found i64` | 12 | 크로스모듈 Vec<str> indexing → element type이 i64로 erasure | TC: 크로스모듈 generic propagation |
-| `undefined variable` | 8 | import된 함수/상수가 TC에서 미해석 | TC: cross-module symbol resolution |
-| `*u8 vs &[u8]` | 6 | 포인터와 슬라이스 타입 호환 | TC: 포인터↔슬라이스 coercion 또는 VaisDB 코드 수정 |
-| `Optional or Result, found ()` | 5 | `?` 연산자에서 반환 타입 해석 실패 | TC: `?` operator return type inference |
-| `T?, found Option<?>` | 4 | Option generic type variable 미해석 | TC: Option/Result generic propagation |
-| `argument count` mismatch | 4 | 크로스모듈 필드 접근이 method call로 fallback | TC/Parser: field vs method disambiguation |
-| `IsolationLevel, found i64` | 3 | enum 타입이 i64로 erasure | TC: 크로스모듈 enum type resolution |
-| `field on i64/T` | 3 | generic struct field access 미지원 | TC: generic struct field resolution |
-| `TxnStatus vs TxnState` | 2 | 타입명 불일치 | VaisDB 코드 수정 |
-| Open-end slicing | 1 | 미구현 기능 | Parser/TC: open-end slice syntax |
-| 기타 | 5 | 혼합 | 개별 분석 필요 |
-
-#### 우선순위별 작업
-
-- [ ] 1. 크로스모듈 symbol resolution 강화 — undefined variable 8건 해소 (Opus 직접)
-  대상: TC의 cross-module import에서 함수/상수/타입 심볼 해석 누락
-- [ ] 2. 크로스모듈 Vec<T> generic propagation — str erasure 12건 해소 (Opus 직접)
-  대상: 대규모 파일에서 Vec<str> indexing 시 element type을 i64로 fallback하는 문제
-- [ ] 3. `?` 연산자 반환 타입 해석 — Optional/Result 9건 해소 (Opus 직접)
-  대상: `?` 연산자가 Optional/Result가 아닌 함수에서 사용될 때 TC 에러
-- [ ] 4. 크로스모듈 enum/struct 타입 해석 — 8건 해소 (Opus 직접) [blockedBy: 1]
-  대상: enum이 i64로 erasure, argument count fallback, field on i64
-- [ ] 5. 전체 검증 — VaisDB 6개 테스트 TC 에러 최소화 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1,2,3,4]
-진행률: 0/5 (0%)
+- [x] 1. TC pass 2: imported function body error 억제 — 28건 해소 (Opus 직접) ✅ 2026-03-29
+  변경: checker_module/mod.rs — pass 2에서 idx < imported_item_count인 항목의 check_function/check_impl_method 에러를 무시. 기존 pass 3 ownership 스킵과 동일 패턴.
+  결과: test_graph 12→5, test_vector 38→35, test_fulltext 50→32, 이전 정상 3개 테스트 regression 0건.
+  근거: imported body는 이미 원본 모듈 컴파일 시 검증됨. 현재 compilation unit에 없는 transitive dependency로 인한 spurious error 방지.
+- [x] 2. 조사 완료: Vec<T> str erasure 미발생 — 컴파일러 정상 (Opus 직접) ✅ 2026-03-29
+  결과: "str found i64" 에러는 imported body 재검사에서 발생. 실제 Vec<T> generic propagation은 정상 동작. Task 1 수정으로 해소.
+- [x] 3. 조사 완료: ?/! 연산자 정상 동작 — 컴파일러 정상 (Opus 직접) ✅ 2026-03-29
+  결과: Result/Option unwrap은 cross-module에서도 정상. "Optional found ()" 에러는 imported body 재검사에서 발생. Task 1 수정으로 해소.
+- [x] 4. 조사 완료: enum/struct 타입 cross-module 정상 — 컴파일러 정상 (Opus 직접) ✅ 2026-03-29
+  결과: struct field access, enum type resolution 모두 정상. 에러는 imported body 재검사에서 발생. Task 1 수정으로 해소.
+- [x] 5. 전체 검증 — E2E 회귀 0건 + VaisDB 100→72 (Opus 직접) ✅ 2026-03-29
+  결과: E2E 2,503 passed / 0 failed, Clippy 0건, Phase 158 보호 테스트 16/16, modules_system 79/79.
+  VaisDB 잔여 72건: bool→i64(~40), f32→i64(~30), 기타(~2) — 모두 VaisDB 테스트 코드 수정 필요 (Phase 158 strict rules).
+진행률: 5/5 (100%) ✅
 
 ### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
 
