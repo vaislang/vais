@@ -482,7 +482,7 @@ fn main() {
     // deep codegen for complex struct specializations (e.g., Vec<BufferFrame>)
     let child = std::thread::Builder::new()
         .name("vaisc-main".to_string())
-        .stack_size(256 * 1024 * 1024)
+        .stack_size(1024 * 1024 * 1024)
         .spawn(main_inner)
         .expect("failed to spawn main thread");
 

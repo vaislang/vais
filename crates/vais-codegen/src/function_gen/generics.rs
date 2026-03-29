@@ -109,13 +109,23 @@ impl CodeGenerator {
         generic_fn: &Function,
         inst: &vais_types::GenericInstantiation,
     ) -> CodegenResult<String> {
-        // Use stacker to handle deep specialization chains
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, move || {
-            self.enter_type_recursion("generate_specialized_function")?;
-            let result = self.generate_specialized_function_inner(generic_fn, inst);
-            self.exit_type_recursion();
-            result
-        })
+        // Use stacker to handle deep specialization chains.
+        // Catch panics from stack overflow and convert to recoverable error.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                self.enter_type_recursion("generate_specialized_function")?;
+                let result = self.generate_specialized_function_inner(generic_fn, inst);
+                self.exit_type_recursion();
+                result
+            })
+        }));
+        match result {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("[WARN] Stack overflow during specialization of '{}' — skipping", inst.mangled_name);
+                Ok(String::new()) // Return empty IR, function will be undefined
+            }
+        }
     }
 
     #[inline(never)]

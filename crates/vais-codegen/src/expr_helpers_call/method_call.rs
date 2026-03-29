@@ -637,44 +637,39 @@ impl CodeGenerator {
                 }
             }
 
-            // For struct types passed to generic (T→i64) params: store struct, ptrtoint to i64
-            // EXCEPT: if a specialized function exists for this arg type, skip the conversion
-            // and pass the struct value directly.
+            // For struct types: handle generic erasure (struct → i64) and
+            // pointer-to-value loading for non-generic struct params.
             let arg_inferred = self.infer_expr_type(arg);
-            let skip_erasure = if matches!(
-                &arg_inferred,
-                ResolvedType::Named { .. } | ResolvedType::Str
-            ) {
-                // Check if a specialized version exists for this method + arg type
-                let spec_name = vais_types::mangle_name(
-                    &format!(
-                        "{}_{}",
-                        self.resolve_struct_name(
-                            if let ResolvedType::Named { name, .. } = &recv_type {
-                                name
-                            } else {
-                                "Unknown"
-                            }
-                        ),
-                        method_name
-                    ),
-                    &[arg_inferred.clone()],
-                );
-                self.types.functions.contains_key(&spec_name)
-                    || self.generics.generic_method_bodies.contains_key(&(
-                        if let ResolvedType::Named { name, .. } = &recv_type {
-                            name.clone()
-                        } else {
-                            String::new()
-                        },
-                        method_name.to_string(),
-                    ))
-            } else {
-                false
-            };
-            if matches!(&arg_inferred, ResolvedType::Named { .. }) && !skip_erasure {
+            if matches!(&arg_inferred, ResolvedType::Named { .. }) {
                 let struct_llvm = self.type_to_llvm(&arg_inferred);
                 if arg_llvm_ty == "i64" && struct_llvm.starts_with('%') {
+                    // Generic param (T→i64): check if a specialized version exists
+                    let skip_erasure = {
+                        let spec_name = vais_types::mangle_name(
+                            &format!(
+                                "{}_{}",
+                                self.resolve_struct_name(
+                                    if let ResolvedType::Named { name, .. } = &recv_type {
+                                        name
+                                    } else {
+                                        "Unknown"
+                                    }
+                                ),
+                                method_name
+                            ),
+                            &[arg_inferred.clone()],
+                        );
+                        self.types.functions.contains_key(&spec_name)
+                            || self.generics.generic_method_bodies.contains_key(&(
+                                if let ResolvedType::Named { name, .. } = &recv_type {
+                                    name.clone()
+                                } else {
+                                    String::new()
+                                },
+                                method_name.to_string(),
+                            ))
+                    };
+                    if !skip_erasure {
                     // Generic erasure: struct → i64 via alloca+store+ptrtoint
                     if self.is_expr_value(arg) {
                         let alloca_tmp = self.next_temp(counter);
@@ -707,6 +702,7 @@ impl CodeGenerator {
                             val
                         );
                         val = ptr_tmp;
+                    }
                     }
                 } else if !self.is_expr_value(arg) {
                     // Non-generic struct param: load from pointer

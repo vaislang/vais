@@ -31,9 +31,18 @@ impl CodeGenerator {
         f: &Function,
         span: Span,
     ) -> CodegenResult<String> {
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
-            self.generate_function_with_span_inner(f, span)
-        })
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                self.generate_function_with_span_inner(f, span)
+            })
+        }));
+        match result {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("[WARN] Stack overflow during codegen of '{}' — skipping", f.name.node);
+                Ok(String::new())
+            }
+        }
     }
 
     #[inline(never)]

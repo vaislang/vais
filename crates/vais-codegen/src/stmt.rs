@@ -32,6 +32,16 @@ impl CodeGenerator {
         stmt: &Spanned<Stmt>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            self.generate_stmt_inner(stmt, counter)
+        })
+    }
+
+    fn generate_stmt_inner(
+        &mut self,
+        stmt: &Spanned<Stmt>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
         // Track the current statement span for error diagnostics
         self.last_error_span = Some(stmt.span);
 
