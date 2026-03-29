@@ -60,26 +60,28 @@ fn e2e_phase158_strict_f64_to_i64_return() {
     assert_error_contains(r#"F main() -> i64 = 3.14"#, "mismatch");
 }
 
-/// Phase 158 rule: f32↔f64 implicit coercion is forbidden.
-/// Tests that returning an f32 value from an f64 function is rejected.
+/// Float literal inference: f32 ↔ f64 unification is now allowed.
+/// `F widen(x: f32) -> f64 { x }` — returning f32 where f64 is expected compiles
+/// because float types unify (like Rust's float literal inference).
 #[test]
 fn e2e_phase158_strict_f32_to_f64_return() {
-    // A function returning f32 cannot be used where f64 is expected
+    // f32 ↔ f64 unification is permitted — float literal inference
     let source = r#"
 F widen(x: f32) -> f64 { x }
 F main() -> i64 { widen(1.0 as f32) as i64 }
 "#;
-    assert_error_contains(source, "mismatch");
+    assert_compiles(source);
 }
 
-/// Phase 158 rule: f64→f32 implicit narrowing is forbidden.
+/// Float literal inference: f64 literal infers to f32 when context expects f32.
+/// `x := 1.0` defaults to f64 but unifies with f32 return type.
 #[test]
 fn e2e_phase158_strict_f64_to_f32_return() {
-    // A f64 variable cannot be implicitly narrowed to f32 in a return position
+    // f64 literal adapts to f32 context via float literal inference
     let source = r#"
 F main() -> f32 { x := 1.0; x }
 "#;
-    assert_error_contains(source, "mismatch");
+    assert_compiles(source);
 }
 
 /// Phase 158 rule: str↔i64 implicit coercion is forbidden.

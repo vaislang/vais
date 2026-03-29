@@ -117,8 +117,9 @@ intellij-vais/     # IntelliJ plugin
 > 이 규칙은 `unification.rs`의 coercion이 5회 토글된 요요 패턴을 근본 방지하기 위해 제정됨.
 > 변경 시 반드시 RFC + E2E 보호 테스트 업데이트 필요.
 
-- ✅ **허용 (암시적)**: 정수 widening만 — `i8→i16→i32→i64`, `u8→u16→u32→u64`
-- ❌ **금지**: `bool↔i64`, `int↔float`, `f32↔f64`, `str↔i64`, 정수 narrowing (`i64→i32`)
+- ✅ **허용 (암시적)**: 정수 widening — `i8→i16→i32→i64`, `u8→u16→u32→u64`
+- ✅ **허용 (암시적)**: float 리터럴 추론 — `f32↔f64` (Rust와 동일, float 리터럴이 컨텍스트에 맞게 추론)
+- ❌ **금지**: `bool↔i64`, `int↔float`, `str↔i64`, 정수 narrowing (`i64→i32`)
 - 모든 타입 변환은 `as` 키워드로 명시: `x as i64`, `y as f64`, `flag as i64`
 - `unification.rs`에 `Bool`, `Str↔I64`, `Float↔Int` coercion 절대 추가하지 말 것
 - E2E 보호 테스트 (`phase158_type_strict.rs`)가 이 규칙을 검증

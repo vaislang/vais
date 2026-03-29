@@ -97,7 +97,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | unsafe SAFETY 주석 | 44/44 문서화 (100%) | ✅ |
 | 의존성 버전 | 전부 최신 안정 버전 | ✅ |
 | 보안 (입력 검증/인젝션/시크릿) | 이슈 없음 | ✅ |
-| pre-existing 테스트 실패 | E2E 6건 (generic mono 3, large struct 3) | ⚠️ |
+| pre-existing 테스트 실패 | 0건 (Phase 159에서 전수 해결) | ✅ |
 
 ### 릴리즈 상태: v0.1.0 (프리릴리스)
 
@@ -270,9 +270,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: 4개 worktree + branch 삭제 완료
 - [x] 3. ROADMAP 정리 — stale 항목 제거 + 건강도 업데이트 (Opus 직접) ✅ 2026-03-29
   변경: stale Phase 150-A/B/C/D 세부계획 제거, 건강도 테이블 갱신, 헤더 날짜 업데이트
-- [ ] 4. Pre-existing E2E 6건 수정 — generic mono + large struct codegen (Opus 직접) ❌ 보류
-  사유: 수정 시도 시 where_clause regression 발생 → revert. 향후 별도 Phase에서 해결
-진행률: 3/4 (75%) — Task 4 보류
+- [x] 4. Pre-existing E2E 6건 수정 — generic mono + large struct codegen (Opus 직접) ✅ 2026-03-29
+  변경: type_inference.rs — specialization-aware return type, method_call.rs — fn_instantiations 우선, generics.rs — generate_block_stmts + terminated 플래그
+  결과: E2E 2,501 passed / 0 failed / 2 ignored, regression 0건
+진행률: 4/4 (100%) ✅
 
 ### Phase 156: Codecov 68% → 80% — 핵심 crate 단위 테스트 대량 추가
 
