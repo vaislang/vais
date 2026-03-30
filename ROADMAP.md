@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 163 완료)
+> **현재 버전**: 0.1.0 (Phase 164 예정, VaisDB test_btree TC/CG 잔여)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 163 완료)
+> **최종 업데이트**: 2026-03-30 (Phase 163 완료, Phase 164 예정)
 
 ---
 
@@ -256,6 +256,33 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
 ## 📋 예정 작업
+
+### Phase 164: VaisDB test_btree TC 2 + CG 5 잔여 해결
+
+> **배경**: Phase 163에서 Ref(Vec<T>)↔Slice(T), generic mono, open-end slicing 구현했으나,
+> VaisDB test_btree의 특정 패턴은 여전히 미해결. E2E는 통과하므로 컴파일러 자체 회귀는 없음.
+> **검증 프로젝트**: VaisDB test_btree — 유일한 TC 에러 잔존 테스트 (나머지 5/6 TC 0)
+
+#### 잔여 에러 상세
+
+**TC 2건:**
+- `E006 Wrong argument count: expected 2, got 1` — `encode_composite_key(&[&[u8]])` 호출에서 `&Vec<&[u8]>` 전달 시 TC가 함수를 찾지 못하고 다른 오버로드(2-arg)로 fallback
+  - Phase 163의 `Ref(Vec<T>)↔Slice(T)` coercion이 **nested** slice (`&[&[u8]]`)에 재귀적으로 적용되지 않음
+  - 수정 방향: Ref(Vec<Slice(T)>) → Slice(Slice(T)) 재귀 unification 또는 TC의 함수 lookup에서 Vec→slice auto-deref
+- `E006 cascade` — 위 에러로 인해 블록 끝에서 발생하는 2차 에러
+
+**CG 3건 (TC와 무관, codegen 단계):**
+- `C003 field 'key_off' on type 'T'` — BTreeEntry<T> generic struct에서 T가 codegen에서 i64로 erasure됨. Phase 163의 mono fix가 이 패턴을 커버하지 못함
+  - 수정 방향: codegen에서 BTreeEntry의 T를 concrete struct로 치환하는 monomorphization 경로 추가
+- `C003 field 'tid' on type 'i64'` — 동일 원인 (T→i64 erasure 후 field access)
+- `C005 Open-end slicing` — `data[offset..]`에서 data가 `&[u8]` slice인데, Phase 163은 ConstArray만 지원. Slice 소스의 open-end slicing 미구현
+  - 수정 방향: helpers.rs에서 Slice 소스에 대해 `ptr + start_offset`으로 새 slice 생성
+
+- [ ] 1. nested slice coercion — `Ref(Vec<Slice(T)>)` → `Slice(Slice(T))` 재귀 unification (Opus 직접)
+- [ ] 2. generic struct field access in codegen — BTreeEntry<T> monomorphization (Opus 직접) [blockedBy: 1]
+- [ ] 3. Slice 소스 open-end slicing — `slice[start..]` codegen (Opus 직접)
+- [ ] 4. 전체 검증 — VaisDB test_btree TC 0 + CG 0 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1, 2, 3]
+진행률: 0/4 (0%)
 
 ### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
 
