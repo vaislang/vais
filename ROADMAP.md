@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 164 완료, VaisDB test_btree TC/CG 검증 + Slice open-end fix)
+> **현재 버전**: 0.1.0 (Phase 165 예정, VaisDB test_btree cross-module 잔여)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 164 완료)
+> **최종 업데이트**: 2026-03-30 (Phase 164 완료, Phase 165 예정)
 
 ---
 
@@ -256,6 +256,33 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
 ## 📋 예정 작업
+
+### Phase 165: VaisDB test_btree 잔여 TC 2 + CG 5 — cross-module 특수 사례
+
+> **배경**: Phase 164 검증 후에도 VaisDB test_btree에서 TC 2 + CG 5 잔존.
+> E2E 단일 파일 테스트는 통과하지만 VaisDB cross-module 컴파일에서만 발생하는 특수 사례.
+> **VaisDB 현황**: 5/6 TC 0 (test_graph, test_wal, test_vector, test_fulltext, test_transaction). 총 221→2 (99%).
+
+#### 잔여 에러 상세 (2026-03-30 검증)
+
+**TC 2건 — cross-module nested slice coercion:**
+- `E006 Wrong argument count` at test_btree.vais:94 — `encode_composite_key(&Vec<&[u8]>)` 호출에서 TC가 함수 `encode_composite_key(&[&[u8]])` 매칭 실패
+  - E2E 단독 파일에서는 `Ref(Vec<Slice(T)>)→Slice(Slice(T))` 정상 동작
+  - VaisDB cross-module import 시에만 함수 lookup이 2-arg 오버로드로 fallback
+  - 수정 방향: cross-module 함수 lookup에서 argument coercion을 시도하는 로직 추가
+- `E006 cascade` at test_btree.vais:390 — 위 에러로 인한 블록 끝 전파
+
+**CG 5건 — cross-module generic erasure:**
+- `C003 field 'key_off' on type 'T'` — BTreeEntry generic struct field
+- `C003 field 'tid' on type 'i64'` — T→i64 erasure 후 field access
+- `C005 Open-end slicing` — `&[u8]` slice source open-end (Ref(Slice) 패턴)
+  - Phase 164에서 `is_slice_source`에 Ref(Slice) 추가했으나 VaisDB cross-module에서 미적용
+- 추가 CG 2건 — cross-module type inference cascade
+
+- [ ] 1. cross-module 함수 lookup에서 nested slice argument coercion (Opus 직접)
+- [ ] 2. cross-module generic struct codegen monomorphization (Opus 직접)
+- [ ] 3. 전체 검증 — VaisDB 6/6 TC 0 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1, 2]
+진행률: 0/3 (0%)
 
 ### Phase 164: VaisDB test_btree TC/CG 검증 + Slice open-end slicing 수정
 
