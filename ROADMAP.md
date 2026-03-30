@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 166 예정, TC 함수 call argument coercion)
+> **현재 버전**: 0.1.0 (Phase 166 완료, cross-module Vec→Slice codegen coercion)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 165 완료, Phase 166 예정)
+> **최종 업데이트**: 2026-03-31 (Phase 166 완료)
 
 ---
 
@@ -257,25 +257,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
-### Phase 167: TC 함수 후보 선택에서 argument coercion — VaisDB test_btree TC 0
+### ~~Phase 167: TC 함수 후보 선택에서 argument coercion~~ — **불필요 (2026-03-31)**
 
-> **배경**: Phase 166은 codegen 레벨에서 Vec→Slice coercion을 수정했으나 TC 에러는 미해결.
-> TC의 **함수 후보 선택(overload resolution)** 단계에서 argument coercion이 적용되지 않음.
->
-> **정확한 문제**:
-> - VaisDB `encode_composite_key(components: &[&[u8]])` — 1-arg 함수
-> - 호출: `encode_composite_key(&part_refs)` where `part_refs: Vec<&[u8]>`
-> - TC가 인자 타입 `&Vec<&[u8]>`와 파라미터 타입 `&[&[u8]]`를 비교할 때, unification이 아닌 **정확 매칭**으로 비교
-> - 매칭 실패 → 다른 함수 후보(2-arg)로 fallback → "expected 2 arguments, got 1" 에러
->
-> **수정 위치**: `checker_expr/calls.rs` — `check_call()` 또는 `resolve_function()` 에서 함수 후보 선택 시,
-> 인자 수가 일치하는 후보에 대해 `unify(param_type, arg_type)` 시도. 성공하면 후보로 선택.
->
-> **검증**: `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 0건
-
-- [ ] 1. TC check_call에서 argument type unification 기반 후보 선택 (Opus 직접)
-- [ ] 2. VaisDB test_btree TC 0 검증 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1]
-진행률: 0/2 (0%)
+> Phase 166 검증 결과 VaisDB TC 0건 (test_btree.vais는 이전 세션 임시 파일, 코드베이스에 없음).
+> TC unification.rs에 Ref(Vec<T>)↔Slice(T) coercion 이미 존재 (Phase 163). 추가 수정 불필요.
 
 ### Phase 166: TC 함수 call argument coercion — VaisDB test_btree 최종 해결
 
