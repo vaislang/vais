@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774875539356,
+  "lastUpdate": 1774877797112,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33527,6 +33527,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 794736,
             "range": "± 3167",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "78f893460da8a91c9c3cb8eed13f614ea3dc2ea9",
+          "message": "docs: sync documentation with actual implementation across 24 files\n\nTeam review found 6 categories of doc-implementation mismatches:\n\n1. String interpolation: ~{expr} → {expr} in 21 files (parser uses\n   curly braces directly, not tilde prefix)\n2. Trait impl syntax: X MyTrait for MyStruct → X MyStruct: MyTrait\n   (colon syntax per parser implementation)\n3. Counts: stdlib 74→80, examples 174→188, tests 9,300→12,000+,\n   E2E 1,620→2,500+\n4. Performance: updated to Phase 129/130 baselines\n5. Version: 0.0.1 → 0.1.0\n6. ~ operator: string interpolation → bitwise NOT\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-30T22:31:47+09:00",
+          "tree_id": "ff6e0abf5d1c3f857f4513e7fa2b94736bdb486b",
+          "url": "https://github.com/vaislang/vais/commit/78f893460da8a91c9c3cb8eed13f614ea3dc2ea9"
+        },
+        "date": 1774877796711,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3595,
+            "range": "± 48",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6770,
+            "range": "± 145",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8130,
+            "range": "± 74",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14286,
+            "range": "± 145",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18904,
+            "range": "± 97",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35721,
+            "range": "± 440",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32580,
+            "range": "± 138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70352,
+            "range": "± 393",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 302781,
+            "range": "± 1019",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 463371,
+            "range": "± 2611",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 115789,
+            "range": "± 403",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 797170,
+            "range": "± 3406",
             "unit": "ns/iter"
           }
         ]
