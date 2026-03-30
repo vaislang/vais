@@ -333,8 +333,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | `i64, found str` (assert_eq) | 6 | 0 | ✅ VaisDB test_fulltext — assert_eq→assert_eq_str |
 | `undefined variable` (tok, tf, val) | 6 | 0 | ✅ lookup.rs — iterator type 추론 + control_flow.rs fallback |
 | `[u64] vs *i64` | 1 | 0 | ✅ unification.rs — Array↔Pointer coercion |
-| WrongArgCount (btree) | 2 | 2 | VaisDB 코드 문제 (함수 인자 수 불일치) |
-| VByteResult tuple (fulltext) | 0 | 2 | VaisDB 코드 문제 (struct vs tuple destructure) |
+| WrongArgCount (btree) | 2 | 2 | TC: nested slice `&[&[u8]]` 인자 파싱 + cascade |
+| VByteResult tuple (fulltext) | 0 | 0 | ✅ VaisDB 수정 완료 (tuple→struct field) |
+
+#### 잔여 이슈 (2 TC + 3 CG = 5건, test_btree만)
+
+**TC 에러 2건:**
+- `E006 Wrong argument count` — `encode_composite_key(&[&[u8]])` 호출에서 `&Vec<&[u8]>` 전달 시 nested slice 타입 파싱 문제
+- `E006 Wrong argument count` — 위 에러의 cascade (블록 끝으로 전파)
+
+**CG 에러 3건:**
+- `C003 field 'key_off' on type 'T'` — codegen generic struct field access (monomorphization 시 T→concrete 타입 치환 필요)
+- `C003 field 'tid' on type 'i64'` — codegen generic erasure (struct가 i64로 치환되어 field access 불가)
+- `C005 Open-end slicing` — `arr[start..]` 문법 미구현 (파서/codegen)
+
+**수정 방향:**
+- TC 2건: 파서에서 nested slice 타입 (`&[&[u8]]`) 파라미터 매칭 개선 또는 VaisDB에서 우회
+- CG 3건: codegen generic monomorphization에서 struct field resolution 개선 + open-end slicing 구현
 
 - [x] 1. `*u8` ↔ `&[u8]` auto-coercion — TC unification rule 추가 (Opus 직접) ✅ 2026-03-30
   변경: unification.rs — Pointer↔Slice/SliceMut, Array/ConstArray↔Pointer coercion 추가. test_wal 2→0, test_btree 3→2, test_fulltext [u64]vs*i64 1건 해소.
