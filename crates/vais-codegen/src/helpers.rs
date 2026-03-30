@@ -415,6 +415,15 @@ impl CodeGenerator {
                     arr_val
                 );
                 length
+            } else if let ResolvedType::ConstArray { size, .. } = &arr_type {
+                // ConstArray has a known compile-time size; use it as i64 literal
+                if let Some(n) = size.try_evaluate() {
+                    n.to_string()
+                } else {
+                    return Err(CodegenError::Unsupported(
+                        "Open-end slicing on ConstArray requires a concrete size".to_string(),
+                    ));
+                }
             } else {
                 // Array/Pointer source doesn't have length information
                 return Err(CodegenError::Unsupported(

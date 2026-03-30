@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 162 예정, TC 잔여 이슈 VaisDB 19→0)
+> **현재 버전**: 0.1.0 (Phase 163 진행, 잔여 5건 해결)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 161 완료, Phase 162 예정)
+> **최종 업데이트**: 2026-03-30 (Phase 162 완료, Phase 163 진행)
 
 ---
 
@@ -316,6 +316,24 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   VaisDB 잔여 72건: bool→i64(~40), f32→i64(~30), 기타(~2) — 모두 VaisDB 테스트 코드 수정 필요 (Phase 158 strict rules).
   **후속 결과 (Phase 160-A numeric promotion 재적용):** VaisDB TC 에러 72→19. test_graph 0, test_vector 0 달성.
 진행률: 5/5 (100%) ✅
+
+### Phase 163: 잔여 5건 해결 — TC coercion + generic mono + open-end slicing
+
+> **배경**: Phase 162 후 VaisDB test_btree 잔여 5건 (TC 2 + CG 3). 컴파일러 레벨 버그 수정.
+> **근본 원인**: (1) Ref(Vec<T>)↔Slice(T) unification 미지원, (2) generic struct monomorphization 시 T→i64 erasure, (3) array open-end slicing length 미추론
+
+모드: 자동진행
+  전략 판단: Task 1,2 파일 겹침(vais-types → vais-codegen 순차) + Task 3 독립(codegen helpers.rs 비겹침) → 순차+독립 병렬. Opus 직접: TC/CG core 수정
+
+- [x] 1. Ref(Vec<T>) ↔ Slice(T) TC unification rule 추가 (Opus 직접) ✅ 2026-03-30
+  변경: inference/unification.rs — Ref(Vec<T>)↔Slice(T) + RefMut(Vec<T>)↔SliceMut(T) 2개 규칙 추가. &Vec<&[u8]>를 &[&[u8]] 파라미터에 전달 가능.
+- [ ] 2. Generic struct codegen monomorphization — T→concrete 타입 치환 (Opus 직접) [blockedBy: 1]
+  조사: generic struct에서 T가 non-i64 타입(struct)일 때 type definition + struct literal + field access에서 i64 erasure 발생. Text IR codegen + Inkwell codegen 양쪽 수정 필요. 기존 i64-기반 generic struct는 regression 없이 유지해야 함 — 단순 type def 억제는 42건 regression 유발. 근본 수정은 monomorphization pipeline에서 specialized struct type 생성 + 사용 경로 전체 교체 필요.
+- [x] 3. Array open-end slicing codegen 지원 — arr[start..] 구현 (impl-sonnet) ✅ 2026-03-30
+  변경: helpers.rs — ConstArray 소스에서 size.try_evaluate()로 length 추출. 기존 Slice 소스 + 새 ConstArray 소스 양쪽 지원.
+- [x] 4. 전체 검증 — E2E 2,501 passed / 0 failed + Clippy 0건 (Opus 직접) ✅ 2026-03-30
+  결과: E2E 2,501 passed / 0 failed / 2 ignored, Clippy 0건. Task 1+3 regression 0건. Task 2(generic struct mono)는 deep issue로 후속 Phase 이관.
+진행률: 3/4 (75%) — Task 2 미완료 (후속 이관)
 
 ### Phase 162: TC 잔여 이슈 — VaisDB 19→0 목표
 

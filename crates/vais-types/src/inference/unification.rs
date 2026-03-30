@@ -235,6 +235,29 @@ impl TypeChecker {
                     Ok(()) // Permissive: allow Vec ↔ &T
                 }
             }
+            // Ref(Vec<T>) ↔ Slice(T) auto-coercion (Phase 163).
+            // &Vec<&[u8]> and &[&[u8]] are compatible — Rust-style auto-deref from &Vec<T> to &[T].
+            (ResolvedType::Ref(inner), ResolvedType::Slice(elem))
+            | (ResolvedType::Slice(elem), ResolvedType::Ref(inner))
+                if matches!(inner.as_ref(), ResolvedType::Named { name, generics, .. } if name == "Vec" && !generics.is_empty()) =>
+            {
+                if let ResolvedType::Named { generics, .. } = inner.as_ref() {
+                    self.unify(&generics[0], elem)
+                } else {
+                    Ok(())
+                }
+            }
+            // RefMut(Vec<T>) ↔ SliceMut(T) auto-coercion (Phase 163).
+            (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
+            | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))
+                if matches!(inner.as_ref(), ResolvedType::Named { name, generics, .. } if name == "Vec" && !generics.is_empty()) =>
+            {
+                if let ResolvedType::Named { generics, .. } = inner.as_ref() {
+                    self.unify(&generics[0], elem)
+                } else {
+                    Ok(())
+                }
+            }
             // Pointer <-> i64 implicit unification.
             // Vais represents all pointers as i64 at the IR level (no opaque pointer distinction).
             // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
