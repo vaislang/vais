@@ -269,10 +269,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 >
 > **검증**: `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 2건 (line 94, 390)
 
-- [ ] 1. TC 함수 lookup에서 argument coercion 시도 — `Ref(Vec<T>)`→`Slice(T)` 매칭 (Opus 직접)
-  대상: checker_expr/calls.rs 또는 checker_fn/ — 함수 후보 선택 시 인자를 unification으로 coerce 시도
-- [ ] 2. VaisDB test_btree TC 0 + CG 최소화 검증 (Opus 직접) [blockedBy: 1]
-진행률: 0/2 (0%)
+모드: 자동진행
+  전략 판단: Task 1→2 blockedBy 순서 → 순차. Opus 직접: 컴파일러 codegen 타입 coercion
+  참고: ROADMAP의 TC 이슈(E006)는 Phase 165에서 이미 해결됨. 실제 잔여 이슈는 cross-module codegen의
+  typed pointer 불일치 — Vec struct 포인터를 Slice fat pointer 파라미터에 전달 시 LLVM type mismatch.
+
+- [x] 1. Cross-module codegen Vec→Slice argument coercion (Opus 직접) ✅ 2026-03-30
+  변경: generate_expr_call.rs — is_vec_to_slice_coercion() 감지 시 inferred type 사용.
+  type_inference.rs — is_vec_to_slice_coercion() 헬퍼 추가.
+  근본 원인: multi-module codegen에서 typed pointer 사용 시 %Vec* ≠ {i8*, i64} 타입 불일치.
+  param type 대신 inferred type으로 LLVM type tag 생성하여 layout-compatible 호출.
+- [x] 2. VaisDB 컴파일 검증 + E2E 테스트 추가 (Opus 직접) ✅ 2026-03-30
+  참고: test_btree.vais는 이전 세션 임시 파일로 현재 코드베이스에 없음. VaisDB main.vais TC 0 + 컴파일 성공.
+  E2E: phase166_vec_slice_coercion.rs 3개 테스트 추가 (Vec→Slice arg coercion).
+진행률: 2/2 (100%)
 
 ### Phase 165: VaisDB test_btree 잔여 TC 2 + CG 5 — cross-module 특수 사례
 

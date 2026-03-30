@@ -371,6 +371,12 @@ impl CodeGenerator {
             let arg_ty = if let Some(ref ty) = param_ty {
                 if matches!(ty, ResolvedType::Generic(_)) {
                     self.type_to_llvm(&inferred_ty)
+                } else if Self::is_vec_to_slice_coercion(ty, &inferred_ty) {
+                    // Vec<T> → Slice(T) coercion: use inferred type for LLVM IR type tag.
+                    // The param expects a slice fat pointer { ptr, i64 } but the arg is a
+                    // Vec (same layout { i64, i64 }). Using the inferred type avoids a
+                    // type mismatch in cross-module codegen where typed pointers are used.
+                    self.type_to_llvm(&inferred_ty)
                 } else {
                     self.type_to_llvm(ty)
                 }

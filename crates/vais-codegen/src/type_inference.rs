@@ -155,6 +155,35 @@ impl CodeGenerator {
         }
     }
 
+    /// Check if param_ty is a Slice type but inferred_ty is a Vec (or Ref(Vec)).
+    /// In cross-module codegen, the parameter LLVM type ({ ptr, i64 }) differs from
+    /// the Vec struct type (%Vec), causing a type mismatch. Using the inferred type
+    /// for the call argument avoids this — both are layout-compatible.
+    pub(crate) fn is_vec_to_slice_coercion(
+        param_ty: &ResolvedType,
+        inferred_ty: &ResolvedType,
+    ) -> bool {
+        let param_is_slice = matches!(
+            param_ty,
+            ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+        ) || matches!(param_ty, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+            if matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_)));
+
+        if !param_is_slice {
+            return false;
+        }
+
+        // Check if inferred type is Vec or Ref(Vec)
+        let is_vec = |ty: &ResolvedType| -> bool {
+            matches!(ty, ResolvedType::Named { name, .. } if name == "Vec")
+        };
+        match inferred_ty {
+            t if is_vec(t) => true,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => is_vec(inner),
+            _ => false,
+        }
+    }
+
     /// Infer type of expression (simple version for let statement)
     pub(crate) fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
         stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
