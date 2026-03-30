@@ -257,6 +257,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 167: TC 함수 후보 선택에서 argument coercion — VaisDB test_btree TC 0
+
+> **배경**: Phase 166은 codegen 레벨에서 Vec→Slice coercion을 수정했으나 TC 에러는 미해결.
+> TC의 **함수 후보 선택(overload resolution)** 단계에서 argument coercion이 적용되지 않음.
+>
+> **정확한 문제**:
+> - VaisDB `encode_composite_key(components: &[&[u8]])` — 1-arg 함수
+> - 호출: `encode_composite_key(&part_refs)` where `part_refs: Vec<&[u8]>`
+> - TC가 인자 타입 `&Vec<&[u8]>`와 파라미터 타입 `&[&[u8]]`를 비교할 때, unification이 아닌 **정확 매칭**으로 비교
+> - 매칭 실패 → 다른 함수 후보(2-arg)로 fallback → "expected 2 arguments, got 1" 에러
+>
+> **수정 위치**: `checker_expr/calls.rs` — `check_call()` 또는 `resolve_function()` 에서 함수 후보 선택 시,
+> 인자 수가 일치하는 후보에 대해 `unify(param_type, arg_type)` 시도. 성공하면 후보로 선택.
+>
+> **검증**: `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 0건
+
+- [ ] 1. TC check_call에서 argument type unification 기반 후보 선택 (Opus 직접)
+- [ ] 2. VaisDB test_btree TC 0 검증 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1]
+진행률: 0/2 (0%)
+
 ### Phase 166: TC 함수 call argument coercion — VaisDB test_btree 최종 해결
 
 > **배경**: Phase 165까지 수정했으나 VaisDB test_btree TC 2건 잔존.
