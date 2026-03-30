@@ -257,10 +257,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
-### ~~Phase 167: TC 함수 후보 선택에서 argument coercion~~ — **불필요 (2026-03-31)**
+### Phase 167: TC 함수 후보 선택에서 argument coercion — VaisDB test_btree TC 0 목표
 
-> Phase 166 검증 결과 VaisDB TC 0건 (test_btree.vais는 이전 세션 임시 파일, 코드베이스에 없음).
-> TC unification.rs에 Ref(Vec<T>)↔Slice(T) coercion 이미 존재 (Phase 163). 추가 수정 불필요.
+> **⚠️ "불필요" 판단은 오진** (2026-03-31 재검증): test_btree.vais는 VaisDB 코드베이스에 실재하며 TC 2건 잔존.
+> `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 2건 (line 94, 390) 확인됨.
+>
+> **근본 원인**: TC `check_call()`에서 함수 후보 선택 시 인자 타입을 정확 매칭.
+> `&Vec<&[u8]>` (arg) ≠ `&[&[u8]]` (param) → 후보 탈락 → 2-arg fallback → "expected 2 arguments".
+> unification.rs에 Ref(Vec<T>)↔Slice(T) coercion이 있지만, 함수 후보 선택 로직에서는 사용하지 않음.
+>
+> **수정 위치**: `checker_expr/calls.rs` — 후보 선택 시 `unify(param_type, arg_type)` 시도하여 coercion 가능 여부 판단
+
+- [ ] 1. TC check_call 후보 선택에서 argument unification 기반 매칭 (Opus 직접)
+- [ ] 2. VaisDB test_btree TC 0 검증 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1]
+진행률: 0/2 (0%)
 
 ### Phase 168: btree.vais phi instruction 수정 + stale 테스트 정리
 
