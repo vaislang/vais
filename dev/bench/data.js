@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774875221259,
+  "lastUpdate": 1774875539356,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33431,6 +33431,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 799488,
             "range": "± 3519",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "0471dfd1d671060622427e011b285dc1710431be",
+          "message": "fix(tests): update 5 tests for Phase 160-A numeric promotion rules\n\nPhase 160-A restored bool↔i64 and int↔float numeric promotion, but\n5 tests still expected these coercions to fail:\n- inference_coverage_tests: test_type_mismatch_error, test_return_type_mismatch\n  → Changed to use str↔i64 mismatch (still forbidden)\n- inference_unification_tests: test_unify_mismatch_bool_i64,\n  test_unify_mismatch_if_branches, test_unify_mismatch_fn_return\n  → Changed to tc_ok (bool↔i64 now allowed)\n\nFixes CI failure on all 3 workflows (CI, ASan, TSan).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-30T21:54:09+09:00",
+          "tree_id": "96fc2b5ed76757987513329c3ef7ddf4772ce168",
+          "url": "https://github.com/vaislang/vais/commit/0471dfd1d671060622427e011b285dc1710431be"
+        },
+        "date": 1774875538880,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3520,
+            "range": "± 49",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7109,
+            "range": "± 176",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8216,
+            "range": "± 212",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 15045,
+            "range": "± 88",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18519,
+            "range": "± 85",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35877,
+            "range": "± 480",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32857,
+            "range": "± 2805",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 69803,
+            "range": "± 389",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 302733,
+            "range": "± 1343",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 461667,
+            "range": "± 1913",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 115203,
+            "range": "± 627",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 794736,
+            "range": "± 3167",
             "unit": "ns/iter"
           }
         ]
