@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 165 완료, cross-module codegen 초기화 통합)
+> **현재 버전**: 0.1.0 (Phase 166 예정, TC 함수 call argument coercion)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 165 완료)
+> **최종 업데이트**: 2026-03-30 (Phase 165 완료, Phase 166 예정)
 
 ---
 
@@ -257,6 +257,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
+### Phase 166: TC 함수 call argument coercion — VaisDB test_btree 최종 해결
+
+> **배경**: Phase 165까지 수정했으나 VaisDB test_btree TC 2건 잔존.
+> E2E 단일 파일에서는 nested slice coercion 정상이지만, 실제 VaisDB 컴파일에서 TC의 함수 lookup이
+> `&Vec<&[u8]>`를 `&[&[u8]]`로 coerce하여 후보 함수를 매칭하는 로직이 없음.
+>
+> **근본 원인**: TC의 `check_call`/`check_method_call`에서 인자 타입이 파라미터 타입과 정확히 일치하지 않을 때
+> unification을 시도하지만, **함수 후보 선택(overload resolution)** 단계에서는 coercion을 시도하지 않음.
+> `encode_composite_key`가 1-arg 함수인데, TC가 `&Vec<&[u8]>` ≠ `&[&[u8]]`로 판단하여 후보에서 탈락 → "expected 2 arguments" fallback.
+>
+> **검증**: `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 2건 (line 94, 390)
+
+- [ ] 1. TC 함수 lookup에서 argument coercion 시도 — `Ref(Vec<T>)`→`Slice(T)` 매칭 (Opus 직접)
+  대상: checker_expr/calls.rs 또는 checker_fn/ — 함수 후보 선택 시 인자를 unification으로 coerce 시도
+- [ ] 2. VaisDB test_btree TC 0 + CG 최소화 검증 (Opus 직접) [blockedBy: 1]
+진행률: 0/2 (0%)
+
 ### Phase 165: VaisDB test_btree 잔여 TC 2 + CG 5 — cross-module 특수 사례
 
 > **배경**: Phase 164 검증 후에도 VaisDB test_btree에서 TC 2 + CG 5 잔존.
@@ -288,6 +305,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: set_expr_types() 추가로 tc_expr_type() 경로가 cross-module에서도 정확한 ResolvedType 반환. VaisDB 컴파일+실행 정상 확인.
 - [x] 3. 전체 검증 — E2E 2,508 passed / 0 failed + Clippy 0건 + VaisDB 정상 (Opus 직접) ✅ 2026-03-30
   결과: VaisDB "All VaisDB tests passed!" exit code 0. module(92), generic(205), mono(101), struct(259), slice(24) 관련 테스트 전부 0 regression.
+  **⚠️ VaisDB 추가 검증 (2026-03-30)**: TC_NONFATAL 빌드에서 test_btree TC 2 + CG 5 여전히 잔존.
+  E006 `encode_composite_key(&Vec<&[u8]>)` → `&[&[u8]]` 파라미터 매칭 실패 (per-module에서도 동일).
+  근본 원인: TC의 함수 lookup이 `&Vec<&[u8]>`를 `&[&[u8]]`로 coerce하여 후보 매칭하는 로직 부재.
+  → Phase 166에서 TC 함수 call argument coercion 추가 필요.
 진행률: 3/3 (100%) ✅
 
 ### Phase 164: VaisDB test_btree TC/CG 검증 + Slice open-end slicing 수정
