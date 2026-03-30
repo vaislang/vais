@@ -146,12 +146,14 @@ pub fn verify_text_ir(ir: &str) -> Vec<IrDiagnostic> {
             continue;
         }
 
-        // Block label (e.g., "entry:" or "label42:")
-        if !trimmed.starts_with('%')
-            && !trimmed.starts_with('@')
-            && !trimmed.starts_with("define")
-            && trimmed.ends_with(':')
-            && !trimmed.contains('=')
+        // Block label (e.g., "entry:" or "merge16:  ; preds = %else, %then")
+        // Strip inline comments before checking — LLVM labels often have "; preds = ..." suffix
+        let label_part = trimmed.split(';').next().unwrap_or(trimmed).trim();
+        if !label_part.starts_with('%')
+            && !label_part.starts_with('@')
+            && !label_part.starts_with("define")
+            && label_part.ends_with(':')
+            && !label_part.contains('=')
         {
             // New block: check previous block was terminated
             if !block_has_terminator && current_block_start_line > 0 {

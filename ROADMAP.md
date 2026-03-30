@@ -262,6 +262,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > Phase 166 검증 결과 VaisDB TC 0건 (test_btree.vais는 이전 세션 임시 파일, 코드베이스에 없음).
 > TC unification.rs에 Ref(Vec<T>)↔Slice(T) coercion 이미 존재 (Phase 163). 추가 수정 불필요.
 
+### Phase 168: btree.vais phi instruction 수정 + stale 테스트 정리
+
+> **배경**: VaisDB btree.vais 단독 컴파일 시 18개 LLVM IR verification error.
+> 모두 "phi instruction after non-phi instruction in basic block" — 루프+if/break 패턴에서
+> codegen이 merge block에 phi 노드를 non-phi 명령어 뒤에 배치.
+> 추가로 vais-types 테스트 2건이 Phase 160-A numeric promotion 변경 후 stale 상태.
+>
+> **검증**: btree.vais IR error 0건 + cargo test -p vais-types 0 failure + E2E 0 regression
+
+모드: 자동진행
+  전략 판단: Task 1 직접 위임(1파일, ~10줄), Task 2 Opus 직접(codegen control flow). 파일 비겹침 → 독립 병렬
+
+- [x] 1. Fix 2 stale vais-types tests — bool→i64 is now valid per Phase 160-A (impl-sonnet) ✅ 2026-03-31
+  변경: type_error_path_tests.rs — `F test()->i64=true` → `F test()->i64="hello"` (str≠i64 진짜 mismatch)
+- [x] 2. Fix btree.vais IR verify false positives — label detection with inline comments (Opus 직접) ✅ 2026-03-31
+  변경: ir_verify.rs — label detection에서 inline comment (`;` 이후) strip 후 `:` 확인.
+  근본 원인: IR verifier가 `merge16: ; preds = ...` 형태 라벨을 인식 못해 phi 오류 오판.
+  Opus 직접: IR verifier 로직은 LLVM IR 구조 이해 필요 — 설계-구현 불가분
+진행률: 2/2 (100%)
+
 ### Phase 166: TC 함수 call argument coercion — VaisDB test_btree 최종 해결
 
 > **배경**: Phase 165까지 수정했으나 VaisDB test_btree TC 2건 잔존.
