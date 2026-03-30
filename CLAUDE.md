@@ -60,8 +60,8 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (79 .vais files)
-examples/          # Example programs (174 .vais files)
+std/               # Standard library (80 .vais files)
+examples/          # Example programs (188 .vais files)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
@@ -92,12 +92,13 @@ intellij-vais/     # IntelliJ plugin
 - `?` = ternary (`cond ? a : b`) or try operator on Result/Option
 - `!` = unwrap operator on Result/Option
 - `|>` = pipe operator
-- `~` = string interpolation
+- `~` = bitwise NOT
+- `{expr}` inside strings = string interpolation
 - `..` = range operator
 - `#` = line comment
 
 ### Declarations
-- Traits: `W MyTrait { ... }`, impl: `X MyTrait for MyStruct { ... }`
+- Traits: `W MyTrait { ... }`, impl: `X MyStruct: MyTrait { ... }`
 - Generics: `F foo<T>(x: T) -> T`
 - Pattern matching: `M expr { pattern => result, _ => default }`
 - Closures: `|x| x * 2`, `|x, y| { x + y }`
@@ -145,12 +146,12 @@ intellij-vais/     # IntelliJ plugin
 ## Testing
 
 Tests are in `crates/<name>/tests/`. Key test suites:
-- `vaisc/tests/e2e/` - End-to-end compilation tests (1,620+)
+- `vaisc/tests/e2e/` - End-to-end compilation tests (2,500+)
 - `vaisc/tests/integration_tests.rs` - Integration tests
 - `vais-types/tests/` - Type system tests (bidirectional, GAT, object safety, specialization)
 - `vais-codegen/tests/` - Formatter and error suggestion tests
 
-Total: 9,300+ tests across all crates.
+Total: 12,000+ tests across all crates.
 
 ## Dependencies
 

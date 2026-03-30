@@ -91,8 +91,8 @@ F add(a:i64, b:i64)->i64 = a + b  # インラインコメント
 **文字列補間:**
 ```vais
 name := "Vais"
-println("Hello, ~{name}!")           # 変数補間
-println("結果: ~{2 + 3}")            # 式補間
+println("Hello, {name}!")           # 変数補間
+println("結果: {2 + 3}")            # 式補間
 println("エスケープ: {{補間なし}}")  # エスケープされた括弧
 ```
 
@@ -378,12 +378,12 @@ F main() -> i64 = 5 |> double |> add_one  # 11
 
 ### 文字列補間
 
-`~{expr}`で文字列リテラル内に式を埋め込み:
+`{expr}`で文字列リテラル内に式を埋め込み:
 
 ```vais
 name := "World"
-println("Hello, ~{name}!")          # 変数
-println("合計: ~{2 + 3}")           # 式
+println("Hello, {name}!")          # 変数
+println("合計: {2 + 3}")           # 式
 println("エスケープ: {{括弧}}")    # リテラル括弧は {{ }}
 ```
 

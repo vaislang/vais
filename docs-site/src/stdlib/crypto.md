@@ -15,7 +15,7 @@ F main() -> i64 {
     hasher.update("Hello, World!")
     digest := hasher.finalize()
 
-    print_str("Hash: ~{digest}")
+    print_str("Hash: {digest}")
     R 0
 }
 ```
@@ -140,11 +140,11 @@ F main() -> i64 {
     plaintext := "Hello, World!!!!"
     ciphertext := aes.encrypt_block(plaintext)
 
-    print_str("암호문: ~{hex_encode(ciphertext, 16)}")
+    print_str("암호문: {hex_encode(ciphertext, 16)}")
 
     # 복호화
     decrypted := aes.decrypt_block(ciphertext)
-    print_str("복호문: ~{decrypted}")  # "Hello, World!!!!"
+    print_str("복호문: {decrypted}")  # "Hello, World!!!!"
 
     R 0
 }
@@ -235,7 +235,7 @@ F recv_authenticated_message(socket: TcpStream, secret: i64) -> i64 {
         R 0
     }
 
-    print_str("메시지 검증 성공: ~{message}")
+    print_str("메시지 검증 성공: {message}")
     R 1
 }
 ```

@@ -85,7 +85,7 @@ F highlight_matches(text: i64, pattern: i64) -> i64 {
     i := 0
     L i < matches.len() {
         pos := matches.get(i)
-        print_str("매칭 위치: ~{pos}")
+        print_str("매칭 위치: {pos}")
         i = i + 1
     }
     R matches.len()
@@ -94,7 +94,7 @@ F highlight_matches(text: i64, pattern: i64) -> i64 {
 F main() -> i64 {
     text := "The quick brown fox jumps over the lazy dog"
     count := highlight_matches(text, "\\b[a-z]{4}\\b")  # 4글자 단어
-    print_str("총 ~{count}개 매칭")
+    print_str("총 {count}개 매칭")
     R 0
 }
 ```
@@ -158,9 +158,9 @@ F extract_version(text: i64) -> i64 {
         minor := captures.get(1)
         patch := captures.get(2)
 
-        print_str("Major: ~{major}")
-        print_str("Minor: ~{minor}")
-        print_str("Patch: ~{patch}")
+        print_str("Major: {major}")
+        print_str("Minor: {minor}")
+        print_str("Patch: {patch}")
     }
     R 0
 }

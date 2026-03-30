@@ -44,7 +44,7 @@ F producer(ch_ptr: i64) -> i64 {
     i := 0
     L i < 10 {
         sender.send(i)
-        print_str("생산: ~{i}")
+        print_str("생산: {i}")
         thread_sleep(100)
         i = i + 1
     }
@@ -57,7 +57,7 @@ F consumer(ch_ptr: i64) -> i64 {
     L 1 {
         value := receiver.recv()
         I value < 0 { B }  # 종료
-        print_str("소비: ~{value}")
+        print_str("소비: {value}")
         thread_sleep(200)
     }
     R 0
@@ -91,7 +91,7 @@ F worker(ch_ptr: i64, worker_id: i64) -> i64 {
         task := receiver.recv()
         I task.id == 0 { B }  # 종료 신호
 
-        print_str("워커 ~{worker_id} 작업 ~{task.id}")
+        print_str("워커 {worker_id} 작업 {task.id}")
         thread_sleep(500)  # 작업 시뮬레이션
     }
     R 0
@@ -154,9 +154,9 @@ F main() -> i64 {
 
     idx := channel_select(channels.data, 2)
     I idx == 0 {
-        print_str("ch1 수신: ~{ch1.receiver.recv()}")
+        print_str("ch1 수신: {ch1.receiver.recv()}")
     } E I idx == 1 {
-        print_str("ch2 수신: ~{ch2.receiver.recv()}")
+        print_str("ch2 수신: {ch2.receiver.recv()}")
     }
 
     R 0

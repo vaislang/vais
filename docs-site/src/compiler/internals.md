@@ -115,7 +115,8 @@ pub enum Token {
 - `?` - try operator (Result/Option)
 - `!` - unwrap operator
 - `|>` - pipe operator
-- `~` - 문자열 보간 (예: `~{expr}`)
+- `~` - 비트 NOT
+- `{expr}` in strings - 문자열 보간
 
 ### 성능 특성
 

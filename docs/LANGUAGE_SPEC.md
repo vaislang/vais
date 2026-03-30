@@ -96,8 +96,8 @@ Examples: `x`, `my_var`, `Counter`, `_private`
 **String Interpolation:**
 ```vais
 name := "Vais"
-println("Hello, ~{name}!")           # Variable interpolation
-println("Result: ~{2 + 3}")         # Expression interpolation
+println("Hello, {name}!")           # Variable interpolation
+println("Result: {2 + 3}")         # Expression interpolation
 println("Escaped: {{not interp}}") # Escaped braces
 ```
 
@@ -383,12 +383,12 @@ F main() -> i64 = 5 |> double |> add_one  # 11
 
 ### String Interpolation
 
-Embed expressions inside string literals with `~{expr}`:
+Embed expressions inside string literals with `{expr}`:
 
 ```vais
 name := "World"
-println("Hello, ~{name}!")          # Variable
-println("Sum: ~{2 + 3}")           # Expression
+println("Hello, {name}!")          # Variable
+println("Sum: {2 + 3}")           # Expression
 println("Escaped: {{braces}}")    # Literal braces with {{ }}
 ```
 
@@ -946,9 +946,9 @@ Pattern aliases allow you to bind a name to a matched pattern using the `@` oper
 # Basic pattern alias with range
 F describe(n: i64) -> str {
     M n {
-        x @ 1..10 => "small: ~{x}",
-        x @ 10..100 => "medium: ~{x}",
-        x @ 100..1000 => "large: ~{x}",
+        x @ 1..10 => "small: {x}",
+        x @ 10..100 => "medium: {x}",
+        x @ 100..1000 => "large: {x}",
         _ => "very large"
     }
 }
@@ -993,7 +993,7 @@ E Result<T, E> {
 F handle_result(r: Result<i64, str>) -> str {
     M r {
         success @ Ok(value) if value > 0 => "positive success",
-        failure @ Err(msg) => "error: ~{msg}",
+        failure @ Err(msg) => "error: {msg}",
         _ => "zero or negative"
     }
 }
@@ -1711,7 +1711,7 @@ vaisc pkg doc
 6. **Import only needed modules** to keep token count low
 7. **Use match exhaustiveness** to catch all cases
 8. **Use `|>` pipe operator** for readable function chaining
-9. **Use string interpolation** `println("x=~{x}")` instead of manual concatenation
+9. **Use string interpolation** `println("x={x}")` instead of manual concatenation
 10. **Omit parameter types** when they can be inferred from call sites
 11. **Use `?` operator** for error propagation instead of manual match/return
 12. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations

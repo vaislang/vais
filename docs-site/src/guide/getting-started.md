@@ -163,7 +163,7 @@ F add(a: i64, b: i64) -> i64 = a + b
 
 # 함수 본문 포함
 F greet(name: str) -> str {
-    message := "Hello, ~{name}!"
+    message := "Hello, {name}!"
     message
 }
 
@@ -212,7 +212,7 @@ result := x > 0 ? "positive" : "non-positive"
 # for 루프 (범위)
 F print_range() {
     L i:0..5 {
-        puts("~{i}")
+        puts("{i}")
     }
 }
 
@@ -223,7 +223,7 @@ F infinite_loop_example() {
         I count >= 10 {
             B
         }
-        puts("~{count}")
+        puts("{count}")
         count = count + 1
     }
 }
@@ -232,7 +232,7 @@ F infinite_loop_example() {
 F while_example() {
     x := mut 0
     L x < 10 {
-        puts("~{x}")
+        puts("{x}")
         x = x + 2
     }
 }
@@ -257,7 +257,7 @@ S Person {
 p := Point { x: 10, y: 20 }
 
 # 필드 접근
-puts("~{p.x}, ~{p.y}")
+puts("{p.x}, {p.y}")
 
 # 구조체 메서드 (impl 블록)
 X Point {
@@ -320,8 +320,8 @@ E Response {
 response := Response.Success("Done")
 
 M response {
-    Response.Success(msg) => puts("Success: ~{msg}"),
-    Response.Failure(err) => puts("Error: ~{err}")
+    Response.Success(msg) => puts("Success: {msg}"),
+    Response.Failure(err) => puts("Error: {err}")
 }
 ```
 
@@ -363,7 +363,7 @@ S Circle {
 # Trait 구현
 X Circle: Drawable {
     F draw(&self) -> i64 {
-        puts("Drawing circle with radius ~{self.radius}")
+        puts("Drawing circle with radius {self.radius}")
         0
     }
 }
@@ -393,7 +393,7 @@ F main() -> i64 {
     calc.result = calc.add(10)
     calc.result = calc.multiply(2)
     calc.result = calc.subtract(5)
-    puts("Result: ~{calc.result}")
+    puts("Result: {calc.result}")
     0
 }
 ```
@@ -414,7 +414,7 @@ F main() -> i64 {
 
     # 문자열 보간
     name := "World"
-    message := "Hello, ~{name}!"
+    message := "Hello, {name}!"
     puts(message)
 
     0
@@ -435,7 +435,7 @@ F sum_array(arr: [i64; 5]) -> i64 {
 F main() {
     numbers := [1, 2, 3, 4, 5]
     total := sum_array(numbers)
-    println("Sum: ~{total}")
+    println("Sum: {total}")
 }
 ```
 
@@ -463,7 +463,7 @@ F main() {
     arr: *i64 = [10, 20, 30]
     swap(arr, 0, 2)       # arr[0]과 arr[2] 교환
     # arr = [30, 20, 10]
-    println("~{load_i64(arr + 0 * 8)}")  # 30
+    println("{load_i64(arr + 0 * 8)}")  # 30
 }
 ```
 

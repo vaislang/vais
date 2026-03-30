@@ -62,9 +62,9 @@ X WcResult {
     }
 
     F print(&self) {
-        puts("Lines: ~{self.lines}")
-        puts("Words: ~{self.words}")
-        puts("Bytes: ~{self.bytes}")
+        puts("Lines: {self.lines}")
+        puts("Words: {self.words}")
+        puts("Bytes: {self.bytes}")
     }
 }
 ```
@@ -73,7 +73,7 @@ X WcResult {
 - `S`는 구조체(struct) 선언 키워드
 - `X`는 impl 블록 (메서드 정의)
 - `&self`는 해당 구조체의 불변 참조
-- `~{expr}`는 문자열 보간 (string interpolation)
+- `{expr}`는 문자열 보간 (string interpolation)
 - `R`은 return 키워드
 
 ---
@@ -274,6 +274,6 @@ vaisc run examples/tutorial_wc.vais
 | 루프 | `L i:0..n { }` | 범위 루프 |
 | 조건 | `I cond { } E { }` | if/else |
 | FFI | `N "C" { F func() }` | C 함수 호출 |
-| 보간 | `"~{expr}"` | 문자열 내 표현식 |
+| 보간 | `"{expr}"` | 문자열 내 표현식 |
 
 다음 튜토리얼: [HTTP Server 만들기](./http-server.md)

@@ -119,7 +119,7 @@ F reader(id: i64) -> i64 {
         guard := cache.read()  # 여러 reader 동시 접근 가능
         data := guard.get_inner()
         value := data.get(42)
-        print_str("Reader ~{id}: ~{value}")
+        print_str("Reader {id}: {value}")
         thread_sleep(10)
         i = i + 1
     }
@@ -191,7 +191,7 @@ F consumer(queue_ptr: i64) -> i64 {
         }
 
         event := events.remove(0)
-        print_str("소비: ~{event}")
+        print_str("소비: {event}")
 
         I event >= 9 { B }  # 종료 조건
     }
@@ -221,21 +221,21 @@ global barrier := Barrier::new(3)
 
 F phase_worker(id: i64) -> i64 {
     # Phase 1
-    print_str("스레드 ~{id}: Phase 1 시작")
+    print_str("스레드 {id}: Phase 1 시작")
     thread_sleep(id * 100)
-    print_str("스레드 ~{id}: Phase 1 완료")
+    print_str("스레드 {id}: Phase 1 완료")
 
     barrier.wait()  # 모든 스레드 대기
 
     # Phase 2 (모두 동시 시작)
-    print_str("스레드 ~{id}: Phase 2 시작")
+    print_str("스레드 {id}: Phase 2 시작")
     thread_sleep(id * 100)
-    print_str("스레드 ~{id}: Phase 2 완료")
+    print_str("스레드 {id}: Phase 2 완료")
 
     barrier.wait()
 
     # Phase 3
-    print_str("스레드 ~{id}: Phase 3 시작")
+    print_str("스레드 {id}: Phase 3 시작")
     R 0
 }
 
@@ -259,14 +259,14 @@ U std/thread
 global db_pool := Semaphore::new(3)
 
 F database_query(id: i64) -> i64 {
-    print_str("~{id}: 연결 대기 중...")
+    print_str("{id}: 연결 대기 중...")
     db_pool.acquire()  # 허가 획득
 
-    print_str("~{id}: 쿼리 실행 중")
+    print_str("{id}: 쿼리 실행 중")
     thread_sleep(500)  # DB 작업 시뮬레이션
 
     db_pool.release()  # 허가 반환
-    print_str("~{id}: 연결 해제")
+    print_str("{id}: 연결 해제")
     R 0
 }
 

@@ -21,7 +21,7 @@ Vais is designed to minimize token usage while maximizing code expressiveness, m
 - **Slice Types** - `&[T]` / `&mut [T]` with fat pointer implementation
 - **Parallel Compilation** - DAG-based parallel type-check and codegen (2-4x speedup)
 - **Self-Hosting** - 50,000+ LOC bootstrap compiler, 21/21 clang 100% success
-- **Rich Ecosystem** - 29 crates, 74 stdlib modules, growing package ecosystem
+- **Rich Ecosystem** - 29 crates, 80 stdlib modules, growing package ecosystem
 
 ## Quick Example
 
@@ -87,12 +87,12 @@ crates/
 ├── vais-python/       # Python bindings (PyO3)
 └── vais-node/         # Node.js bindings (NAPI)
 
-std/               # Standard library (79 modules)
+std/               # Standard library (80 modules)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (174 .vais files)
+examples/          # Example programs (188 .vais files)
 benches/           # Benchmark suite (criterion + language comparison)
 playground/        # Web playground frontend
 ```
@@ -101,8 +101,8 @@ playground/        # Web playground frontend
 
 ```bash
 cargo build --release
-cargo test                                     # Run all 9,300+ tests
-cargo test -p vaisc                            # Run vaisc tests (1,620+ E2E tests)
+cargo test                                     # Run all 12,000+ tests
+cargo test -p vaisc                            # Run vaisc tests (2,500+ E2E tests)
 cargo clippy --workspace --exclude vais-python --exclude vais-node
 ```
 
@@ -167,7 +167,7 @@ Coverage is measured automatically on every push and pull request to `main` and 
 - [x] Parser (recursive descent)
 - [x] Type checker (generics, traits, type inference, GATs, object safety)
 - [x] Code generator (LLVM IR via inkwell, JavaScript ESM, WASM)
-- [x] Standard library (74 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
+- [x] Standard library (80 modules: Vec, HashMap, String, File, Net, Async, GPU, etc.)
 - [x] Borrow checker (Non-Lexical Lifetimes, CFG-based dataflow, `--strict-borrow`)
 - [x] Slice types (`&[T]` / `&mut [T]` with fat pointers)
 - [x] Parallel compilation (DAG-based dependency resolution, 2-4x speedup)
@@ -188,11 +188,11 @@ Vais is designed for both compilation speed and runtime performance.
 
 | Phase | Time (avg) | Throughput | Notes |
 |-------|------------|------------|-------|
-| Lexer | ~0.09ms/1K LOC | ~166 MiB/s | logos-based |
+| Lexer | ~0.07ms/1K LOC | ~166 MiB/s | logos-based |
 | Parser | ~0.44ms/1K LOC | ~32 MiB/s | 2.18x speedup with parallel |
 | Type Checker | ~0.13ms/1K LOC | ~8K lines/ms | DAG-based parallel |
-| Code Generator | ~0.53ms/1K LOC | ~1.9K lines/ms | 4.14x speedup with parallel |
-| **Full Pipeline** | **~1.22ms/1K LOC** | **~819K lines/sec** | **50K lines → 61ms** |
+| Code Generator | ~0.54ms/1K LOC | ~1.8K lines/ms | 4.14x speedup with parallel |
+| **Full Pipeline** | **~1.2ms/1K LOC** | **~833K lines/sec** | **50K lines → 60ms** |
 
 **Self-Hosting Bootstrap:** 50,000+ LOC, 21/21 clang compilation success (100%)
 

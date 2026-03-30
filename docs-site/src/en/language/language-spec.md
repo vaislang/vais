@@ -363,9 +363,9 @@ Bind a name to the matched value using `@`:
 ```vais
 F describe(n: i64) -> str {
     M n {
-        x @ 1..10 => "small: ~{x}",
-        x @ 10..100 => "medium: ~{x}",
-        x @ 100..1000 => "large: ~{x}",
+        x @ 1..10 => "small: {x}",
+        x @ 10..100 => "medium: {x}",
+        x @ 100..1000 => "large: {x}",
         _ => "very large"
     }
 }

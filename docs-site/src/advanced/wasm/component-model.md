@@ -227,7 +227,7 @@ Vais handles this automatically through `WasmSerde`:
 F process(data: Person) -> Result<str, str> {
     # `data` is automatically lifted from linear memory
     # Return value is automatically lowered
-    R Ok("Processed: ~{data.name}")
+    R Ok("Processed: {data.name}")
 }
 ```
 

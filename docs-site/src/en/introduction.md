@@ -65,12 +65,12 @@ crates/
 ├── vais-registry-server/    # Package registry
 └── vais-playground-server/  # Web playground backend
 
-std/               # Standard library (74 modules)
+std/               # Standard library (80 modules)
 selfhost/          # Self-hosting compiler (50,000+ LOC)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
-examples/          # Example programs (189 files)
+examples/          # Example programs (188 files)
 ```
 
 ## Compilation Pipeline
@@ -209,7 +209,7 @@ Fibonacci(35) benchmark (Apple M-series ARM64):
 
 ### Standard Library
 
-74 modules covering:
+80 modules covering:
 - Collections (Vec, HashMap, HashSet, LinkedList, BTree)
 - I/O (File, Network, Async I/O)
 - Concurrency (Thread, Channel, Mutex, RwLock)

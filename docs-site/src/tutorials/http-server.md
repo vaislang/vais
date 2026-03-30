@@ -182,16 +182,16 @@ F handle_request(fd: i64, req: HttpRequest) {
 ```vais
 F main() -> i64 {
     port := 8080
-    puts("Starting Vais HTTP Server on port ~{port}...")
+    puts("Starting Vais HTTP Server on port {port}...")
 
     listener := __tcp_listen(port)
     I listener < 0 {
-        puts("ERROR: Failed to listen on port ~{port}")
+        puts("ERROR: Failed to listen on port {port}")
         R 1
     }
 
-    puts("Server listening on port ~{port}")
-    puts("Try: curl http://localhost:~{port}/api/hello")
+    puts("Server listening on port {port}")
+    puts("Try: curl http://localhost:{port}/api/hello")
 
     # 요청 수신 버퍼
     buf := malloc(4096)
@@ -293,9 +293,9 @@ F handle_request_with_counter(fd: i64, req: HttpRequest) {
     request_count = request_count + 1
 
     I path_equals(req.buffer, req.path_start, req.path_len, "/stats") == 1 {
-        puts("Request #~{request_count}: /stats")
+        puts("Request #{request_count}: /stats")
         # 응답 생성
-        body := json_kv("requests", "~{request_count}")
+        body := json_kv("requests", "{request_count}")
         send_response(fd, 200, body)
         free(body)
         R 0

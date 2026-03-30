@@ -95,7 +95,7 @@ F main() -> i64 {
     user := find_user(1)
 
     M user {
-        Option.Some(name) => puts("Found user: ~{name}"),
+        Option.Some(name) => puts("Found user: {name}"),
         Option.None => puts("User not found")
     }
 
@@ -165,8 +165,8 @@ F main() -> i64 {
     result := parse_number("123")
 
     M result {
-        Result.Ok(num) => puts("Parsed: ~{num}"),
-        Result.Err(err) => puts("Error: ~{err}")
+        Result.Ok(num) => puts("Parsed: {num}"),
+        Result.Err(err) => puts("Error: {err}")
     }
 
     0
@@ -234,7 +234,7 @@ F main() -> i64 {
 
     # 0이 기본값 (에러 처리됨)
     actual_timeout := timeout > 0 ? timeout : 30
-    puts("Timeout: ~{actual_timeout}")
+    puts("Timeout: {actual_timeout}")
 
     0
 }
@@ -254,8 +254,8 @@ F main() -> i64 {
     result := divide(10, 2)
 
     M result {
-        Result.Ok(value) => puts("Result: ~{value}"),
-        Result.Err(msg) => puts("Cannot divide: ~{msg}")
+        Result.Ok(value) => puts("Result: {value}"),
+        Result.Err(msg) => puts("Cannot divide: {msg}")
     }
 
     0
@@ -284,12 +284,12 @@ S Logger {
 X Logger {
     F log(&self, level: LogLevel, msg: str) {
         M level {
-            LogLevel.Error => puts("[ERROR] ~{msg}"),
-            LogLevel.Warn => puts("[WARN] ~{msg}"),
-            LogLevel.Info => puts("[INFO] ~{msg}"),
-            LogLevel.Debug => puts("[DEBUG] ~{msg}"),
+            LogLevel.Error => puts("[ERROR] {msg}"),
+            LogLevel.Warn => puts("[WARN] {msg}"),
+            LogLevel.Info => puts("[INFO] {msg}"),
+            LogLevel.Debug => puts("[DEBUG] {msg}"),
             LogLevel.Fatal => {
-                puts("[FATAL] ~{msg}")
+                puts("[FATAL] {msg}")
                 # 프로그램 종료
             }
         }
@@ -311,7 +311,7 @@ F main() -> i64 {
 
     M result {
         Result.Ok(value) => logger.log(LogLevel.Info, "Division successful"),
-        Result.Err(msg) => logger.error("Division failed: ~{msg}")
+        Result.Err(msg) => logger.error("Division failed: {msg}")
     }
 
     0
@@ -407,7 +407,7 @@ F main() -> i64 {
                 M valid {
                     Result.Ok(_) => {
                         puts("Configuration loaded and validated")
-                        puts("Host: ~{cfg.host}:~{cfg.port}")
+                        puts("Host: {cfg.host}:{cfg.port}")
                     },
                     Result.Err(_) => puts("Configuration validation failed")
                 }
@@ -459,7 +459,7 @@ F fetch_user_data(id: i64) -> Result<str> {
 F process_records(count: i64) -> Result<bool> {
     I count <= 0 {
         # 좋은 에러 메시지: 무엇이 잘못되었는지 알 수 있음
-        R Result.Err("Record count must be positive, got ~{count}")
+        R Result.Err("Record count must be positive, got {count}")
     }
     R Result.Ok(true)
 }

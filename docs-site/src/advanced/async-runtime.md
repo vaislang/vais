@@ -19,7 +19,7 @@ F fetch_data() -> Future<str> {
 F main() -> i64 {
     future := fetch_data()
     result := Y future  # Await the future
-    puts("Got: ~{result}")
+    puts("Got: {result}")
     0
 }
 ```
@@ -37,7 +37,7 @@ U std::async
 
 F background_task(id: i64) -> Future<()> {
     sleep(1000)
-    puts("Task ~{id} completed")
+    puts("Task {id} completed")
 }
 
 F main() -> i64 {
@@ -63,7 +63,7 @@ F main() -> i64 {
     future_b := fetch_data_b()
 
     result := select([future_a, future_b])
-    puts("First result: ~{result}")
+    puts("First result: {result}")
     0
 }
 ```
@@ -172,9 +172,9 @@ F main() -> i64 {
 }
 
 F worker(barrier: Barrier, id: i64) -> Future<()> {
-    puts("Worker ~{id} starting")
+    puts("Worker {id} starting")
     Y barrier.wait()
-    puts("Worker ~{id} past barrier")
+    puts("Worker {id} past barrier")
 }
 ```
 
@@ -197,7 +197,7 @@ F main() -> i64 {
 
 F limited_task(sem: Semaphore, id: i64) -> Future<()> {
     Y sem.acquire()
-    puts("Task ~{id} running")
+    puts("Task {id} running")
     sleep(1000)
     sem.release()
 }
@@ -225,7 +225,7 @@ F main() -> i64 {
 
 F task(wg: WaitGroup, id: i64) -> Future<()> {
     sleep(id * 100)
-    puts("Task ~{id} done")
+    puts("Task {id} done")
     wg.done()
 }
 ```
@@ -267,7 +267,7 @@ F main() -> i64 {
 
     L {
         M Y stream.next() {
-            Some(n) => puts("Got: ~{n}"),
+            Some(n) => puts("Got: {n}"),
             None => B
         }
     }
@@ -344,9 +344,9 @@ F main() -> i64 {
     M response.status {
         200 => {
             body := Y response.text()
-            puts("Success: ~{body}")
+            puts("Success: {body}")
         },
-        _ => puts("Error: ~{response.status}")
+        _ => puts("Error: {response.status}")
     }
 
     0
@@ -403,8 +403,8 @@ F fetch_data() -> Future<Result<str, Error>> {
 
 F main() -> i64 {
     M Y fetch_data() {
-        Ok(data) => puts("Success: ~{data}"),
-        Err(e) => puts("Error: ~{e}")
+        Ok(data) => puts("Success: {data}"),
+        Err(e) => puts("Error: {e}")
     }
     0
 }

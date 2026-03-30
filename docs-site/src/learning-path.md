@@ -100,7 +100,7 @@ E { println("non-positive") }
 result := x > 0 ? "yes" : "no"
 
 # 범위 루프
-L i:0..10 { println("~{i}") }
+L i:0..10 { println("{i}") }
 
 # 조건 루프
 L x < 100 { x = x * 2 }
@@ -133,7 +133,7 @@ X Point {
 
 F main() {
     p := Point { x: 10, y: 20 }
-    println("~{p.sum()}")
+    println("{p.sum()}")
 }
 ```
 
@@ -169,7 +169,7 @@ F area(s: Shape) -> i64 {
 - [ ] `F` 함수, `@` 자재귀 사용
 - [ ] `I`/`E` 조건문, `L` 루프, `M` 매칭 사용
 - [ ] `S` 구조체, `X` impl 블록, `E` enum 정의
-- [ ] `~{expr}` 문자열 보간 사용
+- [ ] `{expr}` 문자열 보간 사용
 - [ ] 간단한 프로그램을 독립적으로 작성 가능
 
 ---
@@ -330,7 +330,7 @@ F process_file(path: str) -> i64 {
 ```vais
 macro debug! {
     ($expr) => {
-        println("DEBUG: ~{$expr}")
+        println("DEBUG: {$expr}")
     }
 }
 ```

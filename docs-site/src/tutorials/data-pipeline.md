@@ -47,11 +47,11 @@ X Stats {
     }
 
     F print(&self) {
-        puts("Records: ~{self.count}")
-        puts("Total score: ~{self.total}")
-        puts("Average: ~{self.average()}")
-        puts("Max: ~{self.max_val}")
-        puts("Min: ~{self.min_val}")
+        puts("Records: {self.count}")
+        puts("Total score: {self.total}")
+        puts("Average: {self.average()}")
+        puts("Max: {self.max_val}")
+        puts("Min: {self.min_val}")
     }
 }
 ```
@@ -264,7 +264,7 @@ F main() -> i64 {
     L i:0..count {
         rec := read_record(buf, i)
         curved := apply_curve(rec.score)
-        puts("  ID ~{rec.id}: ~{rec.score} -> ~{curved}")
+        puts("  ID {rec.id}: {rec.score} -> {curved}")
     }
 
     # 5. 정리

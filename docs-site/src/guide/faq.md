@@ -152,8 +152,8 @@ F max<T>(a: T, b: T) -> T {
 
 # 패턴 매칭 (C에는 없음)
 M result {
-    Result.Ok(val) => puts("Success: ~{val}"),
-    Result.Err(err) => puts("Error: ~{err}")
+    Result.Ok(val) => puts("Success: {val}"),
+    Result.Err(err) => puts("Error: {err}")
 }
 ```
 
@@ -184,7 +184,7 @@ fn main() {
 # Vais 코드 (동일)
 F main() {
     x := 5
-    puts("x = ~{x}")
+    puts("x = {x}")
 }
 ```
 
@@ -218,7 +218,7 @@ func main() {
 # Vais (유사한 구조)
 F main() {
     L i := 0; i < 10; i = i + 1 {
-        puts("~{i}")
+        puts("{i}")
     }
 }
 ```

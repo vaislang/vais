@@ -91,8 +91,8 @@ F add(a:i64, b:i64)->i64 = a + b  # 行内注释
 **字符串插值:**
 ```vais
 name := "Vais"
-println("Hello, ~{name}!")           # 变量插值
-println("Result: ~{2 + 3}")          # 表达式插值
+println("Hello, {name}!")           # 变量插值
+println("Result: {2 + 3}")          # 表达式插值
 println("Escaped: {{not interp}}")  # 转义大括号
 ```
 

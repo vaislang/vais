@@ -576,7 +576,7 @@ F main() {
     # String interpolation
     name := "Alice"
     age := 25
-    msg := "Name: ~{name}, Age: ~{age}"
+    msg := "Name: {name}, Age: {age}"
     puts(msg)  # Prints: Name: Alice, Age: 25
 }
 ```
@@ -811,12 +811,12 @@ You now have a comprehensive understanding of Vais! Continue learning:
 ### Documentation
 
 - **[Language Specification](../language/language-spec.md)** - Complete syntax reference and formal grammar
-- **[Standard Library Guide](../stdlib/README.md)** - Full API reference for all 74 modules
+- **[Standard Library Guide](../stdlib/README.md)** - Full API reference for all 80 modules
 - **[Memory Safety](../advanced/memory-safety.md)** - Deep dive into ownership and borrowing
 
 ### Practice
 
-- **[Examples Directory](https://github.com/vaislang/vais/tree/main/examples)** - 189 example programs covering all features
+- **[Examples Directory](https://github.com/vaislang/vais/tree/main/examples)** - 188 example programs covering all features
 - **[REPL](../tools/repl.md)** - Interactive environment for experimentation
 - **[Playground](https://vais.dev/playground/)** - Online editor with instant compilation
 
