@@ -45,8 +45,9 @@ pub(crate) fn compile_per_module(
     fs::create_dir_all(&cache_dir).map_err(|e| format!("Cannot create module cache dir: {}", e))?;
 
     let effective_opt_level = if debug { 0 } else { opt_level };
-    let resolved_functions = checker.get_all_functions().clone();
+    let resolved_functions = checker.get_all_functions_with_methods();
     let resolved_type_aliases = checker.get_type_aliases().clone();
+    let resolved_expr_types = checker.get_expr_types().clone();
     let instantiations = checker.get_generic_instantiations();
     let instantiations = &instantiations;
 
@@ -67,6 +68,7 @@ pub(crate) fn compile_per_module(
             let mut codegen = CodeGenerator::new_with_target(&module_stem, target.clone());
             codegen.set_resolved_functions(resolved_functions.clone());
             codegen.set_type_aliases(resolved_type_aliases.clone());
+            codegen.set_expr_types(resolved_expr_types.clone());
             codegen.set_string_prefix(&module_stem);
 
             if gc {

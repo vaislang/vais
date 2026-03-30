@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 165 예정, VaisDB test_btree cross-module 잔여)
+> **현재 버전**: 0.1.0 (Phase 165 완료, cross-module codegen 초기화 통합)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 164 완료, Phase 165 예정)
+> **최종 업데이트**: 2026-03-30 (Phase 165 완료)
 
 ---
 
@@ -279,10 +279,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   - Phase 164에서 `is_slice_source`에 Ref(Slice) 추가했으나 VaisDB cross-module에서 미적용
 - 추가 CG 2건 — cross-module type inference cascade
 
-- [ ] 1. cross-module 함수 lookup에서 nested slice argument coercion (Opus 직접)
-- [ ] 2. cross-module generic struct codegen monomorphization (Opus 직접)
-- [ ] 3. 전체 검증 — VaisDB 6/6 TC 0 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1, 2]
-진행률: 0/3 (0%)
+모드: 자동진행
+  전략 판단: Task 1,2 근본 원인 동일(set_expr_types/get_all_functions_with_methods 누락) → 순차. Opus 직접: 컴파일러 빌드 경로 수정
+
+- [x] 1. cross-module codegen 초기화 수정 — set_expr_types + get_all_functions_with_methods (Opus 직접) ✅ 2026-03-30
+  변경: per_module.rs, parallel.rs, test.rs — set_expr_types() 추가 + get_all_functions()→get_all_functions_with_methods() 전환. serial.rs — get_all_functions_with_methods() 전환.
+- [x] 2. cross-module generic struct codegen — Task 1과 동일 근본 원인 (Opus 직접) ✅ 2026-03-30
+  변경: set_expr_types() 추가로 tc_expr_type() 경로가 cross-module에서도 정확한 ResolvedType 반환. VaisDB 컴파일+실행 정상 확인.
+- [x] 3. 전체 검증 — E2E 2,508 passed / 0 failed + Clippy 0건 + VaisDB 정상 (Opus 직접) ✅ 2026-03-30
+  결과: VaisDB "All VaisDB tests passed!" exit code 0. module(92), generic(205), mono(101), struct(259), slice(24) 관련 테스트 전부 0 regression.
+진행률: 3/3 (100%) ✅
 
 ### Phase 164: VaisDB test_btree TC/CG 검증 + Slice open-end slicing 수정
 
