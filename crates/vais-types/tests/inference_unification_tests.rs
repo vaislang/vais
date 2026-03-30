@@ -232,8 +232,9 @@ fn test_unify_dyn_trait() {
 // ============================================================================
 
 #[test]
-fn test_unify_mismatch_bool_i64() {
-    tc_err("F test() -> bool { R 42 }");
+fn test_unify_bool_i64_allowed() {
+    // Phase 160-A: bool↔i64 numeric promotion is now allowed
+    tc_ok("F test() -> bool { R 42 }");
 }
 
 #[test]
@@ -242,13 +243,15 @@ fn test_unify_mismatch_str_i64() {
 }
 
 #[test]
-fn test_unify_mismatch_if_branches() {
-    tc_err("F test(b: bool) -> i64 = I b { true } E { 2 }");
+fn test_unify_if_branches_bool_int_allowed() {
+    // Phase 160-A: bool↔i64 numeric promotion is now allowed
+    tc_ok("F test(b: bool) -> i64 = I b { true } E { 2 }");
 }
 
 #[test]
-fn test_unify_mismatch_fn_return() {
-    tc_err("F add(x: i64, y: i64) -> bool = x + y");
+fn test_unify_fn_return_bool_int_allowed() {
+    // Phase 160-A: bool↔i64 numeric promotion is now allowed
+    tc_ok("F add(x: i64, y: i64) -> bool = x + y");
 }
 
 #[test]
