@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774789027343,
+  "lastUpdate": 1774857273017,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33239,6 +33239,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 794338,
             "range": "± 2439",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "fc2fb268be062418489b16cfeefe8ff669de9ed7",
+          "message": "fix(codegen): Phase 163 — generic struct monomorphization for non-i64 type params\n\nWhen a generic struct like `Wrapper<T>` is instantiated with a struct type\n(e.g., T=Inner), the Inkwell codegen now detects type mismatches between the\nbase struct definition (T→i64 erasure) and actual field values, dynamically\ncreating a specialized LLVM struct type with correct field types.\n\nChanges:\n- gen_declaration.rs: record struct generic params during define_struct\n- gen_advanced.rs: generate_struct_literal creates specialized struct type\n  when field value types differ from base definition\n\nE2E 2,501 passed / 0 failed, Clippy 0건.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-30T16:35:16+09:00",
+          "tree_id": "9bc1cdf592520fb183447a8d25d08ef606a80286",
+          "url": "https://github.com/vaislang/vais/commit/fc2fb268be062418489b16cfeefe8ff669de9ed7"
+        },
+        "date": 1774857272296,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3147,
+            "range": "± 96",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6566,
+            "range": "± 200",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7547,
+            "range": "± 199",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 13331,
+            "range": "± 312",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17919,
+            "range": "± 106",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34418,
+            "range": "± 376",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31314,
+            "range": "± 237",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67724,
+            "range": "± 687",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 279863,
+            "range": "± 1702",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 421695,
+            "range": "± 3678",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 120534,
+            "range": "± 493",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 715635,
+            "range": "± 6562",
             "unit": "ns/iter"
           }
         ]
