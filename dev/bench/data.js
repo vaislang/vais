@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774857273017,
+  "lastUpdate": 1774875221259,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33335,6 +33335,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 715635,
             "range": "± 6562",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "5b2aaff4a1a523e701098f28af7240c73df774eb",
+          "message": "fix(codegen): Phase 165 — cross-module codegen init with expr_types + methods\n\nAdd set_expr_types() and switch to get_all_functions_with_methods() in\nall codegen initialization paths (per_module, parallel, test, serial)\nto match the backend.rs reference pattern.\n\nRoot cause: cross-module compilation failed to pass TC-resolved\nexpression type info to CodeGenerator, causing generic struct field\naccess to fall back to heuristic inference and lose type parameters.\n\n- per_module.rs: +set_expr_types, get_all_functions→with_methods\n- parallel.rs: +set_expr_types, get_all_functions→with_methods\n- test.rs: +set_expr_types, get_all_functions→with_methods\n- serial.rs: get_all_functions→with_methods (Inkwell, no expr_types)\n- VaisDB: compiles and passes all tests (\"All VaisDB tests passed!\")\n- E2E 2,508 passed / 0 failed / 2 ignored, Clippy 0 warnings\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-03-30T21:46:03+09:00",
+          "tree_id": "b51ad57f78821586b7dfebf20e6d720e090699df",
+          "url": "https://github.com/vaislang/vais/commit/5b2aaff4a1a523e701098f28af7240c73df774eb"
+        },
+        "date": 1774875220445,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3551,
+            "range": "± 52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6739,
+            "range": "± 145",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7961,
+            "range": "± 78",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14494,
+            "range": "± 143",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18970,
+            "range": "± 168",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35797,
+            "range": "± 294",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32474,
+            "range": "± 119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 71138,
+            "range": "± 350",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 308085,
+            "range": "± 2133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 466959,
+            "range": "± 2584",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118888,
+            "range": "± 1149",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 799488,
+            "range": "± 3519",
             "unit": "ns/iter"
           }
         ]
