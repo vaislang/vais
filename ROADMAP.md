@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 163 진행, 잔여 5건 해결)
+> **현재 버전**: 0.1.0 (Phase 163 완료)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-30 (Phase 162 완료, Phase 163 진행)
+> **최종 업데이트**: 2026-03-30 (Phase 163 완료)
 
 ---
 
@@ -327,13 +327,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 - [x] 1. Ref(Vec<T>) ↔ Slice(T) TC unification rule 추가 (Opus 직접) ✅ 2026-03-30
   변경: inference/unification.rs — Ref(Vec<T>)↔Slice(T) + RefMut(Vec<T>)↔SliceMut(T) 2개 규칙 추가. &Vec<&[u8]>를 &[&[u8]] 파라미터에 전달 가능.
-- [ ] 2. Generic struct codegen monomorphization — T→concrete 타입 치환 (Opus 직접) [blockedBy: 1]
-  조사: generic struct에서 T가 non-i64 타입(struct)일 때 type definition + struct literal + field access에서 i64 erasure 발생. Text IR codegen + Inkwell codegen 양쪽 수정 필요. 기존 i64-기반 generic struct는 regression 없이 유지해야 함 — 단순 type def 억제는 42건 regression 유발. 근본 수정은 monomorphization pipeline에서 specialized struct type 생성 + 사용 경로 전체 교체 필요.
+- [x] 2. Generic struct codegen monomorphization — T→concrete 타입 치환 (Opus 직접) ✅ 2026-03-30
+  변경: inkwell/gen_declaration.rs — define_struct에서 generic params 기록. inkwell/gen_advanced.rs — generate_struct_literal에서 field value 타입 불일치 감지 시 specialized struct type 동적 생성. E2E 2,501 passed / 0 failed.
 - [x] 3. Array open-end slicing codegen 지원 — arr[start..] 구현 (impl-sonnet) ✅ 2026-03-30
   변경: helpers.rs — ConstArray 소스에서 size.try_evaluate()로 length 추출. 기존 Slice 소스 + 새 ConstArray 소스 양쪽 지원.
 - [x] 4. 전체 검증 — E2E 2,501 passed / 0 failed + Clippy 0건 (Opus 직접) ✅ 2026-03-30
-  결과: E2E 2,501 passed / 0 failed / 2 ignored, Clippy 0건. Task 1+3 regression 0건. Task 2(generic struct mono)는 deep issue로 후속 Phase 이관.
-진행률: 3/4 (75%) — Task 2 미완료 (후속 이관)
+  결과: E2E 2,501 passed / 0 failed / 2 ignored, Clippy 0건. 전 작업 regression 0건.
+진행률: 4/4 (100%) ✅
 
 ### Phase 162: TC 잔여 이슈 — VaisDB 19→0 목표
 

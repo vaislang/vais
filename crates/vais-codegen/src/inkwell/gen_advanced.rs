@@ -328,10 +328,60 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             field_name_values.push((field_name.node.clone(), val));
         }
 
-        let struct_type = *self
+        let base_struct_type = *self
             .generated_structs
             .get(name)
             .ok_or_else(|| CodegenError::UndefinedVar(format!("Struct not found: {}", name)))?;
+
+        // For generic structs, check if field value types differ from the base definition.
+        // If so, create a specialized struct type with the actual field types.
+        let struct_type = if self.struct_generic_params.contains_key(name) {
+            let field_names = self.struct_fields.get(name).cloned().unwrap_or_default();
+            let mut actual_field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+            let mut needs_specialization = false;
+
+            for (i, def_field_name) in field_names.iter().enumerate() {
+                let val_type = field_name_values
+                    .iter()
+                    .find(|(n, _)| n == def_field_name)
+                    .map(|(_, v)| v.get_type());
+
+                if let Some(vt) = val_type {
+                    let base_field_type = base_struct_type.get_field_type_at_index(i as u32);
+                    if let Some(bft) = base_field_type {
+                        if vt != bft {
+                            needs_specialization = true;
+                        }
+                    }
+                    actual_field_types.push(vt);
+                } else if let Some(bft) = base_struct_type.get_field_type_at_index(i as u32) {
+                    actual_field_types.push(bft);
+                } else {
+                    actual_field_types.push(self.context.i64_type().into());
+                }
+            }
+
+            if needs_specialization {
+                // Create a specialized struct type with the actual field types
+                let specialized_type = self.context.struct_type(&actual_field_types, false);
+                // Register it with a mangled name so field access can find it
+                let mangled_name = format!("{}$specialized_{}", name, self.label_counter);
+                self.label_counter += 1;
+                self.generated_structs
+                    .insert(mangled_name.clone(), specialized_type);
+                self.struct_fields
+                    .insert(mangled_name.clone(), field_names.clone());
+                // Also update the base name to point to the specialized type
+                // so field access on this variable resolves correctly
+                self.generated_structs
+                    .insert(name.to_string(), specialized_type);
+                specialized_type
+            } else {
+                base_struct_type
+            }
+        } else {
+            base_struct_type
+        };
 
         // Check if this is a union (single LLVM field, multiple logical fields)
         let num_llvm_fields = struct_type.count_fields();

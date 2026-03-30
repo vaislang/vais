@@ -126,6 +126,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .insert(struct_name.clone(), field_type_names);
         self.type_mapper.register_struct(struct_name, struct_type);
 
+        // Record generic parameters for on-demand specialization
+        if !s.generics.is_empty() {
+            let param_names: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
+            self.struct_generic_params
+                .insert(struct_name.clone(), param_names);
+        }
+
         Ok(struct_type)
     }
 
