@@ -346,20 +346,6 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   결과: Clippy 0건, Phase 158 보호 16/16, modules_system 79/79, bool↔int E2E 6건 수정. VaisDB TC 4잔여(btree WrongArgCount 2, fulltext VByteResult 2 — VaisDB 코드 문제).
 진행률: 4/4 (100%) ✅
 
-### Phase 160-B: Codegen 리팩토링 — call codegen 통합 + 중복 제거
-
-> **목표**: team-refactor 분석 기반 4개 리팩토링, ~1,225줄 순감소
-> **기대 효과**: codegen 유지보수성 향상, 버그 수정 시 단일 경로
-
-모드: 자동진행
-  전략 판단: Task 10 선행 → Task 11,12,13 병렬 (파일 비겹침) → Task 14 순차
-- [ ] 1. resolve_arg_to_i8_ptr 헬퍼 추출 — 9개 중복 패턴 통합 (impl-sonnet)
-- [ ] 2. duplicate call codegen 통합 — generate_expr_call.rs 제거 (Opus 직접) [blockedBy: 1]
-- [ ] 3. generic method resolution 헬퍼 추출 — 200줄 중복 제거 (impl-sonnet) [blockedBy: 1]
-- [ ] 4. token_to_friendly_name 추출 — parser 90줄 분리 (impl-sonnet)
-- [ ] 5. 전체 검증 — E2E 2501 + Clippy 0건 (Opus 직접) [blockedBy: 2,3,4]
-진행률: 0/5 (0%)
-
 ### Phase 159: 코드 건강도 복원 — Clippy 0건 + Pre-existing E2E 해결 + 정리
 
 > **목표**: team-review에서 발견된 4가지 이슈 해결
