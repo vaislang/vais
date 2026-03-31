@@ -257,7 +257,48 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
-### Phase 167: TC 함수 후보 선택에서 argument coercion — 미해결
+### Phase 171: Codegen IR 정확성 — VaisDB 6개 테스트 clang 직접 통과
+
+> **배경**: TC 에러 221→0 (100% 해소) 달성. 다음 단계는 IR→clang→link→run 파이프라인.
+> **원칙**: ir_fix.py 등 IR 후처리 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+> **검증**: `clang -c -x ir /tmp/<test>.ll -o /tmp/<test>.o -w` — 에러 0건이 목표.
+>
+> **재현 명령 (전체 파이프라인)**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/graph/test_graph.vais --emit-ir -o /tmp/test_graph.ll --force-rebuild
+> clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
+> ```
+
+#### clang 에러 현황 (2026-04-01, ir_fix.py 없이 직접 컴파일)
+
+| 테스트 | clang 에러 | 에러 내용 | codegen 근본 원인 |
+|--------|-----------|----------|------------------|
+| test_graph | 1 | `i8` defined but expected `i64` | Vec<u8> generic: value를 i8로 정의하나 i64로 사용 |
+| test_fulltext | 1 | `i8` defined but expected `i64` | 동일 (Vec<u8>) |
+| test_vector | 1 | `float` defined but expected `i64` | Vec<f32> generic: value를 float으로 정의하나 i64로 사용 |
+| test_wal | 1 | `ptr` but expected `Mutex$i64` struct | Mutex self를 ptr로 정의하나 struct 타입 기대 |
+| test_btree | 1 | return type mismatch `BTreeLeafEntry` | struct 반환 타입 불일치 |
+| test_transaction | 1 | `void type` in non-function context | void를 변수 타입으로 사용 |
+
+#### 에러 패턴 분류
+
+| 패턴 | 건수 | 근본 원인 |
+|------|------|----------|
+| Vec<T> generic value 타입 불일치 | 3 | codegen specialized Vec method에서 value 타입을 T가 아닌 i64로 사용 |
+| struct self/return 타입 불일치 | 2 | codegen에서 struct 타입을 ptr/void로 잘못 생성 |
+| void 변수 타입 | 1 | codegen에서 void를 변수 타입으로 emit |
+
+- [ ] 1. Vec<T> generic value 타입 정확화 — i8/float value를 올바른 T 타입으로 (Opus 직접)
+- [ ] 2. struct self/return 타입 정확화 — Mutex, BTreeLeafEntry (Opus 직접)
+- [ ] 3. void 변수 타입 제거 — Unit 타입을 i8로 대체 (Opus 직접)
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1,2,3]
+진행률: 0/4 (0%)
+
+### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 
 > **⚠️ "불필요" 판단은 오진**: 실제 VaisDB 프로젝트(`/Users/sswoo/study/projects/vaisdb/`)에서 TC 2건 잔존.
 > `examples/projects/vaisdb/`는 간소화된 별도 예제이며, 실제 VaisDB 프로젝트가 아님.
