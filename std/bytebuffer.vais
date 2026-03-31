@@ -257,16 +257,27 @@ X ByteBuffer {
         ByteBuffer.with_capacity(64)
     }
 
-    # Wrap existing mutable byte buffer (takes ownership of data pointer)
-    F wrap(data: i64, len: i64) -> ByteBuffer {
-        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
+    # Wrap existing byte slice as mutable ByteBuffer (shares data pointer — caller must
+    # ensure the underlying buffer lives as long as this ByteBuffer).
+    # Accepts &[u8], &Vec<u8> (via coercion), or any slice reference.
+    F wrap(data: &[u8]) -> ByteBuffer {
+        ptr := slice_data_ptr(data)
+        length := data.len()
+        ByteBuffer { data: ptr, len: length, cap: length, pos: 0 }
     }
 
-    # Wrap existing read-only byte buffer (copies data)
-    F wrap_readonly(data: i64, len: i64) -> ByteBuffer {
-        buf := malloc(len)
-        memcpy(buf, data, len)
-        ByteBuffer { data: buf, len: len, cap: len, pos: 0 }
+    # Wrap existing byte slice as read-only ByteBuffer (copies data into new buffer)
+    F wrap_readonly(data: &[u8]) -> ByteBuffer {
+        ptr := slice_data_ptr(data)
+        length := data.len()
+        buf := malloc(length)
+        memcpy(buf, ptr, length)
+        ByteBuffer { data: buf, len: length, cap: length, pos: 0 }
+    }
+
+    # Wrap raw pointer and length directly (low-level, use wrap/wrap_readonly instead)
+    F wrap_raw(data: i64, len: i64) -> ByteBuffer {
+        ByteBuffer { data: data, len: len, cap: len, pos: 0 }
     }
 
     # Create ByteBuffer by copying from another ByteBuffer

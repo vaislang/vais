@@ -750,6 +750,36 @@ impl CodeGenerator {
             let result_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
             Ok((result_i64, ir))
+        } else if fn_name == "slice_data_ptr" {
+            // Extract the data pointer from a slice fat pointer {i8*, i64}
+            // Returns i64 (ptrtoint of the i8*)
+            let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
+            // If arg is a { i8*, i64 } slice, extractvalue index 0 gives the pointer
+            if arg_full.starts_with("{ i8*, i64 }") || arg_full.contains("{ i8*, i64 }") {
+                // arg is like "{ i8*, i64 } %t5"
+                let val_name = arg_full
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or("%unknown");
+                let ptr_tmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    ptr_tmp,
+                    val_name
+                );
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
+                Ok((result, ir))
+            } else {
+                // Fallback: treat the argument as already an i64 pointer
+                let val = arg_full
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or("0")
+                    .to_string();
+                Ok((val, ir))
+            }
         } else if fn_name == "strlen" {
             // Special handling for strlen: extract i8* from various argument types
             let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");

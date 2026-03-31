@@ -92,6 +92,22 @@ impl TypeChecker {
             },
         );
 
+        // slice_data_ptr: (s: &[u8]) -> i64 — extract raw data pointer from slice
+        // Returns the data pointer component of a fat pointer (first element of {i8*, i64})
+        self.functions.insert(
+            "slice_data_ptr".to_string(),
+            FunctionSig {
+                name: "slice_data_ptr".to_string(),
+                params: vec![(
+                    "s".to_string(),
+                    ResolvedType::Slice(Box::new(ResolvedType::U8)),
+                    false,
+                )],
+                ret: ResolvedType::I64,
+                ..Default::default()
+            },
+        );
+
         // type_size: () -> i64 — compile-time size of generic type T
         // Used in generic containers to get element size at monomorphization time
         self.functions.insert(
