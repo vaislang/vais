@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774877797112,
+  "lastUpdate": 1775001405442,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33623,6 +33623,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 797170,
             "range": "± 3406",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "b854a9573dc085e6f9e16daa04d24fff953be506",
+          "message": "fix(types): Try operator (?) returns concrete type for Named Result/Option\n\nThe ? operator on Named { name: \"Result\", generics: [T, E] } was looking up\nthe enum definition's variant types (unsubstituted Generic(\"T\")) instead of\nusing the concrete generics from the Named type. This caused variables bound\nvia `let x = expr?` to have type Generic(\"T\") instead of the actual type.\n\nFixed by using generics[0] directly (same pattern as the ! unwrap operator).\nThis resolves VaisDB test_btree E030 \"No such field\" error.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-01T08:47:59+09:00",
+          "tree_id": "a5a9d9cf1f9652047d04dff13e56a77bdc94ee7d",
+          "url": "https://github.com/vaislang/vais/commit/b854a9573dc085e6f9e16daa04d24fff953be506"
+        },
+        "date": 1775001404864,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 4006,
+            "range": "± 79",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7714,
+            "range": "± 158",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 9576,
+            "range": "± 402",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 16063,
+            "range": "± 152",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19163,
+            "range": "± 128",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 37495,
+            "range": "± 354",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 34191,
+            "range": "± 155",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 72972,
+            "range": "± 405",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 305432,
+            "range": "± 1621",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 466347,
+            "range": "± 2893",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117708,
+            "range": "± 1218",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 802809,
+            "range": "± 4743",
             "unit": "ns/iter"
           }
         ]
