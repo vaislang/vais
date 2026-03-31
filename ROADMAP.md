@@ -312,9 +312,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > TC가 BTreeLeafNode 타입에서 `delete` 메서드를 찾지 못함.
 > **재현**: 위 Phase 167 재현 명령 사용 → `error[E030] No such field` 1건
 
-- [ ] 1. TC에서 BTreeLeafNode.delete 메서드 해석 실패 원인 분석 + 수정 (Opus 직접)
-- [ ] 2. 실제 VaisDB test_btree TC 0 검증 (Opus 직접) [blockedBy: 1]
-진행률: 0/2 (0%)
+모드: 자동진행
+  strategy: sequential (blockedBy dependency) → Opus direct
+  opus_direct: TC 디버깅은 컴파일러 내부 check_call() 로직 이해 필수 — design-impl inseparable
+
+- [x] 1. TC에서 BTreeLeafNode.delete 메서드 해석 실패 원인 분석 + 수정 (Opus 직접) ✅ 2026-04-01
+  근본 원인: Try 연산자(?)가 Named { name: "Result", generics } 처리 시 enum 정의의 unsubstituted Generic("T")를 반환 — Unwrap(!)은 이미 generics[0] 사용하여 정상, Try만 누락
+  변경: checker_expr/special.rs — Try(?) Result/Option 핸들러에서 generics[0] 직접 사용 (Unwrap과 동일 패턴)
+- [x] 2. 실제 VaisDB test_btree TC 0 검증 (Opus 직접) [blockedBy: 1] ✅ 2026-04-01
+  결과: TC 에러 0건, TC 경고 0건 — 완전 해소
+진행률: 2/2 (100%)
 
 ### Phase 169: VaisDB 실전 Vec→Slice 검증 + ROADMAP 정리
 

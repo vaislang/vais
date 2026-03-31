@@ -23,8 +23,12 @@ impl TypeChecker {
                     ResolvedType::Result(ok_type, _err_type) => Some(Ok(*ok_type.clone())),
                     ResolvedType::Optional(some_type) => Some(Ok(*some_type.clone())),
                     // Also support user-defined enums named "Result" with Ok variant
-                    ResolvedType::Named { name, .. } if name == "Result" => {
-                        if let Some(enum_def) = self.enums.get("Result") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Result" => {
+                        if !generics.is_empty() {
+                            // Result<T, E> — first generic is the Ok type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Result") {
                             if let Some(variant_fields) = enum_def.variants.get("Ok") {
                                 match variant_fields {
                                     VariantFieldTypes::Tuple(types) if !types.is_empty() => {
@@ -40,8 +44,12 @@ impl TypeChecker {
                         }
                     }
                     // Also support user-defined enums named "Option" with Some variant
-                    ResolvedType::Named { name, .. } if name == "Option" => {
-                        if let Some(enum_def) = self.enums.get("Option") {
+                    // Use generics from Named type directly (concrete types)
+                    ResolvedType::Named { name, generics } if name == "Option" => {
+                        if !generics.is_empty() {
+                            // Option<T> — first generic is the Some type
+                            Some(Ok(generics[0].clone()))
+                        } else if let Some(enum_def) = self.enums.get("Option") {
                             if let Some(variant_fields) = enum_def.variants.get("Some") {
                                 match variant_fields {
                                     VariantFieldTypes::Tuple(types) if !types.is_empty() => {
