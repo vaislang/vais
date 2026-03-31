@@ -278,8 +278,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > unification.rs의 Ref(Vec<T>)↔Slice(T) coercion은 **unify() 내에서만 동작**하고,
 > 함수 후보 선택 단계에서는 사용되지 않음.
 
-- [ ] 1. TC check_call 후보 선택에서 unify() 기반 argument 매칭 (Opus 직접)
-- [ ] 2. 실제 VaisDB test_btree TC 0 검증 (위 재현 명령 사용) [blockedBy: 1]
+#### 추가 디버깅 결과 (2026-03-31)
+- 단독 파일: `&Vec<&[u8]>` → `&[&[u8]]` coercion 정상 (TC 0)
+- 2-파일 크로스모듈: 정상 (TC 0)
+- VaisDB (대규모 프로젝트, 수백 파일): TC 2건 에러
+- 원인 추정: 대규모 import 체인에서 함수 시그니처가 TC에 등록될 때 `&[&[u8]]` 타입이 변형되거나,
+  다른 모듈의 동명 함수/struct가 간섭하여 후보 선택에 영향
+
+- [ ] 1. VaisDB 대규모 프로젝트에서 TC 디버그 출력 추가 — encode_composite_key 후보 목록 확인 (Opus 직접)
+- [ ] 2. 근본 원인 수정 + VaisDB test_btree TC 0 검증 (Opus 직접) [blockedBy: 1]
 진행률: 0/2 (0%)
 
 ### Phase 169: VaisDB 실전 Vec→Slice 검증 + ROADMAP 정리
