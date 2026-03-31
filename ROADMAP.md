@@ -301,8 +301,20 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   결과: encode_composite_key E006는 이전 Phase에서 해소됨. 잔존 TC 2건은 ByteBuffer.wrap_readonly(1 arg) / ByteBuffer.wrap(1 arg) — std는 (data: i64, len: i64) 2 params. BTreeLeafNode::from_page_data + BTreeInternalNode::from_page_data, BTreeLeafNode::flush + BTreeInternalNode::flush.
 - [x] 2. 근본 원인 수정 + 실제 VaisDB test_btree TC E006→0 검증 (Opus 직접) ✅ 2026-04-01
   변경: std/bytebuffer.vais (wrap/wrap_readonly → &[u8] 시그니처 + wrap_raw 유지), builtins/core.rs (slice_data_ptr 빌트인), generate_expr_call.rs (slice_data_ptr codegen)
-  결과: E2E 2,512 passed / 0 failed / 2 ignored, Clippy 0건. VaisDB test_btree TC E006 0건 (E030 1건은 generic 관련 pre-existing)
-진행률: 2/2 (100%)
+  결과: E2E 2,512 passed / 0 failed / 2 ignored, Clippy 0건. VaisDB test_btree TC E006 0건.
+  **잔여**: E030 "No such field" 1건 (test_btree.vais:393 `leaf.delete(&key)`) — TC가 BTreeLeafNode의 delete 메서드를 해석하지 못함.
+  재현: `cd /Users/sswoo/study/projects/vaisdb && VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais --emit-ir -o /tmp/test_btree.ll --force-rebuild 2>&1 | grep "^error\[E"`
+진행률: 2/2 (100%) — E030 1건은 아래 Phase 170으로 이관
+
+### Phase 170: test_btree E030 "No such field" — BTreeLeafNode.delete 메서드 해석
+
+> **배경**: Phase 167에서 E006 해소 후 E030 1건 잔존. test_btree.vais:393 `leaf.delete(&key)`.
+> TC가 BTreeLeafNode 타입에서 `delete` 메서드를 찾지 못함.
+> **재현**: 위 Phase 167 재현 명령 사용 → `error[E030] No such field` 1건
+
+- [ ] 1. TC에서 BTreeLeafNode.delete 메서드 해석 실패 원인 분석 + 수정 (Opus 직접)
+- [ ] 2. 실제 VaisDB test_btree TC 0 검증 (Opus 직접) [blockedBy: 1]
+진행률: 0/2 (0%)
 
 ### Phase 169: VaisDB 실전 Vec→Slice 검증 + ROADMAP 정리
 
