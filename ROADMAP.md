@@ -257,11 +257,30 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
-### ~~Phase 167~~ — **불필요 확정** (2026-03-31)
+### Phase 167: TC 함수 후보 선택에서 argument coercion — 미해결
 
-> test_btree.vais는 코드베이스에 미존재 (이전 세션 임시 파일). encode_composite_key 함수도 VaisDB에 없음.
-> VaisDB main.vais: TC 0, CG 0, 빌드+실행 성공 ("All VaisDB tests passed!").
-> TC unification.rs에 Ref(Vec<T>)↔Slice(T) coercion 이미 존재 (Phase 163).
+> **⚠️ "불필요" 판단은 오진**: 실제 VaisDB 프로젝트(`/Users/sswoo/study/projects/vaisdb/`)에서 TC 2건 잔존.
+> `examples/projects/vaisdb/`는 간소화된 별도 예제이며, 실제 VaisDB 프로젝트가 아님.
+>
+> **재현 명령 (실제 VaisDB 프로젝트에서 실행)**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/storage/test_btree.vais --emit-ir -o /tmp/test_btree_mono.ll --force-rebuild 2>&1 \
+>   | grep "error\[E"
+> ```
+> 결과: `E006 Wrong argument count` 2건 (line 94, 390)
+>
+> **근본 원인**: `encode_composite_key(components: &[&[u8]])` 호출에서 `&Vec<&[u8]>` 전달.
+> TC check_call()이 인자 타입을 정확 매칭하여 후보 탈락 → 2-arg fallback.
+> unification.rs의 Ref(Vec<T>)↔Slice(T) coercion은 **unify() 내에서만 동작**하고,
+> 함수 후보 선택 단계에서는 사용되지 않음.
+
+- [ ] 1. TC check_call 후보 선택에서 unify() 기반 argument 매칭 (Opus 직접)
+- [ ] 2. 실제 VaisDB test_btree TC 0 검증 (위 재현 명령 사용) [blockedBy: 1]
+진행률: 0/2 (0%)
 
 ### Phase 169: VaisDB 실전 Vec→Slice 검증 + ROADMAP 정리
 
