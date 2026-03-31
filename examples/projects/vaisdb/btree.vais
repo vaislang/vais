@@ -397,6 +397,22 @@ F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64
 }
 
 # Free all nodes recursively
+# Composite key encoding: combine multiple i64 keys into a single hash.
+# Accepts a pointer to key parts and a count, produces a combined key.
+# Uses Vais's raw-pointer convention (i64 = pointer) matching VaisDB style.
+F encode_composite_key(parts: i64, count: i64) -> i64 {
+    I count <= 0 { R 0 }
+    result := mut 0
+    idx := mut 0
+    L {
+        I idx >= count { B }
+        val := load_i64(parts + idx * 8)
+        result = result * 31 + val
+        idx = idx + 1
+    }
+    result
+}
+
 F btree_free_node(node: i64) -> i64 {
     I node == 0 { R 0 }
     is_leaf := load_i64(node + NODE_IS_LEAF)

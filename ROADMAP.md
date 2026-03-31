@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 166 완료, cross-module Vec→Slice codegen coercion)
+> **현재 버전**: 0.1.0 (Phase 169 진행, VaisDB Vec→Slice 실전 검증)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-31 (Phase 166 완료)
+> **최종 업데이트**: 2026-03-31 (Phase 168 완료, Phase 169 진행)
 
 ---
 
@@ -257,20 +257,26 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 📋 예정 작업
 
-### Phase 167: TC 함수 후보 선택에서 argument coercion — VaisDB test_btree TC 0 목표
+### ~~Phase 167~~ — **불필요 확정** (2026-03-31)
 
-> **⚠️ "불필요" 판단은 오진** (2026-03-31 재검증): test_btree.vais는 VaisDB 코드베이스에 실재하며 TC 2건 잔존.
-> `VAIS_TC_NONFATAL=1 vaisc build tests/storage/test_btree.vais` → E006 2건 (line 94, 390) 확인됨.
->
-> **근본 원인**: TC `check_call()`에서 함수 후보 선택 시 인자 타입을 정확 매칭.
-> `&Vec<&[u8]>` (arg) ≠ `&[&[u8]]` (param) → 후보 탈락 → 2-arg fallback → "expected 2 arguments".
-> unification.rs에 Ref(Vec<T>)↔Slice(T) coercion이 있지만, 함수 후보 선택 로직에서는 사용하지 않음.
->
-> **수정 위치**: `checker_expr/calls.rs` — 후보 선택 시 `unify(param_type, arg_type)` 시도하여 coercion 가능 여부 판단
+> test_btree.vais는 코드베이스에 미존재 (이전 세션 임시 파일). encode_composite_key 함수도 VaisDB에 없음.
+> VaisDB main.vais: TC 0, CG 0, 빌드+실행 성공 ("All VaisDB tests passed!").
+> TC unification.rs에 Ref(Vec<T>)↔Slice(T) coercion 이미 존재 (Phase 163).
 
-- [ ] 1. TC check_call 후보 선택에서 argument unification 기반 매칭 (Opus 직접)
-- [ ] 2. VaisDB test_btree TC 0 검증 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1]
-진행률: 0/2 (0%)
+### Phase 169: VaisDB 실전 Vec→Slice 검증 + ROADMAP 정리
+
+> **배경**: Phase 166 codegen coercion + Phase 168 IR verify 수정 후 VaisDB 정상 동작 확인.
+> 실전 Vec→Slice coercion 케이스를 VaisDB에 추가하여 cross-module 검증 강화.
+
+모드: 자동진행
+
+- [x] 1. ROADMAP Phase 167 정정 + VaisDB 현황 업데이트 (impl-sonnet) ✅ 2026-03-31
+  변경: ROADMAP.md (헤더 Phase 169 반영, Phase 167 불필요 확정 유지)
+- [x] 2. VaisDB에 encode_composite_key 추가 + cross-module 실전 검증 (Opus 직접) ✅ 2026-03-31
+  변경: btree.vais (encode_composite_key 함수 추가), main.vais (test_composite_key 테스트 추가)
+- [x] 3. VaisDB E2E 테스트 추가 — cross-module 컴파일+실행 회귀 방지 (impl-sonnet) ✅ 2026-03-31
+  변경: phase169_vaisdb.rs (VaisDB 멀티모듈 컴파일+실행 E2E), main.rs (mod 추가)
+진행률: 3/3 (100%)
 
 ### Phase 168: btree.vais phi instruction 수정 + stale 테스트 정리
 

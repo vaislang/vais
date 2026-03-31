@@ -324,6 +324,28 @@ F test_buffer_pool() -> i64 {
     0
 }
 
+# ========== Test 8: Composite key encoding (cross-module call) ==========
+F test_composite_key() -> i64 {
+    # Call encode_composite_key from btree module — exercises cross-module function call
+    buf := malloc(24)   # 3 i64 values
+    store_i64(buf, 10)
+    store_i64(buf + 8, 20)
+    store_i64(buf + 16, 30)
+
+    # encode_composite_key(parts, count) -> hash
+    result := encode_composite_key(buf, 3)
+    # Expected: ((0 * 31 + 10) * 31 + 20) * 31 + 30 = (10 * 31 + 20) * 31 + 30 = 330 * 31 + 30 = 10260
+    # Verify: 10*31=310, 310+20=330, 330*31=10230, 10230+30=10260
+    I result != 10260 { free(buf); R 1 }
+
+    # Edge case: empty key
+    empty := encode_composite_key(buf, 0)
+    I empty != 0 { free(buf); R 2 }
+
+    free(buf)
+    0
+}
+
 # ========== Main: run all tests ==========
 F main() -> i64 {
     r := mut test_page_ops()
@@ -346,6 +368,9 @@ F main() -> i64 {
 
     r = test_buffer_pool()
     I r != 0 { print("FAIL: buffer pool"); R 60 + r }
+
+    r = test_composite_key()
+    I r != 0 { print("FAIL: composite key"); R 70 + r }
 
     print("All VaisDB tests passed!")
     0

@@ -55,6 +55,7 @@ mod phase148_safety;
 mod phase158_type_strict;
 mod phase164_btree;
 mod phase166_vec_slice_coercion;
+mod phase169_vaisdb;
 mod phase30;
 mod phase31;
 mod phase32;
