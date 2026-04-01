@@ -313,8 +313,43 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   VaisDB 6개 테스트: 원래 에러 패턴 4종 해결, deeper 에러 2종 잔존 (specialized call arg width, Option struct)
 - [x] 4. 전체 검증 (Opus 직접) ✅ 2026-04-01
   결과: E2E 2512 pass / 0 fail / 2 ignored — **0 regression**. Clippy 0건. Unit 800 pass.
-  VaisDB clang: 6개 테스트 각 1 에러 잔존 (deeper body-uses-i64 — 별도 Phase에서 해결)
+  VaisDB clang: 6개 테스트 각 1 에러 잔존 — 아래 Phase 172로 이관.
 진행률: 5/5 (100%)
+
+### Phase 172: Codegen IR body-uses-i64 잔여 — VaisDB 6개 테스트 clang 0 에러
+
+> **배경**: Phase 171에서 4가지 에러 패턴 해소 후 deeper 에러 노출. 6개 테스트 각 1 clang 에러.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+>
+> **재현 명령**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/graph/test_graph.vais --emit-ir -o /tmp/test_graph.ll --force-rebuild
+> clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
+> ```
+
+#### clang 에러 현황 (2026-04-01, Phase 171 수정 후)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | `%t15` i64 defined but expected i8 |
+| test_wal | 1 | `%t15` i64 defined but expected i8 |
+| test_btree | 1 | `%t15` i64 defined but expected i8 |
+| test_fulltext | 1 | `%t15` i64 defined but expected i8 |
+| test_vector | 1 | `%t14` ptr defined but expected i64 |
+| test_transaction | 1 | `%__value_ptr` ptr defined but expected i64 |
+
+#### 패턴 분류
+- **i64→i8 (4건)**: codegen이 generic body에서 value를 i64로 emit하나, specialized 함수 시그니처는 i8 기대 (Vec<u8> 관련)
+- **ptr→i64 (2건)**: codegen이 ptr을 emit하나 i64 기대 (Vec<struct>/Option 관련)
+
+- [ ] 1. Vec<u8> specialized body: i64→i8 value width 정확화 (Opus 직접)
+- [ ] 2. Vec<struct>/Option: ptr→i64 value 정확화 (Opus 직접)
+- [ ] 3. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2]
+진행률: 0/3 (0%)
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 
