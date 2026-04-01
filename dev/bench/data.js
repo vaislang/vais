@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775003505168,
+  "lastUpdate": 1775054517682,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33815,6 +33815,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 802882,
             "range": "± 3087",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "fc4b06224bea3916c1198141912571c7f69b6b40",
+          "message": "feat(website): add VaisX framework section and /vaisx/ landing page\n\n- Add VaisX nav link and intro section (3 feature cards + code preview) after Features\n- Create /vaisx/ dedicated landing page with quick start, packages table\n- Add i18n translations for EN/KO/JA/ZH\n- Update vite.config.js with vaisx entry point\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-01T23:36:50+09:00",
+          "tree_id": "3e98f5d1054aa9f66e77a4b59128bb15d7b09b6b",
+          "url": "https://github.com/vaislang/vais/commit/fc4b06224bea3916c1198141912571c7f69b6b40"
+        },
+        "date": 1775054517203,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3705,
+            "range": "± 52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7343,
+            "range": "± 256",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8101,
+            "range": "± 119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 15008,
+            "range": "± 171",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19048,
+            "range": "± 205",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36619,
+            "range": "± 663",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33129,
+            "range": "± 365",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 71043,
+            "range": "± 803",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 319592,
+            "range": "± 3221",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 490696,
+            "range": "± 4999",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117868,
+            "range": "± 2518",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 842177,
+            "range": "± 9389",
             "unit": "ns/iter"
           }
         ]
