@@ -239,23 +239,46 @@ impl CodeGenerator {
                 // For struct values (e.g., from function returns)
                 // Single-pointer: alloca %T, store value directly
                 self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
+                let is_value_expr = self.is_expr_value(value);
                 // If the value expression is not a value (e.g., block returning
-                // a struct-typed local), we need to load the struct first
-                let actual_val = if !self.is_expr_value(value) {
+                // a struct-typed local, or load_typed returning alloca ptr), load struct first
+                let actual_val = if !is_value_expr {
                     let loaded = self.next_temp(counter);
                     write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
                     loaded
                 } else {
                     val.clone()
                 };
-                write_ir!(
-                    ir,
-                    "  store {} {}, {}* %{}",
-                    llvm_ty,
-                    actual_val,
-                    llvm_ty,
-                    llvm_name
-                );
+
+                // Check for type mismatch: when the expression is a "value" (e.g.,
+                // from a generic function call returning i64), but the target is a
+                // struct type. The i64 is a pointer-as-integer to the struct data.
+                let val_llvm_ty = self.llvm_type_of(&actual_val);
+                if is_value_expr && val_llvm_ty == "i64" && llvm_ty.starts_with('%') {
+                    // i64 is a pointer-as-integer to the struct data — memcpy
+                    self.needs_llvm_memcpy = true;
+                    let sizeof = self.compute_sizeof(&resolved_ty);
+                    let dst_ptr = self.next_temp(counter);
+                    let src_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast {}* %{} to i8*", dst_ptr, llvm_ty, llvm_name);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, actual_val);
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        dst_ptr,
+                        src_ptr,
+                        sizeof
+                    );
+                } else {
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* %{}",
+                        llvm_ty,
+                        actual_val,
+                        llvm_ty,
+                        llvm_name
+                    );
+                }
             } else {
                 self.emit_entry_alloca(&format!("%{}", llvm_name), &llvm_ty);
                 // Coerce the value width to match the alloca type (fixes P8: binary op

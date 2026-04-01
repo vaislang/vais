@@ -413,6 +413,40 @@ impl CodeGenerator {
         let target_type = self.ast_type_to_resolved(&ty.node);
         let llvm_type = self.type_to_llvm(&target_type);
 
+        // Check source type for str→i64 cast: extract data pointer from fat pointer
+        let src_llvm_ty = self.llvm_type_of(&val);
+        if src_llvm_ty == "{ i8*, i64 }" && llvm_type == "i64" {
+            // str → i64: extract the data pointer (field 0) and ptrtoint
+            let ptr_val = self.next_temp(counter);
+            let result = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", ptr_val, val);
+            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_val);
+            return Ok((result, ir));
+        }
+
+        // i64 → str cast: convert pointer-as-i64 to fat pointer { i8*, i64 }
+        if src_llvm_ty == "i64" && llvm_type == "{ i8*, i64 }" {
+            let ptr_val = self.next_temp(counter);
+            let fat1 = self.next_temp(counter);
+            let result = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_val, val);
+            write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0", fat1, ptr_val);
+            write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1", result, fat1);
+            return Ok((result, ir));
+        }
+
+        // pointer/struct → i64 cast: ptrtoint
+        if llvm_type == "i64" && (src_llvm_ty.ends_with('*') || src_llvm_ty.starts_with('%')) {
+            let result = self.next_temp(counter);
+            if src_llvm_ty.ends_with('*') {
+                write_ir!(ir, "  {} = ptrtoint {} {} to i64", result, src_llvm_ty, val);
+            } else {
+                // Named struct type — the SSA value is actually a pointer (from alloca)
+                write_ir!(ir, "  {} = ptrtoint {}* {} to i64", result, src_llvm_ty, val);
+            }
+            return Ok((result, ir));
+        }
+
         // Simple cast - in many cases just bitcast or pass through
         let result = self.next_temp(counter);
         match (&target_type, llvm_type.as_str()) {

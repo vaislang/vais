@@ -536,6 +536,55 @@ impl CodeGenerator {
                 }
             }
 
+            // Coerce struct pointer → i64 when the callee parameter is i64.
+            // This happens when a function body passes a struct-typed local
+            // (which is actually a pointer from alloca) to a generic function
+            // that uses i64 erasure.
+            if arg_ty == "i64" {
+                let val_ty = self.llvm_type_of(&val);
+                if val_ty.starts_with('%') && val_ty.ends_with('*') {
+                    // Explicitly pointer-typed → ptrtoint
+                    let tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint {} {} to i64", tmp, val_ty, val);
+                    val = tmp;
+                } else if val_ty.starts_with('%') && !val_ty.ends_with('*') {
+                    // Named struct type from local — the SSA value is actually a
+                    // pointer (from alloca pattern at function entry). Treat as ptr.
+                    let tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, val_ty, val);
+                    val = tmp;
+                }
+            }
+
+            // Final coercion: if the value type is reliably known (not fallback)
+            // and differs from arg_ty, coerce. Only check temps with registered
+            // types or locals — skip when llvm_type_of falls back to i64.
+            {
+                let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
+                    || self.fn_ctx.locals.get(val.strip_prefix('%').unwrap_or(&val)).is_some();
+                if has_known_type {
+                    let val_ty = self.llvm_type_of(&val);
+                    if val_ty != arg_ty
+                        && val_ty.starts_with('i')
+                        && arg_ty.starts_with('i')
+                        && val_ty != "i1"
+                        && arg_ty != "i1"
+                    {
+                        let val_bits: u32 = val_ty[1..].parse().unwrap_or(64);
+                        let arg_bits: u32 = arg_ty[1..].parse().unwrap_or(64);
+                        if val_bits > arg_bits {
+                            let tmp = self.next_temp(counter);
+                            write_ir!(ir, "  {} = trunc {} {} to {}", tmp, val_ty, val, arg_ty);
+                            val = tmp;
+                        } else if val_bits < arg_bits {
+                            let tmp = self.next_temp(counter);
+                            write_ir!(ir, "  {} = sext {} {} to {}", tmp, val_ty, val, arg_ty);
+                            val = tmp;
+                        }
+                    }
+                }
+            }
+
             arg_vals.push(format!("{} {}", arg_ty, val));
         }
 

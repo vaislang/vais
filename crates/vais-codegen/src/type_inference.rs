@@ -104,12 +104,12 @@ impl CodeGenerator {
                     {
                         return false;
                     }
-                    // load_typed() for large structs returns an alloca pointer, not a value
+                    // load_typed() for Named types returns an alloca pointer, not a value.
+                    // The codegen for Named/Str in load_typed always uses the
+                    // alloca+memcpy path regardless of size.
                     if name == "load_typed" {
                         if let Some(concrete) = self.get_generic_substitution("T") {
-                            if matches!(concrete, ResolvedType::Named { .. })
-                                && self.compute_sizeof(&concrete) > 8
-                            {
+                            if matches!(concrete, ResolvedType::Named { .. }) {
                                 return false;
                             }
                         }

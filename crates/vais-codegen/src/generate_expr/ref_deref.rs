@@ -133,6 +133,17 @@ impl CodeGenerator {
         let llvm_ty = self.type_to_llvm(&local.ty);
         let (val, val_ir) = self.generate_expr(inner, counter)?;
         ir.push_str(&val_ir);
+
+        // If the local is a struct-typed SSA value whose LLVM name is an alloca
+        // pointer (e.g., %__test_ptr from function entry, or %self for methods),
+        // the value is already a pointer to the struct — return it directly.
+        // The function entry code creates alloca + store for struct params, and
+        // registers them as SSA with Named type but the value is %StructType*.
+        if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_ssa() {
+            // The value is already a pointer (alloca result or self param pointer)
+            return Ok((val, ir));
+        }
+
         let tmp_alloca = self.next_temp(counter);
         self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
         write_ir!(
