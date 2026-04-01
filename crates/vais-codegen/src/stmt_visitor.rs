@@ -468,6 +468,24 @@ impl CodeGenerator {
                         self.coerce_float_width(&ret_val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
                     } else if val_llvm_ty.starts_with('i') && llvm_ty.starts_with('i') {
                         self.coerce_int_width(&ret_val, &val_llvm_ty, &llvm_ty, counter, &mut ir)
+                    } else if matches!(ret_type, ResolvedType::Named { .. })
+                        && (ret_val == "0" || ret_val.starts_with("0"))
+                    {
+                        // Returning integer 0 for a struct type → use zeroinitializer
+                        "zeroinitializer".to_string()
+                    } else if val_llvm_ty.starts_with('i')
+                        && (llvm_ty == "float" || llvm_ty == "double")
+                    {
+                        // int → float coercion (e.g., i64 → double in specialized HashMap return)
+                        let tmp = self.next_temp(counter);
+                        write_ir!(ir, "  {} = bitcast i64 {} to double", tmp, ret_val);
+                        if llvm_ty == "float" {
+                            let tmp2 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = fptrunc double {} to float", tmp2, tmp);
+                            tmp2
+                        } else {
+                            tmp
+                        }
                     } else {
                         ret_val
                     }

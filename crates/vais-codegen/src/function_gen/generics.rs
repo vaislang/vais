@@ -394,6 +394,9 @@ impl CodeGenerator {
             }
         }
 
+        // Set current return type so R (return) statements emit correct type
+        self.fn_ctx.current_return_type = Some(ret_type.clone());
+
         // Generate function body
         let mut counter = 0;
         match &generic_fn.body {
@@ -414,7 +417,9 @@ impl CodeGenerator {
                     );
                     write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                 } else {
-                    write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                    // Coerce body value to return type if needed (e.g., i64 → double)
+                    let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                    write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
                 }
             }
             FunctionBody::Block(stmts) => {
@@ -446,7 +451,9 @@ impl CodeGenerator {
                             write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                         }
                     } else {
-                        write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                        // Coerce body value to return type if needed
+                        let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                        write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
                     }
                 }
             }
@@ -462,5 +469,40 @@ impl CodeGenerator {
         self.fn_ctx.current_function = None;
 
         Ok(ir)
+    }
+
+    /// Coerce a value to match the specialized function return type.
+    /// Handles cases like i64→double, i64→float when generic functions
+    /// return i64 internally but the specialized version declares a concrete return type.
+    fn coerce_specialized_return(
+        &mut self,
+        value: &str,
+        ret_llvm: &str,
+        _ret_type: &ResolvedType,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        // If value looks like an i64 but return type is float/double, bitcast
+        if ret_llvm == "double" {
+            // Assume value is i64 from generic body — bitcast to double
+            let tmp = self.next_temp(counter);
+            write_ir!(ir, "  {} = bitcast i64 {} to double", tmp, value);
+            return tmp;
+        }
+        if ret_llvm == "float" {
+            let tmp1 = self.next_temp(counter);
+            let tmp2 = self.next_temp(counter);
+            write_ir!(ir, "  {} = bitcast i64 {} to double", tmp1, value);
+            write_ir!(ir, "  {} = fptrunc double {} to float", tmp2, tmp1);
+            return tmp2;
+        }
+        // For small int types (i8, i16, i32), truncate from i64
+        if ret_llvm == "i8" || ret_llvm == "i16" || ret_llvm == "i32" {
+            let tmp = self.next_temp(counter);
+            write_ir!(ir, "  {} = trunc i64 {} to {}", tmp, value, ret_llvm);
+            return tmp;
+        }
+        // Default: return as-is
+        value.to_string()
     }
 }

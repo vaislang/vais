@@ -300,9 +300,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   변경: generate_expr_call.rs — store_typed/load_typed에 is_specialized 분기 추가 + Named struct memcpy 조건 확장
 - [x] 3. void 변수 타입 제거 — Unit 타입을 i8로 대체 (Opus 직접) ✅ 2026-04-01
   변경: function_gen/generics.rs — 특화 struct 필드 void→i8 대체
-- [ ] 2. 잔여 에러 수정 — enum tag, struct self/return, HashMap ret (Opus 직접)
-- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 2]
-진행률: 2/4 (50%)
+- [x] 2a. specialized fn return type 수정 (Opus 직접) ✅ 2026-04-01
+  변경: generics.rs — current_return_type 설정 + coerce_specialized_return() 추가 (i64→double/float/i8-i32)
+  변경: stmt_visitor.rs — R stmt에서 struct 리턴 시 zeroinitializer, i64→float coercion 추가
+- [ ] 2b. 잔여 에러 — enum tag {ptr,i64}, struct self ptr store, body i64→struct (Opus 직접)
+  **분석**: 특화 함수 body가 generic codegen과 동일하게 i64/ptr 기반으로 생성됨.
+  특화 sig는 concrete type이지만 body는 여전히 everything-is-i64 패턴.
+  해결 방향: body 내 call/store에서 타입 불일치 시 bitcast/ptrtoint 삽입, 또는 body 생성 자체를 concrete type 기반으로 변경 (대규모 리팩토링).
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 2b]
+진행률: 3/5 (60%)
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 
