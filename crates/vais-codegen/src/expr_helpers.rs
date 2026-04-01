@@ -447,6 +447,32 @@ impl CodeGenerator {
             return Ok((result, ir));
         }
 
+        // Integer width coercion: only apply when source type is reliably known
+        // (not fallback i64). The "everything-is-i64" body convention means that
+        // i64→i32 truncation would break downstream code that expects i64 values.
+        // Only widen (i8/i16/i32 → i64) from known types, not narrow.
+        {
+            let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
+                || self.fn_ctx.locals.get(val.strip_prefix('%').unwrap_or(&val)).is_some();
+            if has_known_type
+                && src_llvm_ty.starts_with('i')
+                && llvm_type.starts_with('i')
+                && src_llvm_ty != llvm_type
+            {
+                let src_bits: u32 = src_llvm_ty[1..].parse().unwrap_or(0);
+                let dst_bits: u32 = llvm_type[1..].parse().unwrap_or(0);
+                if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                    let result = self.next_temp(counter);
+                    if src_bits > dst_bits {
+                        write_ir!(ir, "  {} = trunc {} {} to {}", result, src_llvm_ty, val, llvm_type);
+                    } else {
+                        write_ir!(ir, "  {} = sext {} {} to {}", result, src_llvm_ty, val, llvm_type);
+                    }
+                    return Ok((result, ir));
+                }
+            }
+        }
+
         // Simple cast - in many cases just bitcast or pass through
         let result = self.next_temp(counter);
         match (&target_type, llvm_type.as_str()) {

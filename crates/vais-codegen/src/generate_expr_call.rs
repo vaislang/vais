@@ -547,12 +547,22 @@ impl CodeGenerator {
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", tmp, val_ty, val);
                     val = tmp;
-                } else if val_ty.starts_with('%') && !val_ty.ends_with('*') {
+                } else if val_ty.starts_with('%') && !val_ty.ends_with('*') && val_ty != "i64" {
                     // Named struct type from local — the SSA value is actually a
                     // pointer (from alloca pattern at function entry). Treat as ptr.
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, val_ty, val);
                     val = tmp;
+                } else if val_ty == "i64" {
+                    // llvm_type_of returned fallback i64 — check the inferred expression type
+                    // to detect Named/struct types that are actually pointers
+                    let inferred = self.infer_expr_type(arg);
+                    if matches!(inferred, ResolvedType::Named { .. }) {
+                        let struct_llvm = self.type_to_llvm(&inferred);
+                        let tmp = self.next_temp(counter);
+                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                        val = tmp;
+                    }
                 }
             }
 

@@ -375,6 +375,11 @@ impl ExprVisitor for CodeGenerator {
                 if local.is_alloca() {
                     // Alloca variables already have an address
                     return Ok((format!("%{}", local.llvm_name), String::new()));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_ssa() {
+                    // Named SSA locals (self, struct params) are already pointers
+                    // from alloca pattern at function entry — return directly
+                    let (val, val_ir) = self.visit_expr(inner, counter)?;
+                    return Ok((val, val_ir));
                 } else {
                     // SSA/Param values need to be spilled to stack to take their address
                     let mut ir = String::new();

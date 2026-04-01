@@ -75,11 +75,21 @@ impl CodeGenerator {
                     val
                 };
 
+                // Coerce value width to match field type (e.g., i8 param stored to i64 field
+                // in specialized function body using generic struct layout)
+                let val_llvm_ty = self.llvm_type_of(&val_to_store);
+                let coerced_val = self.coerce_int_width(
+                    &val_to_store,
+                    &val_llvm_ty,
+                    &llvm_ty,
+                    counter,
+                    &mut ir,
+                );
                 write_ir!(
                     ir,
                     "  store {} {}, {}* {}",
                     llvm_ty,
-                    val_to_store,
+                    coerced_val,
                     llvm_ty,
                     field_ptr
                 );

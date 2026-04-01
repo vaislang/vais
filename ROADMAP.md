@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 171 진행, VaisDB codegen IR 정확성)
+> **현재 버전**: 0.1.0 (Phase 172 진행, VaisDB codegen body type coercion)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-01 (Phase 170 완료, Phase 171 진행 60%)
+> **최종 업데이트**: 2026-04-01 (Phase 171 완료, Phase 172 진행)
 
 ---
 
@@ -256,6 +256,34 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
 ## 📋 예정 작업
+
+### Phase 172: Codegen body type coercion — VaisDB 6개 테스트 clang 0 에러
+
+> **배경**: Phase 171에서 sig/cast/ref/store 레이어 수정. 잔여 에러는 함수 body 내부의 i64 기반 값이
+> 특화 함수 호출 시 concrete type과 불일치하는 패턴.
+> **원칙**: E2E 0 regression 유지. 최소 침습 수정.
+
+#### 잔여 에러 분류 (Phase 171 이후)
+
+| 패턴 | 테스트 | 에러 | 함수 | 근본 원인 |
+|------|--------|------|------|----------|
+| A: call arg i64→i8 | graph,fulltext,wal,btree | `%t15` i64 expected i8 | ByteBuffer_to_vec | `__load_byte` returns i64, passed to `Vec_push$u8` expecting i8 |
+| B-1: store i8→i64 | transaction | `%value` i8 expected i64 | RwLock_new$unit | specialized param i8(Unit) stored as i64 in generic body |
+| B-2: ret ptr→Result | vector | `%t17` ptr expected %Result | Result_and_then | phi returns i64/ptr, ret expects %Result |
+
+모드: 자동진행
+  strategy: sequential → Opus direct (codegen IR semantics)
+  opus_direct: 함수 body 내 type coercion은 LLVM IR 의미론 이해 필수
+
+- [ ] 1. call arg width coercion — ByteBuffer_to_vec에서 Vec_push$u8 호출 시 i64→i8 trunc (Opus 직접)
+  [대상 파일]: crates/vais-codegen/src/generate_expr_call.rs, crates/vais-codegen/src/expr_helpers_call/method_call.rs
+  [완료 기준]: 5개 테스트 (graph/fulltext/wal/btree + vector 부분) ByteBuffer_to_vec clang 에러 0건
+- [ ] 2. specialized body store/ret coercion — RwLock_new$unit i8→i64 store + Result_and_then ret (Opus 직접)
+  [대상 파일]: crates/vais-codegen/src/function_gen/generics.rs, crates/vais-codegen/src/stmt_visitor.rs
+  [완료 기준]: test_transaction RwLock_new$unit clang 에러 0건, test_vector Result_and_then clang 에러 0건
+- [ ] 3. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1, 2]
+  [완료 기준]: clang -c -x ir 모든 6개 .ll 파일 에러 0건, E2E 2512+ pass 0 fail
+진행률: 0/3 (0%)
 
 ### Phase 171: Codegen IR 정확성 — VaisDB 6개 테스트 clang 직접 통과
 

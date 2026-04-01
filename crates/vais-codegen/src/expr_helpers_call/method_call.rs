@@ -443,6 +443,17 @@ impl CodeGenerator {
                 }
             }
 
+            // Coerce struct pointer → i64 when arg_ty is i64 but value is a Named type
+            if arg_llvm_ty == "i64" {
+                let inferred = self.infer_expr_type(arg);
+                if matches!(inferred, ResolvedType::Named { .. }) {
+                    let struct_llvm = self.type_to_llvm(&inferred);
+                    let tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                    val = tmp;
+                }
+            }
+
             arg_vals.push(format!("{} {}", arg_llvm_ty, val));
         }
 
