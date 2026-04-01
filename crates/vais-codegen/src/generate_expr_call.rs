@@ -989,48 +989,74 @@ impl CodeGenerator {
         let resolved_t = self
             .get_generic_substitution("T")
             .unwrap_or(ResolvedType::I64);
+        // In specialized functions, return the concrete type directly (no T→i64 conversion)
+        let is_specialized = !self.generics.substitutions.is_empty()
+            && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         let result = self.next_temp(counter);
         match size {
             1 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
-                write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
+                if is_specialized {
+                    // Return i8 directly in specialized context
+                    write_ir!(ir, "  {} = load i8, i8* {}", result, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
+                    write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
+                }
             }
             2 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
-                write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
+                if is_specialized {
+                    write_ir!(ir, "  {} = load i16, i16* {}", result, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
+                    write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
+                }
             }
             4 if matches!(resolved_t, ResolvedType::F32) => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
-                let tmp3 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
-                write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
-                write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
+                if is_specialized {
+                    // Return float directly in specialized context
+                    write_ir!(ir, "  {} = load float, float* {}", result, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    let tmp3 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
+                    write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
+                    write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
+                }
             }
             4 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
-                write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
+                if is_specialized {
+                    write_ir!(ir, "  {} = load i32, i32* {}", result, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
+                    write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
+                }
             }
             _ if matches!(resolved_t, ResolvedType::F64) => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
-                write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
+                if is_specialized {
+                    // Return double directly in specialized context
+                    write_ir!(ir, "  {} = load double, double* {}", result, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
+                    write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
+                }
             }
-            n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
-                // Large struct: copy via memcpy from the array slot to a stack
+            n if matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
+                // Struct/str type: copy via memcpy from the array slot to a stack
                 // alloca. Return the alloca pointer — struct values in Text IR
                 // are pointer-based, and field access uses GEP on typed pointers.
                 self.needs_llvm_memcpy = true;
@@ -1050,9 +1076,17 @@ impl CodeGenerator {
                 );
             }
             _ => {
-                let tmp1 = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
+                if is_specialized {
+                    // In specialized context, load the concrete type directly
+                    let llvm_ty = self.type_to_llvm(&resolved_t);
+                    let tmp1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp1, ptr_val, llvm_ty);
+                    write_ir!(ir, "  {} = load {}, {}* {}", result, llvm_ty, llvm_ty, tmp1);
+                } else {
+                    let tmp1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
+                    write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
+                }
             }
         }
         Ok((result, ir))
@@ -1073,47 +1107,74 @@ impl CodeGenerator {
         let resolved_t = self
             .get_generic_substitution("T")
             .unwrap_or(ResolvedType::I64);
+        // In specialized functions (monomorphization), parameters already have the
+        // concrete type (e.g., i8 for Vec<u8>), so skip i64→T conversion.
+        let is_specialized = !self.generics.substitutions.is_empty()
+            && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         match size {
             1 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
-                write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
+                if is_specialized {
+                    // Value is already i8 in specialized context
+                    write_ir!(ir, "  store i8 {}, i8* {}", val_val, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
+                    write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
+                }
             }
             2 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
-                write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
+                if is_specialized {
+                    write_ir!(ir, "  store i16 {}, i16* {}", val_val, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
+                    write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
+                }
             }
             4 if matches!(resolved_t, ResolvedType::F32) => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
-                let tmp3 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to float*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
-                write_ir!(ir, "  {} = fptrunc double {} to float", tmp3, tmp2);
-                write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
+                if is_specialized {
+                    // Value is already float in specialized context
+                    write_ir!(ir, "  store float {}, float* {}", val_val, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    let tmp3 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
+                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp3, tmp2);
+                    write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
+                }
             }
             4 => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
-                write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
+                if is_specialized {
+                    write_ir!(ir, "  store i32 {}, i32* {}", val_val, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
+                    write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
+                }
             }
             _ if matches!(resolved_t, ResolvedType::F64) => {
                 let tmp1 = self.next_temp(counter);
-                let tmp2 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to double*", tmp1, ptr_val);
-                write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
-                write_ir!(ir, "  store double {}, double* {}", tmp2, tmp1);
+                if is_specialized {
+                    // Value is already double in specialized context
+                    write_ir!(ir, "  store double {}, double* {}", val_val, tmp1);
+                } else {
+                    let tmp2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast i64 {} to double", tmp2, val_val);
+                    write_ir!(ir, "  store double {}, double* {}", tmp2, tmp1);
+                }
             }
-            n if n > 8 && matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
-                // Large type: store via memcpy
+            n if matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
+                // Struct/str type: store via memcpy (works for all sizes)
                 self.needs_llvm_memcpy = true;
                 let dst_ptr = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
@@ -1155,9 +1216,17 @@ impl CodeGenerator {
                 );
             }
             _ => {
-                let tmp1 = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
-                write_ir!(ir, "  store i64 {}, i64* {}", val_val, tmp1);
+                if is_specialized {
+                    // In specialized context, store the value in its concrete type
+                    let llvm_ty = self.type_to_llvm(&resolved_t);
+                    let tmp1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp1, ptr_val, llvm_ty);
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, val_val, llvm_ty, tmp1);
+                } else {
+                    let tmp1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
+                    write_ir!(ir, "  store i64 {}, i64* {}", val_val, tmp1);
+                }
             }
         }
         Ok(("0".to_string(), ir))

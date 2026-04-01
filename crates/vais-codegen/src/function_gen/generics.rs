@@ -64,7 +64,14 @@ impl CodeGenerator {
             })
             .collect();
 
-        let llvm_fields: Vec<String> = fields.iter().map(|(_, ty)| self.type_to_llvm(ty)).collect();
+        let llvm_fields: Vec<String> = fields
+            .iter()
+            .map(|(_, ty)| {
+                let llvm_ty = self.type_to_llvm(ty);
+                // void is not valid as a struct field type — use i8 for Unit fields
+                if llvm_ty == "void" { "i8".to_string() } else { llvm_ty }
+            })
+            .collect();
 
         write_ir!(
             ir,

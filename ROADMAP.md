@@ -273,30 +273,36 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 > clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
 > ```
 
-#### clang 에러 현황 (2026-04-01, ir_fix.py 없이 직접 컴파일)
+#### clang 에러 현황 (Phase 171 진행 후, 2026-04-01)
 
-| 테스트 | clang 에러 | 에러 내용 | codegen 근본 원인 |
-|--------|-----------|----------|------------------|
-| test_graph | 1 | `i8` defined but expected `i64` | Vec<u8> generic: value를 i8로 정의하나 i64로 사용 |
-| test_fulltext | 1 | `i8` defined but expected `i64` | 동일 (Vec<u8>) |
-| test_vector | 1 | `float` defined but expected `i64` | Vec<f32> generic: value를 float으로 정의하나 i64로 사용 |
-| test_wal | 1 | `ptr` but expected `Mutex$i64` struct | Mutex self를 ptr로 정의하나 struct 타입 기대 |
-| test_btree | 1 | return type mismatch `BTreeLeafEntry` | struct 반환 타입 불일치 |
-| test_transaction | 1 | `void type` in non-function context | void를 변수 타입으로 사용 |
+| 테스트 | 이전 에러 | 현재 에러 | 상태 |
+|--------|----------|----------|------|
+| test_graph | Vec<u8> i8→i64 | enum tag `{ptr,i64}` expected `i64` | 에러 변경 (Vec 수정됨, 새 에러 노출) |
+| test_fulltext | Vec<u8> i8→i64 | HashMap ret `i64` expected `double` | 에러 변경 |
+| test_vector | Vec<f32> float→i64 | enum tag `{ptr,i64}` expected `i64` | 에러 변경 |
+| test_wal | Mutex self ptr→struct | Mutex self ptr→struct | 미해결 |
+| test_btree | BTreeLeafEntry return | `ret i64 0` expected struct | 에러 변경 (Vec 수정됨, 새 에러 노출) |
+| test_transaction | void in struct | `ret i64 0` expected struct | void 수정됨, 새 에러 노출 |
 
-#### 에러 패턴 분류
+#### 잔여 에러 패턴 분류
 
 | 패턴 | 건수 | 근본 원인 |
 |------|------|----------|
-| Vec<T> generic value 타입 불일치 | 3 | codegen specialized Vec method에서 value 타입을 T가 아닌 i64로 사용 |
-| struct self/return 타입 불일치 | 2 | codegen에서 struct 타입을 ptr/void로 잘못 생성 |
-| void 변수 타입 | 1 | codegen에서 void를 변수 타입으로 emit |
+| enum tag 타입 불일치 | 2 | Option/Result enum이 `{ptr,i64}` 구조인데 i64로 전달 |
+| specialized fn 리턴 타입 불일치 | 3 | 특화 함수에서 `ret i64 0` 또는 `ret double %i64_val` — 리턴 값 미변환 |
+| struct self ptr→struct | 1 | specialized fn에서 self가 ptr인데 struct 타입으로 store |
 
-- [ ] 1. Vec<T> generic value 타입 정확화 — i8/float value를 올바른 T 타입으로 (Opus 직접)
-- [ ] 2. struct self/return 타입 정확화 — Mutex, BTreeLeafEntry (Opus 직접)
-- [ ] 3. void 변수 타입 제거 — Unit 타입을 i8로 대체 (Opus 직접)
-- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 1,2,3]
-진행률: 0/4 (0%)
+모드: 자동진행
+  strategy: sequential (Task 1→2→3 파일 겹침 가능, Task 4 blockedBy) → Opus direct
+  opus_direct: codegen IR 정확성은 LLVM IR 세맨틱스 이해 필수 — design-impl inseparable
+
+- [x] 1. Vec<T> store_typed/load_typed 정확화 (Opus 직접) ✅ 2026-04-01
+  변경: generate_expr_call.rs — store_typed/load_typed에 is_specialized 분기 추가 + Named struct memcpy 조건 확장
+- [x] 3. void 변수 타입 제거 — Unit 타입을 i8로 대체 (Opus 직접) ✅ 2026-04-01
+  변경: function_gen/generics.rs — 특화 struct 필드 void→i8 대체
+- [ ] 2. 잔여 에러 수정 — enum tag, struct self/return, HashMap ret (Opus 직접)
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 + E2E 회귀 0건 (Opus 직접) [blockedBy: 2]
+진행률: 2/4 (50%)
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 
