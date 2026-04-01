@@ -340,8 +340,26 @@ impl CodeGenerator {
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         // Check if the result is already a value (from phi node) or a pointer (from struct lit)
                         if self.is_block_result_value(stmts) {
-                            // Value (e.g., from if-else phi node) - return directly
-                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                            // Value — check if type name matches return type.
+                            // Generic calls may return %Vec while function declares %Vec$i64.
+                            let val_llvm = self.llvm_type_of(&value);
+                            if val_llvm != ret_llvm
+                                && val_llvm.starts_with('%')
+                                && ret_llvm.starts_with('%')
+                            {
+                                // Structurally identical but differently named types —
+                                // bitcast via alloca to reconcile.
+                                let tmp_alloca = self.next_temp(&mut counter);
+                                self.emit_entry_alloca(&tmp_alloca, &val_llvm);
+                                write_ir!(ir, "  store {} {}, {}* {}", val_llvm, value, val_llvm, tmp_alloca);
+                                let cast_ptr = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = bitcast {}* {} to {}*", cast_ptr, val_llvm, tmp_alloca, ret_llvm);
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = load {}, {}* {}{}", loaded, ret_llvm, ret_llvm, cast_ptr, ret_dbg);
+                                write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                            } else {
+                                write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                            }
                         } else {
                             // Pointer (e.g., from struct literal) - load then return
                             let loaded = format!("%ret.{}", counter);

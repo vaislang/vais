@@ -408,11 +408,25 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - **phi closure (1건)**: match arm with closure call returns i64, phi expects %Result*
 - **specialized body i8 (1건)**: Unit type param (i8) stored as i64 in generic body
 
-- [ ] 1. Vec/Vec$i64 return type name mismatch (Opus 직접)
-- [ ] 2. struct param ptr→value coercion in specialized bodies (Opus 직접)
+- [x] 1. Vec/Vec$i64 return type name mismatch (Opus 직접) ✅ 2026-04-01
+  변경: codegen.rs (Block return: bitcast via alloca for structurally identical Named types)
+- [x] 2. struct param SSA ptr→value load for field assignment (Opus 직접) ✅ 2026-04-01
+  변경: expr_helpers.rs (field assign: detect SSA Named ptr, load before store)
+  잔여: GEP field access ptr→value load (self.field in match/store), Mutex_new$unit i8 param in generic body
 - [ ] 3. match phi closure call type coercion (Opus 직접)
-- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2, 3]
-진행률: 0/4 (0%)
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 3]
+진행률: 2/4 (50%)
+
+#### clang 에러 현황 (2026-04-01, Phase 173 Task 1-2 수정 후)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | GEP field ptr stored as value (ErrorSeverity) |
+| test_wal | 1 | GEP field ptr stored as value (ErrorSeverity) |
+| test_btree | 1 | Vec_push$Vec_u8 specialized call arg type mismatch |
+| test_fulltext | 1 | GEP field ptr stored as value (ErrorSeverity) |
+| test_vector | 1 | phi ptr vs i64 in Result_and_then (closure call) |
+| test_transaction | 1 | Mutex_new$unit i8 param in generic body store |
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 

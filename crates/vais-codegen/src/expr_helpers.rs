@@ -602,10 +602,29 @@ impl CodeGenerator {
                             obj_val,
                             field_idx
                         );
-                        // Coerce value width to match field type
+                        // Coerce value to match field type
                         let actual_val_ty = self.llvm_type_of(&val);
-                        let coerced_val =
-                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
+                        let coerced_val = if matches!(field_ty, ResolvedType::Named { .. })
+                            && val.starts_with('%')
+                        {
+                            // Named field type: the value may be a pointer to the struct
+                            // (e.g., SSA param spill %__severity_ptr). Find the local by
+                            // matching llvm_name since the val is the LLVM name, not source name.
+                            let is_ssa_named_ptr = self.fn_ctx.locals.values().any(|local| {
+                                local.llvm_name == val
+                                    && local.is_ssa()
+                                    && matches!(local.ty, ResolvedType::Named { .. })
+                            });
+                            if is_ssa_named_ptr {
+                                let loaded = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                                loaded
+                            } else {
+                                self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
+                            }
+                        } else {
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
+                        };
                         write_ir!(
                             ir,
                             "  store {} {}, {}* {}",
