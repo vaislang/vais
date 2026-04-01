@@ -36,6 +36,7 @@
         <a href="#performance" data-i18n="nav.performance">Performance</a>
         <a href="#features" data-i18n="nav.features">Features</a>
         <a href="#playground" data-i18n="nav.playground">Playground</a>
+        <a href="/vaisx/" class="nav-link-vaisx" data-i18n="nav.vaisx">VaisX</a>
         <a href="/docs/" class="nav-link-docs" data-i18n="nav.docs">Docs</a>
         <a href="/blog/" class="nav-link-blog" data-i18n="nav.blog">Blog</a>
         <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener" aria-label="GitHub repository">
@@ -411,6 +412,65 @@
           <h3 data-i18n="features.selfHosting.title">Self-Hosting Compiler</h3>
           <p data-i18n="features.selfHosting.description" data-i18n-html>Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 900 E2E tests and 5,300+ total tests.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VaisX Section -->
+  <section class="vaisx-section" id="vaisx">
+    <div class="container">
+      <span class="section-badge" data-i18n="vaisx.badge">New</span>
+      <h2 class="section-title" data-i18n="vaisx.title">Build Web Apps with Vais</h2>
+      <p class="section-subtitle" data-i18n="vaisx.subtitle" data-i18n-html>VaisX is a full-stack web framework powered by the Vais compiler. Compile-time reactivity, file-based routing, and SSR — all in under 3KB.</p>
+
+      <div class="vaisx-grid">
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">⚡</div>
+          <h3 data-i18n="vaisx.compiler.title">Compile-Time Reactivity</h3>
+          <p data-i18n="vaisx.compiler.description">Reactive state analyzed at build time. Zero runtime overhead for state tracking — just surgical DOM updates.</p>
+        </div>
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">🗂️</div>
+          <h3 data-i18n="vaisx.routing.title">File-Based Routing &amp; SSR</h3>
+          <p data-i18n="vaisx.routing.description">Your app/ directory structure becomes your URL routes. SSR, SSG, and streaming out of the box.</p>
+        </div>
+        <div class="vaisx-card">
+          <div class="vaisx-card-icon">📦</div>
+          <h3 data-i18n="vaisx.runtime.title">&lt; 3KB Runtime</h3>
+          <p data-i18n="vaisx.runtime.description">The entire runtime weighs under 3KB gzipped. Most work happens at compile time, not in the browser.</p>
+        </div>
+      </div>
+
+      <div class="vaisx-preview">
+        <div class="code-window">
+          <div class="code-header">
+            <span class="code-dot red"></span>
+            <span class="code-dot yellow"></span>
+            <span class="code-dot green"></span>
+            <span class="code-filename">Counter.vaisx</span>
+          </div>
+          <div class="code-body">
+            <pre>&lt;script&gt;
+  <span class="kw">let</span> count = <span class="fn">__vx_state</span>(<span class="param">0</span>)
+  <span class="kw">let</span> doubled = <span class="fn">__vx_derived</span>(count * <span class="param">2</span>)
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;button <span class="self">@on:click</span>={count++}&gt;
+    Count: {count} (×2 = {doubled})
+  &lt;/button&gt;
+&lt;/template&gt;
+
+&lt;style&gt;
+  <span class="type">button</span> { <span class="kw">padding</span>: <span class="param">12px 24px</span>; }
+&lt;/style&gt;</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="vaisx-cta">
+        <a href="/vaisx/" class="btn btn-primary" data-i18n="vaisx.learnMore">Learn More</a>
+        <a href="https://github.com/vaislang/vais-web" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="vaisx.github">GitHub</a>
       </div>
     </div>
   </section>

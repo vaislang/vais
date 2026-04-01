@@ -8,6 +8,7 @@
     "performance": "Performance",
     "features": "Features",
     "playground": "Playground",
+    "vaisx": "VaisX",
     "docs": "Docs",
     "blog": "Blog"
   },
@@ -102,6 +103,28 @@
     "changelog": "Changelog",
     "license": "MIT License",
     "copyright": "&copy; 2026 Vais Contributors. Built with ❤ for AI."
+  },
+  "vaisx": {
+    "badge": "New",
+    "title": "Build Web Apps with Vais",
+    "subtitle": "VaisX is a full-stack web framework powered by the Vais compiler. Compile-time reactivity, file-based routing, and SSR — all in under 3KB.",
+    "compiler": {
+      "title": "Compile-Time Reactivity",
+      "description": "Reactive state analyzed at build time. Zero runtime overhead for state tracking — just surgical DOM updates."
+    },
+    "routing": {
+      "title": "File-Based Routing & SSR",
+      "description": "Your app/ directory structure becomes your URL routes. SSR, SSG, and streaming out of the box."
+    },
+    "runtime": {
+      "title": "< 3KB Runtime",
+      "description": "The entire runtime weighs under 3KB gzipped. Most work happens at compile time, not in the browser."
+    },
+    "learnMore": "Learn More",
+    "github": "GitHub",
+    "quickStart": "Quick Start",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "Packages"
   },
   "langSelector": {
     "label": "Language"

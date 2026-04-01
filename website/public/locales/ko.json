@@ -8,6 +8,7 @@
     "performance": "성능",
     "features": "특징",
     "playground": "플레이그라운드",
+    "vaisx": "VaisX",
     "docs": "문서",
     "blog": "블로그"
   },
@@ -102,6 +103,28 @@
     "changelog": "변경 로그",
     "license": "MIT 라이선스",
     "copyright": "&copy; 2026 Vais 기여자들. AI를 위해 ❤로 만들었습니다."
+  },
+  "vaisx": {
+    "badge": "신규",
+    "title": "Vais로 웹 앱 만들기",
+    "subtitle": "VaisX는 Vais 컴파일러 기반의 풀스택 웹 프레임워크입니다. 컴파일 타임 반응성, 파일 기반 라우팅, SSR — 모두 3KB 이하로.",
+    "compiler": {
+      "title": "컴파일 타임 반응성",
+      "description": "빌드 시점에 분석되는 반응형 상태. 상태 추적을 위한 런타임 오버헤드 없음 — 정밀한 DOM 업데이트만."
+    },
+    "routing": {
+      "title": "파일 기반 라우팅 & SSR",
+      "description": "app/ 디렉토리 구조가 URL 라우트가 됩니다. SSR, SSG, 스트리밍이 기본 제공."
+    },
+    "runtime": {
+      "title": "3KB 미만의 런타임",
+      "description": "전체 런타임이 gzip 압축 후 3KB 미만. 대부분의 작업은 브라우저가 아닌 컴파일 타임에 처리."
+    },
+    "learnMore": "더 알아보기",
+    "github": "GitHub",
+    "quickStart": "빠른 시작",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "패키지"
   },
   "langSelector": {
     "label": "언어"

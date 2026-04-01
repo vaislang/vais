@@ -8,6 +8,7 @@
     "performance": "性能",
     "features": "特性",
     "playground": "在线试用",
+    "vaisx": "VaisX",
     "docs": "文档",
     "blog": "博客"
   },
@@ -102,6 +103,28 @@
     "changelog": "更新日志",
     "license": "MIT 许可证",
     "copyright": "&copy; 2026 Vais 贡献者。用 ❤ 为 AI 打造。"
+  },
+  "vaisx": {
+    "badge": "新功能",
+    "title": "用 Vais 构建 Web 应用",
+    "subtitle": "VaisX 是由 Vais 编译器驱动的全栈 Web 框架。编译时响应性、基于文件的路由和 SSR — 一切都在 3KB 以内。",
+    "compiler": {
+      "title": "编译时响应性",
+      "description": "在构建时分析的响应式状态。状态跟踪零运行时开销 — 只有精准的 DOM 更新。"
+    },
+    "routing": {
+      "title": "基于文件的路由 & SSR",
+      "description": "您的 app/ 目录结构即为 URL 路由。开箱即用的 SSR、SSG 和流式传输。"
+    },
+    "runtime": {
+      "title": "< 3KB 运行时",
+      "description": "整个运行时 gzip 压缩后不足 3KB。大部分工作在编译时完成，而非在浏览器中。"
+    },
+    "learnMore": "了解更多",
+    "github": "GitHub",
+    "quickStart": "快速入门",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "软件包"
   },
   "langSelector": {
     "label": "语言"

@@ -8,6 +8,7 @@
     "performance": "パフォーマンス",
     "features": "特徴",
     "playground": "プレイグラウンド",
+    "vaisx": "VaisX",
     "docs": "ドキュメント",
     "blog": "ブログ"
   },
@@ -102,6 +103,28 @@
     "changelog": "変更履歴",
     "license": "MITライセンス",
     "copyright": "&copy; 2026 Vais 貢献者。AIのために❤で作られました。"
+  },
+  "vaisx": {
+    "badge": "新機能",
+    "title": "VaisでWebアプリを構築",
+    "subtitle": "VaisXはVaisコンパイラによるフルスタックWebフレームワークです。コンパイル時リアクティビティ、ファイルベースルーティング、SSR — すべて3KB以下で。",
+    "compiler": {
+      "title": "コンパイル時リアクティビティ",
+      "description": "ビルド時に解析されるリアクティブ状態。状態追跡のランタイムオーバーヘッドなし — 精密なDOM更新のみ。"
+    },
+    "routing": {
+      "title": "ファイルベースルーティング & SSR",
+      "description": "app/ディレクトリ構造がURLルートになります。SSR、SSG、ストリーミングがすぐに使用可能。"
+    },
+    "runtime": {
+      "title": "3KB未満のランタイム",
+      "description": "ランタイム全体がgzip圧縮で3KB未満。ほとんどの処理はブラウザではなくコンパイル時に行われます。"
+    },
+    "learnMore": "詳しく見る",
+    "github": "GitHub",
+    "quickStart": "クイックスタート",
+    "install": "npm install -g @vaisx/cli",
+    "packages": "パッケージ"
   },
   "langSelector": {
     "label": "言語"
