@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 169 진행, VaisDB Vec→Slice 실전 검증)
+> **현재 버전**: 0.1.0 (Phase 171 진행, VaisDB codegen IR 정확성)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-03-31 (Phase 168 완료, Phase 169 진행)
+> **최종 업데이트**: 2026-04-01 (Phase 170 완료, Phase 171 진행 60%)
 
 ---
 
