@@ -380,6 +380,11 @@ impl ExprVisitor for CodeGenerator {
                     // from alloca pattern at function entry — return directly
                     let (val, val_ir) = self.visit_expr(inner, counter)?;
                     return Ok((val, val_ir));
+                } else if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_param()
+                {
+                    // Named param (e.g., `self` in methods) is passed as %Struct* —
+                    // already a pointer, return directly for &self
+                    return Ok((format!("%{}", local.llvm_name), String::new()));
                 } else {
                     // SSA/Param values need to be spilled to stack to take their address
                     let mut ir = String::new();

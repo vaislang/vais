@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 172 진행, VaisDB codegen body type coercion)
+> **현재 버전**: 0.1.0 (Phase 172 완료, Phase 173 대기 — VaisDB deeper codegen errors)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-01 (Phase 171 완료, Phase 172 진행)
+> **최종 업데이트**: 2026-04-01 (Phase 172 완료, Phase 173 대기)
 
 ---
 
@@ -373,10 +373,46 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - **i64→i8 (4건)**: codegen이 generic body에서 value를 i64로 emit하나, specialized 함수 시그니처는 i8 기대 (Vec<u8> 관련)
 - **ptr→i64 (2건)**: codegen이 ptr을 emit하나 i64 기대 (Vec<struct>/Option 관련)
 
-- [ ] 1. Vec<u8> specialized body: i64→i8 value width 정확화 (Opus 직접)
-- [ ] 2. Vec<struct>/Option: ptr→i64 value 정확화 (Opus 직접)
-- [ ] 3. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2]
-진행률: 0/3 (0%)
+- [x] 1. &self/struct param ptr 수정 + load_typed/store_typed fn_is_specialized guard (Opus 직접) ✅ 2026-04-01
+  변경: ref_deref.rs (generate_ref_spill: Named param → direct ptr), expr_visitor.rs (visit_ref: Named param case),
+  generate_expr_call.rs (load_typed/store_typed: fn_is_specialized guard, store_typed fallback infer from arg),
+  type_inference.rs (load_typed: I64 in non-specialized context, Binary: width promotion to I64),
+  generate_expr/mod.rs (register_temp_type: don't override already-set types)
+- [x] 2. match phi type + return value width coercion (Opus 직접) ✅ 2026-04-01
+  변경: match_gen.rs (phi type from all arms + return type, i64→ptr coercion, default null),
+  codegen.rs (return value coerce_int_width for Expr + Block bodies)
+- [x] 3. 전체 검증 (Opus 직접) ✅ 2026-04-01
+  결과: E2E 2512 pass / 0 fail / 2 ignored — **0 regression**. Clippy 2건 (pre-existing). Unit 800 pass.
+  VaisDB clang: 원래 6 에러 패턴 해결, deeper pre-existing 에러 6종 잔존 (아래 Phase 173으로 이관).
+진행률: 3/3 (100%)
+
+### Phase 173: VaisDB deeper codegen errors — specialized function body type coercion
+
+> **배경**: Phase 172에서 surface-level 에러 6건 해결 후 deeper pre-existing 에러 노출. 각 수정마다 새 layer 노출.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+
+#### clang 에러 현황 (2026-04-01, Phase 172 수정 후)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | `%Vec` vs `%Vec$i64` type name mismatch in specialized return |
+| test_wal | 1 | `%__severity_ptr` ptr expected `%ErrorSeverity` — struct param spill |
+| test_btree | 1 | `%__severity_ptr` ptr expected `%ErrorSeverity` — struct param spill |
+| test_fulltext | 1 | `%Vec` vs `%Vec$i64` type name mismatch in specialized return |
+| test_vector | 1 | phi `%Result*` vs `i64` — closure call return type in match |
+| test_transaction | 1 | `%value` i8 expected i64 — Mutex_new$unit param in generic body |
+
+#### 패턴 분류
+- **Vec/Vec$i64 (2건)**: specialized function returns %Vec (generic) but signature declares %Vec$i64
+- **struct param spill (2건)**: non-self struct param alloca ptr used where struct value expected
+- **phi closure (1건)**: match arm with closure call returns i64, phi expects %Result*
+- **specialized body i8 (1건)**: Unit type param (i8) stored as i64 in generic body
+
+- [ ] 1. Vec/Vec$i64 return type name mismatch (Opus 직접)
+- [ ] 2. struct param ptr→value coercion in specialized bodies (Opus 직접)
+- [ ] 3. match phi closure call type coercion (Opus 직접)
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2, 3]
+진행률: 0/4 (0%)
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 

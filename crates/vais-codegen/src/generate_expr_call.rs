@@ -1048,8 +1048,16 @@ impl CodeGenerator {
         let resolved_t = self
             .get_generic_substitution("T")
             .unwrap_or(ResolvedType::I64);
-        // In specialized functions, return the concrete type directly (no T→i64 conversion)
-        let is_specialized = !self.generics.substitutions.is_empty()
+        // In specialized functions, return the concrete type directly (no T→i64 conversion).
+        // Only treat as specialized if the current function name contains '$' (mangled).
+        let fn_is_specialized = self
+            .fn_ctx
+            .current_function
+            .as_ref()
+            .map(|n| n.contains('$'))
+            .unwrap_or(false);
+        let is_specialized = fn_is_specialized
+            && !self.generics.substitutions.is_empty()
             && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         let result = self.next_temp(counter);
@@ -1148,6 +1156,14 @@ impl CodeGenerator {
                 }
             }
         }
+        // Register the actual LLVM type of the result to prevent downstream
+        // coercion from using the semantic type (e.g., U8 from generic substitution)
+        // when the IR value is actually i64 (zext'd in non-specialized context).
+        if !is_specialized {
+            self.fn_ctx.register_temp_type(&result, ResolvedType::I64);
+        } else {
+            self.fn_ctx.register_temp_type(&result, resolved_t);
+        }
         Ok((result, ir))
     }
 
@@ -1165,10 +1181,31 @@ impl CodeGenerator {
         ir.push_str(&val_ir);
         let resolved_t = self
             .get_generic_substitution("T")
+            .or_else(|| {
+                // Fallback: when generic param is not "T" (e.g., HashMap uses "V"),
+                // infer the concrete type from the value argument
+                if !self.generics.substitutions.is_empty() {
+                    let inferred = self.infer_expr_type(&args[1]);
+                    if !matches!(inferred, ResolvedType::I64 | ResolvedType::Unknown) {
+                        return Some(inferred);
+                    }
+                }
+                None
+            })
             .unwrap_or(ResolvedType::I64);
         // In specialized functions (monomorphization), parameters already have the
         // concrete type (e.g., i8 for Vec<u8>), so skip i64→T conversion.
-        let is_specialized = !self.generics.substitutions.is_empty()
+        // Only treat as specialized if the current function name contains '$' (mangled),
+        // preventing generic functions from using specialized types when substitutions
+        // leak from the parent context.
+        let fn_is_specialized = self
+            .fn_ctx
+            .current_function
+            .as_ref()
+            .map(|n| n.contains('$'))
+            .unwrap_or(false);
+        let is_specialized = fn_is_specialized
+            && !self.generics.substitutions.is_empty()
             && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         match size {

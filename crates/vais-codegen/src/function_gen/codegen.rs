@@ -285,6 +285,15 @@ impl CodeGenerator {
                     );
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
+                    // Coerce return value width if needed (e.g., i32 arithmetic
+                    // widens to i64 in body, but function return type is i32).
+                    // Only apply to IR temporaries/locals (%-prefixed values).
+                    let value = if value.starts_with('%') {
+                        let val_llvm = self.llvm_type_of(&value);
+                        self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                    } else {
+                        value
+                    };
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                 }
             }
@@ -364,6 +373,13 @@ impl CodeGenerator {
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
+                        // Coerce return value width if needed
+                        let value = if value.starts_with('%') {
+                            let val_llvm = self.llvm_type_of(&value);
+                            self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                        } else {
+                            value
+                        };
                         write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                     }
                 }
@@ -550,6 +566,12 @@ impl CodeGenerator {
                         .push((const_name.clone(), inner_ty, value.clone()));
                     write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                 } else {
+                    let value = if value.starts_with('%') {
+                        let val_llvm = self.llvm_type_of(&value);
+                        self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                    } else {
+                        value
+                    };
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                 }
             }

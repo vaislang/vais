@@ -309,9 +309,20 @@ impl CodeGenerator {
                     }
                     // Builtins: load_typed returns T, type_size returns i64, sizeof returns i64
                     if fn_name == "load_typed" {
-                        // load_typed(ptr) -> T where T is the current generic substitution
-                        if let Some(concrete) = self.get_generic_substitution("T") {
-                            return concrete;
+                        // load_typed(ptr) -> T where T is the current generic substitution.
+                        // Only return the concrete type when the current function is
+                        // actually specialized (mangled with '$'). In non-specialized
+                        // (generic) functions, the IR value is i64 (zext'd).
+                        let fn_is_specialized = self
+                            .fn_ctx
+                            .current_function
+                            .as_ref()
+                            .map(|n| n.contains('$'))
+                            .unwrap_or(false);
+                        if fn_is_specialized {
+                            if let Some(concrete) = self.get_generic_substitution("T") {
+                                return concrete;
+                            }
                         }
                         return ResolvedType::I64;
                     }
@@ -798,7 +809,18 @@ impl CodeGenerator {
                 {
                     ResolvedType::F32
                 } else {
-                    left_ty
+                    // For integer arithmetic, the codegen promotes to the wider type.
+                    // If either operand is i64/u64, the result is i64 in the IR.
+                    let left_bits = self.get_integer_bits(&left_ty);
+                    let right_bits = self.get_integer_bits(&right_ty);
+                    if (left_bits > 0 && right_bits > 0 && left_bits != right_bits)
+                        || left_bits == 64
+                        || right_bits == 64
+                    {
+                        ResolvedType::I64
+                    } else {
+                        left_ty
+                    }
                 }
             }
             Expr::Unary { expr: inner, .. } => self.infer_expr_type(inner),

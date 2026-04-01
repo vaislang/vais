@@ -261,6 +261,23 @@ impl CodeGenerator {
                             body_val = alloca;
                         }
                         // else: already a pointer, use as-is
+                    } else if !matches!(arm_inferred, ResolvedType::Named { .. }) {
+                        // Arm produces i64 (e.g., closure call) but function returns
+                        // Named type (struct/enum) — inttoptr to match phi pointer type
+                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
+                            if matches!(ret_ty, ResolvedType::Named { .. }) {
+                                let llvm_ty = self.type_to_llvm(ret_ty);
+                                let coerced = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}*",
+                                    coerced,
+                                    body_val,
+                                    llvm_ty
+                                );
+                                body_val = coerced;
+                            }
+                        }
                     }
                 }
 
@@ -275,10 +292,22 @@ impl CodeGenerator {
 
             // Default fallthrough block (no arm matched)
             write_ir!(ir, "{}:", default_label);
-            // Use appropriate default value based on first arm's body type
-            let default_val = if !arms.is_empty() {
-                let arm_body_type = self.infer_expr_type(&arms[0].body);
-                match &arm_body_type {
+            // Use appropriate default value based on arm types or function return type
+            let default_val = {
+                let mut resolved = if !arms.is_empty() {
+                    self.infer_expr_type(&arms[0].body)
+                } else {
+                    ResolvedType::I64
+                };
+                // If first arm type is i64 but function returns Named, use Named
+                if !matches!(resolved, ResolvedType::Named { .. }) {
+                    if let Some(ret_ty) = &self.fn_ctx.current_return_type {
+                        if matches!(ret_ty, ResolvedType::Named { .. }) {
+                            resolved = ret_ty.clone();
+                        }
+                    }
+                }
+                match &resolved {
                     ResolvedType::Named { .. }
                     | ResolvedType::Str
                     | ResolvedType::Ref(_)
@@ -287,8 +316,6 @@ impl CodeGenerator {
                     ResolvedType::Bool => "0".to_string(), // Bool → i64 in phi
                     _ => "0".to_string(),
                 }
-            } else {
-                "0".to_string()
             };
             arm_values.push((default_val, default_label.clone()));
             write_ir!(ir, "  br label %{}", merge_label);
@@ -300,9 +327,33 @@ impl CodeGenerator {
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
         } else {
-            // Determine phi node type from the first arm's body expression type
+            // Determine phi node type from arm body expressions.
+            // Try the first arm, but if it's a generic i64 and another arm or the
+            // function return type is a Named type (struct/enum), prefer that.
             let arm_body_type = if !arms.is_empty() {
-                self.infer_expr_type(&arms[0].body)
+                let first_arm_ty = self.infer_expr_type(&arms[0].body);
+                if matches!(first_arm_ty, ResolvedType::Named { .. }) {
+                    first_arm_ty
+                } else {
+                    // Check other arms for Named types (e.g., enum construction)
+                    let named_from_arms = arms.iter().skip(1).find_map(|arm| {
+                        let ty = self.infer_expr_type(&arm.body);
+                        if matches!(ty, ResolvedType::Named { .. }) {
+                            Some(ty)
+                        } else {
+                            None
+                        }
+                    });
+                    // Also check function return type as fallback
+                    named_from_arms.unwrap_or_else(|| {
+                        if let Some(ret_ty) = &self.fn_ctx.current_return_type {
+                            if matches!(ret_ty, ResolvedType::Named { .. }) {
+                                return ret_ty.clone();
+                            }
+                        }
+                        first_arm_ty
+                    })
+                }
             } else {
                 ResolvedType::I64
             };

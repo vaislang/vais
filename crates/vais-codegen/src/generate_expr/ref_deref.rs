@@ -139,7 +139,10 @@ impl CodeGenerator {
         // the value is already a pointer to the struct — return it directly.
         // The function entry code creates alloca + store for struct params, and
         // registers them as SSA with Named type but the value is %StructType*.
-        if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_ssa() {
+        // Also handles Param locals (e.g., `self` in methods passed as %Struct*).
+        if matches!(&local.ty, ResolvedType::Named { .. })
+            && (local.is_ssa() || local.is_param())
+        {
             // The value is already a pointer (alloca result or self param pointer)
             return Ok((val, ir));
         }

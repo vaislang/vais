@@ -289,8 +289,10 @@ impl CodeGenerator {
         // This enables downstream passes (store, binary, icmp, call, phi) to emit
         // correct LLVM IR types instead of defaulting to i64.
         // Covers %tN temporaries, %name.N locals, and other %-prefixed registers.
+        // Skip if the builtin already registered a type (e.g., load_typed registers
+        // I64 in non-specialized context even when inferred type is smaller).
         if let Ok((ref val, _)) = result {
-            if val.starts_with('%') {
+            if val.starts_with('%') && self.fn_ctx.get_temp_type(val).is_none() {
                 self.fn_ctx.register_temp_type(val, inferred_type);
             }
         }
