@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775001405442,
+  "lastUpdate": 1775003505168,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33719,6 +33719,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 802809,
             "range": "± 4743",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "6bedb06792364416f8262179e4838cd2d80cfe58",
+          "message": "docs(roadmap): Phase 171 progress 60% — session handoff\n\nPhase 170 완료 (TC Try operator fix), Phase 171 진행 중:\n- Task 1,3,2a 완료: store_typed/load_typed, void→i8, return type coercion\n- Task 2b 잔여: enum tag, struct self ptr, body i64→struct (5건)\n- E2E 2,512 passed, 0 failed\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-01T09:26:45+09:00",
+          "tree_id": "55e95e461a25dde46279d66483f06875f10122bc",
+          "url": "https://github.com/vaislang/vais/commit/6bedb06792364416f8262179e4838cd2d80cfe58"
+        },
+        "date": 1775003504793,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3647,
+            "range": "± 47",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6835,
+            "range": "± 161",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7951,
+            "range": "± 92",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14300,
+            "range": "± 138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18566,
+            "range": "± 85",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35316,
+            "range": "± 366",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32645,
+            "range": "± 204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70610,
+            "range": "± 478",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 307114,
+            "range": "± 2129",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 468725,
+            "range": "± 4314",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 120138,
+            "range": "± 611",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 802882,
+            "range": "± 3087",
             "unit": "ns/iter"
           }
         ]
