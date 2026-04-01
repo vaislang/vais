@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 172 완료, Phase 173 대기 — VaisDB deeper codegen errors)
+> **현재 버전**: 0.1.0 (Phase 173 완료 — VaisDB codegen 14+ deeper errors resolved)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-01 (Phase 172 완료, Phase 173 대기)
+> **최종 업데이트**: 2026-04-01 (Phase 173 완료)
 
 ---
 
@@ -413,9 +413,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 2. struct param SSA ptr→value load for field assignment (Opus 직접) ✅ 2026-04-01
   변경: expr_helpers.rs (field assign: detect SSA Named ptr, load before store)
   잔여: GEP field access ptr→value load (self.field in match/store), Mutex_new$unit i8 param in generic body
-- [ ] 3. match phi closure call type coercion (Opus 직접)
-- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 3]
-진행률: 2/4 (50%)
+- [x] 3. match phi + bool return + Field is_expr_value (Opus 직접) ✅ 2026-04-01
+  변경: match_gen.rs (Bool phi result → register as I64), type_inference.rs (Field with Named type → not value),
+  codegen.rs (return coercion all 4 paths), coercion.rs (int_type_width pub(crate))
+- [x] 4. 전체 검증 (Opus 직접) ✅ 2026-04-01
+  결과: E2E 2512 pass / 0 fail / 2 ignored — **0 regression**. Unit 800 pass.
+  VaisDB clang: 원래 6 에러 전부 해결 + deeper 8종 해결. 잔존 에러는 snprintf i32 ABI, specialized Vec_push struct arg, HashMap ret type.
+진행률: 4/4 (100%)
 
 #### clang 에러 현황 (2026-04-01, Phase 173 Task 1-2 수정 후)
 

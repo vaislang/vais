@@ -78,7 +78,7 @@ impl CodeGenerator {
     }
 
     /// Get the bit width of an integer LLVM type string. Returns 0 for non-integer types.
-    fn int_type_width(ty: &str) -> u32 {
+    pub(crate) fn int_type_width(ty: &str) -> u32 {
         match ty {
             "i1" => 1,
             "i8" => 8,

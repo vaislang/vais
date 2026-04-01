@@ -151,6 +151,27 @@ impl CodeGenerator {
                 // Block value-ness is determined by its last expression
                 self.is_block_result_value(stmts)
             }
+            Expr::Field { expr: obj, field } => {
+                // Field access on a struct returns a GEP pointer for Named fields.
+                // Check if the field type is Named (struct/enum) — if so, the GEP
+                // returns a pointer, not a value.
+                let obj_type = self.infer_expr_type(obj);
+                let resolved = match &obj_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if let ResolvedType::Named { name, .. } = resolved {
+                    let struct_name = self.resolve_struct_name(name);
+                    if let Some(struct_info) = self.types.structs.get(&struct_name) {
+                        if let Some((_fname, fty)) =
+                            struct_info.fields.iter().find(|(n, _)| n == &field.node)
+                        {
+                            return !matches!(fty, ResolvedType::Named { .. });
+                        }
+                    }
+                }
+                true
+            }
             _ => true,
         }
     }

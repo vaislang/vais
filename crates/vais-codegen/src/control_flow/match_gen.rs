@@ -415,6 +415,11 @@ impl CodeGenerator {
 
                 Ok((loaded, ir))
             } else {
+                // Register the actual phi IR type (i64 for Bool/small ints) so
+                // downstream coercion uses the correct source type.
+                if matches!(arm_body_type, ResolvedType::Bool) {
+                    self.fn_ctx.register_temp_type(&phi_result, ResolvedType::I64);
+                }
                 Ok((phi_result, ir))
             }
         }
