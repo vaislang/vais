@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 173 완료 — VaisDB codegen 14+ deeper errors resolved)
+> **현재 버전**: 0.1.0 (Phase 173 완료, Phase 174 대기 — VaisDB snprintf ABI + specialized coercion)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-01 (Phase 173 완료)
+> **최종 업데이트**: 2026-04-01 (Phase 173 완료, Phase 174 대기)
 
 ---
 
@@ -421,16 +421,43 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   VaisDB clang: 원래 6 에러 전부 해결 + deeper 8종 해결. 잔존 에러는 snprintf i32 ABI, specialized Vec_push struct arg, HashMap ret type.
 진행률: 4/4 (100%)
 
-#### clang 에러 현황 (2026-04-01, Phase 173 Task 1-2 수정 후)
+#### clang 에러 현황 (2026-04-01, Phase 173 최종)
 
 | 테스트 | clang 에러 | 에러 내용 |
 |--------|-----------|----------|
-| test_graph | 1 | GEP field ptr stored as value (ErrorSeverity) |
-| test_wal | 1 | GEP field ptr stored as value (ErrorSeverity) |
-| test_btree | 1 | Vec_push$Vec_u8 specialized call arg type mismatch |
-| test_fulltext | 1 | GEP field ptr stored as value (ErrorSeverity) |
-| test_vector | 1 | phi ptr vs i64 in Result_and_then (closure call) |
-| test_transaction | 1 | Mutex_new$unit i8 param in generic body store |
+| test_graph | 1 | snprintf call: `%page_id` i32 but expected i64 |
+| test_wal | 1 | snprintf call: `%page_id` i32 but expected i64 |
+| test_btree | 1 | Vec_push$BTreeInternalEntry: i64 arg but expected %struct |
+| test_fulltext | 1 | snprintf call: `%page_id` i32 but expected i64 |
+| test_vector | 1 | snprintf call: `%page_id` i32 but expected i64 |
+| test_transaction | 1 | `ret %Vec$u64 %t37`: i64 but expected %Vec$u64 (HashMap_set specialized return) |
+
+### Phase 174: VaisDB deeper codegen — snprintf ABI, specialized call/ret type coercion
+
+> **배경**: Phase 172~173에서 14+ 에러 패턴 해소 후 새로운 deeper 에러 노출. 6개 테스트 각 1 clang 에러.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+>
+> **재현 명령**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/graph/test_graph.vais --emit-ir -o /tmp/test_graph.ll --force-rebuild
+> clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
+> ```
+
+#### 패턴 분류
+- **snprintf i32 ABI (4건)**: `page_id: u32` 파라미터가 snprintf vararg에서 `i64 %page_id`로 전달 — i32 param을 i64로 sext 필요
+- **specialized call struct arg (1건)**: `Vec_push$BTreeInternalEntry` 호출에서 i64 arg를 %struct으로 전달 — generic body의 i64 value를 specialized struct로 coercion
+- **specialized return (1건)**: `HashMap_set$u64_Vec_u64` 함수에서 `ret %Vec$u64 %t37` — i64 body 결과를 specialized struct return으로 coercion
+
+  opus_direct: codegen IR 의미론 이해 필수 — vararg ABI + specialized function body type coercion
+
+- [ ] 1. snprintf/vararg i32 param → i64 sext (Opus 직접)
+- [ ] 2. specialized Vec_push struct arg coercion (Opus 직접)
+- [ ] 3. specialized HashMap return type coercion (Opus 직접)
+- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2, 3]
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 
