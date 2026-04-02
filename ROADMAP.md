@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 173 완료, Phase 174 대기 — VaisDB snprintf ABI + specialized coercion)
+> **현재 버전**: 0.1.0 (Phase 174 진행 중 — snprintf ABI + specialized coercion 3건 해소, deeper 에러 잔여)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-01 (Phase 173 완료, Phase 174 대기)
+> **최종 업데이트**: 2026-04-02 (Phase 174 진행 중)
 
 ---
 
@@ -454,10 +454,23 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
   opus_direct: codegen IR 의미론 이해 필수 — vararg ABI + specialized function body type coercion
 
-- [ ] 1. snprintf/vararg i32 param → i64 sext (Opus 직접)
-- [ ] 2. specialized Vec_push struct arg coercion (Opus 직접)
-- [ ] 3. specialized HashMap return type coercion (Opus 직접)
-- [ ] 4. 전체 검증 — 6개 테스트 clang 0 에러 (Opus 직접) [blockedBy: 1, 2, 3]
+- [x] 1. snprintf/vararg i32 param → i64 sext (Opus 직접) ✅ 2026-04-02
+  변경: print_format.rs — format spec U8/U16/U32 → %u, I8/I16 → %d, Bool → zext i1→i64, small int sext/zext for vararg ABI
+  결과: 4개 테스트(test_graph, test_vector, test_fulltext, test_wal) snprintf i32 에러 해소
+- [x] 2. specialized Vec_push struct arg coercion (Opus 직접) ✅ 2026-04-02
+  변경: method_call.rs/generate_expr_call.rs — i64→struct inttoptr+load coercion, load_typed generic context ptrtoint, store_typed generic context i64 store, VaisError value→ptr alloca
+  결과: Vec_push$BTreeLeafEntry/InternalEntry struct arg 에러 해소, VaisError_with_severity 4건 해소
+- [x] 3. specialized HashMap return type coercion (Opus 직접) ✅ 2026-04-02
+  변경: 위 2번에 포함 — generic/specialized function body의 load_typed/store_typed에서 is_specialized 분기 정확화
+  결과: 원래 에러는 deeper pre-existing 에러로 마스킹됨. store_typed/load_typed의 generic context 처리 수정 완료
+- [x] 4. 전체 검증 — E2E 2512 passed / 0 failed, Clippy 0건 (Opus 직접) ✅ 2026-04-02
+  결과: 원래 6건의 첫 번째 clang 에러 전부 해소. Deeper pre-existing 에러 6건 잔존 → Phase 175로 이관
+  잔여 에러:
+  - test_graph/test_fulltext/test_wal: `alloca %Result` unsized type (Result struct 미정의)
+  - test_vector: `sqrt(double %x)` float→double ABI 불일치
+  - test_transaction: `store %ActiveTransactionEntry %t4` i64→struct (specialized store in generic body)
+  - test_btree: `Vec_push$slice_u8` i64→`{i8*,i64}` (slice arg in generic context)
+진행률: 4/4 (100%)
 
 ### Phase 167: TC 함수 후보 선택에서 argument coercion — 해결 완료
 

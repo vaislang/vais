@@ -595,6 +595,33 @@ impl CodeGenerator {
                 }
             }
 
+            // Coerce i64 → struct when specialized param expects struct but value is i64
+            // This happens in generic function bodies (e.g., Vec_map) that call
+            // specialized methods (e.g., Vec_push$BTreeLeafEntry)
+            if arg_ty.starts_with('%') && !arg_ty.ends_with('*') {
+                let inferred = self.infer_expr_type(arg);
+                if !matches!(inferred, ResolvedType::Named { .. }) {
+                    let ptr_tmp = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        ptr_tmp,
+                        val,
+                        arg_ty
+                    );
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        arg_ty,
+                        arg_ty,
+                        ptr_tmp
+                    );
+                    val = loaded;
+                }
+            }
+
             arg_vals.push(format!("{} {}", arg_ty, val));
         }
 
@@ -1128,19 +1155,47 @@ impl CodeGenerator {
                 // are pointer-based, and field access uses GEP on typed pointers.
                 self.needs_llvm_memcpy = true;
                 let llvm_ty = self.type_to_llvm(&resolved_t);
-                // Use result as the alloca directly
-                write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
-                let dst_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
-                let src_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
-                write_ir!(
-                    ir,
-                    "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
-                    dst_ptr,
-                    src_ptr,
-                    n
-                );
+                if is_specialized {
+                    // In specialized context, return the alloca pointer directly
+                    // so downstream code can use GEP for field access.
+                    write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
+                    let dst_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
+                    let src_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        dst_ptr,
+                        src_ptr,
+                        n
+                    );
+                } else {
+                    // In generic context, convert alloca pointer to i64 so the
+                    // generic code (which uses i64 erasure) can work with it.
+                    // The alloca is still needed for memcpy, but we ptrtoint it
+                    // so callers see an i64 value.
+                    let alloca_tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
+                    let dst_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, alloca_tmp);
+                    let src_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        dst_ptr,
+                        src_ptr,
+                        n
+                    );
+                    write_ir!(
+                        ir,
+                        "  {} = ptrtoint {}* {} to i64",
+                        result,
+                        llvm_ty,
+                        alloca_tmp
+                    );
+                }
             }
             _ => {
                 if is_specialized {
@@ -1275,41 +1330,60 @@ impl CodeGenerator {
                 let dst_ptr = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i8*", dst_ptr, ptr_val);
                 let llvm_ty = self.type_to_llvm(&resolved_t);
-                // If val is a value (not pointer), alloca+store to get a pointer
-                let src_ptr =
-                    if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
-                        let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
-                        *counter += 1;
-                        self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
-                        write_ir!(
-                            ir,
-                            "  store {} {}, {}* {}",
-                            llvm_ty,
-                            val_val,
-                            llvm_ty,
-                            tmp_alloca
-                        );
-                        let cast = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = bitcast {}* {} to i8*",
-                            cast,
-                            llvm_ty,
-                            tmp_alloca
-                        );
-                        cast
-                    } else {
-                        let cast = self.next_temp(counter);
-                        write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
-                        cast
-                    };
-                write_ir!(
-                    ir,
-                    "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
-                    dst_ptr,
-                    src_ptr,
-                    n
-                );
+                if !is_specialized {
+                    // Generic context: value is i64 (generic erasure).
+                    // Store i64 to a temp alloca and memcpy bytes to destination.
+                    let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
+                    *counter += 1;
+                    self.emit_entry_alloca(&tmp_alloca, "i64");
+                    write_ir!(ir, "  store i64 {}, i64* {}", val_val, tmp_alloca);
+                    let cast = self.next_temp(counter);
+                    write_ir!(ir, "  {} = bitcast i64* {} to i8*", cast, tmp_alloca);
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        dst_ptr,
+                        cast,
+                        n
+                    );
+                } else {
+                    // Specialized context: value is the concrete struct type.
+                    // If val is a value (not pointer), alloca+store to get a pointer
+                    let src_ptr =
+                        if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
+                            let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
+                            *counter += 1;
+                            self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                llvm_ty,
+                                val_val,
+                                llvm_ty,
+                                tmp_alloca
+                            );
+                            let cast = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to i8*",
+                                cast,
+                                llvm_ty,
+                                tmp_alloca
+                            );
+                            cast
+                        } else {
+                            let cast = self.next_temp(counter);
+                            write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
+                            cast
+                        };
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        dst_ptr,
+                        src_ptr,
+                        n
+                    );
+                }
             }
             _ => {
                 if is_specialized {

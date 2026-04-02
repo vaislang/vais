@@ -278,6 +278,29 @@ impl CodeGenerator {
             self.type_to_llvm(&recv_type)
         };
 
+        // If receiver is a struct value (from function call) but method expects pointer,
+        // store the value to an alloca and pass the pointer instead.
+        // Skip for SelfCall — `%self` is already a pointer in method context.
+        let recv_val = if recv_llvm_ty.ends_with('*')
+            && !matches!(&receiver.node, Expr::SelfCall)
+            && self.is_expr_value(receiver)
+            && matches!(&recv_type, ResolvedType::Named { .. })
+        {
+            let struct_llvm = self.type_to_llvm(&recv_type);
+            let alloca_tmp = self.next_temp(counter);
+            self.emit_entry_alloca(&alloca_tmp, &struct_llvm);
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                struct_llvm,
+                recv_val,
+                struct_llvm,
+                alloca_tmp
+            );
+            alloca_tmp
+        } else {
+            recv_val
+        };
         let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
 
         for (i, arg) in args.iter().enumerate() {
@@ -451,6 +474,35 @@ impl CodeGenerator {
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
                     val = tmp;
+                }
+            }
+
+            // Coerce i64 → struct when specialized param expects struct but value is i64
+            // This happens in generic function bodies (e.g., Vec_map) that call
+            // specialized methods (e.g., Vec_push$BTreeLeafEntry)
+            if arg_llvm_ty.starts_with('%') && !arg_llvm_ty.ends_with('*') {
+                let inferred = self.infer_expr_type(arg);
+                if !matches!(inferred, ResolvedType::Named { .. }) {
+                    // Value is i64 (generic erasure) but param expects struct type
+                    // Coerce via inttoptr + load: i64 → struct_ptr → struct
+                    let ptr_tmp = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        ptr_tmp,
+                        val,
+                        arg_llvm_ty
+                    );
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        arg_llvm_ty,
+                        arg_llvm_ty,
+                        ptr_tmp
+                    );
+                    val = loaded;
                 }
             }
 
