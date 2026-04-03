@@ -291,6 +291,18 @@ impl CodeGenerator {
             } else if self.types.declared_functions.contains(name) {
                 // Function declared in module (may be generic, will instantiate later)
                 (name.clone(), false)
+            } else if matches!(
+                name.as_str(),
+                "malloc"
+                    | "free"
+                    | "memcpy"
+                    | "memcpy_str"
+                    | "slice_data_ptr"
+                    | "strlen"
+                    | "puts_ptr"
+            ) {
+                // Known codegen builtins handled later in the call pipeline
+                (name.clone(), false)
             } else {
                 // Unknown function - provide suggestions
                 let mut candidates: Vec<&str> = Vec::new();

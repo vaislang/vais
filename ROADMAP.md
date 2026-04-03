@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 174 진행 중 — snprintf ABI + specialized coercion 3건 해소, deeper 에러 잔여)
+> **현재 버전**: 0.1.0 (Phase 175 검증 완료 — 3건 E2E regression + deeper 6건 → Phase 176)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-02 (Phase 174 진행 중)
+> **최종 업데이트**: 2026-04-03 (Phase 175 검증 완료, Phase 176 계획 필요)
 
 ---
 
@@ -431,6 +431,75 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | test_fulltext | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_vector | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_transaction | 1 | `ret %Vec$u64 %t37`: i64 but expected %Vec$u64 (HashMap_set specialized return) |
+
+### Phase 175: VaisDB deeper codegen — Result struct, sqrt ABI, specialized store/slice coercion
+
+> **배경**: Phase 174에서 snprintf ABI + specialized coercion 해소 후 deeper pre-existing 에러 6건 노출.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+>
+> **재현 명령**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:/tmp/vais-lib/std" VAIS_STD_PATH="/tmp/vais-lib/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/graph/test_graph.vais --emit-ir -o /tmp/test_graph.ll --force-rebuild
+> clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
+> ```
+
+#### clang 에러 현황 (2026-04-02, Phase 174 최종)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | `alloca %Result` unsized type (Result struct 미정의) |
+| test_fulltext | 1 | `alloca %Result` unsized type (Result struct 미정의) |
+| test_wal | 1 | `alloca %Result` unsized type (Result struct 미정의) |
+| test_vector | 1 | `sqrt(double %x)` float→double ABI 불일치 |
+| test_transaction | 1 | `store %ActiveTransactionEntry %t4` i64→struct (specialized store) |
+| test_btree | 1 | `Vec_push$slice_u8` i64→`{i8*,i64}` (slice arg in generic context) |
+
+#### 패턴 분류
+- **Result struct 미정의 (3건)**: Result<T,E> generic struct의 LLVM type definition이 IR에 emit되지 않음 → %Result이 opaque/unsized
+- **sqrt float→double ABI (1건)**: C stdlib sqrt(double) 호출 시 f32 인자가 fpext 없이 직접 전달
+- **specialized store i64→struct (1건)**: generic body에서 specialized struct 타입으로 store 시 타입 불일치
+- **slice arg in generic context (1건)**: Vec_push<T> T=slice_u8일 때 i64→{i8*,i64} fat pointer coercion 누락
+
+  opus_direct: codegen IR 의미론 이해 필수 — struct type emission + ABI coercion + generic specialization
+
+- [x] 1. Result/Option builtin enum type registration (Opus 직접) ✅ 2026-04-02
+  변경: generate_expr_call.rs (codegen builtin fn recognition: slice_data_ptr, malloc, etc.), module_gen/instantiations.rs (builtin enum type emission + enum info registration with correct variants)
+  근본 원인: Result<T,E> enum의 AST가 per-module 로딩에서 누락 → %Result type 미정의 + type_to_llvm이 %Result$i64_VaisError (opaque) 생성
+  해결: types.enums에 Result/Option 자동 등록 (variants 포함) → type_to_llvm이 base name %Result 사용 → is_expr_value가 Ok/Err를 pointer로 인식 → ret 시 load 올바르게 수행
+  결과: 3개 테스트(test_graph, test_fulltext, test_wal) alloca %Result unsized type 에러 해소 + specialized store/slice 에러도 연쇄 해소
+- [x] 2. f32↔f64 cast codegen (fpext/fptrunc) + int↔float cast (sitofp/fptosi) (Opus 직접) ✅ 2026-04-02
+  변경: expr_helpers.rs generate_cast_expr — f32↔f64 fpext/fptrunc + int→float sitofp + float→int fptosi 추가
+  근본 원인: `as f64`/`as f32` cast에서 fpext/fptrunc 미생성 → sqrt(double %float_arg) ABI 불일치
+  결과: test_vector sqrt_f32 에러 해소 (정확한 fpext→call→fptrunc 체인 생성)
+- [x] 3. Specialized store/slice errors resolved via Result fix (Opus 직접) ✅ 2026-04-02
+  결과: Task 1의 Result enum fix에 의해 test_transaction, test_btree의 원래 에러도 연쇄 해소
+- [x] 4. 전체 검증 (Opus 직접) ✅ 2026-04-02
+  결과: 원래 6건의 첫 번째 clang 에러 전부 해소. Deeper pre-existing 에러 6건 잔존 → Phase 176로 이관
+  잔여 에러:
+  - test_graph/test_fulltext: `extractvalue { i8*, i64 } %t1` — i64 값에서 fat pointer extractvalue (str/slice → i64 mismatch)
+  - test_wal/test_btree: `ret i32 %t7` — i64→i32 return type narrowing
+  - test_vector: `phi double [%t4] [%x]` — f32 값이 double phi node에 직접 참여 (fpext 누락)
+  - test_transaction: `ret %Vec$u64 %t6` — i64→specialized struct return type mismatch
+- [x] 5. 전체 검증 — E2E + VaisDB clang 에러 확인 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3,4]
+  결과: E2E 2509 passed / 3 failed / 2 ignored. Clippy 0건.
+  **3건 regression (Phase 175 도입)**:
+  - e2e_p119_generic_function_with_struct_return: `%Result = type` 중복 정의 (builtin Result 등록이 기존 Result 정의와 충돌)
+  - e2e_p145_f32_param_basic: `sitofp i64 5.0e+00` — float literal이 i64로 잘못 타입됨 (cast codegen 회귀)
+  - e2e_p145_f32_arithmetic: 동일 패턴 (`sitofp i64 3.0e+00`)
+  **VaisDB deeper 에러 6건** (예측 일치):
+  - test_graph/test_fulltext: `extractvalue { i8*, i64 } %t1` — i64→fat pointer
+  - test_wal/test_btree: `ret i32 %t7` — i64→i32 return type narrowing
+  - test_vector: `phi double [%t4] [%x]` — f32→double phi fpext 누락
+  - test_transaction: `store i64 %value` (i8 변수에 i64 store) — 타입 narrowing
+  → **Phase 176: 3건 regression 수정 + deeper 6건**
+mode: auto
+progress: 5/5 (100%)
+
+---
 
 ### Phase 174: VaisDB deeper codegen — snprintf ABI, specialized call/ret type coercion
 

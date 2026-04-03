@@ -473,6 +473,45 @@ impl CodeGenerator {
             }
         }
 
+        // Float width coercion: f32 ↔ f64 (fpext/fptrunc)
+        if (src_llvm_ty == "float" && llvm_type == "double")
+            || (src_llvm_ty == "double" && llvm_type == "float")
+        {
+            let result = self.next_temp(counter);
+            if src_llvm_ty == "float" {
+                write_ir!(ir, "  {} = fpext float {} to double", result, val);
+            } else {
+                write_ir!(ir, "  {} = fptrunc double {} to float", result, val);
+            }
+            return Ok((result, ir));
+        }
+
+        // Integer ↔ float coercion (as f64, as f32 from int, as i64 from float)
+        if src_llvm_ty.starts_with('i') && (llvm_type == "float" || llvm_type == "double") {
+            let result = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = sitofp {} {} to {}",
+                result,
+                src_llvm_ty,
+                val,
+                llvm_type
+            );
+            return Ok((result, ir));
+        }
+        if (src_llvm_ty == "float" || src_llvm_ty == "double") && llvm_type.starts_with('i') {
+            let result = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = fptosi {} {} to {}",
+                result,
+                src_llvm_ty,
+                val,
+                llvm_type
+            );
+            return Ok((result, ir));
+        }
+
         // Simple cast - in many cases just bitcast or pass through
         let result = self.next_temp(counter);
         match (&target_type, llvm_type.as_str()) {

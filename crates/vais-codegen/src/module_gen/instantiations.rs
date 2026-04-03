@@ -484,6 +484,59 @@ impl CodeGenerator {
             ir.push('\n');
         }
 
+        // Ensure well-known generic enum types are defined even when their AST definition
+        // is not in the module (e.g., Result from std/result.vais not loaded transitively).
+        // The codegen body uses the base name (e.g., %Result) for alloca/GEP, and the
+        // "everything is i64" pattern means all enum payloads fit in { i32, { i64 } }.
+        // Also register in types.enums so type_to_llvm uses the base name for generic
+        // instances (e.g., Result<i64, VaisError> → %Result instead of %Result$i64_VaisError),
+        // and get_tuple_variant_info can find Ok/Err/Some/None as enum variants.
+        {
+            use crate::types::{EnumInfo, EnumVariantFields, EnumVariantInfo};
+            if !self.types.enums.contains_key("Result") {
+                write_ir!(ir, "%Result = type {{ i32, {{ i64 }} }}");
+                self.types.enums.insert(
+                    "Result".to_string(),
+                    EnumInfo {
+                        name: "Result".to_string(),
+                        variants: vec![
+                            EnumVariantInfo {
+                                name: "Ok".to_string(),
+                                _tag: 0,
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                            },
+                            EnumVariantInfo {
+                                name: "Err".to_string(),
+                                _tag: 1,
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                            },
+                        ],
+                    },
+                );
+            }
+            if !self.types.enums.contains_key("Option") {
+                write_ir!(ir, "%Option = type {{ i32, {{ i64 }} }}");
+                self.types.enums.insert(
+                    "Option".to_string(),
+                    EnumInfo {
+                        name: "Option".to_string(),
+                        variants: vec![
+                            EnumVariantInfo {
+                                name: "None".to_string(),
+                                _tag: 0,
+                                fields: EnumVariantFields::Unit,
+                            },
+                            EnumVariantInfo {
+                                name: "Some".to_string(),
+                                _tag: 1,
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                            },
+                        ],
+                    },
+                );
+            }
+        }
+
         // Generate union types
         for (name, info) in &self.types.unions {
             ir.push_str(&self.generate_union_type(name, info));
