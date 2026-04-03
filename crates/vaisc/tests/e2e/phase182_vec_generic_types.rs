@@ -183,11 +183,15 @@ X Vec<T> {
     F get(&self) -> T {
         self.elem
     }
+
+    F size(&self) -> i64 {
+        self.len
+    }
 }
 
 F main() -> i64 {
     v := Vec.new(99 as u8)
-    v.count()
+    v.size()
 }
 "#,
     );

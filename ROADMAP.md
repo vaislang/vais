@@ -265,7 +265,8 @@ mode: auto
   changes: types.rs (Named type tries mangled name lookup with generics)
 - [x] 4. generate_expr_call.rs load_typed/store_typed 비특화 컨텍스트 f32 처리 수정 (impl-sonnet) ✅ 2026-04-03
   changes: generate_expr_call.rs (is_specialized no longer requires $ in function name)
-- [x] 5. E2E 테스트 — Vec<f32> 제네릭 타입 보존 검증 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3,4]
+- [x] 5. E2E 테스트 — Vec<f32> 제네릭 타입 보존 검증 (impl-sonnet) ✅ 2026-04-03 [blockedBy: 1,2,3,4]
+  changes: phase182_vec_generic_types.rs (12 tests: Vec<f32/f64/i32/u8/i64> type preservation)
   결과: E2E 2512 passed / 0 failed / 2 ignored — 0 regression
 progress: 5/5 (100%)
   strategy: 4 tasks independent (no file overlap) → independent-parallel, task 5 sequential after
