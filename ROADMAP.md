@@ -1,9 +1,22 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 182 완료 — Vec<f32> 제네릭 + Phase 180-181 codegen coercion. E2E 0 regression)
+> **현재 버전**: 0.1.0 (Phase 183 진행 중 — 테스트/코드 정리)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-03 (Phase 182 완료)
+> **최종 업데이트**: 2026-04-04 (Phase 183 진행 중)
+
+---
+
+## Current Tasks (2026-04-04)
+mode: auto
+strategy: 3 independent tasks, no file overlap → independent-parallel (Agent × 3)
+- [x] 1. Fix error_message_tests.rs 5개 실패 (impl-sonnet) ✅ 2026-04-04
+  changes: crates/vaisc/tests/error_message_tests.rs (bool→i64 테스트를 struct mismatch로 변경, 5개 수정)
+- [x] 2. Clippy warning 3건 수정 (impl-sonnet) ✅ 2026-04-04
+  changes: expr_helpers.rs, generate_expr_call.rs (get().is_some()→contains_key()), generate_expr_struct.rs (map_or→is_some_and)
+- [x] 3. vaisdb 빌드 아티팩트 gitignore 추가 (impl-sonnet) ✅ 2026-04-04
+  changes: .gitignore (examples/projects/vaisdb/main 추가)
+progress: 3/3 (100%)
 
 ---
 

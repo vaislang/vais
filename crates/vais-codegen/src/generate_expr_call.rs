@@ -599,7 +599,7 @@ impl CodeGenerator {
             // types or locals — skip when llvm_type_of falls back to i64.
             {
                 let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
-                    || self.fn_ctx.locals.get(val.strip_prefix('%').unwrap_or(&val)).is_some();
+                    || self.fn_ctx.locals.contains_key(val.strip_prefix('%').unwrap_or(&val));
                 if has_known_type {
                     let val_ty = self.llvm_type_of(&val);
                     if val_ty != arg_ty

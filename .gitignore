@@ -116,6 +116,7 @@ examples/projects/benchmark/benchmark_o2
 examples/projects/benchmark/benchmark_rs
 examples/projects/num-convert/file_stats
 examples/projects/num-convert/num_convert
+examples/projects/vaisdb/main
 
 # Test binaries in root
 test_*

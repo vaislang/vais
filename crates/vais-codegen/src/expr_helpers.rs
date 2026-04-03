@@ -453,7 +453,7 @@ impl CodeGenerator {
         // Only widen (i8/i16/i32 → i64) from known types, not narrow.
         {
             let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
-                || self.fn_ctx.locals.get(val.strip_prefix('%').unwrap_or(&val)).is_some();
+                || self.fn_ctx.locals.contains_key(val.strip_prefix('%').unwrap_or(&val));
             if has_known_type
                 && src_llvm_ty.starts_with('i')
                 && llvm_type.starts_with('i')

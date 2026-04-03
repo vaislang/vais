@@ -92,7 +92,7 @@ impl CodeGenerator {
                     if llvm_ty == "i64" && (val_llvm_ty == "void" || val_llvm_ty == "i8") {
                         let local_name =
                             coerced_val.strip_prefix('%').unwrap_or(&coerced_val);
-                        if self.fn_ctx.locals.get(local_name).map_or(false, |l| l.is_param()) {
+                        if self.fn_ctx.locals.get(local_name).is_some_and(|l| l.is_param()) {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = zext i8 {} to i64", tmp, coerced_val);
                             tmp
