@@ -488,6 +488,15 @@ impl CodeGenerator {
 
         // Integer ↔ float coercion (as f64, as f32 from int, as i64 from float)
         if src_llvm_ty.starts_with('i') && (llvm_type == "float" || llvm_type == "double") {
+            // Check if the value is actually a float literal (e.g., "5.000000e+00")
+            // that was given i64 type by the "everything is i64" fallback.
+            // Float literals don't start with '%' and contain 'e+' or 'e-' (scientific notation).
+            let is_float_literal =
+                !val.starts_with('%') && (val.contains("e+") || val.contains("e-"));
+            if is_float_literal {
+                // Return the literal directly — it's already a valid LLVM float constant
+                return Ok((val.clone(), ir));
+            }
             let result = self.next_temp(counter);
             write_ir!(
                 ir,

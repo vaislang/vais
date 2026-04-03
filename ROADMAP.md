@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 175 검증 완료 — 3건 E2E regression + deeper 6건 → Phase 176)
+> **현재 버전**: 0.1.0 (Phase 176 완료 — regression 3건 수정, E2E 2512/0. Deeper 6건 → Phase 177)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-03 (Phase 175 검증 완료, Phase 176 계획 필요)
+> **최종 업데이트**: 2026-04-03 (Phase 176 완료)
 
 ---
 
@@ -431,6 +431,57 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | test_fulltext | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_vector | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_transaction | 1 | `ret %Vec$u64 %t37`: i64 but expected %Vec$u64 (HashMap_set specialized return) |
+
+### Phase 176: Phase 175 regression 수정 + VaisDB deeper codegen 에러
+
+> **배경**: Phase 175 검증에서 E2E 3건 regression 발견 + VaisDB deeper 에러 6건(4패턴) 잔존.
+> **원칙**: regression 우선 수정. ir_fix.py 우회 금지.
+>
+> **재현 명령**:
+> ```bash
+> cargo test --package vaisc --test e2e -- e2e_p119_generic_function_with_struct_return e2e_p145_f32_param_basic e2e_p145_f32_arithmetic --nocapture
+> ```
+
+#### Regression 분석
+
+| 테스트 | clang 에러 | 근본 원인 |
+|--------|-----------|----------|
+| e2e_p119_generic_function_with_struct_return | `%Result = type` 중복 정의 | builtin Result 등록이 structs 네임스페이스 미확인 |
+| e2e_p145_f32_param_basic | `sitofp i64 5.0e+00` invalid | float literal의 i64 타입 → sitofp에 float constant 전달 |
+| e2e_p145_f32_arithmetic | `sitofp i64 3.0e+00` invalid | 동일 패턴 |
+
+#### VaisDB deeper 에러 (4패턴 6건, pre-existing)
+
+| 테스트 | clang 에러 | 패턴 |
+|--------|-----------|------|
+| test_graph/test_fulltext | extractvalue { i8*, i64 } from i64 | str/slice → i64 mismatch |
+| test_wal/test_btree | ret i32 %t7 (i64 type) | return type narrowing |
+| test_vector | phi double [%x] (float type) | f32→f64 fpext 누락 |
+| test_transaction | store i64 %value (i8 type) | i8→i64 store narrowing |
+
+  opus_direct: codegen IR regression + 의미론 이해 필수
+
+- [x] 1. Fix %Result type 중복 정의 regression (Opus 직접) ✅ 2026-04-03
+  변경: module_gen/instantiations.rs (builtin Result/Option 등록 시 structs 네임스페이스도 확인)
+  근본 원인: `self.types.enums.contains_key("Result")`만 확인 → structs에 사용자 정의 Result 있으면 중복 emit
+  해결: `!self.types.structs.contains_key("Result")` 조건 추가 (Option도 동일)
+- [x] 2. Fix sitofp i64 float_literal regression (Opus 직접) ✅ 2026-04-03
+  변경: expr_helpers.rs generate_cast_expr (float literal 감지 → sitofp 대신 직접 반환)
+  근본 원인: float literal `5.0e+00`이 i64 fallback 타입 → `sitofp i64 5.0e+00` invalid IR
+  해결: 값에 `e+`/`e-` 포함 + `%` 미시작 → float literal로 판단, 변환 없이 직접 반환
+- [x] 3. 전체 검증 — E2E 0 failed 확인 + VaisDB deeper 에러 현황 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2]
+  결과: E2E 2512 passed / 0 failed / 2 ignored. Clippy 0건.
+  VaisDB deeper 에러 6건(4패턴) 잔존 (pre-existing, Phase 175와 동일):
+  - test_graph/test_fulltext: extractvalue { i8*, i64 } from i64 — str/slice → i64 mismatch
+  - test_wal: ret i32 %t7 (i64) — return type narrowing
+  - test_btree: Vec_push$slice_u8 { i8*, i64 } %t23 (i64) — slice arg in generic context
+  - test_vector: phi double [%x] (float) — f32→f64 fpext 누락
+  - test_transaction: store i64 %value (i8) — i8→i64 store narrowing
+  → Deeper 에러 5패턴 6건 → Phase 177로 이관
+mode: auto
+progress: 3/3 (100%)
+
+---
 
 ### Phase 175: VaisDB deeper codegen — Result struct, sqrt ABI, specialized store/slice coercion
 

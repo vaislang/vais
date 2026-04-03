@@ -493,7 +493,7 @@ impl CodeGenerator {
         // and get_tuple_variant_info can find Ok/Err/Some/None as enum variants.
         {
             use crate::types::{EnumInfo, EnumVariantFields, EnumVariantInfo};
-            if !self.types.enums.contains_key("Result") {
+            if !self.types.enums.contains_key("Result") && !self.types.structs.contains_key("Result") {
                 write_ir!(ir, "%Result = type {{ i32, {{ i64 }} }}");
                 self.types.enums.insert(
                     "Result".to_string(),
@@ -514,7 +514,7 @@ impl CodeGenerator {
                     },
                 );
             }
-            if !self.types.enums.contains_key("Option") {
+            if !self.types.enums.contains_key("Option") && !self.types.structs.contains_key("Option") {
                 write_ir!(ir, "%Option = type {{ i32, {{ i64 }} }}");
                 self.types.enums.insert(
                     "Option".to_string(),
