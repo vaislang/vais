@@ -105,9 +105,9 @@ impl CodeGenerator {
         let phi_type = self.infer_block_type(then);
         let phi_llvm = self.type_to_llvm(&phi_type);
 
-        // Check if the result is a struct/enum type (returned as pointer from struct/enum literals)
-        let is_struct_result =
-            matches!(&phi_type, ResolvedType::Named { .. }) && !self.is_block_result_value(then);
+        // Check each branch independently for struct pointer vs value
+        let is_named_phi = matches!(&phi_type, ResolvedType::Named { .. });
+        let then_is_ptr = is_named_phi && !self.is_block_result_value(then);
 
         // Then block
         write_ir!(ir, "{}:", then_label);
@@ -116,7 +116,7 @@ impl CodeGenerator {
         ir.push_str(&then_ir);
 
         // For struct/enum results, load the value from the alloca pointer before branch
-        let then_val_for_phi = if is_struct_result && !then_terminated {
+        let then_val_for_phi = if then_is_ptr && !then_terminated {
             let loaded = self.next_temp(counter);
             write_ir!(
                 ir,
@@ -130,7 +130,24 @@ impl CodeGenerator {
         } else if !then_terminated {
             // Coerce integer width if the value type differs from the phi type
             let actual_ty = self.llvm_type_of(&then_val);
-            self.coerce_int_width(&then_val, &actual_ty, &phi_llvm, counter, &mut ir)
+            let coerced =
+                self.coerce_int_width(&then_val, &actual_ty, &phi_llvm, counter, &mut ir);
+            // Also coerce float width (e.g., float→double or double→float for phi)
+            let actual_after = self.llvm_type_of(&coerced);
+            if actual_after != phi_llvm
+                && (actual_after == "float" || actual_after == "double")
+                && (phi_llvm == "float" || phi_llvm == "double")
+            {
+                let tmp = self.next_temp(counter);
+                if actual_after == "float" {
+                    write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
+                } else {
+                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
+                }
+                tmp
+            } else {
+                coerced
+            }
         } else {
             then_val
         };
@@ -159,8 +176,13 @@ impl CodeGenerator {
         // For struct/enum results, load the value from the alloca pointer before branch
         // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
         // it's already a phi node value (not a pointer), so don't load it
+        // Check else branch independently for struct pointer (may differ from then branch)
+        let else_is_ptr = is_named_phi
+            && has_else
+            && nested_last_block.is_empty()
+            && self.is_else_branch_ptr(else_);
         let else_val_for_phi =
-            if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
+            if else_is_ptr && !else_terminated && has_else && nested_last_block.is_empty() {
                 let loaded = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -174,7 +196,24 @@ impl CodeGenerator {
             } else if !else_terminated && has_else {
                 // Coerce integer width if the value type differs from the phi type
                 let actual_ty = self.llvm_type_of(&else_val);
-                self.coerce_int_width(&else_val, &actual_ty, &phi_llvm, counter, &mut ir)
+                let coerced =
+                    self.coerce_int_width(&else_val, &actual_ty, &phi_llvm, counter, &mut ir);
+                // Also coerce float width (e.g., float→double or double→float for phi)
+                let actual_after = self.llvm_type_of(&coerced);
+                if actual_after != phi_llvm
+                    && (actual_after == "float" || actual_after == "double")
+                    && (phi_llvm == "float" || phi_llvm == "double")
+                {
+                    let tmp = self.next_temp(counter);
+                    if actual_after == "float" {
+                        write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
+                    } else {
+                        write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
+                    }
+                    tmp
+                } else {
+                    coerced
+                }
             } else {
                 else_val
             };
@@ -232,6 +271,15 @@ impl CodeGenerator {
         }
 
         Ok((result, ir))
+    }
+
+    /// Check if an else branch produces a pointer (struct literal) vs a value
+    fn is_else_branch_ptr(&self, else_: Option<&vais_ast::IfElse>) -> bool {
+        match else_ {
+            Some(vais_ast::IfElse::Else(stmts)) => !self.is_block_result_value(stmts),
+            Some(vais_ast::IfElse::ElseIf(..)) => false, // nested if-else produces phi value
+            None => false,
+        }
     }
 
     /// Generate loop expression

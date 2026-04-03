@@ -918,6 +918,7 @@ impl CodeGenerator {
             // Convert i32 result to i64 for consistency
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
             Ok((result, ir))
         } else if ret_ty == "void" {
             // Check for recursive call with decreases clause
@@ -1014,6 +1015,11 @@ impl CodeGenerator {
             }
             let tmp = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", tmp, i32_tmp);
+            // Register as I64 since the sext converts i32→i64.
+            // Without this, generate_expr_inner's catch-all registers the
+            // semantic return type (I32/U32), causing downstream coercion
+            // to think the value is i32 when it's actually i64.
+            self.fn_ctx.register_temp_type(&tmp, vais_types::ResolvedType::I64);
             Ok((tmp, ir))
         } else {
             // Check for recursive call with decreases clause

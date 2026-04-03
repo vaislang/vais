@@ -27,9 +27,10 @@ impl CodeGenerator {
                 let block_type = self.infer_block_type(then_stmts);
                 let llvm_type = self.type_to_llvm(&block_type);
 
-                // Check if the result is a struct type (returned as pointer from struct literals)
-                let is_struct_result = matches!(&block_type, ResolvedType::Named { .. })
-                    && !self.is_block_result_value(then_stmts);
+                // Check each branch independently for struct pointer vs value
+                let is_named_phi = matches!(&block_type, ResolvedType::Named { .. });
+                let then_is_ptr =
+                    is_named_phi && !self.is_block_result_value(then_stmts);
 
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
@@ -54,7 +55,7 @@ impl CodeGenerator {
                 ir.push_str(&then_ir);
 
                 // For struct results, load the value before branch if it's a pointer
-                let then_val_for_phi = if is_struct_result && !then_terminated {
+                let then_val_for_phi = if then_is_ptr && !then_terminated {
                     let loaded = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -114,7 +115,18 @@ impl CodeGenerator {
                 // For struct results, load the value before branch if it's a pointer
                 // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
                 // it's already a phi node value (not a pointer), so don't load it
-                let else_val_for_phi = if is_struct_result
+                // Check else branch independently (may differ from then branch)
+                let else_is_ptr = is_named_phi
+                    && has_else
+                    && nested_last_block.is_empty()
+                    && else_branch
+                        .as_ref()
+                        .map(|eb| match eb.as_ref() {
+                            vais_ast::IfElse::Else(stmts) => !self.is_block_result_value(stmts),
+                            vais_ast::IfElse::ElseIf(..) => false, // nested produces phi value
+                        })
+                        .unwrap_or(false);
+                let else_val_for_phi = if else_is_ptr
                     && !else_terminated
                     && has_else
                     && nested_last_block.is_empty()

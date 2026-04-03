@@ -502,6 +502,20 @@ impl CodeGenerator {
             write_ir!(ir, "  {} = trunc i64 {} to {}", tmp, value, ret_llvm);
             return tmp;
         }
+        // For struct return types where body returns i64 (generic erasure)
+        // Use inttoptr+load to reinterpret the i64 as a struct pointer
+        let val_llvm = self.llvm_type_of(value);
+        if val_llvm == "i64"
+            && ret_llvm.starts_with('%')
+            && !ret_llvm.ends_with('*')
+            && value.starts_with('%')
+        {
+            let tmp_ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+            let loaded = self.next_temp(counter);
+            write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+            return loaded;
+        }
         // Default: return as-is
         value.to_string()
     }

@@ -454,6 +454,55 @@ impl CodeGenerator {
                             } else {
                                 final_val
                             }
+                        } else if val_ty != ret_type
+                            && (val_ty == "float" || val_ty == "double")
+                            && (ret_type == "float" || ret_type == "double")
+                        {
+                            // Float width coercion (e.g., double→float fptrunc)
+                            let tmp = self.next_temp(counter);
+                            if val_ty == "double" && ret_type == "float" {
+                                write_ir!(
+                                    ir,
+                                    "  {} = fptrunc double {} to float",
+                                    tmp,
+                                    final_val
+                                );
+                            } else {
+                                write_ir!(
+                                    ir,
+                                    "  {} = fpext float {} to double",
+                                    tmp,
+                                    final_val
+                                );
+                            }
+                            tmp
+                        } else if val_ty != ret_type
+                            && val_ty == "i64"
+                            && ret_type.starts_with('%')
+                            && !ret_type.ends_with('*')
+                        {
+                            // Struct return type mismatch — value is i64 but return type is struct.
+                            // This happens in specialized generic functions where the body
+                            // uses i64 (generic erasure) but the function signature declares
+                            // a concrete struct type. Use inttoptr+load to reinterpret.
+                            let tmp_ptr = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                tmp_ptr,
+                                final_val,
+                                ret_type
+                            );
+                            let loaded = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_type,
+                                ret_type,
+                                tmp_ptr
+                            );
+                            loaded
                         } else {
                             final_val
                         }

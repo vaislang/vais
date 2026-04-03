@@ -294,7 +294,21 @@ impl CodeGenerator {
                         trunc_tmp
                     } else if value.starts_with('%') {
                         let val_llvm = self.llvm_type_of(&value);
-                        self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                        if (val_llvm == "float" || val_llvm == "double")
+                            && (ret_llvm == "float" || ret_llvm == "double")
+                            && val_llvm != ret_llvm
+                        {
+                            // Float width coercion for return
+                            let tmp = self.next_temp(&mut counter);
+                            if val_llvm == "double" && ret_llvm == "float" {
+                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
+                            } else {
+                                write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                            }
+                            tmp
+                        } else {
+                            self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                        }
                     } else {
                         value
                     };
@@ -395,10 +409,32 @@ impl CodeGenerator {
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
-                        // Coerce return value width if needed.
+                        // Coerce return value width if needed (int, float, struct).
                         let value = if value.starts_with('%') {
                             let val_llvm = self.llvm_type_of(&value);
-                            self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                            if (val_llvm == "float" || val_llvm == "double")
+                                && (ret_llvm == "float" || ret_llvm == "double")
+                                && val_llvm != ret_llvm
+                            {
+                                let tmp = self.next_temp(&mut counter);
+                                if val_llvm == "double" && ret_llvm == "float" {
+                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
+                                } else {
+                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                                }
+                                tmp
+                            } else if val_llvm == "i64"
+                                && ret_llvm.starts_with('%')
+                                && !ret_llvm.ends_with('*')
+                            {
+                                let tmp_ptr = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+                                loaded
+                            } else {
+                                self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                            }
                         } else {
                             value
                         };
@@ -654,10 +690,32 @@ impl CodeGenerator {
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
-                        // Coerce return value width if needed.
+                        // Coerce return value width if needed (int, float, struct).
                         let value = if value.starts_with('%') {
                             let val_llvm = self.llvm_type_of(&value);
-                            self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                            if (val_llvm == "float" || val_llvm == "double")
+                                && (ret_llvm == "float" || ret_llvm == "double")
+                                && val_llvm != ret_llvm
+                            {
+                                let tmp = self.next_temp(&mut counter);
+                                if val_llvm == "double" && ret_llvm == "float" {
+                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
+                                } else {
+                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                                }
+                                tmp
+                            } else if val_llvm == "i64"
+                                && ret_llvm.starts_with('%')
+                                && !ret_llvm.ends_with('*')
+                            {
+                                let tmp_ptr = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+                                loaded
+                            } else {
+                                self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                            }
                         } else {
                             value
                         };
