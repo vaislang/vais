@@ -70,8 +70,11 @@ impl CodeGenerator {
                 }
             }
 
+            // Coerce match value to i64 for switch (e.g., i8 param → i64)
+            let match_val_ty = self.llvm_type_of(&match_val);
+            let switch_val = self.coerce_int_width(&match_val, &match_val_ty, "i64", counter, &mut ir);
             // Generate switch instruction
-            write_ir!(ir, "  switch i64 {}, label %{} [", match_val, default_label);
+            write_ir!(ir, "  switch i64 {}, label %{} [", switch_val, default_label);
             for (val, label) in &switch_cases {
                 write_ir!(ir, "    i64 {}, label %{}", val, label);
             }

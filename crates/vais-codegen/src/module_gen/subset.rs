@@ -532,14 +532,34 @@ impl CodeGenerator {
             }
         }
 
+        // Collect mangled names of specialized functions that will be defined in this module
+        // to avoid emitting conflicting `declare` with different type signatures.
+        let mut specialized_defines: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for inst in instantiations {
+            if matches!(inst.kind, vais_types::InstantiationKind::Function)
+                && module_functions.contains(&inst.base_name)
+            {
+                specialized_defines.insert(inst.mangled_name.clone());
+            }
+            if let vais_types::InstantiationKind::Method { ref struct_name } = inst.kind {
+                let method_key = format!("{}_{}", struct_name, inst.base_name);
+                if module_functions.contains(&method_key) {
+                    specialized_defines.insert(inst.mangled_name.clone());
+                }
+            }
+        }
+
         // Generate extern declarations for cross-module Vais functions
         // (functions registered from AST but not in this module's item set)
         // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
+        // Skip specialized functions that will be defined in this module (type signature mismatch).
         for (name, info) in &self.types.functions {
             if !info.is_extern
                 && !module_functions.contains(name)
                 && !declared_fns.contains(name)
                 && !builtin_fn_keys.contains(name)
+                && !specialized_defines.contains(name)
             {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');

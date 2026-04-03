@@ -738,11 +738,15 @@ impl CodeGenerator {
                 base_ptr,
                 idx_val
             );
+            // Coerce value to match element type (e.g., i8 from trunc → i64 for Vec store)
+            let val_ty = self.llvm_type_of(&val);
+            let store_val =
+                self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir);
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
                 elem_llvm_ty,
-                val,
+                store_val,
                 elem_llvm_ty,
                 elem_ptr
             );

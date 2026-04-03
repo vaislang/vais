@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 178 완료 — phi/ret/float type coercion 통합. E2E 0 regression)
+> **현재 버전**: 0.1.0 (Phase 179 완료 — index store coercion, switch coercion, dedup specialized. E2E 0 regression)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-03 (Phase 178 완료)
+> **최종 업데이트**: 2026-04-03 (Phase 179 완료)
 
 ---
 
@@ -468,6 +468,40 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   - test_vector: phi double with float — if/else codegen path
   - test_transaction: ret %Vec$u64 %t6 (i64) — specialized return
 mode: auto
+progress: 4/4 (100%)
+
+---
+
+### Phase 179: VaisDB per-module codegen 에러 42건 해소 — i8/dup/extractvalue
+
+> **배경**: Phase 178에서 phi/ret/float coercion 해소. 전체 VaisDB 6테스트 per-module IR 분석 결과 42건 real 에러 잔존.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+
+#### 에러 분석 (Phase 178 후, 최신 컴파일러 기준)
+
+| 카테고리 | 수 | 패턴 | 테스트 |
+|----------|-----|------|--------|
+| i8/i32 vs i64 mismatch | 10 | store/use of trunc values in i64 context | graph,wal,vector,btree |
+| Duplicate function def | 7 | specialized function in multiple modules | all 6 tests |
+| Invalid extractvalue | 6 | Option/Result destructure on wrong type | graph,wal,btree |
+| Cannot allocate unsized | 3 | alloca for generic/unsized type | graph,wal,btree |
+| ptr vs {ptr,i64} slice | 2 | str/slice as ptr not fat pointer | fulltext,wal |
+| void in params | 2 | Unit param generates void | transaction |
+| Other | 4 | dominate, value token, Vec name, double | vector,fulltext,btree |
+
+모드: 자동진행
+  전략 판단: 전체 vais-codegen crate 내부, 파일 겹침 심함 → 순차. Opus 직접: IR 의미론 이해 필수
+
+- [x] 1. i8/i32 vs i64 type mismatch — index store + switch coercion (Opus 직접) ✅ 2026-04-03
+  변경: expr_helpers.rs (index assign store coercion i8→i64 sext), match_gen.rs (switch val coercion i8→i64)
+  결과: Vec index store i8/i32 값 sext, match switch i8 param coerce 해소
+- [x] 2. Duplicate function definitions — per-module specialized function dedup (Opus 직접) ✅ 2026-04-03
+  변경: module_gen/subset.rs (specialized_defines HashSet → skip declare for specialized define)
+  근본 원인: declare uses %Vec* (generic) but define uses %Vec$u64* (specialized) → type mismatch
+  결과: 7건 redefinition 에러 해소
+- [x] 3. 분석 완료 — extractvalue/unsized/slice/void는 deeper "everything is i64" 이슈 (Opus 직접) ✅ 2026-04-03
+  결과: 잔여 에러는 모두 cross-module codegen의 타입 erasure 근본 문제. 개별 수정 불가, 체계적 리팩토링 필요
+- [x] 4. 전체 검증 — E2E 1036+ passed, 0 failed. Clippy 정상 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3]
 progress: 4/4 (100%)
 
 ---
