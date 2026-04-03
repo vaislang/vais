@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 179 완료 — index store coercion, switch coercion, dedup specialized. E2E 0 regression)
+> **현재 버전**: 0.1.0 (Phase 182 완료 — Vec<f32> 제네릭 + Phase 180-181 codegen coercion. E2E 0 regression)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-03 (Phase 179 완료)
+> **최종 업데이트**: 2026-04-03 (Phase 182 완료)
 
 ---
 
@@ -255,7 +255,109 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 142 | R2 IR Type Tracking Phase 1 | temp_var_types 레지스트리, void call naming, integer width mismatch 수정 | 2,383 |
 | 143 | R2/R1/R4 근본 문제 해결 | store/load/call/ret 타입 추적, elem_size 전파, Drop auto-call, large struct memcpy | 2,383 |
 
+## Current Tasks (2026-04-03) — Phase 182: Vec<f32> 제네릭 타입 소거 버그 수정
+mode: auto
+- [x] 1. method_call.rs 제네릭 파라미터 arg 타입 i64 하드코딩 수정 (impl-sonnet) ✅ 2026-04-03
+  changes: method_call.rs (Generic param checks substitution before i64 fallback)
+- [x] 2. conversion.rs Generic/Named 타입 i64 폴백에 substitution 조회 추가 (impl-sonnet) ✅ 2026-04-03
+  changes: conversion.rs (Single-letter Named type checks substitution before i64)
+- [x] 3. inkwell/types.rs Named 타입 generics 무시 + Generic i64 폴백 수정 (impl-sonnet) ✅ 2026-04-03
+  changes: types.rs (Named type tries mangled name lookup with generics)
+- [x] 4. generate_expr_call.rs load_typed/store_typed 비특화 컨텍스트 f32 처리 수정 (impl-sonnet) ✅ 2026-04-03
+  changes: generate_expr_call.rs (is_specialized no longer requires $ in function name)
+- [x] 5. E2E 테스트 — Vec<f32> 제네릭 타입 보존 검증 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3,4]
+  결과: E2E 2512 passed / 0 failed / 2 ignored — 0 regression
+progress: 5/5 (100%)
+  strategy: 4 tasks independent (no file overlap) → independent-parallel, task 5 sequential after
+
 ## 📋 예정 작업
+
+### Phase 181: VaisDB deeper codegen 에러 — Ref(Vec), double→float, i64→struct
+
+> **배경**: Phase 180에서 3패턴 6건 해소 후 deeper 에러 노출. 6건(3패턴) 잔존.
+> **원칙**: E2E 0 regression 유지. ir_fix.py 우회 금지.
+
+#### clang 에러 현황 (2026-04-03, Phase 180 수정 후)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | `%data` {ptr,i64} vs %Vec$u8* — crc32c call arg |
+| test_wal | 1 | `%data` {ptr,i64} vs %Vec$u8* — crc32c call arg |
+| test_btree | 1 | `%data` {ptr,i64} vs %Vec$u8* — crc32c call arg |
+| test_fulltext | 1 | `%data` {ptr,i64} vs %Vec$u8* — crc32c call arg |
+| test_vector | 1 | `%t45` double vs float — sqrt_f32 call arg |
+| test_transaction | 1 | `%t4` i64 vs %ActiveTransactionEntry — store |
+
+모드: 자동진행
+  전략 판단: 전체 vais-codegen crate 내부, 파일 겹침 심함 → 순차. Opus 직접: IR 의미론 이해 필수
+
+- [x] 1. crc32c Ref(Vec<u8>) → %Vec$u8* call arg coercion — 4건 해소 (Opus 직접) ✅ 2026-04-03
+  변경: generate_expr_call.rs — Slice {i8*,i64} → Vec* 변환 (alloca temp Vec, extractvalue+ptrtoint+store 4필드)
+  근본 원인: TC가 Ref(Vec<T>)↔Slice(T) coercion 허용하나 codegen에서 fat pointer→Vec ptr 변환 미구현
+- [x] 2. sqrt_f32 double→float call arg fptrunc — test_vector 해소 (Opus 직접) ✅ 2026-04-03
+  변경: generate_expr_call.rs — call arg에서 float coercion 추가 (coerce_float_width 활용, infer_expr_type + param_ty 기반)
+  근본 원인: call arg coercion이 integer width만 처리하고 float/double 불일치 미처리
+- [x] 3. ActiveTransactionEntry i64→struct store coercion — test_transaction 해소 (Opus 직접) ✅ 2026-04-03
+  변경: call_gen.rs — enum variant 대형 struct store에서 i64→struct coercion (inttoptr+load+store)
+  근본 원인: HashMap_get 반환 i64를 Option Some(ActiveTransactionEntry) 구성 시 직접 store
+- [x] 4. 전체 검증 — E2E 2512 passed / 0 failed / 2 ignored (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3]
+  VaisDB: 원래 3패턴 6건 해소 → deeper 에러 노출 (phi {ptr,i64}→i8*, i8→i64 sub, float constant, ptr→struct)
+progress: 4/4 (100%)
+
+---
+
+### Phase 180: VaisDB codegen 근본 리팩토링 — clang 에러 6→0 목표
+
+> **배경**: Phase 179까지 점진적 coercion 추가로 42→6건 감소. 잔여 6건은 3가지 근본 패턴.
+> **원칙**: E2E 0 regression 유지. ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성.
+>
+> **재현 명령**:
+> ```bash
+> cd /Users/sswoo/study/projects/vaisdb
+> VAIS_DEP_PATHS="$(pwd)/src:$HOME/study/projects/vais/std" VAIS_STD_PATH="$HOME/study/projects/vais/std" \
+>   VAIS_SINGLE_MODULE=1 VAIS_TC_NONFATAL=1 \
+>   /Users/sswoo/study/projects/vais/target/debug/vaisc build \
+>   tests/graph/test_graph.vais --emit-ir -o /tmp/test_graph.ll --force-rebuild
+> clang -c -x ir /tmp/test_graph.ll -o /tmp/test_graph.o -w
+> ```
+
+#### clang 에러 현황 (2026-04-03, Phase 179 수정 후)
+
+| 테스트 | clang 에러 | 에러 내용 |
+|--------|-----------|----------|
+| test_graph | 1 | `%t15` i8 but expected i64 — ByteBuffer_write_u8 call arg |
+| test_wal | 1 | `%t15` i8 but expected i64 — ByteBuffer_write_u8 call arg |
+| test_btree | 1 | `%t15` i8 but expected i64 — ByteBuffer_write_u8 call arg |
+| test_fulltext | 1 | `%t15` i8 but expected i64 — ByteBuffer_write_u8 call arg |
+| test_vector | 1 | `store i64 void` — Result Ok(()) void value in struct |
+| test_transaction | 1 | `ret %Vec$u64 %t6` i64 — HashMap specialized return |
+
+#### 패턴 분류
+- **i8→i64 call arg (4건)**: `load i8` value passed to i64 param — specialized body에서 byte load 후 generic 시그니처 call
+- **store void (1건)**: Result struct Ok(()) 생성 시 void/Unit 값을 i64 필드에 store
+- **ret struct from i64 (1건)**: HashMap_remove_from_chain i64 반환을 %Vec$u64 ret에 사용
+
+모드: 자동진행
+  전략 판단: 전체 vais-codegen crate 내부, 파일 겹침 심함 → 순차. Opus 직접: IR 의미론 이해 필수
+
+- [x] 1. ByteBuffer_write_u8 i8→i64 call arg coercion — 4건 해소 (Opus 직접) ✅ 2026-04-03
+  변경: type_inference.rs — Index expr에 SliceMut/RefMut 핸들러 추가 (기존에 Slice/Ref만 처리). expr_helpers_data.rs — index load 결과 temp_var_types 등록 (register_elem_type 헬퍼)
+  근본 원인: infer_expr_type이 &mut [u8] 인덱싱에서 I64 반환 (SliceMut 누락) → 메서드 call arg coercion 미발동
+- [x] 2. Result struct void value store 수정 — test_vector 해소 (Opus 직접) ✅ 2026-04-03
+  변경: call_gen.rs — enum payload store에서 "void" → "0" 치환 (Ok(()) 생성 시)
+  근본 원인: () 표현식이 "void" 반환 → store i64 void → invalid IR
+- [x] 3. HashMap specialized return i64→%Vec$u64 coercion — test_transaction 해소 (Opus 직접) ✅ 2026-04-03
+  변경: generics.rs — Block 반환 시 Named ret 타입에서 value가 i64이고 ret이 struct이면 coerce_specialized_return 적용
+  근본 원인: is_block_result_value가 true일 때 coercion 미적용 — generic body의 i64 반환값을 struct ret에 직접 사용
+- [x] 4. 전체 검증 — E2E 2512 passed / 0 failed / 2 ignored. Clippy 3건 (pre-existing) (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3]
+  VaisDB clang 에러: 원래 3패턴 6건 해소 → deeper 에러 노출 (아래)
+  잔여 에러:
+  - test_graph/test_wal/test_btree/test_fulltext: %data {ptr,i64} vs %Vec$u8* — crc32c 함수 호출에서 Ref(Vec<u8>) 인자가 fat pointer로 전달
+  - test_vector: double→float — sqrt_f32 call arg fptrunc 누락
+  - test_transaction: i64→%ActiveTransactionEntry — store에서 struct type coercion 누락
+progress: 4/4 (100%)
+
+---
 
 ### Phase 172: Codegen body type coercion — VaisDB 6개 테스트 clang 0 에러
 
@@ -467,7 +569,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
   - test_btree: Vec_push$slice_u8 i64→{ i8*, i64 } — closure generic
   - test_vector: phi double with float — if/else codegen path
   - test_transaction: ret %Vec$u64 %t6 (i64) — specialized return
-mode: auto
+mode: stopped (authentication_failed)
 progress: 4/4 (100%)
 
 ---
@@ -590,7 +692,7 @@ progress: 4/4 (100%)
   - test_vector: phi double [%x] (float) — f32→f64 fpext 누락
   - test_transaction: store i64 %value (i8) — i8→i64 store narrowing
   → Deeper 에러 5패턴 6건 → Phase 177로 이관
-mode: auto
+mode: stopped (authentication_failed)
 progress: 3/3 (100%)
 
 ---
@@ -659,7 +761,7 @@ progress: 3/3 (100%)
   - test_vector: `phi double [%t4] [%x]` — f32→double phi fpext 누락
   - test_transaction: `store i64 %value` (i8 변수에 i64 store) — 타입 narrowing
   → **Phase 176: 3건 regression 수정 + deeper 6건**
-mode: auto
+mode: stopped (authentication_failed)
 progress: 5/5 (100%)
 
 ---

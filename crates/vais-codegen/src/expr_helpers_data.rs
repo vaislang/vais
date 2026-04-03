@@ -2,11 +2,35 @@
 //!
 //! Contains array, tuple, struct literal, index, and field expression generation.
 
-use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
+use crate::{
+    format_did_you_mean, state::FunctionContext, suggest_similar, CodeGenerator, CodegenError,
+    CodegenResult,
+};
 use vais_ast::{Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    /// Register a ResolvedType for an index-load result based on its LLVM type string.
+    ///
+    /// This ensures downstream call-arg coercion (in generate_expr_call.rs) can detect
+    /// width mismatches (e.g., i8 value passed to i64 parameter) by looking up
+    /// `temp_var_types`. Without this, `has_known_type` is false and coercion is skipped.
+    fn register_elem_type(fn_ctx: &mut FunctionContext, result: &str, elem_llvm_ty: &str) {
+        let resolved = match elem_llvm_ty {
+            "i8" => Some(ResolvedType::U8),
+            "i16" => Some(ResolvedType::I16),
+            "i32" => Some(ResolvedType::I32),
+            "i64" => Some(ResolvedType::I64),
+            "float" => Some(ResolvedType::F32),
+            "double" => Some(ResolvedType::F64),
+            "i1" => Some(ResolvedType::Bool),
+            _ => None, // Str and Named handled separately by caller
+        };
+        if let Some(ty) = resolved {
+            fn_ctx.register_temp_type(result, ty);
+        }
+    }
+
     #[inline(never)]
     pub(crate) fn generate_array_expr(
         &mut self,
@@ -516,6 +540,8 @@ impl CodeGenerator {
                     elem_llvm_ty,
                     typed_elem_ptr
                 );
+                // Register element type so downstream call-arg coercion can detect width mismatch
+                Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm_ty);
                 return Ok((result, ir));
             } else {
                 arr_val.clone()
@@ -543,13 +569,15 @@ impl CodeGenerator {
             elem_ptr
         );
 
-        // Register the element type for downstream codegen (e.g., Option/Result construction).
-        // For Vec<str>, elem_llvm_ty = "{ i8*, i64 }" → ResolvedType::Str
+        // Register the element type for downstream codegen (e.g., Option/Result construction,
+        // call-arg width coercion).
+        Self::register_elem_type(&mut self.fn_ctx, &result, &elem_llvm_ty);
         if elem_llvm_ty == "{ i8*, i64 }" {
+            // Override with precise Str type for fat pointer elements
             self.fn_ctx
                 .register_temp_type(&result, vais_types::ResolvedType::Str);
         } else if elem_llvm_ty.starts_with('%') {
-            // Named struct type
+            // Named struct type — override with precise Named type
             let name = elem_llvm_ty.trim_start_matches('%');
             self.fn_ctx.register_temp_type(
                 &result,

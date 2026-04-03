@@ -183,7 +183,19 @@ impl<'ctx> TypeMapper<'ctx> {
                     .struct_type(&[ptr_type.into(), len_type.into()], false)
                     .into()
             }
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
+                // If generics are present and all concrete, try mangled name first (e.g., "Vec$f32")
+                if !generics.is_empty() {
+                    let all_concrete = generics.iter().all(|g| {
+                        !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
+                    });
+                    if all_concrete {
+                        let mangled = vais_types::mangle_name(name, generics);
+                        if let Some(st) = self.struct_types.get(mangled.as_str()) {
+                            return (*st).into();
+                        }
+                    }
+                }
                 if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {

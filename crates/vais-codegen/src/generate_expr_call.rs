@@ -429,6 +429,12 @@ impl CodeGenerator {
                     }
                     val = conv_tmp;
                 }
+                // Float coercion: fptrunc double→float or fpext float→double
+                let src_llvm = self.type_to_llvm(&inferred_ty);
+                let dst_llvm = self.type_to_llvm(pt);
+                if src_llvm != dst_llvm {
+                    val = self.coerce_float_width(&val, &src_llvm, &dst_llvm, counter, &mut ir);
+                }
             }
 
             // For struct arguments, load the value if we have a pointer
@@ -614,6 +620,10 @@ impl CodeGenerator {
                             val = tmp;
                         }
                     }
+                    // Float coercion: fptrunc double→float or fpext float→double
+                    if val_ty != arg_ty {
+                        val = self.coerce_float_width(&val, &val_ty, &arg_ty, counter, &mut ir);
+                    }
                 }
             }
 
@@ -641,6 +651,53 @@ impl CodeGenerator {
                         ptr_tmp
                     );
                     val = loaded;
+                }
+            }
+
+            // Coerce Slice { i8*, i64 } → Vec* when param expects &Vec<T> but arg is a slice.
+            // TC allows Ref(Vec<T>) ↔ Slice(T) coercion (Phase 163).
+            // Build a temporary Vec on the stack: { ptrtoint data, len, len, elem_size }.
+            if arg_ty.ends_with('*') && arg_ty.starts_with('%') {
+                let inferred = self.infer_expr_type(arg);
+                let is_slice_arg = matches!(
+                    &inferred,
+                    ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                ) || matches!(&inferred, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_)));
+                if is_slice_arg {
+                    // arg_ty is e.g. "%Vec$u8*" — strip the trailing * to get the struct name
+                    let vec_struct = &arg_ty[..arg_ty.len() - 1];
+                    // Build a temp Vec from the slice fat pointer { i8*, i64 }
+                    let alloca = self.next_temp(counter);
+                    self.emit_entry_alloca(&alloca, vec_struct);
+                    // Extract data pointer from slice and convert to i64
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", data_ptr, val);
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, data_ptr);
+                    // Extract length from slice
+                    let len = self.next_temp(counter);
+                    write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, val);
+                    // Store fields: data, len, cap (=len), elem_size (=1 for u8, 8 for default)
+                    let f0 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 0", f0, vec_struct, vec_struct, alloca);
+                    write_ir!(ir, "  store i64 {}, i64* {}", data_i64, f0);
+                    let f1 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1", f1, vec_struct, vec_struct, alloca);
+                    write_ir!(ir, "  store i64 {}, i64* {}", len, f1);
+                    let f2 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 2", f2, vec_struct, vec_struct, alloca);
+                    write_ir!(ir, "  store i64 {}, i64* {}", len, f2);
+                    let f3 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 3", f3, vec_struct, vec_struct, alloca);
+                    // elem_size: determine from type name (Vec$u8 → 1, default → 8)
+                    let elem_size = if vec_struct.contains("u8") || vec_struct.contains("i8") {
+                        "1"
+                    } else {
+                        "8"
+                    };
+                    write_ir!(ir, "  store i64 {}, i64* {}", elem_size, f3);
+                    val = alloca;
                 }
             }
 
@@ -1104,15 +1161,9 @@ impl CodeGenerator {
             .get_generic_substitution("T")
             .unwrap_or(ResolvedType::I64);
         // In specialized functions, return the concrete type directly (no T→i64 conversion).
-        // Only treat as specialized if the current function name contains '$' (mangled).
-        let fn_is_specialized = self
-            .fn_ctx
-            .current_function
-            .as_ref()
-            .map(|n| n.contains('$'))
-            .unwrap_or(false);
-        let is_specialized = fn_is_specialized
-            && !self.generics.substitutions.is_empty()
+        // If resolved_t is a concrete non-i64/non-u64 type and substitutions are non-empty,
+        // treat as specialized regardless of whether the function name contains '$'.
+        let is_specialized = !self.generics.substitutions.is_empty()
             && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         let result = self.next_temp(counter);
@@ -1278,17 +1329,9 @@ impl CodeGenerator {
             .unwrap_or(ResolvedType::I64);
         // In specialized functions (monomorphization), parameters already have the
         // concrete type (e.g., i8 for Vec<u8>), so skip i64→T conversion.
-        // Only treat as specialized if the current function name contains '$' (mangled),
-        // preventing generic functions from using specialized types when substitutions
-        // leak from the parent context.
-        let fn_is_specialized = self
-            .fn_ctx
-            .current_function
-            .as_ref()
-            .map(|n| n.contains('$'))
-            .unwrap_or(false);
-        let is_specialized = fn_is_specialized
-            && !self.generics.substitutions.is_empty()
+        // If resolved_t is a concrete non-i64/non-u64 type and substitutions are non-empty,
+        // treat as specialized regardless of whether the function name contains '$'.
+        let is_specialized = !self.generics.substitutions.is_empty()
             && !matches!(resolved_t, ResolvedType::I64 | ResolvedType::U64);
         let size = self.compute_sizeof(&resolved_t);
         match size {

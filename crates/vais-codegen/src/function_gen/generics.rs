@@ -437,7 +437,15 @@ impl CodeGenerator {
                         ir.push_str("  ret void\n");
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         if self.is_block_result_value(stmts) {
-                            write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                            // Check if value needs coercion (e.g., i64 from generic call
+                            // but ret_llvm is a struct type like %Vec$u64)
+                            let val_ty = self.llvm_type_of(&value);
+                            if val_ty == "i64" && ret_llvm.starts_with('%') && !ret_llvm.ends_with('*') {
+                                let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                                write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
+                            } else {
+                                write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                            }
                         } else {
                             let loaded = format!("%ret.{}", counter);
                             write_ir!(

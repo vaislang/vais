@@ -152,7 +152,11 @@ impl CodeGenerator {
             ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                    String::from("i64")
+                    if let Some(concrete) = self.get_generic_substitution(name) {
+                        self.type_to_llvm(&concrete)
+                    } else {
+                        String::from("i64")
+                    }
                 } else if !generics.is_empty() {
                     // Check if all generics are concrete (not Generic or Var types)
                     let all_concrete = generics

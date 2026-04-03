@@ -129,14 +129,47 @@ impl CodeGenerator {
                         typed_ptr
                     );
                 } else {
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        effective_ty,
-                        arg_val,
-                        effective_ty,
-                        typed_ptr
-                    );
+                    // Check if arg_val is i64 (generic erasure) but effective_ty is struct.
+                    // If so, interpret i64 as pointer to struct and load before storing.
+                    let actual_llvm = self.llvm_type_of(arg_val);
+                    if (actual_llvm == "i64" || actual_llvm.starts_with('i'))
+                        && effective_ty.starts_with('%')
+                    {
+                        let src_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = inttoptr i64 {} to {}*",
+                            src_ptr,
+                            arg_val,
+                            effective_ty
+                        );
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            loaded,
+                            effective_ty,
+                            effective_ty,
+                            src_ptr
+                        );
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            effective_ty,
+                            loaded,
+                            effective_ty,
+                            typed_ptr
+                        );
+                    } else {
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            effective_ty,
+                            arg_val,
+                            effective_ty,
+                            typed_ptr
+                        );
+                    }
                 }
                 let ptr_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", ptr_i64, heap_ptr);
@@ -160,7 +193,9 @@ impl CodeGenerator {
                     cast_ptr
                 );
             } else {
-                write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
+                // Replace "void" with 0 for Unit/() values in enum payloads
+                let store_val = if arg_val == "void" { "0" } else { arg_val };
+                write_ir!(ir, "  store i64 {}, i64* {}", store_val, payload_field_ptr);
             }
         }
 

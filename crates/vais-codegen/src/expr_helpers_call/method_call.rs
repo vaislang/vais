@@ -325,10 +325,15 @@ impl CodeGenerator {
 
             // Use parameter type from signature if available, unless generic
             let arg_llvm_ty = if let Some(ref pt) = param_ty {
-                if matches!(pt, ResolvedType::Generic(_)) {
-                    // Generic params are erased to i64 in LLVM IR
-                    // Use i64 as the LLVM type, and coerce if needed
-                    "i64".to_string()
+                if let ResolvedType::Generic(ref name) = pt {
+                    // Check if a concrete substitution exists for this generic parameter
+                    if let Some(concrete_ty) = self.get_generic_substitution(name) {
+                        self.type_to_llvm(&concrete_ty)
+                    } else {
+                        // Generic params are erased to i64 in LLVM IR
+                        // Use i64 as the LLVM type, and coerce if needed
+                        "i64".to_string()
+                    }
                 } else {
                     self.type_to_llvm(pt)
                 }

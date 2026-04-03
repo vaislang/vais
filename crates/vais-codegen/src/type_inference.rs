@@ -533,18 +533,20 @@ impl CodeGenerator {
                     match inner_ty {
                         ResolvedType::Pointer(elem) => *elem,
                         ResolvedType::Array(elem) => *elem,
-                        ResolvedType::Slice(elem) => *elem,
+                        ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => *elem,
                         // Vec<T>[idx] → T
                         ResolvedType::Named {
                             ref name,
                             ref generics,
                         } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
-                        ResolvedType::Ref(ref inner) => match inner.as_ref() {
+                        ResolvedType::Ref(ref inner)
+                        | ResolvedType::RefMut(ref inner) => match inner.as_ref() {
                             ResolvedType::Named {
                                 ref name,
                                 ref generics,
                             } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
-                            ResolvedType::Slice(elem) => *elem.clone(),
+                            ResolvedType::Slice(elem)
+                            | ResolvedType::SliceMut(elem) => *elem.clone(),
                             ResolvedType::Array(elem) => *elem.clone(),
                             _ => ResolvedType::I64,
                         },
