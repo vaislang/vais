@@ -419,6 +419,46 @@ impl CodeGenerator {
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
                     ir.push_str(&alloc_cleanup_ir);
 
+                    // Coerce value to match function return type if needed
+                    // (e.g., sext i32→i64 in body then ret i32 needs trunc back)
+                    let final_val = {
+                        let val_ty = self.llvm_type_of(&final_val);
+                        if val_ty != ret_type
+                            && val_ty.starts_with('i')
+                            && ret_type.starts_with('i')
+                        {
+                            let val_bits: u32 = val_ty[1..].parse().unwrap_or(64);
+                            let ret_bits: u32 = ret_type[1..].parse().unwrap_or(64);
+                            if val_bits > 0 && ret_bits > 0 && val_bits != ret_bits {
+                                let tmp = self.next_temp(counter);
+                                if val_bits > ret_bits {
+                                    write_ir!(
+                                        ir,
+                                        "  {} = trunc {} {} to {}",
+                                        tmp,
+                                        val_ty,
+                                        final_val,
+                                        ret_type
+                                    );
+                                } else {
+                                    write_ir!(
+                                        ir,
+                                        "  {} = sext {} {} to {}",
+                                        tmp,
+                                        val_ty,
+                                        final_val,
+                                        ret_type
+                                    );
+                                }
+                                tmp
+                            } else {
+                                final_val
+                            }
+                        } else {
+                            final_val
+                        }
+                    };
+
                     // Emit the ret instruction
                     write_ir!(ir, "  ret {} {}", ret_type, final_val);
                     Ok((final_val, ir))

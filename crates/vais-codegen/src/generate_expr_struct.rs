@@ -85,6 +85,23 @@ impl CodeGenerator {
                     counter,
                     &mut ir,
                 );
+                // Handle Unit/void params: when the resolved type is Unit (void) but the
+                // actual LLVM param is i8, coerce_int_width won't catch this because
+                // llvm_type_of returns "void". Explicitly zext i8→i64 for Unit params.
+                let coerced_val =
+                    if llvm_ty == "i64" && (val_llvm_ty == "void" || val_llvm_ty == "i8") {
+                        let local_name =
+                            coerced_val.strip_prefix('%').unwrap_or(&coerced_val);
+                        if self.fn_ctx.locals.get(local_name).map_or(false, |l| l.is_param()) {
+                            let tmp = self.next_temp(counter);
+                            write_ir!(ir, "  {} = zext i8 {} to i64", tmp, coerced_val);
+                            tmp
+                        } else {
+                            coerced_val
+                        }
+                    } else {
+                        coerced_val
+                    };
                 write_ir!(
                     ir,
                     "  store {} {}, {}* {}",

@@ -372,7 +372,17 @@ impl CodeGenerator {
             // from the fat pointer { i8*, i64 } and use i8* as the argument type
             if is_extern_c {
                 if let Some(ResolvedType::Str) = &param_ty {
-                    let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
+                    // Check if the value is actually a fat pointer or an i64
+                    // (pointer-as-integer from "everything is i64" convention).
+                    // If i64, use inttoptr directly; if fat pointer, extractvalue.
+                    let val_ty = self.llvm_type_of(&val);
+                    let raw_ptr = if val_ty == "i64" || val_ty.starts_with('i') {
+                        let tmp = self.next_temp(counter);
+                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", tmp, val);
+                        tmp
+                    } else {
+                        self.extract_str_ptr(&val, counter, &mut ir)
+                    };
                     val = raw_ptr;
                     arg_vals.push(format!("i8* {}", val));
                     continue;

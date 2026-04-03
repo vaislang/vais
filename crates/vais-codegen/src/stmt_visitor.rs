@@ -531,6 +531,20 @@ impl CodeGenerator {
             let alloc_cleanup_ir = self.generate_alloc_cleanup();
             ir.push_str(&alloc_cleanup_ir);
 
+            // Final safety: coerce if actual IR value type differs from ret type
+            // (catches cases where body sext'd i32→i64 but function returns i32)
+            let ret_val = {
+                let actual = self.llvm_type_of(&ret_val);
+                if actual != llvm_ty
+                    && actual.starts_with('i')
+                    && llvm_ty.starts_with('i')
+                {
+                    self.coerce_int_width(&ret_val, &actual, &llvm_ty, counter, &mut ir)
+                } else {
+                    ret_val
+                }
+            };
+
             write_ir!(ir, "  ret {} {}", llvm_ty, ret_val);
         } else {
             // Execute deferred expressions before return (LIFO order)

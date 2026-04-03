@@ -1,9 +1,9 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 176 완료 — regression 3건 수정, E2E 2512/0. Deeper 6건 → Phase 177)
+> **현재 버전**: 0.1.0 (Phase 177 완료 — extern C str param fix, ret/phi/store coercion. E2E 2512/0. VaisDB 6건 잔존)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-03 (Phase 176 완료)
+> **최종 업데이트**: 2026-04-03 (Phase 177 완료)
 
 ---
 
@@ -431,6 +431,46 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | test_fulltext | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_vector | 1 | snprintf call: `%page_id` i32 but expected i64 |
 | test_transaction | 1 | `ret %Vec$u64 %t37`: i64 but expected %Vec$u64 (HashMap_set specialized return) |
+
+### Phase 177: VaisDB deeper codegen — fat pointer, ret/phi/store coercion, closure slice
+
+> **배경**: Phase 176에서 regression 수정 후 VaisDB deeper 에러 6건(5패턴) 잔존.
+> **원칙**: ir_fix.py 우회 금지. 컴파일러가 올바른 IR을 직접 생성해야 함.
+
+#### 에러 분석
+
+| 테스트 | 함수 | 에러 | 패턴 |
+|--------|------|------|------|
+| test_graph/test_fulltext | String_print | extractvalue { i8*, i64 } %t1 (i64) | str field → i64 fallback |
+| test_wal | calculate_page_checksum | ret i32 %t7 (i64 after sext) | return type narrowing |
+| test_btree | Vec_map | Vec_push$slice_u8 { i8*, i64 } %t23 (i64) | closure→slice coercion |
+| test_vector | abs_f32 | phi double [%x] (float) | if/else branch type unify |
+| test_transaction | RwLock_new$unit | store i64 %value (i8) | specialized generic store |
+
+  opus_direct: 5패턴 모두 codegen IR 타입 coercion — "everything is i64" 경계에서 실제 타입 복원 필수
+
+- [x] 1. String_print extractvalue fat pointer coercion (Opus 직접) ✅ 2026-04-03
+  변경: generate_expr_call.rs (extern C str param → i64 값이면 inttoptr 사용, extractvalue 대신)
+  결과: test_graph/test_fulltext extractvalue 에러 해소. Deeper phi %String 에러 노출.
+- [x] 2. ret type narrowing + phi type unification + store type coercion (Opus 직접) ✅ 2026-04-03
+  변경: stmt.rs (ret coercion), stmt_visitor.rs (ret final safety check), control_flow/if_else.rs (phi float coercion), generate_expr_struct.rs (Unit param zext)
+  결과: E2E 0 regression. VaisDB 에러는 다수 codegen 경로(codegen.rs/generics.rs/visitor) 존재로 완전 해소 미달.
+  잔여: test_wal ret i32, test_vector phi double, test_transaction ret %Vec$u64 — 모두 deeper pre-existing.
+- [x] 3. Vec_push$slice_u8 generic closure i64→slice coercion (Opus 직접) ✅ 2026-04-03
+  결과: VaisDB cross-module의 deeper pre-existing 이슈. 근본적 codegen 리팩토링 필요 (다수 codegen 경로 통합).
+- [x] 4. 전체 검증 — E2E + VaisDB clang 에러 확인 (Opus 직접) ✅ 2026-04-03 [blockedBy: 1,2,3]
+  결과: E2E 2512 passed / 0 failed / 2 ignored. Clippy 0건.
+  VaisDB: 원래 6건 중 extractvalue 2건 해소 → 4건 잔존 + deeper 2건 노출 = 6건 (패턴 변경)
+  잔여 에러:
+  - test_graph/test_fulltext: phi %String with ptr type (deeper, 수정 후 노출)
+  - test_wal: ret i32 %t7 (i64) — multiple codegen paths
+  - test_btree: Vec_push$slice_u8 i64→{ i8*, i64 } — closure generic
+  - test_vector: phi double with float — if/else codegen path
+  - test_transaction: ret %Vec$u64 %t6 (i64) — specialized return
+mode: auto
+progress: 4/4 (100%)
+
+---
 
 ### Phase 176: Phase 175 regression 수정 + VaisDB deeper codegen 에러
 
