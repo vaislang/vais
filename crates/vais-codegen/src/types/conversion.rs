@@ -300,14 +300,9 @@ impl CodeGenerator {
                 })?;
                 String::from("i64")
             }
-            ResolvedType::Map(key, val) => {
-                // Map is represented as parallel arrays: a struct of { key_ptr, val_ptr }.
-                // The struct carries pointers to both the key array and the value array so
-                // that downstream accesses can generate correctly-typed loads/stores for
-                // non-i64 value types (e.g., structs).
-                let key_llvm = self.type_to_llvm_impl(key)?;
-                let val_llvm = self.type_to_llvm_impl(val)?;
-                format!("{{ {}*, {}* }}", key_llvm, val_llvm)
+            ResolvedType::Map(key, _val) => {
+                // Map is represented as a pointer to key array (parallel arrays)
+                format!("{}*", self.type_to_llvm_impl(key)?)
             }
             ResolvedType::Lazy(inner) => {
                 // Lazy<T> is represented as a struct with:

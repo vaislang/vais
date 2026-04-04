@@ -20,21 +20,10 @@ impl CodeGenerator {
         let mut ir = String::new();
         let len = pairs.len();
 
-        // Infer key/value types.
-        // Prefer TC-resolved types (from the type checker span map) over the
-        // heuristic infer_expr_type, because infer_expr_type may fall back to
-        // i64 for struct-typed values when the struct isn't yet in locals.
+        // Infer key/value types
         let (key_ty, val_ty) = if let Some((k, v)) = pairs.first() {
-            let k_resolved = self
-                .tc_expr_type(k)
-                .cloned()
-                .unwrap_or_else(|| self.infer_expr_type(k));
-            let v_resolved = self
-                .tc_expr_type(v)
-                .cloned()
-                .unwrap_or_else(|| self.infer_expr_type(v));
-            let kt = self.type_to_llvm(&k_resolved);
-            let vt = self.type_to_llvm(&v_resolved);
+            let kt = self.type_to_llvm(&self.infer_expr_type(k));
+            let vt = self.type_to_llvm(&self.infer_expr_type(v));
             (kt, vt)
         } else {
             ("i64".to_string(), "i64".to_string())
