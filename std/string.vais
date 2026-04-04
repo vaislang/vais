@@ -4,6 +4,10 @@
 
 U std/option
 
+# Str is an alias for the primitive str type
+# Used widely in vaisdb and other projects
+T Str = str
+
 S String {
     data: i64,      # Pointer to char array (i8*)
     len: i64,       # Current length (excluding null terminator)

@@ -63,7 +63,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Expr::Field { expr: obj, field } => self.generate_field_access(&obj.node, &field.node),
             Expr::TupleFieldAccess { expr: obj, index } => {
-                self.generate_tuple_field_access(&obj.node, *index)
+                self.generate_field_access(&obj.node, &index.to_string())
             }
 
             // Array/Tuple/Index

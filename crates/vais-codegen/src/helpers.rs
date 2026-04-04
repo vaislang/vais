@@ -387,6 +387,15 @@ impl CodeGenerator {
                     if matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
                 );
 
+        // Detect Vec source: Vec<T>, &Vec<T>, or &mut Vec<T>
+        let is_vec_source =
+            matches!(&arr_type, ResolvedType::Named { name, .. } if name == "Vec")
+                || matches!(
+                    &arr_type,
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if matches!(inner.as_ref(), ResolvedType::Named { name, .. } if name == "Vec")
+                );
+
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {
             let (val, start_ir) = self.generate_expr(start_expr, counter)?;
@@ -421,6 +430,19 @@ impl CodeGenerator {
                     arr_val
                 );
                 length
+            } else if is_vec_source {
+                // Vec<T>: extract length from Vec struct field 1 (len)
+                // arr_val is a %Vec* pointer
+                let len_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1",
+                    len_ptr,
+                    arr_val
+                );
+                let length = self.next_temp(counter);
+                write_ir!(ir, "  {} = load i64, i64* {}", length, len_ptr);
+                length
             } else if let ResolvedType::ConstArray { size, .. } = &arr_type {
                 // ConstArray has a known compile-time size; use it as i64 literal
                 if let Some(n) = size.try_evaluate() {
@@ -438,7 +460,7 @@ impl CodeGenerator {
             }
         };
 
-        // If source is a slice, extract the data pointer
+        // If source is a slice or Vec, extract the data pointer
         let src_arr_ptr = if is_slice_source {
             let data_ptr = self.next_temp(counter);
             write_ir!(
@@ -450,6 +472,20 @@ impl CodeGenerator {
             let typed_ptr = self.next_temp(counter);
             write_ir!(ir, "  {} = bitcast i8* {} to i64*", typed_ptr, data_ptr);
             typed_ptr
+        } else if is_vec_source {
+            // Vec<T>: extract data pointer from Vec struct field 0 (data)
+            let data_field = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 0",
+                data_field,
+                arr_val
+            );
+            let data_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_field);
+            let data_ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to i64*", data_ptr, data_i64);
+            data_ptr
         } else {
             // For arrays/pointers, use directly
             arr_val.clone()

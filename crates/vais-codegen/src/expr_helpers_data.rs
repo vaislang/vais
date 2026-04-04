@@ -819,6 +819,146 @@ impl CodeGenerator {
             }
         }
 
+        // Fallback: when the resolved type is Generic("T") or I64 (generic erasure),
+        // try to determine the concrete struct type by:
+        // 1. Resolving generic substitutions
+        // 2. Looking at the Vec element type if obj is an Index into a Vec
+        // 3. Searching all known structs for the field name as a last resort
+        let fallback_type = match resolved_type {
+            ResolvedType::Generic(t) => {
+                // Try generic substitution first, but only if it resolves to a Named type
+                // (struct/enum). If T maps to a primitive (e.g., U8 from Vec<u8> specialization),
+                // that substitution is for a different Vec<T> in the same function scope.
+                if let Some(concrete) = self.generics.substitutions.get(t) {
+                    if matches!(concrete, ResolvedType::Named { .. }) {
+                        Some(concrete.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            ResolvedType::I64 => None,
+            _ => None,
+        };
+
+        // If generic substitution didn't help, try to resolve from the obj expression context
+        let fallback_type = fallback_type.or_else(|| {
+            // If obj is Index { expr: vec_expr, .. }, try the Vec's element type
+            if let Expr::Index { expr: vec_expr, .. } = &obj.node {
+                let vec_ty = self.infer_expr_type(vec_expr);
+                let inner_ty = match &vec_ty {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if let ResolvedType::Named { name, generics } = inner_ty {
+                    if name == "Vec" && !generics.is_empty() {
+                        let elem = &generics[0];
+                        match elem {
+                            ResolvedType::Named { .. } => Some(elem.clone()),
+                            ResolvedType::Generic(t) => {
+                                // Only use substitution if it resolves to a Named type
+                                self.generics.substitutions.get(t).and_then(|c| {
+                                    if matches!(c, ResolvedType::Named { .. }) {
+                                        Some(c.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        // If we still couldn't resolve, search all known structs for the field name
+        let fallback_type = fallback_type.or_else(|| {
+            for (struct_name, struct_info) in &self.types.structs {
+                if struct_info.fields.iter().any(|(n, _)| n == &field.node) {
+                    return Some(ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: vec![],
+                    });
+                }
+            }
+            None
+        });
+
+        if let Some(ResolvedType::Named { name: ref fallback_name, .. }) = fallback_type {
+            let type_name = self.resolve_struct_name(fallback_name);
+            let type_name = if self.types.structs.contains_key(&type_name) {
+                type_name
+            } else if type_name.contains('$') {
+                let base = type_name.split('$').next().unwrap_or(&type_name).to_string();
+                if self.types.structs.contains_key(&base) { base } else { type_name }
+            } else {
+                type_name
+            };
+
+            if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
+                if let Some(field_idx) = struct_info
+                    .fields
+                    .iter()
+                    .position(|(n, _)| n == &field.node)
+                {
+                    let field_ty_raw = &struct_info.fields[field_idx].1;
+                    let field_ty = if !self.generics.substitutions.is_empty() {
+                        vais_types::substitute_type(field_ty_raw, &self.generics.substitutions)
+                    } else {
+                        field_ty_raw.clone()
+                    };
+                    let llvm_ty = self.type_to_llvm(&field_ty);
+
+                    // obj_val is an i64 (erased struct value from Vec).
+                    // Reinterpret as a pointer to the struct type, then GEP to the field.
+                    let struct_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to %{}*",
+                        struct_ptr,
+                        obj_val,
+                        type_name
+                    );
+
+                    let field_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                        field_ptr,
+                        type_name,
+                        type_name,
+                        struct_ptr,
+                        field_idx
+                    );
+
+                    if matches!(field_ty, ResolvedType::Named { .. }) {
+                        return Ok((field_ptr, ir));
+                    }
+
+                    let result = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        result,
+                        llvm_ty,
+                        llvm_ty,
+                        field_ptr
+                    );
+
+                    return Ok((result, ir));
+                }
+            }
+        }
+
         // Field access on non-struct/non-union type is an error
         let type_desc = format!("{}", self.infer_expr_type(obj));
         Err(CodegenError::TypeError(format!(

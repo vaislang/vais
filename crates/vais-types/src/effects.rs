@@ -198,7 +198,9 @@ impl EffectInferrer {
             }
 
             // Field access is pure (reading)
-            Expr::Field { expr, .. } => self.infer_expr_effects(&expr.node, functions),
+            Expr::Field { expr, .. } | Expr::TupleFieldAccess { expr, .. } => {
+                self.infer_expr_effects(&expr.node, functions)
+            }
 
             // Index access is pure (reading)
             Expr::Index { expr, index, .. } => {
