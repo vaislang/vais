@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775054517682,
+  "lastUpdate": 1775265716946,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -33911,6 +33911,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 842177,
             "range": "± 9389",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "dc5e6744341dfcd7fc3caedfbe24d030f1f78b21",
+          "message": "feat: v0.1.0 release — codegen fixes, dead keyword cleanup, docs modernization\n\nCodegen bug fixes:\n- Fix Vec<struct> field access SIGSEGV (alloca+memcpy loading, generics preservation)\n- Fix cross-module struct type resolution (generated_structs lookup, prefix scan)\n- Fix generic function struct return type erasure (3-strategy cascading lookup)\n\nDead keyword removal:\n- Remove unused Token::Weak, Token::Clone, Token::Consume from lexer/parser/bindings\n\nDocumentation & ecosystem modernization:\n- LANGUAGE_SPEC.md: Phase 158 strict coercion, Phase 182 features, [Experimental] tags\n- CHANGELOG.md: v0.1.0 release notes (Added/Changed/Removed/Fixed)\n- BASELINE.md: Phase 182 benchmarks (850K lines/sec, self-hosting stats)\n- Playground: 2 new examples (Vec<struct>, Type Casting), keyword updates\n- Website: v0.1.0, Production Ready ecosystem section\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-04T10:16:48+09:00",
+          "tree_id": "418147973aec0a0578f8556864077000e0354360",
+          "url": "https://github.com/vaislang/vais/commit/dc5e6744341dfcd7fc3caedfbe24d030f1f78b21"
+        },
+        "date": 1775265716565,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3607,
+            "range": "± 55",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7076,
+            "range": "± 147",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8150,
+            "range": "± 94",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14355,
+            "range": "± 212",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18724,
+            "range": "± 223",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35959,
+            "range": "± 268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33127,
+            "range": "± 2414",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70320,
+            "range": "± 1034",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 302370,
+            "range": "± 2580",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 466790,
+            "range": "± 3711",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 116580,
+            "range": "± 948",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 802662,
+            "range": "± 8038",
             "unit": "ns/iter"
           }
         ]
