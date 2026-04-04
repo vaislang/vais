@@ -182,17 +182,21 @@ pub enum Token {
     #[regex(r"0[xX][0-9a-fA-F][0-9a-fA-F_]*", |lex| {
         let s = lex.slice().replace('_', "");
         let hex_str = &s[2..]; // skip "0x"
-        i64::from_str_radix(hex_str, 16).ok()
+        // Parse as u64 first to support full u64 range (e.g. 0xcbf29ce484222325),
+        // then reinterpret bits as i64 (wrapping cast, same as Rust's `as i64`).
+        u64::from_str_radix(hex_str, 16).ok().map(|v| v as i64)
     })]
     #[regex(r"0[bB][01][01_]*", |lex| {
         let s = lex.slice().replace('_', "");
         let bin_str = &s[2..]; // skip "0b"
-        i64::from_str_radix(bin_str, 2).ok()
+        // Parse as u64 first to support full u64 range, then reinterpret as i64.
+        u64::from_str_radix(bin_str, 2).ok().map(|v| v as i64)
     })]
     #[regex(r"0[oO][0-7][0-7_]*", |lex| {
         let s = lex.slice().replace('_', "");
         let oct_str = &s[2..]; // skip "0o"
-        i64::from_str_radix(oct_str, 8).ok()
+        // Parse as u64 first to support full u64 range, then reinterpret as i64.
+        u64::from_str_radix(oct_str, 8).ok().map(|v| v as i64)
     })]
     #[regex(r"[0-9][0-9_]*", |lex| lex.slice().replace('_', "").parse::<i64>().ok())]
     Int(i64),
