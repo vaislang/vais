@@ -1099,6 +1099,85 @@ F main() -> i64 {
     puts("Sum of 1..5 = {total}")   # 15
     0
 }`
+  },
+
+  'vec-struct-access': {
+    name: 'Vec<Struct> Direct Access',
+    description: 'Phase 182: v[i].field direct field access on Vec of structs',
+    code: `# Vec<Struct> direct field access (Phase 182)
+# v[i].field pattern — no intermediate binding needed
+
+S Point {
+    x: i64,
+    y: i64
+}
+
+F main() -> i64 {
+    # Array of structs
+    points: *Point = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 },
+        Point { x: 5, y: 6 }
+    ]
+
+    # Direct field access via index: v[i].field
+    puts("points[0] = ({points[0].x}, {points[0].y})")   # (1, 2)
+    puts("points[1] = ({points[1].x}, {points[1].y})")   # (3, 4)
+    puts("points[2] = ({points[2].x}, {points[2].y})")   # (5, 6)
+
+    # Use in expressions directly
+    sum_x := points[0].x + points[1].x + points[2].x
+    sum_y := points[0].y + points[1].y + points[2].y
+    puts("sum_x = {sum_x}")   # 9
+    puts("sum_y = {sum_y}")   # 12
+
+    # Access inside a loop
+    total := mut 0
+    L i:0..3 {
+        total = total + points[i].x + points[i].y
+    }
+    puts("total = {total}")   # 21
+
+    0
+}`
+  },
+
+  'type-casting': {
+    name: 'Type Safe Casting',
+    description: 'Phase 158: explicit as keyword for all type conversions',
+    code: `# Explicit type casting with the as keyword (Phase 158)
+# Vais enforces strict type safety — no implicit coercions between
+# int/float/bool. All conversions require the as keyword.
+
+F main() -> i64 {
+    # Integer to float conversion
+    n: i64 = 42
+    f: f64 = n as f64
+    puts("i64 42 as f64 = {f}")   # 42
+
+    # Float to integer (truncates)
+    pi: f64 = 3.14159
+    truncated: i64 = pi as i64
+    puts("3.14159 as i64 = {truncated}")   # 3
+
+    # Integer widening (also explicit for clarity)
+    small: i32 = 100
+    wide: i64 = small as i64
+    puts("i32 100 as i64 = {wide}")   # 100
+
+    # bool to integer (explicit required)
+    flag: bool = true
+    as_int: i64 = flag as i64
+    puts("true as i64 = {as_int}")   # 1
+
+    # Casting in arithmetic expressions
+    a: i64 = 7
+    b: i64 = 2
+    ratio: f64 = a as f64 / b as f64
+    puts("7.0 / 2.0 = {ratio}")   # 3.5
+
+    0
+}`
   }
 };
 

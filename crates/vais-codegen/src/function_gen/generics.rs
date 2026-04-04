@@ -329,11 +329,44 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&t.node);
             vais_types::substitute_type(&ty, &self.generics.substitutions)
         } else {
-            self.types
+            // Bug fix: try multiple lookup strategies in order since specialized
+            // functions may be registered under the mangled name (e.g., "Cell_get$bool")
+            // rather than the base name (e.g., "Cell_get").
+            //
+            // Strategy 1: base name (original behavior)
+            let by_base = self
+                .types
                 .functions
                 .get(&generic_fn.name.node)
-                .map(|info| &info.signature.ret)
-                .cloned() // explicit single clone at end
+                .map(|info| info.signature.ret.clone());
+
+            // Strategy 2: mangled name (specialized function registration)
+            let by_mangled = || {
+                self.types
+                    .functions
+                    .get(&inst.mangled_name)
+                    .map(|info| info.signature.ret.clone())
+            };
+
+            // Strategy 3: resolved_function_sigs from the type checker (base name, then mangled)
+            let by_resolved = || {
+                self.types
+                    .resolved_function_sigs
+                    .get(&generic_fn.name.node)
+                    .map(|sig| sig.ret.clone())
+                    .or_else(|| {
+                        self.types
+                            .resolved_function_sigs
+                            .get(&inst.mangled_name)
+                            .map(|sig| sig.ret.clone())
+                    })
+            };
+
+            // Use the first non-Unit result, or fall back to Unit
+            by_base
+                .filter(|t| *t != ResolvedType::Unit)
+                .or_else(by_mangled)
+                .or_else(by_resolved)
                 .unwrap_or(ResolvedType::Unit)
         };
 
@@ -403,7 +436,17 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
-                if ret_type == ResolvedType::Unit {
+                // Bug 2 safety check: if ret_type resolved to Unit but the generated
+                // function signature uses a non-void return type (detected via ret_llvm),
+                // prefer the signature type to avoid LLVM IR validation failures.
+                // Both ret_type and ret_llvm are derived from the same source, so this
+                // check catches any future divergence between them.
+                let effective_ret_llvm = &ret_llvm;
+                if ret_type == ResolvedType::Unit && effective_ret_llvm != "void" {
+                    // Signature says non-void but ret_type says Unit — trust the signature.
+                    // Attempt to return the body value as the declared type.
+                    write_ir!(ir, "  ret {} {}", effective_ret_llvm, value);
+                } else if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     let loaded = format!("%ret.{}", counter);
@@ -433,7 +476,11 @@ impl CodeGenerator {
                 // If the block already contains a terminator (e.g., explicit `R 42`),
                 // do not emit a duplicate ret instruction.
                 if !terminated {
-                    if ret_type == ResolvedType::Unit {
+                    // Bug 2 safety check: if ret_type resolved to Unit but the generated
+                    // function signature uses a non-void return type, trust the signature.
+                    if ret_type == ResolvedType::Unit && ret_llvm != "void" {
+                        write_ir!(ir, "  ret {} {}", ret_llvm, value);
+                    } else if ret_type == ResolvedType::Unit {
                         ir.push_str("  ret void\n");
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
                         if self.is_block_result_value(stmts) {

@@ -1743,7 +1743,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Linear => 123,   // TOK_KW_LINEAR
         Token::Affine => 124,   // TOK_KW_AFFINE
         Token::Move => 125,     // TOK_KW_MOVE
-        Token::Consume => 126,  // TOK_KW_CONSUME
         Token::Lazy => 127,     // TOK_KW_LAZY
         Token::Force => 128,    // TOK_KW_FORCE
         Token::Where => 129,    // TOK_KW_WHERE
@@ -1851,8 +1850,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         // Tokens not yet in selfhost lexer (return -1 for "not mapped")
         // These are rarely used features that can be added later if needed
         Token::DocComment(_) => -1, // Doc comments are stripped by the lexer anyway
-        Token::Weak => -1,          // weak references (rare)
-        Token::Clone => -1,         // clone (rare)
         Token::Pure => -1,          // pure functions (effect system)
         Token::Effect => -1,        // effect system
         Token::Io => -1,            // io effect

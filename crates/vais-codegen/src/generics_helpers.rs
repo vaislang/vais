@@ -23,12 +23,38 @@ impl CodeGenerator {
     /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
     #[inline]
     pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
+        // 1. Direct hit in the struct registry — use as-is.
         if self.types.structs.contains_key(name) {
             return name.to_string();
         }
+        // 2. Alias registered for this base name (e.g., "Box" -> "Box$i64").
         if let Some(mangled) = self.generics.struct_aliases.get(name) {
             return mangled.clone();
         }
+        // 3. Already a specialized/mangled struct name (e.g., "Point$i64") in generated_structs.
+        if self.generics.generated_structs.contains_key(name) {
+            return name.to_string();
+        }
+        // 4. If the name contains '$', it is already in mangled form — accept as-is even if
+        //    the struct hasn't been emitted yet (it will be resolved later by the LLVM emitter).
+        if name.contains('$') {
+            return name.to_string();
+        }
+        // 5. If the name is a plain base name, try to find any generated struct whose
+        //    mangled name starts with "<name>$" (picks the first/only specialization).
+        //    This handles cross-module access where only one specialization exists.
+        let prefix = format!("{name}$");
+        if let Some(mangled_key) = self
+            .generics
+            .generated_structs
+            .keys()
+            .find(|k| k.starts_with(&prefix))
+        {
+            return mangled_key.clone();
+        }
+        // Final fallback: return name unchanged.
+        // Note: this may fail later during LLVM type lookup — the caller is responsible
+        // for handling unknown struct names gracefully.
         name.to_string()
     }
 

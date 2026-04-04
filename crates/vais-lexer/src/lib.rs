@@ -90,10 +90,6 @@ pub enum Token {
     Await,
     #[token("yield")]
     Yield,
-    #[token("weak")]
-    Weak,
-    #[token("clone")]
-    Clone,
     #[token("const")]
     Const,
     #[token("comptime")]
@@ -122,8 +118,6 @@ pub enum Token {
     Affine,
     #[token("move")]
     Move,
-    #[token("consume")]
-    Consume,
     #[token("where")]
     Where,
 
@@ -438,8 +432,6 @@ impl fmt::Display for Token {
             Token::False => write!(f, "false"),
             Token::Spawn => write!(f, "spawn"),
             Token::Await => write!(f, "Y"),
-            Token::Weak => write!(f, "weak"),
-            Token::Clone => write!(f, "clone"),
             Token::Const => write!(f, "const"),
             Token::Comptime => write!(f, "comptime"),
             Token::Dyn => write!(f, "dyn"),
@@ -531,7 +523,6 @@ impl fmt::Display for Token {
             Token::Linear => write!(f, "linear"),
             Token::Affine => write!(f, "affine"),
             Token::Move => write!(f, "move"),
-            Token::Consume => write!(f, "consume"),
             Token::Where => write!(f, "where"),
             // Lifetime
             Token::Lifetime(name) => write!(f, "'{}", name),

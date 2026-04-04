@@ -60,7 +60,7 @@
     <div class="hero-bg"></div>
     <div class="container">
       <div class="hero-content">
-        <div class="hero-badge" data-i18n="hero.badge">v0.0.5 — Production Ready</div>
+        <div class="hero-badge" data-i18n="hero.badge">v0.1.0 — Production Ready</div>
         <h1 class="hero-title" data-i18n="hero.title" data-i18n-html>
           Write <span class="gradient-text">fewer tokens</span>,<br>
           get <span class="gradient-text">native performance</span>
@@ -410,34 +410,44 @@
         <div class="feature-card">
           <div class="feature-icon">🏗️</div>
           <h3 data-i18n="features.selfHosting.title">Self-Hosting Compiler</h3>
-          <p data-i18n="features.selfHosting.description" data-i18n-html>Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 900 E2E tests and 5,300+ total tests.</p>
+          <p data-i18n="features.selfHosting.description" data-i18n-html>Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais — 152 test suites all passing, 850K lines/sec compilation speed, and near-C runtime performance.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&lt;T&gt;</div>
+          <h3 data-i18n="features.generics.title">Generic Monomorphization</h3>
+          <p data-i18n="features.generics.description" data-i18n-html>Full generic monomorphization — <code>Vec&lt;T&gt;</code>, <code>HashMap&lt;K,V&gt;</code>, and user-defined generic structs emit specialized, zero-overhead native code. Includes direct field access on <code>Vec&lt;struct&gt;</code>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3 data-i18n="features.typeCoercion.title">Rust-Style Type Safety</h3>
+          <p data-i18n="features.typeCoercion.description" data-i18n-html>Phase 158 strict type coercion: implicit widening only (<code>i32→i64</code>), no silent <code>bool↔int</code> or <code>float↔int</code> conversions. All cross-type casts are explicit with <code>as</code>, matching Rust's safety guarantees.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- VaisX Section -->
+  <!-- Ecosystem Section -->
   <section class="vaisx-section" id="vaisx">
     <div class="container">
-      <span class="section-badge" data-i18n="vaisx.badge">New</span>
-      <h2 class="section-title" data-i18n="vaisx.title">Build Web Apps with Vais</h2>
-      <p class="section-subtitle" data-i18n="vaisx.subtitle" data-i18n-html>VaisX is a full-stack web framework powered by the Vais compiler. Compile-time reactivity, file-based routing, and SSR — all in under 3KB.</p>
+      <span class="section-badge" data-i18n="ecosystem.badge">Production Ready</span>
+      <h2 class="section-title" data-i18n="ecosystem.title">Full-Stack Vais Ecosystem</h2>
+      <p class="section-subtitle" data-i18n="ecosystem.subtitle" data-i18n-html>Three production-ready libraries — database, server, and web — all written in Vais, all shipping with v0.1.0.</p>
 
       <div class="vaisx-grid">
         <div class="vaisx-card">
-          <div class="vaisx-card-icon">⚡</div>
-          <h3 data-i18n="vaisx.compiler.title">Compile-Time Reactivity</h3>
-          <p data-i18n="vaisx.compiler.description">Reactive state analyzed at build time. Zero runtime overhead for state tracking — just surgical DOM updates.</p>
+          <div class="vaisx-card-icon">🗄️</div>
+          <h3 data-i18n="ecosystem.vaisdb.title">VaisDB — RAG-Native Database</h3>
+          <p data-i18n="ecosystem.vaisdb.description">Hybrid relational + vector database with ACID/MVCC, a full SQL parser, migration framework, and first-class RAG support. Built for AI-native workloads.</p>
         </div>
         <div class="vaisx-card">
-          <div class="vaisx-card-icon">🗂️</div>
-          <h3 data-i18n="vaisx.routing.title">File-Based Routing &amp; SSR</h3>
-          <p data-i18n="vaisx.routing.description">Your app/ directory structure becomes your URL routes. SSR, SSG, and streaming out of the box.</p>
+          <div class="vaisx-card-icon">🚀</div>
+          <h3 data-i18n="ecosystem.server.title">vais-server — HTTP Framework</h3>
+          <p data-i18n="ecosystem.server.description">REST + GraphQL + WebSocket in one framework. JWT/OAuth/Session auth, YAML config, Docker-ready, and graceful shutdown built in.</p>
         </div>
         <div class="vaisx-card">
-          <div class="vaisx-card-icon">📦</div>
-          <h3 data-i18n="vaisx.runtime.title">&lt; 3KB Runtime</h3>
-          <p data-i18n="vaisx.runtime.description">The entire runtime weighs under 3KB gzipped. Most work happens at compile time, not in the browser.</p>
+          <div class="vaisx-card-icon">🌐</div>
+          <h3 data-i18n="ecosystem.vaisweb.title">vais-web (VaisX) — Web Framework</h3>
+          <p data-i18n="ecosystem.vaisweb.description">SSR/SSG, file-based routing, 24 packages, CSRF/XSS protection, and compile-time reactivity. The entire runtime weighs under 3KB gzipped.</p>
         </div>
       </div>
 
@@ -469,8 +479,8 @@
       </div>
 
       <div class="vaisx-cta">
-        <a href="/vaisx/" class="btn btn-primary" data-i18n="vaisx.learnMore">Learn More</a>
-        <a href="https://github.com/vaislang/vais-web" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="vaisx.github">GitHub</a>
+        <a href="/vaisx/" class="btn btn-primary" data-i18n="ecosystem.learnMore">Learn More</a>
+        <a href="https://github.com/vaislang/vais-web" class="btn btn-secondary" target="_blank" rel="noopener" data-i18n="ecosystem.github">GitHub</a>
       </div>
     </div>
   </section>

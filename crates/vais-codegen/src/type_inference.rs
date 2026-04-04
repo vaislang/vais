@@ -284,8 +284,28 @@ impl CodeGenerator {
                     // PascalCase identifier not found in locals — likely a cross-module
                     // struct/enum type name. Return Named type so downstream field access
                     // and method call resolution can work.
+                    //
+                    // When the struct/enum is actually registered, use the resolved name
+                    // (which may be a mangled specialization). This ensures that cross-module
+                    // field access generates correct IR when the struct is found in the registry.
+                    let resolved_name =
+                        if self.types.structs.contains_key(name.as_str())
+                            || self.types.enums.contains_key(name.as_str())
+                        {
+                            // Struct/enum is directly registered — use its canonical name.
+                            name.clone()
+                        } else if self.generics.generated_structs.contains_key(name.as_str()) {
+                            // Already a specialized/mangled struct name (e.g., "Point$i64").
+                            name.clone()
+                        } else if let Some(mangled) = self.generics.struct_aliases.get(name.as_str()) {
+                            // Base generic name has a registered specialization alias.
+                            mangled.clone()
+                        } else {
+                            // Not found anywhere — return as-is; may be resolved later.
+                            name.clone()
+                        };
                     ResolvedType::Named {
-                        name: name.clone(),
+                        name: resolved_name,
                         generics: vec![],
                     }
                 } else {

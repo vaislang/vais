@@ -354,16 +354,19 @@ impl CodeGenerator {
 
         // Infer element type for correct LLVM IR generation
         let arr_ty = self.infer_expr_type(array);
-        let (elem_llvm_ty, is_fat_ptr) = match arr_ty {
-            vais_types::ResolvedType::Pointer(ref elem) => (self.type_to_llvm(elem), false),
-            vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false),
+        // elem_resolved_ty holds the full ResolvedType for Vec element (used for struct detection)
+        let (elem_llvm_ty, is_fat_ptr, elem_resolved_ty) = match arr_ty {
+            vais_types::ResolvedType::Pointer(ref elem) => (self.type_to_llvm(elem), false, None),
+            vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false, None),
             vais_types::ResolvedType::Slice(ref elem)
-            | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true),
+            | vais_types::ResolvedType::SliceMut(ref elem) => (self.type_to_llvm(elem), true, None),
             // Vec<T>[idx] → element type T, access via data pointer
             vais_types::ResolvedType::Named {
                 ref name,
                 ref generics,
-            } if name == "Vec" && !generics.is_empty() => (self.type_to_llvm(&generics[0]), false),
+            } if name == "Vec" && !generics.is_empty() => {
+                (self.type_to_llvm(&generics[0]), false, Some(generics[0].clone()))
+            }
             // &Vec<T>[idx]
             vais_types::ResolvedType::Ref(ref inner)
             | vais_types::ResolvedType::RefMut(ref inner) => {
@@ -372,27 +375,27 @@ impl CodeGenerator {
                         ref name,
                         ref generics,
                     } if name == "Vec" && !generics.is_empty() => {
-                        (self.type_to_llvm(&generics[0]), false)
+                        (self.type_to_llvm(&generics[0]), false, Some(generics[0].clone()))
                     }
                     vais_types::ResolvedType::Slice(ref elem)
                     | vais_types::ResolvedType::SliceMut(ref elem) => {
-                        (self.type_to_llvm(elem), true)
+                        (self.type_to_llvm(elem), true, None)
                     }
-                    vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false),
+                    vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false, None),
                     _ => {
                         // Treat as i64 pointer indexing
-                        ("i64".to_string(), false)
+                        ("i64".to_string(), false, None)
                     }
                 }
             }
             // Str indexing → byte access
-            vais_types::ResolvedType::Str => ("i8".to_string(), true),
+            vais_types::ResolvedType::Str => ("i8".to_string(), true, None),
             // Named types (non-Vec) that may have operator overloading or custom indexing
             vais_types::ResolvedType::Named { .. }
             | vais_types::ResolvedType::Unknown
             | vais_types::ResolvedType::Generic(_) => {
                 // Fallback: treat as i64 pointer for named/unknown types
-                ("i64".to_string(), false)
+                ("i64".to_string(), false, None)
             }
             ref other => {
                 // Concrete non-indexable types (i64, f64, bool, etc.) — return error
@@ -531,6 +534,44 @@ impl CodeGenerator {
                     elem_ptr_i8,
                     elem_llvm_ty
                 );
+
+                // Bug 3 fix: if the element type is a struct (LLVM type starts with '%'),
+                // allocate a local copy via alloca + memcpy so that field access GEP can
+                // use a properly-typed struct pointer rather than a raw i64 value.
+                if elem_llvm_ty.starts_with('%') {
+                    let alloca = self.next_temp(counter);
+                    self.emit_entry_alloca(&alloca, &elem_llvm_ty);
+                    let alloca_i8 = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {}* {} to i8*",
+                        alloca_i8,
+                        elem_llvm_ty,
+                        alloca
+                    );
+                    write_ir!(
+                        ir,
+                        "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                        alloca_i8,
+                        elem_ptr_i8,
+                        elem_size_val
+                    );
+                    // Register element type for field access / call-arg coercion
+                    if let Some(ref resolved) = elem_resolved_ty {
+                        self.fn_ctx.register_temp_type(&alloca, resolved.clone());
+                    } else {
+                        let struct_name = elem_llvm_ty.trim_start_matches('%');
+                        self.fn_ctx.register_temp_type(
+                            &alloca,
+                            vais_types::ResolvedType::Named {
+                                name: struct_name.to_string(),
+                                generics: vec![],
+                            },
+                        );
+                    }
+                    return Ok((alloca, ir));
+                }
+
                 let result = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -577,15 +618,21 @@ impl CodeGenerator {
             self.fn_ctx
                 .register_temp_type(&result, vais_types::ResolvedType::Str);
         } else if elem_llvm_ty.starts_with('%') {
-            // Named struct type — override with precise Named type
-            let name = elem_llvm_ty.trim_start_matches('%');
-            self.fn_ctx.register_temp_type(
-                &result,
-                vais_types::ResolvedType::Named {
-                    name: name.to_string(),
-                    generics: vec![],
-                },
-            );
+            // Bug 1 fix: Named struct type — use full ResolvedType from elem_resolved_ty when
+            // available so that generics (e.g., Cell<bool> → Cell$bool) are preserved.
+            // Hardcoding generics: vec![] would make specialized structs unfindable downstream.
+            if let Some(ref resolved) = elem_resolved_ty {
+                self.fn_ctx.register_temp_type(&result, resolved.clone());
+            } else {
+                let name = elem_llvm_ty.trim_start_matches('%');
+                self.fn_ctx.register_temp_type(
+                    &result,
+                    vais_types::ResolvedType::Named {
+                        name: name.to_string(),
+                        generics: vec![],
+                    },
+                );
+            }
         }
 
         Ok((result, ir))
@@ -647,6 +694,29 @@ impl CodeGenerator {
         } = resolved_type
         {
             let type_name = self.resolve_struct_name(orig_type_name);
+            // Bug 2 fix: resolve_struct_name may return an unresolved name if the struct
+            // was not found in types.structs or struct_aliases. Also check generated_structs
+            // (specialized types like Cell$bool) and fall back to the base struct name
+            // (stripping the '$' mangling suffix) if still not found.
+            let type_name = if self.types.structs.contains_key(&type_name) {
+                type_name
+            } else if self.generics.generated_structs.contains_key(&type_name)
+                && self.types.structs.contains_key(&type_name)
+            {
+                type_name
+            } else if type_name.contains('$') {
+                // Mangled specialized name: try looking it up directly in types.structs
+                // (generated_specialized_struct_type inserts with mangled name as key)
+                if self.types.structs.contains_key(&type_name) {
+                    type_name
+                } else {
+                    // Fall back to base name (before '$') to get field layout
+                    let base = type_name.split('$').next().unwrap_or(&type_name).to_string();
+                    if self.types.structs.contains_key(&base) { base } else { type_name }
+                }
+            } else {
+                type_name
+            };
             // First check if it's a struct
             if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
                 let field_idx = struct_info

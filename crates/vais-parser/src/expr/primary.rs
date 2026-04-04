@@ -995,8 +995,6 @@ impl Parser {
             Token::SelfLower => "self".to_string(),
             Token::Str => "str".to_string(),
             Token::Bool => "bool".to_string(),
-            Token::Clone => "clone".to_string(),
-            Token::Weak => "weak".to_string(),
             Token::Global => "G".to_string(),
             _ => {
                 return Err(ParseError::UnexpectedToken {

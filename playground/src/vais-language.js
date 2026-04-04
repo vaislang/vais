@@ -14,7 +14,8 @@ export function registerVaisLanguage(monaco) {
       'break', 'continue', 'return', 'true', 'false',
       'async', 'await', 'pub', 'mut', 'const', 'static',
       'where', 'self', 'Self', 'super',
-      'extern', 'type'
+      'extern', 'type',
+      'as', 'lazy', 'force'
     ],
 
     typeKeywords: [

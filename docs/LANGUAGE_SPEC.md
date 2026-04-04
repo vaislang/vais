@@ -1,6 +1,6 @@
 # Vais Language Specification
 
-Version: 1.0.0
+Version: v0.1.0
 
 ## Table of Contents
 
@@ -42,6 +42,14 @@ Vais is a token-efficient, AI-optimized systems programming language designed to
 - **LLVM-based compilation** for native performance
 - **Type inference** with minimal annotations
 - **Advanced features**: Generics, Traits, Async/Await, Pattern Matching
+
+### Phase 182 Milestones
+
+As of Phase 182, the Vais compiler has reached the following milestones:
+
+- **Self-hosting compiler**: The Vais compiler (`selfhost/`) is implemented in Vais itself, totaling 50,000+ lines of Vais source code.
+- **Generic monomorphization**: Generics are compiled using a hybrid monomorphization approach — specializing concrete types at compile time while sharing code where possible, balancing binary size and performance.
+- **`Vec<struct>` direct field access**: Fields of structs stored inside `Vec<T>` can be accessed directly without intermediate bindings (e.g., `vec.get(i).field` works correctly).
 
 ---
 
@@ -146,8 +154,6 @@ Note: The `C` keyword has dual meaning - `C` for continue in loops, and `C` for 
 - `true`, `false` - Boolean literals
 - `spawn` - Spawn async task
 - `await` - Await async result (also available as `Y` shorthand)
-- `weak` - Weak reference
-- `clone` - Clone operation
 - `yield` - Yield value in iterator/coroutine (simplified implementation)
 
 ### Shorthand Keywords (Phase 29)
@@ -195,6 +201,60 @@ Option<T>   # Generic Option type
 Vec<T>      # Generic vector type
 Pair<A, B>  # Multiple type parameters
 ```
+
+### Type Conversion Rules (Phase 158)
+
+Vais uses strict Rust-style type coercion. Implicit widening is allowed only in a narrow set of cases; all other conversions require an explicit `as` cast. These rules were finalized in **Phase 158** to eliminate the yo-yo pattern where `unification.rs` coercion was toggled repeatedly.
+
+**Implicit (automatic) conversions:**
+- Integer widening: `i8 → i16 → i32 → i64`, `u8 → u16 → u32 → u64`
+- Float literal inference: `f32 ↔ f64` (the literal is inferred from context, identical to Rust behavior)
+
+**Prohibited implicit conversions — explicit `as` required:**
+- `bool ↔ i64`: use `flag as i64` or `n != 0`
+- `int ↔ float`: use `x as f64` or `y as i64`
+- `str ↔ i64`: use parsing functions or `n as str`
+- Integer narrowing (`i64 → i32`): use `x as i32`
+
+```vais
+# Allowed implicit widening
+x: i8 = 10
+y: i64 = x          # OK: i8 → i64
+
+# Explicit cast required
+flag: bool = true
+n: i64 = flag as i64        # OK: explicit as
+val: f64 = 3 as f64         # OK: explicit as
+
+# Prohibited — compile error
+bad: i64 = true             # ERROR: bool → i64 implicit
+bad2: i64 = 3.14            # ERROR: float → int implicit
+```
+
+**E2E protection test:** `vais-types/tests/phase158_type_strict.rs` enforces these rules.
+
+### Linear and Affine Types (Experimental)
+
+> **[Experimental]** Linear and affine type annotations are partially implemented. The borrow checker integration is incomplete. These features may change in future releases.
+
+**Linear types** (`linear T`) enforce that a value must be used exactly once:
+
+```vais
+# [Experimental] — borrow checker integration incomplete
+x: linear i64 = acquire_resource()
+use_resource(x)   # x is consumed here; using x again is a compile error
+```
+
+**Affine types** (`affine T`) enforce that a value is used at most once (may be dropped unused):
+
+```vais
+# [Experimental] — borrow checker integration incomplete
+x: affine i64 = acquire_resource()
+# x may be dropped without use, but cannot be used twice
+use_resource(x)
+```
+
+These types appear in the grammar as `LinearType` and `AffineType` but full enforcement via the borrow checker is a work-in-progress.
 
 ---
 
@@ -1916,7 +1976,11 @@ Stmt         ::= 'R' Expr? | 'B' Expr? | 'C' | 'D' Expr | LetStmt | Expr
 Type         ::= BaseType ['?' | '!']
 BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
                | PointerType | RefType | SliceType | DynTraitType
-               | LinearType | AffineType | ImplTraitType | DependentType | FnPtrType
+               | LinearType    (* [Experimental] — borrow checker integration incomplete *)
+               | AffineType    (* [Experimental] — borrow checker integration incomplete *)
+               | ImplTraitType
+               | DependentType (* [Experimental] *)
+               | FnPtrType
 
 Pattern      ::= '_' | Ident ['@' Pattern] | Ident '(' Patterns ')' | Literal
                | '(' Patterns ')' | Pattern '..' Pattern | Pattern '|' Pattern
