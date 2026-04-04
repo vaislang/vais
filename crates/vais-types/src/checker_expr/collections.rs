@@ -216,6 +216,49 @@ impl TypeChecker {
                 }))
             }
 
+            Expr::TupleFieldAccess {
+                expr: inner,
+                index,
+            } => {
+                let inner_type = match self.check_expr(inner) {
+                    Ok(t) => t,
+                    Err(e) => return Some(Err(e)),
+                };
+                // Unwrap references
+                let tuple_type = match &inner_type {
+                    ResolvedType::Tuple(_) => inner_type.clone(),
+                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) => *t.clone(),
+                    other => {
+                        return Some(Err(TypeError::Mismatch {
+                            expected: "tuple type".to_string(),
+                            found: other.to_string(),
+                            span: Some(inner.span),
+                        }));
+                    }
+                };
+                match tuple_type {
+                    ResolvedType::Tuple(ref fields) => {
+                        if *index >= fields.len() {
+                            return Some(Err(TypeError::Mismatch {
+                                expected: format!(
+                                    "tuple index in range 0..{} for {}-tuple",
+                                    fields.len(),
+                                    fields.len()
+                                ),
+                                found: format!("index {}", index),
+                                span: Some(expr.span),
+                            }));
+                        }
+                        Some(Ok(fields[*index].clone()))
+                    }
+                    other => Some(Err(TypeError::Mismatch {
+                        expected: "tuple type".to_string(),
+                        found: other.to_string(),
+                        span: Some(inner.span),
+                    })),
+                }
+            }
+
             Expr::Index { expr: inner, index } => {
                 let inner_type = match self.check_expr(inner) {
                     Ok(t) => t,

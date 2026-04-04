@@ -486,6 +486,10 @@ impl<'a> AstExpander<'a> {
             | Expr::Unit
             | Expr::SelfCall
             | Expr::Error { .. }) => e,
+            Expr::TupleFieldAccess { expr, index } => Expr::TupleFieldAccess {
+                expr: Box::new(self.expand_expr(*expr)?),
+                index,
+            },
         };
         Ok(Spanned::new(expanded, span))
     }

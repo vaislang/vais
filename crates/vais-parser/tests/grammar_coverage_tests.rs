@@ -1423,10 +1423,11 @@ fn grammar_sync_expr_variants() {
             | Expr::Error { .. }
             | Expr::Lazy(_)
             | Expr::Force(_)
-            | Expr::EnumAccess { .. } => {}
+            | Expr::EnumAccess { .. }
+            | Expr::TupleFieldAccess { .. } => {}
         }
     }
-    // Count: 47 variants as of Phase 152
+    // Count: 48 variants as of Phase 182
 }
 
 /// Compile-time guard: if Item variants change, this match will fail to compile.

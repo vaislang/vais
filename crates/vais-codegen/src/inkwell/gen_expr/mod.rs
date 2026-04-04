@@ -62,6 +62,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.generate_struct_literal(&name.node, fields)
             }
             Expr::Field { expr: obj, field } => self.generate_field_access(&obj.node, &field.node),
+            Expr::TupleFieldAccess { expr: obj, index } => {
+                self.generate_tuple_field_access(&obj.node, *index)
+            }
 
             // Array/Tuple/Index
             Expr::Array(elements) => self.generate_array(elements),

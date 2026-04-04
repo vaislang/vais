@@ -456,6 +456,9 @@ impl LintAnalyzer {
             | Expr::MacroInvoke(_)
             | Expr::Yield(_)
             | Expr::Error { .. } => {}
+            Expr::TupleFieldAccess { expr, .. } => {
+                self.collect_usages_in_expr(&expr.node);
+            }
         }
     }
 

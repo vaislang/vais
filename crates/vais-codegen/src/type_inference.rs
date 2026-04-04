@@ -215,7 +215,6 @@ impl CodeGenerator {
     /// Get the TC-resolved type for an expression, if available.
     /// This is more accurate than infer_expr_type but may not be available for all expressions.
     /// Use for targeted lookups where TC accuracy is critical (e.g., generic type resolution).
-    #[allow(dead_code)]
     pub(crate) fn tc_expr_type(&self, expr: &Spanned<Expr>) -> Option<&ResolvedType> {
         let span_key = (expr.span.start, expr.span.end);
         self.expr_types.get(&span_key)

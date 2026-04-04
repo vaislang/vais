@@ -363,6 +363,9 @@ impl Formatter {
                     format!("{}::{}", enum_name, variant)
                 }
             }
+            Expr::TupleFieldAccess { expr, index } => {
+                format!("{}.{}", self.format_expr(&expr.node), index)
+            }
         }
     }
 

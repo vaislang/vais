@@ -401,6 +401,9 @@ impl SecurityAnalyzer {
             | Expr::MacroInvoke(_)
             | Expr::Yield(_)
             | Expr::Error { .. } => {}
+            Expr::TupleFieldAccess { expr, .. } => {
+                self.analyze_expr(&expr.node, expr.span);
+            }
         }
     }
 

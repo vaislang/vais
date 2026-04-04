@@ -125,6 +125,10 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&expr.node)?;
                 Ok(format!("{e}.{}", sanitize_js_ident(&field.node)))
             }
+            Expr::TupleFieldAccess { expr, index } => {
+                let e = self.generate_expr(&expr.node)?;
+                Ok(format!("{e}[{index}]"))
+            }
             Expr::Index { expr, index } => {
                 let e = self.generate_expr(&expr.node)?;
                 let i = self.generate_expr(&index.node)?;

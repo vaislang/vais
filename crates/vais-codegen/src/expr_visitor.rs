@@ -66,6 +66,11 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_index(array, index, counter)
             }
             Expr::Field { expr: obj, field } => self.visit_field(obj, field, counter),
+            Expr::TupleFieldAccess { expr: obj, index } => {
+                // Treat tuple field access as regular field access with index as field name
+                let field_name = Spanned::new(index.to_string(), obj.span);
+                self.visit_field(obj, &field_name, counter)
+            }
             Expr::MethodCall {
                 receiver,
                 method,

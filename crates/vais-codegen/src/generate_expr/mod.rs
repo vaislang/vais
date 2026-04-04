@@ -172,6 +172,15 @@ impl CodeGenerator {
                 field,
             } => self.generate_field_expr(obj_expr, field, counter),
 
+            // Tuple field access: obj.0, obj.1
+            Expr::TupleFieldAccess {
+                expr: obj_expr,
+                index,
+            } => {
+                let field = Spanned::new(index.to_string(), obj_expr.span);
+                self.generate_field_expr(obj_expr, &field, counter)
+            }
+
             // Method call: obj.method(args)
             Expr::MethodCall {
                 receiver,

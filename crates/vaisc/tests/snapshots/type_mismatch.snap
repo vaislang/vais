@@ -1,1 +1,1 @@
-Type error: Mismatch { expected: "bool", found: "i64", span: None }
+Type error: Mismatch { expected: "str", found: "i64", span: None }

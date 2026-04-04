@@ -429,6 +429,9 @@ impl TreeShaker {
             Expr::Field { expr, .. } => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
+            Expr::TupleFieldAccess { expr, .. } => {
+                Self::collect_expr_deps(&expr.node, deps);
+            }
             Expr::Index { expr, index } => {
                 Self::collect_expr_deps(&expr.node, deps);
                 Self::collect_expr_deps(&index.node, deps);

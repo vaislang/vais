@@ -4,7 +4,7 @@
 //! indexing, await, try (?), unwrap (!), type casts (as), and static method calls (::).
 
 use vais_ast::*;
-use vais_lexer::Token;
+use vais_lexer::{SpannedToken, Token};
 
 use crate::{ParseError, ParseResult, Parser};
 
@@ -44,6 +44,28 @@ impl Parser {
                     self.advance_skip();
                     let end = self.prev_span().end;
                     expr = Spanned::new(Expr::Await(Box::new(expr)), Span::new(start, end));
+                } else if let Some(SpannedToken {
+                    token: Token::Int(n),
+                    ..
+                }) = self.peek().cloned()
+                {
+                    // Tuple field access: expr.0, expr.1, etc.
+                    if n < 0 {
+                        return Err(ParseError::UnexpectedToken {
+                            found: Token::Int(n),
+                            span: self.prev_span(),
+                            expected: "non-negative integer for tuple field access".into(),
+                        });
+                    }
+                    self.advance_skip();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(
+                        Expr::TupleFieldAccess {
+                            expr: Box::new(expr),
+                            index: n as usize,
+                        },
+                        Span::new(start, end),
+                    );
                 } else {
                     let field = self.parse_ident()?;
                     if self.check(&Token::LParen) {

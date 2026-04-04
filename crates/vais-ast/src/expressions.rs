@@ -97,6 +97,11 @@ pub enum Expr {
         expr: Box<Spanned<Expr>>,
         field: Spanned<String>,
     },
+    /// Tuple field access: `obj.0`, `obj.1`, etc.
+    TupleFieldAccess {
+        expr: Box<Spanned<Expr>>,
+        index: usize,
+    },
     /// Index: `arr[idx]`
     Index {
         expr: Box<Spanned<Expr>>,
