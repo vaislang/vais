@@ -37,7 +37,7 @@ F pb_buf_new() -> i64 {
 F pb_buf_ensure(buf: i64, needed: i64) -> i64 {
     len := load_i64(buf + 8)
     cap := load_i64(buf + 16)
-    I len + needed <= cap { 0 } E {
+    I len + needed <= cap { 0 } EL {
         new_cap := cap * 2
         I new_cap < len + needed { new_cap = len + needed + 256 }
         new_data := malloc(new_cap)
@@ -96,12 +96,12 @@ F pb_encode_varint_rec(buf: i64, v: i64, count: i64) -> i64 {
         pb_buf_write_byte(buf, byte)
         count + 1
     }
-    E I next == 0 && byte == (v & 127) {
+    EL I next == 0 && byte == (v & 127) {
         # Positive number, final byte
         pb_buf_write_byte(buf, byte)
         count + 1
     }
-    E {
+    EL {
         pb_buf_write_byte(buf, byte | 128)
         pb_encode_varint_rec(buf, next, count + 1)
     }
@@ -116,16 +116,16 @@ F pb_decode_varint(r: i64) -> i64 {
 F pb_decode_varint_rec(r: i64, result: i64, shift: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos >= len { 0 - 1 } E {
+    I pos >= len { 0 - 1 } EL {
         data := load_i64(r)
         byte := load_byte(data + pos)
         store_i64(r + 8, pos + 1)
         new_result := result | ((byte & 127) << shift)
         I (byte & 128) == 0 {
             new_result
-        } E {
+        } EL {
             I shift >= 63 { new_result }
-            E { pb_decode_varint_rec(r, new_result, shift + 7) }
+            EL { pb_decode_varint_rec(r, new_result, shift + 7) }
         }
     }
 }
@@ -138,14 +138,14 @@ F pb_decode_varint_rec(r: i64, result: i64, shift: i64) -> i64 {
 F pb_zigzag_encode(n: i64) -> i64 {
     # (n << 1) ^ (n >> 63)
     I n >= 0 { n * 2 }
-    E { (0 - n) * 2 - 1 }
+    EL { (0 - n) * 2 - 1 }
 }
 
 F pb_zigzag_decode(n: i64) -> i64 {
     # (n >>> 1) ^ -(n & 1)
     half := (n >> 1) & 4611686018427387903  # logical right shift
     I (n & 1) == 0 { half }
-    E { 0 - half - 1 }
+    EL { 0 - half - 1 }
 }
 
 # =====================================================
@@ -187,7 +187,7 @@ F pb_write_sint_field(buf: i64, field_num: i64, value: i64) -> i64 {
 F pb_write_bool_field(buf: i64, field_num: i64, value: i64) -> i64 {
     tag := pb_make_tag(field_num, 0)
     pb_encode_varint(buf, tag)
-    pb_encode_varint(buf, I value != 0 { 1 } E { 0 })
+    pb_encode_varint(buf, I value != 0 { 1 } EL { 0 })
 }
 
 # Write a 64-bit fixed field (wire type 1)
@@ -269,7 +269,7 @@ F pb_write_packed_varint_field(buf: i64, field_num: i64, values: i64, count: i64
 }
 
 F pb_encode_packed_varints_rec(buf: i64, values: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         v := load_i64(values + idx * 8)
         pb_encode_varint(buf, v)
         pb_encode_packed_varints_rec(buf, values, count, idx + 1)
@@ -306,7 +306,7 @@ F pb_reader_pos(r: i64) -> i64 {
 F pb_reader_read_byte(r: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos >= len { 0 - 1 } E {
+    I pos >= len { 0 - 1 } EL {
         data := load_i64(r)
         b := load_byte(data + pos)
         store_i64(r + 8, pos + 1)
@@ -317,9 +317,9 @@ F pb_reader_read_byte(r: i64) -> i64 {
 # Read next field from reader
 # Returns field struct pointer, or 0 if no more fields
 F pb_read_field(r: i64) -> i64 {
-    I pb_reader_remaining(r) <= 0 { 0 } E {
+    I pb_reader_remaining(r) <= 0 { 0 } EL {
         tag := pb_decode_varint(r)
-        I tag < 0 { 0 } E {
+        I tag < 0 { 0 } EL {
             wire_type := pb_tag_wire_type(tag)
             field_num := pb_tag_field_number(tag)
 
@@ -334,12 +334,12 @@ F pb_read_field(r: i64) -> i64 {
                 val := pb_decode_varint(r)
                 store_i64(field + 16, val)
             }
-            E I wire_type == 1 {
+            EL I wire_type == 1 {
                 # 64-bit
                 val := pb_read_fixed64(r)
                 store_i64(field + 16, val)
             }
-            E I wire_type == 2 {
+            EL I wire_type == 2 {
                 # Length-delimited
                 len := pb_decode_varint(r)
                 I len > 0 {
@@ -352,12 +352,12 @@ F pb_read_field(r: i64) -> i64 {
                     store_i64(field + 24, len)
                 }
             }
-            E I wire_type == 5 {
+            EL I wire_type == 5 {
                 # 32-bit
                 val := pb_read_fixed32(r)
                 store_i64(field + 16, val)
             }
-            E {
+            EL {
                 # Unknown wire type - skip
                 free(field)
                 R 0
@@ -370,7 +370,7 @@ F pb_read_field(r: i64) -> i64 {
 F pb_read_fixed64(r: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos + 8 > len { 0 } E {
+    I pos + 8 > len { 0 } EL {
         data := load_i64(r)
         b0 := load_byte(data + pos)
         b1 := load_byte(data + pos + 1)
@@ -388,7 +388,7 @@ F pb_read_fixed64(r: i64) -> i64 {
 F pb_read_fixed32(r: i64) -> i64 {
     pos := load_i64(r + 8)
     len := load_i64(r + 16)
-    I pos + 4 > len { 0 } E {
+    I pos + 4 > len { 0 } EL {
         data := load_i64(r)
         b0 := load_byte(data + pos)
         b1 := load_byte(data + pos + 1)
@@ -404,51 +404,51 @@ F pb_read_fixed32(r: i64) -> i64 {
 # =====================================================
 
 F pb_field_wire_type(field: i64) -> i64 {
-    I field == 0 { 0 - 1 } E { load_i64(field) }
+    I field == 0 { 0 - 1 } EL { load_i64(field) }
 }
 
 F pb_field_number(field: i64) -> i64 {
-    I field == 0 { 0 } E { load_i64(field + 8) }
+    I field == 0 { 0 } EL { load_i64(field + 8) }
 }
 
 F pb_field_varint(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 0 { 0 }
-    E { load_i64(field + 16) }
+    EL I load_i64(field) != 0 { 0 }
+    EL { load_i64(field + 16) }
 }
 
 F pb_field_fixed64(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 1 { 0 }
-    E { load_i64(field + 16) }
+    EL I load_i64(field) != 1 { 0 }
+    EL { load_i64(field + 16) }
 }
 
 F pb_field_fixed32(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 5 { 0 }
-    E { load_i64(field + 16) }
+    EL I load_i64(field) != 5 { 0 }
+    EL { load_i64(field + 16) }
 }
 
 F pb_field_bytes(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 2 { 0 }
-    E { load_i64(field + 16) }
+    EL I load_i64(field) != 2 { 0 }
+    EL { load_i64(field + 16) }
 }
 
 F pb_field_bytes_len(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 2 { 0 }
-    E { load_i64(field + 24) }
+    EL I load_i64(field) != 2 { 0 }
+    EL { load_i64(field + 24) }
 }
 
 # Get string from a length-delimited field (returns null-terminated string ptr)
 F pb_field_string(field: i64) -> i64 {
     I field == 0 { 0 }
-    E I load_i64(field) != 2 { 0 }
-    E {
+    EL I load_i64(field) != 2 { 0 }
+    EL {
         src := load_i64(field + 16)
         len := load_i64(field + 24)
-        I src == 0 || len == 0 { 0 } E {
+        I src == 0 || len == 0 { 0 } EL {
             buf := malloc(len + 1)
             memcpy(buf, src, len)
             store_byte(buf + len, 0)
@@ -464,7 +464,7 @@ F pb_field_sint(field: i64) -> i64 {
 
 # Get a boolean from a varint field
 F pb_field_bool(field: i64) -> i64 {
-    I pb_field_varint(field) != 0 { 1 } E { 0 }
+    I pb_field_varint(field) != 0 { 1 } EL { 0 }
 }
 
 # Free a field (frees bytes data if wire type 2)
@@ -497,9 +497,9 @@ F pb_parse_all(data: i64, len: i64) -> i64 {
 }
 
 F pb_parse_all_rec(r: i64, fields: i64) -> i64 {
-    I pb_reader_remaining(r) <= 0 { 0 } E {
+    I pb_reader_remaining(r) <= 0 { 0 } EL {
         field := pb_read_field(r)
-        I field == 0 { 0 } E {
+        I field == 0 { 0 } EL {
             count := load_i64(fields + 8)
             cap := load_i64(fields + 16)
 
@@ -524,14 +524,14 @@ F pb_parse_all_rec(r: i64, fields: i64) -> i64 {
 
 # Get number of parsed fields
 F pb_fields_count(fields: i64) -> i64 {
-    I fields == 0 { 0 } E { load_i64(fields + 8) }
+    I fields == 0 { 0 } EL { load_i64(fields + 8) }
 }
 
 # Get field by index
 F pb_fields_get(fields: i64, index: i64) -> i64 {
-    I fields == 0 { 0 } E {
+    I fields == 0 { 0 } EL {
         count := load_i64(fields + 8)
-        I index < 0 || index >= count { 0 } E {
+        I index < 0 || index >= count { 0 } EL {
             data := load_i64(fields)
             load_i64(data + index * 8)
         }
@@ -545,10 +545,10 @@ F pb_fields_find(fields: i64, field_num: i64) -> i64 {
 
 F pb_fields_find_rec(fields: i64, field_num: i64, idx: i64) -> i64 {
     count := pb_fields_count(fields)
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         f := pb_fields_get(fields, idx)
         I f != 0 && pb_field_number(f) == field_num { f }
-        E { pb_fields_find_rec(fields, field_num, idx + 1) }
+        EL { pb_fields_find_rec(fields, field_num, idx + 1) }
     }
 }
 
@@ -565,7 +565,7 @@ F pb_fields_free(fields: i64) -> i64 {
 
 F pb_fields_free_rec(fields: i64, idx: i64) -> i64 {
     count := load_i64(fields + 8)
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         data := load_i64(fields)
         field := load_i64(data + idx * 8)
         pb_field_free(field)
@@ -590,7 +590,7 @@ F pb_decode_packed_varints(data: i64, len: i64) -> i64 {
 }
 
 F pb_decode_packed_rec(r: i64, result: i64, cap: i64, count: i64) -> i64 {
-    I pb_reader_remaining(r) <= 0 { 0 } E {
+    I pb_reader_remaining(r) <= 0 { 0 } EL {
         val := pb_decode_varint(r)
         # Grow if needed
         I count >= cap {
@@ -601,7 +601,7 @@ F pb_decode_packed_rec(r: i64, result: i64, cap: i64, count: i64) -> i64 {
             free(old)
             store_i64(result, new_vals)
             pb_decode_packed_rec(r, result, new_cap, count)
-        } E {
+        } EL {
             values := load_i64(result)
             store_i64(values + count * 8, val)
             store_i64(result + 8, count + 1)
@@ -611,17 +611,17 @@ F pb_decode_packed_rec(r: i64, result: i64, cap: i64, count: i64) -> i64 {
 }
 
 F pb_packed_values(packed: i64) -> i64 {
-    I packed == 0 { 0 } E { load_i64(packed) }
+    I packed == 0 { 0 } EL { load_i64(packed) }
 }
 
 F pb_packed_count(packed: i64) -> i64 {
-    I packed == 0 { 0 } E { load_i64(packed + 8) }
+    I packed == 0 { 0 } EL { load_i64(packed + 8) }
 }
 
 F pb_packed_get(packed: i64, idx: i64) -> i64 {
-    I packed == 0 { 0 } E {
+    I packed == 0 { 0 } EL {
         count := load_i64(packed + 8)
-        I idx < 0 || idx >= count { 0 } E {
+        I idx < 0 || idx >= count { 0 } EL {
             values := load_i64(packed)
             load_i64(values + idx * 8)
         }

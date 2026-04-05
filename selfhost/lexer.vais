@@ -8,42 +8,42 @@ U token
 
 # Check if character is digit (0-9: ASCII 48-57)
 F is_digit(c: i64) -> i64 {
-    I c >= 48 && c <= 57 { 1 } E { 0 }
+    I c >= 48 && c <= 57 { 1 } EL { 0 }
 }
 
 # Check if character can start identifier (A-Z: 65-90, a-z: 97-122, _: 95)
 F is_ident_start(c: i64) -> i64 {
     I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 {
         1
-    } E {
+    } EL {
         0
     }
 }
 
 # Check if character can be part of identifier
 F is_ident_char(c: i64) -> i64 {
-    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } E { 0 }
+    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } EL { 0 }
 }
 
 # Check if character is whitespace (space:32, tab:9, newline:10, carriage return:13)
 F is_whitespace(c: i64) -> i64 {
-    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } EL { 0 }
 }
 
 # Check if character is hex digit (0-9, A-F, a-f)
 F is_hex_digit(c: i64) -> i64 {
-    I is_digit(c) == 1 || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } E { 0 }
+    I is_digit(c) == 1 || (c >= 65 && c <= 70) || (c >= 97 && c <= 102) { 1 } EL { 0 }
 }
 
 # Convert hex digit to value
 F hex_digit_value(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48
-    } E I c >= 65 && c <= 70 {
+    } EL I c >= 65 && c <= 70 {
         c - 55
-    } E I c >= 97 && c <= 102 {
+    } EL I c >= 97 && c <= 102 {
         c - 87
-    } E {
+    } EL {
         0
     }
 }
@@ -70,14 +70,14 @@ X Lexer {
 
     # Check if at end of source
     F is_eof(&self) -> i64 {
-        I self.pos >= self.source_len { 1 } E { 0 }
+        I self.pos >= self.source_len { 1 } EL { 0 }
     }
 
     # Peek current character (returns 0 if at end)
     F peek(&self) -> i64 {
         I self.pos >= self.source_len {
             0
-        } E {
+        } EL {
             load_byte(self.source + self.pos)
         }
     }
@@ -86,7 +86,7 @@ X Lexer {
     F peek_next(&self) -> i64 {
         I self.pos + 1 >= self.source_len {
             0
-        } E {
+        } EL {
             load_byte(self.source + self.pos + 1)
         }
     }
@@ -99,13 +99,13 @@ X Lexer {
                 self.line = self.line + 1
                 self.col = 1
                 0
-            } E {
+            } EL {
                 self.col = self.col + 1
                 0
             }
             self.pos = self.pos + 1
             c
-        } E {
+        } EL {
             0
         }
     }
@@ -140,7 +140,7 @@ X Lexer {
             c := @.peek()
             I is_whitespace(c) == 1 {
                 @.advance()
-            } E {
+            } EL {
                 # Must be '#' (comment, not #[)
                 @.skip_comment()
             }
@@ -204,7 +204,7 @@ X Lexer {
                 @.advance()
             }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -215,7 +215,7 @@ X Lexer {
             I @.peek() == 43 || @.peek() == 45 {
                 @.advance()
                 0
-            } E {
+            } EL {
                 0
             }
             L {
@@ -224,13 +224,13 @@ X Lexer {
                 @.advance()
             }
             0
-        } E {
+        } EL {
             0
         }
 
         I is_float == 1 {
             token_float_lit(value, start, self.pos)
-        } E {
+        } EL {
             token_int_lit(value, start, self.pos)
         }
     }
@@ -273,7 +273,7 @@ X Lexer {
             I c == 89 { R token_simple(TOK_KW_Y(), start, self.pos) }
             I c == 68 { R token_simple(TOK_KW_D(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -286,7 +286,7 @@ X Lexer {
             # as (97='a', 115='s')
             I c0 == 97 && c1 == 115 { R token_simple(TOK_KW_AS(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -307,7 +307,7 @@ X Lexer {
             # dyn (100='d', 121='y', 110='n')
             I c0 == 100 && c1 == 121 && c2 == 110 { R token_simple(TOK_KW_DYN(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -330,7 +330,7 @@ X Lexer {
             # lazy (108='l', 97='a', 122='z', 121='y')
             I c0 == 108 && c1 == 97 && c2 == 122 && c3 == 121 { R token_simple(TOK_KW_LAZY(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -350,7 +350,7 @@ X Lexer {
             # force (102='f', 111='o', 114='r', 99='c', 101='e')
             I c0 == 102 && c1 == 111 && c2 == 114 && c3 == 99 && c4 == 101 { R token_simple(TOK_KW_FORCE(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -366,7 +366,7 @@ X Lexer {
             # affine (97='a', 102='f', 102='f', 105='i', 110='n', 101='e')
             I c0 == 97 && c1 == 102 && c2 == 102 && c3 == 105 && c4 == 110 && c5 == 101 { R token_simple(TOK_KW_AFFINE(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -401,7 +401,7 @@ X Lexer {
             # Vec4i64 (86='V', 101='e', 99='c', 52='4', 105='i', 54='6', 52='4')
             I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 52 && c4 == 105 && c5 == 54 && c6 == 52 { R token_simple(TOK_TY_VEC4I64(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -417,7 +417,7 @@ X Lexer {
             # comptime (99='c', 111='o', 109='m', 112='p', 116='t', 105='i', 109='m', 101='e')
             I c0 == 99 && c1 == 111 && c2 == 109 && c3 == 112 && c4 == 116 && c5 == 105 && c6 == 109 && c7 == 101 { R token_simple(TOK_KW_COMPTIME(), start, self.pos) }
             0
-        } E {
+        } EL {
             0
         }
 
@@ -451,32 +451,32 @@ X Lexer {
                     buf_len = buf_len + 1
                     0
                 # \t = tab (9)
-                } E I esc == 116 {
+                } EL I esc == 116 {
                     store_byte(buf + buf_len, 9)
                     buf_len = buf_len + 1
                     0
                 # \r = carriage return (13)
-                } E I esc == 114 {
+                } EL I esc == 114 {
                     store_byte(buf + buf_len, 13)
                     buf_len = buf_len + 1
                     0
                 # \\ = backslash (92)
-                } E I esc == 92 {
+                } EL I esc == 92 {
                     store_byte(buf + buf_len, 92)
                     buf_len = buf_len + 1
                     0
                 # \" = double quote (34)
-                } E I esc == 34 {
+                } EL I esc == 34 {
                     store_byte(buf + buf_len, 34)
                     buf_len = buf_len + 1
                     0
                 # \0 = null (0)
-                } E I esc == 48 {
+                } EL I esc == 48 {
                     store_byte(buf + buf_len, 0)
                     buf_len = buf_len + 1
                     0
                 # \x = hex escape
-                } E I esc == 120 {
+                } EL I esc == 120 {
                     # Read two hex digits
                     I @.is_eof() == 0 && is_hex_digit(@.peek()) == 1 {
                         h1 := hex_digit_value(@.advance())
@@ -485,13 +485,13 @@ X Lexer {
                             store_byte(buf + buf_len, h1 * 16 + h2)
                             buf_len = buf_len + 1
                             0
-                        } E {
+                        } EL {
                             # Only one hex digit - store it
                             store_byte(buf + buf_len, h1)
                             buf_len = buf_len + 1
                             0
                         }
-                    } E {
+                    } EL {
                         # No hex digits - keep \x as-is
                         store_byte(buf + buf_len, 92)
                         buf_len = buf_len + 1
@@ -499,7 +499,7 @@ X Lexer {
                         buf_len = buf_len + 1
                         0
                     }
-                } E {
+                } EL {
                     # Unknown escape - keep backslash and char
                     store_byte(buf + buf_len, 92)
                     buf_len = buf_len + 1
@@ -507,7 +507,7 @@ X Lexer {
                     buf_len = buf_len + 1
                     0
                 }
-            } E {
+            } EL {
                 # Regular character
                 store_byte(buf + buf_len, c)
                 buf_len = buf_len + 1
@@ -520,7 +520,7 @@ X Lexer {
         I @.is_eof() == 0 && @.peek() == 34 {
             @.advance()
             0
-        } E {
+        } EL {
             0
         }
 

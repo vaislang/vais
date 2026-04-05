@@ -36,5 +36,5 @@ F main() -> i64 {
     # Verify: 6 + 25 + 36 + 35 + 1 + 0 = 103
     total := g1 + g2 + l1 + l2 + c1 + c2
     puts("Total = {total}")
-    I total == 103 { 0 } E { 1 }
+    I total == 103 { 0 } EL { 1 }
 }

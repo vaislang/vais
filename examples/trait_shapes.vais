@@ -63,5 +63,5 @@ F main() -> i64 {
     puts("Total area = {total}")
 
     # 75 + 16 + 9 = 100
-    I total == 100 { 0 } E { 1 }
+    I total == 100 { 0 } EL { 1 }
 }

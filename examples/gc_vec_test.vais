@@ -34,7 +34,7 @@ X GcVec {
 
     F push(&self, value: i64) -> i64 {
         # Check if we need to grow
-        L self.len >= self.cap {
+        LW self.len >= self.cap {
             self.grow()
         }
 
@@ -48,7 +48,7 @@ X GcVec {
     }
 
     F get(&self, index: i64) -> i64 {
-        L index >= self.len {
+        LW index >= self.len {
             R 0  # Out of bounds
         }
 
@@ -67,7 +67,7 @@ X GcVec {
 
         # Copy old data
         i := mut 0
-        L i < self.len {
+        LW i < self.len {
             old_offset := i * 8
             new_offset := i * 8
             value := load_i64(self.data + old_offset)
@@ -108,7 +108,7 @@ F test_gc_vec() -> i64 {
 
     # Add some elements
     i := mut 0
-    L i < 10 {
+    LW i < 10 {
         vec.push(i * 10)
         i = i + 1
     }
@@ -117,7 +117,7 @@ F test_gc_vec() -> i64 {
     printf("Vector length: %ld\n", vec.len())
 
     i = 0
-    L i < vec.len() {
+    LW i < vec.len() {
         val := vec.get(i)
         printf("  vec[%ld] = %ld\n", i, val)
         i = i + 1
@@ -126,7 +126,7 @@ F test_gc_vec() -> i64 {
     # Test growth
     puts("\nTesting vector growth...")
     i = 0
-    L i < 20 {
+    LW i < 20 {
         vec.push(i * 100)
         i = i + 1
     }

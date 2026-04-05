@@ -1,7 +1,7 @@
 # Option type - represents an optional value
 # Some(T) or None
 
-E Option<T> {
+EN Option<T> {
     None,
     Some(T)
 }

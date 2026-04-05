@@ -90,7 +90,7 @@ F handle_hover(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
     line := json_get_int_field(pos_obj, "line")
     col := json_get_int_field(pos_obj, "character")
 
@@ -103,7 +103,7 @@ F handle_hover(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Convert position to offset
     offset := line_col_to_offset(src, src_len, line, col)
@@ -121,7 +121,7 @@ F handle_hover(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Look up in symbol table
     st := server_get_symtable(server)
@@ -144,42 +144,42 @@ F handle_hover(id: i64, params: i64, server: i64) -> i64 {
             jb_obj_end(sb)
             sb_free(hover_sb)
             0
-        } E {
+        } EL {
             jb_null(sb)
             0
         }
-    } E {
+    } EL {
         kind := symdef_kind(def)
         info_sb: mut i64 = 0
 
         I kind == SYM_FUNCTION() {
             item := symdef_extra(def)
-            I item != 0 { info_sb = build_function_signature(item); 0 } E { 0 }
-        } E I kind == SYM_METHOD() {
+            I item != 0 { info_sb = build_function_signature(item); 0 } EL { 0 }
+        } EL I kind == SYM_METHOD() {
             item := symdef_extra(def)
-            I item != 0 { info_sb = build_function_signature(item); 0 } E { 0 }
-        } E I kind == SYM_STRUCT() {
+            I item != 0 { info_sb = build_function_signature(item); 0 } EL { 0 }
+        } EL I kind == SYM_STRUCT() {
             item := symdef_extra(def)
-            I item != 0 { info_sb = build_struct_info(item); 0 } E { 0 }
-        } E I kind == SYM_VARIABLE() {
+            I item != 0 { info_sb = build_struct_info(item); 0 } EL { 0 }
+        } EL I kind == SYM_VARIABLE() {
             info_sb = sb_new(64)
             sb_append_cstr(info_sb, "variable `")
             sb_append_bytes(info_sb, word_ptr, word_len)
             sb_append_byte(info_sb, 96)  # `
             0
-        } E I kind == SYM_PARAM() {
+        } EL I kind == SYM_PARAM() {
             info_sb = sb_new(64)
             sb_append_cstr(info_sb, "parameter `")
             sb_append_bytes(info_sb, word_ptr, word_len)
             sb_append_byte(info_sb, 96)
             0
-        } E I kind == SYM_FIELD() {
+        } EL I kind == SYM_FIELD() {
             info_sb = sb_new(64)
             sb_append_cstr(info_sb, "field `")
             sb_append_bytes(info_sb, word_ptr, word_len)
             sb_append_byte(info_sb, 96)
             0
-        } E { 0 }
+        } EL { 0 }
 
         I info_sb != 0 {
             jb_obj_start(sb)
@@ -200,7 +200,7 @@ F handle_hover(id: i64, params: i64, server: i64) -> i64 {
             jb_obj_end(sb)
             sb_free(info_sb)
             0
-        } E {
+        } EL {
             jb_null(sb)
             0
         }
@@ -217,77 +217,77 @@ F check_builtin_hover(name_ptr: i64, name_len: i64) -> i64 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F puts(s: str) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "putchar") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F putchar(ch: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "malloc") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F malloc(size: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "free") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F free(ptr: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "strlen") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F strlen(s: str) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "memcpy") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F memcpy(dst: i64, src: i64, len: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "store_i64") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F store_i64(addr: i64, val: i64) -> ()")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "load_i64") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F load_i64(addr: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "store_byte") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F store_byte(addr: i64, val: i64) -> ()")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "load_byte") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F load_byte(addr: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "fopen") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F fopen(path: str, mode: str) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "fread") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F fread(buf: i64, size: i64, count: i64, fp: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "fwrite") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F fwrite(buf: i64, size: i64, count: i64, fp: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "fclose") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F fclose(fp: i64) -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     I lsp_streq(name_ptr, name_len, "getchar") == 1 {
         sb := sb_new(64)
         sb_append_cstr(sb, "F getchar() -> i64")
         R sb
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -303,7 +303,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
     line := json_get_int_field(pos_obj, "line")
     col := json_get_int_field(pos_obj, "character")
 
@@ -315,7 +315,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     offset := line_col_to_offset(src, src_len, line, col)
 
@@ -331,7 +331,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Find definition
     st := server_get_symtable(server)
@@ -340,7 +340,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
     sb := jb_new()
     I def == 0 {
         jb_null(sb)
-    } E {
+    } EL {
         # For now, search source for function/struct declaration containing this name
         def_offset := find_name_declaration_offset(src, src_len, word_ptr, word_len)
         I def_offset >= 0 {
@@ -377,7 +377,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
             jb_obj_end(sb)
             jb_obj_end(sb)
             jb_obj_end(sb)
-        } E {
+        } EL {
             jb_null(sb)
             0
         }
@@ -392,7 +392,7 @@ F handle_definition(id: i64, params: i64, server: i64) -> i64 {
 F find_name_declaration_offset(src: i64, src_len: i64, name_ptr: i64, name_len: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= src_len { B } E { 0 }
+        I i >= src_len { B } EL { 0 }
         ch := load_byte(src + i)
         # Look for F/S/E/T followed by space then our name
         I ch == 70 {  # F
@@ -402,27 +402,27 @@ F find_name_declaration_offset(src: i64, src_len: i64, name_ptr: i64, name_len: 
                         # Check char after name is not ident
                         after := i + 2 + name_len
                         I after >= src_len { R i + 2 }
-                        E {
+                        EL {
                             ac := load_byte(src + after)
-                            I is_ident_char(ac) == 0 { R i + 2 } E { 0 }
+                            I is_ident_char(ac) == 0 { R i + 2 } EL { 0 }
                         }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
-        } E I ch == 83 {  # S
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL I ch == 83 {  # S
             I i + 2 + name_len <= src_len {
                 I load_byte(src + i + 1) == 32 {
                     I lsp_memcmp(src + i + 2, name_ptr, name_len) == 0 {
                         after := i + 2 + name_len
                         I after >= src_len { R i + 2 }
-                        E {
+                        EL {
                             ac := load_byte(src + after)
-                            I is_ident_char(ac) == 0 { R i + 2 } E { 0 }
+                            I is_ident_char(ac) == 0 { R i + 2 } EL { 0 }
                         }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
-        } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0 - 1
@@ -440,7 +440,7 @@ F handle_references(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
     line := json_get_int_field(pos_obj, "line")
     col := json_get_int_field(pos_obj, "character")
 
@@ -453,7 +453,7 @@ F handle_references(id: i64, params: i64, server: i64) -> i64 {
         lsp_response(id, sb)
         sb_free(sb)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     offset := line_col_to_offset(src, src_len, line, col)
 
@@ -467,7 +467,7 @@ F handle_references(id: i64, params: i64, server: i64) -> i64 {
     I word_len == 0 {
         jb_arr_start(sb)
         jb_arr_end(sb)
-    } E {
+    } EL {
         # Scan source for all occurrences of the word
         jb_arr_start(sb)
         locs := find_all_occurrences_in_source(src, src_len, word_ptr, word_len)
@@ -476,7 +476,7 @@ F handle_references(id: i64, params: i64, server: i64) -> i64 {
         first: mut i64 = 1
         li: mut i64 = 0
         L {
-            I li >= loc_count { B } E { 0 }
+            I li >= loc_count { B } EL { 0 }
             loc_off := load_i64(loc_data + li * 8)
             lc_out := malloc(16)
             offset_to_line_col(src, src_len, loc_off, lc_out)
@@ -484,7 +484,7 @@ F handle_references(id: i64, params: i64, server: i64) -> i64 {
             ref_col := load_i64(lc_out + 8)
             free(lc_out)
 
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
 
             jb_obj_start(sb)
@@ -533,33 +533,33 @@ F find_all_occurrences_in_source(src: i64, src_len: i64, name_ptr: i64, name_len
     count: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i + name_len > src_len { B } E { 0 }
+        I i + name_len > src_len { B } EL { 0 }
         # Check if this position starts with name
         I lsp_memcmp(src + i, name_ptr, name_len) == 0 {
             # Verify word boundary
             before_ok: mut i64 = 1
             I i > 0 {
                 bc := load_byte(src + i - 1)
-                I is_ident_char(bc) == 1 { before_ok = 0; 0 } E { 0 }
-            } E { 0 }
+                I is_ident_char(bc) == 1 { before_ok = 0; 0 } EL { 0 }
+            } EL { 0 }
             after_ok: mut i64 = 1
             after_pos := i + name_len
             I after_pos < src_len {
                 ac := load_byte(src + after_pos)
-                I is_ident_char(ac) == 1 { after_ok = 0; 0 } E { 0 }
-            } E { 0 }
+                I is_ident_char(ac) == 1 { after_ok = 0; 0 } EL { 0 }
+            } EL { 0 }
             I before_ok == 1 {
                 I after_ok == 1 {
                     I count < 1024 {
                         store_i64(buf + 8 + count * 8, i)
                         count = count + 1
                         0
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
             i = i + name_len
             0
-        } E {
+        } EL {
             i = i + 1
             0
         }
@@ -634,14 +634,14 @@ F handle_completion(id: i64, params: i64, server: i64) -> i64 {
     dc := symtable_defs_count(st)
     di: mut i64 = 0
     L {
-        I di >= dc { B } E { 0 }
+        I di >= dc { B } EL { 0 }
         def := symtable_get_def(st, di)
         kind := symdef_kind(def)
         np := symdef_name_ptr(def)
         nl := symdef_name_len(def)
         # Only add functions, structs, variables (skip params/fields)
         I kind == SYM_FUNCTION() {
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
             jb_obj_start(sb)
             jb_key(sb, "label")
@@ -651,8 +651,8 @@ F handle_completion(id: i64, params: i64, server: i64) -> i64 {
             jb_int(sb, 3)  # Function
             jb_obj_end(sb)
             0
-        } E I kind == SYM_STRUCT() {
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+        } EL I kind == SYM_STRUCT() {
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
             jb_obj_start(sb)
             jb_key(sb, "label")
@@ -662,8 +662,8 @@ F handle_completion(id: i64, params: i64, server: i64) -> i64 {
             jb_int(sb, 22)  # Struct
             jb_obj_end(sb)
             0
-        } E I kind == SYM_VARIABLE() {
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+        } EL I kind == SYM_VARIABLE() {
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
             jb_obj_start(sb)
             jb_key(sb, "label")
@@ -673,7 +673,7 @@ F handle_completion(id: i64, params: i64, server: i64) -> i64 {
             jb_int(sb, 6)  # Variable
             jb_obj_end(sb)
             0
-        } E { 0 }
+        } EL { 0 }
         di = di + 1
     }
 
@@ -689,7 +689,7 @@ F handle_completion(id: i64, params: i64, server: i64) -> i64 {
 # kind: LSP CompletionItemKind (1=Text, 2=Method, 3=Function, 6=Variable, 14=Keyword, 22=Struct, 25=TypeParameter)
 # Returns new first flag
 F add_completion_item(sb: i64, first: i64, label: str, kind: i64, detail: str) -> i64 {
-    I first == 0 { jb_comma(sb); 0 } E { 0 }
+    I first == 0 { jb_comma(sb); 0 } EL { 0 }
     jb_obj_start(sb)
     jb_key(sb, "label")
     jb_cstr(sb, label)
@@ -719,7 +719,7 @@ F handle_document_symbols(id: i64, server: i64) -> i64 {
     first: mut i64 = 1
     di: mut i64 = 0
     L {
-        I di >= dc { B } E { 0 }
+        I di >= dc { B } EL { 0 }
         def := symtable_get_def(st, di)
         kind := symdef_kind(def)
         # Only report top-level: functions, structs, methods
@@ -732,7 +732,7 @@ F handle_document_symbols(id: i64, server: i64) -> i64 {
             I dec_off >= 0 {
                 offset_to_line_col(src, src_len, dec_off, lc_out)
                 0
-            } E {
+            } EL {
                 store_i64(lc_out, 0)
                 store_i64(lc_out + 8, 0)
                 0
@@ -741,11 +741,11 @@ F handle_document_symbols(id: i64, server: i64) -> i64 {
             sym_col := load_i64(lc_out + 8)
             free(lc_out)
 
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
             emit_doc_symbol(sb, np, nl, 12, sym_line, sym_col, nl)
             0
-        } E I kind == SYM_STRUCT() {
+        } EL I kind == SYM_STRUCT() {
             np := symdef_name_ptr(def)
             nl := symdef_name_len(def)
             dec_off := find_name_declaration_offset(src, src_len, np, nl)
@@ -753,7 +753,7 @@ F handle_document_symbols(id: i64, server: i64) -> i64 {
             I dec_off >= 0 {
                 offset_to_line_col(src, src_len, dec_off, lc_out)
                 0
-            } E {
+            } EL {
                 store_i64(lc_out, 0)
                 store_i64(lc_out + 8, 0)
                 0
@@ -762,11 +762,11 @@ F handle_document_symbols(id: i64, server: i64) -> i64 {
             sym_col := load_i64(lc_out + 8)
             free(lc_out)
 
-            I first == 0 { jb_comma(sb); 0 } E { 0 }
+            I first == 0 { jb_comma(sb); 0 } EL { 0 }
             first = 0
             emit_doc_symbol(sb, np, nl, 23, sym_line, sym_col, nl)
             0
-        } E { 0 }
+        } EL { 0 }
         di = di + 1
     }
 

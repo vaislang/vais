@@ -70,7 +70,7 @@ F main() -> i64 {
 
     I res_status == 1 {
         puts("  Table created successfully!")
-    } E {
+    } EL {
         puts("  ERROR: Failed to create table")
         msg := __pg_error_message(handle)
         puts(msg)
@@ -107,7 +107,7 @@ F main() -> i64 {
         puts("  Rows returned:")
 
         i := 0
-        L i < nrows {
+        LW i < nrows {
             id_val := __pg_getvalue(res, i, 0)
             name_val := __pg_getvalue(res, i, 1)
             age_val := __pg_getvalue(res, i, 2)
@@ -121,7 +121,7 @@ F main() -> i64 {
 
             i = i + 1
         }
-    } E {
+    } EL {
         puts("  ERROR: Query failed")
         msg := __pg_error_message(handle)
         puts(msg)
@@ -145,14 +145,14 @@ F main() -> i64 {
         puts("  People older than 25:")
 
         i := 0
-        L i < nrows {
+        LW i < nrows {
             name_val := __pg_getvalue(res, i, 0)
             age_val := __pg_getvalue(res, i, 1)
             puts(name_val)
             puts(age_val)
             i = i + 1
         }
-    } E {
+    } EL {
         puts("  ERROR: Parameterized query failed")
     }
     __pg_clear(res)
@@ -179,10 +179,10 @@ F main() -> i64 {
             puts(__pg_getvalue(res, 0, 0))
             puts(__pg_getvalue(res, 0, 1))
             puts(__pg_getvalue(res, 0, 2))
-        } E {
+        } EL {
             puts("  Bob not found")
         }
-    } E {
+    } EL {
         puts("  ERROR: Prepared statement failed")
     }
     __pg_clear(res)
@@ -220,7 +220,7 @@ F main() -> i64 {
     I res_status == 2 {
         nrows := __pg_ntuples(res)
         i := 0
-        L i < nrows {
+        LW i < nrows {
             puts(__pg_getvalue(res, i, 0))
             puts(__pg_getvalue(res, i, 1))
             i = i + 1
@@ -241,7 +241,7 @@ F main() -> i64 {
         is_null := __pg_getisnull(res, 0, 1)
         I is_null == 1 {
             puts("  Eve's age is NULL (correct)")
-        } E {
+        } EL {
             puts("  Eve's age is not NULL (unexpected)")
         }
     }

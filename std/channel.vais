@@ -143,7 +143,7 @@ X UnboundedChannel {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.head >= self.tail { 1 } E { 0 }
+        I self.head >= self.tail { 1 } EL { 0 }
     }
 
     # Get number of pending messages
@@ -464,7 +464,7 @@ F channel_len(ch: i64) -> i64 {
 
 # Check if channel is empty
 F channel_is_empty(ch: i64) -> i64 {
-    I load_i64(ch + 16) >= load_i64(ch + 24) { 1 } E { 0 }
+    I load_i64(ch + 16) >= load_i64(ch + 24) { 1 } EL { 0 }
 }
 
 # Select: poll multiple channels, return index of first ready (-1 if none)

@@ -8,17 +8,17 @@ F main() -> i64 {
     # if-else with assert (Unit type) in both branches
     I x > 3 {
         assert(x > 0)
-    } E {
+    } EL {
         assert(x >= 0)
     }
 
     # Nested case
     I x > 10 {
         assert(x > 10)
-    } E {
+    } EL {
         I x > 0 {
             assert(x > 0)
-        } E {
+        } EL {
             assert(x >= 0)
         }
     }

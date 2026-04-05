@@ -59,7 +59,7 @@ F main() -> i64 {
             # Handle client in this thread (simplified - no threading for this example)
             # In production, you'd spawn a new thread here
             handle_client(client_fd, room)
-        } E {
+        } EL {
             puts("Accept failed, retrying...")
         }
     }

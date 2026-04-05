@@ -53,7 +53,7 @@ F sb_append_byte(sb: i64, byte: i64) -> i64 {
     I len >= cap {
         sb_grow_to(sb, cap * 2)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     store_byte(data + len, byte)
     sb_set_len(sb, len + 1)
@@ -67,7 +67,7 @@ F sb_append_cstr(sb: i64, s: str) -> i64 {
     I len + slen > cap {
         sb_grow_to(sb, len + slen + 1024)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     memcpy_str(data + len, s, slen)
     sb_set_len(sb, len + slen)
@@ -81,7 +81,7 @@ F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
     I len + slen > cap {
         sb_grow_to(sb, len + slen + 1024)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     memcpy(data + len, src, slen)
     sb_set_len(sb, len + slen)
@@ -91,14 +91,14 @@ F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
 F sb_append_i64(sb: i64, value: i64) -> i64 {
     I value == 0 {
         sb_append_byte(sb, 48)
-    } E I value < 0 {
+    } EL I value < 0 {
         sb_append_byte(sb, 45)
         sb_append_i64(sb, 0 - value)
-    } E {
+    } EL {
         I value >= 10 {
             sb_append_i64(sb, value / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         sb_append_byte(sb, (value % 10) + 48)
     }
 }

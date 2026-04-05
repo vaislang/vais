@@ -123,7 +123,7 @@ F main(argc: i64, argv: i64) -> i64 {
             print_result(result_ptr)
             idx = idx + 1
         }
-    } E {
+    } EL {
         puts("No matches found.")
     }
 

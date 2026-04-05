@@ -4,13 +4,13 @@ U std/btreemap
 
 F verify_keys(map: i64) -> i64 {
     I btreemap_get(map, 1) != 10 { 0 }
-    E I btreemap_get(map, 5) != 50 { 0 }
-    E I btreemap_get(map, 8) != 80 { 0 }
-    E I btreemap_get(map, 15) != 150 { 0 }
-    E I btreemap_get(map, 20) != 200 { 0 }
-    E I btreemap_get(map, 25) != 250 { 0 }
-    E I btreemap_get(map, 30) != 300 { 0 }
-    E { 1 }
+    EL I btreemap_get(map, 5) != 50 { 0 }
+    EL I btreemap_get(map, 8) != 80 { 0 }
+    EL I btreemap_get(map, 15) != 150 { 0 }
+    EL I btreemap_get(map, 20) != 200 { 0 }
+    EL I btreemap_get(map, 25) != 250 { 0 }
+    EL I btreemap_get(map, 30) != 300 { 0 }
+    EL { 1 }
 }
 
 F print_num(n: i64) -> i64 {
@@ -112,7 +112,7 @@ F main() -> i64 {
     I ok == 1 {
         puts("  All keys verified: OK")
         0
-    } E {
+    } EL {
         puts("  Verification FAILED")
         0
     }

@@ -68,10 +68,10 @@ F print_i64(x: i64) -> i64 {
         putchar(x / 100 + 48)
         putchar((x / 10) % 10 + 48)
         putchar(x % 10 + 48)
-    } E I x >= 10 {
+    } EL I x >= 10 {
         putchar(x / 10 + 48)
         putchar(x % 10 + 48)
-    } E {
+    } EL {
         putchar(x + 48)
     }
     0

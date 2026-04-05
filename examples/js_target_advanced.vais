@@ -22,7 +22,7 @@ F main() -> i64 {
 
     # Loop
     sum := mut 0
-    L i: 0..5 {
+    LF i: 0..5 {
         sum = sum + i
     }
 

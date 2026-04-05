@@ -33,12 +33,12 @@ F main() -> i64 {
             __println("")
             __println("Decompression successful!")
             decomp_result.free()
-        } E {
+        } EL {
             __println("Decompression failed!")
         }
 
         gzip_result.free()
-    } E {
+    } EL {
         __println("Gzip compression failed! Error: ")
         __print_i64(gzip_result.status)
         __println("")
@@ -54,7 +54,7 @@ F main() -> i64 {
 
         # Deflate should be slightly smaller than gzip (no header)
         deflate_result.free()
-    } E {
+    } EL {
         __println("Deflate compression failed!")
     }
 
@@ -90,7 +90,7 @@ F main() -> i64 {
             r3.free()
         }
         compressor.free()
-    } E {
+    } EL {
         __println("Failed to create compressor")
     }
 

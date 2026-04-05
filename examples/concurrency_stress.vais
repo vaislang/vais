@@ -241,11 +241,11 @@ X RingBuffer {
     }
 
     F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } E { 0 }
+        I self.size == 0 { 1 } EL { 0 }
     }
 
     F is_full(&self) -> i64 {
-        I self.size >= self.capacity { 1 } E { 0 }
+        I self.size >= self.capacity { 1 } EL { 0 }
     }
 
     F get_size(&self) -> i64 {
@@ -279,7 +279,7 @@ F test_spawn_many() -> i64 {
 
     # Process all tasks
     processed := pool.process()
-    success := I processed == MAX_TASKS { 1 } E { 0 }
+    success := I processed == MAX_TASKS { 1 } EL { 0 }
 
     cleanup := pool.destroy()
     R success
@@ -309,7 +309,7 @@ F test_select_timeout() -> i64 {
 
     # Select should find ready future
     ready_idx := fset.select_ready()
-    success := I ready_idx == 2 { 1 } E { 0 }
+    success := I ready_idx == 2 { 1 } EL { 0 }
 
     cleanup := fset.destroy()
     R success
@@ -354,7 +354,7 @@ F test_concurrent_connections() -> i64 {
     }
 
     final_active := pool.active_count()
-    success := I final_active == 20 { 1 } E { 0 }
+    success := I final_active == 20 { 1 } EL { 0 }
 
     cleanup := pool.destroy()
     R success
@@ -382,7 +382,7 @@ F test_mutex_contention() -> i64 {
             work_result := i * 2
             # Release
             unlock_result := mtx.unlock()
-        } E {
+        } EL {
             total_waiters = total_waiters + 1
         }
 
@@ -392,7 +392,7 @@ F test_mutex_contention() -> i64 {
     lock_count := mtx.get_lock_count()
 
     # Should have multiple successful locks and some waiters
-    success := I lock_count > 0 { 1 } E { 0 }
+    success := I lock_count > 0 { 1 } EL { 0 }
     R success
 }
 
@@ -455,7 +455,7 @@ F test_reactor_saturation() -> i64 {
     }
 
     final_size := rb.get_size()
-    success := I final_size == 192 { 1 } E { 0 }
+    success := I final_size == 192 { 1 } EL { 0 }
 
     cleanup := rb.destroy()
     R success
@@ -494,7 +494,7 @@ F test_mixed_workload() -> i64 {
     }
 
     # Verify results
-    success := I processed == 50 { I consumed == 25 { 1 } E { 0 } } E { 0 }
+    success := I processed == 50 { I consumed == 25 { 1 } EL { 0 } } EL { 0 }
 
     cleanup1 := pool.destroy()
     cleanup2 := rb.destroy()
@@ -515,7 +515,7 @@ F main() -> i64 {
     I result1 == 1 {
         puts("  PASS: Spawn many tasks")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Spawn many tasks")
     }
     puts("")
@@ -525,7 +525,7 @@ F main() -> i64 {
     I result2 == 1 {
         puts("  PASS: Select with timeout")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Select with timeout")
     }
     puts("")
@@ -535,7 +535,7 @@ F main() -> i64 {
     I result3 == 1 {
         puts("  PASS: Concurrent connections")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Concurrent connections")
     }
     puts("")
@@ -545,7 +545,7 @@ F main() -> i64 {
     I result4 == 1 {
         puts("  PASS: Mutex contention")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Mutex contention")
     }
     puts("")
@@ -555,7 +555,7 @@ F main() -> i64 {
     I result5 == 1 {
         puts("  PASS: Reactor event saturation")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Reactor event saturation")
     }
     puts("")
@@ -565,7 +565,7 @@ F main() -> i64 {
     I result6 == 1 {
         puts("  PASS: Mixed workload stress")
         passed = passed + 1
-    } E {
+    } EL {
         puts("  FAIL: Mixed workload stress")
     }
     puts("")
@@ -578,7 +578,7 @@ F main() -> i64 {
     I passed == total {
         puts("All tests passed!")
         R 0
-    } E {
+    } EL {
         puts("Some tests failed")
         R 1
     }

@@ -24,12 +24,12 @@ X Uuid {
 
     # Check if UUID is nil
     F is_nil(&self) -> i64 {
-        I self.high == 0 && self.low == 0 { 1 } E { 0 }
+        I self.high == 0 && self.low == 0 { 1 } EL { 0 }
     }
 
     # Compare two UUIDs for equality
     F equals(&self, other: Uuid) -> i64 {
-        I self.high == other.high && self.low == other.low { 1 } E { 0 }
+        I self.high == other.high && self.low == other.low { 1 } EL { 0 }
     }
 
     # Convert UUID to string representation
@@ -102,7 +102,7 @@ X Uuid {
 F nibble_to_hex(n: i64) -> i64 {
     I n < 10 {
         48 + n  # '0' + n
-    } E {
+    } EL {
         97 + (n - 10)  # 'a' + (n - 10)
     }
 }
@@ -112,13 +112,13 @@ F hex_to_nibble(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         # '0'-'9'
         c - 48
-    } E I c >= 97 && c <= 102 {
+    } EL I c >= 97 && c <= 102 {
         # 'a'-'f'
         c - 97 + 10
-    } E I c >= 65 && c <= 70 {
+    } EL I c >= 65 && c <= 70 {
         # 'A'-'F'
         c - 65 + 10
-    } E {
+    } EL {
         0 - 1
     }
 }
@@ -167,11 +167,11 @@ F uuid_parse(s: String) -> Uuid {
     # UUID string must be exactly 36 characters
     I s.len != 36 {
         Uuid.nil()
-    } E {
+    } EL {
         # Verify hyphens are in correct positions
         I s.char_at(8) != 45 || s.char_at(13) != 45 || s.char_at(18) != 45 || s.char_at(23) != 45 {
             Uuid.nil()
-        } E {
+        } EL {
             # Parse hex digits
             high := 0
             low := 0
@@ -189,7 +189,7 @@ F uuid_parse(s: String) -> Uuid {
             store_i64(pos_high + 56, 16)
 
             i := 0
-            L i < 8 {
+            LW i < 8 {
                 pos := load_i64(pos_high + i * 8)
                 b := parse_hex_byte(s, pos)
                 I b < 0 {
@@ -216,7 +216,7 @@ F uuid_parse(s: String) -> Uuid {
             store_i64(pos_low + 56, 34)
 
             i = 0
-            L i < 8 {
+            LW i < 8 {
                 pos := load_i64(pos_low + i * 8)
                 b := parse_hex_byte(s, pos)
                 I b < 0 {
@@ -239,13 +239,13 @@ F uuid_parse(s: String) -> Uuid {
 F parse_hex_byte(s: String, pos: i64) -> i64 {
     I pos + 1 >= s.len {
         0 - 1
-    } E {
+    } EL {
         high := hex_to_nibble(s.char_at(pos))
         low := hex_to_nibble(s.char_at(pos + 1))
 
         I high < 0 || low < 0 {
             0 - 1
-        } E {
+        } EL {
             (high << 4) | low
         }
     }
@@ -255,7 +255,7 @@ F parse_hex_byte(s: String, pos: i64) -> i64 {
 F uuid_parse_cstr(cstr: i64) -> Uuid {
     I cstr == 0 {
         Uuid.nil()
-    } E {
+    } EL {
         s := str_from(cstr)
         uuid := uuid_parse(s)
         s.drop()

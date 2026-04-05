@@ -7,8 +7,8 @@ F double(x: i64) -> i64 = x * 2
 F add_one(x: i64) -> i64 = x + 1
 F square(x: i64) -> i64 = x * x
 F negate(x: i64) -> i64 = 0 - x
-F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }
-F clamp(x: i64) -> i64 = I x > 100 { 100 } E I x < 0 { 0 } E { x }
+F abs(x: i64) -> i64 = I x < 0 { 0 - x } EL { x }
+F clamp(x: i64) -> i64 = I x > 100 { 100 } EL I x < 0 { 0 } EL { x }
 
 F main() -> i64 {
     puts("=== Pipe Chains ===")
@@ -37,5 +37,5 @@ F main() -> i64 {
     puts("Total = {total}")
 
     # 11 + 19 + 7 + 100 + 101 = 238
-    I total == 238 { 0 } E { 1 }
+    I total == 238 { 0 } EL { 1 }
 }

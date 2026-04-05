@@ -11,7 +11,7 @@ F main() -> i64 {
         fclose(h)
         puts("Write OK!")
         0
-    } E {
+    } EL {
         puts("Write FAILED!")
         0
     }
@@ -26,13 +26,13 @@ F main() -> i64 {
             putchar(c)
             putchar(10)
             0
-        } E {
+        } EL {
             0
         }
         fclose(h2)
         puts("Read OK!")
         0
-    } E {
+    } EL {
         puts("Read FAILED!")
         0
     }

@@ -196,43 +196,43 @@ X Token {
 
     # Check if token is a keyword
     F is_keyword(&self) -> i64 {
-        I self.kind >= 1 && self.kind <= 30 { 1 } E { 0 }
+        I self.kind >= 1 && self.kind <= 30 { 1 } EL { 0 }
     }
 
     # Check if token is a type keyword
     F is_type_keyword(&self) -> i64 {
-        I self.kind >= 31 && self.kind <= 50 { 1 } E { 0 }
+        I self.kind >= 31 && self.kind <= 50 { 1 } EL { 0 }
     }
 
     # Check if token is a literal
     F is_literal(&self) -> i64 {
-        I self.kind >= 51 && self.kind <= 60 { 1 } E { 0 }
+        I self.kind >= 51 && self.kind <= 60 { 1 } EL { 0 }
     }
 
     # Check if token is an operator
     F is_operator(&self) -> i64 {
-        I self.kind >= 61 && self.kind <= 80 { 1 } E { 0 }
+        I self.kind >= 61 && self.kind <= 80 { 1 } EL { 0 }
     }
 
     # Check if token is EOF
     F is_eof(&self) -> i64 {
-        I self.kind == TOK_EOF() { 1 } E { 0 }
+        I self.kind == TOK_EOF() { 1 } EL { 0 }
     }
 
     # Get operator precedence (higher = tighter binding)
     F precedence(&self) -> i64 {
         k := self.kind
         I k == 80 { 1 }                                          # ||
-        E I k == 79 { 2 }                                        # &&
-        E I k == 73 { 3 }                                        # |
-        E I k == 74 { 4 }                                        # ^
-        E I k == 72 { 5 }                                        # &
-        E I k == 70 || k == 71 { 6 }                             # == !=
-        E I k == 66 || k == 67 || k == 68 || k == 69 { 7 }       # < > <= >=
-        E I k == 76 || k == 77 { 8 }                             # << >>
-        E I k == 61 || k == 62 { 9 }                             # + -
-        E I k == 63 || k == 64 || k == 65 { 10 }                 # * / %
-        E { 0 }
+        EL I k == 79 { 2 }                                        # &&
+        EL I k == 73 { 3 }                                        # |
+        EL I k == 74 { 4 }                                        # ^
+        EL I k == 72 { 5 }                                        # &
+        EL I k == 70 || k == 71 { 6 }                             # == !=
+        EL I k == 66 || k == 67 || k == 68 || k == 69 { 7 }       # < > <= >=
+        EL I k == 76 || k == 77 { 8 }                             # << >>
+        EL I k == 61 || k == 62 { 9 }                             # + -
+        EL I k == 63 || k == 64 || k == 65 { 10 }                 # * / %
+        EL { 0 }
     }
 }
 
@@ -278,7 +278,7 @@ X TokenList {
 
     # Check if index is valid
     F is_valid_index(&self, index: i64) -> i64 {
-        I index >= 0 && index < self.len { 1 } E { 0 }
+        I index >= 0 && index < self.len { 1 } EL { 0 }
     }
 
     # Grow the list
@@ -366,7 +366,7 @@ F test_token_main() -> i64 {
     I tok.kind == 1 {
         puts("Token creation: OK")
         0
-    } E {
+    } EL {
         puts("Token creation: FAIL")
         0
     }
@@ -377,7 +377,7 @@ F test_token_main() -> i64 {
     I list.len() == 1 {
         puts("TokenList: OK")
         0
-    } E {
+    } EL {
         puts("TokenList: FAIL")
         0
     }

@@ -4,7 +4,7 @@
 # This test focuses on verifying that struct variants are properly registered
 
 # Define an enum with mixed variant types
-E Color {
+EN Color {
     Red,
     Green,
     Blue,
@@ -12,7 +12,7 @@ E Color {
 }
 
 # More complex example: Message enum
-E Message {
+EN Message {
     Quit,
     Move { x: i64, y: i64 },
     Write(i64),

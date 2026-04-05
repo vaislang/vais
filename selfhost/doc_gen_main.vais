@@ -79,7 +79,7 @@ F extract_module_name(path: i64, path_len: i64, out_ptr: i64, out_len: i64) -> i
     i := mut 0
     L {
         I i >= path_len { B }
-        I load_byte(path + i) == 47 { last_slash = i; 0 } E { 0 }
+        I load_byte(path + i) == 47 { last_slash = i; 0 } EL { 0 }
         i = i + 1
     }
 
@@ -95,12 +95,12 @@ F extract_module_name(path: i64, path_len: i64, out_ptr: i64, out_len: i64) -> i
                         I load_byte(path + path_len - 1) == 115 {  # s
                             ext_start = path_len - 5
                             0
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
-        } E { 0 }
-    } E { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     store_i64(out_ptr, path + name_start)
     store_i64(out_len, ext_start - name_start)
@@ -132,8 +132,8 @@ F main(argc: i64, argv: i64) -> i64 {
             output_ptr = load_i64(argv + 24)
             output_len = strlen_ptr(output_ptr)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     # Read source file
     source := read_file_ptr(path_ptr)
@@ -177,7 +177,7 @@ F main(argc: i64, argv: i64) -> i64 {
         write_file_ptr(output_ptr, out_data, out_len)
         puts("Documentation generated\n")
         0
-    } E {
+    } EL {
         # Print to stdout
         print_str(out_data, out_len)
         0

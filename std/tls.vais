@@ -106,7 +106,7 @@ X TlsContext {
 
     # Check if context was created successfully
     F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # Load certificate from PEM file
@@ -186,7 +186,7 @@ X TlsConn {
 
     # Check if connection handle is valid
     F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # Set SNI hostname (must be called before handshake for clients)
@@ -205,7 +205,7 @@ X TlsConn {
         I result == 0 {
             self.connected = 1
             self.last_error = TLS_OK
-        } E {
+        } EL {
             self.last_error = TLS_ERR_HANDSHAKE
         }
         result
@@ -218,7 +218,7 @@ X TlsConn {
         I result == 0 {
             self.connected = 1
             self.last_error = TLS_OK
-        } E {
+        } EL {
             self.last_error = TLS_ERR_HANDSHAKE
         }
         result
@@ -262,7 +262,7 @@ X TlsConn {
         I n > 0 {
             __store_byte(buf + n, 0)  # null terminate
             buf as str
-        } E {
+        } EL {
             __free(buf)
             ""
         }

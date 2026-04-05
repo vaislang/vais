@@ -19,7 +19,7 @@ F calculate(value: i64) -> i64 {
 }
 
 # Enum definition
-E Color {
+EN Color {
     Red,
     Green,
     Blue

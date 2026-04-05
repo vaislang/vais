@@ -112,13 +112,13 @@ F format_response() -> i64 {
     I last_status_code == 200 {
         msg := "Success: 200 OK"
         _ := console_log(msg as i64, 15)
-    } E I last_status_code == 201 {
+    } EL I last_status_code == 201 {
         msg := "Created: 201"
         _ := console_log(msg as i64, 12)
-    } E I last_status_code == 404 {
+    } EL I last_status_code == 404 {
         msg := "Not Found: 404"
         _ := console_log(msg as i64, 14)
-    } E {
+    } EL {
         msg := "Error: Unknown status"
         _ := console_log(msg as i64, 20)
     }
@@ -136,14 +136,14 @@ F count_digits(n: i64) -> i64 {
     }
 
     count := mut 0
-    num := mut I n < 0 { -n } E { n }
+    num := mut I n < 0 { -n } EL { n }
 
-    L num > 0 {
+    LW num > 0 {
         count = count + 1
         num = num / 10
     }
 
-    I n < 0 { count + 1 } E { count }
+    I n < 0 { count + 1 } EL { count }
 }
 
 # Retry mechanism for failed requests
@@ -151,7 +151,7 @@ F count_digits(n: i64) -> i64 {
 F retry_get(url_ptr: i64, url_len: i64, max_retries: i64) -> i64 {
     attempts := mut 0
 
-    L attempts < max_retries {
+    LW attempts < max_retries {
         response := fetch_get(url_ptr, url_len)
 
         I response >= 0 {

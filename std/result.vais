@@ -2,7 +2,7 @@
 # Ok(T) or Err(E)
 # Layout: {i32 tag, i64 value} where tag=0 is Ok, tag=1 is Err
 
-E Result<T, E> {
+EN Result<T, E> {
     Ok(T),
     Err(E)
 }
@@ -73,7 +73,7 @@ X Result<T, E> {
     }
 
     # Get error value or default
-    F err_or(&self, default: E) -> E {
+    F err_or(&self, default: E) -> EL {
         M self {
             Ok(_) => default,
             Err(e) => e
@@ -132,7 +132,7 @@ X StdError {
     }
 
     F has_source(&self) -> i64 {
-        I self.source_code != 0 { 1 } E { 0 }
+        I self.source_code != 0 { 1 } EL { 0 }
     }
 }
 

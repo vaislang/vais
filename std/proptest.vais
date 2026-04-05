@@ -149,9 +149,9 @@ X Generator {
                 # Shrink towards zero
                 I value == 0 {
                     0
-                } E I value > 0 {
+                } EL I value > 0 {
                     value / 2
-                } E {
+                } EL {
                     (value + 1) / 2   # Shrink negative towards zero
                 }
             },
@@ -161,7 +161,7 @@ X Generator {
                 f := i64_bits_to_f64(value)
                 I f == 0.0 {
                     0
-                } E {
+                } EL {
                     f64_to_i64_bits(f / 2.0)
                 }
             },
@@ -266,7 +266,7 @@ X Property {
         random_seed(self.seed)
 
         i := 0
-        L i < self.num_tests {
+        LW i < self.num_tests {
             # Generate random input
             value := self.generator.generate()
 
@@ -307,7 +307,7 @@ F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkRe
     current := initial
     steps := 0
 
-    L steps < MAX_SHRINK_ATTEMPTS && gen.can_shrink(current) {
+    LW steps < MAX_SHRINK_ATTEMPTS && gen.can_shrink(current) {
         shrunk := gen.shrink(current)
 
         # Check if shrunk value still fails
@@ -317,7 +317,7 @@ F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkRe
             # Shrunk value still fails - use it
             current = shrunk
             steps = steps + 1
-        } E {
+        } EL {
             # Shrunk value passes - can't shrink further this way
             B
         }

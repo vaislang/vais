@@ -27,11 +27,11 @@ X File {
         # Validate path is not null
         I path == 0 {
             File { handle: 0, mode: 0 }
-        } E {
+        } EL {
             handle := fopen(path, "r")
             I handle == 0 {
                 File { handle: 0, mode: 0 }
-            } E {
+            } EL {
                 File { handle: handle, mode: 1 }
             }
         }
@@ -42,11 +42,11 @@ X File {
         # Validate path is not null
         I path == 0 {
             File { handle: 0, mode: 0 }
-        } E {
+        } EL {
             handle := fopen(path, "w")
             I handle == 0 {
                 File { handle: 0, mode: 0 }
-            } E {
+            } EL {
                 File { handle: handle, mode: 2 }
             }
         }
@@ -57,11 +57,11 @@ X File {
         # Validate path is not null
         I path == 0 {
             File { handle: 0, mode: 0 }
-        } E {
+        } EL {
             handle := fopen(path, "a")
             I handle == 0 {
                 File { handle: 0, mode: 0 }
-            } E {
+            } EL {
                 File { handle: handle, mode: 3 }
             }
         }
@@ -69,7 +69,7 @@ X File {
 
     # Check if file is open and valid
     F is_open(&self) -> i64 {
-        I self.handle != 0 { 1 } E { 0 }
+        I self.handle != 0 { 1 } EL { 0 }
     }
 
     # Get file mode (0=closed, 1=read, 2=write, 3=append)
@@ -81,7 +81,7 @@ X File {
     F read_byte(&self) -> i64 {
         I self.handle == 0 {
             0 - 1
-        } E {
+        } EL {
             fgetc(self.handle)
         }
     }
@@ -91,9 +91,9 @@ X File {
     F read_byte_result(&self) -> Result<i64, i64> {
         I self.handle == 0 {
             Err(ERR_INVALID())
-        } E {
+        } EL {
             byte := fgetc(self.handle)
-            I byte < 0 { Err(ERR_IO()) } E { Ok(byte) }
+            I byte < 0 { Err(ERR_IO()) } EL { Ok(byte) }
         }
     }
 
@@ -102,11 +102,11 @@ X File {
     F read_byte_opt(&self) -> Option {
         I self.handle == 0 {
             None
-        } E {
+        } EL {
             byte := fgetc(self.handle)
             I byte < 0 {
                 None
-            } E {
+            } EL {
                 Some(byte)
             }
         }
@@ -117,11 +117,11 @@ X File {
     F read(&self, buffer: i64, count: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I buffer == 0 {
+        } EL I buffer == 0 {
             0
-        } E I count <= 0 {
+        } EL I count <= 0 {
             0
-        } E {
+        } EL {
             fread(buffer, 1, count, self.handle)
         }
     }
@@ -131,15 +131,15 @@ X File {
     F read_line(&self, buffer: i64, max_len: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I buffer == 0 {
+        } EL I buffer == 0 {
             0
-        } E I max_len <= 0 {
+        } EL I max_len <= 0 {
             0
-        } E {
+        } EL {
             result := fgets(buffer, max_len, self.handle)
             I result == 0 {
                 0
-            } E {
+            } EL {
                 1
             }
         }
@@ -150,15 +150,15 @@ X File {
     F read_line_result(&self, buffer: i64, max_len: i64) -> Result<i64, i64> {
         I self.handle == 0 {
             Err(ERR_INVALID())
-        } E I buffer == 0 {
+        } EL I buffer == 0 {
             Err(ERR_INVALID())
-        } E I max_len <= 0 {
+        } EL I max_len <= 0 {
             Err(ERR_INVALID())
-        } E {
+        } EL {
             result := fgets(buffer, max_len, self.handle)
             I result == 0 {
                 Err(ERR_IO())
-            } E {
+            } EL {
                 Ok(buffer)
             }
         }
@@ -169,11 +169,11 @@ X File {
     F write_byte(&self, byte: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             result := fputc(byte, self.handle)
             I result < 0 {
                 0
-            } E {
+            } EL {
                 1
             }
         }
@@ -184,11 +184,11 @@ X File {
     F write(&self, buffer: i64, count: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I buffer == 0 {
+        } EL I buffer == 0 {
             0
-        } E I count <= 0 {
+        } EL I count <= 0 {
             0
-        } E {
+        } EL {
             fwrite(buffer, 1, count, self.handle)
         }
     }
@@ -198,13 +198,13 @@ X File {
     F write_str(&self, s: i64) -> i64 {
         I self.handle == 0 {
             0
-        } E I s == 0 {
+        } EL I s == 0 {
             0
-        } E {
+        } EL {
             result := fputs(s, self.handle)
             I result < 0 {
                 0
-            } E {
+            } EL {
                 1
             }
         }
@@ -214,7 +214,7 @@ X File {
     F flush(&self) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             fflush(self.handle)
             1
         }
@@ -225,14 +225,14 @@ X File {
     F sync(&self) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             fflush(self.handle)
             fd := fileno(self.handle)
             I fd < 0 {
                 0
-            } E {
+            } EL {
                 result := fsync(fd)
-                I result == 0 { 1 } E { 0 }
+                I result == 0 { 1 } EL { 0 }
             }
         }
     }
@@ -242,14 +242,14 @@ X File {
     F datasync(&self) -> i64 {
         I self.handle == 0 {
             0
-        } E {
+        } EL {
             fflush(self.handle)
             fd := fileno(self.handle)
             I fd < 0 {
                 0
-            } E {
+            } EL {
                 result := fdatasync(fd)
-                I result == 0 { 1 } E { 0 }
+                I result == 0 { 1 } EL { 0 }
             }
         }
     }
@@ -259,9 +259,9 @@ X File {
     F seek(&self, offset: i64, origin: i64) -> i64 {
         I self.handle == 0 {
             0 - 1
-        } E I origin < SEEK_SET | origin > SEEK_END {
+        } EL I origin < SEEK_SET | origin > SEEK_END {
             0 - 1
-        } E {
+        } EL {
             fseek(self.handle, offset, origin)
         }
     }
@@ -271,11 +271,11 @@ X File {
     F seek_result(&self, offset: i64, origin: i64) -> Result<i64, i64> {
         I self.handle == 0 {
             Err(ERR_INVALID())
-        } E I origin < SEEK_SET | origin > SEEK_END {
+        } EL I origin < SEEK_SET | origin > SEEK_END {
             Err(ERR_INVALID())
-        } E {
+        } EL {
             result := fseek(self.handle, offset, origin)
-            I result == 0 { Ok(0) } E { Err(ERR_IO()) }
+            I result == 0 { Ok(0) } EL { Err(ERR_IO()) }
         }
     }
 
@@ -284,7 +284,7 @@ X File {
     F tell(&self) -> i64 {
         I self.handle == 0 {
             0 - 1
-        } E {
+        } EL {
             ftell(self.handle)
         }
     }
@@ -294,9 +294,9 @@ X File {
     F tell_result(&self) -> Result<i64, i64> {
         I self.handle == 0 {
             Err(ERR_INVALID())
-        } E {
+        } EL {
             pos := ftell(self.handle)
-            I pos < 0 { Err(ERR_IO()) } E { Ok(pos) }
+            I pos < 0 { Err(ERR_IO()) } EL { Ok(pos) }
         }
     }
 
@@ -304,7 +304,7 @@ X File {
     F eof(&self) -> i64 {
         I self.handle == 0 {
             1
-        } E {
+        } EL {
             feof(self.handle)
         }
     }
@@ -335,14 +335,14 @@ F file_read_all(path: i64, size_out: i64) -> i64 {
             store_i64(size_out, 0)
         }
         0
-    } E I size_out == 0 {
+    } EL I size_out == 0 {
         0
-    } E {
+    } EL {
         f := File.open_read(path)
         I f.handle == 0 {
             store_i64(size_out, 0)
             0
-        } E {
+        } EL {
             # Get file size
             f.seek(0, 2)  # Seek to end
             size := f.tell()
@@ -352,14 +352,14 @@ F file_read_all(path: i64, size_out: i64) -> i64 {
                 f.close()
                 store_i64(size_out, 0)
                 0
-            } E {
+            } EL {
                 # Allocate buffer (+1 for null terminator)
                 buffer := malloc(size + 1)
                 I buffer == 0 {
                     f.close()
                     store_i64(size_out, 0)
                     0
-                } E {
+                } EL {
                     bytes_read := f.read(buffer, size)
                     store_byte(buffer + bytes_read, 0)  # Null terminate
                     f.close()
@@ -381,14 +381,14 @@ F file_read_all_result(path: i64, size_out: i64) -> Result<i64, i64> {
             store_i64(size_out, 0)
         }
         Err(ERR_INVALID())
-    } E I size_out == 0 {
+    } EL I size_out == 0 {
         Err(ERR_INVALID())
-    } E {
+    } EL {
         f := File.open_read(path)
         I f.handle == 0 {
             store_i64(size_out, 0)
             Err(ERR_NOT_FOUND())
-        } E {
+        } EL {
             # Get file size
             f.seek(0, 2)  # Seek to end
             size := f.tell()
@@ -398,14 +398,14 @@ F file_read_all_result(path: i64, size_out: i64) -> Result<i64, i64> {
                 f.close()
                 store_i64(size_out, 0)
                 Err(ERR_IO())
-            } E {
+            } EL {
                 # Allocate buffer (+1 for null terminator)
                 buffer := malloc(size + 1)
                 I buffer == 0 {
                     f.close()
                     store_i64(size_out, 0)
                     Err(ERR_OVERFLOW())
-                } E {
+                } EL {
                     bytes_read := f.read(buffer, size)
                     store_byte(buffer + bytes_read, 0)  # Null terminate
                     f.close()
@@ -423,15 +423,15 @@ F file_write_all(path: i64, buffer: i64, size: i64) -> i64 {
     # Validate inputs
     I path == 0 {
         0
-    } E I buffer == 0 {
+    } EL I buffer == 0 {
         0
-    } E I size <= 0 {
+    } EL I size <= 0 {
         0
-    } E {
+    } EL {
         f := File.open_write(path)
         I f.handle == 0 {
             0
-        } E {
+        } EL {
             written := f.write(buffer, size)
             f.close()
             written
@@ -445,15 +445,15 @@ F file_append(path: i64, buffer: i64, size: i64) -> i64 {
     # Validate inputs
     I path == 0 {
         0
-    } E I buffer == 0 {
+    } EL I buffer == 0 {
         0
-    } E I size <= 0 {
+    } EL I size <= 0 {
         0
-    } E {
+    } EL {
         f := File.open_append(path)
         I f.handle == 0 {
             0
-        } E {
+        } EL {
             written := f.write(buffer, size)
             f.close()
             written
@@ -466,11 +466,11 @@ F file_exists(path: i64) -> i64 {
     # Validate path is not null
     I path == 0 {
         0
-    } E {
+    } EL {
         f := File.open_read(path)
         I f.handle == 0 {
             0
-        } E {
+        } EL {
             f.close()
             1
         }
@@ -482,11 +482,11 @@ F file_exists(path: i64) -> i64 {
 F file_sync(path: i64) -> i64 {
     I path == 0 {
         0
-    } E {
+    } EL {
         f := File.open_read(path)
         I f.handle == 0 {
             0
-        } E {
+        } EL {
             result := f.sync()
             f.close()
             result
@@ -545,7 +545,7 @@ X MappedFile {
         addr := mmap(0, len, prot, flags, fd, offset)
         I addr == MAP_FAILED {
             MappedFile { addr: 0, len: 0 }
-        } E {
+        } EL {
             MappedFile { addr: addr, len: len }
         }
     }
@@ -562,16 +562,16 @@ X MappedFile {
 
     # Check if mapping is valid
     F is_valid(&self) -> i64 {
-        I self.addr != 0 { 1 } E { 0 }
+        I self.addr != 0 { 1 } EL { 0 }
     }
 
     # Unmap the memory region. Returns 1 on success, 0 on error.
     F unmap(&self) -> i64 {
         I self.addr == 0 {
             0
-        } E {
+        } EL {
             result := munmap(self.addr, self.len)
-            I result == 0 { 1 } E { 0 }
+            I result == 0 { 1 } EL { 0 }
         }
     }
 
@@ -579,9 +579,9 @@ X MappedFile {
     F sync(&self) -> i64 {
         I self.addr == 0 {
             0
-        } E {
+        } EL {
             result := msync(self.addr, self.len, MS_SYNC)
-            I result == 0 { 1 } E { 0 }
+            I result == 0 { 1 } EL { 0 }
         }
     }
 
@@ -589,9 +589,9 @@ X MappedFile {
     F sync_async(&self) -> i64 {
         I self.addr == 0 {
             0
-        } E {
+        } EL {
             result := msync(self.addr, self.len, MS_ASYNC)
-            I result == 0 { 1 } E { 0 }
+            I result == 0 { 1 } EL { 0 }
         }
     }
 
@@ -599,18 +599,18 @@ X MappedFile {
     F advise(&self, advice: i64) -> i64 {
         I self.addr == 0 {
             0
-        } E {
+        } EL {
             result := madvise(self.addr, self.len, advice)
-            I result == 0 { 1 } E { 0 }
+            I result == 0 { 1 } EL { 0 }
         }
     }
 
     # Read a byte at given offset within the mapping
     F read_byte(&self, offset: i64) -> i64 {
         I self.addr == 0 { 0 - 1 }
-        E I  offset < 0 { 0 - 1 }
-        E I  offset >= self.len { 0 - 1 }
-        E {
+        EL I  offset < 0 { 0 - 1 }
+        EL I  offset >= self.len { 0 - 1 }
+        EL {
             load_byte(self.addr + offset)
         }
     }
@@ -619,9 +619,9 @@ X MappedFile {
     # Returns Ok(byte) on success, Err(error_code) on failure
     F read_byte_result(&self, offset: i64) -> Result<i64, i64> {
         I self.addr == 0 { Err(ERR_INVALID()) }
-        E I  offset < 0 { Err(ERR_INVALID()) }
-        E I  offset >= self.len { Err(ERR_OVERFLOW()) }
-        E {
+        EL I  offset < 0 { Err(ERR_INVALID()) }
+        EL I  offset >= self.len { Err(ERR_OVERFLOW()) }
+        EL {
             Ok(load_byte(self.addr + offset))
         }
     }
@@ -629,9 +629,9 @@ X MappedFile {
     # Write a byte at given offset within the mapping
     F write_byte(&self, offset: i64, val: i64) -> i64 {
         I self.addr == 0 { 0 }
-        E I  offset < 0 { 0 }
-        E I  offset >= self.len { 0 }
-        E {
+        EL I  offset < 0 { 0 }
+        EL I  offset >= self.len { 0 }
+        EL {
             store_byte(self.addr + offset, val)
             1
         }
@@ -641,9 +641,9 @@ X MappedFile {
     # Returns Ok(1) on success, Err(error_code) on failure
     F write_byte_result(&self, offset: i64, val: i64) -> Result<i64, i64> {
         I self.addr == 0 { Err(ERR_INVALID()) }
-        E I  offset < 0 { Err(ERR_INVALID()) }
-        E I  offset >= self.len { Err(ERR_OVERFLOW()) }
-        E {
+        EL I  offset < 0 { Err(ERR_INVALID()) }
+        EL I  offset >= self.len { Err(ERR_OVERFLOW()) }
+        EL {
             store_byte(self.addr + offset, val)
             Ok(1)
         }
@@ -672,7 +672,7 @@ X FileLock {
     F open(path: i64) -> FileLock {
         I path == 0 {
             FileLock { fd: 0 - 1, locked: 0 }
-        } E {
+        } EL {
             fd := posix_open(path, 2, 0)
             FileLock { fd: fd, locked: 0 }
         }
@@ -680,19 +680,19 @@ X FileLock {
 
     # Check if the lock handle is valid
     F is_valid(&self) -> i64 {
-        I self.fd >= 0 { 1 } E { 0 }
+        I self.fd >= 0 { 1 } EL { 0 }
     }
 
     # Acquire a shared (read) lock, blocking
     # Returns 1 on success, 0 on error
     F lock_shared(&self) -> i64 {
         I self.fd < 0 { 0 }
-        E {
+        EL {
             result := flock(self.fd, LOCK_SH)
             I result == 0 {
                 self.locked = 1
                 1
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -700,12 +700,12 @@ X FileLock {
     # Returns 1 on success, 0 on error
     F lock_exclusive(&self) -> i64 {
         I self.fd < 0 { 0 }
-        E {
+        EL {
             result := flock(self.fd, LOCK_EX)
             I result == 0 {
                 self.locked = 2
                 1
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -713,12 +713,12 @@ X FileLock {
     # Returns 1 on success, 0 if would block or error
     F try_lock_shared(&self) -> i64 {
         I self.fd < 0 { 0 }
-        E {
+        EL {
             result := flock(self.fd, LOCK_SH + LOCK_NB)
             I result == 0 {
                 self.locked = 1
                 1
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -726,12 +726,12 @@ X FileLock {
     # Returns 1 on success, 0 if would block or error
     F try_lock_exclusive(&self) -> i64 {
         I self.fd < 0 { 0 }
-        E {
+        EL {
             result := flock(self.fd, LOCK_EX + LOCK_NB)
             I result == 0 {
                 self.locked = 2
                 1
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -739,19 +739,19 @@ X FileLock {
     # Returns 1 on success, 0 on error
     F unlock(&self) -> i64 {
         I self.fd < 0 { 0 }
-        E I  self.locked == 0 { 1 }
-        E {
+        EL I  self.locked == 0 { 1 }
+        EL {
             result := flock(self.fd, LOCK_UN)
             I result == 0 {
                 self.locked = 0
                 1
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
     # Check if currently locked
     F is_locked(&self) -> i64 {
-        I self.locked != 0 { 1 } E { 0 }
+        I self.locked != 0 { 1 } EL { 0 }
     }
 
     # Close the file descriptor and release lock
@@ -778,14 +778,14 @@ X FileLock {
 F dir_sync(path: i64) -> i64 {
     I path == 0 {
         0
-    } E {
+    } EL {
         fd := posix_open(path, O_RDONLY, 0)
         I fd < 0 {
             0
-        } E {
+        } EL {
             result := fsync(fd)
             posix_close(fd)
-            I result == 0 { 1 } E { 0 }
+            I result == 0 { 1 } EL { 0 }
         }
     }
 }
@@ -801,13 +801,13 @@ X File {
     # Thread-safe: does not modify file offset
     F pread(&self, buffer: i64, count: i64, offset: i64) -> i64 {
         I self.handle == 0 { 0 - 1 }
-        E I buffer == 0 { 0 - 1 }
-        E I count < 0 { 0 - 1 }
-        E I offset < 0 { 0 - 1 }
-        E {
+        EL I buffer == 0 { 0 - 1 }
+        EL I count < 0 { 0 - 1 }
+        EL I offset < 0 { 0 - 1 }
+        EL {
             fd := fileno(self.handle)
             I fd < 0 { 0 - 1 }
-            E { pread(fd, buffer, count, offset) }
+            EL { pread(fd, buffer, count, offset) }
         }
     }
 
@@ -815,15 +815,15 @@ X File {
     # Returns Ok(bytes_read) on success, Err(error_code) on failure
     F pread_result(&self, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
         I self.handle == 0 { Err(ERR_INVALID()) }
-        E I buffer == 0 { Err(ERR_INVALID()) }
-        E I count < 0 { Err(ERR_INVALID()) }
-        E I offset < 0 { Err(ERR_INVALID()) }
-        E {
+        EL I buffer == 0 { Err(ERR_INVALID()) }
+        EL I count < 0 { Err(ERR_INVALID()) }
+        EL I offset < 0 { Err(ERR_INVALID()) }
+        EL {
             fd := fileno(self.handle)
             I fd < 0 { Err(ERR_IO()) }
-            E {
+            EL {
                 n := pread(fd, buffer, count, offset)
-                I n < 0 { Err(ERR_IO()) } E { Ok(n) }
+                I n < 0 { Err(ERR_IO()) } EL { Ok(n) }
             }
         }
     }
@@ -833,13 +833,13 @@ X File {
     # Thread-safe: does not modify file offset
     F pwrite(&self, buffer: i64, count: i64, offset: i64) -> i64 {
         I self.handle == 0 { 0 - 1 }
-        E I buffer == 0 { 0 - 1 }
-        E I count < 0 { 0 - 1 }
-        E I offset < 0 { 0 - 1 }
-        E {
+        EL I buffer == 0 { 0 - 1 }
+        EL I count < 0 { 0 - 1 }
+        EL I offset < 0 { 0 - 1 }
+        EL {
             fd := fileno(self.handle)
             I fd < 0 { 0 - 1 }
-            E { pwrite(fd, buffer, count, offset) }
+            EL { pwrite(fd, buffer, count, offset) }
         }
     }
 
@@ -847,15 +847,15 @@ X File {
     # Returns Ok(bytes_written) on success, Err(error_code) on failure
     F pwrite_result(&self, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
         I self.handle == 0 { Err(ERR_INVALID()) }
-        E I buffer == 0 { Err(ERR_INVALID()) }
-        E I count < 0 { Err(ERR_INVALID()) }
-        E I offset < 0 { Err(ERR_INVALID()) }
-        E {
+        EL I buffer == 0 { Err(ERR_INVALID()) }
+        EL I count < 0 { Err(ERR_INVALID()) }
+        EL I offset < 0 { Err(ERR_INVALID()) }
+        EL {
             fd := fileno(self.handle)
             I fd < 0 { Err(ERR_IO()) }
-            E {
+            EL {
                 n := pwrite(fd, buffer, count, offset)
-                I n < 0 { Err(ERR_IO()) } E { Ok(n) }
+                I n < 0 { Err(ERR_IO()) } EL { Ok(n) }
             }
         }
     }
@@ -865,11 +865,11 @@ X File {
 # Returns number of bytes read, or -1 on error
 F file_pread(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
     I path == 0 { 0 - 1 }
-    E I buffer == 0 { 0 - 1 }
-    E {
+    EL I buffer == 0 { 0 - 1 }
+    EL {
         f := File.open_read(path)
         I f.handle == 0 { 0 - 1 }
-        E {
+        EL {
             result := f.pread(buffer, count, offset)
             f.close()
             result
@@ -881,14 +881,14 @@ F file_pread(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
 # Returns Ok(bytes_read) on success, Err(error_code) on failure
 F file_pread_result(path: i64, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
     I path == 0 { Err(ERR_INVALID()) }
-    E I buffer == 0 { Err(ERR_INVALID()) }
-    E {
+    EL I buffer == 0 { Err(ERR_INVALID()) }
+    EL {
         f := File.open_read(path)
         I f.handle == 0 { Err(ERR_NOT_FOUND()) }
-        E {
+        EL {
             result := f.pread(buffer, count, offset)
             f.close()
-            I result < 0 { Err(ERR_IO()) } E { Ok(result) }
+            I result < 0 { Err(ERR_IO()) } EL { Ok(result) }
         }
     }
 }
@@ -897,11 +897,11 @@ F file_pread_result(path: i64, buffer: i64, count: i64, offset: i64) -> Result<i
 # Returns number of bytes written, or -1 on error
 F file_pwrite(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
     I path == 0 { 0 - 1 }
-    E I buffer == 0 { 0 - 1 }
-    E {
+    EL I buffer == 0 { 0 - 1 }
+    EL {
         f := File.open_write(path)
         I f.handle == 0 { 0 - 1 }
-        E {
+        EL {
             result := f.pwrite(buffer, count, offset)
             f.close()
             result
@@ -913,14 +913,14 @@ F file_pwrite(path: i64, buffer: i64, count: i64, offset: i64) -> i64 {
 # Returns Ok(bytes_written) on success, Err(error_code) on failure
 F file_pwrite_result(path: i64, buffer: i64, count: i64, offset: i64) -> Result<i64, i64> {
     I path == 0 { Err(ERR_INVALID()) }
-    E I buffer == 0 { Err(ERR_INVALID()) }
-    E {
+    EL I buffer == 0 { Err(ERR_INVALID()) }
+    EL {
         f := File.open_write(path)
         I f.handle == 0 { Err(ERR_IO()) }
-        E {
+        EL {
             result := f.pwrite(buffer, count, offset)
             f.close()
-            I result < 0 { Err(ERR_IO()) } E { Ok(result) }
+            I result < 0 { Err(ERR_IO()) } EL { Ok(result) }
         }
     }
 }

@@ -10,7 +10,7 @@ C TAU: f64 = 6.283185307179586
 F abs_i64(x: i64) -> i64 {
     I x < 0 {
         0 - x
-    } E {
+    } EL {
         x
     }
 }
@@ -19,38 +19,38 @@ F abs_i64(x: i64) -> i64 {
 F abs(x: f64) -> f64 {
     I x < 0.0 {
         0.0 - x
-    } E {
+    } EL {
         x
     }
 }
 
 # Minimum of two i64 values
 F min_i64(a: i64, b: i64) -> i64 {
-    I a < b { a } E { b }
+    I a < b { a } EL { b }
 }
 
 # Minimum of two f64 values
 F min(a: f64, b: f64) -> f64 {
-    I a < b { a } E { b }
+    I a < b { a } EL { b }
 }
 
 # Maximum of two i64 values
 F max_i64(a: i64, b: i64) -> i64 {
-    I a > b { a } E { b }
+    I a > b { a } EL { b }
 }
 
 # Maximum of two f64 values
 F max(a: f64, b: f64) -> f64 {
-    I a > b { a } E { b }
+    I a > b { a } EL { b }
 }
 
 # Clamp value between min and max (i64)
 F clamp_i64(x: i64, min_val: i64, max_val: i64) -> i64 {
     I x < min_val {
         min_val
-    } E I x > max_val {
+    } EL I x > max_val {
         max_val
-    } E {
+    } EL {
         x
     }
 }
@@ -59,9 +59,9 @@ F clamp_i64(x: i64, min_val: i64, max_val: i64) -> i64 {
 F clamp(x: f64, min_val: f64, max_val: f64) -> f64 {
     I x < min_val {
         min_val
-    } E I x > max_val {
+    } EL I x > max_val {
         max_val
-    } E {
+    } EL {
         x
     }
 }
@@ -133,5 +133,5 @@ F rad_to_deg(radians: f64) -> f64 {
 # Helper: Check if number is approximately equal (within epsilon)
 F approx_eq(a: f64, b: f64, epsilon: f64) -> i64 {
     diff := abs(a - b)
-    I diff < epsilon { 1 } E { 0 }
+    I diff < epsilon { 1 } EL { 0 }
 }

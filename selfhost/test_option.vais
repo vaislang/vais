@@ -14,14 +14,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -39,7 +39,7 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
         puts(test_name)
         putchar(10)
         1
-    } E {
+    } EL {
         puts("[FAIL] ")
         puts(test_name)
         putchar(10)
@@ -258,5 +258,5 @@ F main() -> i64 {
     puts("============================================================================")
 
     # Return 0 if all passed, 1 if any failed
-    I total_passes == 32 { 0 } E { 1 }
+    I total_passes == 32 { 0 } EL { 1 }
 }

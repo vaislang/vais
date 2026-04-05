@@ -20,7 +20,7 @@ X Counter: Iterator {
             val := self.count
             self.count = self.count + 1
             val
-        } E {
+        } EL {
             0 - 1  # Return -1 to signal end
         }
     }
@@ -33,7 +33,7 @@ F test_iteration() -> i64 {
     # Test 1: Range iteration (built-in)
     puts("Range iteration:")
     sum1 := mut 0
-    L i:0..5 {
+    LF i:0..5 {
         putchar(i + 48)
         putchar(32)
         sum1 = sum1 + i

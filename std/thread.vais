@@ -34,13 +34,13 @@ X JoinHandle<T> {
 
     # Wait for the thread to finish and get its result
     F join(&self) -> T? {
-        L self.status == THREAD_RUNNING {
+        LW self.status == THREAD_RUNNING {
             # Call OS join function
             __thread_join(self.handle)
             self.status = THREAD_FINISHED
         }
 
-        L self.status == THREAD_FINISHED {
+        LW self.status == THREAD_FINISHED {
             # Read result from result_ptr
             result := __load_result(self.result_ptr)
             Some(result as T)
@@ -51,7 +51,7 @@ X JoinHandle<T> {
 
     # Check if thread has finished
     F is_finished(&self) -> i64 {
-        L self.status == THREAD_FINISHED {
+        LW self.status == THREAD_FINISHED {
             1
         } ! {
             __thread_try_join(self.handle)
@@ -180,7 +180,7 @@ X ThreadLocal<T> {
     # Get the thread-local value, initializing if needed
     F get(&self) -> &T {
         ptr := __tls_get(self.key)
-        L ptr == 0 {
+        LW ptr == 0 {
             # Initialize for this thread
             init_value := __call_fn(self.init_fn)
             storage := __malloc(8)
@@ -195,7 +195,7 @@ X ThreadLocal<T> {
     # Set the thread-local value
     F set(&self, value: T) -> i64 {
         ptr := __tls_get(self.key)
-        L ptr == 0 {
+        LW ptr == 0 {
             storage := __malloc(8)
             __store_i64(storage, value as i64)
             __tls_set(self.key, storage)
@@ -322,7 +322,7 @@ X Scope {
     # Wait for all threads to complete
     F join_all(&self) -> i64 {
         i := 0
-        L i < self.thread_count {
+        LW i < self.thread_count {
             offset := i * 24
             handle := __load_i64(self.threads + offset + 8)
             __thread_join(handle)
@@ -373,7 +373,7 @@ X ThreadPool {
 
         # Spawn worker threads
         i := 0
-        L i < num_threads {
+        LW i < num_threads {
             handle := __thread_spawn(__worker_fn as i64, &pool as i64, 0)
             __store_i64(workers + i * 8, handle)
             i = i + 1
@@ -398,7 +398,7 @@ X ThreadPool {
 
         # Wait for all workers
         i := 0
-        L i < self.worker_count {
+        LW i < self.worker_count {
             handle := __load_i64(self.workers + i * 8)
             __thread_join(handle)
             i = i + 1
@@ -414,9 +414,9 @@ X ThreadPool {
 F __worker_fn(pool_ptr: i64) -> i64 {
     pool := pool_ptr as *ThreadPool
 
-    L pool.shutdown == 0 {
+    LW pool.shutdown == 0 {
         # Try to get a task
-        L pool.queue_head < pool.queue_tail {
+        LW pool.queue_head < pool.queue_tail {
             offset := (pool.queue_head % pool.queue_size) * 16
             fn_ptr := __load_i64(pool.task_queue + offset)
             arg := __load_i64(pool.task_queue + offset + 8)

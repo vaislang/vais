@@ -38,7 +38,7 @@ X Stats {
 
 # Store a 64-bit integer at buf+offset (little-endian)
 F store_i64(buf: i64, offset: i64, value: i64) {
-    L i:0..8 {
+    LF i:0..8 {
         byte := (value >> (i * 8)) & 255
         store_byte(buf + offset, i, byte)
     }
@@ -47,7 +47,7 @@ F store_i64(buf: i64, offset: i64, value: i64) {
 # Load a 64-bit integer from buf+offset (little-endian)
 F load_i64_at(buf: i64, offset: i64) -> i64 {
     result := mut 0
-    L i:0..8 {
+    LF i:0..8 {
         byte := load_byte(buf + offset, i)
         result = result | (byte << (i * 8))
     }
@@ -97,7 +97,7 @@ F compute_stats(buf: i64, count: i64) -> Stats {
     max_v := mut 0
     min_v := mut 999999
 
-    L i:0..count {
+    LF i:0..count {
         rec := read_record(buf, i)
         score := apply_curve(rec.score)
 
@@ -122,7 +122,7 @@ F compute_filtered_stats(buf: i64, count: i64, min_score: i64) -> Stats {
     min_v := mut 999999
     passed := mut 0
 
-    L i:0..count {
+    LF i:0..count {
         rec := read_record(buf, i)
         score := apply_curve(rec.score)
 
@@ -163,7 +163,7 @@ F main() -> i64 {
 
     # 4. Raw data dump
     puts("\n--- Raw Data ---")
-    L i:0..count {
+    LF i:0..count {
         rec := read_record(buf, i)
         curved := apply_curve(rec.score)
         puts("  ID ~{rec.id}: ~{rec.score} -> ~{curved}")

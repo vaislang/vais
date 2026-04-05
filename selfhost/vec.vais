@@ -38,7 +38,7 @@ F vec_len(v: i64) -> i64 = load_i64(v + 8)
 F vec_cap(v: i64) -> i64 = load_i64(v + 16)
 
 F vec_is_empty(v: i64) -> i64 {
-    I vec_len(v) == 0 { 1 } E { 0 }
+    I vec_len(v) == 0 { 1 } EL { 0 }
 }
 
 # ============================================================================
@@ -70,14 +70,14 @@ F vec_get_checked(v: i64, idx: i64) -> i64 {
             store_i64(opt, 0)
             store_i64(opt + 8, val)
             opt
-        } E {
+        } EL {
             # Return opt_none inline
             opt := malloc(16)
             store_i64(opt, 1)
             store_i64(opt + 8, 0)
             opt
         }
-    } E {
+    } EL {
         opt := malloc(16)
         store_i64(opt, 1)
         store_i64(opt + 8, 0)
@@ -123,7 +123,7 @@ F vec_ensure_cap(v: i64, needed: i64) -> i64 {
         store_i64(v, new_data)
         store_i64(v + 16, new_cap)
         0
-    } E { 0 }
+    } EL { 0 }
 }
 
 # ============================================================================
@@ -137,7 +137,7 @@ F vec_push(v: i64, val: i64) -> i64 {
     I len >= cap {
         vec_grow(v)
         0
-    } E { 0 }
+    } EL { 0 }
     data := load_i64(v)
     store_i64(data + len * 8, val)
     store_i64(v + 8, len + 1)
@@ -152,7 +152,7 @@ F vec_pop(v: i64) -> i64 {
         store_i64(v + 8, new_len)
         data := load_i64(v)
         load_i64(data + new_len * 8)
-    } E {
+    } EL {
         puts("panic: vec_pop on empty vec")
         0
     }
@@ -165,11 +165,11 @@ F vec_insert(v: i64, idx: i64, val: i64) -> i64 {
     I len >= cap {
         vec_grow(v)
         0
-    } E { 0 }
+    } EL { 0 }
     data := load_i64(v)
     # Shift elements right from end to idx
     i := mut len
-    L i > idx {
+    LW i > idx {
         prev := load_i64(data + (i - 1) * 8)
         store_i64(data + i * 8, prev)
         i = i - 1
@@ -186,7 +186,7 @@ F vec_remove(v: i64, idx: i64) -> i64 {
     val := load_i64(data + idx * 8)
     # Shift elements left
     i := mut idx
-    L i < len - 1 {
+    LW i < len - 1 {
         next := load_i64(data + (i + 1) * 8)
         store_i64(data + i * 8, next)
         i = i + 1
@@ -205,7 +205,7 @@ F vec_swap_remove(v: i64, idx: i64) -> i64 {
         last := load_i64(data + new_len * 8)
         store_i64(data + idx * 8, last)
         0
-    } E { 0 }
+    } EL { 0 }
     store_i64(v + 8, new_len)
     val
 }
@@ -222,7 +222,7 @@ F vec_truncate(v: i64, new_len: i64) -> i64 {
     I new_len < len {
         store_i64(v + 8, new_len)
         0
-    } E { 0 }
+    } EL { 0 }
 }
 
 # ============================================================================
@@ -235,12 +235,12 @@ F vec_index_of(v: i64, val: i64) -> i64 {
     data := load_i64(v)
     i := mut 0
     result := mut 0 - 1
-    L i < len {
+    LW i < len {
         elem := load_i64(data + i * 8)
         I elem == val {
             result = i
             i = len  # break
-        } E {
+        } EL {
             i = i + 1
         }
     }
@@ -250,7 +250,7 @@ F vec_index_of(v: i64, val: i64) -> i64 {
 # Check if value exists in vec
 F vec_contains(v: i64, val: i64) -> i64 {
     idx := vec_index_of(v, val)
-    I idx >= 0 { 1 } E { 0 }
+    I idx >= 0 { 1 } EL { 0 }
 }
 
 # ============================================================================
@@ -289,7 +289,7 @@ F vec_reverse(v: i64) -> i64 {
     data := load_i64(v)
     i := mut 0
     j := mut len - 1
-    L i < j {
+    LW i < j {
         a := load_i64(data + i * 8)
         b := load_i64(data + j * 8)
         store_i64(data + i * 8, b)
@@ -308,20 +308,20 @@ F vec_sort(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 1
-    L i < len {
+    LW i < len {
         key := load_i64(data + i * 8)
         j := mut i - 1
         done := mut 0
-        L done == 0 {
+        LW done == 0 {
             I j >= 0 {
                 elem := load_i64(data + j * 8)
                 I elem > key {
                     store_i64(data + (j + 1) * 8, elem)
                     j = j - 1
-                } E {
+                } EL {
                     done = 1
                 }
-            } E {
+            } EL {
                 done = 1
             }
         }
@@ -348,12 +348,12 @@ F vec_drop_deep(v: i64) -> i64 {
     len := vec_len(v)
     data := load_i64(v)
     i := mut 0
-    L i < len {
+    LW i < len {
         elem := load_i64(data + i * 8)
         I elem != 0 {
             free(elem)
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     free(data)
@@ -371,12 +371,12 @@ F vec_print(v: i64) -> i64 {
     data := load_i64(v)
     putchar(91)  # [
     i := mut 0
-    L i < len {
+    LW i < len {
         I i > 0 {
             putchar(44)  # ,
             putchar(32)  # space
             0
-        } E { 0 }
+        } EL { 0 }
         val := load_i64(data + i * 8)
         printf("%ld", val)
         i = i + 1

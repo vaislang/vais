@@ -866,7 +866,7 @@ X Parser {
             R 1
         }
         kind := @.peek_kind()
-        I kind == TOK_EOF() { 1 } E { 0 }
+        I kind == TOK_EOF() { 1 } EL { 0 }
     }
 
     # Get current token kind (i64)
@@ -914,13 +914,13 @@ X Parser {
         I self.pos < self.tokens_len {
             self.pos = self.pos + 1
             0
-        } E { 0 }
+        } EL { 0 }
         tok
     }
 
     F check(&self, kind: i64) -> i64 {
         tok := @.peek()
-        I tok.kind == kind { 1 } E { 0 }
+        I tok.kind == kind { 1 } EL { 0 }
     }
 
     F current_span_start(&self) -> i64 {
@@ -937,7 +937,7 @@ X Parser {
         I @.check(kind) == 1 {
             @.advance()
             1
-        } E {
+        } EL {
             @.set_error_expected(kind)
             0
         }
@@ -968,7 +968,7 @@ X Parser {
             @.add_error_entry(0, msg_ptr, msg_len, tok.span_start)
             self.has_error = 1
             0
-        } E {
+        } EL {
             I self.has_error == 0 {
                 self.has_error = 1
                 self.error_msg_ptr = msg_ptr
@@ -976,7 +976,7 @@ X Parser {
                 self.error_span_start = tok.span_start
                 self.error_span_end = tok.span_end
                 0
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -986,7 +986,7 @@ X Parser {
             @.add_error_entry(1, expected_kind, 0, tok.span_start)
             self.has_error = 1
             0
-        } E {
+        } EL {
             I self.has_error == 0 {
                 self.has_error = 1
                 self.error_msg_ptr = expected_kind
@@ -994,7 +994,7 @@ X Parser {
                 self.error_span_start = tok.span_start
                 self.error_span_end = tok.span_end
                 0
-            } E { 0 }
+            } EL { 0 }
         }
     }
 
@@ -1037,7 +1037,7 @@ X Parser {
         I @.peek_kind() == TOK_SEMI() {
             @.advance()
             0
-        } E { 0 }
+        } EL { 0 }
         1
     }
 
@@ -1053,7 +1053,7 @@ X Parser {
             self.sp_data = new_data
             self.sp_data_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Grow offsets if needed
         I self.sp_count >= self.sp_offset_cap {
@@ -1064,7 +1064,7 @@ X Parser {
             self.sp_offsets = new_offsets
             self.sp_offset_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Copy string data
         memcpy(self.sp_data + self.sp_data_len, ptr, len)
@@ -1091,7 +1091,7 @@ X Parser {
             self.items_ptr = new_ptr
             self.items_cap = new_cap
             0
-        } E { 0 }
+        } EL { 0 }
 
         ptr := self.items_ptr + self.items_len * 32
         store_i64(ptr + 0, kind)
@@ -1116,17 +1116,17 @@ X Parser {
                 I self.has_error == 1 {
                     @.synchronize_to_item()
                     0
-                } E { 0 }
-            } E {
+                } EL { 0 }
+            } EL {
                 # Normal mode: stop on first error
                 I self.has_error == 1 { B }
                 @.parse_item()
             }
         }
         I self.recovery_mode == 1 {
-            I self.errors_len == 0 { 1 } E { 0 }
-        } E {
-            I self.has_error == 0 { 1 } E { 0 }
+            I self.errors_len == 0 { 1 } EL { 0 }
+        } EL {
+            I self.has_error == 0 { 1 } EL { 0 }
         }
     }
 
@@ -1165,14 +1165,14 @@ X Parser {
                         store_i64(args_ptr + args_len * 8, arg_idx)
                         args_len = args_len + 1
                         0
-                    } E { 0 }
+                    } EL { 0 }
 
-                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
                 }
 
                 I @.expect(TOK_RPAREN()) == 0 { B }
                 0
-            } E { 0 }
+            } EL { 0 }
 
             I @.expect(TOK_RBRACKET()) == 0 { B }
 
@@ -1201,7 +1201,7 @@ X Parser {
             @.advance()
             is_pub = 1
             0
-        } E { 0 }
+        } EL { 0 }
 
         start := @.current_span_start()
 
@@ -1221,22 +1221,22 @@ X Parser {
         I @.check(TOK_KW_F()) == 1 {
             @.advance()
             @.parse_function(is_pub, 0, start)
-        } E I @.check(TOK_KW_S()) == 1 {
+        } EL I @.check(TOK_KW_S()) == 1 {
             @.advance()
             @.parse_struct(is_pub, start)
-        } E I @.check(TOK_KW_X()) == 1 {
+        } EL I @.check(TOK_KW_X()) == 1 {
             @.advance()
             @.parse_impl(start)
-        } E I @.check(TOK_KW_E()) == 1 {
+        } EL I @.check(TOK_KW_E()) == 1 {
             @.advance()
             @.parse_enum(is_pub, start)
-        } E I @.check(TOK_KW_W()) == 1 {
+        } EL I @.check(TOK_KW_W()) == 1 {
             @.advance()
             @.parse_trait(is_pub, start)
-        } E I @.check(TOK_KW_U()) == 1 {
+        } EL I @.check(TOK_KW_U()) == 1 {
             @.advance()
             @.parse_use(start)
-        } E {
+        } EL {
             @.set_error_expected(TOK_KW_F())
             0
         }
@@ -1295,7 +1295,7 @@ X Parser {
             ret_type := @.parse_type()
             store_i64(func_ptr + 40, ret_type)
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Parse body
         I @.check(TOK_EQ()) == 1 {
@@ -1305,7 +1305,7 @@ X Parser {
             store_i64(func_ptr + 48, 0)  # body_kind = expr
             store_i64(func_ptr + 56, body_expr)
             0
-        } E I @.check(TOK_LBRACE()) == 1 {
+        } EL I @.check(TOK_LBRACE()) == 1 {
             # Block body: { stmts }
             @.advance()
             body_stmts := @.parse_block_contents()
@@ -1316,7 +1316,7 @@ X Parser {
             store_i64(func_ptr + 64, body_stmts)  # body_stmts_ptr
             store_i64(func_ptr + 72, body_stmts_len)  # body_stmts_len
             0
-        } E {
+        } EL {
             @.set_error_expected(TOK_EQ())
             R 0
         }
@@ -1384,7 +1384,7 @@ X Parser {
             fields_len = fields_len + 1
 
             # Optional comma
-            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
         }
 
         store_i64(struct_ptr + 24, fields_ptr)
@@ -1434,7 +1434,7 @@ X Parser {
             trait_tok := @.advance()
             trait_name_idx = @.intern_string(trait_tok.str_ptr, trait_tok.str_len)
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Allocate ImplDef
         impl_ptr := malloc(ImplDef.size())
@@ -1504,7 +1504,7 @@ X Parser {
                     ret_type := @.parse_type()
                     store_i64(method_ptr + 40, ret_type)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 # Parse body
                 I @.check(TOK_EQ()) == 1 {
@@ -1513,7 +1513,7 @@ X Parser {
                     store_i64(method_ptr + 48, 0)
                     store_i64(method_ptr + 56, body_expr)
                     0
-                } E I @.check(TOK_LBRACE()) == 1 {
+                } EL I @.check(TOK_LBRACE()) == 1 {
                     @.advance()
                     body_stmts := @.parse_block_contents()
                     body_stmts_len := load_i64(body_stmts - 8)
@@ -1522,7 +1522,7 @@ X Parser {
                     store_i64(method_ptr + 64, body_stmts)
                     store_i64(method_ptr + 72, body_stmts_len)
                     0
-                } E {
+                } EL {
                     @.set_error_expected(TOK_EQ())
                     B
                 }
@@ -1530,7 +1530,7 @@ X Parser {
                 store_i64(method_ptr + 104, @.current_span_start())
                 methods_len = methods_len + 1
                 0
-            } E {
+            } EL {
                 B
             }
         }
@@ -1617,7 +1617,7 @@ X Parser {
                     store_i64(fields_ptr + fields_len * 8, field_type)
                     fields_len = fields_len + 1
 
-                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
                 }
 
                 I @.expect(TOK_RPAREN()) == 0 { B }
@@ -1626,12 +1626,12 @@ X Parser {
                 store_i64(variant_ptr + 24, fields_len)
                 store_i64(variant_ptr + 40, @.current_span_start())
                 0
-            } E { 0 }
+            } EL { 0 }
 
             variants_len = variants_len + 1
 
             # Optional comma
-            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
         }
 
         store_i64(enum_ptr + 24, variants_ptr)
@@ -1740,7 +1740,7 @@ X Parser {
                     ret_type := @.parse_type()
                     store_i64(method_ptr + 40, ret_type)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 # Parse optional default body
                 I @.check(TOK_EQ()) == 1 {
@@ -1749,7 +1749,7 @@ X Parser {
                     store_i64(method_ptr + 48, 0)  # body_kind = expr
                     store_i64(method_ptr + 56, body_expr)
                     0
-                } E I @.check(TOK_LBRACE()) == 1 {
+                } EL I @.check(TOK_LBRACE()) == 1 {
                     @.advance()
                     body_stmts := @.parse_block_contents()
                     body_stmts_len := load_i64(body_stmts - 8)
@@ -1758,7 +1758,7 @@ X Parser {
                     store_i64(method_ptr + 64, body_stmts)
                     store_i64(method_ptr + 72, body_stmts_len)
                     0
-                } E {
+                } EL {
                     # No default body (abstract method) - body_kind stays -1
                     0
                 }
@@ -1766,7 +1766,7 @@ X Parser {
                 store_i64(method_ptr + 104, @.current_span_start())
                 methods_len = methods_len + 1
                 0
-            } E {
+            } EL {
                 B
             }
         }
@@ -1807,12 +1807,12 @@ X Parser {
                 buf_len = buf_len + 1
                 @.advance()
                 0
-            } E I @.check(TOK_COLON_COLON()) == 1 {
+            } EL I @.check(TOK_COLON_COLON()) == 1 {
                 store_byte(buf + buf_len, 47)  # normalize :: to /
                 buf_len = buf_len + 1
                 @.advance()
                 0
-            } E { B }
+            } EL { B }
 
             I @.check(TOK_IDENT()) == 0 {
                 @.set_error_expected(TOK_IDENT())
@@ -1958,17 +1958,17 @@ X Parser {
                     store_i64(param_ptr + 32, tok.span_end)
                     params_len = params_len + 1
 
-                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
                     C
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             # Check for mut
             I @.check(TOK_KW_MUT()) == 1 {
                 @.advance()
                 is_mut = 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             # Parse name
             I @.check(TOK_IDENT()) == 0 { B }
@@ -1991,7 +1991,7 @@ X Parser {
             params_len = params_len + 1
 
             # Optional comma
-            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
         }
 
         # Store length at params_ptr - 8
@@ -2044,7 +2044,7 @@ X Parser {
                 bounds_ptr = bounds
                 bounds_len = load_i64(bounds - 8)
                 0
-            } E { 0 }
+            } EL { 0 }
 
             # Store GenericParam
             param_ptr := generics_ptr + generics_len * GenericParam.size()
@@ -2056,7 +2056,7 @@ X Parser {
             generics_len = generics_len + 1
 
             # Optional comma
-            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
         }
 
         # Expect >
@@ -2082,13 +2082,13 @@ X Parser {
                 @.advance()
                 is_mut = 1
                 0
-            } E { 0 }
+            } EL { 0 }
             inner := @.parse_type()
             type_ptr := malloc(TypeNode.size())
             I is_mut == 1 {
                 store_i64(type_ptr + 0, TYPE_REF_MUT())
                 0
-            } E {
+            } EL {
                 store_i64(type_ptr + 0, TYPE_REF())
                 0
             }
@@ -2135,7 +2135,7 @@ X Parser {
         # Named type or built-in type: i64, String, Vec<T>, etc.
         # Built-in type tokens (31-44) are treated as named types
         is_type_tok := mut 0
-        I @.check(TOK_IDENT()) == 1 { is_type_tok = 1; 0 } E { 0 }
+        I @.check(TOK_IDENT()) == 1 { is_type_tok = 1; 0 } EL { 0 }
         I is_type_tok == 0 {
             # Check for built-in type tokens (31-44)
             cur_kind := @.peek_kind()
@@ -2143,8 +2143,8 @@ X Parser {
                 I cur_kind <= 44 {
                     is_type_tok = 1
                     0
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
         }
 
         I is_type_tok == 1 {
@@ -2163,11 +2163,11 @@ X Parser {
                     generic_type := @.parse_type()
                     store_i64(generics_ptr + generics_len * 8, generic_type)
                     generics_len = generics_len + 1
-                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
                 }
                 I @.expect(TOK_GT()) == 0 { R 0 }
                 0
-            } E { 0 }
+            } EL { 0 }
 
             type_ptr := malloc(TypeNode.size())
             store_i64(type_ptr + 0, TYPE_NAMED())
@@ -2207,12 +2207,12 @@ X Parser {
                     @.synchronize_to_stmt()
                     self.has_error = 0
                     0
-                } E I stmt != 0 {
+                } EL I stmt != 0 {
                     memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
                     stmts_len = stmts_len + 1
                     0
-                } E { 0 }
-            } E {
+                } EL { 0 }
+            } EL {
                 # Normal mode: stop on first error
                 I self.has_error == 1 { B }
                 stmt := @.parse_stmt()
@@ -2220,7 +2220,7 @@ X Parser {
                     memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
                     stmts_len = stmts_len + 1
                     0
-                } E { 0 }
+                } EL { 0 }
             }
         }
 
@@ -2241,7 +2241,7 @@ X Parser {
             I @.check(TOK_RBRACE()) == 0 {
                 expr_ptr = @.parse_expr()
                 0
-            } E { 0 }
+            } EL { 0 }
 
             stmt_ptr := malloc(StmtNode.size())
             store_i64(stmt_ptr + 0, STMT_RETURN())
@@ -2302,8 +2302,8 @@ X Parser {
             next := @.peek_next()
             is_var_decl: mut i64 = 0
             I next.kind == TOK_COLON_EQ() { is_var_decl = 1; 0 }
-            E I next.kind == TOK_COLON() { is_var_decl = 1; 0 }
-            E { 0 }
+            EL I next.kind == TOK_COLON() { is_var_decl = 1; 0 }
+            EL { 0 }
             I is_var_decl == 1 {
                 tok := @.advance()
                 name_idx := @.intern_string(tok.str_ptr, tok.str_len)
@@ -2319,9 +2319,9 @@ X Parser {
                         @.advance()
                         is_mut = 1
                         0
-                    } E { 0 }
+                    } EL { 0 }
                     0
-                } E I @.check(TOK_COLON()) == 1 {
+                } EL I @.check(TOK_COLON()) == 1 {
                     @.advance()
 
                     # Check for mut
@@ -2329,12 +2329,12 @@ X Parser {
                         @.advance()
                         is_mut = 1
                         0
-                    } E { 0 }
+                    } EL { 0 }
 
                     type_ptr = @.parse_type()
                     I @.expect(TOK_EQ()) == 0 { R 0 }
                     0
-                } E {
+                } EL {
                     @.set_error_expected(TOK_COLON_EQ())
                     R 0
                 }
@@ -2350,7 +2350,7 @@ X Parser {
                 store_i64(stmt_ptr + 40, value_ptr)
                 store_i64(stmt_ptr + 48, is_mut)
                 R stmt_ptr
-            } E { 0 }
+            } EL { 0 }
         }
 
         # Expression statement
@@ -2579,8 +2579,8 @@ X Parser {
         L {
             op: mut i64 = 0
             I @.check(TOK_EQ_EQ()) == 1 { op = BINOP_EQ(); 0 }
-            E I @.check(TOK_NOT_EQ()) == 1 { op = BINOP_NEQ(); 0 }
-            E { B }
+            EL I @.check(TOK_NOT_EQ()) == 1 { op = BINOP_NEQ(); 0 }
+            EL { B }
 
             @.advance()
             right := @.parse_comparison()
@@ -2610,10 +2610,10 @@ X Parser {
         L {
             op: mut i64 = 0
             I @.check(TOK_LT()) == 1 { op = BINOP_LT(); 0 }
-            E I @.check(TOK_GT()) == 1 { op = BINOP_GT(); 0 }
-            E I @.check(TOK_LT_EQ()) == 1 { op = BINOP_LTE(); 0 }
-            E I @.check(TOK_GT_EQ()) == 1 { op = BINOP_GTE(); 0 }
-            E { B }
+            EL I @.check(TOK_GT()) == 1 { op = BINOP_GT(); 0 }
+            EL I @.check(TOK_LT_EQ()) == 1 { op = BINOP_LTE(); 0 }
+            EL I @.check(TOK_GT_EQ()) == 1 { op = BINOP_GTE(); 0 }
+            EL { B }
 
             @.advance()
             right := @.parse_shift()
@@ -2643,8 +2643,8 @@ X Parser {
         L {
             op: mut i64 = 0
             I @.check(TOK_SHL()) == 1 { op = BINOP_SHL(); 0 }
-            E I @.check(TOK_SHR()) == 1 { op = BINOP_SHR(); 0 }
-            E { B }
+            EL I @.check(TOK_SHR()) == 1 { op = BINOP_SHR(); 0 }
+            EL { B }
 
             @.advance()
             right := @.parse_additive()
@@ -2674,8 +2674,8 @@ X Parser {
         L {
             op: mut i64 = 0
             I @.check(TOK_PLUS()) == 1 { op = BINOP_ADD(); 0 }
-            E I @.check(TOK_MINUS()) == 1 { op = BINOP_SUB(); 0 }
-            E { B }
+            EL I @.check(TOK_MINUS()) == 1 { op = BINOP_SUB(); 0 }
+            EL { B }
 
             @.advance()
             right := @.parse_multiplicative()
@@ -2705,9 +2705,9 @@ X Parser {
         L {
             op: mut i64 = 0
             I @.check(TOK_STAR()) == 1 { op = BINOP_MUL(); 0 }
-            E I @.check(TOK_SLASH()) == 1 { op = BINOP_DIV(); 0 }
-            E I @.check(TOK_PERCENT()) == 1 { op = BINOP_MOD(); 0 }
-            E { B }
+            EL I @.check(TOK_SLASH()) == 1 { op = BINOP_DIV(); 0 }
+            EL I @.check(TOK_PERCENT()) == 1 { op = BINOP_MOD(); 0 }
+            EL { B }
 
             @.advance()
             right := @.parse_unary()
@@ -2940,7 +2940,7 @@ X Parser {
             store_i64(args_ptr + args_len * 8, arg)
             args_len = args_len + 1
 
-            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
         }
 
         args_ptr
@@ -3044,7 +3044,7 @@ X Parser {
                     store_i64(field_ptr + 24, @.current_span_start())
                     fields_len = fields_len + 1
 
-                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
                 }
 
                 I @.expect(TOK_RBRACE()) == 0 { R 0 }
@@ -3111,7 +3111,7 @@ X Parser {
                     store_i64(field_expr + 56, 0)
                     store_i64(field_expr + 64, 0)
                     R field_expr
-                } E { 0 }
+                } EL { 0 }
             }
 
             # Plain identifier
@@ -3146,7 +3146,7 @@ X Parser {
                     else_if_expr := @.parse_primary()  # Recursive if
                     else_ptr = else_if_expr
                     0
-                } E I @.check(TOK_LBRACE()) == 1 {
+                } EL I @.check(TOK_LBRACE()) == 1 {
                     @.advance()
                     else_stmts := @.parse_block_contents()
                     else_len := load_i64(else_stmts - 8)
@@ -3161,7 +3161,7 @@ X Parser {
                     store_i64(else_node + 32, 0)
                     else_ptr = else_node
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             expr_ptr := malloc(ExprNode.size())
@@ -3199,7 +3199,7 @@ X Parser {
                 store_i64(expr_ptr + 56, 0)
                 store_i64(expr_ptr + 64, 0)
                 R expr_ptr
-            } E {
+            } EL {
                 # While loop: L cond { ... }
                 cond := @.parse_expr()
                 I cond == 0 { R 0 }
@@ -3237,7 +3237,7 @@ X Parser {
             arms_buf := malloc(arms_cap * 40)  # MatchArm.size() = 40
             arms_len: mut i64 = 0
 
-            L @.check(TOK_RBRACE()) == 0 && @.check(TOK_EOF()) == 0 {
+            LW @.check(TOK_RBRACE()) == 0 && @.check(TOK_EOF()) == 0 {
                 arm_start := @.current_span_start()
 
                 # Parse pattern (with or-pattern support)
@@ -3251,7 +3251,7 @@ X Parser {
                     guard = @.parse_expr()
                     I guard == 0 { R 0 }
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 # Expect =>
                 I @.expect(TOK_FAT_ARROW()) == 0 { R 0 }
@@ -3267,13 +3267,13 @@ X Parser {
                     arms_cap = arms_cap * 2
                     new_buf := malloc(arms_cap * 40)
                     j: mut i64 = 0
-                    L j < arms_len * 40 {
+                    LW j < arms_len * 40 {
                         store_i64(new_buf + j, load_i64(arms_buf + j))
                         j = j + 8
                     }
                     arms_buf = new_buf
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 arm_offset := arms_len * 40
                 store_i64(arms_buf + arm_offset + 0, pat)       # pattern_ptr
@@ -3287,7 +3287,7 @@ X Parser {
                 I @.check(TOK_COMMA()) == 1 {
                     @.advance()
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
@@ -3312,7 +3312,7 @@ X Parser {
             @.advance()
             has_move = 1
             0
-        } E { 0 }
+        } EL { 0 }
 
         I @.check(TOK_PIPE()) == 1 {
             @.advance()
@@ -3335,7 +3335,7 @@ X Parser {
                     @.advance()
                     type_ptr = @.parse_type()
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 # Store param
                 param_ptr := params_ptr + params_len * Param.size()
@@ -3346,7 +3346,7 @@ X Parser {
                 store_i64(param_ptr + 32, @.current_span_start())
                 params_len = params_len + 1
 
-                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
             }
 
             I @.expect(TOK_PIPE()) == 0 { R 0 }
@@ -3356,7 +3356,7 @@ X Parser {
                 @.advance()
                 ret_type := @.parse_type()
                 0  # For now, we'll ignore the return type in the AST
-            } E { 0 }
+            } EL { 0 }
 
             # Parse body - either block { ... } or expression
             body_ptr: mut i64 = 0
@@ -3378,7 +3378,7 @@ X Parser {
                 store_i64(body_ptr + 56, 0)
                 store_i64(body_ptr + 64, 0)
                 0
-            } E {
+            } EL {
                 # Single expression body
                 body_ptr = @.parse_expr()
                 0
@@ -3415,9 +3415,9 @@ X Parser {
                     store_i64(elements_ptr + elements_len * 8, elem)
                     elements_len = elements_len + 1
                     0
-                } E { B }
+                } EL { B }
 
-                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } EL { 0 }
             }
 
             I @.expect(TOK_RBRACKET()) == 0 { R 0 }
@@ -3483,7 +3483,7 @@ X Parser {
         store_i64(pats_buf, first)
         pats_len: mut i64 = 1
 
-        L @.check(TOK_PIPE()) == 1 {
+        LW @.check(TOK_PIPE()) == 1 {
             @.advance()
             pat := @.parse_pattern()
             I pat == 0 { R 0 }
@@ -3492,13 +3492,13 @@ X Parser {
                 pats_cap = pats_cap * 2
                 new_buf := malloc(pats_cap * 8)
                 j: mut i64 = 0
-                L j < pats_len {
+                LW j < pats_len {
                     store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
                     j = j + 1
                 }
                 pats_buf = new_buf
                 0
-            } E { 0 }
+            } EL { 0 }
 
             store_i64(pats_buf + pats_len * 8, pat)
             pats_len = pats_len + 1
@@ -3568,7 +3568,7 @@ X Parser {
             # Check for range pattern: N..M or N..=M
             I @.check(TOK_DOT_DOT()) == 1 || @.check(TOK_DOT_DOT_EQ()) == 1 {
                 inclusive: mut i64 = 0
-                I @.check(TOK_DOT_DOT_EQ()) == 1 { inclusive = 1; 0 } E { 0 }
+                I @.check(TOK_DOT_DOT_EQ()) == 1 { inclusive = 1; 0 } EL { 0 }
                 @.advance()
 
                 end_tok := @.advance()
@@ -3638,11 +3638,11 @@ X Parser {
             pats_buf := malloc(pats_cap * 8)
             pats_len: mut i64 = 0
 
-            L @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
+            LW @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
                 I pats_len > 0 {
                     I @.expect(TOK_COMMA()) == 0 { R 0 }
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 sub_pat := @.parse_pattern()
                 I sub_pat == 0 { R 0 }
@@ -3651,13 +3651,13 @@ X Parser {
                     pats_cap = pats_cap * 2
                     new_buf := malloc(pats_cap * 8)
                     j: mut i64 = 0
-                    L j < pats_len {
+                    LW j < pats_len {
                         store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
                         j = j + 1
                     }
                     pats_buf = new_buf
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 store_i64(pats_buf + pats_len * 8, sub_pat)
                 pats_len = pats_len + 1
@@ -3688,11 +3688,11 @@ X Parser {
                 pats_buf := malloc(pats_cap * 8)
                 pats_len: mut i64 = 0
 
-                L @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
+                LW @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
                     I pats_len > 0 {
                         I @.expect(TOK_COMMA()) == 0 { R 0 }
                         0
-                    } E { 0 }
+                    } EL { 0 }
 
                     sub_pat := @.parse_pattern()
                     I sub_pat == 0 { R 0 }
@@ -3701,13 +3701,13 @@ X Parser {
                         pats_cap = pats_cap * 2
                         new_buf := malloc(pats_cap * 8)
                         j: mut i64 = 0
-                        L j < pats_len {
+                        LW j < pats_len {
                             store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
                             j = j + 1
                         }
                         pats_buf = new_buf
                         0
-                    } E { 0 }
+                    } EL { 0 }
 
                     store_i64(pats_buf + pats_len * 8, sub_pat)
                     pats_len = pats_len + 1
@@ -3774,28 +3774,28 @@ X Parser {
                 # Expected token error
                 p_sb_cstr(sb, ": error: expected ")
                 I msg_val == TOK_IDENT() { p_sb_cstr(sb, "identifier"); 0 }
-                E I msg_val == TOK_KW_F() { p_sb_cstr(sb, "'F'"); 0 }
-                E I msg_val == TOK_LPAREN() { p_sb_cstr(sb, "'('"); 0 }
-                E I msg_val == TOK_RPAREN() { p_sb_cstr(sb, "')'"); 0 }
-                E I msg_val == TOK_LBRACE() { p_sb_cstr(sb, "'{'"); 0 }
-                E I msg_val == TOK_RBRACE() { p_sb_cstr(sb, "'}'"); 0 }
-                E I msg_val == TOK_LBRACKET() { p_sb_cstr(sb, "'['"); 0 }
-                E I msg_val == TOK_RBRACKET() { p_sb_cstr(sb, "']'"); 0 }
-                E I msg_val == TOK_COLON() { p_sb_cstr(sb, "':'"); 0 }
-                E I msg_val == TOK_COMMA() { p_sb_cstr(sb, "','"); 0 }
-                E I msg_val == TOK_ARROW() { p_sb_cstr(sb, "'->'"); 0 }
-                E I msg_val == TOK_EQ() { p_sb_cstr(sb, "'='"); 0 }
-                E I msg_val == TOK_SEMI() { p_sb_cstr(sb, "';'"); 0 }
-                E I msg_val == TOK_FAT_ARROW() { p_sb_cstr(sb, "'=>'"); 0 }
-                E I msg_val == TOK_COLON_EQ() { p_sb_cstr(sb, "':='"); 0 }
-                E { p_sb_cstr(sb, "token"); 0 }
-            } E {
+                EL I msg_val == TOK_KW_F() { p_sb_cstr(sb, "'F'"); 0 }
+                EL I msg_val == TOK_LPAREN() { p_sb_cstr(sb, "'('"); 0 }
+                EL I msg_val == TOK_RPAREN() { p_sb_cstr(sb, "')'"); 0 }
+                EL I msg_val == TOK_LBRACE() { p_sb_cstr(sb, "'{'"); 0 }
+                EL I msg_val == TOK_RBRACE() { p_sb_cstr(sb, "'}'"); 0 }
+                EL I msg_val == TOK_LBRACKET() { p_sb_cstr(sb, "'['"); 0 }
+                EL I msg_val == TOK_RBRACKET() { p_sb_cstr(sb, "']'"); 0 }
+                EL I msg_val == TOK_COLON() { p_sb_cstr(sb, "':'"); 0 }
+                EL I msg_val == TOK_COMMA() { p_sb_cstr(sb, "','"); 0 }
+                EL I msg_val == TOK_ARROW() { p_sb_cstr(sb, "'->'"); 0 }
+                EL I msg_val == TOK_EQ() { p_sb_cstr(sb, "'='"); 0 }
+                EL I msg_val == TOK_SEMI() { p_sb_cstr(sb, "';'"); 0 }
+                EL I msg_val == TOK_FAT_ARROW() { p_sb_cstr(sb, "'=>'"); 0 }
+                EL I msg_val == TOK_COLON_EQ() { p_sb_cstr(sb, "':='"); 0 }
+                EL { p_sb_cstr(sb, "token"); 0 }
+            } EL {
                 # Custom error message
                 p_sb_cstr(sb, ": error: ")
                 I msg_len > 0 {
                     p_sb_bytes(sb, msg_val, msg_len)
                     0
-                } E {
+                } EL {
                     p_sb_cstr(sb, "parse error")
                     0
                 }
@@ -3844,7 +3844,7 @@ F p_sb_byte(sb: i64, byte: i64) -> i64 {
         store_i64(sb, new_data)
         store_i64(sb + 16, new_cap)
         0
-    } E { 0 }
+    } EL { 0 }
     data := load_i64(sb)
     store_byte(data + len, byte)
     store_i64(sb + 8, len + 1)
@@ -3854,7 +3854,7 @@ F p_sb_byte(sb: i64, byte: i64) -> i64 {
 F p_sb_cstr(sb: i64, s: str) -> i64 {
     ptr := str_to_ptr(s)
     slen: mut i64 = 0
-    L { I load_byte(ptr + slen) == 0 { B } E { slen = slen + 1 } }
+    L { I load_byte(ptr + slen) == 0 { B } EL { slen = slen + 1 } }
     p_sb_bytes(sb, ptr, slen)
 }
 
@@ -3870,7 +3870,7 @@ F p_sb_bytes(sb: i64, src: i64, slen: i64) -> i64 {
         store_i64(sb, new_data)
         store_i64(sb + 16, new_cap)
         0
-    } E { 0 }
+    } EL { 0 }
     data := load_i64(sb)
     memcpy(data + len, src, slen)
     store_i64(sb + 8, len + slen)
@@ -3880,14 +3880,14 @@ F p_sb_bytes(sb: i64, src: i64, slen: i64) -> i64 {
 F p_sb_i64(sb: i64, value: i64) -> i64 {
     I value == 0 {
         p_sb_byte(sb, 48)
-    } E I value < 0 {
+    } EL I value < 0 {
         p_sb_byte(sb, 45)
         p_sb_i64(sb, 0 - value)
-    } E {
+    } EL {
         I value >= 10 {
             p_sb_i64(sb, value / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         p_sb_byte(sb, (value % 10) + 48)
     }
 }
@@ -3910,14 +3910,14 @@ F offset_to_line(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
     line: mut i64 = 1
     i: mut i64 = 0
     limit := offset
-    I limit > source_len { limit = source_len; 0 } E { 0 }
+    I limit > source_len { limit = source_len; 0 } EL { 0 }
     L {
         I i >= limit { B }
         c := load_byte(source_ptr + i)
         I c == 10 {
             line = line + 1
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     line
@@ -3926,7 +3926,7 @@ F offset_to_line(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
 # Convert a byte offset to column number (1-based) by scanning back to last newline
 F offset_to_col(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
     pos := offset
-    I pos > source_len { pos = source_len; 0 } E { 0 }
+    I pos > source_len { pos = source_len; 0 } EL { 0 }
     # Scan backwards to find last newline
     i: mut i64 = pos - 1
     L {
@@ -4079,25 +4079,25 @@ F test_parser_main() -> i64 {
                             body_op := load_i64(body_expr + 40)
                             I body_op == BINOP_ADD() {
                                 puts("Binary op: OK (add)")
-                            } E {
+                            } EL {
                                 puts("Binary op: FAIL")
                             }
-                        } E {
+                        } EL {
                             puts("Body expr: FAIL")
                         }
-                    } E {
+                    } EL {
                         puts("Body type: FAIL")
                     }
-                } E {
+                } EL {
                     puts("Item type: FAIL")
                 }
-            } E {
+            } EL {
                 puts("Item count: FAIL")
             }
-        } E {
+        } EL {
             puts("Parse: FAIL (has_error)")
         }
-    } E {
+    } EL {
         puts("Parse: FAIL (result != 1)")
     }
 

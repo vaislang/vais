@@ -13,7 +13,7 @@ F test_tuple_alias() -> i64 {
 }
 
 # Alias with enum variant pattern
-E Option<T> {
+EN Option<T> {
     Some(T),
     None
 }

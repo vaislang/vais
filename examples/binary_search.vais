@@ -7,13 +7,13 @@ F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
     lo := mut 0
     hi := mut len - 1
 
-    L lo <= hi {
+    LW lo <= hi {
         mid := lo + (hi - lo) / 2
         I arr[mid] == target {
             R mid
-        } E I arr[mid] < target {
+        } EL I arr[mid] < target {
             lo = mid + 1
-        } E {
+        } EL {
             hi = mid - 1
         }
     }
@@ -47,7 +47,7 @@ F main() -> i64 {
     I idx1 == 5 & idx2 == -1 & idx3 == 0 & idx4 == 9 {
         puts("All tests passed!")
         0
-    } E {
+    } EL {
         puts("Test failed!")
         1
     }

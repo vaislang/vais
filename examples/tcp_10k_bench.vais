@@ -146,10 +146,10 @@ X EchoServer {
                 # Echo back the data
                 send(client_fd, buf, n, 0)
                 total_bytes := total_bytes + n
-            } E I n == 0 {
+            } EL I n == 0 {
                 # Connection closed
                 B
-            } E {
+            } EL {
                 # Error or would block
                 B
             }
@@ -189,7 +189,7 @@ X EchoServer {
                     print_i64(handled)
                     print_str(" connections\n")
                 }
-            } E {
+            } EL {
                 # No pending connection, continue
                 C
             }
@@ -270,7 +270,7 @@ X TcpClient {
         close(fd)
         connections_created := connections_created + 1
 
-        R I received > 0 { 1 } E { 0 }
+        R I received > 0 { 1 } EL { 0 }
     }
 
     # Benchmark: Create multiple connections rapidly

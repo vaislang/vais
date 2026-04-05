@@ -153,7 +153,7 @@ X Table {
             row_len := page_get_row_len(page_ptr, slot_idx)
             store_i64(out_ptrs + idx * 8, page_ptr + row_offset)
             store_i64(out_lens + idx * 8, row_len)
-        } E {
+        } EL {
             store_i64(out_ptrs + idx * 8, 0)
             store_i64(out_lens + idx * 8, 0)
         }

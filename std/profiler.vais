@@ -40,7 +40,7 @@ X Timer {
 
     # Stop the timer
     F stop(&self) -> Timer {
-        L self.running == 1 {
+        LW self.running == 1 {
             self.end_ns = __time_now_ns()
             self.running = 0
         }
@@ -49,7 +49,7 @@ X Timer {
 
     # Get elapsed time in nanoseconds
     F elapsed_ns(&self) -> i64 {
-        L self.running == 1 {
+        LW self.running == 1 {
             __time_now_ns() - self.start_ns
         } ! {
             self.end_ns - self.start_ns
@@ -104,7 +104,7 @@ X ProfileEntry {
 
     # Enter the profiled region
     F enter(&self) -> i64 {
-        L self.depth == 0 {
+        LW self.depth == 0 {
             self.start_time = __time_now_ns()
         }
         self.depth = self.depth + 1
@@ -114,15 +114,15 @@ X ProfileEntry {
     # Exit the profiled region
     F exit(&self) -> i64 {
         self.depth = self.depth - 1
-        L self.depth == 0 {
+        LW self.depth == 0 {
             elapsed := __time_now_ns() - self.start_time
             self.call_count = self.call_count + 1
             self.total_time_ns = self.total_time_ns + elapsed
 
-            L elapsed < self.min_time_ns {
+            LW elapsed < self.min_time_ns {
                 self.min_time_ns = elapsed
             }
-            L elapsed > self.max_time_ns {
+            LW elapsed > self.max_time_ns {
                 self.max_time_ns = elapsed
             }
         }
@@ -131,7 +131,7 @@ X ProfileEntry {
 
     # Get average time per call
     F avg_time_ns(&self) -> i64 {
-        L self.call_count > 0 {
+        LW self.call_count > 0 {
             self.total_time_ns / self.call_count
         } ! {
             0
@@ -207,17 +207,17 @@ X Profiler {
     F get_entry(&self, name: str) -> i64 {
         # Search for existing entry
         i := 0
-        L i < self.entry_count {
+        LW i < self.entry_count {
             offset := i * 64
             entry_name := __load_str(self.entries + offset)
-            L __str_eq(entry_name, name) == 1 {
+            LW __str_eq(entry_name, name) == 1 {
                 R self.entries + offset
             }
             i = i + 1
         }
 
         # Create new entry if not found
-        L self.entry_count >= self.capacity {
+        LW self.entry_count >= self.capacity {
             # Grow capacity
             new_capacity := self.capacity * 2
             new_entries := __malloc(new_capacity * 64)
@@ -243,7 +243,7 @@ X Profiler {
 
     # Enter a profiled region
     F enter(&self, name: str) -> i64 {
-        L self.enabled == PROFILER_DISABLED {
+        LW self.enabled == PROFILER_DISABLED {
             R 0
         }
 
@@ -251,7 +251,7 @@ X Profiler {
 
         # Update entry: enter
         depth := __load_i64(entry_ptr + 48)
-        L depth == 0 {
+        LW depth == 0 {
             __store_i64(entry_ptr + 40, __time_now_ns())  # start_time
         }
         __store_i64(entry_ptr + 48, depth + 1)
@@ -261,7 +261,7 @@ X Profiler {
 
     # Exit a profiled region
     F exit(&self, name: str) -> i64 {
-        L self.enabled == PROFILER_DISABLED {
+        LW self.enabled == PROFILER_DISABLED {
             R 0
         }
 
@@ -271,7 +271,7 @@ X Profiler {
         depth := __load_i64(entry_ptr + 48)
         __store_i64(entry_ptr + 48, depth - 1)
 
-        L depth == 1 {
+        LW depth == 1 {
             start_time := __load_i64(entry_ptr + 40)
             elapsed := __time_now_ns() - start_time
 
@@ -283,10 +283,10 @@ X Profiler {
             __store_i64(entry_ptr + 8, call_count)
             __store_i64(entry_ptr + 16, total_time)
 
-            L elapsed < min_time {
+            LW elapsed < min_time {
                 __store_i64(entry_ptr + 24, elapsed)
             }
-            L elapsed > max_time {
+            LW elapsed > max_time {
                 __store_i64(entry_ptr + 32, elapsed)
             }
         }
@@ -307,7 +307,7 @@ X Profiler {
     # Reset all entries
     F reset(&self) -> i64 {
         i := 0
-        L i < self.entry_count {
+        LW i < self.entry_count {
             offset := i * 64
             __store_i64(self.entries + offset + 8, 0)   # call_count
             __store_i64(self.entries + offset + 16, 0)  # total_time_ns
@@ -334,7 +334,7 @@ X Profiler {
         __print_str("--------------------------------------------------------------------------------\n")
 
         i := 0
-        L i < self.entry_count {
+        LW i < self.entry_count {
             offset := i * 64
             name := __load_str(self.entries + offset)
             calls := __load_i64(self.entries + offset + 8)
@@ -342,7 +342,7 @@ X Profiler {
             min_ns := __load_i64(self.entries + offset + 24)
             max_ns := __load_i64(self.entries + offset + 32)
 
-            avg_ns := L calls > 0 { total_ns / calls } ! { 0 }
+            avg_ns := LW calls > 0 { total_ns / calls } ! { 0 }
 
             __print_padded_str(name, 30)
             __print_padded_i64(calls, 10)
@@ -396,12 +396,12 @@ X MemoryProfiler {
 
     # Track an allocation
     F track_alloc(&self, size: i64) -> i64 {
-        L self.enabled == 1 {
+        LW self.enabled == 1 {
             self.allocations = self.allocations + 1
             self.bytes_allocated = self.bytes_allocated + size
             self.total_allocated = self.total_allocated + size
 
-            L self.bytes_allocated > self.peak_bytes {
+            LW self.bytes_allocated > self.peak_bytes {
                 self.peak_bytes = self.bytes_allocated
             }
         }
@@ -410,7 +410,7 @@ X MemoryProfiler {
 
     # Track a deallocation
     F track_dealloc(&self, size: i64) -> i64 {
-        L self.enabled == 1 {
+        LW self.enabled == 1 {
             self.deallocations = self.deallocations + 1
             self.bytes_allocated = self.bytes_allocated - size
         }
@@ -496,7 +496,7 @@ X SampleProfiler {
     # Stop sampling
     F stop(&self) -> i64 {
         self.running = 0
-        L self.thread_handle != 0 {
+        LW self.thread_handle != 0 {
             __stop_sampler_thread(self.thread_handle)
         }
         0
@@ -504,7 +504,7 @@ X SampleProfiler {
 
     # Record a sample (called by sampler thread)
     F record_sample(&self, func_ptr: i64) -> i64 {
-        L self.sample_count < self.capacity {
+        LW self.sample_count < self.capacity {
             offset := self.sample_count * 16
             __store_i64(self.samples + offset, func_ptr)
             __store_i64(self.samples + offset + 8, __time_now_ns())
@@ -564,7 +564,7 @@ X FlameGraphBuilder {
 
     # Record a stack sample
     F record_stack(&self, stack_ptr: i64, depth: i64) -> i64 {
-        L self.sample_count < self.capacity {
+        LW self.sample_count < self.capacity {
             offset := self.sample_count * 64
             # Copy stack frames
             __memcpy(self.stack_samples + offset, stack_ptr, depth * 8)
@@ -591,7 +591,7 @@ V __GLOBAL_MEM_PROFILER: i64 = 0
 
 # Initialize global profiler
 F profiler_init() -> i64 {
-    L __GLOBAL_PROFILER == 0 {
+    LW __GLOBAL_PROFILER == 0 {
         p := Profiler::new()
         __GLOBAL_PROFILER = &p as i64
     }
@@ -600,7 +600,7 @@ F profiler_init() -> i64 {
 
 # Get global profiler
 F get_profiler() -> &Profiler {
-    L __GLOBAL_PROFILER == 0 {
+    LW __GLOBAL_PROFILER == 0 {
         profiler_init()
     }
     __GLOBAL_PROFILER as &Profiler
@@ -608,7 +608,7 @@ F get_profiler() -> &Profiler {
 
 # Initialize global memory profiler
 F mem_profiler_init() -> i64 {
-    L __GLOBAL_MEM_PROFILER == 0 {
+    LW __GLOBAL_MEM_PROFILER == 0 {
         p := MemoryProfiler::new()
         __GLOBAL_MEM_PROFILER = &p as i64
     }
@@ -617,7 +617,7 @@ F mem_profiler_init() -> i64 {
 
 # Get global memory profiler
 F get_mem_profiler() -> &MemoryProfiler {
-    L __GLOBAL_MEM_PROFILER == 0 {
+    LW __GLOBAL_MEM_PROFILER == 0 {
         mem_profiler_init()
     }
     __GLOBAL_MEM_PROFILER as &MemoryProfiler

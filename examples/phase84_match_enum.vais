@@ -1,5 +1,5 @@
 # Phase 84: Enum matching
-E Shape {
+EN Shape {
     Circle,
     Square,
     Triangle

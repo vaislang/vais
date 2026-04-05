@@ -31,7 +31,7 @@ X Mutex<T> {
     # Try to acquire the lock without blocking
     F try_lock(&self) -> MutexGuard<T>? {
         result := __mutex_try_lock(self.os_mutex)
-        L result == 1 {
+        LW result == 1 {
             self.lock_state = 1
             Some(MutexGuard::new(&self))
         } ! {
@@ -128,7 +128,7 @@ X RwLock<T> {
     # Try to acquire read lock
     F try_read(&self) -> RwLockReadGuard<T>? {
         result := __rwlock_try_read_lock(self.os_rwlock)
-        L result == 1 {
+        LW result == 1 {
             self.readers = self.readers + 1
             Some(RwLockReadGuard::new(&self))
         } ! {
@@ -139,7 +139,7 @@ X RwLock<T> {
     # Try to acquire write lock
     F try_write(&self) -> RwLockWriteGuard<T>? {
         result := __rwlock_try_write_lock(self.os_rwlock)
-        L result == 1 {
+        LW result == 1 {
             self.writer = 1
             Some(RwLockWriteGuard::new(&self))
         } ! {
@@ -296,7 +296,7 @@ X Once {
 
     # Call the function exactly once
     F call_once(&self, fn_ptr: i64) -> i64 {
-        L self.state == 2 {
+        LW self.state == 2 {
             0  # Already completed
         } ! {
             __once_call(self.os_once, fn_ptr)
@@ -339,7 +339,7 @@ X Semaphore {
     # Try to acquire without blocking
     F try_acquire(&self) -> i64 {
         result := __semaphore_try_wait(self.os_semaphore)
-        L result == 1 {
+        LW result == 1 {
             self.permits = self.permits - 1
             1
         } ! {
@@ -407,8 +407,8 @@ X Channel<T> {
         __mutex_lock(self.mutex)
 
         # Wait until there's space
-        L (self.tail - self.head) >= self.capacity {
-            L self.closed == 1 {
+        LW (self.tail - self.head) >= self.capacity {
+            LW self.closed == 1 {
                 __mutex_unlock(self.mutex)
                 R -1  # Channel closed
             }
@@ -430,8 +430,8 @@ X Channel<T> {
         __mutex_lock(self.mutex)
 
         # Wait until there's a message
-        L self.head >= self.tail {
-            L self.closed == 1 {
+        LW self.head >= self.tail {
+            LW self.closed == 1 {
                 __mutex_unlock(self.mutex)
                 R None
             }
@@ -451,11 +451,11 @@ X Channel<T> {
     # Try to send without blocking
     F try_send(&self, value: T) -> i64 {
         result := __mutex_try_lock(self.mutex)
-        L result == 0 {
+        LW result == 0 {
             R -1  # Could not acquire lock
         }
 
-        L (self.tail - self.head) >= self.capacity {
+        LW (self.tail - self.head) >= self.capacity {
             __mutex_unlock(self.mutex)
             R -1  # Buffer full
         }
@@ -472,11 +472,11 @@ X Channel<T> {
     # Try to receive without blocking
     F try_recv(&self) -> T? {
         result := __mutex_try_lock(self.mutex)
-        L result == 0 {
+        LW result == 0 {
             R None
         }
 
-        L self.head >= self.tail {
+        LW self.head >= self.tail {
             __mutex_unlock(self.mutex)
             R None
         }
@@ -652,7 +652,7 @@ X SpinLock {
 
     F lock(&self) -> SpinLockGuard {
         # Spin until we acquire the lock
-        L self.locked.compare_exchange(0, 1) != 0 {
+        LW self.locked.compare_exchange(0, 1) != 0 {
             # Hint to CPU that we're spinning
             __cpu_pause()
         }
@@ -660,7 +660,7 @@ X SpinLock {
     }
 
     F try_lock(&self) -> SpinLockGuard? {
-        L self.locked.compare_exchange(0, 1) == 0 {
+        LW self.locked.compare_exchange(0, 1) == 0 {
             Some(SpinLockGuard::new(&self))
         } ! {
             None
@@ -802,7 +802,7 @@ X CancellationTokenSource {
     F create_linked_source(&self) -> CancellationTokenSource {
         child := CancellationTokenSource::new()
         # If parent is already cancelled, cancel child immediately
-        L self.is_cancelled() == 1 {
+        LW self.is_cancelled() == 1 {
             child.cancel()
         }
         child
@@ -830,7 +830,7 @@ S CancellationToken {
 X CancellationToken {
     # Check if cancellation has been requested
     F is_cancelled(&self) -> i64 {
-        L self.source_ptr != 0 {
+        LW self.source_ptr != 0 {
             source := self.source_ptr as *CancellationTokenSource
             source.is_cancelled()
         } ! {
@@ -841,7 +841,7 @@ X CancellationToken {
     # Throw a cancellation exception if cancelled
     # Returns 0 if not cancelled, -1 if cancelled
     F throw_if_cancelled(&self) -> i64 {
-        L self.is_cancelled() == 1 {
+        LW self.is_cancelled() == 1 {
             R -1
         }
         0
@@ -850,10 +850,10 @@ X CancellationToken {
     # Wait until cancellation is requested
     # Blocks the current thread
     F wait_for_cancellation(&self) -> i64 {
-        L self.source_ptr != 0 {
+        LW self.source_ptr != 0 {
             source := self.source_ptr as *CancellationTokenSource
             __mutex_lock(source.mutex)
-            L source.is_cancelled() == 0 {
+            LW source.is_cancelled() == 0 {
                 __condvar_wait(source.condvar, source.mutex)
             }
             __mutex_unlock(source.mutex)
@@ -863,10 +863,10 @@ X CancellationToken {
 
     # Wait with timeout (returns 1 if cancelled, 0 if timeout)
     F wait_for_cancellation_timeout(&self, timeout_ms: i64) -> i64 {
-        L self.source_ptr != 0 {
+        LW self.source_ptr != 0 {
             source := self.source_ptr as *CancellationTokenSource
             __mutex_lock(source.mutex)
-            L source.is_cancelled() == 0 {
+            LW source.is_cancelled() == 0 {
                 __condvar_wait_timeout(source.condvar, source.mutex, timeout_ms)
             }
             result := source.is_cancelled()
@@ -893,7 +893,7 @@ X CancellationToken {
 
     # Drop the token reference
     F drop(&self) -> i64 {
-        L self.source_ptr != 0 {
+        LW self.source_ptr != 0 {
             source := self.source_ptr as *CancellationTokenSource
             source.child_count.fetch_sub(1)
         }
@@ -938,7 +938,7 @@ X CancellableFuture<T> {
     # Returns: 0 = Pending, 1 = Ready, -1 = Cancelled
     F poll(&self, ctx: i64) -> i64 {
         # Check cancellation first
-        L self.token.is_cancelled() == 1 {
+        LW self.token.is_cancelled() == 1 {
             R -1  # Cancelled
         }
 
@@ -976,7 +976,7 @@ X WaitGroup {
     # Add delta to the counter (can be positive or negative)
     F add(&self, delta: i64) -> i64 {
         new_count := self.counter.fetch_add(delta) + delta
-        L new_count <= 0 {
+        LW new_count <= 0 {
             __mutex_lock(self.mutex)
             __condvar_broadcast(self.condvar)
             __mutex_unlock(self.mutex)
@@ -992,7 +992,7 @@ X WaitGroup {
     # Wait until the counter reaches zero
     F wait(&self) -> i64 {
         __mutex_lock(self.mutex)
-        L self.counter.load() > 0 {
+        LW self.counter.load() > 0 {
             __condvar_wait(self.condvar, self.mutex)
         }
         __mutex_unlock(self.mutex)

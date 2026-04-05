@@ -17,7 +17,7 @@ S Vec<T> {
 # Shift elements right by one starting from index
 F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
     I len <= index { 0 }
-    E {
+    EL {
         # Move element at len-1 to len
         src := data + (len - 1) * elem_size
         dst := data + len * elem_size
@@ -29,7 +29,7 @@ F vec_shift_right(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
 # Shift elements left by one starting from index
 F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
     I index >= len - 1 { 0 }
-    E {
+    EL {
         src := data + (index + 1) * elem_size
         dst := data + index * elem_size
         store_i64(dst, load_i64(src))
@@ -40,7 +40,7 @@ F vec_shift_left(data: i64, elem_size: i64, index: i64, len: i64) -> i64 {
 # Reverse helper: swap elements from both ends toward center
 F vec_reverse_helper(data: i64, elem_size: i64, lo: i64, hi: i64) -> i64 {
     I lo >= hi { 0 }
-    E {
+    EL {
         a := load_i64(data + lo * elem_size)
         b := load_i64(data + hi * elem_size)
         store_i64(data + lo * elem_size, b)
@@ -56,7 +56,7 @@ F vec_insertion_sort(data: i64, elem_size: i64, len: i64) -> i64 {
 
 F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
     I i >= len { 0 }
-    E {
+    EL {
         key := load_i64(data + i * elem_size)
         vec_insertion_sort_inner(data, elem_size, i, key)
         vec_insertion_sort_outer(data, elem_size, len, i + 1)
@@ -65,12 +65,12 @@ F vec_insertion_sort_outer(data: i64, elem_size: i64, len: i64, i: i64) -> i64 {
 
 F vec_insertion_sort_inner(data: i64, elem_size: i64, j: i64, key: i64) -> i64 {
     I j <= 0 { store_i64(data + j * elem_size, key) 0 }
-    E {
+    EL {
         prev := load_i64(data + (j - 1) * elem_size)
         I prev > key {
             store_i64(data + j * elem_size, prev)
             vec_insertion_sort_inner(data, elem_size, j - 1, key)
-        } E {
+        } EL {
             store_i64(data + j * elem_size, key)
             0
         }
@@ -82,7 +82,7 @@ X Vec<T> {
     F with_capacity(capacity: i64) -> Vec<T> {
         es := type_size()  # Returns sizeof(T) — resolved at monomorphization
         # For backward compatibility: if sizeof returns 0 (e.g., Unit), default to 8
-        elem_sz := I es <= 0 { 8 } E { es }
+        elem_sz := I es <= 0 { 8 } EL { es }
         data := malloc(capacity * elem_sz)
         Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
     }
@@ -99,16 +99,16 @@ X Vec<T> {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } EL { 0 }
     }
 
     # Get element at index
     F get(&self, index: i64) -> T {
         I index < 0 {
             0
-        } E I index >= self.len {
+        } EL I index >= self.len {
             0
-        } E {
+        } EL {
             ptr := self.data + index * self.elem_size
             load_typed(ptr)
         }
@@ -119,9 +119,9 @@ X Vec<T> {
     F get_opt(&self, index: i64) -> Option<T> {
         I index < 0 {
             None
-        } E I index >= self.len {
+        } EL I index >= self.len {
             None
-        } E {
+        } EL {
             ptr := self.data + index * self.elem_size
             Some(load_typed(ptr))
         }
@@ -133,7 +133,7 @@ X Vec<T> {
             ptr := self.data + index * self.elem_size
             store_typed(ptr, value)
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -155,7 +155,7 @@ X Vec<T> {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
             load_typed(ptr)
-        } E {
+        } EL {
             0
         }
     }
@@ -167,7 +167,7 @@ X Vec<T> {
             self.len = self.len - 1
             ptr := self.data + self.len * self.elem_size
             Some(load_typed(ptr))
-        } E {
+        } EL {
             None
         }
     }
@@ -175,7 +175,7 @@ X Vec<T> {
     # Grow capacity (double it)
     F grow(&self) -> i64 {
         doubled := self.cap * 2
-        new_cap := I doubled < 8 { 8 } E { doubled }
+        new_cap := I doubled < 8 { 8 } EL { doubled }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -344,13 +344,13 @@ X Vec<T> {
     # Get first element or 0 if empty
     F first(&self) -> T {
         I self.len == 0 { 0 }
-        E { load_typed(self.data) }
+        EL { load_typed(self.data) }
     }
 
     # Get last element or 0 if empty
     F last(&self) -> T {
         I self.len == 0 { 0 }
-        E { load_typed(self.data + (self.len - 1) * self.elem_size) }
+        EL { load_typed(self.data + (self.len - 1) * self.elem_size) }
     }
 
     # Swap elements at two indices
@@ -367,7 +367,7 @@ X Vec<T> {
     F resize(&self, new_len: i64, default_val: T) -> i64 {
         I new_len < 0 { R 0 }
         # Grow if needed
-        L self.cap < new_len {
+        LW self.cap < new_len {
             self.grow()
         }
         # Fill new slots with default value

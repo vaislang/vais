@@ -18,8 +18,8 @@ F strmap_str_eq_loop(a: i64, b: i64, idx: i64) -> i64 {
     ca := load_byte(a + idx)
     cb := load_byte(b + idx)
     I ca != cb { 0 }
-    E I ca == 0 { 1 }
-    E { strmap_str_eq_loop(a, b, idx + 1) }
+    EL I ca == 0 { 1 }
+    EL { strmap_str_eq_loop(a, b, idx + 1) }
 }
 
 # Helper: copy a null-terminated string to a new heap allocation
@@ -34,7 +34,7 @@ F strmap_str_dup(s: i64) -> i64 {
 # Helper function to initialize bucket array
 F strmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap { 0 }
-    E {
+    EL {
         store_i64(buckets + idx * 8, 0)
         strmap_init_buckets(buckets, idx + 1, cap)
     }
@@ -43,7 +43,7 @@ F strmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
 # Helper: free all entries in a chain (also frees key copies)
 F strmap_free_chain(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    E {
+    EL {
         next := load_i64(entry_ptr + 16)
         # Free the key copy
         key_ptr := load_i64(entry_ptr)
@@ -56,7 +56,7 @@ F strmap_free_chain(entry_ptr: i64) -> i64 {
 # Helper: clear all buckets
 F strmap_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap { 0 }
-    E {
+    EL {
         entry_ptr := load_i64(buckets + idx * 8)
         strmap_free_chain(entry_ptr)
         store_i64(buckets + idx * 8, 0)
@@ -67,7 +67,7 @@ F strmap_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
 # Helper: count entries across all buckets
 F strmap_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap { 0 }
-    E {
+    EL {
         entry_ptr := load_i64(buckets + idx * 8)
         chain_count := strmap_count_chain(entry_ptr)
         chain_count + strmap_count_entries(buckets, idx + 1, cap)
@@ -76,7 +76,7 @@ F strmap_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
 
 F strmap_count_chain(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    E {
+    EL {
         next := load_i64(entry_ptr + 16)
         1 + strmap_count_chain(next)
     }
@@ -85,7 +85,7 @@ F strmap_count_chain(entry_ptr: i64) -> i64 {
 # Rehash helper: iterate old buckets and reinsert into new
 F strmap_rehash_bucket(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
     I idx >= old_cap { 0 }
-    E {
+    EL {
         entry_ptr := load_i64(old_buckets + idx * 8)
         strmap_rehash_entries(new_buckets, new_cap, entry_ptr)
         strmap_rehash_bucket(new_buckets, new_cap, old_buckets, idx + 1, old_cap)
@@ -95,7 +95,7 @@ F strmap_rehash_bucket(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i6
 # Rehash helper: reinsert entry chain (reuse existing key copies)
 F strmap_rehash_entries(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    E {
+    EL {
         key_ptr := load_i64(entry_ptr)
         value := load_i64(entry_ptr + 8)
         next := load_i64(entry_ptr + 16)
@@ -131,7 +131,7 @@ S StringMap<V> {
 X StringMap<V> {
     # Create a new StringMap with given capacity
     F with_capacity(capacity: i64) -> StringMap<V> {
-        cap := I capacity < 8 { 8 } E { capacity }
+        cap := I capacity < 8 { 8 } EL { capacity }
         buckets := malloc(cap * 8)
         strmap_init_buckets(buckets, 0, cap)
         StringMap<V> { buckets: buckets, size: 0, cap: cap }
@@ -145,7 +145,7 @@ X StringMap<V> {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } E { 0 }
+        I self.size == 0 { 1 } EL { 0 }
     }
 
     # Hash a string key to a bucket index
@@ -163,11 +163,11 @@ X StringMap<V> {
 
     F get_from_chain(&self, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
-        E {
+        EL {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 load_i64(entry_ptr + 8)
-            } E {
+            } EL {
                 next := load_i64(entry_ptr + 16)
                 @.get_from_chain(next, key)
             }
@@ -178,7 +178,7 @@ X StringMap<V> {
     F get_opt(&self, key: i64) -> Option<V> {
         I @.contains(key) == 1 {
             Some(@.get(key))
-        } E {
+        } EL {
             None
         }
     }
@@ -192,10 +192,10 @@ X StringMap<V> {
 
     F contains_in_chain(&self, entry_ptr: i64, key: i64) -> i64 {
         I entry_ptr == 0 { 0 }
-        E {
+        EL {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 { 1 }
-            E {
+            EL {
                 next := load_i64(entry_ptr + 16)
                 @.contains_in_chain(next, key)
             }
@@ -212,7 +212,7 @@ X StringMap<V> {
         result := @.update_in_chain(entry_ptr, key, value)
         I result >= 0 {
             result
-        } E {
+        } EL {
             # Key not found, insert new entry at head with a copy of the key
             key_copy := strmap_str_dup(key)
             new_entry := malloc(24)
@@ -233,13 +233,13 @@ X StringMap<V> {
     F update_in_chain(&self, entry_ptr: i64, key: i64, value: V) -> V {
         I entry_ptr == 0 {
             0 - 1
-        } E {
+        } EL {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 old_value := load_i64(entry_ptr + 8)
                 store_i64(entry_ptr + 8, value)
                 old_value
-            } E {
+            } EL {
                 next := load_i64(entry_ptr + 16)
                 @.update_in_chain(next, key, value)
             }
@@ -255,7 +255,7 @@ X StringMap<V> {
 
     F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
-        E {
+        EL {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 value := load_i64(entry_ptr + 8)
@@ -264,7 +264,7 @@ X StringMap<V> {
                 _ := I prev_ptr == 0 {
                     store_i64(self.buckets + bucket_idx * 8, next)
                     0
-                } E {
+                } EL {
                     store_i64(prev_ptr + 16, next)
                     0
                 }
@@ -274,7 +274,7 @@ X StringMap<V> {
                 free(entry_ptr)
                 self.size = self.size - 1
                 value
-            } E {
+            } EL {
                 next := load_i64(entry_ptr + 16)
                 @.remove_from_chain(bucket_idx, entry_ptr, next, key)
             }

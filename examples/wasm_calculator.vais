@@ -59,7 +59,7 @@ F power(base: i64, exp: i64) -> i64 {
 
     result := mut base
     i := mut 1
-    L i < exp {
+    LW i < exp {
         result = result * base
         i = i + 1
     }
@@ -80,7 +80,7 @@ F sqrt(n: i64) -> i64 {
     x := mut n
     y := mut (n + 1) / 2
 
-    L y < x {
+    LW y < x {
         x = y
         y = (x + n / x) / 2
     }
@@ -100,7 +100,7 @@ F factorial(n: i64) -> i64 {
 
     result := mut 1
     i := mut 2
-    L i <= n {
+    LW i <= n {
         result = result * i
         i = i + 1
     }
@@ -120,7 +120,7 @@ F mod_op(a: i64, b: i64) -> i64 {
 
 #[wasm_export("abs_val")]
 F abs_val(n: i64) -> i64 {
-    result := I n < 0 { -n } E { n }
+    result := I n < 0 { -n } EL { n }
     memory = result
     result
 }

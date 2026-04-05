@@ -10,7 +10,7 @@ F abs_positive(x: i64) -> i64 {
 # Test 2: Basic ensures (postcondition)
 #[ensures(return >= 0)]
 F abs_simple(x: i64) -> i64 {
-    I x < 0 { -x } E { x }
+    I x < 0 { -x } EL { x }
 }
 
 # Test 3: Both requires and ensures

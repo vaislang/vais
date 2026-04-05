@@ -82,7 +82,7 @@ F remove_todo(id: i64) -> i64 {
 
     # Shift remaining items
     i := mut idx
-    L i < todo_count - 1 {
+    LW i < todo_count - 1 {
         todo_ids[i] = todo_ids[i + 1]
         todo_titles_ptr[i] = todo_titles_ptr[i + 1]
         todo_titles_len[i] = todo_titles_len[i + 1]
@@ -103,7 +103,7 @@ F toggle_todo(id: i64) -> i64 {
     }
 
     current := todo_completed[idx]
-    todo_completed[idx] = I current == 0 { 1 } E { 0 }
+    todo_completed[idx] = I current == 0 { 1 } EL { 0 }
     todo_completed[idx]
 }
 
@@ -116,7 +116,7 @@ F get_count() -> i64 = todo_count
 F get_completed_count() -> i64 {
     count := mut 0
     i := mut 0
-    L i < todo_count {
+    LW i < todo_count {
         I todo_completed[i] == 1 {
             count = count + 1
         }
@@ -128,7 +128,7 @@ F get_completed_count() -> i64 {
 # Helper: find todo index by ID
 F find_todo_index(id: i64) -> i64 {
     i := mut 0
-    L i < todo_count {
+    LW i < todo_count {
         I todo_ids[i] == id {
             R i
         }

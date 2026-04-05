@@ -50,7 +50,7 @@ F main() -> i64 {
 
     # Initialize particles
     i := mut 0
-    L i < system.count {
+    LW i < system.count {
         spawn_particle(i)
         i = i + 1
     }
@@ -59,12 +59,12 @@ F main() -> i64 {
     frame := mut 0
     dt := 0.016  # ~60 FPS
 
-    L frame < 10 {
+    LW frame < 10 {
         printf("=== Frame %ld ===\n", frame)
 
         # Update all particles
         i = 0
-        L i < system.count {
+        LW i < system.count {
             # Update physics
             update_physics(dt)
 
@@ -73,7 +73,7 @@ F main() -> i64 {
 
         # Render particles
         i = 0
-        L i < system.count {
+        LW i < system.count {
             render_particle(i)
             i = i + 1
         }

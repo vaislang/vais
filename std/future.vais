@@ -2,7 +2,7 @@
 # Stackless coroutine-based async/await implementation
 
 # Poll result: Ready(value) or Pending
-E Poll {
+EN Poll {
     Pending,
     Ready(i64)
 }
@@ -52,7 +52,7 @@ X Context {
 
     F wake(&self) -> i64 {
         # Wake up the task associated with this context
-        L self.waker_ptr != 0 {
+        LW self.waker_ptr != 0 {
             # Call waker function
             1
         } ! {
@@ -74,7 +74,7 @@ X Waker {
 
     F wake(&self) -> i64 {
         # Signal the runtime that this task is ready to make progress
-        L self.wake_fn != 0 {
+        LW self.wake_fn != 0 {
             # call_indirect(self.wake_fn, self.task_ptr)
             1
         } ! {
@@ -304,7 +304,7 @@ X AsyncDropGuard {
     # Manually trigger async drop
     # Returns the result of the drop operation
     A F drop_async(&self) -> i64 {
-        L self.dropped == 1 {
+        LW self.dropped == 1 {
             R 0  # Already dropped
         }
         self.dropped = 1
@@ -365,7 +365,7 @@ X AsyncDropScope {
         errors := 0
         current := self.head
 
-        L current != 0 {
+        LW current != 0 {
             value_ptr := load_i64(current)
             next := load_i64(current + 8)
 
@@ -487,7 +487,7 @@ X ChainFuture {
     F get_result(&self, idx: i64) -> i64 {
         I idx >= 0 && idx < self.count {
             load_i64(self.results_ptr + idx * 8)
-        } E {
+        } EL {
             0
         }
     }
@@ -525,10 +525,10 @@ X RetryFuture {
     F calculate_backoff(&self) -> i64 {
         I self.attempt == 0 {
             self.backoff_base
-        } E {
+        } EL {
             delay := self.backoff_base
             shifts := self.attempt
-            L shifts > 0 {
+            LW shifts > 0 {
                 delay = delay * 2
                 shifts = shifts - 1
             }
@@ -622,7 +622,7 @@ F poll_map(future_ptr: i64, poll_fn: i64, map_fn: i64, ctx: i64) -> i64 {
     I poll_result != 0 {
         # In real impl: call_indirect(map_fn, poll_result)
         poll_result
-    } E {
+    } EL {
         0
     }
 }

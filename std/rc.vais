@@ -92,7 +92,7 @@ X Rc {
             # Last reference, free memory
             free(self.ptr)
             0
-        } E {
+        } EL {
             rc_set_count(self.ptr, count - 1)
             count - 1
         }
@@ -100,7 +100,7 @@ X Rc {
 
     # Check if this is the only reference
     F is_unique(&self) -> i64 {
-        I rc_get_count(self.ptr) == 1 { 1 } E { 0 }
+        I rc_get_count(self.ptr) == 1 { 1 } EL { 0 }
     }
 
     # Create a weak reference
@@ -122,14 +122,14 @@ X Weak {
         I count > 0 {
             rc_set_count(self.ptr, count + 1)
             1  # Success - caller should construct Rc
-        } E {
+        } EL {
             0  # Failed - value already freed
         }
     }
 
     # Check if the referenced value still exists
     F is_alive(&self) -> i64 {
-        I rc_get_count(self.ptr) > 0 { 1 } E { 0 }
+        I rc_get_count(self.ptr) > 0 { 1 } EL { 0 }
     }
 }
 

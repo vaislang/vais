@@ -30,10 +30,10 @@ F is_leap(year: i64) -> i64 {
 # Helper function: get number of days in a given month
 F days_in_month_for(year: i64, month: i64) -> i64 {
     I month == 2 {
-        I is_leap(year) == 1 { 29 } E { 28 }
-    } E I month == 4 || month == 6 || month == 9 || month == 11 {
+        I is_leap(year) == 1 { 29 } EL { 28 }
+    } EL I month == 4 || month == 6 || month == 9 || month == 11 {
         30
-    } E {
+    } EL {
         31
     }
 }
@@ -164,7 +164,7 @@ X DateTime {
         h := (q + ((13 * (m + 1)) / 5) + k + (k / 4) + (j / 4) - (2 * j)) % 7
 
         # Convert Zeller's output (0=Sat) to standard (0=Sun)
-        I h == 0 { 6 } E { h - 1 }
+        I h == 0 { 6 } EL { h - 1 }
     }
 
     # Add days to this DateTime
@@ -208,7 +208,7 @@ X Duration {
             final_nanos := norm_nanos + 1000000000
             extra_secs = extra_secs - 1
             Duration { secs: secs + extra_secs, nanos: final_nanos }
-        } E {
+        } EL {
             Duration { secs: secs + extra_secs, nanos: norm_nanos }
         }
     }
@@ -285,17 +285,17 @@ X Duration {
     F sub(&self, other: Duration) -> Duration {
         I self.secs < other.secs {
             Duration { secs: 0, nanos: 0 }
-        } E I self.secs == other.secs {
+        } EL I self.secs == other.secs {
             I self.nanos < other.nanos {
                 Duration { secs: 0, nanos: 0 }
-            } E {
+            } EL {
                 Duration { secs: 0, nanos: self.nanos - other.nanos }
             }
-        } E {
+        } EL {
             diff_secs := self.secs - other.secs
             I self.nanos < other.nanos {
                 Duration { secs: diff_secs - 1, nanos: self.nanos + 1000000000 - other.nanos }
-            } E {
+            } EL {
                 Duration { secs: diff_secs, nanos: self.nanos - other.nanos }
             }
         }

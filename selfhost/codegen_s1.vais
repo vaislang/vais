@@ -81,7 +81,7 @@ F str_eq(ptr1: i64, len1: i64, ptr2: i64, len2: i64) -> i64 {
     I len1 != len2 { R 0 }
     i: mut i64 = 0
     L {
-        I i >= len1 { B } E { 0 }
+        I i >= len1 { B } EL { 0 }
         I load_byte(ptr1 + i) != load_byte(ptr2 + i) { R 0 }
         i = i + 1
     }
@@ -104,7 +104,7 @@ F cg_find_var(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
     count := cg_get_var_count(cg)
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         offset := i * 24
         var_ptr := load_i64(vars + offset + 0)
         var_len := load_i64(vars + offset + 8)
@@ -132,7 +132,7 @@ F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
 
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         offset := i * 24
         existing_ptr := load_i64(strings + offset + 0)
         existing_len := load_i64(strings + offset + 8)
@@ -157,29 +157,29 @@ F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
 
     j: mut i64 = 0
     L {
-        I j >= str_len { B } E { 0 }
+        I j >= str_len { B } EL { 0 }
         ch := load_byte(str_ptr + j)
         I ch == 10 {
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 48)
             sb_append_byte(strings_sb, 65)
-        } E I ch == 13 {
+        } EL I ch == 13 {
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 48)
             sb_append_byte(strings_sb, 68)
-        } E I ch == 9 {
+        } EL I ch == 9 {
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 48)
             sb_append_byte(strings_sb, 57)
-        } E I ch == 34 {
+        } EL I ch == 34 {
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 50)
             sb_append_byte(strings_sb, 50)
-        } E I ch == 92 {
+        } EL I ch == 92 {
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 53)
             sb_append_byte(strings_sb, 67)
-        } E {
+        } EL {
             sb_append_byte(strings_sb, ch)
         }
         j = j + 1
@@ -235,7 +235,7 @@ F cg_emit_str(cg: i64, ptr: i64, len: i64) -> i64 {
     sb := cg_get_sb(cg)
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         sb_append_byte(sb, load_byte(ptr + i))
         i = i + 1
     }
@@ -361,7 +361,7 @@ F cg_emit_operand(cg: i64, reg: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit(cg, "%")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         cg_emit(cg, "%")
         cg_emit_i64(cg, reg)
         0
@@ -383,7 +383,7 @@ F cg_gen_int_expr(cg: i64, expr: i64) -> i64 {
 # Runtime function checks
 F expr_is_string(expr: i64) -> i64 {
     kind := load_i64(expr + 0)
-    I kind == EXPR_STRING() { 1 } E { 0 }
+    I kind == EXPR_STRING() { 1 } EL { 0 }
 }
 
 F is_puts_func(ptr: i64, len: i64) -> i64 {
@@ -505,7 +505,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
     arg_regs := malloc(16 * 8)
     i: mut i64 = 0
     L {
-        I i >= arg_count { B } E { 0 }
+        I i >= arg_count { B } EL { 0 }
         arg := load_i64(args + i * 8)
         store_byte(arg_is_string + i, expr_is_string(arg))
         arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
@@ -523,7 +523,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit(cg, ")")
         cg_emit_newline(cg)
         0
-    } E I is_putchar == 1 {
+    } EL I is_putchar == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i32 @putchar(i32 ")
@@ -534,7 +534,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit(cg, " to i32))")
         cg_emit_newline(cg)
         0
-    } E I is_malloc == 1 {
+    } EL I is_malloc == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call ptr @malloc(i64 %")
@@ -551,7 +551,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R conv_reg
-    } E I is_free == 1 {
+    } EL I is_free == 1 {
         ptr_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
         cg_emit_i64(cg, ptr_reg)
@@ -566,7 +566,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R 0
-    } E I is_load_byte == 1 {
+    } EL I is_load_byte == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @__load_byte(i64 ")
@@ -576,7 +576,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R result_reg
-    } E I is_store_byte == 1 {
+    } EL I is_store_byte == 1 {
         cg_emit(cg, "  call void @__store_byte(i64 ")
         cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
         cg_emit(cg, ", i64 ")
@@ -586,7 +586,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R 0
-    } E I is_load_i64 == 1 {
+    } EL I is_load_i64 == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @__load_i64(i64 ")
@@ -596,7 +596,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R result_reg
-    } E I is_store_i64 == 1 {
+    } EL I is_store_i64 == 1 {
         cg_emit(cg, "  call void @__store_i64(i64 ")
         cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
         cg_emit(cg, ", i64 ")
@@ -606,7 +606,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R 0
-    } E {
+    } EL {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @")
@@ -615,8 +615,8 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
 
         i = 0
         L {
-            I i >= arg_count { B } E { 0 }
-            I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            I i >= arg_count { B } EL { 0 }
+            I i > 0 { cg_emit(cg, ", "); 0 } EL { 0 }
             cg_emit(cg, "i64 ")
             arg_reg := load_i64(arg_regs + i * 8)
             cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
@@ -648,43 +648,43 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
     I op == BINOP_ADD() {
         cg_emit(cg, " = add i64 ")
         0
-    } E I op == BINOP_SUB() {
+    } EL I op == BINOP_SUB() {
         cg_emit(cg, " = sub i64 ")
         0
-    } E I op == BINOP_MUL() {
+    } EL I op == BINOP_MUL() {
         cg_emit(cg, " = mul i64 ")
         0
-    } E I op == BINOP_DIV() {
+    } EL I op == BINOP_DIV() {
         cg_emit(cg, " = sdiv i64 ")
         0
-    } E I op == BINOP_MOD() {
+    } EL I op == BINOP_MOD() {
         cg_emit(cg, " = srem i64 ")
         0
-    } E I op == BINOP_LT() {
+    } EL I op == BINOP_LT() {
         cg_emit(cg, " = icmp slt i64 ")
         0
-    } E I op == BINOP_LTE() {
+    } EL I op == BINOP_LTE() {
         cg_emit(cg, " = icmp sle i64 ")
         0
-    } E I op == BINOP_GT() {
+    } EL I op == BINOP_GT() {
         cg_emit(cg, " = icmp sgt i64 ")
         0
-    } E I op == BINOP_GTE() {
+    } EL I op == BINOP_GTE() {
         cg_emit(cg, " = icmp sge i64 ")
         0
-    } E I op == BINOP_EQ() {
+    } EL I op == BINOP_EQ() {
         cg_emit(cg, " = icmp eq i64 ")
         0
-    } E I op == BINOP_NEQ() {
+    } EL I op == BINOP_NEQ() {
         cg_emit(cg, " = icmp ne i64 ")
         0
-    } E I op == BINOP_AND() {
+    } EL I op == BINOP_AND() {
         cg_emit(cg, " = and i64 ")
         0
-    } E I op == BINOP_OR() {
+    } EL I op == BINOP_OR() {
         cg_emit(cg, " = or i64 ")
         0
-    } E {
+    } EL {
         cg_emit(cg, " = add i64 ")
         0
     }
@@ -703,7 +703,7 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
         cg_emit(cg, " to i64")
         cg_emit_newline(cg)
         ext_reg
-    } E {
+    } EL {
         result_reg
     }
 }
@@ -737,7 +737,7 @@ F cg_gen_loop_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit_i64(cg, loop_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     cg_emit(cg, "loop_end")
     cg_emit_i64(cg, loop_id)
@@ -812,7 +812,7 @@ F cg_gen_while_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
         cg_emit_i64(cg, loop_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # End block
     cg_emit(cg, "loop_end")
@@ -871,7 +871,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit_i64(cg, label_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     cg_emit(cg, "else")
     cg_emit_i64(cg, label_id)
@@ -883,7 +883,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
     I else_expr != 0 {
         else_reg = cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         else_reg = cg_fresh_reg(cg)
         cg_emit(cg, "  %")
         cg_emit_i64(cg, else_reg)
@@ -899,12 +899,12 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit_i64(cg, label_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     I then_terminated == 1 && else_terminated == 1 {
         cg_set_terminated(cg, 1)
         0 - 2
-    } E {
+    } EL {
         cg_emit(cg, "merge")
         cg_emit_i64(cg, label_id)
         cg_emit(cg, ":")
@@ -922,7 +922,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
                 cg_emit(cg, "merge")
                 cg_emit_i64(cg, then_final_id)
                 0
-            } E {
+            } EL {
                 cg_emit(cg, "then")
                 cg_emit_i64(cg, label_id)
                 0
@@ -934,7 +934,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
                 cg_emit(cg, "merge")
                 cg_emit_i64(cg, else_final_id)
                 0
-            } E {
+            } EL {
                 cg_emit(cg, "else")
                 cg_emit_i64(cg, label_id)
                 0
@@ -943,10 +943,10 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
             cg_emit_newline(cg)
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             result_reg
-        } E I then_terminated == 1 {
+        } EL I then_terminated == 1 {
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             else_reg
-        } E {
+        } EL {
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             then_reg
         }
@@ -978,18 +978,18 @@ F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_add_var(cg, name_ptr, name_len, alloca_reg)
 
         R 0
-    } E I stmt_kind == STMT_BREAK() {
+    } EL I stmt_kind == STMT_BREAK() {
         loop_end := cg_get_loop_end(cg)
         cg_emit(cg, "  br label %loop_end")
         cg_emit_i64(cg, loop_end)
         cg_emit_newline(cg)
         cg_set_terminated(cg, 1)
         R 1
-    } E I stmt_kind == STMT_EXPR() {
+    } EL I stmt_kind == STMT_EXPR() {
         stmt_expr := load_i64(stmt + 8)
         cg_gen_expr(cg, stmt_expr, param_name_ptr, param_name_len)
         R 0
-    } E { 0 }
+    } EL { 0 }
 }
 
 F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
@@ -1000,9 +1000,9 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     terminated: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= stmts_len { B } E { 0 }
-        I terminated == 1 { B } E { 0 }
-        I cg_get_terminated(cg) == 1 { B } E { 0 }
+        I i >= stmts_len { B } EL { 0 }
+        I terminated == 1 { B } EL { 0 }
+        I cg_get_terminated(cg) == 1 { B } EL { 0 }
         stmt := load_i64(stmts + i * 8)
         terminated = cg_gen_stmt(cg, stmt, param_name_ptr, param_name_len)
         i = i + 1
@@ -1011,13 +1011,13 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     I cg_get_terminated(cg) == 1 {
         terminated = 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     I terminated == 1 {
         0 - 2
-    } E I final_expr != 0 {
+    } EL I final_expr != 0 {
         cg_gen_expr(cg, final_expr, param_name_ptr, param_name_len)
-    } E {
+    } EL {
         result_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
@@ -1101,7 +1101,7 @@ F cg_gen_match_expr(cg: i64, expr: i64, param_ptr: i64, param_len: i64) -> i64 {
 
     i: mut i64 = 0
     L {
-        I i >= arm_count { B } E { 0 }
+        I i >= arm_count { B } EL { 0 }
         pattern := load_i64(arms + i * 16)
         body := load_i64(arms + i * 16 + 8)
         cg_gen_match_arm(cg, scrut_reg, pattern, body, label_id, i, param_ptr, param_len, result_alloca, label_id)
@@ -1131,14 +1131,14 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
     I expr == 0 { R 0 }
     kind := load_i64(expr + 0)
 
-    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } E { 0 }
+    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } EL { 0 }
 
     result: mut i64 = 0
 
     I kind == EXPR_INT() {
         result = cg_gen_int_expr(cg, expr)
         0
-    } E I kind == EXPR_STRING() {
+    } EL I kind == EXPR_STRING() {
         str_ptr := expr_get_field0(expr)
         str_len := expr_get_field1(expr)
         str_id := cg_add_string(cg, str_ptr, str_len)
@@ -1156,14 +1156,14 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_newline(cg)
         result = reg
         0
-    } E I kind == EXPR_IDENT() {
+    } EL I kind == EXPR_IDENT() {
         ident_ptr := expr_get_field0(expr)
         ident_len := expr_get_field1(expr)
 
         I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
             result = 0 - 1
             0
-        } E {
+        } EL {
             var_alloca := cg_find_var(cg, ident_ptr, ident_len)
             I var_alloca != 0 - 1 {
                 load_reg := cg_fresh_reg(cg)
@@ -1174,30 +1174,30 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
                 cg_emit_newline(cg)
                 result = load_reg
                 0
-            } E {
+            } EL {
                 result = 0 - 1
                 0
             }
         }
-    } E I kind == EXPR_CALL() {
+    } EL I kind == EXPR_CALL() {
         result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_BINARY() {
+    } EL I kind == EXPR_BINARY() {
         result = cg_gen_binary_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_IF() {
+    } EL I kind == EXPR_IF() {
         result = cg_gen_if_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_BLOCK() {
+    } EL I kind == EXPR_BLOCK() {
         result = cg_gen_block_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_LOOP() {
+    } EL I kind == EXPR_LOOP() {
         result = cg_gen_loop_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_WHILE() {
+    } EL I kind == EXPR_WHILE() {
         result = cg_gen_while_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_ASSIGN() {
+    } EL I kind == EXPR_ASSIGN() {
         target := expr_get_field0(expr)
         value := expr_get_field1(expr)
 
@@ -1218,15 +1218,15 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
 
                 result = value_reg
                 0
-            } E {
+            } EL {
                 result = 0
                 0
             }
-        } E {
+        } EL {
             result = 0
             0
         }
-    } E I kind == EXPR_INDEX() {
+    } EL I kind == EXPR_INDEX() {
         # Index expression: arr[idx]
         base := expr_get_field0(expr)
         index := expr_get_field1(expr)
@@ -1254,7 +1254,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
 
         result = load_reg
         0
-    } E I kind == EXPR_ARRAY() {
+    } EL I kind == EXPR_ARRAY() {
         # Array literal: [expr1, expr2, ...]
         elements := expr_get_field0(expr)
         elem_len := expr_get_field1(expr)
@@ -1268,7 +1268,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             cg_emit_newline(cg)
             result = null_reg
             0
-        } E {
+        } EL {
             # Alloca for array
             alloca_reg := cg_fresh_reg(cg)
             cg_emit(cg, "  %")
@@ -1280,7 +1280,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             # Store each element
             i: mut i64 = 0
             L {
-                I i >= elem_len { B } E { 0 }
+                I i >= elem_len { B } EL { 0 }
 
                 elem_expr := load_i64(elements + i * 8)
                 elem_reg := cg_gen_expr(cg, elem_expr, param_name_ptr, param_name_len)
@@ -1308,7 +1308,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             result = alloca_reg
             0
         }
-    } E { 0 }
+    } EL { 0 }
 
     result
 }
@@ -1324,7 +1324,7 @@ F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
         cg_emit(cg, "(i64 %")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         cg_emit(cg, ") {")
-    } E {
+    } EL {
         cg_emit(cg, "() {")
     }
     cg_emit_newline(cg)
@@ -1338,7 +1338,7 @@ F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
         cg_emit(cg, "%")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         cg_emit(cg, "%")
         cg_emit_i64(cg, result_reg)
         0
@@ -1400,15 +1400,15 @@ F cg_finalize(cg: i64) -> i64 {
         define_pos: mut i64 = 0
         i: mut i64 = 0
         L {
-            I i >= main_len - 6 { B } E { 0 }
+            I i >= main_len - 6 { B } EL { 0 }
             I load_byte(main_data + i) == 100 {
                 I load_byte(main_data + i + 1) == 101 {
                     I load_byte(main_data + i + 2) == 102 {
                         define_pos = i
                         B
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
 
@@ -1418,7 +1418,7 @@ F cg_finalize(cg: i64) -> i64 {
 
             j: mut i64 = 0
             L {
-                I j >= define_pos { B } E { 0 }
+                I j >= define_pos { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(main_data + j))
                 j = j + 1
             }
@@ -1426,7 +1426,7 @@ F cg_finalize(cg: i64) -> i64 {
             sb_append_byte(new_sb, 10)
             j = 0
             L {
-                I j >= strings_len { B } E { 0 }
+                I j >= strings_len { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(strings_data + j))
                 j = j + 1
             }
@@ -1434,7 +1434,7 @@ F cg_finalize(cg: i64) -> i64 {
 
             j = define_pos
             L {
-                I j >= main_len { B } E { 0 }
+                I j >= main_len { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(main_data + j))
                 j = j + 1
             }
@@ -1442,8 +1442,8 @@ F cg_finalize(cg: i64) -> i64 {
             sb_free(main_sb)
             store_i64(cg + 0, new_sb)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
     1
 }
 
@@ -1501,7 +1501,7 @@ F cg_gen_function_item(cg: i64, item: i64) -> i64 {
         I result_reg == 0 - 1 {
             cg_emit(cg, "0")
             0
-        } E {
+        } EL {
             cg_emit(cg, "%")
             cg_emit_i64(cg, result_reg)
             0
@@ -1518,7 +1518,7 @@ F cg_gen_function_item(cg: i64, item: i64) -> i64 {
         param_name_ptr = param_get_name_ptr(param)
         param_name_len = param_get_name_len(param)
         0
-    } E { 0 }
+    } EL { 0 }
 
     cg_gen_function(cg, name_ptr, name_len, param_name_ptr, param_name_len, body)
 }
@@ -1530,7 +1530,7 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
 
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         item := load_i64(items + i * 8)
         kind := item_get_kind(item)
 
@@ -1544,16 +1544,16 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
                 first_func_name_ptr = name_ptr
                 first_func_name_len = name_len
                 0
-            } E { 0 }
+            } EL { 0 }
 
             I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
                 has_main = 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             cg_gen_function_item(cg, item)
             0
-        } E { 0 }
+        } EL { 0 }
 
         i = i + 1
     }
@@ -1561,7 +1561,7 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
     I has_main == 0 && first_func_name_ptr != 0 {
         cg_gen_main_that_calls(cg, first_func_name_ptr, first_func_name_len)
         0
-    } E { 0 }
+    } EL { 0 }
 
     count
 }

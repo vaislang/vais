@@ -55,7 +55,7 @@ X Path {
         new_len := 0
         I ends_with_slash {
             new_len = self.len + other_len
-        } E {
+        } EL {
             new_len = self.len + 1 + other_len
         }
 
@@ -65,7 +65,7 @@ X Path {
 
         I ends_with_slash {
             memcpy(data + self.len, other_ptr, other_len + 1)
-        } E {
+        } EL {
             store_byte(data + self.len, 47)
             memcpy(data + self.len + 1, other_ptr, other_len + 1)
         }
@@ -203,15 +203,15 @@ X Path {
     # Check if path is absolute (starts with '/')
     F is_absolute(&self) -> i64 {
         I self.len > 0 {
-            I load_byte(self.data) == 47 { 1 } E { 0 }
-        } E {
+            I load_byte(self.data) == 47 { 1 } EL { 0 }
+        } EL {
             0
         }
     }
 
     # Check if path is relative (not absolute)
     F is_relative(&self) -> i64 {
-        I @.is_absolute() { 0 } E { 1 }
+        I @.is_absolute() { 0 } EL { 1 }
     }
 
     # Free the path memory
@@ -274,7 +274,7 @@ X PathBuf {
         new_len := 0
         I needs_sep {
             new_len = self.len + 1 + comp_len
-        } E {
+        } EL {
             new_len = self.len + comp_len
         }
 
@@ -381,7 +381,7 @@ X PathBuf {
             self.len = self.len + 1
             memcpy(self.data + self.len, ext_ptr, ext_len + 1)
             self.len = self.len + ext_len
-        } E {
+        } EL {
             store_byte(self.data + self.len, 0)
         }
         0
@@ -423,7 +423,7 @@ F path_join(a: str, b: str) -> i64 {
     new_len := 0
     I ends_with_slash {
         new_len = a_len + b_len
-    } E {
+    } EL {
         new_len = a_len + 1 + b_len
     }
 
@@ -433,7 +433,7 @@ F path_join(a: str, b: str) -> i64 {
 
     I ends_with_slash {
         memcpy(result + a_len, b_ptr, b_len + 1)
-    } E {
+    } EL {
         store_byte(result + a_len, 47)
         memcpy(result + a_len + 1, b_ptr, b_len + 1)
     }
@@ -578,8 +578,8 @@ F path_is_absolute(path: str) -> i64 {
     ptr := str_to_ptr(path)
     len := strlen(ptr)
     I len > 0 {
-        I load_byte(ptr) == 47 { 1 } E { 0 }
-    } E {
+        I load_byte(ptr) == 47 { 1 } EL { 0 }
+    } EL {
         0
     }
 }

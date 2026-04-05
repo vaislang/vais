@@ -217,7 +217,7 @@ F sb_append_byte(sb: i64, byte: i64) -> i64 {
     I len >= cap {
         sb_grow_to(sb, cap * 2)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     store_byte(data + len, byte)
     sb_set_len(sb, len + 1)
@@ -231,7 +231,7 @@ F sb_append_cstr(sb: i64, s: str) -> i64 {
     I len + slen > cap {
         sb_grow_to(sb, len + slen + 1024)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     memcpy_str(data + len, s, slen)
     sb_set_len(sb, len + slen)
@@ -245,7 +245,7 @@ F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
     I len + slen > cap {
         sb_grow_to(sb, len + slen + 1024)
         0
-    } E { 0 }
+    } EL { 0 }
     data := sb_get_data(sb)
     memcpy(data + len, src, slen)
     sb_set_len(sb, len + slen)
@@ -255,14 +255,14 @@ F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
 F sb_append_i64(sb: i64, value: i64) -> i64 {
     I value == 0 {
         sb_append_byte(sb, 48)
-    } E I value < 0 {
+    } EL I value < 0 {
         sb_append_byte(sb, 45)
         sb_append_i64(sb, 0 - value)
-    } E {
+    } EL {
         I value >= 10 {
             sb_append_i64(sb, value / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         sb_append_byte(sb, (value % 10) + 48)
     }
 }
@@ -301,12 +301,12 @@ F lexer_set_pos(lex: i64, pos: i64) -> i64 {
 F lexer_is_eof(lex: i64) -> i64 {
     pos := lexer_get_pos(lex)
     len := lexer_get_len(lex)
-    I pos >= len { 1 } E { 0 }
+    I pos >= len { 1 } EL { 0 }
 }
 
 F lexer_peek(lex: i64) -> i64 {
     I lexer_is_eof(lex) == 1 { 0 }
-    E {
+    EL {
         src := lexer_get_source(lex)
         pos := lexer_get_pos(lex)
         load_byte(src + pos)
@@ -315,7 +315,7 @@ F lexer_peek(lex: i64) -> i64 {
 
 F lexer_advance(lex: i64) -> i64 {
     I lexer_is_eof(lex) == 1 { 0 }
-    E {
+    EL {
         c := lexer_peek(lex)
         pos := lexer_get_pos(lex)
         lexer_set_pos(lex, pos + 1)
@@ -324,26 +324,26 @@ F lexer_advance(lex: i64) -> i64 {
 }
 
 F is_digit(c: i64) -> i64 {
-    I c >= 48 && c <= 57 { 1 } E { 0 }
+    I c >= 48 && c <= 57 { 1 } EL { 0 }
 }
 
 F is_ident_start(c: i64) -> i64 {
-    I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 { 1 } E { 0 }
+    I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 { 1 } EL { 0 }
 }
 
 F is_ident_char(c: i64) -> i64 {
-    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } E { 0 }
+    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } EL { 0 }
 }
 
 F is_whitespace(c: i64) -> i64 {
-    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } EL { 0 }
 }
 
 F lexer_skip_whitespace(lex: i64) -> i64 {
     L {
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
         c := lexer_peek(lex)
-        I is_whitespace(c) == 0 { B } E { 0 }
+        I is_whitespace(c) == 0 { B } EL { 0 }
         lexer_advance(lex)
     }
     1
@@ -351,8 +351,8 @@ F lexer_skip_whitespace(lex: i64) -> i64 {
 
 F lexer_skip_comment(lex: i64) -> i64 {
     L {
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
-        I lexer_peek(lex) == 10 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
+        I lexer_peek(lex) == 10 { B } EL { 0 }
         lexer_advance(lex)
     }
     1
@@ -361,11 +361,11 @@ F lexer_skip_comment(lex: i64) -> i64 {
 F lexer_skip_whitespace_and_comments(lex: i64) -> i64 {
     L {
         lexer_skip_whitespace(lex)
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
         I lexer_peek(lex) == 35 {
             lexer_skip_comment(lex)
             0
-        } E {
+        } EL {
             B
         }
     }
@@ -393,9 +393,9 @@ F lexer_scan_number(lex: i64, tokens: i64, count: i64) -> i64 {
     start := lexer_get_pos(lex)
     value: mut i64 = 0
     L {
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
         c := lexer_peek(lex)
-        I is_digit(c) == 0 { B } E { 0 }
+        I is_digit(c) == 0 { B } EL { 0 }
         value = value * 10 + (c - 48)
         lexer_advance(lex)
     }
@@ -409,8 +409,8 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
     str_start := src + start
 
     L {
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
-        I is_ident_char(lexer_peek(lex)) == 0 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
+        I is_ident_char(lexer_peek(lex)) == 0 { B } EL { 0 }
         lexer_advance(lex)
     }
 
@@ -423,18 +423,18 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
     I len == 1 {
         c := load_byte(str_start)
         # Check M first to avoid adding to E I chain
-        I c == 77 { kind = TOK_KW_M(); 0 } E { 0 }
+        I c == 77 { kind = TOK_KW_M(); 0 } EL { 0 }
         I c == 70 { kind = TOK_KW_F(); 0 }       # F
-        E I c == 83 { kind = TOK_KW_S(); 0 }     # S
-        E I c == 88 { kind = TOK_KW_X(); 0 }     # X
-        E I c == 73 { kind = TOK_KW_I(); 0 }     # I
-        E I c == 76 { kind = TOK_KW_L(); 0 }     # L
-        E I c == 82 { kind = TOK_KW_R(); 0 }     # R
-        E I c == 66 { kind = TOK_KW_B(); 0 }     # B
-        E I c == 69 { kind = TOK_KW_E(); 0 }     # E
-        E I c == 85 { kind = TOK_KW_U(); 0 }     # U (import)
-        E { 0 }
-    } E I len == 3 {
+        EL I c == 83 { kind = TOK_KW_S(); 0 }     # S
+        EL I c == 88 { kind = TOK_KW_X(); 0 }     # X
+        EL I c == 73 { kind = TOK_KW_I(); 0 }     # I
+        EL I c == 76 { kind = TOK_KW_L(); 0 }     # L
+        EL I c == 82 { kind = TOK_KW_R(); 0 }     # R
+        EL I c == 66 { kind = TOK_KW_B(); 0 }     # B
+        EL I c == 69 { kind = TOK_KW_E(); 0 }     # E
+        EL I c == 85 { kind = TOK_KW_U(); 0 }     # U (import)
+        EL { 0 }
+    } EL I len == 3 {
         c0 := load_byte(str_start)
         c1 := load_byte(str_start + 1)
         c2 := load_byte(str_start + 2)
@@ -443,15 +443,15 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
             kind = TOK_TY_I64()
             0
         # Check for str
-        } E I c0 == 115 && c1 == 116 && c2 == 114 {
+        } EL I c0 == 115 && c1 == 116 && c2 == 114 {
             kind = TOK_TY_STR()
             0
         # Check for mut
-        } E I c0 == 109 && c1 == 117 && c2 == 116 {
+        } EL I c0 == 109 && c1 == 117 && c2 == 116 {
             kind = TOK_KW_MUT()
             0
-        } E { 0 }
-    } E I len == 4 {
+        } EL { 0 }
+    } EL I len == 4 {
         c0 := load_byte(str_start)
         c1 := load_byte(str_start + 1)
         c2 := load_byte(str_start + 2)
@@ -460,8 +460,8 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
         I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 {
             kind = TOK_TY_BOOL()
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     token_store(tokens, count, kind, 0, str_start, len, start, end)
 }
@@ -478,112 +478,112 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
             fat_end := lexer_get_pos(lex)
             token_store(tokens, count, TOK_FAT_ARROW(), 0, 0, 0, start, fat_end)
             R 0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
 
     I c == 40 { kind = TOK_LPAREN(); 0 }       # (
-    E I c == 41 { kind = TOK_RPAREN(); 0 }     # )
-    E I c == 123 { kind = TOK_LBRACE(); 0 }    # {
-    E I c == 125 { kind = TOK_RBRACE(); 0 }    # }
-    E I c == 91 { kind = TOK_LBRACKET(); 0 }   # [
-    E I c == 93 { kind = TOK_RBRACKET(); 0 }   # ]
-    E I c == 44 { kind = TOK_COMMA(); 0 }      # ,
-    E I c == 59 { kind = TOK_SEMI(); 0 }       # ;
-    E I c == 64 { kind = TOK_AT(); 0 }         # @
-    E I c == 58 {
+    EL I c == 41 { kind = TOK_RPAREN(); 0 }     # )
+    EL I c == 123 { kind = TOK_LBRACE(); 0 }    # {
+    EL I c == 125 { kind = TOK_RBRACE(); 0 }    # }
+    EL I c == 91 { kind = TOK_LBRACKET(); 0 }   # [
+    EL I c == 93 { kind = TOK_RBRACKET(); 0 }   # ]
+    EL I c == 44 { kind = TOK_COMMA(); 0 }      # ,
+    EL I c == 59 { kind = TOK_SEMI(); 0 }       # ;
+    EL I c == 64 { kind = TOK_AT(); 0 }         # @
+    EL I c == 58 {
         # Check for :=
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_COLON_EQ()
             0
-        } E {
+        } EL {
             kind = TOK_COLON()
             0
         }
     }
-    E I c == 46 { kind = TOK_DOT(); 0 }        # .
-    E I c == 43 { kind = TOK_PLUS(); 0 }       # +
-    E I c == 45 {
+    EL I c == 46 { kind = TOK_DOT(); 0 }        # .
+    EL I c == 43 { kind = TOK_PLUS(); 0 }       # +
+    EL I c == 45 {
         I lexer_peek(lex) == 62 {
             lexer_advance(lex)
             kind = TOK_ARROW()
             0
-        } E {
+        } EL {
             kind = TOK_MINUS()
             0
         }
     }
-    E I c == 42 { kind = TOK_STAR(); 0 }       # *
-    E I c == 47 { kind = TOK_SLASH(); 0 }      # /
-    E I c == 37 { kind = TOK_PERCENT(); 0 }    # %
-    E I c == 60 {
+    EL I c == 42 { kind = TOK_STAR(); 0 }       # *
+    EL I c == 47 { kind = TOK_SLASH(); 0 }      # /
+    EL I c == 37 { kind = TOK_PERCENT(); 0 }    # %
+    EL I c == 60 {
         # < or <= or <<
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_LT_EQ()
             0
-        } E {
+        } EL {
             kind = TOK_LT()
             0
         }
     }
-    E I c == 62 {
+    EL I c == 62 {
         # > or >= or >>
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_GT_EQ()
             0
-        } E {
+        } EL {
             kind = TOK_GT()
             0
         }
     }
-    E I c == 61 {
+    EL I c == 61 {
         # = or ==
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_EQ_EQ()
             0
-        } E {
+        } EL {
             kind = TOK_EQ()
             0
         }
     }
-    E I c == 33 {
+    EL I c == 33 {
         # ! or !=
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_NOT_EQ()
             0
-        } E {
+        } EL {
             kind = TOK_NOT()
             0
         }
     }
-    E I c == 38 {
+    EL I c == 38 {
         # & or &&
         I lexer_peek(lex) == 38 {
             lexer_advance(lex)
             kind = TOK_AND()
             0
-        } E {
+        } EL {
             kind = TOK_AMP()
             0
         }
     }
-    E I c == 124 {
+    EL I c == 124 {
         # | or ||
         I lexer_peek(lex) == 124 {
             lexer_advance(lex)
             kind = TOK_OR()
             0
-        } E {
+        } EL {
             kind = TOK_PIPE()
             0
         }
     }
-    E I c == 63 { kind = TOK_QUESTION(); 0 }  # ?
-    E { 0 }
+    EL I c == 63 { kind = TOK_QUESTION(); 0 }  # ?
+    EL { 0 }
 
     end := lexer_get_pos(lex)
     token_store(tokens, count, kind, 0, 0, 0, start, end)
@@ -600,9 +600,9 @@ F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
     buf_len: mut i64 = 0
 
     L {
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
         c := lexer_peek(lex)
-        I c == 34 { B } E { 0 }  # closing quote
+        I c == 34 { B } EL { 0 }  # closing quote
         I c == 92 {
             # escape sequence
             lexer_advance(lex)
@@ -614,27 +614,27 @@ F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
                     # \n -> newline (10)
                     store_byte(buf + buf_len, 10)
                     buf_len = buf_len + 1
-                } E I ec == 116 {
+                } EL I ec == 116 {
                     # \t -> tab (9)
                     store_byte(buf + buf_len, 9)
                     buf_len = buf_len + 1
-                } E I ec == 114 {
+                } EL I ec == 114 {
                     # \r -> carriage return (13)
                     store_byte(buf + buf_len, 13)
                     buf_len = buf_len + 1
-                } E I ec == 92 {
+                } EL I ec == 92 {
                     # \\ -> backslash
                     store_byte(buf + buf_len, 92)
                     buf_len = buf_len + 1
-                } E I ec == 34 {
+                } EL I ec == 34 {
                     # \" -> double quote
                     store_byte(buf + buf_len, 34)
                     buf_len = buf_len + 1
-                } E I ec == 48 {
+                } EL I ec == 48 {
                     # \0 -> null
                     store_byte(buf + buf_len, 0)
                     buf_len = buf_len + 1
-                } E {
+                } EL {
                     # Unknown escape: keep both chars
                     store_byte(buf + buf_len, 92)
                     buf_len = buf_len + 1
@@ -642,8 +642,8 @@ F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
                     buf_len = buf_len + 1
                 }
                 0
-            } E { 0 }
-        } E {
+            } EL { 0 }
+        } EL {
             # Normal character
             store_byte(buf + buf_len, c)
             buf_len = buf_len + 1
@@ -663,7 +663,7 @@ F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
     c: mut i64 = 0
     L {
         lexer_skip_whitespace_and_comments(lex)
-        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_is_eof(lex) == 1 { B } EL { 0 }
 
         c = lexer_peek(lex)
 
@@ -671,16 +671,16 @@ F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
             lexer_scan_number(lex, tokens, count)
             count = count + 1
             0
-        } E I is_ident_start(c) == 1 {
+        } EL I is_ident_start(c) == 1 {
             lexer_scan_ident(lex, tokens, count)
             count = count + 1
             0
-        } E I c == 34 {
+        } EL I c == 34 {
             # String literal (double quote)
             lexer_scan_string(lex, tokens, count)
             count = count + 1
             0
-        } E {
+        } EL {
             lexer_scan_operator(lex, tokens, count)
             count = count + 1
             0
@@ -824,7 +824,7 @@ F parser_expect(p: i64, kind: i64) -> i64 {
     I parser_current_kind(p) == kind {
         parser_advance(p)
         1
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Item management
@@ -900,20 +900,20 @@ F parser_parse_call_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     arg_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         arg := parser_parse_expr(p)
         I arg != 0 {
             store_i64(args + arg_count * 8, arg)
             arg_count = arg_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     parser_expect(p, TOK_RPAREN())
@@ -934,15 +934,15 @@ F parser_parse_struct_lit_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     field_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
-        I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+        I parser_current_kind(p) != TOK_IDENT() { B } EL { 0 }
         fname_ptr := parser_current_str_ptr(p)
         fname_len := parser_current_str_len(p)
         parser_advance(p)
 
-        I parser_expect(p, TOK_COLON()) == 0 { B } E { 0 }
+        I parser_expect(p, TOK_COLON()) == 0 { B } EL { 0 }
 
         fvalue := parser_parse_expr(p)
 
@@ -954,7 +954,7 @@ F parser_parse_struct_lit_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     parser_expect(p, TOK_RBRACE())
@@ -985,15 +985,15 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
             I parser_current_kind(p) == TOK_COLON() {
                 is_struct_lit = 1
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         parser_set_pos(p, saved_pos)  # restore position
 
         I is_struct_lit == 1 {
             result = parser_parse_struct_lit_expr(p, str_ptr, str_len)
             0
-        } E {
+        } EL {
             # Not a struct literal, just return the identifier
             e := expr_new(EXPR_IDENT())
             expr_set_field0(e, str_ptr)
@@ -1001,10 +1001,10 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
             result = e
             0
         }
-    } E I next_kind == TOK_LPAREN() {
+    } EL I next_kind == TOK_LPAREN() {
         result = parser_parse_call_expr(p, str_ptr, str_len)
         0
-    } E {
+    } EL {
         # Simple identifier
         e := expr_new(EXPR_IDENT())
         expr_set_field0(e, str_ptr)
@@ -1022,15 +1022,15 @@ F parser_parse_match_arm(p: i64, arms: i64, arm_count_ptr: i64) -> i64 {
     arm_count := load_i64(arm_count_ptr)
 
     # Check if we can parse a pattern (integer literal for now)
-    I parser_current_kind(p) != TOK_INT() { R 0 } E { 0 }
+    I parser_current_kind(p) != TOK_INT() { R 0 } EL { 0 }
 
     pattern_val := parser_current_value(p)
     parser_advance(p)
 
-    I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } EL { 0 }
 
     body := parser_parse_expr(p)
-    I body == 0 { R 0 } E { 0 }
+    I body == 0 { R 0 } EL { 0 }
 
     store_i64(arms + arm_count * 16, pattern_val)
     store_i64(arms + arm_count * 16 + 8, body)
@@ -1044,7 +1044,7 @@ F parser_parse_match(p: i64) -> i64 {
     parser_advance(p)  # consume M
 
     # Parse scrutinee - only identifier for now to avoid { ambiguity
-    I parser_current_kind(p) != TOK_IDENT() { R 0 } E { 0 }
+    I parser_current_kind(p) != TOK_IDENT() { R 0 } EL { 0 }
     str_ptr := parser_current_str_ptr(p)
     str_len := parser_current_str_len(p)
     parser_advance(p)
@@ -1053,19 +1053,19 @@ F parser_parse_match(p: i64) -> i64 {
     expr_set_field0(scrutinee, str_ptr)
     expr_set_field1(scrutinee, str_len)
 
-    I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } EL { 0 }
 
     arms := malloc(64 * 16)
     arm_count := malloc(8)
     store_i64(arm_count, 0)
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_parse_match_arm(p, arms, arm_count) == 0 { B } E { 0 }
-        I parser_current_kind(p) == TOK_COMMA() { parser_advance(p); 0 } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_parse_match_arm(p, arms, arm_count) == 0 { B } EL { 0 }
+        I parser_current_kind(p) == TOK_COMMA() { parser_advance(p); 0 } EL { 0 }
     }
 
-    I parser_expect(p, TOK_RBRACE()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_RBRACE()) == 0 { R 0 } EL { 0 }
 
     e := expr_new(EXPR_MATCH())
     expr_set_field0(e, scrutinee)
@@ -1088,14 +1088,14 @@ F parser_parse_primary(p: i64) -> i64 {
         e := expr_new(EXPR_INT())
         expr_set_field0(e, value)
         e
-    } E I kind == TOK_IDENT() {
+    } EL I kind == TOK_IDENT() {
         str_ptr := parser_current_str_ptr(p)
         str_len := parser_current_str_len(p)
         parser_advance(p)
 
         # Use helper function to handle ident-based expressions
         parser_parse_ident_expr(p, str_ptr, str_len)
-    } E I kind == TOK_STRING() {
+    } EL I kind == TOK_STRING() {
         # String literal
         str_ptr := parser_current_str_ptr(p)
         str_len := parser_current_str_len(p)
@@ -1104,16 +1104,16 @@ F parser_parse_primary(p: i64) -> i64 {
         expr_set_field0(e, str_ptr)
         expr_set_field1(e, str_len)
         e
-    } E I kind == TOK_LBRACE() {
+    } EL I kind == TOK_LBRACE() {
         # Block expression: { stmts... expr }
         parser_parse_block_expr(p)
-    } E I kind == TOK_LPAREN() {
+    } EL I kind == TOK_LPAREN() {
         # Parenthesized expression
         parser_advance(p)
         inner := parser_parse_expr(p)
         parser_expect(p, TOK_RPAREN())
         inner
-    } E I kind == TOK_AT() {
+    } EL I kind == TOK_AT() {
         # Self-call: @(args...) or @.method(args...)
         parser_advance(p)  # consume @
 
@@ -1131,17 +1131,17 @@ F parser_parse_primary(p: i64) -> i64 {
             arg_count: mut i64 = 0
 
             L {
-                I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                 arg := parser_parse_expr(p)
                 I arg != 0 {
                     store_i64(args + arg_count * 8, arg)
                     arg_count = arg_count + 1
                     0
-                } E { B }
+                } EL { B }
                 I parser_current_kind(p) == TOK_COMMA() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             parser_expect(p, TOK_RPAREN())
@@ -1152,7 +1152,7 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field2(e, args)
             expr_set_field3(e, arg_count)
             e
-        } E I parser_current_kind(p) == TOK_LPAREN() {
+        } EL I parser_current_kind(p) == TOK_LPAREN() {
             # @(args...) - recursive self call
             parser_advance(p)
 
@@ -1160,17 +1160,17 @@ F parser_parse_primary(p: i64) -> i64 {
             arg_count: mut i64 = 0
 
             L {
-                I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                 arg := parser_parse_expr(p)
                 I arg != 0 {
                     store_i64(args + arg_count * 8, arg)
                     arg_count = arg_count + 1
                     0
-                } E { B }
+                } EL { B }
                 I parser_current_kind(p) == TOK_COMMA() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             parser_expect(p, TOK_RPAREN())
@@ -1181,8 +1181,8 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field2(e, args)
             expr_set_field3(e, arg_count)
             e
-        } E { 0 }
-    } E I kind == TOK_KW_I() {
+        } EL { 0 }
+    } EL I kind == TOK_KW_I() {
         # If expression: I cond { then } E { else }
         parser_advance(p)  # consume I
 
@@ -1200,20 +1200,20 @@ F parser_parse_primary(p: i64) -> i64 {
                 # else if chain
                 else_expr = parser_parse_primary(p)
                 0
-            } E {
+            } EL {
                 I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
                 else_expr = parser_parse_block_contents(p)
                 I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
                 0
             }
-        } E { 0 }
+        } EL { 0 }
 
         e := expr_new(EXPR_IF())
         expr_set_field0(e, cond)
         expr_set_field1(e, then_expr)
         expr_set_field2(e, else_expr)
         e
-    } E I kind == TOK_KW_L() {
+    } EL I kind == TOK_KW_L() {
         # Loop: L { body } or L cond { body }
         parser_advance(p)  # consume L
 
@@ -1226,7 +1226,7 @@ F parser_parse_primary(p: i64) -> i64 {
             e := expr_new(EXPR_LOOP())
             expr_set_field0(e, body)
             e
-        } E {
+        } EL {
             # While loop: L cond { ... }
             cond := parser_parse_expr(p)
             I cond == 0 { R 0 }
@@ -1240,7 +1240,7 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field1(e, body)
             e
         }
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse postfix operators: .field, .method(), [index]
@@ -1253,7 +1253,7 @@ F parser_parse_postfix(p: i64) -> i64 {
 
         I kind == TOK_DOT() {
             parser_advance(p)
-            I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+            I parser_current_kind(p) != TOK_IDENT() { B } EL { 0 }
 
             member_ptr := parser_current_str_ptr(p)
             member_len := parser_current_str_len(p)
@@ -1267,17 +1267,17 @@ F parser_parse_postfix(p: i64) -> i64 {
                 arg_count: mut i64 = 0
 
                 L {
-                    I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                    I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                     arg := parser_parse_expr(p)
                     I arg != 0 {
                         store_i64(args + arg_count * 8, arg)
                         arg_count = arg_count + 1
                         0
-                    } E { B }
+                    } EL { B }
                     I parser_current_kind(p) == TOK_COMMA() {
                         parser_advance(p)
                         0
-                    } E { 0 }
+                    } EL { 0 }
                 }
 
                 parser_expect(p, TOK_RPAREN())
@@ -1290,7 +1290,7 @@ F parser_parse_postfix(p: i64) -> i64 {
                 expr_set_field4(e, arg_count)
                 left = e
                 0
-            } E {
+            } EL {
                 # Field access: expr.field
                 e := expr_new(EXPR_FIELD())
                 expr_set_field0(e, left)
@@ -1299,7 +1299,7 @@ F parser_parse_postfix(p: i64) -> i64 {
                 left = e
                 0
             }
-        } E I kind == TOK_LBRACKET() {
+        } EL I kind == TOK_LBRACKET() {
             # Index: expr[index]
             parser_advance(p)
             index := parser_parse_expr(p)
@@ -1310,7 +1310,7 @@ F parser_parse_postfix(p: i64) -> i64 {
             expr_set_field1(e, index)
             left = e
             0
-        } E { B }
+        } EL { B }
     }
 
     left
@@ -1327,14 +1327,14 @@ F parser_parse_unary(p: i64) -> i64 {
         expr_set_field0(e, UNOP_NEG())
         expr_set_field1(e, operand)
         e
-    } E I kind == TOK_NOT() {
+    } EL I kind == TOK_NOT() {
         parser_advance(p)
         operand := parser_parse_unary(p)
         e := expr_new(EXPR_UNARY())
         expr_set_field0(e, UNOP_NOT())
         expr_set_field1(e, operand)
         e
-    } E {
+    } EL {
         parser_parse_postfix(p)
     }
 }
@@ -1342,30 +1342,30 @@ F parser_parse_unary(p: i64) -> i64 {
 # Get binary operator precedence
 F get_binop_precedence(kind: i64) -> i64 {
     I kind == TOK_OR() { 1 }
-    E I kind == TOK_AND() { 2 }
-    E I kind == TOK_EQ_EQ() || kind == TOK_NOT_EQ() { 3 }
-    E I kind == TOK_LT() || kind == TOK_GT() || kind == TOK_LT_EQ() || kind == TOK_GT_EQ() { 4 }
-    E I kind == TOK_PLUS() || kind == TOK_MINUS() { 5 }
-    E I kind == TOK_STAR() || kind == TOK_SLASH() || kind == TOK_PERCENT() { 6 }
-    E { 0 }
+    EL I kind == TOK_AND() { 2 }
+    EL I kind == TOK_EQ_EQ() || kind == TOK_NOT_EQ() { 3 }
+    EL I kind == TOK_LT() || kind == TOK_GT() || kind == TOK_LT_EQ() || kind == TOK_GT_EQ() { 4 }
+    EL I kind == TOK_PLUS() || kind == TOK_MINUS() { 5 }
+    EL I kind == TOK_STAR() || kind == TOK_SLASH() || kind == TOK_PERCENT() { 6 }
+    EL { 0 }
 }
 
 # Convert token to binary operator
 F token_to_binop(kind: i64) -> i64 {
     I kind == TOK_PLUS() { BINOP_ADD() }
-    E I kind == TOK_MINUS() { BINOP_SUB() }
-    E I kind == TOK_STAR() { BINOP_MUL() }
-    E I kind == TOK_SLASH() { BINOP_DIV() }
-    E I kind == TOK_PERCENT() { BINOP_MOD() }
-    E I kind == TOK_LT() { BINOP_LT() }
-    E I kind == TOK_LT_EQ() { BINOP_LTE() }
-    E I kind == TOK_GT() { BINOP_GT() }
-    E I kind == TOK_GT_EQ() { BINOP_GTE() }
-    E I kind == TOK_EQ_EQ() { BINOP_EQ() }
-    E I kind == TOK_NOT_EQ() { BINOP_NEQ() }
-    E I kind == TOK_AND() { BINOP_AND() }
-    E I kind == TOK_OR() { BINOP_OR() }
-    E { 0 }
+    EL I kind == TOK_MINUS() { BINOP_SUB() }
+    EL I kind == TOK_STAR() { BINOP_MUL() }
+    EL I kind == TOK_SLASH() { BINOP_DIV() }
+    EL I kind == TOK_PERCENT() { BINOP_MOD() }
+    EL I kind == TOK_LT() { BINOP_LT() }
+    EL I kind == TOK_LT_EQ() { BINOP_LTE() }
+    EL I kind == TOK_GT() { BINOP_GT() }
+    EL I kind == TOK_GT_EQ() { BINOP_GTE() }
+    EL I kind == TOK_EQ_EQ() { BINOP_EQ() }
+    EL I kind == TOK_NOT_EQ() { BINOP_NEQ() }
+    EL I kind == TOK_AND() { BINOP_AND() }
+    EL I kind == TOK_OR() { BINOP_OR() }
+    EL { 0 }
 }
 
 # Parse binary expression with precedence climbing
@@ -1376,13 +1376,13 @@ F parser_parse_binary(p: i64, min_prec: i64) -> i64 {
     L {
         kind := parser_current_kind(p)
         prec := get_binop_precedence(kind)
-        I prec < min_prec || prec == 0 { B } E { 0 }
+        I prec < min_prec || prec == 0 { B } EL { 0 }
 
         op := token_to_binop(kind)
         parser_advance(p)
 
         right := parser_parse_binary(p, prec + 1)
-        I right == 0 { B } E { 0 }
+        I right == 0 { B } EL { 0 }
 
         e := expr_new(EXPR_BINARY())
         expr_set_field0(e, op)
@@ -1409,7 +1409,7 @@ F parser_parse_expr(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_COLON() {
             parser_advance(p)
             0
-        } E { R 0 }
+        } EL { R 0 }
 
         else_expr := parser_parse_expr(p)
         I else_expr == 0 { R 0 }
@@ -1430,7 +1430,7 @@ F parser_parse_expr(p: i64) -> i64 {
         expr_set_field0(e, left)
         expr_set_field1(e, right)
         e
-    } E { left }
+    } EL { left }
 }
 
 # Parse block contents: stmts... [final_expr]
@@ -1445,12 +1445,12 @@ F parser_parse_block_contents(p: i64) -> i64 {
         L {
             I parser_current_kind(p) == TOK_SEMI() {
                 parser_advance(p)
-            } E { B }
+            } EL { B }
         }
         # Check for M (match) - parse as final expr and break
-        I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } E { 0 }
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } EL { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         # Check for let statement: name := expr or mut name := expr
         I parser_current_kind(p) == TOK_IDENT() {
@@ -1474,7 +1474,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                 store_i64(stmts + stmts_len * 8, stmt)
                 stmts_len = stmts_len + 1
                 0
-            } E I parser_current_kind(p) == TOK_COLON() {
+            } EL I parser_current_kind(p) == TOK_COLON() {
                 # Could be: name: mut Type = expr or name: Type = expr
                 parser_advance(p)
 
@@ -1483,13 +1483,13 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     is_mut = 1
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 # Skip type
                 I parser_current_kind(p) == TOK_IDENT() || parser_current_kind(p) == TOK_TY_I64() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 I parser_current_kind(p) == TOK_EQ() {
                     parser_advance(p)
@@ -1505,14 +1505,14 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     store_i64(stmts + stmts_len * 8, stmt)
                     stmts_len = stmts_len + 1
                     0
-                } E {
+                } EL {
                     # Restore position, it's not a let
                     parser_set_pos(p, saved_pos)
                     e := parser_parse_expr(p)
                     I parser_current_kind(p) == TOK_RBRACE() {
                         final_expr = e
                         0
-                    } E {
+                    } EL {
                         stmt := malloc(16)
                         store_i64(stmt + 0, STMT_EXPR())
                         store_i64(stmt + 8, e)
@@ -1521,7 +1521,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                         0
                     }
                 }
-            } E {
+            } EL {
                 # Not a let, restore and parse as expression
                 parser_set_pos(p, saved_pos)
                 e := parser_parse_expr(p)
@@ -1529,7 +1529,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                 I parser_current_kind(p) == TOK_RBRACE() {
                     final_expr = e
                     0
-                } E {
+                } EL {
                     stmt := malloc(16)
                     store_i64(stmt + 0, STMT_EXPR())
                     store_i64(stmt + 8, e)
@@ -1538,7 +1538,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     0
                 }
             }
-        } E I parser_current_kind(p) == TOK_KW_R() {
+        } EL I parser_current_kind(p) == TOK_KW_R() {
             # Return statement: R expr
             parser_advance(p)
             value := parser_parse_expr(p)
@@ -1549,7 +1549,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
             store_i64(stmts + stmts_len * 8, stmt)
             stmts_len = stmts_len + 1
             0
-        } E I parser_current_kind(p) == TOK_KW_B() {
+        } EL I parser_current_kind(p) == TOK_KW_B() {
             # Break: B
             parser_advance(p)
             stmt := malloc(8)
@@ -1557,13 +1557,13 @@ F parser_parse_block_contents(p: i64) -> i64 {
             store_i64(stmts + stmts_len * 8, stmt)
             stmts_len = stmts_len + 1
             0
-        } E {
+        } EL {
             # Expression statement or final expression
             e := parser_parse_expr(p)
             I parser_current_kind(p) == TOK_RBRACE() {
                 final_expr = e
                 0
-            } E {
+            } EL {
                 stmt := malloc(16)
                 store_i64(stmt + 0, STMT_EXPR())
                 store_i64(stmt + 8, e)
@@ -1607,22 +1607,22 @@ F parser_parse_type(p: i64) -> i64 {
             parser_advance(p)
             # Skip generic params for now
             L {
-                I parser_current_kind(p) == TOK_GT() { B } E { 0 }
-                I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+                I parser_current_kind(p) == TOK_GT() { B } EL { 0 }
+                I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
                 parser_advance(p)
             }
             parser_expect(p, TOK_GT())
             0
-        } E { 0 }
+        } EL { 0 }
 
         # Return type info as packed value: (ptr << 32) | len (simplified)
         # For now just return the ptr (can be used to lookup type name)
         type_ptr
-    } E I kind == TOK_STAR() || kind == TOK_AMP() {
+    } EL I kind == TOK_STAR() || kind == TOK_AMP() {
         # Pointer or reference type
         parser_advance(p)
         parser_parse_type(p)  # recursive
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse parameter: name: Type or &self or &mut self
@@ -1634,7 +1634,7 @@ F parser_parse_param(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_KW_MUT() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
         # Expect "self"
         I parser_current_kind(p) == TOK_IDENT() {
             name_ptr := parser_current_str_ptr(p)
@@ -1642,8 +1642,8 @@ F parser_parse_param(p: i64) -> i64 {
             parser_advance(p)
             # Create self param
             param_new(name_ptr, name_len, 0, 0)  # type = self
-        } E { 0 }
-    } E I parser_current_kind(p) == TOK_IDENT() {
+        } EL { 0 }
+    } EL I parser_current_kind(p) == TOK_IDENT() {
         name_ptr := parser_current_str_ptr(p)
         name_len := parser_current_str_len(p)
         parser_advance(p)
@@ -1654,11 +1654,11 @@ F parser_parse_param(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_KW_MUT() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
 
         type_info := parser_parse_type(p)
         param_new(name_ptr, name_len, type_info, 0)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse function: F name(params...) -> Type = expr  OR  F name(params...) -> Type { block }
@@ -1678,20 +1678,20 @@ F parser_parse_function_item(p: i64) -> i64 {
     param_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         param := parser_parse_param(p)
         I param != 0 {
             store_i64(params + param_count * 8, param)
             param_count = param_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     I parser_expect(p, TOK_RPAREN()) == 0 { R 0 }
@@ -1702,7 +1702,7 @@ F parser_parse_function_item(p: i64) -> i64 {
         parser_advance(p)
         ret_type = parser_parse_type(p)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Parse body: = expr OR { block }
     body: mut i64 = 0
@@ -1710,10 +1710,10 @@ F parser_parse_function_item(p: i64) -> i64 {
         parser_advance(p)
         body = parser_parse_expr(p)
         0
-    } E I parser_current_kind(p) == TOK_LBRACE() {
+    } EL I parser_current_kind(p) == TOK_LBRACE() {
         body = parser_parse_block_expr(p)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Create function item
     item := item_new(ITEM_FUNCTION(), name_ptr, name_len)
@@ -1756,20 +1756,20 @@ F parser_parse_struct_item(p: i64) -> i64 {
     field_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         field := parser_parse_struct_field(p)
         I field != 0 {
             store_i64(fields + field_count * 8, field)
             field_count = field_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
@@ -1796,8 +1796,8 @@ F parser_parse_impl_item(p: i64) -> i64 {
     method_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         I parser_current_kind(p) == TOK_KW_F() {
             method := parser_parse_function_item(p)
@@ -1805,8 +1805,8 @@ F parser_parse_impl_item(p: i64) -> i64 {
                 store_i64(methods + method_count * 8, method)
                 method_count = method_count + 1
                 0
-            } E { B }
-        } E {
+            } EL { B }
+        } EL {
             # Skip unknown tokens
             parser_advance(p)
             0
@@ -1842,7 +1842,7 @@ F parser_parse_use_item(p: i64) -> i64 {
 
     # Continue with /identifier pattern
     L {
-        I parser_current_kind(p) != TOK_SLASH() { B } E { 0 }
+        I parser_current_kind(p) != TOK_SLASH() { B } EL { 0 }
         sb_append_byte(path_sb, 47)  # /
         parser_advance(p)
 
@@ -1871,26 +1871,26 @@ F parser_parse_item(p: i64) -> i64 {
 
     I kind == TOK_KW_F() {
         parser_parse_function_item(p)
-    } E I kind == TOK_KW_S() {
+    } EL I kind == TOK_KW_S() {
         parser_parse_struct_item(p)
-    } E I kind == TOK_KW_X() {
+    } EL I kind == TOK_KW_X() {
         parser_parse_impl_item(p)
-    } E I kind == TOK_KW_U() {
+    } EL I kind == TOK_KW_U() {
         parser_parse_use_item(p)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse entire module (multiple items)
 F parser_parse_module(p: i64) -> i64 {
     item: mut i64 = 0
     L {
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         item = parser_parse_item(p)
         I item != 0 {
             parser_add_item(p, item)
             0
-        } E {
+        } EL {
             # Skip unknown token
             parser_advance(p)
             0
@@ -1916,7 +1916,7 @@ F parser_parse_function(p: i64) -> i64 {
         store_i64(p + 112, param_get_name_ptr(param))
         store_i64(p + 120, param_get_name_len(param))
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Store body
     body := item_get_data3(item)
@@ -1940,7 +1940,7 @@ F parser_get_body_expr(p: i64) -> i64 {
     I count > 0 {
         item := load_i64(items)
         item_get_data3(item)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F parser_free(p: i64) -> i64 {
@@ -2034,7 +2034,7 @@ F str_eq(ptr1: i64, len1: i64, ptr2: i64, len2: i64) -> i64 {
     I len1 != len2 { R 0 }
     i: mut i64 = 0
     L {
-        I i >= len1 { B } E { 0 }
+        I i >= len1 { B } EL { 0 }
         I load_byte(ptr1 + i) != load_byte(ptr2 + i) { R 0 }
         i = i + 1
     }
@@ -2061,7 +2061,7 @@ F cg_find_var(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
     # Search from most recent to oldest to support shadowing
     i: mut i64 = count - 1
     L {
-        I i < 0 { B } E { 0 }
+        I i < 0 { B } EL { 0 }
         offset := i * 24
         var_ptr := load_i64(vars + offset + 0)
         var_len := load_i64(vars + offset + 8)
@@ -2094,7 +2094,7 @@ F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
     # Check if string already exists
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         offset := i * 24
         existing_ptr := load_i64(strings + offset + 0)
         existing_len := load_i64(strings + offset + 8)
@@ -2123,34 +2123,34 @@ F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
     # Emit string contents with escaping
     j: mut i64 = 0
     L {
-        I j >= str_len { B } E { 0 }
+        I j >= str_len { B } EL { 0 }
         ch := load_byte(str_ptr + j)
         I ch == 10 {
             # newline -> \0A
             sb_append_byte(strings_sb, 92)  # backslash
             sb_append_byte(strings_sb, 48)  # 0
             sb_append_byte(strings_sb, 65)  # A
-        } E I ch == 13 {
+        } EL I ch == 13 {
             # carriage return -> \0D
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 48)
             sb_append_byte(strings_sb, 68)  # D
-        } E I ch == 9 {
+        } EL I ch == 9 {
             # tab -> \09
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 48)
             sb_append_byte(strings_sb, 57)  # 9
-        } E I ch == 34 {
+        } EL I ch == 34 {
             # double quote -> \22
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 50)  # 2
             sb_append_byte(strings_sb, 50)  # 2
-        } E I ch == 92 {
+        } EL I ch == 92 {
             # backslash -> \5C
             sb_append_byte(strings_sb, 92)
             sb_append_byte(strings_sb, 53)  # 5
             sb_append_byte(strings_sb, 67)  # C
-        } E {
+        } EL {
             sb_append_byte(strings_sb, ch)
         }
         j = j + 1
@@ -2206,7 +2206,7 @@ F cg_emit_str(cg: i64, ptr: i64, len: i64) -> i64 {
     sb := cg_get_sb(cg)
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         sb_append_byte(sb, load_byte(ptr + i))
         i = i + 1
     }
@@ -2359,7 +2359,7 @@ F cg_emit_operand(cg: i64, reg: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit(cg, "%")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         cg_emit(cg, "%")
         cg_emit_i64(cg, reg)
         0
@@ -2383,7 +2383,7 @@ F cg_gen_int_expr(cg: i64, expr: i64) -> i64 {
 # Check if an expression is a string literal
 F expr_is_string(expr: i64) -> i64 {
     kind := load_i64(expr + 0)
-    I kind == EXPR_STRING() { 1 } E { 0 }
+    I kind == EXPR_STRING() { 1 } EL { 0 }
 }
 
 # Check if function name matches "puts" (4 chars)
@@ -2570,7 +2570,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
     arg_regs := malloc(16 * 8)
     i: mut i64 = 0
     L {
-        I i >= arg_count { B } E { 0 }
+        I i >= arg_count { B } EL { 0 }
         arg := load_i64(args + i * 8)
         store_byte(arg_is_string + i, expr_is_string(arg))
         arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
@@ -2600,7 +2600,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit_newline(cg)
         0
     # Handle putchar: i32 @putchar(i32)
-    } E I is_putchar == 1 {
+    } EL I is_putchar == 1 {
         # Truncate i64 to i32 first
         arg_reg := load_i64(arg_regs + 0)
         cg_emit(cg, "  %")
@@ -2619,7 +2619,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit_newline(cg)
         0
     # Handle malloc: ptr @malloc(i64)
-    } E I is_malloc == 1 {
+    } EL I is_malloc == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call ptr @malloc(i64 %")
@@ -2638,7 +2638,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R conv_reg
     # Handle free: void @free(ptr)
-    } E I is_free == 1 {
+    } EL I is_free == 1 {
         # Convert i64 to ptr
         ptr_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
@@ -2655,7 +2655,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R 0
     # Handle load_byte: i64 @__load_byte(i64)
-    } E I is_load_byte == 1 {
+    } EL I is_load_byte == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @__load_byte(i64 ")
@@ -2666,7 +2666,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R result_reg
     # Handle store_byte: void @__store_byte(i64, i64)
-    } E I is_store_byte == 1 {
+    } EL I is_store_byte == 1 {
         cg_emit(cg, "  call void @__store_byte(i64 ")
         cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
         cg_emit(cg, ", i64 ")
@@ -2677,7 +2677,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R 0
     # Handle load_i64: i64 @__load_i64(i64)
-    } E I is_load_i64 == 1 {
+    } EL I is_load_i64 == 1 {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @__load_i64(i64 ")
@@ -2688,7 +2688,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R result_reg
     # Handle store_i64: void @__store_i64(i64, i64)
-    } E I is_store_i64 == 1 {
+    } EL I is_store_i64 == 1 {
         cg_emit(cg, "  call void @__store_i64(i64 ")
         cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
         cg_emit(cg, ", i64 ")
@@ -2699,7 +2699,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R 0
     # Handle memcpy: ptr @memcpy(ptr, ptr, i64) - convert i64 args to ptr
-    } E I is_memcpy == 1 {
+    } EL I is_memcpy == 1 {
         # Convert first arg (dest) to ptr
         ptr1_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
@@ -2740,7 +2740,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R conv_reg
     # Handle memcmp: i32 @memcmp(ptr, ptr, i64) - convert i64 args to ptr
-    } E I is_memcmp == 1 {
+    } EL I is_memcmp == 1 {
         # Convert first arg to ptr
         ptr1_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
@@ -2781,7 +2781,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R ext_reg
     # Handle strlen: i64 @strlen(ptr) - first arg may be string (ptr) or i64
-    } E I is_strlen == 1 {
+    } EL I is_strlen == 1 {
         # Check if arg is a string constant (already ptr) or i64
         I load_byte(arg_is_string + 0) == 1 {
             # String constant: arg_reg is already ptr-like, use directly
@@ -2792,7 +2792,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
             cg_emit(cg, ")")
             cg_emit_newline(cg)
             0
-        } E {
+        } EL {
             # i64 pointer: convert to ptr first
             # Allocate both regs upfront for sequential numbering
             ptr_reg := cg_fresh_reg(cg)
@@ -2817,7 +2817,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R result_reg
     # Handle memcpy_str: copies from str (ptr) to i64 dest
-    } E I is_memcpy_str == 1 {
+    } EL I is_memcpy_str == 1 {
         # Allocate all regs upfront for sequential numbering
         dest_ptr := cg_fresh_reg(cg)
         # Second arg (src) may be string constant or i64
@@ -2841,7 +2841,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
             cg_emit(cg, ")")
             cg_emit_newline(cg)
             0
-        } E {
+        } EL {
             # i64 pointer: need dest_ptr, src_ptr, memcpy_result
             src_ptr := cg_fresh_reg(cg)
             memcpy_result := cg_fresh_reg(cg)
@@ -2873,7 +2873,7 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_is_string)
         R 1
     # Default: user-defined function with i64 args
-    } E {
+    } EL {
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
         cg_emit(cg, " = call i64 @")
@@ -2883,8 +2883,8 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         # Emit arguments
         i = 0
         L {
-            I i >= arg_count { B } E { 0 }
-            I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            I i >= arg_count { B } EL { 0 }
+            I i > 0 { cg_emit(cg, ", "); 0 } EL { 0 }
             cg_emit(cg, "i64 ")
             arg_reg := load_i64(arg_regs + i * 8)
             cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
@@ -2918,43 +2918,43 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
     I op == BINOP_ADD() {
         cg_emit(cg, " = add i64 ")
         0
-    } E I op == BINOP_SUB() {
+    } EL I op == BINOP_SUB() {
         cg_emit(cg, " = sub i64 ")
         0
-    } E I op == BINOP_MUL() {
+    } EL I op == BINOP_MUL() {
         cg_emit(cg, " = mul i64 ")
         0
-    } E I op == BINOP_DIV() {
+    } EL I op == BINOP_DIV() {
         cg_emit(cg, " = sdiv i64 ")
         0
-    } E I op == BINOP_MOD() {
+    } EL I op == BINOP_MOD() {
         cg_emit(cg, " = srem i64 ")
         0
-    } E I op == BINOP_LT() {
+    } EL I op == BINOP_LT() {
         cg_emit(cg, " = icmp slt i64 ")
         0
-    } E I op == BINOP_LTE() {
+    } EL I op == BINOP_LTE() {
         cg_emit(cg, " = icmp sle i64 ")
         0
-    } E I op == BINOP_GT() {
+    } EL I op == BINOP_GT() {
         cg_emit(cg, " = icmp sgt i64 ")
         0
-    } E I op == BINOP_GTE() {
+    } EL I op == BINOP_GTE() {
         cg_emit(cg, " = icmp sge i64 ")
         0
-    } E I op == BINOP_EQ() {
+    } EL I op == BINOP_EQ() {
         cg_emit(cg, " = icmp eq i64 ")
         0
-    } E I op == BINOP_NEQ() {
+    } EL I op == BINOP_NEQ() {
         cg_emit(cg, " = icmp ne i64 ")
         0
-    } E I op == BINOP_AND() {
+    } EL I op == BINOP_AND() {
         cg_emit(cg, " = and i64 ")
         0
-    } E I op == BINOP_OR() {
+    } EL I op == BINOP_OR() {
         cg_emit(cg, " = or i64 ")
         0
-    } E {
+    } EL {
         # Default to add for unknown ops
         cg_emit(cg, " = add i64 ")
         0
@@ -2975,7 +2975,7 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
         cg_emit(cg, " to i64")
         cg_emit_newline(cg)
         ext_reg
-    } E {
+    } EL {
         result_reg
     }
 }
@@ -3022,7 +3022,7 @@ F cg_gen_loop_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         cg_emit_i64(cg, loop_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Loop end block (break target) - this is where break jumps to
     cg_emit(cg, "loop_end")
@@ -3101,7 +3101,7 @@ F cg_gen_while_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
         cg_emit_i64(cg, loop_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # End block
     cg_emit(cg, "loop_end")
@@ -3171,7 +3171,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit_i64(cg, label_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Else block
     cg_emit(cg, "else")
@@ -3184,7 +3184,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
     I else_expr != 0 {
         else_reg = cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         # No else branch - use 0
         else_reg = cg_fresh_reg(cg)
         cg_emit(cg, "  %")
@@ -3203,14 +3203,14 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit_i64(cg, label_id)
         cg_emit_newline(cg)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Merge block - only generate if at least one branch reaches it
     I then_terminated == 1 && else_terminated == 1 {
         # Both branches terminated - no merge needed, propagate termination
         cg_set_terminated(cg, 1)
         0 - 2  # No merge block, return special value
-    } E {
+    } EL {
         # At least one branch reaches merge
         cg_emit(cg, "merge")
         cg_emit_i64(cg, label_id)
@@ -3231,7 +3231,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
                 cg_emit(cg, "merge")
                 cg_emit_i64(cg, then_final_id)
                 0
-            } E {
+            } EL {
                 cg_emit(cg, "then")
                 cg_emit_i64(cg, label_id)
                 0
@@ -3243,7 +3243,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
                 cg_emit(cg, "merge")
                 cg_emit_i64(cg, else_final_id)
                 0
-            } E {
+            } EL {
                 cg_emit(cg, "else")
                 cg_emit_i64(cg, label_id)
                 0
@@ -3252,11 +3252,11 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
             cg_emit_newline(cg)
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             result_reg
-        } E I then_terminated == 1 {
+        } EL I then_terminated == 1 {
             # Only else reaches merge - use else value directly
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             else_reg
-        } E {
+        } EL {
             # Only then reaches merge - use then value directly
             cg_set_current_block(cg, BLOCK_MERGE(), label_id)
             then_reg
@@ -3296,7 +3296,7 @@ F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_add_var(cg, name_ptr, name_len, alloca_reg)
 
         R 0
-    } E I stmt_kind == STMT_BREAK() {
+    } EL I stmt_kind == STMT_BREAK() {
         # Break: jump to loop_end
         loop_end := cg_get_loop_end(cg)
         cg_emit(cg, "  br label %loop_end")
@@ -3304,7 +3304,7 @@ F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_newline(cg)
         cg_set_terminated(cg, 1)
         R 1  # control flow terminated
-    } E I stmt_kind == STMT_RETURN() {
+    } EL I stmt_kind == STMT_RETURN() {
         # Return statement: R expr
         ret_value := load_i64(stmt + 8)
         value_reg := cg_gen_expr(cg, ret_value, param_name_ptr, param_name_len)
@@ -3313,12 +3313,12 @@ F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_newline(cg)
         cg_set_terminated(cg, 1)
         R 1  # control flow terminated
-    } E I stmt_kind == STMT_EXPR() {
+    } EL I stmt_kind == STMT_EXPR() {
         # Expression statement: evaluate and discard
         stmt_expr := load_i64(stmt + 8)  # expr field
         cg_gen_expr(cg, stmt_expr, param_name_ptr, param_name_len)
         R 0
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Generate block expression
@@ -3331,9 +3331,9 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     terminated: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= stmts_len { B } E { 0 }
-        I terminated == 1 { B } E { 0 }  # Skip after break/continue/return
-        I cg_get_terminated(cg) == 1 { B } E { 0 }  # Also check global terminated
+        I i >= stmts_len { B } EL { 0 }
+        I terminated == 1 { B } EL { 0 }  # Skip after break/continue/return
+        I cg_get_terminated(cg) == 1 { B } EL { 0 }  # Also check global terminated
         stmt := load_i64(stmts + i * 8)
         terminated = cg_gen_stmt(cg, stmt, param_name_ptr, param_name_len)
         i = i + 1
@@ -3343,16 +3343,16 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     I cg_get_terminated(cg) == 1 {
         terminated = 1
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Generate final expression (only if not terminated by break etc)
     I terminated == 1 {
         # Block was terminated by break/return, don't emit any code
         # Return a dummy register number (won't be used)
         0 - 2  # Special marker for terminated block
-    } E I final_expr != 0 {
+    } EL I final_expr != 0 {
         cg_gen_expr(cg, final_expr, param_name_ptr, param_name_len)
-    } E {
+    } EL {
         # No final expression, return 0
         result_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
@@ -3449,7 +3449,7 @@ F cg_gen_match_expr(cg: i64, expr: i64, param_ptr: i64, param_len: i64) -> i64 {
     # Generate each arm
     i: mut i64 = 0
     L {
-        I i >= arm_count { B } E { 0 }
+        I i >= arm_count { B } EL { 0 }
         pattern := load_i64(arms + i * 16)
         body := load_i64(arms + i * 16 + 8)
         cg_gen_match_arm(cg, scrut_reg, pattern, body, label_id, i, param_ptr, param_len, result_alloca, label_id)
@@ -3484,14 +3484,14 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
     kind := load_i64(expr + 0)
 
     # Check for match early with early return
-    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } E { 0 }
+    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } EL { 0 }
 
     result: mut i64 = 0
 
     I kind == EXPR_INT() {
         result = cg_gen_int_expr(cg, expr)
         0
-    } E I kind == EXPR_STRING() {
+    } EL I kind == EXPR_STRING() {
         # String literal: add to string constants and return pointer as i64
         str_ptr := expr_get_field0(expr)
         str_len := expr_get_field1(expr)
@@ -3519,7 +3519,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_newline(cg)
         result = conv_reg
         0
-    } E I kind == EXPR_IDENT() {
+    } EL I kind == EXPR_IDENT() {
         # Identifier: could be a local variable or a parameter
         ident_ptr := expr_get_field0(expr)
         ident_len := expr_get_field1(expr)
@@ -3536,34 +3536,34 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             cg_emit_newline(cg)
             result = load_reg
             0
-        } E I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
+        } EL I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
             # Legacy single-param check for backward compatibility
             result = 0 - 1  # Special marker for parameter
             0
-        } E {
+        } EL {
             # Not found - assume it's a parameter (fallback)
             result = 0 - 1
             0
         }
-    } E I kind == EXPR_CALL() {
+    } EL I kind == EXPR_CALL() {
         result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_BINARY() {
+    } EL I kind == EXPR_BINARY() {
         result = cg_gen_binary_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_IF() {
+    } EL I kind == EXPR_IF() {
         result = cg_gen_if_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_BLOCK() {
+    } EL I kind == EXPR_BLOCK() {
         result = cg_gen_block_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_LOOP() {
+    } EL I kind == EXPR_LOOP() {
         result = cg_gen_loop_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_WHILE() {
+    } EL I kind == EXPR_WHILE() {
         result = cg_gen_while_expr(cg, expr, param_name_ptr, param_name_len)
         0
-    } E I kind == EXPR_ASSIGN() {
+    } EL I kind == EXPR_ASSIGN() {
         # Assignment: target = value
         target := expr_get_field0(expr)
         value := expr_get_field1(expr)
@@ -3590,16 +3590,16 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
                 # Assignment returns the value
                 result = value_reg
                 0
-            } E {
+            } EL {
                 # Variable not found - error
                 result = 0
                 0
             }
-        } E {
+        } EL {
             result = 0
             0
         }
-    } E I kind == EXPR_UNARY() {
+    } EL I kind == EXPR_UNARY() {
         # Unary expression: op operand
         op := expr_get_field0(expr)
         operand := expr_get_field1(expr)
@@ -3615,7 +3615,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             cg_emit_newline(cg)
             result = neg_reg
             0
-        } E I op == UNOP_NOT() {
+        } EL I op == UNOP_NOT() {
             # Logical not: operand == 0 ? 1 : 0
             # Compare to 0
             cmp_reg := cg_fresh_reg(cg)
@@ -3635,11 +3635,11 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             cg_emit_newline(cg)
             result = zext_reg
             0
-        } E {
+        } EL {
             result = operand_reg
             0
         }
-    } E I kind == EXPR_TERNARY() {
+    } EL I kind == EXPR_TERNARY() {
         # Ternary: cond ? then_expr : else_expr
         cond := expr_get_field0(expr)
         then_expr := expr_get_field1(expr)
@@ -3710,7 +3710,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
 
         result = phi_reg
         0
-    } E I kind == EXPR_SELF_CALL() {
+    } EL I kind == EXPR_SELF_CALL() {
         # Self-recursion: @(args...) calls current function
         cur_func_ptr := load_i64(cg + 120)
         cur_func_len := load_i64(cg + 128)
@@ -3721,7 +3721,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         arg_regs := malloc(16 * 8)
         j: mut i64 = 0
         L {
-            I j >= arg_count { B } E { 0 }
+            I j >= arg_count { B } EL { 0 }
             arg := load_i64(args + j * 8)
             arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
             store_i64(arg_regs + j * 8, arg_reg)
@@ -3738,8 +3738,8 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
 
         j = 0
         L {
-            I j >= arg_count { B } E { 0 }
-            I j > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            I j >= arg_count { B } EL { 0 }
+            I j > 0 { cg_emit(cg, ", "); 0 } EL { 0 }
             cg_emit(cg, "i64 ")
             cg_emit_operand(cg, load_i64(arg_regs + j * 8), param_name_ptr, param_name_len)
             j = j + 1
@@ -3751,7 +3751,7 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         free(arg_regs)
         result = call_reg
         0
-    } E { 0 }
+    } EL { 0 }
 
     result
 }
@@ -3772,7 +3772,7 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
         first_param := load_i64(params)
         cg_set_param(cg, param_get_name_ptr(first_param), param_get_name_len(first_param))
         0
-    } E {
+    } EL {
         cg_set_param(cg, 0, 0)
         0
     }
@@ -3784,11 +3784,11 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
     # Emit all parameters in signature
     i: mut i64 = 0
     L {
-        I i >= param_count { B } E { 0 }
+        I i >= param_count { B } EL { 0 }
         I i > 0 {
             cg_emit(cg, ", ")
             0
-        } E { 0 }
+        } EL { 0 }
         param := load_i64(params + i * 8)
         cg_emit(cg, "i64 %")
         cg_emit_str(cg, param_get_name_ptr(param), param_get_name_len(param))
@@ -3803,7 +3803,7 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
     # Register all parameters as variables (alloca + store)
     i = 0
     L {
-        I i >= param_count { B } E { 0 }
+        I i >= param_count { B } EL { 0 }
         param := load_i64(params + i * 8)
         p_name_ptr := param_get_name_ptr(param)
         p_name_len := param_get_name_len(param)
@@ -3836,7 +3836,7 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
         first_param_ptr = param_get_name_ptr(first_p)
         first_param_len = param_get_name_len(first_p)
         0
-    } E { 0 }
+    } EL { 0 }
 
     result_reg := cg_gen_expr(cg, body_expr, first_param_ptr, first_param_len)
 
@@ -3845,7 +3845,7 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
     I result_reg == 0 - 1 {
         cg_emit(cg, "0")
         0
-    } E {
+    } EL {
         cg_emit(cg, "%")
         cg_emit_i64(cg, result_reg)
         0
@@ -3871,7 +3871,7 @@ F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
         cg_emit(cg, "(i64 %")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         cg_emit(cg, ") {")
-    } E {
+    } EL {
         cg_emit(cg, "() {")
     }
     cg_emit_newline(cg)
@@ -3887,7 +3887,7 @@ F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
         cg_emit(cg, "%")
         cg_emit_str(cg, param_name_ptr, param_name_len)
         0
-    } E {
+    } EL {
         cg_emit(cg, "%")
         cg_emit_i64(cg, result_reg)
         0
@@ -3957,15 +3957,15 @@ F cg_finalize(cg: i64) -> i64 {
         define_pos: mut i64 = 0
         i: mut i64 = 0
         L {
-            I i >= main_len - 6 { B } E { 0 }
+            I i >= main_len - 6 { B } EL { 0 }
             I load_byte(main_data + i) == 100 {  # 'd'
                 I load_byte(main_data + i + 1) == 101 {  # 'e'
                     I load_byte(main_data + i + 2) == 102 {  # 'f'
                         define_pos = i
                         B
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
             i = i + 1
         }
 
@@ -3977,7 +3977,7 @@ F cg_finalize(cg: i64) -> i64 {
             # Copy header (up to define_pos)
             j: mut i64 = 0
             L {
-                I j >= define_pos { B } E { 0 }
+                I j >= define_pos { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(main_data + j))
                 j = j + 1
             }
@@ -3986,7 +3986,7 @@ F cg_finalize(cg: i64) -> i64 {
             sb_append_byte(new_sb, 10)  # extra newline
             j = 0
             L {
-                I j >= strings_len { B } E { 0 }
+                I j >= strings_len { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(strings_data + j))
                 j = j + 1
             }
@@ -3995,7 +3995,7 @@ F cg_finalize(cg: i64) -> i64 {
             # Copy rest of code (functions)
             j = define_pos
             L {
-                I j >= main_len { B } E { 0 }
+                I j >= main_len { B } EL { 0 }
                 sb_append_byte(new_sb, load_byte(main_data + j))
                 j = j + 1
             }
@@ -4004,8 +4004,8 @@ F cg_finalize(cg: i64) -> i64 {
             sb_free(main_sb)
             store_i64(cg + 0, new_sb)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
     1
 }
 
@@ -4040,14 +4040,14 @@ F print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -4056,7 +4056,7 @@ F print_i64(val: i64) -> i64 {
 F print_str(ptr: i64, len: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         putchar(load_byte(ptr + i))
         i = i + 1
     }
@@ -4067,7 +4067,7 @@ F print_str(ptr: i64, len: i64) -> i64 {
 F read_file(path: str) -> i64 {
     fp := fopen(path, "rb")
     I fp == 0 { 0 }
-    E {
+    EL {
         fseek(fp, 0, 2)  # SEEK_END
         size := ftell(fp)
         fseek(fp, 0, 0)  # SEEK_SET
@@ -4076,7 +4076,7 @@ F read_file(path: str) -> i64 {
         I buf == 0 {
             fclose(fp)
             0
-        } E {
+        } EL {
             bytes_read := fread(buf + 8, 1, size, fp)
             store_byte(buf + 8 + bytes_read, 0)
             store_i64(buf, bytes_read)
@@ -4100,7 +4100,7 @@ F debug_print_expr(expr: i64, depth: i64) -> i64 {
     # Indent
     i: mut i64 = 0
     L {
-        I i >= depth { B } E { 0 }
+        I i >= depth { B } EL { 0 }
         puts("  ")
         i = i + 1
     }
@@ -4109,12 +4109,12 @@ F debug_print_expr(expr: i64, depth: i64) -> i64 {
         print_i64(expr_get_field0(expr))
         putchar(10)
         0
-    } E I kind == EXPR_IDENT() {
+    } EL I kind == EXPR_IDENT() {
         puts("IDENT: ")
         print_str(expr_get_field0(expr), expr_get_field1(expr))
         putchar(10)
         0
-    } E I kind == EXPR_CALL() {
+    } EL I kind == EXPR_CALL() {
         puts("CALL: ")
         print_str(expr_get_field0(expr), expr_get_field1(expr))
         puts(" (")
@@ -4126,20 +4126,20 @@ F debug_print_expr(expr: i64, depth: i64) -> i64 {
         arg_count := expr_get_field3(expr)
         j: mut i64 = 0
         L {
-            I j >= arg_count { B } E { 0 }
+            I j >= arg_count { B } EL { 0 }
             arg := load_i64(args + j * 8)
             debug_print_expr(arg, depth + 1)
             j = j + 1
         }
         0
-    } E I kind == EXPR_BINARY() {
+    } EL I kind == EXPR_BINARY() {
         puts("BINARY op=")
         print_i64(expr_get_field0(expr))
         putchar(10)
         debug_print_expr(expr_get_field1(expr), depth + 1)
         debug_print_expr(expr_get_field2(expr), depth + 1)
         0
-    } E {
+    } EL {
         puts("EXPR kind=")
         print_i64(kind)
         putchar(10)
@@ -4186,7 +4186,7 @@ F cg_gen_function_item(cg: i64, item: i64) -> i64 {
         I result_reg == 0 - 1 {
             cg_emit(cg, "0")
             0
-        } E {
+        } EL {
             cg_emit(cg, "%")
             cg_emit_i64(cg, result_reg)
             0
@@ -4210,7 +4210,7 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
     # First pass: generate all functions and check for main
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         item := load_i64(items + i * 8)
         kind := item_get_kind(item)
 
@@ -4225,17 +4225,17 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
                 first_func_name_ptr = name_ptr
                 first_func_name_len = name_len
                 0
-            } E { 0 }
+            } EL { 0 }
 
             # Check if this is main (with any number of params)
             I is_main_function(name_ptr, name_len) == 1 {
                 has_main = 1
                 0
-            } E { 0 }
+            } EL { 0 }
 
             cg_gen_function_item(cg, item)
             0
-        } E { 0 }
+        } EL { 0 }
 
         i = i + 1
     }
@@ -4244,7 +4244,7 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
     I has_main == 0 && first_func_name_ptr != 0 {
         cg_gen_main_that_calls(cg, first_func_name_ptr, first_func_name_len)
         0
-    } E { 0 }
+    } EL { 0 }
 
     count
 }
@@ -4274,15 +4274,15 @@ F loaded_modules_contains(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
     count := loaded_modules_count(lm)
     i: mut i64 = 0
     L {
-        I i >= count { B } E { 0 }
+        I i >= count { B } EL { 0 }
         idx := 8 + i * 16
         ptr := load_i64(lm + idx)
         len := load_i64(lm + idx + 8)
         I len == path_len {
             I str_cmp(ptr, path_ptr, len) == 0 {
                 R 1
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0
@@ -4302,12 +4302,12 @@ F loaded_modules_add(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
 F str_cmp(a: i64, b: i64, len: i64) -> i64 {
     i: mut i64 = 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         ca := load_byte(a + i)
         cb := load_byte(b + i)
         I ca != cb {
             R ca - cb
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     0
@@ -4325,7 +4325,7 @@ F resolve_import_path(base_dir: i64, base_len: i64, mod_path: i64, mod_len: i64)
         sb_append_bytes(sb, base_dir, base_len)
         sb_append_byte(sb, 47)  # /
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Add module path
     sb_append_bytes(sb, mod_path, mod_len)
@@ -4347,11 +4347,11 @@ F get_directory(path: i64, path_len: i64) -> i64 {
     last_slash: mut i64 = 0 - 1
     i: mut i64 = 0
     L {
-        I i >= path_len { B } E { 0 }
+        I i >= path_len { B } EL { 0 }
         I load_byte(path + i) == 47 {  # /
             last_slash = i
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -4361,7 +4361,7 @@ F get_directory(path: i64, path_len: i64) -> i64 {
         store_byte(result, 46)  # .
         store_byte(result + 1, 0)
         result
-    } E {
+    } EL {
         # Copy directory part
         result := malloc(last_slash + 2)
         memcpy(result, path, last_slash)
@@ -4413,7 +4413,7 @@ F all_items_add(ai: i64, item: i64) -> i64 {
         store_i64(ai, new_ptr)
         store_i64(ai + 16, new_cap)
         0
-    } E { 0 }
+    } EL { 0 }
 
     ptr := all_items_get_ptr(ai)
     store_i64(ptr + count * 8, item)
@@ -4470,7 +4470,7 @@ F load_module_with_imports(
     added: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= item_count { B } E { 0 }
+        I i >= item_count { B } EL { 0 }
         item := load_i64(items + i * 8)
         kind := item_get_kind(item)
 
@@ -4483,7 +4483,7 @@ F load_module_with_imports(
             load_module_with_imports(resolved, all_items, loaded)
             # Note: resolved is leaked, but ok for now
             0
-        } E {
+        } EL {
             # Add non-use items
             all_items_add(all_items, item)
             added = added + 1
@@ -4505,7 +4505,7 @@ F load_module_with_imports(
 F strlen_ptr(s: i64) -> i64 {
     len: mut i64 = 0
     L {
-        I load_byte(s + len) == 0 { B } E { 0 }
+        I load_byte(s + len) == 0 { B } EL { 0 }
         len = len + 1
     }
     len
@@ -4516,7 +4516,7 @@ F read_file_ptr(path: i64) -> i64 {
     # fopen_ptr accepts i64 pointer as path
     fp := fopen_ptr(path, "rb")
     I fp == 0 { 0 }
-    E {
+    EL {
         fseek(fp, 0, 2)  # SEEK_END
         size := ftell(fp)
         fseek(fp, 0, 0)  # SEEK_SET
@@ -4525,7 +4525,7 @@ F read_file_ptr(path: i64) -> i64 {
         I buf == 0 {
             fclose(fp)
             0
-        } E {
+        } EL {
             data_ptr := buf + 8
             bytes_read := fread(data_ptr, 1, size, fp)
             store_byte(data_ptr + bytes_read, 0)
@@ -4559,7 +4559,7 @@ F main(argc: i64, argv: i64) -> i64 {
     i: mut i64 = 0
     L {
         c := load_byte(path_ptr + i)
-        I c == 0 { B } E { 0 }
+        I c == 0 { B } EL { 0 }
         putchar(c)
         i = i + 1
     }
@@ -4589,7 +4589,7 @@ F main(argc: i64, argv: i64) -> i64 {
     struct_count: mut i64 = 0
     i: mut i64 = 0
     L {
-        I i >= item_count { B } E { 0 }
+        I i >= item_count { B } EL { 0 }
         item := load_i64(items + i * 8)
         kind := item_get_kind(item)
         I kind == ITEM_FUNCTION() {
@@ -4598,18 +4598,18 @@ F main(argc: i64, argv: i64) -> i64 {
             putchar(10)
             func_count = func_count + 1
             0
-        } E I kind == ITEM_STRUCT() {
+        } EL I kind == ITEM_STRUCT() {
             puts("    Struct: ")
             print_str(item_get_name_ptr(item), item_get_name_len(item))
             putchar(10)
             struct_count = struct_count + 1
             0
-        } E I kind == ITEM_IMPL() {
+        } EL I kind == ITEM_IMPL() {
             puts("    Impl: ")
             print_str(item_get_name_ptr(item), item_get_name_len(item))
             putchar(10)
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
     puts("    Functions: ")
@@ -4639,7 +4639,7 @@ F main(argc: i64, argv: i64) -> i64 {
         fclose(fp)
         puts("\n[OK] Written to selfhost/main_output.ll\n")
         0
-    } E {
+    } EL {
         puts("\n[ERROR] Could not write output file\n")
         0
     }

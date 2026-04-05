@@ -59,7 +59,7 @@ X ArgParser {
             self.results = new_results
             self.spec_cap = new_cap
             0
-        } E {
+        } EL {
             0
         }
     }
@@ -190,17 +190,17 @@ X ArgParser {
                     # Set flag to 1
                     store_i64(self.results + spec_idx * 8, 1);
                     0
-                } E I kind == ARG_OPTION {
+                } EL I kind == ARG_OPTION {
                     # Get next argument as value
                     arg_idx = arg_idx + 1
                     I arg_idx >= argc { R -1 }  # Missing value
                     value_ptr := load_i64(argv + arg_idx * 8)
                     store_i64(self.results + spec_idx * 8, value_ptr);
                     0
-                } E {
+                } EL {
                     0
                 }
-            } E I first_byte == 45 && load_byte(arg_ptr + 1) != 45 {
+            } EL I first_byte == 45 && load_byte(arg_ptr + 1) != 45 {
                 # Short option: single char after '-'
                 short_char := load_byte(arg_ptr + 1)
                 spec_idx := @.find_spec_by_short(short_char)
@@ -217,17 +217,17 @@ X ArgParser {
                     # Set flag to 1
                     store_i64(self.results + spec_idx * 8, 1);
                     0
-                } E I kind == ARG_OPTION {
+                } EL I kind == ARG_OPTION {
                     # Get next argument as value
                     arg_idx = arg_idx + 1
                     I arg_idx >= argc { R -1 }  # Missing value
                     value_ptr := load_i64(argv + arg_idx * 8)
                     store_i64(self.results + spec_idx * 8, value_ptr);
                     0
-                } E {
+                } EL {
                     0
                 }
-            } E {
+            } EL {
                 # Positional argument
                 # Find next positional spec
                 pos_spec_idx := mut -1
@@ -244,7 +244,7 @@ X ArgParser {
                         };
                         pos_count = pos_count + 1;
                         0
-                    } E {
+                    } EL {
                         0
                     };
                     i = i + 1
@@ -254,7 +254,7 @@ X ArgParser {
                     store_i64(self.results + pos_spec_idx * 8, arg_ptr);
                     self.positional_idx = self.positional_idx + 1;
                     0
-                } E {
+                } EL {
                     # Too many positional arguments
                     R -1
                 }
@@ -294,7 +294,7 @@ X ArgParser {
                 };
                 pos_count = pos_count + 1;
                 0
-            } E {
+            } EL {
                 0
             };
             i = i + 1
@@ -328,17 +328,17 @@ X ArgParser {
                 I kind == ARG_OPTION {
                     puts_ptr(" <value>");
                     0
-                } E {
+                } EL {
                     0
                 };
                 puts_ptr("]");
                 0
-            } E I kind == ARG_POSITIONAL {
+            } EL I kind == ARG_POSITIONAL {
                 puts_ptr(" <")
                 puts_ptr(long_name)
                 puts_ptr(">")
                 0
-            } E {
+            } EL {
                 0
             };
 
@@ -371,7 +371,7 @@ X ArgParser {
                     free(buf)
                     puts_ptr(", ");
                     0
-                } E {
+                } EL {
                     0
                 };
                 puts_ptr("--")
@@ -380,7 +380,7 @@ X ArgParser {
                 puts_ptr(help_text)
                 puts_ptr("")
                 0
-            } E {
+            } EL {
                 0
             };
 

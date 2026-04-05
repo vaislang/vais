@@ -115,7 +115,7 @@ F page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
     I slot_idx == 0 {
         # First slot - row extends to PAGE_SIZE
         PAGE_SIZE - row_offset
-    } E {
+    } EL {
         # Previous slot's row starts right after this one
         prev_slot_ptr := PAGE_HEADER_SIZE + (slot_idx - 1) * SLOT_SIZE
         prev_row_offset := load_i64(page_ptr + prev_slot_ptr)
@@ -181,11 +181,11 @@ X BufferPool {
 
     F find_page(&self, page_id: i64, idx: i64) -> i64 {
         I idx >= self.num_pages { 0 }
-        E {
+        EL {
             pid := load_i64(self.page_ids + idx * 8)
             I pid == page_id {
                 load_i64(self.pages + idx * 8)
-            } E {
+            } EL {
                 @.find_page(page_id, idx + 1)
             }
         }
@@ -228,7 +228,7 @@ X BufferPool {
 
     F free_pages(&self, idx: i64) -> i64 {
         I idx >= self.num_pages { 0 }
-        E {
+        EL {
             pp := load_i64(self.pages + idx * 8)
             I pp != 0 { free(pp) }
             @.free_pages(idx + 1)

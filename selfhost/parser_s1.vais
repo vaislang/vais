@@ -65,7 +65,7 @@ F parser_expect(p: i64, kind: i64) -> i64 {
     I parser_current_kind(p) == kind {
         parser_advance(p)
         1
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Item management
@@ -124,20 +124,20 @@ F parser_parse_call_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     arg_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         arg := parser_parse_expr(p)
         I arg != 0 {
             store_i64(args + arg_count * 8, arg)
             arg_count = arg_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     parser_expect(p, TOK_RPAREN())
@@ -158,15 +158,15 @@ F parser_parse_struct_lit_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     field_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
-        I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+        I parser_current_kind(p) != TOK_IDENT() { B } EL { 0 }
         fname_ptr := parser_current_str_ptr(p)
         fname_len := parser_current_str_len(p)
         parser_advance(p)
 
-        I parser_expect(p, TOK_COLON()) == 0 { B } E { 0 }
+        I parser_expect(p, TOK_COLON()) == 0 { B } EL { 0 }
 
         fvalue := parser_parse_expr(p)
 
@@ -178,7 +178,7 @@ F parser_parse_struct_lit_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     parser_expect(p, TOK_RBRACE())
@@ -200,10 +200,10 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     I next_kind == TOK_LBRACE() {
         result = parser_parse_struct_lit_expr(p, str_ptr, str_len)
         0
-    } E I next_kind == TOK_LPAREN() {
+    } EL I next_kind == TOK_LPAREN() {
         result = parser_parse_call_expr(p, str_ptr, str_len)
         0
-    } E {
+    } EL {
         # Simple identifier
         e := expr_new(EXPR_IDENT())
         expr_set_field0(e, str_ptr)
@@ -233,7 +233,7 @@ F parser_parse_pattern(p: i64) -> i64 {
             parser_advance(p)
 
             # Parse end value
-            I parser_current_kind(p) != TOK_INT() { R 0 } E { 0 }
+            I parser_current_kind(p) != TOK_INT() { R 0 } EL { 0 }
             end_value := parser_current_value(p)
             end_span := parser_current_span_end(p)
             parser_advance(p)
@@ -247,13 +247,13 @@ F parser_parse_pattern(p: i64) -> i64 {
             pat := malloc(56)
             store_pattern_node(pat, PAT_RANGE(), start, end_span, start_pat, end_pat, inclusive, 0)
             R pat
-        } E { 0 }
+        } EL { 0 }
 
         # Just a literal
         pat := malloc(56)
         store_pattern_node(pat, PAT_LITERAL(), start, end, value, 0, 0, 0)
         R pat
-    } E { 0 }
+    } EL { 0 }
 
     # Identifier pattern (binding, wildcard, or variant)
     I kind == TOK_IDENT() {
@@ -269,15 +269,15 @@ F parser_parse_pattern(p: i64) -> i64 {
                 pat := malloc(56)
                 store_pattern_node(pat, PAT_WILDCARD(), start, end, 0, 0, 0, 0)
                 R pat
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         # Check for variant pattern: Some(x) or Point { x, y }
         # For now, just handle simple identifier binding
         pat := malloc(56)
         store_pattern_node(pat, PAT_IDENT(), start, end, str_ptr, str_len, 0, 0)
         R pat
-    } E { 0 }
+    } EL { 0 }
 
     # No pattern matched
     0
@@ -287,10 +287,10 @@ F parser_parse_pattern(p: i64) -> i64 {
 # Returns pointer to PAT_OR node with array of patterns, or single pattern if no |
 F parser_parse_or_pattern(p: i64) -> i64 {
     first_pat := parser_parse_pattern(p)
-    I first_pat == 0 { R 0 } E { 0 }
+    I first_pat == 0 { R 0 } EL { 0 }
 
     # Check for | operator
-    I parser_current_kind(p) != TOK_PIPE() { R first_pat } E { 0 }
+    I parser_current_kind(p) != TOK_PIPE() { R first_pat } EL { 0 }
 
     # We have an or-pattern, collect all alternatives
     patterns := malloc(32 * 8)  # up to 32 patterns
@@ -298,11 +298,11 @@ F parser_parse_or_pattern(p: i64) -> i64 {
     count: mut i64 = 1
 
     L {
-        I parser_current_kind(p) != TOK_PIPE() { B } E { 0 }
+        I parser_current_kind(p) != TOK_PIPE() { B } EL { 0 }
         parser_advance(p)  # consume |
 
         next_pat := parser_parse_pattern(p)
-        I next_pat == 0 { B } E { 0 }
+        I next_pat == 0 { B } EL { 0 }
 
         store_i64(patterns + count * 8, next_pat)
         count = count + 1
@@ -338,22 +338,22 @@ F parser_parse_match_arm(p: i64, arms: i64, arm_count_ptr: i64) -> i64 {
 
     # Parse pattern (or-pattern)
     pattern := parser_parse_or_pattern(p)
-    I pattern == 0 { R 0 } E { 0 }
+    I pattern == 0 { R 0 } EL { 0 }
 
     # Check for guard: I condition
     guard: mut i64 = 0
     I parser_current_kind(p) == TOK_KW_I() {
         parser_advance(p)  # consume I
         guard = parser_parse_expr(p)
-        I guard == 0 { R 0 } E { 0 }
-    } E { 0 }
+        I guard == 0 { R 0 } EL { 0 }
+    } EL { 0 }
 
     # Expect =>
-    I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } EL { 0 }
 
     # Parse body
     body := parser_parse_expr(p)
-    I body == 0 { R 0 } E { 0 }
+    I body == 0 { R 0 } EL { 0 }
 
     # Store arm: pattern_ptr, guard_ptr, body_ptr (24 bytes per arm)
     arm_ptr := arms + arm_count * 24
@@ -371,9 +371,9 @@ F parser_parse_match(p: i64) -> i64 {
 
     # Parse scrutinee expression
     scrutinee := parser_parse_expr(p)
-    I scrutinee == 0 { R 0 } E { 0 }
+    I scrutinee == 0 { R 0 } EL { 0 }
 
-    I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } EL { 0 }
 
     # Allocate arms array (24 bytes per arm: pattern_ptr, guard_ptr, body_ptr)
     arms := malloc(64 * 24)
@@ -381,12 +381,12 @@ F parser_parse_match(p: i64) -> i64 {
     store_i64(arm_count, 0)
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_parse_match_arm(p, arms, arm_count) == 0 { B } E { 0 }
-        I parser_current_kind(p) == TOK_COMMA() { parser_advance(p); 0 } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_parse_match_arm(p, arms, arm_count) == 0 { B } EL { 0 }
+        I parser_current_kind(p) == TOK_COMMA() { parser_advance(p); 0 } EL { 0 }
     }
 
-    I parser_expect(p, TOK_RBRACE()) == 0 { R 0 } E { 0 }
+    I parser_expect(p, TOK_RBRACE()) == 0 { R 0 } EL { 0 }
 
     e := expr_new(EXPR_MATCH())
     expr_set_field0(e, scrutinee)
@@ -406,12 +406,12 @@ F parser_parse_primary(p: i64) -> i64 {
         e := expr_new(EXPR_INT())
         expr_set_field0(e, value)
         e
-    } E I kind == TOK_IDENT() {
+    } EL I kind == TOK_IDENT() {
         str_ptr := parser_current_str_ptr(p)
         str_len := parser_current_str_len(p)
         parser_advance(p)
         parser_parse_ident_expr(p, str_ptr, str_len)
-    } E I kind == TOK_STRING() {
+    } EL I kind == TOK_STRING() {
         str_ptr := parser_current_str_ptr(p)
         str_len := parser_current_str_len(p)
         parser_advance(p)
@@ -419,14 +419,14 @@ F parser_parse_primary(p: i64) -> i64 {
         expr_set_field0(e, str_ptr)
         expr_set_field1(e, str_len)
         e
-    } E I kind == TOK_LBRACE() {
+    } EL I kind == TOK_LBRACE() {
         parser_parse_block_expr(p)
-    } E I kind == TOK_LPAREN() {
+    } EL I kind == TOK_LPAREN() {
         parser_advance(p)
         inner := parser_parse_expr(p)
         parser_expect(p, TOK_RPAREN())
         inner
-    } E I kind == TOK_AT() {
+    } EL I kind == TOK_AT() {
         parser_advance(p)  # consume @
 
         I parser_current_kind(p) == TOK_DOT() {
@@ -442,17 +442,17 @@ F parser_parse_primary(p: i64) -> i64 {
             arg_count: mut i64 = 0
 
             L {
-                I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                 arg := parser_parse_expr(p)
                 I arg != 0 {
                     store_i64(args + arg_count * 8, arg)
                     arg_count = arg_count + 1
                     0
-                } E { B }
+                } EL { B }
                 I parser_current_kind(p) == TOK_COMMA() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             parser_expect(p, TOK_RPAREN())
@@ -463,24 +463,24 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field2(e, args)
             expr_set_field3(e, arg_count)
             e
-        } E I parser_current_kind(p) == TOK_LPAREN() {
+        } EL I parser_current_kind(p) == TOK_LPAREN() {
             parser_advance(p)
 
             args := malloc(16 * 8)
             arg_count: mut i64 = 0
 
             L {
-                I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                 arg := parser_parse_expr(p)
                 I arg != 0 {
                     store_i64(args + arg_count * 8, arg)
                     arg_count = arg_count + 1
                     0
-                } E { B }
+                } EL { B }
                 I parser_current_kind(p) == TOK_COMMA() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
 
             parser_expect(p, TOK_RPAREN())
@@ -491,8 +491,8 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field2(e, args)
             expr_set_field3(e, arg_count)
             e
-        } E { 0 }
-    } E I kind == TOK_KW_I() {
+        } EL { 0 }
+    } EL I kind == TOK_KW_I() {
         parser_advance(p)  # consume I
 
         cond := parser_parse_expr(p)
@@ -508,20 +508,20 @@ F parser_parse_primary(p: i64) -> i64 {
             I parser_current_kind(p) == TOK_KW_I() {
                 else_expr = parser_parse_primary(p)
                 0
-            } E {
+            } EL {
                 I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
                 else_expr = parser_parse_block_contents(p)
                 I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
                 0
             }
-        } E { 0 }
+        } EL { 0 }
 
         e := expr_new(EXPR_IF())
         expr_set_field0(e, cond)
         expr_set_field1(e, then_expr)
         expr_set_field2(e, else_expr)
         e
-    } E I kind == TOK_KW_L() {
+    } EL I kind == TOK_KW_L() {
         parser_advance(p)  # consume L
 
         I parser_check(p, TOK_LBRACE()) == 1 {
@@ -533,7 +533,7 @@ F parser_parse_primary(p: i64) -> i64 {
             e := expr_new(EXPR_LOOP())
             expr_set_field0(e, body)
             e
-        } E {
+        } EL {
             # While loop: L cond { ... }
             cond := parser_parse_expr(p)
             I cond == 0 { R 0 }
@@ -547,7 +547,7 @@ F parser_parse_primary(p: i64) -> i64 {
             expr_set_field1(e, body)
             e
         }
-    } E I kind == TOK_LBRACKET() {
+    } EL I kind == TOK_LBRACKET() {
         # Array literal: [expr1, expr2, ...]
         parser_advance(p)  # consume [
 
@@ -555,20 +555,20 @@ F parser_parse_primary(p: i64) -> i64 {
         elem_count: mut i64 = 0
 
         L {
-            I parser_current_kind(p) == TOK_RBRACKET() { B } E { 0 }
-            I elem_count >= 64 { B } E { 0 }
+            I parser_current_kind(p) == TOK_RBRACKET() { B } EL { 0 }
+            I elem_count >= 64 { B } EL { 0 }
 
             elem := parser_parse_expr(p)
             I elem != 0 {
                 store_i64(elements + elem_count * 8, elem)
                 elem_count = elem_count + 1
                 0
-            } E { B }
+            } EL { B }
 
             I parser_current_kind(p) == TOK_COMMA() {
                 parser_advance(p)
                 0
-            } E { 0 }
+            } EL { 0 }
         }
 
         parser_expect(p, TOK_RBRACKET())
@@ -577,7 +577,7 @@ F parser_parse_primary(p: i64) -> i64 {
         expr_set_field0(e, elements)
         expr_set_field1(e, elem_count)
         e
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse postfix operators
@@ -590,7 +590,7 @@ F parser_parse_postfix(p: i64) -> i64 {
 
         I kind == TOK_DOT() {
             parser_advance(p)
-            I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+            I parser_current_kind(p) != TOK_IDENT() { B } EL { 0 }
 
             member_ptr := parser_current_str_ptr(p)
             member_len := parser_current_str_len(p)
@@ -603,17 +603,17 @@ F parser_parse_postfix(p: i64) -> i64 {
                 arg_count: mut i64 = 0
 
                 L {
-                    I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+                    I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
                     arg := parser_parse_expr(p)
                     I arg != 0 {
                         store_i64(args + arg_count * 8, arg)
                         arg_count = arg_count + 1
                         0
-                    } E { B }
+                    } EL { B }
                     I parser_current_kind(p) == TOK_COMMA() {
                         parser_advance(p)
                         0
-                    } E { 0 }
+                    } EL { 0 }
                 }
 
                 parser_expect(p, TOK_RPAREN())
@@ -626,7 +626,7 @@ F parser_parse_postfix(p: i64) -> i64 {
                 expr_set_field4(e, arg_count)
                 left = e
                 0
-            } E {
+            } EL {
                 e := expr_new(EXPR_FIELD())
                 expr_set_field0(e, left)
                 expr_set_field1(e, member_ptr)
@@ -634,7 +634,7 @@ F parser_parse_postfix(p: i64) -> i64 {
                 left = e
                 0
             }
-        } E I kind == TOK_LBRACKET() {
+        } EL I kind == TOK_LBRACKET() {
             parser_advance(p)
             index := parser_parse_expr(p)
             parser_expect(p, TOK_RBRACKET())
@@ -644,7 +644,7 @@ F parser_parse_postfix(p: i64) -> i64 {
             expr_set_field1(e, index)
             left = e
             0
-        } E { B }
+        } EL { B }
     }
 
     left
@@ -661,14 +661,14 @@ F parser_parse_unary(p: i64) -> i64 {
         expr_set_field0(e, UNOP_NEG())
         expr_set_field1(e, operand)
         e
-    } E I kind == TOK_NOT() {
+    } EL I kind == TOK_NOT() {
         parser_advance(p)
         operand := parser_parse_unary(p)
         e := expr_new(EXPR_UNARY())
         expr_set_field0(e, UNOP_NOT())
         expr_set_field1(e, operand)
         e
-    } E {
+    } EL {
         parser_parse_postfix(p)
     }
 }
@@ -676,30 +676,30 @@ F parser_parse_unary(p: i64) -> i64 {
 # Get binary operator precedence
 F get_binop_precedence(kind: i64) -> i64 {
     I kind == TOK_OR() { 1 }
-    E I kind == TOK_AND() { 2 }
-    E I kind == TOK_EQ_EQ() || kind == TOK_NOT_EQ() { 3 }
-    E I kind == TOK_LT() || kind == TOK_GT() || kind == TOK_LT_EQ() || kind == TOK_GT_EQ() { 4 }
-    E I kind == TOK_PLUS() || kind == TOK_MINUS() { 5 }
-    E I kind == TOK_STAR() || kind == TOK_SLASH() || kind == TOK_PERCENT() { 6 }
-    E { 0 }
+    EL I kind == TOK_AND() { 2 }
+    EL I kind == TOK_EQ_EQ() || kind == TOK_NOT_EQ() { 3 }
+    EL I kind == TOK_LT() || kind == TOK_GT() || kind == TOK_LT_EQ() || kind == TOK_GT_EQ() { 4 }
+    EL I kind == TOK_PLUS() || kind == TOK_MINUS() { 5 }
+    EL I kind == TOK_STAR() || kind == TOK_SLASH() || kind == TOK_PERCENT() { 6 }
+    EL { 0 }
 }
 
 # Convert token to binary operator
 F token_to_binop(kind: i64) -> i64 {
     I kind == TOK_PLUS() { BINOP_ADD() }
-    E I kind == TOK_MINUS() { BINOP_SUB() }
-    E I kind == TOK_STAR() { BINOP_MUL() }
-    E I kind == TOK_SLASH() { BINOP_DIV() }
-    E I kind == TOK_PERCENT() { BINOP_MOD() }
-    E I kind == TOK_LT() { BINOP_LT() }
-    E I kind == TOK_LT_EQ() { BINOP_LTE() }
-    E I kind == TOK_GT() { BINOP_GT() }
-    E I kind == TOK_GT_EQ() { BINOP_GTE() }
-    E I kind == TOK_EQ_EQ() { BINOP_EQ() }
-    E I kind == TOK_NOT_EQ() { BINOP_NEQ() }
-    E I kind == TOK_AND() { BINOP_AND() }
-    E I kind == TOK_OR() { BINOP_OR() }
-    E { 0 }
+    EL I kind == TOK_MINUS() { BINOP_SUB() }
+    EL I kind == TOK_STAR() { BINOP_MUL() }
+    EL I kind == TOK_SLASH() { BINOP_DIV() }
+    EL I kind == TOK_PERCENT() { BINOP_MOD() }
+    EL I kind == TOK_LT() { BINOP_LT() }
+    EL I kind == TOK_LT_EQ() { BINOP_LTE() }
+    EL I kind == TOK_GT() { BINOP_GT() }
+    EL I kind == TOK_GT_EQ() { BINOP_GTE() }
+    EL I kind == TOK_EQ_EQ() { BINOP_EQ() }
+    EL I kind == TOK_NOT_EQ() { BINOP_NEQ() }
+    EL I kind == TOK_AND() { BINOP_AND() }
+    EL I kind == TOK_OR() { BINOP_OR() }
+    EL { 0 }
 }
 
 # Parse binary expression with precedence climbing
@@ -710,13 +710,13 @@ F parser_parse_binary(p: i64, min_prec: i64) -> i64 {
     L {
         kind := parser_current_kind(p)
         prec := get_binop_precedence(kind)
-        I prec < min_prec || prec == 0 { B } E { 0 }
+        I prec < min_prec || prec == 0 { B } EL { 0 }
 
         op := token_to_binop(kind)
         parser_advance(p)
 
         right := parser_parse_binary(p, prec + 1)
-        I right == 0 { B } E { 0 }
+        I right == 0 { B } EL { 0 }
 
         e := expr_new(EXPR_BINARY())
         expr_set_field0(e, op)
@@ -741,7 +741,7 @@ F parser_parse_expr(p: i64) -> i64 {
         expr_set_field0(e, left)
         expr_set_field1(e, right)
         e
-    } E { left }
+    } EL { left }
 }
 
 # Parse block contents: stmts... [final_expr]
@@ -751,9 +751,9 @@ F parser_parse_block_contents(p: i64) -> i64 {
     final_expr: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } E { 0 }
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } EL { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         I parser_current_kind(p) == TOK_IDENT() {
             saved_pos := parser_get_pos(p)
@@ -774,7 +774,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                 store_i64(stmts + stmts_len * 8, stmt)
                 stmts_len = stmts_len + 1
                 0
-            } E I parser_current_kind(p) == TOK_COLON() {
+            } EL I parser_current_kind(p) == TOK_COLON() {
                 parser_advance(p)
 
                 is_mut: mut i64 = 0
@@ -782,12 +782,12 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     is_mut = 1
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 I parser_current_kind(p) == TOK_IDENT() || parser_current_kind(p) == TOK_TY_I64() {
                     parser_advance(p)
                     0
-                } E { 0 }
+                } EL { 0 }
 
                 I parser_current_kind(p) == TOK_EQ() {
                     parser_advance(p)
@@ -803,13 +803,13 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     store_i64(stmts + stmts_len * 8, stmt)
                     stmts_len = stmts_len + 1
                     0
-                } E {
+                } EL {
                     parser_set_pos(p, saved_pos)
                     e := parser_parse_expr(p)
                     I parser_current_kind(p) == TOK_RBRACE() {
                         final_expr = e
                         0
-                    } E {
+                    } EL {
                         stmt := malloc(16)
                         store_i64(stmt + 0, STMT_EXPR())
                         store_i64(stmt + 8, e)
@@ -818,14 +818,14 @@ F parser_parse_block_contents(p: i64) -> i64 {
                         0
                     }
                 }
-            } E {
+            } EL {
                 parser_set_pos(p, saved_pos)
                 e := parser_parse_expr(p)
 
                 I parser_current_kind(p) == TOK_RBRACE() {
                     final_expr = e
                     0
-                } E {
+                } EL {
                     stmt := malloc(16)
                     store_i64(stmt + 0, STMT_EXPR())
                     store_i64(stmt + 8, e)
@@ -834,7 +834,7 @@ F parser_parse_block_contents(p: i64) -> i64 {
                     0
                 }
             }
-        } E I parser_current_kind(p) == TOK_KW_R() {
+        } EL I parser_current_kind(p) == TOK_KW_R() {
             parser_advance(p)
             value := parser_parse_expr(p)
 
@@ -844,19 +844,19 @@ F parser_parse_block_contents(p: i64) -> i64 {
             store_i64(stmts + stmts_len * 8, stmt)
             stmts_len = stmts_len + 1
             0
-        } E I parser_current_kind(p) == TOK_KW_B() {
+        } EL I parser_current_kind(p) == TOK_KW_B() {
             parser_advance(p)
             stmt := malloc(8)
             store_i64(stmt + 0, STMT_BREAK())
             store_i64(stmts + stmts_len * 8, stmt)
             stmts_len = stmts_len + 1
             0
-        } E {
+        } EL {
             e := parser_parse_expr(p)
             I parser_current_kind(p) == TOK_RBRACE() {
                 final_expr = e
                 0
-            } E {
+            } EL {
                 stmt := malloc(16)
                 store_i64(stmt + 0, STMT_EXPR())
                 store_i64(stmt + 8, e)
@@ -898,19 +898,19 @@ F parser_parse_type(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_LT() {
             parser_advance(p)
             L {
-                I parser_current_kind(p) == TOK_GT() { B } E { 0 }
-                I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+                I parser_current_kind(p) == TOK_GT() { B } EL { 0 }
+                I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
                 parser_advance(p)
             }
             parser_expect(p, TOK_GT())
             0
-        } E { 0 }
+        } EL { 0 }
 
         type_ptr
-    } E I kind == TOK_STAR() || kind == TOK_AMP() {
+    } EL I kind == TOK_STAR() || kind == TOK_AMP() {
         parser_advance(p)
         parser_parse_type(p)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse generic parameters like <T, U, V>
@@ -933,11 +933,11 @@ F parser_parse_generics(p: i64) -> i64 {
     generics_len: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_GT() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_GT() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         # Expect identifier (type parameter name)
-        I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+        I parser_current_kind(p) != TOK_IDENT() { B } EL { 0 }
 
         name_ptr := parser_current_str_ptr(p)
         name_len := parser_current_str_len(p)
@@ -953,7 +953,7 @@ F parser_parse_generics(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     # Expect >
@@ -972,14 +972,14 @@ F parser_parse_param(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_KW_MUT() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
         I parser_current_kind(p) == TOK_IDENT() {
             name_ptr := parser_current_str_ptr(p)
             name_len := parser_current_str_len(p)
             parser_advance(p)
             param_new(name_ptr, name_len, 0, 0)
-        } E { 0 }
-    } E I parser_current_kind(p) == TOK_IDENT() {
+        } EL { 0 }
+    } EL I parser_current_kind(p) == TOK_IDENT() {
         name_ptr := parser_current_str_ptr(p)
         name_len := parser_current_str_len(p)
         parser_advance(p)
@@ -989,11 +989,11 @@ F parser_parse_param(p: i64) -> i64 {
         I parser_current_kind(p) == TOK_KW_MUT() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
 
         type_info := parser_parse_type(p)
         param_new(name_ptr, name_len, type_info, 0)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse function item
@@ -1015,20 +1015,20 @@ F parser_parse_function_item(p: i64) -> i64 {
     param_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RPAREN() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         param := parser_parse_param(p)
         I param != 0 {
             store_i64(params + param_count * 8, param)
             param_count = param_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     I parser_expect(p, TOK_RPAREN()) == 0 { R 0 }
@@ -1038,17 +1038,17 @@ F parser_parse_function_item(p: i64) -> i64 {
         parser_advance(p)
         ret_type = parser_parse_type(p)
         0
-    } E { 0 }
+    } EL { 0 }
 
     body: mut i64 = 0
     I parser_current_kind(p) == TOK_EQ() {
         parser_advance(p)
         body = parser_parse_expr(p)
         0
-    } E I parser_current_kind(p) == TOK_LBRACE() {
+    } EL I parser_current_kind(p) == TOK_LBRACE() {
         body = parser_parse_block_expr(p)
         0
-    } E { 0 }
+    } EL { 0 }
 
     item := item_new(ITEM_FUNCTION(), name_ptr, name_len)
     item_set_data0(item, params)
@@ -1093,20 +1093,20 @@ F parser_parse_struct_item(p: i64) -> i64 {
     field_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         field := parser_parse_struct_field(p)
         I field != 0 {
             store_i64(fields + field_count * 8, field)
             field_count = field_count + 1
             0
-        } E { B }
+        } EL { B }
 
         I parser_current_kind(p) == TOK_COMMA() {
             parser_advance(p)
             0
-        } E { 0 }
+        } EL { 0 }
     }
 
     I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
@@ -1136,8 +1136,8 @@ F parser_parse_impl_item(p: i64) -> i64 {
     method_count: mut i64 = 0
 
     L {
-        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_RBRACE() { B } EL { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         I parser_current_kind(p) == TOK_KW_F() {
             method := parser_parse_function_item(p)
@@ -1145,8 +1145,8 @@ F parser_parse_impl_item(p: i64) -> i64 {
                 store_i64(methods + method_count * 8, method)
                 method_count = method_count + 1
                 0
-            } E { B }
-        } E {
+            } EL { B }
+        } EL {
             parser_advance(p)
             0
         }
@@ -1175,7 +1175,7 @@ F parser_parse_use_item(p: i64) -> i64 {
     parser_advance(p)
 
     L {
-        I parser_current_kind(p) != TOK_SLASH() { B } E { 0 }
+        I parser_current_kind(p) != TOK_SLASH() { B } EL { 0 }
         sb_append_byte(path_sb, 47)
         parser_advance(p)
 
@@ -1203,25 +1203,25 @@ F parser_parse_item(p: i64) -> i64 {
 
     I kind == TOK_KW_F() {
         parser_parse_function_item(p)
-    } E I kind == TOK_KW_S() {
+    } EL I kind == TOK_KW_S() {
         parser_parse_struct_item(p)
-    } E I kind == TOK_KW_X() {
+    } EL I kind == TOK_KW_X() {
         parser_parse_impl_item(p)
-    } E I kind == TOK_KW_U() {
+    } EL I kind == TOK_KW_U() {
         parser_parse_use_item(p)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # Parse entire module
 F parser_parse_module(p: i64) -> i64 {
     L {
-        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } EL { 0 }
 
         item := parser_parse_item(p)
         I item != 0 {
             parser_add_item(p, item)
             0
-        } E {
+        } EL {
             parser_advance(p)
             0
         }
@@ -1244,7 +1244,7 @@ F parser_parse_function(p: i64) -> i64 {
         store_i64(p + 112, param_get_name_ptr(param))
         store_i64(p + 120, param_get_name_len(param))
         0
-    } E { 0 }
+    } EL { 0 }
 
     body := item_get_data3(item)
 
@@ -1265,7 +1265,7 @@ F parser_get_body_expr(p: i64) -> i64 {
     I count > 0 {
         item := load_i64(items)
         item_get_data3(item)
-    } E { 0 }
+    } EL { 0 }
 }
 
 F parser_free(p: i64) -> i64 {

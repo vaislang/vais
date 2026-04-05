@@ -11,7 +11,7 @@ F crc32_update_bit(crc: i64, bit: i64) -> i64 {
     }
     next := I (crc & 1) == 1 {
         ((crc >> 1) & 2147483647) ^ 3988292384
-    } E {
+    } EL {
         (crc >> 1) & 2147483647
     }
     crc32_update_bit(next & 4294967295, bit + 1)
@@ -19,7 +19,7 @@ F crc32_update_bit(crc: i64, bit: i64) -> i64 {
 
 F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64 {
     I idx >= len { crc }
-    E {
+    EL {
         byte_val := load_byte(data + idx)
         new_crc := crc32_update_byte(crc, byte_val)
         crc32_loop(data, new_crc, idx + 1, len)

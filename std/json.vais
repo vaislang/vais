@@ -22,12 +22,12 @@ F strlen_ptr(s: i64) -> i64 {
 
 F strlen_ptr_rec(s: i64, len: i64) -> i64 {
     I load_byte(s + len) == 0 { len }
-    E { strlen_ptr_rec(s, len + 1) }
+    EL { strlen_ptr_rec(s, len + 1) }
 }
 
 # Initialize memory to zero recursively
 F init_mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } E {
+    I idx >= count { 0 } EL {
         store_i64(ptr + idx * 8, 0)
         init_mem_zero(ptr, count, idx + 1)
     }
@@ -35,10 +35,10 @@ F init_mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
 
 # Hash string recursively
 F hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } E {
+    I idx >= len { h } EL {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
         hash_str_rec(s, len, idx + 1, abs_h)
     }
 }
@@ -50,8 +50,8 @@ F json_hash_string(s: i64, len: i64) -> i64 {
 # String equality check recursively
 F str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    E { str_eq_rec(a, b, len, idx + 1) }
+    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    EL { str_eq_rec(a, b, len, idx + 1) }
 }
 
 F json_str_eq(a: i64, b: i64, len: i64) -> i64 {
@@ -99,12 +99,12 @@ F json_object_set(obj: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
 }
 
 F json_object_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
-    I node == 0 { 0 } E {
+    I node == 0 { 0 } EL {
         node_key := load_i64(node)
         node_key_len := load_i64(node + 8)
         I node_key_len == key_len && json_str_eq(node_key, key, key_len) == 1 {
             load_i64(node + 16)
-        } E {
+        } EL {
             json_object_get_rec(load_i64(node + 24), key, key_len)
         }
     }
@@ -150,7 +150,7 @@ F json_array_push(arr: i64, value_ptr: i64) -> i64 {
 F json_free_value(v: i64) -> i64 {
     I v == 0 {
         0
-    } E {
+    } EL {
         tag := load_i64(v)
         data := load_i64(v + 8)
 
@@ -177,7 +177,7 @@ F parser_new(input: i64, len: i64) -> i64 {
 F parser_peek(p: i64) -> i64 {
     pos := load_i64(p + 8)
     len := load_i64(p + 16)
-    I pos >= len { 0 } E {
+    I pos >= len { 0 } EL {
         input := load_i64(p)
         load_byte(input + pos)
     }
@@ -191,7 +191,7 @@ F parser_advance(p: i64) -> i64 {
         c := load_byte(input + pos)
         store_i64(p + 8, pos + 1)
         c
-    } E { 0 }
+    } EL { 0 }
 }
 
 F parser_skip_ws(p: i64) -> i64 {
@@ -213,13 +213,13 @@ F parser_parse(p: i64) -> i64 {
 F parser_parse_value(p: i64) -> i64 {
     c := parser_peek(p)
     I c == 110 { parser_parse_null(p) }
-    E I c == 116 { parser_parse_true(p) }
-    E I c == 102 { parser_parse_false(p) }
-    E I c == 34 { parser_parse_string(p) }
-    E I c == 91 { parser_parse_array(p) }
-    E I c == 123 { parser_parse_object(p) }
-    E I c == 45 || (c >= 48 && c <= 57) { parser_parse_number(p) }
-    E { 0 }
+    EL I c == 116 { parser_parse_true(p) }
+    EL I c == 102 { parser_parse_false(p) }
+    EL I c == 34 { parser_parse_string(p) }
+    EL I c == 91 { parser_parse_array(p) }
+    EL I c == 123 { parser_parse_object(p) }
+    EL I c == 45 || (c >= 48 && c <= 57) { parser_parse_number(p) }
+    EL { 0 }
 }
 
 F parser_parse_null(p: i64) -> i64 {
@@ -277,17 +277,17 @@ F parser_parse_str_chars(p: i64, buf: i64, len: i64, cap: i64) -> i64 {
     I c == 0 || c == 34 {
         parser_advance(p)
         len
-    } E I c == 92 {
+    } EL I c == 92 {
         # Escape sequence
         parser_advance(p)  # consume backslash
         escaped := parser_advance(p)
         char_to_store := I escaped == 110 { 10 }
-            E I escaped == 116 { 9 }
-            E I escaped == 114 { 13 }
-            E { escaped }
+            EL I escaped == 116 { 9 }
+            EL I escaped == 114 { 13 }
+            EL { escaped }
         store_byte(buf + len, char_to_store)
         parser_parse_str_chars(p, buf, len + 1, cap)
-    } E {
+    } EL {
         parser_advance(p)
         store_byte(buf + len, c)
         parser_parse_str_chars(p, buf, len + 1, cap)
@@ -295,7 +295,7 @@ F parser_parse_str_chars(p: i64, buf: i64, len: i64, cap: i64) -> i64 {
 }
 
 F parser_parse_number(p: i64) -> i64 {
-    is_neg := I parser_peek(p) == 45 { parser_advance(p); 1 } E { 0 }
+    is_neg := I parser_peek(p) == 45 { parser_advance(p); 1 } EL { 0 }
     int_part := parser_parse_digits(p, 0)
 
     I parser_peek(p) == 46 {
@@ -306,17 +306,17 @@ F parser_parse_number(p: i64) -> i64 {
         I c == 101 || c == 69 { parser_skip_exp(p) }
 
         base_scaled := int_part * 1000000 + frac
-        scaled := I is_neg == 1 { 0 - base_scaled } E { base_scaled }
+        scaled := I is_neg == 1 { 0 - base_scaled } EL { base_scaled }
         result := malloc(24)
         store_i64(result, 3)
         store_i64(result + 8, scaled)
         store_i64(result + 16, 0)
         result
-    } E {
+    } EL {
         c := parser_peek(p)
         I c == 101 || c == 69 { parser_skip_exp(p) }
 
-        final_int := I is_neg == 1 { 0 - int_part } E { int_part }
+        final_int := I is_neg == 1 { 0 - int_part } EL { int_part }
         result := malloc(24)
         store_i64(result, 2)
         store_i64(result + 8, final_int)
@@ -330,7 +330,7 @@ F parser_parse_digits(p: i64, acc: i64) -> i64 {
     I c >= 48 && c <= 57 {
         parser_advance(p)
         parser_parse_digits(p, acc * 10 + (c - 48))
-    } E { acc }
+    } EL { acc }
 }
 
 F parser_parse_frac(p: i64, acc: i64, scale: i64) -> i64 {
@@ -338,7 +338,7 @@ F parser_parse_frac(p: i64, acc: i64, scale: i64) -> i64 {
     I c >= 48 && c <= 57 && scale > 0 {
         parser_advance(p)
         parser_parse_frac(p, acc + (c - 48) * scale, scale / 10)
-    } E { acc }
+    } EL { acc }
 }
 
 F parser_skip_exp(p: i64) -> i64 {
@@ -365,7 +365,7 @@ F parser_parse_array(p: i64) -> i64 {
 
     I parser_peek(p) == 93 {
         parser_advance(p)
-    } E {
+    } EL {
         parser_parse_array_items(p, arr)
     }
 
@@ -386,7 +386,7 @@ F parser_parse_array_items(p: i64, arr: i64) -> i64 {
         parser_advance(p)
         parser_skip_ws(p)
         parser_parse_array_items(p, arr)
-    } E I c == 93 {
+    } EL I c == 93 {
         parser_advance(p)
     }
     0
@@ -400,7 +400,7 @@ F parser_parse_object(p: i64) -> i64 {
 
     I parser_peek(p) == 125 {
         parser_advance(p)
-    } E {
+    } EL {
         parser_parse_object_items(p, obj)
     }
 
@@ -430,7 +430,7 @@ F parser_parse_object_items(p: i64, obj: i64) -> i64 {
     I c == 44 {
         parser_advance(p)
         parser_parse_object_items(p, obj)
-    } E I c == 125 {
+    } EL I c == 125 {
         parser_advance(p)
     }
     0
@@ -443,19 +443,19 @@ F parser_parse_object_items(p: i64, obj: i64) -> i64 {
 F json_stringify(v: i64) -> i64 {
     I v == 0 {
         make_null_str()
-    } E {
+    } EL {
         tag := load_i64(v)
         data := load_i64(v + 8)
         extra := load_i64(v + 16)
 
         I tag == 0 { make_null_str() }
-        E I tag == 1 { I data == 0 { make_false_str() } E { make_true_str() } }
-        E I tag == 2 { json_stringify_int(data) }
-        E I tag == 3 { json_stringify_scaled(data) }
-        E I tag == 4 { json_stringify_string(data, extra) }
-        E I tag == 5 { json_stringify_array(data) }
-        E I tag == 6 { json_stringify_object(data) }
-        E { make_null_str() }
+        EL I tag == 1 { I data == 0 { make_false_str() } EL { make_true_str() } }
+        EL I tag == 2 { json_stringify_int(data) }
+        EL I tag == 3 { json_stringify_scaled(data) }
+        EL I tag == 4 { json_stringify_string(data, extra) }
+        EL I tag == 5 { json_stringify_array(data) }
+        EL I tag == 6 { json_stringify_object(data) }
+        EL { make_null_str() }
     }
 }
 
@@ -499,23 +499,23 @@ F json_stringify_int(n: i64) -> i64 {
         store_byte(buf, 48)
         store_byte(buf + 1, 0)
         buf
-    } E {
+    } EL {
         buf := malloc(32)
-        val := I n < 0 { 0 - n } E { n }
+        val := I n < 0 { 0 - n } EL { n }
         digit_pos := stringify_int_rec(buf, val, 0)
         final_pos := I n < 0 {
             # Shift and add minus sign
             shift_right(buf, digit_pos)
             store_byte(buf, 45)
             digit_pos + 1
-        } E { digit_pos }
+        } EL { digit_pos }
         store_byte(buf + final_pos, 0)
         buf
     }
 }
 
 F stringify_int_rec(buf: i64, n: i64, pos: i64) -> i64 {
-    I n == 0 { pos } E {
+    I n == 0 { pos } EL {
         new_pos := stringify_int_rec(buf, n / 10, pos)
         store_byte(buf + new_pos, 48 + (n % 10))
         new_pos + 1
@@ -523,7 +523,7 @@ F stringify_int_rec(buf: i64, n: i64, pos: i64) -> i64 {
 }
 
 F shift_right(buf: i64, len: i64) -> i64 {
-    I len <= 0 { 0 } E {
+    I len <= 0 { 0 } EL {
         store_byte(buf + len, load_byte(buf + len - 1))
         shift_right(buf, len - 1)
     }
@@ -531,12 +531,12 @@ F shift_right(buf: i64, len: i64) -> i64 {
 
 F json_stringify_scaled(n: i64) -> i64 {
     buf := malloc(64)
-    val := I n < 0 { 0 - n } E { n }
+    val := I n < 0 { 0 - n } EL { n }
     int_part := val / 1000000
     frac_part := val % 1000000
 
     # Handle sign and get starting position
-    start_pos := I n < 0 { store_byte(buf, 45); 1 } E { 0 }
+    start_pos := I n < 0 { store_byte(buf, 45); 1 } EL { 0 }
 
     int_str := json_stringify_int(int_part)
     int_len := strlen_ptr(int_str)
@@ -569,17 +569,17 @@ F json_stringify_string(s: i64, len: i64) -> i64 {
 }
 
 F stringify_str_rec(buf: i64, s: i64, len: i64, idx: i64, pos: i64) -> i64 {
-    I idx >= len { pos } E {
+    I idx >= len { pos } EL {
         c := load_byte(s + idx)
         I c == 34 || c == 92 {
             store_byte(buf + pos, 92)
             store_byte(buf + pos + 1, c)
             stringify_str_rec(buf, s, len, idx + 1, pos + 2)
-        } E I c == 10 {
+        } EL I c == 10 {
             store_byte(buf + pos, 92)
             store_byte(buf + pos + 1, 110)
             stringify_str_rec(buf, s, len, idx + 1, pos + 2)
-        } E {
+        } EL {
             store_byte(buf + pos, c)
             stringify_str_rec(buf, s, len, idx + 1, pos + 1)
         }
@@ -599,11 +599,11 @@ F json_stringify_array(arr: i64) -> i64 {
 }
 
 F stringify_arr_rec(buf: i64, data: i64, len: i64, idx: i64, pos: i64) -> i64 {
-    I idx >= len { pos } E {
+    I idx >= len { pos } EL {
         new_pos := I idx > 0 {
             store_byte(buf + pos, 44)
             pos + 1
-        } E { pos }
+        } EL { pos }
         elem := load_i64(data + idx * 8)
         elem_str := json_stringify(elem)
         elem_len := strlen_ptr(elem_str)
@@ -626,7 +626,7 @@ F json_stringify_object(obj: i64) -> i64 {
 }
 
 F stringify_obj_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64, first: i64) -> i64 {
-    I idx >= cap { pos } E {
+    I idx >= cap { pos } EL {
         node := load_i64(buckets + idx * 8)
         result := stringify_obj_entries(buf, node, pos, first)
         new_pos := load_i64(result)
@@ -642,11 +642,11 @@ F stringify_obj_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
         store_i64(result, pos)
         store_i64(result + 8, first)
         result
-    } E {
+    } EL {
         comma_pos := I first == 0 {
             store_byte(buf + pos, 44)
             pos + 1
-        } E { pos }
+        } EL { pos }
 
         key := load_i64(node)
         key_len := load_i64(node + 8)
@@ -698,54 +698,54 @@ F json_free(v: i64) -> i64 {
 }
 
 F json_type(v: i64) -> i64 {
-    I v == 0 { 0 } E { load_i64(v) }
+    I v == 0 { 0 } EL { load_i64(v) }
 }
 
 F json_get_int(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 2 || load_i64(v) == 3 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 2 || load_i64(v) == 3 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F json_get_bool(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 1 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 1 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F json_get_string(v: i64) -> i64 {
     I v == 0 { 0 }
-    E I load_i64(v) == 4 { load_i64(v + 8) }
-    E { 0 }
+    EL I load_i64(v) == 4 { load_i64(v + 8) }
+    EL { 0 }
 }
 
 F json_array_len(v: i64) -> i64 {
     I v == 0 || load_i64(v) != 5 { 0 }
-    E { load_i64(load_i64(v + 8) + 8) }
+    EL { load_i64(load_i64(v + 8) + 8) }
 }
 
 F json_array_get(v: i64, index: i64) -> i64 {
     I v == 0 || load_i64(v) != 5 {
         0
-    } E {
+    } EL {
         arr := load_i64(v + 8)
         arr_data := load_i64(arr)
         arr_len := load_i64(arr + 8)
         I index < 0 || index >= arr_len { 0 }
-        E { load_i64(arr_data + index * 8) }
+        EL { load_i64(arr_data + index * 8) }
     }
 }
 
 F json_object_get(v: i64, key: str) -> i64 {
     I v == 0 || load_i64(v) != 6 {
         0
-    } E {
+    } EL {
         obj := load_i64(v + 8)
         buckets := load_i64(obj)
         cap := load_i64(obj + 16)
         I cap == 0 {
             0
-        } E {
+        } EL {
             key_ptr := str_to_ptr(key)
             key_len := strlen(key)
             h := json_hash_string(key_ptr, key_len) % cap
@@ -807,7 +807,7 @@ F json_array_create() -> i64 {
 F json_array_add(arr_v: i64, value: i64) -> i64 {
     I load_i64(arr_v) != 5 {
         0
-    } E {
+    } EL {
         arr := load_i64(arr_v + 8)
         json_array_push(arr, value)
         len := load_i64(arr + 8)
@@ -828,7 +828,7 @@ F json_object_create() -> i64 {
 F json_object_put(obj_v: i64, key: str, value: i64) -> i64 {
     I load_i64(obj_v) != 6 {
         0
-    } E {
+    } EL {
         obj := load_i64(obj_v + 8)
         key_ptr := str_to_ptr(key)
         key_len := strlen(key)

@@ -47,7 +47,7 @@ F test_no_error() -> i64 {
     error_count := mir_borrow_check_body(body)
 
     # Return 0 if PASS, 1 if FAIL
-    I error_count == 0 { 0 } E { 1 }
+    I error_count == 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -92,7 +92,7 @@ F test_use_after_move() -> i64 {
 
     # Expect BC_ERR_USE_AFTER_MOVE
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } E { 1 }
+    I error_count > 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -137,7 +137,7 @@ F test_double_mut_borrow() -> i64 {
 
     # Expect BC_ERR_DOUBLE_MUT_BORROW
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } E { 1 }
+    I error_count > 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -182,7 +182,7 @@ F test_mut_immut_conflict() -> i64 {
 
     # Expect BC_ERR_MUT_IMMUT_CONFLICT
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } E { 1 }
+    I error_count > 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -227,7 +227,7 @@ F test_copy_type_ok() -> i64 {
 
     # Expect 0 errors (Copy type allows use after move)
     error_count := mir_borrow_check_body(body)
-    I error_count == 0 { 0 } E { 1 }
+    I error_count == 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -272,7 +272,7 @@ F test_assign_while_borrowed() -> i64 {
 
     # Expect BC_ERR_ASSIGN_WHILE_BORROWED
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } E { 1 }
+    I error_count > 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -315,7 +315,7 @@ F test_drop_while_borrowed() -> i64 {
 
     # Expect BC_ERR_MOVE_WHILE_BORROWED or similar
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } E { 1 }
+    I error_count > 0 { 0 } EL { 1 }
 }
 
 # ============================================================================
@@ -359,5 +359,5 @@ F main() -> i64 {
 
     # Return 0 if all passed, 1 otherwise
     total := result1 + result2 + result3 + result4 + result5 + result6 + result7
-    I total == 0 { 0 } E { 1 }
+    I total == 0 { 0 } EL { 1 }
 }

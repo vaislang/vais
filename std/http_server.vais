@@ -83,7 +83,7 @@ X PathParams {
     # Get parameter value by name
     F get(&self, name: str) -> str? {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             param_name := __load_ptr(self.items + offset) as str
             I __str_eq(param_name, name) == 1 {
@@ -156,12 +156,12 @@ X QueryParams {
 
         # Parse key=value pairs separated by &
         pos := 0
-        L pos < len {
+        LW pos < len {
             # Find key start
             key_start := pos
 
             # Find = or & or end
-            L pos < len {
+            LW pos < len {
                 ch := __load_byte_at(query as i64, pos)
                 I ch == 61 | ch == 38 {  # '=' or '&'
                     B
@@ -177,7 +177,7 @@ X QueryParams {
 
                     # Find value end (& or end)
                     val_start := pos
-                    L pos < len {
+                    LW pos < len {
                         ch2 := __load_byte_at(query as i64, pos)
                         I ch2 == 38 {  # '&'
                             B
@@ -191,7 +191,7 @@ X QueryParams {
                     I pos < len {
                         pos = pos + 1  # skip '&'
                     }
-                } E {
+                } EL {
                     # Key without value
                     key := __substr(query, key_start, pos - key_start)
                     params.add(key, "")
@@ -217,7 +217,7 @@ X QueryParams {
     # Get parameter value by key
     F get(&self, key: str) -> str? {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             param_key := __load_ptr(self.items + offset) as str
             I __str_eq(param_key, key) == 1 {
@@ -232,7 +232,7 @@ X QueryParams {
     # Check if key exists
     F has(&self, key: str) -> i64 {
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 16
             param_key := __load_ptr(self.items + offset) as str
             I __str_eq(param_key, key) == 1 {
@@ -288,7 +288,7 @@ X RequestCtx {
         # Find '?' in path
         path_len := __strlen(path)
         i := 0
-        L i < path_len {
+        LW i < path_len {
             ch := __load_byte_at(path as i64, i)
             I ch == 63 {  # '?'
                 clean_path = __substr(path, 0, i)
@@ -316,7 +316,7 @@ X RequestCtx {
     # Get a header value by name (case-insensitive)
     F get_header(&self, name: str) -> str? {
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
@@ -346,7 +346,7 @@ X RequestCtx {
     F body_text(&self) -> str {
         I self.body != 0 & self.body_len > 0 {
             self.body as str
-        } E {
+        } EL {
             ""
         }
     }
@@ -534,7 +534,7 @@ X ResponseBuilder {
 
         # Headers
         i := 0
-        L i < self.header_count {
+        LW i < self.header_count {
             offset := i * 16
             name := __load_ptr(self.headers + offset) as str
             value := __load_ptr(self.headers + offset + 8) as str
@@ -556,7 +556,7 @@ X ResponseBuilder {
             __store_byte(buffer + pos, 13)
             __store_byte(buffer + pos + 1, 10)
             pos = pos + 2
-        } E {
+        } EL {
             pos = pos + __str_copy_to(buffer + pos, "Content-Length: 0")
             __store_byte(buffer + pos, 13)
             __store_byte(buffer + pos + 1, 10)
@@ -621,10 +621,10 @@ X RoutePattern {
             }
         }
 
-        L pos < pat_len & seg_count < MAX_PATH_SEGMENTS {
+        LW pos < pat_len & seg_count < MAX_PATH_SEGMENTS {
             # Find segment end
             seg_start := pos
-            L pos < pat_len {
+            LW pos < pat_len {
                 ch := __load_byte_at(pattern as i64, pos)
                 I ch == 47 {  # '/'
                     B
@@ -643,10 +643,10 @@ X RoutePattern {
                     # Store name without ':'
                     param_name := __substr(pattern, seg_start + 1, seg_len - 1)
                     __store_ptr(seg_values + seg_count * 8, param_name as i64)
-                } E I first_ch == 42 {  # '*'
+                } EL I first_ch == 42 {  # '*'
                     __store_i64(seg_types + seg_count * 8, SEG_WILDCARD)
                     __store_ptr(seg_values + seg_count * 8, seg_str as i64)
-                } E {
+                } EL {
                     __store_i64(seg_types + seg_count * 8, SEG_LITERAL)
                     __store_ptr(seg_values + seg_count * 8, seg_str as i64)
                 }
@@ -684,7 +684,7 @@ X RoutePattern {
             }
         }
 
-        L seg_idx < self.seg_count {
+        LW seg_idx < self.seg_count {
             # No more path segments but pattern expects more
             I pos >= path_len {
                 R 0
@@ -692,7 +692,7 @@ X RoutePattern {
 
             # Extract current path segment
             seg_start := pos
-            L pos < path_len {
+            LW pos < path_len {
                 ch := __load_byte_at(path as i64, pos)
                 I ch == 47 {  # '/'
                     B
@@ -711,10 +711,10 @@ X RoutePattern {
                 I __str_eq(path_seg, seg_val) != 1 {
                     R 0
                 }
-            } E I seg_type == SEG_PARAM {
+            } EL I seg_type == SEG_PARAM {
                 # Capture parameter
                 params.add(seg_val, path_seg)
-            } E I seg_type == SEG_WILDCARD {
+            } EL I seg_type == SEG_WILDCARD {
                 # Wildcard matches rest of path
                 R 1
             }
@@ -733,7 +733,7 @@ X RoutePattern {
         # All pattern segments consumed; path should also be consumed
         I pos >= path_len {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -787,7 +787,7 @@ X MiddlewareChain {
     F execute(&self, ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
         result := response
         i := 0
-        L i < self.count {
+        LW i < self.count {
             offset := i * 24
             handler := __load_ptr(self.items + offset + 8)
             I handler != 0 {
@@ -834,7 +834,7 @@ X StaticFiles {
 
         # Find last dot
         dot_pos := len - 1
-        L dot_pos >= 0 {
+        LW dot_pos >= 0 {
             ch := __load_byte_at(path as i64, dot_pos)
             I ch == 46 {  # '.'
                 B
@@ -850,35 +850,35 @@ X StaticFiles {
 
         I __str_eq_ignore_case(ext, "html") == 1 | __str_eq_ignore_case(ext, "htm") == 1 {
             "text/html; charset=utf-8"
-        } E I __str_eq_ignore_case(ext, "css") == 1 {
+        } EL I __str_eq_ignore_case(ext, "css") == 1 {
             "text/css; charset=utf-8"
-        } E I __str_eq_ignore_case(ext, "js") == 1 {
+        } EL I __str_eq_ignore_case(ext, "js") == 1 {
             "application/javascript; charset=utf-8"
-        } E I __str_eq_ignore_case(ext, "json") == 1 {
+        } EL I __str_eq_ignore_case(ext, "json") == 1 {
             "application/json"
-        } E I __str_eq_ignore_case(ext, "txt") == 1 {
+        } EL I __str_eq_ignore_case(ext, "txt") == 1 {
             "text/plain; charset=utf-8"
-        } E I __str_eq_ignore_case(ext, "png") == 1 {
+        } EL I __str_eq_ignore_case(ext, "png") == 1 {
             "image/png"
-        } E I __str_eq_ignore_case(ext, "jpg") == 1 | __str_eq_ignore_case(ext, "jpeg") == 1 {
+        } EL I __str_eq_ignore_case(ext, "jpg") == 1 | __str_eq_ignore_case(ext, "jpeg") == 1 {
             "image/jpeg"
-        } E I __str_eq_ignore_case(ext, "gif") == 1 {
+        } EL I __str_eq_ignore_case(ext, "gif") == 1 {
             "image/gif"
-        } E I __str_eq_ignore_case(ext, "svg") == 1 {
+        } EL I __str_eq_ignore_case(ext, "svg") == 1 {
             "image/svg+xml"
-        } E I __str_eq_ignore_case(ext, "ico") == 1 {
+        } EL I __str_eq_ignore_case(ext, "ico") == 1 {
             "image/x-icon"
-        } E I __str_eq_ignore_case(ext, "wasm") == 1 {
+        } EL I __str_eq_ignore_case(ext, "wasm") == 1 {
             "application/wasm"
-        } E I __str_eq_ignore_case(ext, "xml") == 1 {
+        } EL I __str_eq_ignore_case(ext, "xml") == 1 {
             "application/xml"
-        } E I __str_eq_ignore_case(ext, "pdf") == 1 {
+        } EL I __str_eq_ignore_case(ext, "pdf") == 1 {
             "application/pdf"
-        } E I __str_eq_ignore_case(ext, "woff") == 1 {
+        } EL I __str_eq_ignore_case(ext, "woff") == 1 {
             "font/woff"
-        } E I __str_eq_ignore_case(ext, "woff2") == 1 {
+        } EL I __str_eq_ignore_case(ext, "woff2") == 1 {
             "font/woff2"
-        } E {
+        } EL {
             "application/octet-stream"
         }
     }
@@ -887,7 +887,7 @@ X StaticFiles {
     F is_safe_path(path: str) -> i64 {
         len := __strlen(path)
         i := 0
-        L i < len - 1 {
+        LW i < len - 1 {
             ch1 := __load_byte_at(path as i64, i)
             ch2 := __load_byte_at(path as i64, i + 1)
             I ch1 == 46 & ch2 == 46 {  # ".."
@@ -929,7 +929,7 @@ X StaticFiles {
         rel_len := __strlen(rel_path)
         I rel_len == 0 {
             full_path = __str_concat3(self.root_dir, "/", self.index_file)
-        } E {
+        } EL {
             last_ch := __load_byte_at(rel_path as i64, rel_len - 1)
             I last_ch == 47 {  # '/'
                 full_path = __str_concat3(full_path, "", self.index_file)
@@ -1085,11 +1085,11 @@ X App {
         self.running = 1
         I self.tls_enabled == 1 {
             __print_server_start_tls(self.host, self.port)
-        } E {
+        } EL {
             __print_server_start(self.host, self.port)
         }
 
-        L self.running == 1 {
+        LW self.running == 1 {
             client_fd := __tcp_accept(listener_fd)
             I client_fd < 0 {
                 C
@@ -1097,7 +1097,7 @@ X App {
 
             I self.tls_enabled == 1 {
                 self.handle_request_tls(client_fd)
-            } E {
+            } EL {
                 self.handle_request(client_fd)
             }
             __tcp_close(client_fd)
@@ -1119,7 +1119,7 @@ X App {
         buffer := __malloc(8192 + 1048576)  # header + body max
         total := 0
 
-        L 1 {
+        LW 1 {
             n := __tcp_recv(fd, buffer + total, 4096)
             I n <= 0 {
                 B
@@ -1180,7 +1180,7 @@ X App {
         buffer := __malloc(8192 + 1048576)
         total := 0
 
-        L 1 {
+        LW 1 {
             n := __tls_read(tls, buffer + total, 4096)
             I n <= 0 {
                 B
@@ -1232,7 +1232,7 @@ X App {
     F find_and_handle(&self, ctx: &RequestCtx) -> ResponseBuilder {
         # Try each route
         i := 0
-        L i < self.route_count {
+        LW i < self.route_count {
             rp_ptr := __load_ptr(self.routes + i * 8)
             I rp_ptr != 0 {
                 route_method := __load_i64(rp_ptr)

@@ -11,7 +11,7 @@ S ByteBuffer {
 X ByteBuffer {
     # Create with given capacity
     F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } E { capacity }
+        cap := I capacity < 16 { 16 } EL { capacity }
         data := malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
@@ -170,7 +170,7 @@ X ByteBuffer {
             v = v >> 7
             I v > 0 {
                 @.write_u8(byte | 128)  # set continuation bit
-            } E {
+            } EL {
                 @.write_u8(byte)
             }
             count = count + 1
@@ -296,7 +296,7 @@ X ByteBuffer {
     F to_vec(&self) -> Vec<u8> {
         result := mut Vec.with_capacity(self.len)
         i := mut 0
-        L i < self.len {
+        LW i < self.len {
             result.push(load_byte(self.data + i) as u8)
             i = i + 1
         }

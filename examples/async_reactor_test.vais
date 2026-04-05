@@ -34,23 +34,23 @@ F main() -> i64 {
     platform := async_platform()
     P "=== Async Reactor Cross-Platform Test ==="
 
-    L platform == PLATFORM_MACOS {
+    LW platform == PLATFORM_MACOS {
         P "Platform: macOS (kqueue)"
     }
-    L platform == PLATFORM_LINUX {
+    LW platform == PLATFORM_LINUX {
         P "Platform: Linux (epoll)"
     }
-    L platform == PLATFORM_WINDOWS {
+    LW platform == PLATFORM_WINDOWS {
         P "Platform: Windows (IOCP)"
     }
-    L platform == 0 {
+    LW platform == 0 {
         P "Platform: Unknown"
         R 1
     }
 
     # Test 2: Create event backend
     kq := kqueue()
-    L kq < 0 {
+    LW kq < 0 {
         P "FAIL: Could not create event backend"
         R 1
     }
@@ -63,7 +63,7 @@ F main() -> i64 {
     write_fd := load_i64(pipe_buf + 8)
     free(pipe_buf)
 
-    L read_fd < 0 {
+    LW read_fd < 0 {
         P "FAIL: Could not create pipe"
         R 1
     }
@@ -79,10 +79,10 @@ F main() -> i64 {
     events_buf := malloc(64 * 16)
     n := kevent_wait(kq, events_buf, 64, 100)
 
-    L n > 0 {
+    LW n > 0 {
         ev_fd := kevent_get_fd(events_buf, 0)
         ev_filter := kevent_get_filter(events_buf, 0)
-        L ev_fd == read_fd {
+        LW ev_fd == read_fd {
             P "PASS: Received read event on pipe"
         } ! {
             P "WARN: Event on unexpected fd"
@@ -93,7 +93,7 @@ F main() -> i64 {
 
     # Test 6: Read the byte back
     byte := read_byte(read_fd)
-    L byte == 42 {
+    LW byte == 42 {
         P "PASS: Correct byte read from pipe"
     } ! {
         P "FAIL: Wrong byte value"
@@ -101,7 +101,7 @@ F main() -> i64 {
 
     # Test 7: Time measurement
     t1 := time_now_ms()
-    L t1 > 0 {
+    LW t1 > 0 {
         P "PASS: time_now_ms works"
     } ! {
         P "FAIL: time_now_ms returned 0"

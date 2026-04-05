@@ -94,17 +94,17 @@ X Duration {
     F sub(&self, other: Duration) -> Duration {
         I self.secs < other.secs {
             Duration { secs: 0, nanos: 0 }
-        } E I self.secs == other.secs {
+        } EL I self.secs == other.secs {
             I self.nanos < other.nanos {
                 Duration { secs: 0, nanos: 0 }
-            } E {
+            } EL {
                 Duration { secs: 0, nanos: self.nanos - other.nanos }
             }
-        } E {
+        } EL {
             diff_secs := self.secs - other.secs
             I self.nanos < other.nanos {
                 Duration { secs: diff_secs - 1, nanos: self.nanos + 1000000000 - other.nanos }
-            } E {
+            } EL {
                 Duration { secs: diff_secs, nanos: self.nanos - other.nanos }
             }
         }
@@ -147,7 +147,7 @@ F time_millis() -> i64 {
         tv_usec := load_i64(tv + 8)
         free(tv)
         tv_sec * 1000 + tv_usec / 1000
-    } E {
+    } EL {
         # Failed - fallback to time()
         free(tv)
         time(0) * 1000
@@ -167,7 +167,7 @@ F time_micros() -> i64 {
         tv_usec := load_i64(tv + 8)
         free(tv)
         tv_sec * 1000000 + tv_usec
-    } E {
+    } EL {
         # Failed - fallback to time()
         free(tv)
         time(0) * 1000000
@@ -178,7 +178,7 @@ F time_micros() -> i64 {
 F sleep_millis(millis: i64) -> i64 {
     I millis <= 0 {
         0
-    } E {
+    } EL {
         micros := millis * 1000
         usleep(micros)
     }
@@ -188,7 +188,7 @@ F sleep_millis(millis: i64) -> i64 {
 F sleep_micros(micros: i64) -> i64 {
     I micros <= 0 {
         0
-    } E {
+    } EL {
         usleep(micros)
     }
 }
@@ -197,7 +197,7 @@ F sleep_micros(micros: i64) -> i64 {
 F sleep_secs(secs: i64) -> i64 {
     I secs <= 0 {
         0
-    } E {
+    } EL {
         usleep(secs * 1000000)
     }
 }
@@ -242,7 +242,7 @@ F now_duration() -> Duration {
         tv_usec := load_i64(tv + 8)
         free(tv)
         Duration { secs: tv_sec, nanos: tv_usec * 1000 }
-    } E {
+    } EL {
         free(tv)
         Duration { secs: time(0), nanos: 0 }
     }

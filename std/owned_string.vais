@@ -14,7 +14,7 @@ S OwnedString {
 X OwnedString {
     # Create an empty OwnedString with given capacity
     F with_capacity(capacity: i64) -> OwnedString {
-        cap := I capacity < 16 { 16 } E { capacity }
+        cap := I capacity < 16 { 16 } EL { capacity }
         data := malloc(cap)
         store_byte(data, 0)
         OwnedString { data: data, len: 0, cap: cap }
@@ -24,7 +24,7 @@ X OwnedString {
     F from_str(s: i64) -> OwnedString {
         I s == 0 {
             OwnedString.with_capacity(16)
-        } E {
+        } EL {
             len := strlen(s)
             cap := len + 16
             data := malloc(cap)
@@ -41,7 +41,7 @@ X OwnedString {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } EL { 0 }
     }
 
     # Get raw pointer (for passing to FFI or str-based APIs)
@@ -50,7 +50,7 @@ X OwnedString {
     # Get character at index (ASCII value)
     F char_at(&self, index: i64) -> i64 {
         I index < 0 || index >= self.len { 0 }
-        E { load_byte(self.data + index) }
+        EL { load_byte(self.data + index) }
     }
 
     # Push a single character
@@ -115,7 +115,7 @@ X OwnedString {
 
     # Compare with a null-terminated string
     F eq_str(&self, s: i64) -> i64 {
-        I s == 0 { R I self.len == 0 { 1 } E { 0 } }
+        I s == 0 { R I self.len == 0 { 1 } EL { 0 } }
         slen := strlen(s)
         I self.len != slen { R 0 }
         owned_str_memcmp(self.data, s, self.len)
@@ -157,9 +157,9 @@ F owned_str_memcmp(a: i64, b: i64, len: i64) -> i64 {
 
 F owned_str_memcmp_loop(a: i64, b: i64, idx: i64, len: i64) -> i64 {
     I idx >= len { 1 }
-    E {
+    EL {
         I load_byte(a + idx) != load_byte(b + idx) { 0 }
-        E { owned_str_memcmp_loop(a, b, idx + 1, len) }
+        EL { owned_str_memcmp_loop(a, b, idx + 1, len) }
     }
 }
 

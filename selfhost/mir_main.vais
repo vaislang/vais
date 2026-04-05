@@ -24,14 +24,14 @@ F mir_main_print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } E I val < 0 {
+    } EL I val < 0 {
         putchar(45)
         mir_main_print_i64(0 - val)
-    } E {
+    } EL {
         I val >= 10 {
             mir_main_print_i64(val / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -40,7 +40,7 @@ F mir_main_print_i64(val: i64) -> i64 {
 F mir_main_print_str(ptr: i64, len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= len { B } E { 0 }
+        I i >= len { B } EL { 0 }
         putchar(load_byte(ptr + i))
         i = i + 1
     }
@@ -50,7 +50,7 @@ F mir_main_print_str(ptr: i64, len: i64) -> i64 {
 F mir_main_strlen(s: i64) -> i64 {
     len := mut 0
     L {
-        I load_byte(s + len) == 0 { B } E { 0 }
+        I load_byte(s + len) == 0 { B } EL { 0 }
         len = len + 1
     }
     len
@@ -96,7 +96,7 @@ F adapt_items_for_mir(parser_items_ptr: i64, parser_items_len: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= parser_items_len { B } E { 0 }
+        I i >= parser_items_len { B } EL { 0 }
         # Each parser item is 32 bytes inline
         item_addr := parser_items_ptr + i * 32
         store_i64(ptr_array + i * 8, item_addr)
@@ -116,14 +116,14 @@ F adapt_items_for_mir(parser_items_ptr: i64, parser_items_len: i64) -> i64 {
 F has_flag(argc: i64, argv: i64, flag_ptr: i64, flag_len: i64) -> i64 {
     i := mut 1
     L {
-        I i >= argc { B } E { 0 }
+        I i >= argc { B } EL { 0 }
         arg_ptr := load_i64(argv + i * 8)
         arg_len := mir_main_strlen(arg_ptr)
         I arg_len == flag_len {
             match := mut 1
             j := mut 0
             L {
-                I j >= flag_len { B } E { 0 }
+                I j >= flag_len { B } EL { 0 }
                 I load_byte(arg_ptr + j) != load_byte(flag_ptr + j) {
                     match = 0
                     B
@@ -141,7 +141,7 @@ F has_flag(argc: i64, argv: i64, flag_ptr: i64, flag_len: i64) -> i64 {
 F get_input_path(argc: i64, argv: i64) -> i64 {
     i := mut 1
     L {
-        I i >= argc { B } E { 0 }
+        I i >= argc { B } EL { 0 }
         arg_ptr := load_i64(argv + i * 8)
         first_byte := load_byte(arg_ptr)
         # Skip arguments starting with '-'
@@ -251,13 +251,13 @@ F main(argc: i64, argv: i64) -> i64 {
     func_count := mut 0
     fi := mut 0
     L {
-        I fi >= p.items_len { B } E { 0 }
+        I fi >= p.items_len { B } EL { 0 }
         item_addr := p.items_ptr + fi * 32
         kind := load_i64(item_addr)
         I kind == ITEM_FUNCTION() {
             func_count = func_count + 1
             0
-        } E { 0 }
+        } EL { 0 }
         fi = fi + 1
     }
     puts("    Functions: ")
@@ -279,7 +279,7 @@ F main(argc: i64, argv: i64) -> i64 {
         puts("    ")
         mir_lower_print_stats(mir_mod)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # ======== Step 5: MIR Optimization ========
     I no_opt == 0 {
@@ -292,8 +292,8 @@ F main(argc: i64, argv: i64) -> i64 {
             puts("    After optimization: ")
             mir_lower_print_stats(mir_mod)
             0
-        } E { 0 }
-    } E {
+        } EL { 0 }
+    } EL {
         puts("[5] Skipping optimization (--no-opt)\n")
         0
     }
@@ -323,7 +323,7 @@ F main(argc: i64, argv: i64) -> i64 {
         fclose(fp)
         puts("    Written to: selfhost/mir_output.ll\n")
         0
-    } E {
+    } EL {
         puts("[ERROR] Could not write output file\n")
         R 1
     }

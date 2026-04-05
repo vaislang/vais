@@ -4,14 +4,14 @@
 # Run: vaisc run examples/fizzbuzz.vais
 
 F fizzbuzz(n: i64) -> i64 {
-    L i:1..n+1 {
+    LF i:1..n+1 {
         I i % 15 == 0 {
             puts("FizzBuzz")
-        } E I i % 3 == 0 {
+        } EL I i % 3 == 0 {
             puts("Fizz")
-        } E I i % 5 == 0 {
+        } EL I i % 5 == 0 {
             puts("Buzz")
-        } E {
+        } EL {
             puts("{i}")
         }
     }

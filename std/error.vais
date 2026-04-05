@@ -36,7 +36,7 @@ X ErrorChain {
     F root_cause(&self) -> i64 {
         I self.next == 0 {
             self.code
-        } E {
+        } EL {
             # Follow the chain to the root
             self.code
         }
@@ -44,19 +44,19 @@ X ErrorChain {
 
     # Get chain depth (1 = no wrapping)
     F depth(&self) -> i64 {
-        I self.next == 0 { 1 } E { 2 }
+        I self.next == 0 { 1 } EL { 2 }
     }
 
     # Check if this error has a source/cause
     F has_source(&self) -> i64 {
-        I self.next != 0 { 1 } E { 0 }
+        I self.next != 0 { 1 } EL { 0 }
     }
 }
 
 # ===== Typed Error Enum =====
 # Common application errors with specific variants (thiserror-style)
 
-E AppError {
+EN AppError {
     NotFound(i64),
     InvalidInput(i64),
     IoError(i64),
@@ -143,13 +143,13 @@ F internal_error(detail: i64) -> AppError {
 # Convert an errno-style code to an AppError
 F from_errno(errno: i64) -> AppError {
     I errno == 2 { NotFound(errno) }
-    E { I errno == 13 { AuthError(errno) }
-    E { I errno == 22 { InvalidInput(errno) }
-    E { IoError(errno) } } }
+    EL { I errno == 13 { AuthError(errno) }
+    EL { I errno == 22 { InvalidInput(errno) }
+    EL { IoError(errno) } } }
 }
 
 # Ensure a condition holds, or return an error
 # Returns 0 (ok) or error code
 F ensure(condition: i64, error_code: i64) -> i64 {
-    I condition != 0 { 0 } E { error_code }
+    I condition != 0 { 0 } EL { error_code }
 }

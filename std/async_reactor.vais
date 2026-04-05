@@ -175,10 +175,10 @@ X Reactor {
         kevent_register(self.backend_fd, timer_id, REACTOR_TIMER, REACTOR_ADD)
 
         # Platform-specific timer configuration
-        L self.platform == PLATFORM_LINUX {
+        LW self.platform == PLATFORM_LINUX {
             epoll_set_timer_ms(self.backend_fd, timer_id, delay_ms)
         }
-        L self.platform == PLATFORM_WINDOWS {
+        LW self.platform == PLATFORM_WINDOWS {
             iocp_set_timer_ms(self.backend_fd, timer_id, delay_ms)
         }
         # macOS kqueue handles timer delay natively via NOTE flags
@@ -201,7 +201,7 @@ X Reactor {
         store_i64(src_ptr + 24, deadline_ms)
         store_i64(src_ptr + 32, 0)
 
-        L self.sources_tail == 0 {
+        LW self.sources_tail == 0 {
             self.sources_head = src_ptr
             self.sources_tail = src_ptr
         } ! {
@@ -218,18 +218,18 @@ X Reactor {
         prev := 0
         current := self.sources_head
 
-        L current != 0 {
+        LW current != 0 {
             src_fd := load_i64(current + 8)
             next := load_i64(current + 32)
 
-            L src_fd == fd {
-                L prev == 0 {
+            LW src_fd == fd {
+                LW prev == 0 {
                     self.sources_head = next
                 } ! {
                     store_i64(prev + 32, next)
                 }
 
-                L next == 0 {
+                LW next == 0 {
                     self.sources_tail = prev
                 }
 
@@ -247,9 +247,9 @@ X Reactor {
     # Find the task waiting on a given fd
     F find_task_for_fd(&self, fd: i64) -> i64 {
         current := self.sources_head
-        L current != 0 {
+        LW current != 0 {
             src_fd := load_i64(current + 8)
-            L src_fd == fd {
+            LW src_fd == fd {
                 R load_i64(current + 16)
             }
             current = load_i64(current + 32)
@@ -293,14 +293,14 @@ X Reactor {
     F process_events(&self, n_events: i64) -> i64 {
         woken := 0
         i := 0
-        L i < n_events {
+        LW i < n_events {
             ev_fd := self.event_fd(i)
 
-            L ev_fd == self.waker_read_fd {
+            LW ev_fd == self.waker_read_fd {
                 self.drain_waker()
             } ! {
                 task_ptr := self.find_task_for_fd(ev_fd)
-                L task_ptr != 0 {
+                LW task_ptr != 0 {
                     # Mark task as ready (status offset = 24 in TaskNode)
                     store_i64(task_ptr + 24, 2)  # TASK_READY = 2
                     woken = woken + 1
@@ -316,7 +316,7 @@ X Reactor {
     F cleanup(&self) -> i64 {
         # Free all event sources
         current := self.sources_head
-        L current != 0 {
+        LW current != 0 {
             next := load_i64(current + 32)
             free(current)
             current = next
@@ -342,7 +342,7 @@ V __GLOBAL_REACTOR_INSTANCE: i64 = 0
 
 # Initialize global reactor
 F reactor_instance_init() -> i64 {
-    L __GLOBAL_REACTOR_INSTANCE == 0 {
+    LW __GLOBAL_REACTOR_INSTANCE == 0 {
         # Allocate Reactor on heap (9 fields * 8 bytes = 72 bytes)
         r_ptr := malloc(72)
 
@@ -375,7 +375,7 @@ F reactor_instance_init() -> i64 {
 
 # Get global reactor instance
 F get_reactor_instance() -> i64 {
-    L __GLOBAL_REACTOR_INSTANCE == 0 {
+    LW __GLOBAL_REACTOR_INSTANCE == 0 {
         reactor_instance_init()
     }
     __GLOBAL_REACTOR_INSTANCE

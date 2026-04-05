@@ -35,18 +35,18 @@ F advance() -> i64 {
 }
 
 F skip_ws() -> i64 {
-    L pos < input_len {
+    LW pos < input_len {
         ch := peek_char()
         I ch == 32 | ch == 9 | ch == 10 | ch == 13 {
             advance()
-        } E { B }
+        } EL { B }
     }
     0
 }
 
 F scan_string() -> i64 {
     advance()  # skip opening "
-    L pos < input_len {
+    LW pos < input_len {
         ch := peek_char()
         I ch == 34 { advance(); R TOK_STRING }
         I ch == 92 { advance() }  # skip escape
@@ -60,14 +60,14 @@ F scan_number() -> i64 {
     I peek_char() == 45 { neg = 1; advance() }
 
     result := mut 0
-    L pos < input_len {
+    LW pos < input_len {
         ch := peek_char()
         I ch >= 48 & ch <= 57 {
             result = result * 10 + (ch - 48)
             advance()
-        } E { B }
+        } EL { B }
     }
-    num_value = I neg == 1 { 0 - result } E { result }
+    num_value = I neg == 1 { 0 - result } EL { result }
     TOK_NUMBER
 }
 
@@ -94,7 +94,7 @@ F next_token() -> i64 {
         _   => {
             I ch >= 48 & ch <= 57 | ch == 45 {
                 scan_number()
-            } E {
+            } EL {
                 scan_keyword()
             }
         }
@@ -131,7 +131,7 @@ F parse_object() -> i64 {
     I tok != TOK_COLON { R -1 }
     I parse_value() < 0 { R -1 }
 
-    L true {
+    LW true {
         tok = next_token()
         I tok == TOK_RBRACE { B }
         I tok != TOK_COMMA { R -1 }
@@ -153,7 +153,7 @@ F parse_array() -> i64 {
     I parse_value() < 0 { R -1 }
     count = 1
 
-    L true {
+    LW true {
         tok := next_token()
         I tok == TOK_RBRACKET { B }
         I tok != TOK_COMMA { R -1 }
@@ -177,7 +177,7 @@ F main() -> i64 {
         fields := parse_object()
         I fields >= 0 {
             puts("Test 1 OK: object with fields")
-        } E {
+        } EL {
             puts("Test 1 FAIL")
             R 1
         }
@@ -194,7 +194,7 @@ F main() -> i64 {
         elems := parse_array()
         I elems == 3 {
             puts("Test 2 OK: array with 3 elements")
-        } E {
+        } EL {
             puts("Test 2 FAIL")
             R 1
         }
@@ -211,7 +211,7 @@ F main() -> i64 {
         fields := parse_object()
         I fields >= 0 {
             puts("Test 3 OK: nested object")
-        } E {
+        } EL {
             puts("Test 3 FAIL")
             R 1
         }

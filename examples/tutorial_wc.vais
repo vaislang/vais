@@ -35,7 +35,7 @@ F is_whitespace(b: i64) -> i64 {
 
 F count_lines(text: str, len: i64) -> i64 {
     count := mut 0
-    L i:0..len {
+    LF i:0..len {
         byte := load_byte(text, i)
         I byte == 10 {
             count = count + 1
@@ -54,14 +54,14 @@ F count_words(text: str, len: i64) -> i64 {
     count := mut 0
     in_word := mut 0
 
-    L i:0..len {
+    LF i:0..len {
         byte := load_byte(text, i)
         I is_whitespace(byte) == 1 {
             I in_word == 1 {
                 count = count + 1
                 in_word = 0
             }
-        } E {
+        } EL {
             in_word = 1
         }
     }

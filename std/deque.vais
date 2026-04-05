@@ -10,10 +10,10 @@ U std/option
 F deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx: i64, dst_idx: i64, remaining: i64) -> i64 {
     I remaining <= 0 {
         0
-    } E {
+    } EL {
         # Calculate actual source index in circular buffer
         actual_src_temp := head + src_idx
-        actual_src := I actual_src_temp >= cap { actual_src_temp - cap } E { actual_src_temp }
+        actual_src := I actual_src_temp >= cap { actual_src_temp - cap } EL { actual_src_temp }
 
         # Copy the element
         src_ptr := src_data + actual_src * 8
@@ -53,7 +53,7 @@ X Deque {
 
     # Check if empty
     F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+        I self.len == 0 { 1 } EL { 0 }
     }
 
     # Push element to front
@@ -61,7 +61,7 @@ X Deque {
         I self.len >= self.cap {
             # Grow capacity (inline)
             doubled := self.cap * 2
-            new_cap := I doubled < 8 { 8 } E { doubled }
+            new_cap := I doubled < 8 { 8 } EL { doubled }
             new_data := malloc(new_cap * 8)
 
             # Copy elements to new buffer in contiguous order
@@ -77,7 +77,7 @@ X Deque {
         # Move head back (wrapping around if needed)
         I self.head == 0 {
             self.head = self.cap - 1
-        } E {
+        } EL {
             self.head = self.head - 1
         }
 
@@ -92,7 +92,7 @@ X Deque {
         I self.len >= self.cap {
             # Grow capacity (inline)
             doubled := self.cap * 2
-            new_cap := I doubled < 8 { 8 } E { doubled }
+            new_cap := I doubled < 8 { 8 } EL { doubled }
             new_data := malloc(new_cap * 8)
 
             # Copy elements to new buffer in contiguous order
@@ -123,7 +123,7 @@ X Deque {
     F pop_front(&self) -> i64 {
         I self.len == 0 {
             0
-        } E {
+        } EL {
             ptr := self.data + self.head * 8
             value := load_i64(ptr)
 
@@ -143,7 +143,7 @@ X Deque {
     F pop_front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } E {
+        } EL {
             ptr := self.data + self.head * 8
             value := load_i64(ptr)
 
@@ -163,11 +163,11 @@ X Deque {
     F pop_back(&self) -> i64 {
         I self.len == 0 {
             0
-        } E {
+        } EL {
             # Move tail back (wrapping around if needed)
             I self.tail == 0 {
                 self.tail = self.cap - 1
-            } E {
+            } EL {
                 self.tail = self.tail - 1
             }
 
@@ -183,11 +183,11 @@ X Deque {
     F pop_back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } E {
+        } EL {
             # Move tail back (wrapping around if needed)
             I self.tail == 0 {
                 self.tail = self.cap - 1
-            } E {
+            } EL {
                 self.tail = self.tail - 1
             }
 
@@ -203,7 +203,7 @@ X Deque {
     F front(&self) -> i64 {
         I self.len == 0 {
             0
-        } E {
+        } EL {
             ptr := self.data + self.head * 8
             load_i64(ptr)
         }
@@ -214,7 +214,7 @@ X Deque {
     F front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } E {
+        } EL {
             ptr := self.data + self.head * 8
             Some(load_i64(ptr))
         }
@@ -225,10 +225,10 @@ X Deque {
     F back(&self) -> i64 {
         I self.len == 0 {
             0
-        } E {
+        } EL {
             # Calculate index of last element
             back_idx_temp := self.tail - 1
-            back_idx := I back_idx_temp < 0 { self.cap - 1 } E { back_idx_temp }
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } EL { back_idx_temp }
 
             ptr := self.data + back_idx * 8
             load_i64(ptr)
@@ -240,10 +240,10 @@ X Deque {
     F back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } E {
+        } EL {
             # Calculate index of last element
             back_idx_temp := self.tail - 1
-            back_idx := I back_idx_temp < 0 { self.cap - 1 } E { back_idx_temp }
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } EL { back_idx_temp }
 
             ptr := self.data + back_idx * 8
             Some(load_i64(ptr))
@@ -255,12 +255,12 @@ X Deque {
     F get(&self, index: i64) -> i64 {
         I index < 0 {
             0
-        } E I index >= self.len {
+        } EL I index >= self.len {
             0
-        } E {
+        } EL {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             load_i64(ptr)
@@ -272,12 +272,12 @@ X Deque {
     F get_opt(&self, index: i64) -> Option<i64> {
         I index < 0 {
             None
-        } E I index >= self.len {
+        } EL I index >= self.len {
             None
-        } E {
+        } EL {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             Some(load_i64(ptr))
@@ -289,12 +289,12 @@ X Deque {
     F set(&self, index: i64, value: i64) -> i64 {
         I index < 0 {
             0
-        } E I index >= self.len {
+        } EL I index >= self.len {
             0
-        } E {
+        } EL {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             store_i64(ptr, value)

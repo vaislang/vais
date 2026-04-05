@@ -181,7 +181,7 @@ F btree_find_pos(node: i64, key: i64, idx: i64, nk: i64) -> i64 {
     I idx >= nk { R idx }
     k := btree_get_key(node, idx)
     I key <= k { idx }
-    E { btree_find_pos(node, key, idx + 1, nk) }
+    EL { btree_find_pos(node, key, idx + 1, nk) }
 }
 
 # Insert into non-full node
@@ -212,7 +212,7 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
         store_i64(node + NODE_SLOTS + pos * 8, slot_idx)
         store_i64(node + NODE_NUM_KEYS, nk + 1)
         0
-    } E {
+    } EL {
         # Internal node — find child and recurse
         pos := btree_find_pos(node, key, 0, nk)
         child := mut btree_get_child(node, pos)
@@ -226,7 +226,7 @@ F btree_insert_nonfull(node: i64, key: i64, page_id: i64, slot_idx: i64) -> i64 
             _ := I key > mid_key {
                 child = btree_get_child(node, pos + 1)
                 0
-            } E { 0 }
+            } EL { 0 }
         }
 
         btree_insert_nonfull(child, key, page_id, slot_idx)
@@ -340,7 +340,7 @@ F btree_range_scan_node(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i
     I is_leaf == 1 {
         # Scan leaf entries
         btree_scan_leaf(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, 0, nk)
-    } E {
+    } EL {
         # Scan internal node: recurse into children
         btree_scan_internal(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, 0, nk)
     }
@@ -367,7 +367,7 @@ F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64
         # Last child
         child := btree_get_child(node, idx)
         btree_range_scan_node(child, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr)
-    } E {
+    } EL {
         key := btree_get_key(node, idx)
 
         # Visit left child if lo <= key
@@ -392,7 +392,7 @@ F btree_scan_internal(node: i64, lo: i64, hi: i64, out_keys: i64, out_pages: i64
         # Continue scanning if hi > key
         I hi > key {
             btree_scan_internal(node, lo, hi, out_keys, out_pages, out_slots, max_results, count_ptr, idx + 1, nk)
-        } E { 0 }
+        } EL { 0 }
     }
 }
 

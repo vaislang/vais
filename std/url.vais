@@ -105,7 +105,7 @@ X Url {
 
         I self.path.len > 0 {
             append_string(result, self.path)
-        } E {
+        } EL {
             result.push_char(47)  # '/'
         }
 
@@ -126,17 +126,17 @@ X Url {
     F default_port(&self) -> i64 {
         I str_eq_cstr(self.scheme, "http") {
             80
-        } E I str_eq_cstr(self.scheme, "https") {
+        } EL I str_eq_cstr(self.scheme, "https") {
             443
-        } E I str_eq_cstr(self.scheme, "ftp") {
+        } EL I str_eq_cstr(self.scheme, "ftp") {
             21
-        } E I str_eq_cstr(self.scheme, "ssh") {
+        } EL I str_eq_cstr(self.scheme, "ssh") {
             22
-        } E I str_eq_cstr(self.scheme, "telnet") {
+        } EL I str_eq_cstr(self.scheme, "telnet") {
             23
-        } E I str_eq_cstr(self.scheme, "smtp") {
+        } EL I str_eq_cstr(self.scheme, "smtp") {
             25
-        } E {
+        } EL {
             0
         }
     }
@@ -145,7 +145,7 @@ X Url {
     F effective_port(&self) -> i64 {
         I self.port > 0 {
             self.port
-        } E {
+        } EL {
             @.default_port()
         }
     }
@@ -154,11 +154,11 @@ X Url {
     F is_secure(&self) -> i64 {
         I str_eq_cstr(self.scheme, "https") {
             1
-        } E I str_eq_cstr(self.scheme, "ftps") {
+        } EL I str_eq_cstr(self.scheme, "ftps") {
             1
-        } E I str_eq_cstr(self.scheme, "wss") {
+        } EL I str_eq_cstr(self.scheme, "wss") {
             1
-        } E {
+        } EL {
             0
         }
     }
@@ -169,7 +169,7 @@ X Url {
 F url_parse(s: String) -> Option {
     I s.len == 0 {
         None
-    } E {
+    } EL {
         url := Url.new()
         pos := 0
 
@@ -178,7 +178,7 @@ F url_parse(s: String) -> Option {
         I scheme_end > 0 {
             url.scheme = str_substring(s, 0, scheme_end)
             pos = scheme_end + 3
-        } E {
+        } EL {
             # No scheme found
             url.drop()
             B None
@@ -186,7 +186,7 @@ F url_parse(s: String) -> Option {
 
         # Find end of authority (before /, ?, or #)
         authority_end := pos
-        L authority_end < s.len {
+        LW authority_end < s.len {
             c := s.char_at(authority_end)
             I c == 47 || c == 63 || c == 35 {  # '/', '?', '#'
                 B 0
@@ -245,7 +245,7 @@ F url_parse(s: String) -> Option {
 F parse_authority(url: Url, authority: String) -> i64 {
     I authority.len == 0 {
         0
-    } E {
+    } EL {
         # Check for user info (before @)
         at_pos := find_char(authority, 64, 0)  # '@'
         host_start := 0
@@ -258,7 +258,7 @@ F parse_authority(url: Url, authority: String) -> i64 {
             I colon_pos > 0 {
                 url.username = str_substring(userinfo, 0, colon_pos)
                 url.password = str_substring(userinfo, colon_pos + 1, userinfo.len)
-            } E {
+            } EL {
                 url.username = userinfo
             }
 
@@ -274,13 +274,13 @@ F parse_authority(url: Url, authority: String) -> i64 {
             port_str := str_substring(host_part, colon_pos + 1, host_part.len)
             url.port = string_to_i64(port_str)
             port_str.drop()
-        } E {
+        } EL {
             url.host = host_part
         }
 
         I url.host.len == 0 {
             0
-        } E {
+        } EL {
             1
         }
     }
@@ -290,7 +290,7 @@ F parse_authority(url: Url, authority: String) -> i64 {
 F url_parse_cstr(cstr: i64) -> Option {
     I cstr == 0 {
         None
-    } E {
+    } EL {
         s := str_from(cstr)
         result := url_parse(s)
         s.drop()
@@ -313,12 +313,12 @@ F find_substr(s: String, substr: i64, start: i64) -> i64 {
     substr_len := strlen(substr)
     I substr_len == 0 || start >= s.len {
         0 - 1
-    } E {
+    } EL {
         i := start
-        L i <= s.len - substr_len {
+        LW i <= s.len - substr_len {
             match := 1
             j := 0
-            L j < substr_len {
+            LW j < substr_len {
                 I s.char_at(i + j) != load_byte(substr + j) {
                     match = 0
                     B 0
@@ -338,9 +338,9 @@ F find_substr(s: String, substr: i64, start: i64) -> i64 {
 F find_char(s: String, c: i64, start: i64) -> i64 {
     I start >= s.len {
         0 - 1
-    } E {
+    } EL {
         i := start
-        L i < s.len {
+        LW i < s.len {
             I s.char_at(i) == c {
                 B i
             }
@@ -353,7 +353,7 @@ F find_char(s: String, c: i64, start: i64) -> i64 {
 # Helper: Append string to another string
 F append_string(dest: String, src: String) -> i64 {
     i := 0
-    L i < src.len {
+    LW i < src.len {
         dest.push_char(src.char_at(i))
         i = i + 1
     }
@@ -365,7 +365,7 @@ F append_i64(s: String, n: i64) -> i64 {
     I n == 0 {
         s.push_char(48)  # '0'
         0
-    } E {
+    } EL {
         # Handle negative numbers
         I n < 0 {
             s.push_char(45)  # '-'
@@ -375,7 +375,7 @@ F append_i64(s: String, n: i64) -> i64 {
         # Count digits
         temp := n
         digits := 0
-        L temp > 0 {
+        LW temp > 0 {
             digits = digits + 1
             temp = temp / 10
         }
@@ -384,7 +384,7 @@ F append_i64(s: String, n: i64) -> i64 {
         buffer := malloc(digits)
         temp = n
         i := 0
-        L i < digits {
+        LW i < digits {
             buffer + (digits - 1 - i) * 1
             store_byte(buffer + (digits - 1 - i), 48 + (temp % 10))
             temp = temp / 10
@@ -393,7 +393,7 @@ F append_i64(s: String, n: i64) -> i64 {
 
         # Append to string
         i = 0
-        L i < digits {
+        LW i < digits {
             s.push_char(load_byte(buffer + i))
             i = i + 1
         }
@@ -407,7 +407,7 @@ F append_i64(s: String, n: i64) -> i64 {
 F string_to_i64(s: String) -> i64 {
     I s.len == 0 {
         0
-    } E {
+    } EL {
         # Use atol via C string
         cstr := malloc(s.len + 1)
         memcpy(cstr, s.data, s.len)
@@ -423,9 +423,9 @@ F str_eq_cstr(s: String, cstr: i64) -> i64 {
     len := strlen(cstr)
     I s.len != len {
         0
-    } E {
+    } EL {
         i := 0
-        L i < len {
+        LW i < len {
             I s.char_at(i) != load_byte(cstr + i) {
                 B 0
             }
@@ -440,7 +440,7 @@ F url_encode(s: String) -> String {
     result := String.with_capacity(s.len * 3)
 
     i := 0
-    L i < s.len {
+    LW i < s.len {
         c := s.char_at(i)
 
         # Unreserved characters (don't encode)
@@ -448,7 +448,7 @@ F url_encode(s: String) -> String {
            c == 45 || c == 46 || c == 95 || c == 126 {
             # A-Z, a-z, 0-9, -, ., _, ~
             result.push_char(c)
-        } E {
+        } EL {
             # Encode as %XX
             result.push_char(37)  # '%'
             result.push_char(nibble_to_hex_char((c >> 4) & 15))
@@ -466,7 +466,7 @@ F url_decode(s: String) -> String {
     result := String.with_capacity(s.len)
 
     i := 0
-    L i < s.len {
+    LW i < s.len {
         c := s.char_at(i)
 
         I c == 37 && i + 2 < s.len {
@@ -493,7 +493,7 @@ F url_decode(s: String) -> String {
 F nibble_to_hex_char(n: i64) -> i64 {
     I n < 10 {
         48 + n  # '0' + n
-    } E {
+    } EL {
         65 + (n - 10)  # 'A' + (n - 10)
     }
 }
@@ -502,11 +502,11 @@ F nibble_to_hex_char(n: i64) -> i64 {
 F hex_char_to_nibble(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         c - 48  # '0'-'9'
-    } E I c >= 65 && c <= 70 {
+    } EL I c >= 65 && c <= 70 {
         c - 65 + 10  # 'A'-'F'
-    } E I c >= 97 && c <= 102 {
+    } EL I c >= 97 && c <= 102 {
         c - 97 + 10  # 'a'-'f'
-    } E {
+    } EL {
         0 - 1
     }
 }

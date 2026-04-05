@@ -46,7 +46,7 @@ F random_c() -> i64 {
 F random_range(min: i64, max: i64) -> i64 {
     I min >= max {
         min
-    } E {
+    } EL {
         range := max - min + 1
         min + (random_i64() % range)
     }
@@ -56,7 +56,7 @@ F random_range(min: i64, max: i64) -> i64 {
 F random_below(n: i64) -> i64 {
     I n <= 0 {
         0
-    } E {
+    } EL {
         random_i64() % n
     }
 }
@@ -74,7 +74,7 @@ F random_f64() -> f64 {
 F random_f64_range(min: f64, max: f64) -> f64 {
     I min >= max {
         min
-    } E {
+    } EL {
         range := max - min
         min + random_f64() * range
     }
@@ -91,9 +91,9 @@ F random_bool() -> i64 {
 F random_shuffle(arr: i64, len: i64) -> i64 {
     I arr == 0 || len <= 1 {
         0
-    } E {
+    } EL {
         i := len - 1
-        L i > 0 {
+        LW i > 0 {
             # Pick random index from 0 to i
             j := random_below(i + 1)
 
@@ -116,9 +116,9 @@ F random_shuffle(arr: i64, len: i64) -> i64 {
 F random_bytes(buffer: i64, count: i64) -> i64 {
     I buffer == 0 || count <= 0 {
         0
-    } E {
+    } EL {
         i := 0
-        L i < count {
+        LW i < count {
             # Generate random byte (0-255)
             byte := random_i64() % 256
             store_byte(buffer + i, byte)
@@ -137,10 +137,10 @@ F random_alnum() -> i64 {
     I r < 10 {
         # 0-9: ASCII 48-57
         48 + r
-    } E I r < 36 {
+    } EL I r < 36 {
         # A-Z: ASCII 65-90
         65 + (r - 10)
-    } E {
+    } EL {
         # a-z: ASCII 97-122
         97 + (r - 36)
     }
@@ -153,7 +153,7 @@ F random_hex() -> i64 {
     I r < 10 {
         # 0-9: ASCII 48-57
         48 + r
-    } E {
+    } EL {
         # a-f: ASCII 97-102
         97 + (r - 10)
     }
@@ -167,11 +167,11 @@ F i64_to_f64(x: i64) -> f64 {
     result := 0.0
     I x == 0 {
         0.0
-    } E {
+    } EL {
         # Build up the float value
         remaining := x
         multiplier := 1.0
-        L remaining > 0 {
+        LW remaining > 0 {
             digit := remaining % 10
             result = result + (digit * multiplier)
             multiplier = multiplier * 10.0
@@ -219,7 +219,7 @@ F random_xorshift() -> i64 {
     # Return positive value
     I x < 0 {
         0 - x
-    } E {
+    } EL {
         x
     }
 }
@@ -228,7 +228,7 @@ F random_xorshift() -> i64 {
 F random_xorshift_seed(seed: i64) -> i64 {
     I seed == 0 {
         xorshift_state = 88172645463325252
-    } E {
+    } EL {
         xorshift_state = seed
     }
     0

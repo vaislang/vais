@@ -9,7 +9,7 @@ S Point {
 }
 
 # Enum → tagged union
-E Shape {
+EN Shape {
     Circle(f64),
     Rect(f64, f64)
 }
@@ -30,8 +30,8 @@ F area(s: Shape) -> f64 {
 F classify(s: Shape) -> i64 {
     a := area(s)
     I a > 100.0 { 2 }
-    E I a > 10.0 { 1 }
-    E { 0 }
+    EL I a > 10.0 { 1 }
+    EL { 0 }
 }
 
 F main() -> i64 {

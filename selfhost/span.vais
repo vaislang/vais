@@ -25,8 +25,8 @@ X Span {
 
     # Merge two spans into one covering both
     F merge(&self, other_start: i64, other_end: i64) -> Span {
-        s := I self.start < other_start { self.start } E { other_start }
-        e := I self.end > other_end { self.end } E { other_end }
+        s := I self.start < other_start { self.start } EL { other_start }
+        e := I self.end > other_end { self.end } EL { other_end }
         Span { start: s, end: e }
     }
 
@@ -34,16 +34,16 @@ X Span {
     F len(&self) -> i64 = self.end - self.start
 
     # Check if span is empty (returns 1 for true, 0 for false)
-    F is_empty(&self) -> i64 = I self.start >= self.end { 1 } E { 0 }
+    F is_empty(&self) -> i64 = I self.start >= self.end { 1 } EL { 0 }
 
     # Check if this span contains a position
     F contains(&self, pos: i64) -> i64 {
-        I pos >= self.start && pos < self.end { 1 } E { 0 }
+        I pos >= self.start && pos < self.end { 1 } EL { 0 }
     }
 
     # Check if this span overlaps with another
     F overlaps(&self, other_start: i64, other_end: i64) -> i64 {
-        I self.start < other_end && other_start < self.end { 1 } E { 0 }
+        I self.start < other_end && other_start < self.end { 1 } EL { 0 }
     }
 }
 

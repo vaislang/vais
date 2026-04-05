@@ -166,7 +166,7 @@ X Sha256 {
     # Update hash with data
     F update(&self, data: i64, data_len: i64) -> i64 {
         i := 0
-        L i < data_len {
+        LW i < data_len {
             # Copy single byte to buffer
             store_byte(self.buffer + self.buf_len, load_byte(data + i))
             self.buf_len = self.buf_len + 1
@@ -190,7 +190,7 @@ X Sha256 {
 
         # Prepare message schedule W[0..15] from buffer (big-endian 32-bit words)
         i := 0
-        L i < 16 {
+        LW i < 16 {
             # Read 4 bytes from buffer as big-endian 32-bit word
             b0 := load_byte(self.buffer + i * 4) & 255
             b1 := load_byte(self.buffer + i * 4 + 1) & 255
@@ -202,7 +202,7 @@ X Sha256 {
 
         # Extend message schedule W[16..63]
         i = 16
-        L i < 64 {
+        LW i < 64 {
             s0 := sha256_gamma0(load_i64(w + (i - 15) * 8))
             s1 := sha256_gamma1(load_i64(w + (i - 2) * 8))
             val := (load_i64(w + (i - 16) * 8) + s0 + load_i64(w + (i - 7) * 8) + s1) & 4294967295
@@ -222,7 +222,7 @@ X Sha256 {
 
         # 64 rounds of SHA-256 compression
         i = 0
-        L i < 64 {
+        LW i < 64 {
             t1 := (h + sha256_sigma1(e) + sha256_ch(e, f, g) + sha256_k(i) + load_i64(w + i * 8)) & 4294967295
             t2 := (sha256_sigma0(a) + sha256_maj(a, b, c)) & 4294967295
             h = g
@@ -258,8 +258,8 @@ X Sha256 {
         self.buf_len = self.buf_len + 1
 
         # Pad with zeros until we have room for length
-        L self.buf_len > 56 {
-            L self.buf_len < 64 {
+        LW self.buf_len > 56 {
+            LW self.buf_len < 64 {
                 store_byte(self.buffer + self.buf_len, 0)
                 self.buf_len = self.buf_len + 1
             }
@@ -267,7 +267,7 @@ X Sha256 {
             self.buf_len = 0
         }
 
-        L self.buf_len < 56 {
+        LW self.buf_len < 56 {
             store_byte(self.buffer + self.buf_len, 0)
             self.buf_len = self.buf_len + 1
         }
@@ -331,10 +331,10 @@ X Hmac {
         # Allocate padded key
         padded_key := malloc(SHA256_BLOCK_SIZE)
         i := 0
-        L i < SHA256_BLOCK_SIZE {
+        LW i < SHA256_BLOCK_SIZE {
             I i < self.key_len {
                 store_byte(padded_key + i, load_byte(self.key + i))
-            } E {
+            } EL {
                 store_byte(padded_key + i, 0)
             }
             i = i + 1
@@ -343,7 +343,7 @@ X Hmac {
         # Inner hash: H((K' ^ ipad) || m)
         inner_key := malloc(SHA256_BLOCK_SIZE)
         i = 0
-        L i < SHA256_BLOCK_SIZE {
+        LW i < SHA256_BLOCK_SIZE {
             k := load_byte(padded_key + i) & 255
             store_byte(inner_key + i, k ^ 54)  # ipad = 0x36
             i = i + 1
@@ -357,7 +357,7 @@ X Hmac {
         # Outer hash: H((K' ^ opad) || inner_hash)
         outer_key := malloc(SHA256_BLOCK_SIZE)
         i = 0
-        L i < SHA256_BLOCK_SIZE {
+        LW i < SHA256_BLOCK_SIZE {
             k := load_byte(padded_key + i) & 255
             store_byte(outer_key + i, k ^ 92)  # opad = 0x5c
             i = i + 1
@@ -1039,7 +1039,7 @@ F gf_mul(a: i64, b: i64) -> i64 {
     result := 0
 
     i := mut 0
-    L i < 8 {
+    LW i < 8 {
         I (b & 1) == 1 {
             result = (result ^ a) & 255
         }
@@ -1071,7 +1071,7 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
 
     # Generate remaining words (32 to 239)
     i := mut 32
-    L i < 240 {
+    LW i < 240 {
         word_idx := (i / 4) & 4294967295
 
         # Get previous 4 bytes (word)
@@ -1098,7 +1098,7 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
             # Rcon: XOR first byte with round constant
             rcon_idx := ((word_idx / 8) - 1) & 4294967295
             b0 = (b0 ^ aes_rcon(rcon_idx)) & 255
-        } E I (word_idx & 7) == 4 {
+        } EL I (word_idx & 7) == 4 {
             # Every 4th word after 8th: SubWord only
             b0 = load_byte(sbox + b0)
             b1 = load_byte(sbox + b1)
@@ -1130,7 +1130,7 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
 
 F aes_sub_bytes(state: i64, sbox: i64) -> i64 {
     i := mut 0
-    L i < 16 {
+    LW i < 16 {
         byte_val := load_byte(state + i)
         sub_val := load_byte(sbox + byte_val)
         store_byte(state + i, sub_val)
@@ -1141,7 +1141,7 @@ F aes_sub_bytes(state: i64, sbox: i64) -> i64 {
 
 F aes_inv_sub_bytes(state: i64, inv_sbox: i64) -> i64 {
     i := mut 0
-    L i < 16 {
+    LW i < 16 {
         byte_val := load_byte(state + i)
         sub_val := load_byte(inv_sbox + byte_val)
         store_byte(state + i, sub_val)
@@ -1221,7 +1221,7 @@ F aes_mix_columns(state: i64) -> i64 {
     # Matrix: [2,3,1,1; 1,2,3,1; 1,1,2,3; 3,1,1,2]
 
     col := mut 0
-    L col < 4 {
+    LW col < 4 {
         offset := col * 4
         s0 := load_byte(state + offset)
         s1 := load_byte(state + offset + 1)
@@ -1249,7 +1249,7 @@ F aes_inv_mix_columns(state: i64) -> i64 {
     # Inverse matrix: [14,11,13,9; 9,14,11,13; 13,9,14,11; 11,13,9,14]
 
     col := mut 0
-    L col < 4 {
+    LW col < 4 {
         offset := col * 4
         s0 := load_byte(state + offset)
         s1 := load_byte(state + offset + 1)
@@ -1281,7 +1281,7 @@ F aes_add_round_key(state: i64, round_keys: i64, round: i64) -> i64 {
     round_key_offset := round * 16
 
     i := mut 0
-    L i < 16 {
+    LW i < 16 {
         state_byte := load_byte(state + i)
         key_byte := load_byte(round_keys + round_key_offset + i)
         store_byte(state + i, (state_byte ^ key_byte) & 255)
@@ -1320,7 +1320,7 @@ X Aes256 {
 
         # Rounds 1-13
         round := mut 1
-        L round < 14 {
+        LW round < 14 {
             aes_sub_bytes(block, self.sbox)
             aes_shift_rows(block)
             aes_mix_columns(block)
@@ -1342,7 +1342,7 @@ X Aes256 {
 
         # Rounds 13-1
         round := mut 13
-        L round > 0 {
+        LW round > 0 {
             aes_inv_shift_rows(block)
             aes_inv_sub_bytes(block, self.inv_sbox)
             aes_add_round_key(block, self.round_keys, round)
@@ -1392,7 +1392,7 @@ F pkcs7_pad(data: i64, data_len: i64) -> AesResult {
 
     # Add padding bytes (value = pad_len)
     i := mut 0
-    L i < pad_len {
+    LW i < pad_len {
         store_byte(padded + data_len + i, pad_len & 255)
         i = i + 1
     }
@@ -1420,7 +1420,7 @@ F pkcs7_unpad(data: i64, data_len: i64) -> AesResult {
 
     # Verify all padding bytes
     i := mut 0
-    L i < pad_len {
+    LW i < pad_len {
         I load_byte(data + data_len - 1 - i) != pad_len {
             R AesResult { data: 0, len: 0, status: -1 }
         }
@@ -1461,7 +1461,7 @@ F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
 
     # Encrypt each block
     block_idx := mut 0
-    L block_idx < padded_len {
+    LW block_idx < padded_len {
         # Copy block
         block := malloc(16)
         I block == 0 {
@@ -1494,7 +1494,7 @@ F aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
 
     # Decrypt each block
     block_idx := mut 0
-    L block_idx < data_len {
+    LW block_idx < data_len {
         # Copy block
         block := malloc(16)
         I block == 0 {
@@ -1552,7 +1552,7 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
 
     # Encrypt each block
     block_idx := mut 0
-    L block_idx < padded_len {
+    LW block_idx < padded_len {
         # Copy plaintext block
         block := malloc(16)
         I block == 0 {
@@ -1565,7 +1565,7 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
 
         # XOR with previous ciphertext (or IV)
         i := mut 0
-        L i < 16 {
+        LW i < 16 {
             b := load_byte(block + i)
             p := load_byte(prev_block + i)
             store_byte(block + i, (b ^ p) & 255)
@@ -1607,7 +1607,7 @@ F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
 
     # Decrypt each block
     block_idx := mut 0
-    L block_idx < data_len {
+    LW block_idx < data_len {
         # Save current ciphertext block
         cipher_block := malloc(16)
         I cipher_block == 0 {
@@ -1630,7 +1630,7 @@ F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
 
         # XOR with previous ciphertext (or IV)
         i := mut 0
-        L i < 16 {
+        LW i < 16 {
             b := load_byte(block + i)
             p := load_byte(prev_block + i)
             store_byte(block + i, (b ^ p) & 255)
@@ -1682,11 +1682,11 @@ F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResu
     # Process each block
     block_idx := mut 0
     block_num := mut 0
-    L block_idx < data_len {
+    LW block_idx < data_len {
         # Update counter (8-byte little-endian)
         counter_val := block_num
         i := mut 0
-        L i < 8 {
+        LW i < 8 {
             store_byte(counter_block + 8 + i, (counter_val >> (i * 8)) & 255)
             i = i + 1
         }
@@ -1708,7 +1708,7 @@ F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResu
         }
 
         i = 0
-        L i < bytes_in_block {
+        LW i < bytes_in_block {
             d := load_byte(data + block_idx + i)
             k := load_byte(keystream + i)
             store_byte(output + block_idx + i, (d ^ k) & 255)

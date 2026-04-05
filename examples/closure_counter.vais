@@ -5,7 +5,7 @@
 
 F apply_n(f: |i64| -> i64, x: i64, n: i64) -> i64 {
     result := mut x
-    L i:0..n {
+    LF i:0..n {
         result = f(result)
     }
     result
@@ -43,5 +43,5 @@ F main() -> i64 {
     puts("Total = {total}")
 
     # 5 + 8 + 17 + 25 = 55
-    I total == 55 { 0 } E { 1 }
+    I total == 55 { 0 } EL { 1 }
 }

@@ -77,11 +77,11 @@ F fs_list_dir(path: str) -> i64 {
             second_byte := load_byte(entry + 1)
             I second_byte == 0 {
                 # "." — skip
-            } E I second_byte == 46 {
+            } EL I second_byte == 46 {
                 third_byte := load_byte(entry + 2)
                 I third_byte == 0 {
                     # ".." — skip
-                } E {
+                } EL {
                     # Filename starting with ".." but longer — keep it
                     len := strlen(entry)
                     copy := malloc(len + 1)
@@ -97,7 +97,7 @@ F fs_list_dir(path: str) -> i64 {
                     store_i64(data + count * 8, copy)
                     count = count + 1
                 }
-            } E {
+            } EL {
                 # Filename starting with "." but not ".." — keep it (hidden files)
                 len := strlen(entry)
                 copy := malloc(len + 1)
@@ -113,7 +113,7 @@ F fs_list_dir(path: str) -> i64 {
                 store_i64(data + count * 8, copy)
                 count = count + 1
             }
-        } E {
+        } EL {
             # Normal filename — copy and store
             len := strlen(entry)
             copy := malloc(len + 1)
@@ -176,7 +176,7 @@ F fs_list_dir_free(dir_result: i64) -> i64 {
 # Returns 1 if exists, 0 if not
 F fs_exists(path: str) -> i64 {
     r := access(path, 0)
-    I r == 0 { 1 } E { 0 }
+    I r == 0 { 1 } EL { 0 }
 }
 
 # Check if path is a directory

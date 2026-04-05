@@ -94,7 +94,7 @@ F search_file(path: i64, pattern: i64, results: i64, max_results: i64) -> i64 {
 
                 match_count = match_count + 1
             }
-        } E {
+        } EL {
             free(line)
         }
 

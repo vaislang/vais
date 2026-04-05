@@ -207,8 +207,8 @@ F doc_scan_comments(d: i64) -> i64 {
                     I next_ch == 32 {
                         text_start = text_start + 1
                         0
-                    } E { 0 }
-                } E { 0 }
+                    } EL { 0 }
+                } EL { 0 }
 
                 # Find end of line
                 L {
@@ -227,8 +227,8 @@ F doc_scan_comments(d: i64) -> i64 {
                     store_i64(entry + 16, text_len)
                     count = count + 1
                     0
-                } E { 0 }
-            } E {
+                } EL { 0 }
+            } EL {
                 # Not a comment, skip to end of line
                 L {
                     I pos >= source_len { B }
@@ -236,15 +236,15 @@ F doc_scan_comments(d: i64) -> i64 {
                     pos = pos + 1
                 }
             }
-        } E { 0 }
+        } EL { 0 }
 
         # Skip newline
         I pos < source_len {
             I load_byte(source + pos) == 10 {
                 pos = pos + 1
                 0
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
         line = line + 1
     }
 
@@ -270,7 +270,7 @@ F doc_find_comments(d: i64, item_span_start: i64, out_count: i64) -> i64 {
         I load_byte(source + i) == 10 {
             item_line = item_line + 1
             0
-        } E { 0 }
+        } EL { 0 }
         i = i + 1
     }
 
@@ -300,7 +300,7 @@ F doc_find_comments(d: i64, item_span_start: i64, out_count: i64) -> i64 {
                     first_comment_idx = k
                     expected_line = expected_line - 1
                     k = k - 1
-                } E {
+                } EL {
                     B
                 }
             }
@@ -341,23 +341,23 @@ F doc_type(d: i64, type_ptr: i64) -> i64 {
             i := mut 0
             L {
                 I i >= generics_len { B }
-                I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+                I i > 0 { doc_write(d, ", "); 0 } EL { 0 }
                 gen_ptr := load_i64(generics_ptr + i * 8)
                 doc_type(d, gen_ptr)
                 i = i + 1
             }
             doc_write(d, ">")
-        } E { 0 }
-    } E I kind == TYPE_ARRAY() {
+        } EL { 0 }
+    } EL I kind == TYPE_ARRAY() {
         inner := load_i64(type_ptr + 24)
         doc_write(d, "[")
         doc_type(d, inner)
         doc_write(d, "]")
-    } E I kind == TYPE_OPTIONAL() {
+    } EL I kind == TYPE_OPTIONAL() {
         inner := load_i64(type_ptr + 24)
         doc_type(d, inner)
         doc_write(d, "?")
-    } E I kind == TYPE_RESULT() {
+    } EL I kind == TYPE_RESULT() {
         ok := load_i64(type_ptr + 24)
         err := load_i64(type_ptr + 32)
         doc_type(d, ok)
@@ -367,37 +367,37 @@ F doc_type(d: i64, type_ptr: i64) -> i64 {
             doc_type(d, err)
             doc_write(d, ">")
             0
-        } E { 0 }
-    } E I kind == TYPE_REF() {
+        } EL { 0 }
+    } EL I kind == TYPE_REF() {
         inner := load_i64(type_ptr + 24)
         doc_write(d, "&")
         doc_type(d, inner)
-    } E I kind == TYPE_REF_MUT() {
+    } EL I kind == TYPE_REF_MUT() {
         inner := load_i64(type_ptr + 24)
         doc_write(d, "&mut ")
         doc_type(d, inner)
-    } E I kind == TYPE_TUPLE() {
+    } EL I kind == TYPE_TUPLE() {
         elems_ptr := load_i64(type_ptr + 24)
         elems_len := load_i64(type_ptr + 32)
         doc_write(d, "(")
         i := mut 0
         L {
             I i >= elems_len { B }
-            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            I i > 0 { doc_write(d, ", "); 0 } EL { 0 }
             elem := load_i64(elems_ptr + i * 8)
             doc_type(d, elem)
             i = i + 1
         }
         doc_write(d, ")")
-    } E I kind == TYPE_POINTER() {
+    } EL I kind == TYPE_POINTER() {
         inner := load_i64(type_ptr + 24)
         doc_write(d, "*")
-        I inner != 0 { doc_type(d, inner); 0 } E { doc_write(d, "i64") }
-    } E I kind == TYPE_UNIT() {
+        I inner != 0 { doc_type(d, inner); 0 } EL { doc_write(d, "i64") }
+    } EL I kind == TYPE_UNIT() {
         doc_write(d, "()")
-    } E I kind == TYPE_INFER() {
+    } EL I kind == TYPE_INFER() {
         doc_write(d, "_")
-    } E {
+    } EL {
         doc_write(d, "?type?")
     }
     0
@@ -424,7 +424,7 @@ F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            I i > 0 { doc_write(d, ", "); 0 } EL { 0 }
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
             doc_write_str_idx(d, gp_name)
@@ -432,7 +432,7 @@ F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
         }
         doc_write(d, ">")
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Params
     doc_write(d, "(")
@@ -440,7 +440,7 @@ F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
         i := mut 0
         L {
             I i >= params_len { B }
-            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            I i > 0 { doc_write(d, ", "); 0 } EL { 0 }
             p := params_ptr + i * 40
             p_name := load_i64(p + 0)
             p_type := load_i64(p + 8)
@@ -457,27 +457,27 @@ F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
                                 I p_type == 0 {
                                     is_self = 1
                                     0
-                                } E { 0 }
-                            } E { 0 }
-                        } E { 0 }
-                    } E { 0 }
-                } E { 0 }
-            } E { 0 }
+                                } EL { 0 }
+                            } EL { 0 }
+                        } EL { 0 }
+                    } EL { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             I is_self == 1 {
                 doc_write(d, "&self")
-            } E {
+            } EL {
                 doc_write_str_idx(d, p_name)
                 I p_type != 0 {
                     doc_write(d, ": ")
                     doc_type(d, p_type)
                     0
-                } E { 0 }
+                } EL { 0 }
             }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
     doc_write(d, ")")
 
     # Return type
@@ -485,7 +485,7 @@ F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
         doc_write(d, " -> ")
         doc_type(d, ret_type)
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -500,7 +500,7 @@ F doc_write_header(d: i64) -> i64 {
     I name_ptr != 0 {
         doc_write_bytes(d, name_ptr, name_len)
         0
-    } E {
+    } EL {
         doc_write(d, "(unnamed)")
     }
     doc_newline(d)
@@ -525,7 +525,7 @@ F doc_write_header(d: i64) -> i64 {
             I load_byte(source + fi) == 10 {
                 first_line = first_line + 1
                 0
-            } E { 0 }
+            } EL { 0 }
             fi = fi + 1
         }
 
@@ -545,8 +545,8 @@ F doc_write_header(d: i64) -> i64 {
                 I first_ch == 61 {
                     ci = ci + 1
                     C
-                } E { 0 }
-            } E { 0 }
+                } EL { 0 }
+            } EL { 0 }
 
             doc_write_bytes(d, text_ptr, text_len)
             doc_newline(d)
@@ -555,8 +555,8 @@ F doc_write_header(d: i64) -> i64 {
         I ci > 0 {
             doc_newline(d)
             0
-        } E { 0 }
-    } E { 0 }
+        } EL { 0 }
+    } EL { 0 }
     0
 }
 
@@ -583,8 +583,8 @@ F doc_write_comments(d: i64, comments_start: i64, count: i64) -> i64 {
             I first_ch == 61 {
                 i = i + 1
                 C
-            } E { 0 }
-        } E { 0 }
+            } EL { 0 }
+        } EL { 0 }
 
         doc_write(d, "> ")
         doc_write_bytes(d, text_ptr, text_len)
@@ -630,7 +630,7 @@ F doc_struct_item(d: i64, struct_ptr: i64, span_start: i64) -> i64 {
         i := mut 0
         L {
             I i >= generics_len { B }
-            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            I i > 0 { doc_write(d, ", "); 0 } EL { 0 }
             gp := generics_ptr + i * 40
             gp_name := load_i64(gp + 0)
             doc_write_str_idx(d, gp_name)
@@ -638,7 +638,7 @@ F doc_struct_item(d: i64, struct_ptr: i64, span_start: i64) -> i64 {
         }
         doc_write(d, ">")
         0
-    } E { 0 }
+    } EL { 0 }
     doc_write(d, "`")
     doc_newline(d)
     doc_newline(d)
@@ -677,7 +677,7 @@ F doc_struct_item(d: i64, struct_ptr: i64, span_start: i64) -> i64 {
         }
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -723,7 +723,7 @@ F doc_enum_item(d: i64, enum_ptr: i64, span_start: i64) -> i64 {
                 j := mut 0
                 L {
                     I j >= v_fields_len { B }
-                    I j > 0 { doc_write(d, ", "); 0 } E { 0 }
+                    I j > 0 { doc_write(d, ", "); 0 } EL { 0 }
                     field := v_fields_ptr + j * 40
                     f_type := load_i64(field + 8)
                     doc_type(d, f_type)
@@ -731,14 +731,14 @@ F doc_enum_item(d: i64, enum_ptr: i64, span_start: i64) -> i64 {
                 }
                 doc_write(d, ")")
                 0
-            } E { 0 }
+            } EL { 0 }
             doc_write(d, "`")
             doc_newline(d)
             i = i + 1
         }
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -752,7 +752,7 @@ F doc_impl_item(d: i64, impl_ptr: i64, span_start: i64) -> i64 {
     I target_type != 0 {
         doc_type(d, target_type)
         0
-    } E { 0 }
+    } EL { 0 }
     doc_write(d, "`")
     doc_newline(d)
     doc_newline(d)
@@ -764,7 +764,7 @@ F doc_impl_item(d: i64, impl_ptr: i64, span_start: i64) -> i64 {
         doc_newline(d)
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Methods
     I methods_len > 0 {
@@ -783,7 +783,7 @@ F doc_impl_item(d: i64, impl_ptr: i64, span_start: i64) -> i64 {
         }
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -822,7 +822,7 @@ F doc_trait_item(d: i64, trait_ptr: i64, span_start: i64) -> i64 {
         }
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
     0
 }
 
@@ -876,13 +876,13 @@ F doc_generate(d: i64) -> i64 {
         item := items_ptr + i * 32
         kind := load_i64(item + 0)
         I kind == ITEM_FUNCTION() { func_count = func_count + 1; 0 }
-        E I kind == ITEM_STRUCT() { struct_count = struct_count + 1; 0 }
-        E I kind == ITEM_ENUM() { enum_count = enum_count + 1; 0 }
-        E I kind == ITEM_IMPL() { impl_count = impl_count + 1; 0 }
-        E I kind == ITEM_TRAIT() { trait_count = trait_count + 1; 0 }
-        E I kind == ITEM_TYPE_ALIAS() { type_count = type_count + 1; 0 }
-        E I kind == ITEM_USE() { use_count = use_count + 1; 0 }
-        E { 0 }
+        EL I kind == ITEM_STRUCT() { struct_count = struct_count + 1; 0 }
+        EL I kind == ITEM_ENUM() { enum_count = enum_count + 1; 0 }
+        EL I kind == ITEM_IMPL() { impl_count = impl_count + 1; 0 }
+        EL I kind == ITEM_TRAIT() { trait_count = trait_count + 1; 0 }
+        EL I kind == ITEM_TYPE_ALIAS() { type_count = type_count + 1; 0 }
+        EL I kind == ITEM_USE() { use_count = use_count + 1; 0 }
+        EL { 0 }
         i = i + 1
     }
 
@@ -891,13 +891,13 @@ F doc_generate(d: i64) -> i64 {
     doc_newline(d)
     doc_newline(d)
 
-    I use_count > 0 { doc_write(d, "- [Imports](#imports)"); doc_newline(d); 0 } E { 0 }
-    I struct_count > 0 { doc_write(d, "- [Structs](#structs)"); doc_newline(d); 0 } E { 0 }
-    I enum_count > 0 { doc_write(d, "- [Enums](#enums)"); doc_newline(d); 0 } E { 0 }
-    I trait_count > 0 { doc_write(d, "- [Traits](#traits)"); doc_newline(d); 0 } E { 0 }
-    I impl_count > 0 { doc_write(d, "- [Implementations](#implementations)"); doc_newline(d); 0 } E { 0 }
-    I func_count > 0 { doc_write(d, "- [Functions](#functions)"); doc_newline(d); 0 } E { 0 }
-    I type_count > 0 { doc_write(d, "- [Type Aliases](#type-aliases)"); doc_newline(d); 0 } E { 0 }
+    I use_count > 0 { doc_write(d, "- [Imports](#imports)"); doc_newline(d); 0 } EL { 0 }
+    I struct_count > 0 { doc_write(d, "- [Structs](#structs)"); doc_newline(d); 0 } EL { 0 }
+    I enum_count > 0 { doc_write(d, "- [Enums](#enums)"); doc_newline(d); 0 } EL { 0 }
+    I trait_count > 0 { doc_write(d, "- [Traits](#traits)"); doc_newline(d); 0 } EL { 0 }
+    I impl_count > 0 { doc_write(d, "- [Implementations](#implementations)"); doc_newline(d); 0 } EL { 0 }
+    I func_count > 0 { doc_write(d, "- [Functions](#functions)"); doc_newline(d); 0 } EL { 0 }
+    I type_count > 0 { doc_write(d, "- [Type Aliases](#type-aliases)"); doc_newline(d); 0 } EL { 0 }
     doc_newline(d)
 
     # Imports section
@@ -916,12 +916,12 @@ F doc_generate(d: i64) -> i64 {
                 doc_write(d, "`")
                 doc_newline(d)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         doc_newline(d)
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Structs section
     I struct_count > 0 {
@@ -936,11 +936,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_struct_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Enums section
     I enum_count > 0 {
@@ -955,11 +955,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_enum_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Traits section
     I trait_count > 0 {
@@ -974,11 +974,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_trait_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Implementations section
     I impl_count > 0 {
@@ -993,11 +993,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_impl_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Functions section
     I func_count > 0 {
@@ -1012,11 +1012,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_function_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Type aliases section
     I type_count > 0 {
@@ -1031,11 +1031,11 @@ F doc_generate(d: i64) -> i64 {
                 span := load_i64(item + 16)
                 doc_type_alias_item(d, data, span)
                 0
-            } E { 0 }
+            } EL { 0 }
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Footer
     doc_write(d, "---")

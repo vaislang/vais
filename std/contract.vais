@@ -24,9 +24,9 @@ X F exit(code: i32) -> ()
 F __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) -> i64 {
     I kind == CONTRACT_REQUIRES {
         printf("Contract violation: precondition failed\n")
-    } E I kind == CONTRACT_ENSURES {
+    } EL I kind == CONTRACT_ENSURES {
         printf("Contract violation: postcondition failed\n")
-    } E {
+    } EL {
         printf("Contract violation: invariant failed\n")
     }
     printf("  Condition: %s\n", condition)

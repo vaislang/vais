@@ -45,7 +45,7 @@ F do_handshake(fd: i64) -> i64 {
     I buf == 0 { R 0 }
 
     total := mut 0
-    L true {
+    LW true {
         n := __tcp_recv(fd, buf + total, 4096)
         I n <= 0 { __free(buf); R 0 }
         total = total + n
@@ -68,7 +68,7 @@ F do_handshake(fd: i64) -> i64 {
 
     sent := __tcp_send(fd, resp_buf, resp_len)
     __free(resp_buf)
-    I sent > 0 { 1 } E { 0 }
+    I sent > 0 { 1 } EL { 0 }
 }
 
 F handle_client(fd: i64) -> i64 {
@@ -77,9 +77,9 @@ F handle_client(fd: i64) -> i64 {
     I recv_buf == 0 { R -1 }
 
     is_open := mut 1
-    L is_open == 1 {
+    LW is_open == 1 {
         total := mut 0
-        L total < 2 {
+        LW total < 2 {
             n := __tcp_recv(fd, recv_buf + total, 4096)
             I n <= 0 { is_open = 0; B }
             total = total + n
@@ -126,7 +126,7 @@ F main() -> i64 {
     puts("Listening on port 9001")
     puts("Test with: websocat ws://127.0.0.1:9001")
 
-    L true {
+    LW true {
         client := __tcp_accept(listener)
         I client < 0 { C }
         ok := do_handshake(client)

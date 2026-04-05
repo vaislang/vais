@@ -14,7 +14,7 @@ F main() -> i64 {
     # Allocate some memory
     puts("2. Allocating 10 objects (1KB each)...")
     i := mut 0
-    L i < 10 {
+    LW i < 10 {
         ptr := gc_alloc(1024, 0)
         i = i + 1
     }

@@ -13,12 +13,12 @@ F print_digit(d: i64) -> i64 {
 
 F print_num_helper(n: i64) -> i64 =
     I n < 10 { print_digit(n) }
-    E { print_num_helper(n / 10); print_digit(n % 10) }
+    EL { print_num_helper(n / 10); print_digit(n % 10) }
 
 F print_num(n: i64) -> i64 =
     I n < 0 { putchar(45); print_num_helper(0 - n) }
-    E I n == 0 { print_digit(0) }
-    E { print_num_helper(n) }
+    EL I n == 0 { print_digit(0) }
+    EL { print_num_helper(n) }
 
 F nl() -> i64 { putchar(10); 0 }
 
@@ -35,26 +35,26 @@ S NumInfo {
 
 F count_digits(n: i64) -> i64 =
     I n < 0 { count_digits(0 - n) }
-    E I n < 10 { 1 }
-    E { 1 + @(n / 10) }
+    EL I n < 10 { 1 }
+    EL { 1 + @(n / 10) }
 
 F digit_sum(n: i64) -> i64 =
     I n < 0 { digit_sum(0 - n) }
-    E I n < 10 { n }
-    E { n % 10 + @(n / 10) }
+    EL I n < 10 { n }
+    EL { n % 10 + @(n / 10) }
 
 F reverse_helper(n: i64, acc: i64) -> i64 =
     I n == 0 { acc }
-    E { @(n / 10, acc * 10 + n % 10) }
+    EL { @(n / 10, acc * 10 + n % 10) }
 
 F reverse_num(n: i64) -> i64 =
     I n < 0 { 0 - reverse_helper(0 - n, 0) }
-    E { reverse_helper(n, 0) }
+    EL { reverse_helper(n, 0) }
 
 F is_palindrome(n: i64) -> i64 =
     I n < 0 { 0 }
-    E I n == reverse_num(n) { 1 }
-    E { 0 }
+    EL I n == reverse_num(n) { 1 }
+    EL { 0 }
 
 F analyze(n: i64) -> NumInfo =
     NumInfo {
@@ -68,58 +68,58 @@ F analyze(n: i64) -> NumInfo =
 
 F print_binary_helper(n: i64) -> i64 =
     I n < 2 { print_digit(n) }
-    E { print_binary_helper(n / 2); print_digit(n % 2) }
+    EL { print_binary_helper(n / 2); print_digit(n % 2) }
 
 F print_binary(n: i64) -> i64 {
     I n == 0 { putchar(48); 0 }
-    E I n < 0 { putchar(45); print_binary_helper(0 - n) }
-    E { print_binary_helper(n) }
+    EL I n < 0 { putchar(45); print_binary_helper(0 - n) }
+    EL { print_binary_helper(n) }
 }
 
 F bit_length(n: i64) -> i64 =
     I n < 0 { bit_length(0 - n) }
-    E I n < 2 { 1 }
-    E { 1 + @(n / 2) }
+    EL I n < 2 { 1 }
+    EL { 1 + @(n / 2) }
 
 F popcount(n: i64) -> i64 =
     I n == 0 { 0 }
-    E { n % 2 + @(n / 2) }
+    EL { n % 2 + @(n / 2) }
 
 # === Octal Conversion ===
 
 F print_octal_helper(n: i64) -> i64 =
     I n < 8 { print_digit(n) }
-    E { print_octal_helper(n / 8); print_digit(n % 8) }
+    EL { print_octal_helper(n / 8); print_digit(n % 8) }
 
 F print_octal(n: i64) -> i64 {
     I n == 0 { putchar(48); 0 }
-    E I n < 0 { putchar(45); print_octal_helper(0 - n) }
-    E { print_octal_helper(n) }
+    EL I n < 0 { putchar(45); print_octal_helper(0 - n) }
+    EL { print_octal_helper(n) }
 }
 
 # === Hexadecimal Conversion ===
 
 F print_hex_digit(d: i64) -> i64 =
     I d < 10 { putchar(d + 48) }
-    E { putchar(d - 10 + 65) }
+    EL { putchar(d - 10 + 65) }
 
 F print_hex_helper(n: i64) -> i64 =
     I n < 16 { print_hex_digit(n) }
-    E { print_hex_helper(n / 16); print_hex_digit(n % 16) }
+    EL { print_hex_helper(n / 16); print_hex_digit(n % 16) }
 
 F print_hex(n: i64) -> i64 {
     I n == 0 { putchar(48); 0 }
-    E I n < 0 { putchar(45); print_hex_helper(0 - n) }
-    E { print_hex_helper(n) }
+    EL I n < 0 { putchar(45); print_hex_helper(0 - n) }
+    EL { print_hex_helper(n) }
 }
 
 # === Power of Two Check ===
 
 F is_power_of_two(n: i64) -> i64 =
     I n <= 0 { 0 }
-    E I n == 1 { 1 }
-    E I n % 2 != 0 { 0 }
-    E { @(n / 2) }
+    EL I n == 1 { 1 }
+    EL I n % 2 != 0 { 0 }
+    EL { @(n / 2) }
 
 # === Formatted Output Helpers ===
 
@@ -129,7 +129,7 @@ F print_labeled_num(value: i64) -> i64 {
 }
 
 F print_yn(flag: i64) -> i64 {
-    I flag == 1 { puts("yes") } E { puts("no") }
+    I flag == 1 { puts("yes") } EL { puts("no") }
     0
 }
 
@@ -188,43 +188,43 @@ F demo_verification() -> i64 {
     total := mut 0
 
     total = total + 1
-    I digit_sum(123) == 6 { pass = pass + 1; puts("[PASS] digit_sum(123) == 6") } E { puts("[FAIL] digit_sum(123)") }
+    I digit_sum(123) == 6 { pass = pass + 1; puts("[PASS] digit_sum(123) == 6") } EL { puts("[FAIL] digit_sum(123)") }
 
     total = total + 1
-    I digit_sum(999) == 27 { pass = pass + 1; puts("[PASS] digit_sum(999) == 27") } E { puts("[FAIL] digit_sum(999)") }
+    I digit_sum(999) == 27 { pass = pass + 1; puts("[PASS] digit_sum(999) == 27") } EL { puts("[FAIL] digit_sum(999)") }
 
     total = total + 1
-    I count_digits(0) == 1 { pass = pass + 1; puts("[PASS] count_digits(0) == 1") } E { puts("[FAIL] count_digits(0)") }
+    I count_digits(0) == 1 { pass = pass + 1; puts("[PASS] count_digits(0) == 1") } EL { puts("[FAIL] count_digits(0)") }
 
     total = total + 1
-    I count_digits(99999) == 5 { pass = pass + 1; puts("[PASS] count_digits(99999) == 5") } E { puts("[FAIL] count_digits(99999)") }
+    I count_digits(99999) == 5 { pass = pass + 1; puts("[PASS] count_digits(99999) == 5") } EL { puts("[FAIL] count_digits(99999)") }
 
     total = total + 1
-    I reverse_num(1234) == 4321 { pass = pass + 1; puts("[PASS] reverse_num(1234) == 4321") } E { puts("[FAIL] reverse_num(1234)") }
+    I reverse_num(1234) == 4321 { pass = pass + 1; puts("[PASS] reverse_num(1234) == 4321") } EL { puts("[FAIL] reverse_num(1234)") }
 
     total = total + 1
-    I reverse_num(100) == 1 { pass = pass + 1; puts("[PASS] reverse_num(100) == 1") } E { puts("[FAIL] reverse_num(100)") }
+    I reverse_num(100) == 1 { pass = pass + 1; puts("[PASS] reverse_num(100) == 1") } EL { puts("[FAIL] reverse_num(100)") }
 
     total = total + 1
-    I is_palindrome(121) == 1 { pass = pass + 1; puts("[PASS] is_palindrome(121) == 1") } E { puts("[FAIL] is_palindrome(121)") }
+    I is_palindrome(121) == 1 { pass = pass + 1; puts("[PASS] is_palindrome(121) == 1") } EL { puts("[FAIL] is_palindrome(121)") }
 
     total = total + 1
-    I is_palindrome(123) == 0 { pass = pass + 1; puts("[PASS] is_palindrome(123) == 0") } E { puts("[FAIL] is_palindrome(123)") }
+    I is_palindrome(123) == 0 { pass = pass + 1; puts("[PASS] is_palindrome(123) == 0") } EL { puts("[FAIL] is_palindrome(123)") }
 
     total = total + 1
-    I popcount(255) == 8 { pass = pass + 1; puts("[PASS] popcount(255) == 8") } E { puts("[FAIL] popcount(255)") }
+    I popcount(255) == 8 { pass = pass + 1; puts("[PASS] popcount(255) == 8") } EL { puts("[FAIL] popcount(255)") }
 
     total = total + 1
-    I popcount(1024) == 1 { pass = pass + 1; puts("[PASS] popcount(1024) == 1") } E { puts("[FAIL] popcount(1024)") }
+    I popcount(1024) == 1 { pass = pass + 1; puts("[PASS] popcount(1024) == 1") } EL { puts("[FAIL] popcount(1024)") }
 
     total = total + 1
-    I is_power_of_two(64) == 1 { pass = pass + 1; puts("[PASS] is_power_of_two(64) == 1") } E { puts("[FAIL] is_power_of_two(64)") }
+    I is_power_of_two(64) == 1 { pass = pass + 1; puts("[PASS] is_power_of_two(64) == 1") } EL { puts("[FAIL] is_power_of_two(64)") }
 
     total = total + 1
-    I is_power_of_two(100) == 0 { pass = pass + 1; puts("[PASS] is_power_of_two(100) == 0") } E { puts("[FAIL] is_power_of_two(100)") }
+    I is_power_of_two(100) == 0 { pass = pass + 1; puts("[PASS] is_power_of_two(100) == 0") } EL { puts("[FAIL] is_power_of_two(100)") }
 
     printf("\nResults: %ld/%ld passed\n", pass, total)
-    I pass == total { puts("All tests PASSED!") } E { puts("Some tests FAILED!") }
+    I pass == total { puts("All tests PASSED!") } EL { puts("Some tests FAILED!") }
     0
 }
 

@@ -116,7 +116,7 @@ F main() -> i64 {
         R 1
     }
 
-    L __sqlite_step(stmt) == SQLITE_ROW {
+    LW __sqlite_step(stmt) == SQLITE_ROW {
         id := __sqlite_column_int(stmt, 0)
         name := __sqlite_column_text(stmt, 1)
         email := __sqlite_column_text(stmt, 2)
@@ -142,7 +142,7 @@ F main() -> i64 {
     puts("=== Users older than 28 ===")
     stmt = __sqlite_prepare(db, "SELECT name, age FROM users WHERE age > ?1")
     __sqlite_bind_int(stmt, 1, 28)
-    L __sqlite_step(stmt) == SQLITE_ROW {
+    LW __sqlite_step(stmt) == SQLITE_ROW {
         name := __sqlite_column_text(stmt, 0)
         age := __sqlite_column_int(stmt, 1)
         printf("  %s (age %lld)\n", name, age)
@@ -186,7 +186,7 @@ F main() -> i64 {
     # 9. Final query - show all remaining users
     puts("=== Final User List ===")
     stmt = __sqlite_prepare(db, "SELECT id, name, email, age FROM users ORDER BY id")
-    L __sqlite_step(stmt) == SQLITE_ROW {
+    LW __sqlite_step(stmt) == SQLITE_ROW {
         id := __sqlite_column_int(stmt, 0)
         name := __sqlite_column_text(stmt, 1)
         email := __sqlite_column_text(stmt, 2)

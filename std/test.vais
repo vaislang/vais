@@ -143,10 +143,10 @@ X TestCase {
 
     # Add a tag
     F tag(&self, tag: str) -> &TestCase {
-        L self.tags == 0 {
+        LW self.tags == 0 {
             self.tags = __malloc(64 * 8)  # 64 tags max
         }
-        L self.tag_count < 64 {
+        LW self.tag_count < 64 {
             __store_ptr(self.tags + self.tag_count * 8, tag as i64)
             self.tag_count = self.tag_count + 1
         }
@@ -156,9 +156,9 @@ X TestCase {
     # Check if test has a specific tag
     F has_tag(&self, tag: str) -> i64 {
         i := 0
-        L i < self.tag_count {
+        LW i < self.tag_count {
             t := __load_ptr(self.tags + i * 8) as str
-            L __str_eq(t, tag) == 1 {
+            LW __str_eq(t, tag) == 1 {
                 R 1
             }
             i = i + 1
@@ -168,12 +168,12 @@ X TestCase {
 
     # Run the test
     F run(&self) -> TestResult {
-        L self.skip == 1 {
+        LW self.skip == 1 {
             R TestResult::skipped(self.name, self.skip_reason)
         }
 
         # Run setup
-        L self.setup_fn != 0 {
+        LW self.setup_fn != 0 {
             __call_fn(self.setup_fn)
         }
 
@@ -188,7 +188,7 @@ X TestCase {
         duration := __time_now_ns() - start_time
 
         # Run teardown (even if test failed)
-        L self.teardown_fn != 0 {
+        LW self.teardown_fn != 0 {
             __call_fn(self.teardown_fn)
         }
 
@@ -197,16 +197,16 @@ X TestCase {
             # Expected to panic
             I panicked == 1 {
                 TestResult::passed(self.name, duration)
-            } E {
+            } EL {
                 TestResult::failed(self.name, "Expected panic but test completed normally", duration)
             }
-        } E {
+        } EL {
             # Normal test
             I panicked == 1 {
                 TestResult::failed(self.name, "Test panicked", duration)
-            } E I result != 0 {
+            } EL I result != 0 {
                 TestResult::failed(self.name, "Assertion failed", duration)
-            } E {
+            } EL {
                 TestResult::passed(self.name, duration)
             }
         }
@@ -245,7 +245,7 @@ X TestSuite {
 
     # Add a test case
     F add(&self, test: TestCase) -> TestSuite {
-        L self.test_count >= self.capacity {
+        LW self.test_count >= self.capacity {
             new_capacity := self.capacity * 2
             new_tests := __malloc(new_capacity * 88)
             __memcpy(new_tests, self.tests, self.test_count * 88)
@@ -293,16 +293,16 @@ X TestSuite {
         results := TestSuiteResult::new(self.name)
 
         # before_all
-        L self.before_all_fn != 0 {
+        LW self.before_all_fn != 0 {
             __call_fn(self.before_all_fn)
         }
 
         i := 0
-        L i < self.test_count {
+        LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
             # before_each
-            L self.before_each_fn != 0 {
+            LW self.before_each_fn != 0 {
                 __call_fn(self.before_each_fn)
             }
 
@@ -310,7 +310,7 @@ X TestSuite {
             results.add(result)
 
             # after_each
-            L self.after_each_fn != 0 {
+            LW self.after_each_fn != 0 {
                 __call_fn(self.after_each_fn)
             }
 
@@ -318,7 +318,7 @@ X TestSuite {
         }
 
         # after_all
-        L self.after_all_fn != 0 {
+        LW self.after_all_fn != 0 {
             __call_fn(self.after_all_fn)
         }
 
@@ -329,24 +329,24 @@ X TestSuite {
     F run_filtered(&self, filter: str) -> TestSuiteResult {
         results := TestSuiteResult::new(self.name)
 
-        L self.before_all_fn != 0 {
+        LW self.before_all_fn != 0 {
             __call_fn(self.before_all_fn)
         }
 
         i := 0
-        L i < self.test_count {
+        LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
             # Check if test name contains filter
-            L __str_contains(test.name, filter) == 1 {
-                L self.before_each_fn != 0 {
+            LW __str_contains(test.name, filter) == 1 {
+                LW self.before_each_fn != 0 {
                     __call_fn(self.before_each_fn)
                 }
 
                 result := test.run()
                 results.add(result)
 
-                L self.after_each_fn != 0 {
+                LW self.after_each_fn != 0 {
                     __call_fn(self.after_each_fn)
                 }
             }
@@ -354,7 +354,7 @@ X TestSuite {
             i = i + 1
         }
 
-        L self.after_all_fn != 0 {
+        LW self.after_all_fn != 0 {
             __call_fn(self.after_all_fn)
         }
 
@@ -366,10 +366,10 @@ X TestSuite {
         results := TestSuiteResult::new(self.name)
 
         i := 0
-        L i < self.test_count {
+        LW i < self.test_count {
             test := __load_test_case(self.tests + i * 88)
 
-            L test.has_tag(tag) == 1 {
+            LW test.has_tag(tag) == 1 {
                 result := test.run()
                 results.add(result)
             }
@@ -413,7 +413,7 @@ X TestSuiteResult {
 
     # Add a result
     F add(&self, result: TestResult) -> i64 {
-        L self.result_count >= self.capacity {
+        LW self.result_count >= self.capacity {
             new_capacity := self.capacity * 2
             new_results := __malloc(new_capacity * 48)
             __memcpy(new_results, self.results, self.result_count * 48)
@@ -445,7 +445,7 @@ X TestSuiteResult {
 
     # Check if all tests passed
     F all_passed(&self) -> i64 {
-        I self.failed == 0 { 1 } E { 0 }
+        I self.failed == 0 { 1 } EL { 0 }
     }
 
     # Print summary
@@ -459,7 +459,7 @@ X TestSuiteResult {
         __print_str("─────────────────────────────────────\n")
 
         i := 0
-        L i < self.result_count {
+        LW i < self.result_count {
             result := __load_test_result(self.results + i * 48)
 
             M result.status {
@@ -485,7 +485,7 @@ X TestSuiteResult {
 
             __print_str(result.name)
 
-            L result.status == TEST_PASSED {
+            LW result.status == TEST_PASSED {
                 __print_str(COLOR_GRAY)
                 __print_str(" (")
                 __print_i64(result.duration_ns / 1000)
@@ -493,14 +493,14 @@ X TestSuiteResult {
                 __print_str(COLOR_RESET)
             }
 
-            L result.status == TEST_FAILED {
+            LW result.status == TEST_FAILED {
                 __print_str(COLOR_RED)
                 __print_str(" - ")
                 __print_str(result.message)
                 __print_str(COLOR_RESET)
             }
 
-            L result.status == TEST_SKIPPED {
+            LW result.status == TEST_SKIPPED {
                 __print_str(COLOR_YELLOW)
                 __print_str(" - ")
                 __print_str(result.message)
@@ -514,14 +514,14 @@ X TestSuiteResult {
         __print_str("─────────────────────────────────────\n")
         __print_str("Results: ")
 
-        L self.passed > 0 {
+        LW self.passed > 0 {
             __print_str(COLOR_GREEN)
             __print_i64(self.passed)
             __print_str(" passed")
             __print_str(COLOR_RESET)
         }
 
-        L self.failed > 0 {
+        LW self.failed > 0 {
             __print_str(", ")
             __print_str(COLOR_RED)
             __print_i64(self.failed)
@@ -529,7 +529,7 @@ X TestSuiteResult {
             __print_str(COLOR_RESET)
         }
 
-        L self.skipped > 0 {
+        LW self.skipped > 0 {
             __print_str(", ")
             __print_str(COLOR_YELLOW)
             __print_i64(self.skipped)
@@ -552,7 +552,7 @@ X TestSuiteResult {
 
 # Assert that a condition is true
 F assert(condition: i64) -> i64 {
-    L condition == 0 {
+    LW condition == 0 {
         __panic("Assertion failed")
     }
     0
@@ -560,7 +560,7 @@ F assert(condition: i64) -> i64 {
 
 # Assert that a condition is true with message
 F assert_msg(condition: i64, message: str) -> i64 {
-    L condition == 0 {
+    LW condition == 0 {
         __panic(message)
     }
     0
@@ -568,7 +568,7 @@ F assert_msg(condition: i64, message: str) -> i64 {
 
 # Assert two values are equal
 F assert_eq(actual: i64, expected: i64) -> i64 {
-    L actual != expected {
+    LW actual != expected {
         __panic_with_values("Assertion failed: values not equal", actual, expected)
     }
     0
@@ -576,7 +576,7 @@ F assert_eq(actual: i64, expected: i64) -> i64 {
 
 # Assert two strings are equal (uses strcmp instead of pointer comparison)
 F assert_eq_str(actual: str, expected: str) -> i64 {
-    L __str_eq(actual, expected) == 0 {
+    LW __str_eq(actual, expected) == 0 {
         __panic_str_mismatch("Assertion failed: strings not equal", actual, expected)
     }
     0
@@ -584,7 +584,7 @@ F assert_eq_str(actual: str, expected: str) -> i64 {
 
 # Assert two values are not equal
 F assert_ne(actual: i64, expected: i64) -> i64 {
-    L actual == expected {
+    LW actual == expected {
         __panic_with_value("Assertion failed: values should not be equal", actual)
     }
     0
@@ -592,7 +592,7 @@ F assert_ne(actual: i64, expected: i64) -> i64 {
 
 # Assert value is greater than
 F assert_gt(actual: i64, expected: i64) -> i64 {
-    L actual <= expected {
+    LW actual <= expected {
         __panic_with_values("Assertion failed: expected greater than", actual, expected)
     }
     0
@@ -600,7 +600,7 @@ F assert_gt(actual: i64, expected: i64) -> i64 {
 
 # Assert value is less than
 F assert_lt(actual: i64, expected: i64) -> i64 {
-    L actual >= expected {
+    LW actual >= expected {
         __panic_with_values("Assertion failed: expected less than", actual, expected)
     }
     0
@@ -608,7 +608,7 @@ F assert_lt(actual: i64, expected: i64) -> i64 {
 
 # Assert value is greater than or equal
 F assert_ge(actual: i64, expected: i64) -> i64 {
-    L actual < expected {
+    LW actual < expected {
         __panic_with_values("Assertion failed: expected greater or equal", actual, expected)
     }
     0
@@ -616,7 +616,7 @@ F assert_ge(actual: i64, expected: i64) -> i64 {
 
 # Assert value is less than or equal
 F assert_le(actual: i64, expected: i64) -> i64 {
-    L actual > expected {
+    LW actual > expected {
         __panic_with_values("Assertion failed: expected less or equal", actual, expected)
     }
     0
@@ -624,7 +624,7 @@ F assert_le(actual: i64, expected: i64) -> i64 {
 
 # Assert value is true (non-zero)
 F assert_true(value: i64) -> i64 {
-    L value == 0 {
+    LW value == 0 {
         __panic("Assertion failed: expected true")
     }
     0
@@ -632,7 +632,7 @@ F assert_true(value: i64) -> i64 {
 
 # Assert value is false (zero)
 F assert_false(value: i64) -> i64 {
-    L value != 0 {
+    LW value != 0 {
         __panic("Assertion failed: expected false")
     }
     0
@@ -640,7 +640,7 @@ F assert_false(value: i64) -> i64 {
 
 # Assert strings are equal
 F assert_str_eq(actual: str, expected: str) -> i64 {
-    L __str_eq(actual, expected) == 0 {
+    LW __str_eq(actual, expected) == 0 {
         __panic_str_mismatch(actual, expected)
     }
     0
@@ -648,7 +648,7 @@ F assert_str_eq(actual: str, expected: str) -> i64 {
 
 # Assert value is within range [min, max]
 F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
-    L value < min | value > max {
+    LW value < min | value > max {
         __panic("Assertion failed: value not in range")
     }
     0
@@ -656,7 +656,7 @@ F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
 
 # Assert pointer is not null
 F assert_not_null(ptr: i64) -> i64 {
-    L ptr == 0 {
+    LW ptr == 0 {
         __panic("Assertion failed: pointer is null")
     }
     0
@@ -664,8 +664,8 @@ F assert_not_null(ptr: i64) -> i64 {
 
 # Assert with approximate equality for floats
 F assert_approx(actual: f64, expected: f64, epsilon: f64) -> i64 {
-    diff := I actual > expected { actual - expected } E { expected - actual }
-    L diff > epsilon {
+    diff := I actual > expected { actual - expected } EL { expected - actual }
+    LW diff > epsilon {
         __panic("Assertion failed: values not approximately equal")
     }
     0
@@ -699,7 +699,7 @@ X TestRunner {
 
     # Add a test suite
     F add_suite(&self, suite: &TestSuite) -> TestRunner {
-        L self.suite_count >= self.capacity {
+        LW self.suite_count >= self.capacity {
             new_capacity := self.capacity * 2
             new_suites := __malloc(new_capacity * 8)
             __memcpy(new_suites, self.suites, self.suite_count * 8)
@@ -744,7 +744,7 @@ X TestRunner {
         __print_str("\n\n")
 
         i := 0
-        L i < self.suite_count {
+        LW i < self.suite_count {
             suite_ptr := __load_ptr(self.suites + i * 8)
             suite := suite_ptr as &TestSuite
 
@@ -786,7 +786,7 @@ X TestRunner {
         __print_str("\n═══════════════════════════════════════\n\n")
 
         # Return 0 if all passed, 1 if any failed
-        I total_failed > 0 { 1 } E { 0 }
+        I total_failed > 0 { 1 } EL { 0 }
     }
 }
 

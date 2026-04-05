@@ -16,15 +16,15 @@ F test_basic_alloc() -> i64 {
     ptr3 := gc_alloc(300, 3)
 
     # Check allocation
-    L ptr1 == 0 {
+    LW ptr1 == 0 {
         puts("  FAIL: ptr1 allocation failed")
         R 1
     }
-    L ptr2 == 0 {
+    LW ptr2 == 0 {
         puts("  FAIL: ptr2 allocation failed")
         R 1
     }
-    L ptr3 == 0 {
+    LW ptr3 == 0 {
         puts("  FAIL: ptr3 allocation failed")
         R 1
     }
@@ -41,7 +41,7 @@ F test_gc_stats() -> i64 {
 
     # Allocate some objects
     i := mut 0
-    L i < 10 {
+    LW i < 10 {
         ptr := gc_alloc(1024, 0)
         i = i + 1
     }
@@ -52,11 +52,11 @@ F test_gc_stats() -> i64 {
 
     printf("  Allocated: %ld bytes, %ld objects\n", bytes, objects)
 
-    L bytes == 0 {
+    LW bytes == 0 {
         puts("  FAIL: No bytes allocated")
         R 1
     }
-    L objects == 0 {
+    LW objects == 0 {
         puts("  FAIL: No objects tracked")
         R 1
     }
@@ -73,7 +73,7 @@ F test_manual_collect() -> i64 {
 
     # Allocate and track initial state
     i := mut 0
-    L i < 5 {
+    LW i < 5 {
         ptr := gc_alloc(2048, 0)
         i = i + 1
     }
@@ -91,7 +91,7 @@ F test_manual_collect() -> i64 {
            before_bytes, before_objects, before_collections)
     printf("  After:  %ld collections\n", after_collections)
 
-    L after_collections <= before_collections {
+    LW after_collections <= before_collections {
         puts("  FAIL: GC collection did not increment")
         R 1
     }
@@ -135,7 +135,7 @@ F test_gc_threshold() -> i64 {
 
     # Allocate enough to trigger GC
     i := mut 0
-    L i < 10 {
+    LW i < 10 {
         ptr := gc_alloc(1024, 0)
         i = i + 1
     }
@@ -145,7 +145,7 @@ F test_gc_threshold() -> i64 {
     printf("  Collections before: %ld, after: %ld\n",
            before_collections, after_collections)
 
-    L after_collections <= before_collections {
+    LW after_collections <= before_collections {
         puts("  WARNING: Automatic GC may not have triggered")
         # This is not necessarily a failure as objects might still be reachable
     }
@@ -163,7 +163,7 @@ F test_large_alloc() -> i64 {
     # Allocate 1MB
     ptr := gc_alloc(1048576, 0)
 
-    L ptr == 0 {
+    LW ptr == 0 {
         puts("  FAIL: Large allocation failed")
         R 1
     }
@@ -171,7 +171,7 @@ F test_large_alloc() -> i64 {
     bytes := gc_bytes_allocated()
     printf("  Allocated %ld bytes total\n", bytes)
 
-    L bytes < 1048576 {
+    LW bytes < 1048576 {
         puts("  FAIL: Allocation size mismatch")
         R 1
     }
@@ -189,9 +189,9 @@ F test_memory_stress() -> i64 {
 
     # Allocate many small objects
     i := mut 0
-    L i < 100 {
+    LW i < 100 {
         ptr := gc_alloc(256, 0)
-        L ptr == 0 {
+        LW ptr == 0 {
             puts("  FAIL: Allocation failed during stress test")
             R 1
         }
@@ -216,25 +216,25 @@ F main() -> i64 {
     result := mut 0
 
     result = test_basic_alloc()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_gc_stats()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_manual_collect()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_gc_roots()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_gc_threshold()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_large_alloc()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     result = test_memory_stress()
-    L result != 0 { R result }
+    LW result != 0 { R result }
 
     puts("\n=== All Tests Passed ===")
     gc_print_stats()

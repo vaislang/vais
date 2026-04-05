@@ -33,7 +33,7 @@ F test_vec_ctx_creation() -> i64 {
         print_str(", expected 256\n")
         vectorize_ctx_free(ctx)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify candidates_len field (offset 8) is initially 0
     candidates_len := load_i64(ctx + 8)
@@ -43,7 +43,7 @@ F test_vec_ctx_creation() -> i64 {
         print_str(", expected 0\n")
         vectorize_ctx_free(ctx)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify loop_id_counter field (offset 24) is initially 0
     loop_id_counter := load_i64(ctx + 24)
@@ -53,7 +53,7 @@ F test_vec_ctx_creation() -> i64 {
         print_str(", expected 0\n")
         vectorize_ctx_free(ctx)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     vectorize_ctx_free(ctx)
     print_str("PASS\n")
@@ -70,35 +70,35 @@ F test_dep_prevents_vectorization() -> i64 {
     I prevents != 0 {
         print_str("FAIL: DEP_NONE should not prevent vectorization\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # DEP_UNKNOWN should prevent vectorization
     prevents = vec_dep_prevents_vectorization(DEP_UNKNOWN(), vector_lanes)
     I prevents != 1 {
         print_str("FAIL: DEP_UNKNOWN should prevent vectorization\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # DEP_FLOW should prevent vectorization (conservative)
     prevents = vec_dep_prevents_vectorization(DEP_FLOW(), vector_lanes)
     I prevents != 1 {
         print_str("FAIL: DEP_FLOW should prevent vectorization\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # DEP_ANTI should prevent vectorization
     prevents = vec_dep_prevents_vectorization(DEP_ANTI(), vector_lanes)
     I prevents != 1 {
         print_str("FAIL: DEP_ANTI should prevent vectorization\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # DEP_OUTPUT should prevent vectorization
     prevents = vec_dep_prevents_vectorization(DEP_OUTPUT(), vector_lanes)
     I prevents != 1 {
         print_str("FAIL: DEP_OUTPUT should prevent vectorization\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     print_str("PASS\n")
     R 1
@@ -129,7 +129,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # index_local(8): i64
     actual_index := load_i64(access + 8)
@@ -141,7 +141,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # stride(16): i64
     actual_stride := load_i64(access + 16)
@@ -153,7 +153,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # is_write(24): i64
     actual_is_write := load_i64(access + 24)
@@ -165,7 +165,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # element_size(32): i64
     actual_elem_size := load_i64(access + 32)
@@ -177,7 +177,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # block_idx(40): i64
     actual_block_idx := load_i64(access + 40)
@@ -189,7 +189,7 @@ F test_mem_access_creation() -> i64 {
         print_str("\n")
         mem_access_free(access)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     mem_access_free(access)
     print_str("PASS\n")
@@ -243,7 +243,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 0\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     offset1 := load_i64(field1 + 32)
     I offset1 != 8 {
@@ -252,7 +252,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 8\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     offset2 := load_i64(field2 + 32)
     I offset2 != 16 {
@@ -261,7 +261,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 16\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify total size (offset 24)
     total_size := load_i64(layout + 24)
@@ -271,7 +271,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 24\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify padding (offset 40)
     padding := load_i64(layout + 40)
@@ -281,7 +281,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 11\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify alignment (offset 32)
     alignment := load_i64(layout + 32)
@@ -291,7 +291,7 @@ F test_struct_layout_calculate() -> i64 {
         print_str(", expected 8\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     struct_layout_free(layout)
     print_str("PASS\n")
@@ -327,7 +327,7 @@ F test_field_reorder_suggestion() -> i64 {
         print_str("FAIL: expected reorder suggestion, got null\n")
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify suggestion kind is LAYOUT_REORDER
     kind := load_i64(sugg)
@@ -340,7 +340,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify padding_saved (offset 48) is > 0
     padding_saved := load_i64(sugg + 48)
@@ -351,7 +351,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify size_after (offset 40) < size_before (offset 32)
     size_before := load_i64(sugg + 32)
@@ -365,7 +365,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify new_order has 3 fields
     new_order_len := load_i64(sugg + 24)
@@ -376,7 +376,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Verify new_order sorts by alignment descending (i64[1], i32[2], i8[0])
     new_order_ptr := load_i64(sugg + 16)
@@ -391,7 +391,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     I idx1 != 2 {
         print_str("FAIL: new_order[1] is ")
@@ -400,7 +400,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     I idx2 != 0 {
         print_str("FAIL: new_order[2] is ")
@@ -409,7 +409,7 @@ F test_field_reorder_suggestion() -> i64 {
         layout_suggestion_free(sugg)
         struct_layout_free(layout)
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     layout_suggestion_free(sugg)
     struct_layout_free(layout)
@@ -428,7 +428,7 @@ F test_align_to() -> i64 {
         print_i64(result)
         print_str(", expected 8\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Test align_to(8, 8) should give 8
     result = align_to(8, 8)
@@ -437,7 +437,7 @@ F test_align_to() -> i64 {
         print_i64(result)
         print_str(", expected 8\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Test align_to(9, 8) should give 16
     result = align_to(9, 8)
@@ -446,7 +446,7 @@ F test_align_to() -> i64 {
         print_i64(result)
         print_str(", expected 16\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Test align_to(0, 4) should give 0
     result = align_to(0, 4)
@@ -455,7 +455,7 @@ F test_align_to() -> i64 {
         print_i64(result)
         print_str(", expected 0\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     # Test align_to(7, 4) should give 8
     result = align_to(7, 4)
@@ -464,7 +464,7 @@ F test_align_to() -> i64 {
         print_i64(result)
         print_str(", expected 8\n")
         R 0
-    } E { 0 }
+    } EL { 0 }
 
     print_str("PASS\n")
     R 1
@@ -485,7 +485,7 @@ F main() -> i64 {
     I test_vec_ctx_creation() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -493,7 +493,7 @@ F main() -> i64 {
     I test_dep_prevents_vectorization() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -501,7 +501,7 @@ F main() -> i64 {
     I test_mem_access_creation() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -511,7 +511,7 @@ F main() -> i64 {
     I test_struct_layout_calculate() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -519,7 +519,7 @@ F main() -> i64 {
     I test_field_reorder_suggestion() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -527,7 +527,7 @@ F main() -> i64 {
     I test_align_to() == 1 {
         passed = passed + 1
         0
-    } E {
+    } EL {
         failed = failed + 1
         0
     }
@@ -544,7 +544,7 @@ F main() -> i64 {
     I failed == 0 {
         print_str("\nAll tests PASSED!\n")
         R 0
-    } E {
+    } EL {
         print_str("\nSome tests FAILED.\n")
         R 1
     }

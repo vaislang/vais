@@ -27,8 +27,8 @@ F fib(n: i64) -> i64 = fib_acc(n, 0, 1)
 # Ackermann function (bounded for testing)
 F ack(m: i64, n: i64) -> i64 {
     I m == 0 { R n + 1 }
-    E I n == 0 { R @(m - 1, 1) }
-    E { R @(m - 1, @(m, n - 1)) }
+    EL I n == 0 { R @(m - 1, 1) }
+    EL { R @(m - 1, @(m, n - 1)) }
 }
 
 F main() -> i64 {

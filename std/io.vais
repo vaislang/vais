@@ -52,10 +52,10 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
     result := fgets_ptr(buffer, max_len, stdin)
     I result == 0 {
         0
-    } E {
+    } EL {
         # Remove trailing newline if present
         i := 0
-        L i < max_len {
+        LW i < max_len {
             c := load_byte(buffer + i)
             I c == 0 {
                 B buffer
@@ -144,7 +144,7 @@ F read_i64() -> i64 {
     I result == 0 {
         free(buffer)
         0
-    } E {
+    } EL {
         value := atol_ptr(buffer)
         free(buffer)
         value
@@ -175,7 +175,7 @@ F read_f64() -> f64 {
     I result == 0 {
         free(buffer)
         0.0
-    } E {
+    } EL {
         value := atof_ptr(buffer)
         free(buffer)
         value
@@ -237,7 +237,7 @@ F read_char() -> i64 {
 # Returns Ok(char) on success, Err(ERR_IO()) on EOF/error
 F read_char_result() -> Result<i64, i64> {
     c := getchar()
-    I c < 0 { Err(ERR_IO()) } E { Ok(c) }
+    I c < 0 { Err(ERR_IO()) } EL { Ok(c) }
 }
 
 # Read an i64 integer using Result type
@@ -248,7 +248,7 @@ F read_i64_result() -> Result<i64, i64> {
     I result == 0 {
         free(buffer)
         Err(ERR_IO())
-    } E {
+    } EL {
         value := atol_ptr(buffer)
         free(buffer)
         Ok(value)

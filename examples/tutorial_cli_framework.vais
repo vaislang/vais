@@ -52,7 +52,7 @@ F cmd_count(argc: i64) -> i64 {
         R 1
     }
     total := mut 0
-    L i:1..n+1 {
+    LF i:1..n+1 {
         total = total + i
     }
     puts("Sum 1..{n} = {total}")
@@ -99,7 +99,7 @@ F main() -> i64 {
         R cmd_help()
     }
 
-    cmd_idx := I verbose == 1 { 2 } E { 1 }
+    cmd_idx := I verbose == 1 { 2 } EL { 1 }
     I cmd_idx >= argc {
         R cmd_help()
     }

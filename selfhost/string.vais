@@ -68,7 +68,7 @@ F string_len(s: i64) -> i64 = load_i64(s + 8)
 F string_cap(s: i64) -> i64 = load_i64(s + 16)
 
 F string_is_empty(s: i64) -> i64 {
-    I string_len(s) == 0 { 1 } E { 0 }
+    I string_len(s) == 0 { 1 } EL { 0 }
 }
 
 # Get byte at index
@@ -97,7 +97,7 @@ F string_ensure_cap(s: i64, needed: i64) -> i64 {
     cap := load_i64(s + 16)
     I needed + 1 > cap {
         string_grow_to(s, needed * 2 + 1)
-    } E { 0 }
+    } EL { 0 }
 }
 
 # ============================================================================
@@ -151,14 +151,14 @@ F string_push_string(dst: i64, src: i64) -> i64 {
 F string_push_i64(s: i64, value: i64) -> i64 {
     I value == 0 {
         string_push_byte(s, 48)
-    } E I value < 0 {
+    } EL I value < 0 {
         string_push_byte(s, 45)
         string_push_i64(s, 0 - value)
-    } E {
+    } EL {
         I value >= 10 {
             string_push_i64(s, value / 10)
             0
-        } E { 0 }
+        } EL { 0 }
         string_push_byte(s, (value % 10) + 48)
     }
 }
@@ -178,13 +178,13 @@ F string_clear(s: i64) -> i64 {
 F bytes_equal(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
     i := mut 0
     equal := mut 1
-    L i < len {
+    LW i < len {
         ab := load_byte(a_ptr + i)
         bb := load_byte(b_ptr + i)
         I ab != bb {
             equal = 0
             i = len  # break
-        } E {
+        } EL {
             i = i + 1
         }
     }
@@ -195,20 +195,20 @@ F bytes_cmp(a_ptr: i64, b_ptr: i64, len: i64) -> i64 {
     i := mut 0
     result := mut 0
     found := mut 0
-    L i < len {
+    LW i < len {
         I found == 0 {
             ab := load_byte(a_ptr + i)
             bb := load_byte(b_ptr + i)
             I ab < bb {
                 result = 0 - 1
                 found = 1
-            } E I ab > bb {
+            } EL I ab > bb {
                 result = 1
                 found = 1
-            } E {
+            } EL {
                 i = i + 1
             }
-        } E {
+        } EL {
             i = len  # break
         }
     }
@@ -225,7 +225,7 @@ F string_eq(a: i64, b: i64) -> i64 {
     b_len := load_i64(b + 8)
     I a_len != b_len {
         0
-    } E {
+    } EL {
         a_data := load_i64(a)
         b_data := load_i64(b)
         bytes_equal(a_data, b_data, a_len)
@@ -236,13 +236,13 @@ F string_eq(a: i64, b: i64) -> i64 {
 F string_eq_str(s: i64, lit: str) -> i64 {
     lit_ptr := str_to_ptr(lit)
     lit_len := mut 0
-    L load_byte(lit_ptr + lit_len) != 0 {
+    LW load_byte(lit_ptr + lit_len) != 0 {
         lit_len = lit_len + 1
     }
     s_len := load_i64(s + 8)
     I s_len != lit_len {
         0
-    } E {
+    } EL {
         s_data := load_i64(s)
         bytes_equal(s_data, lit_ptr, s_len)
     }
@@ -258,15 +258,15 @@ F string_cmp(a: i64, b: i64) -> i64 {
     I b_len < min_len {
         min_len = b_len
         0
-    } E { 0 }
+    } EL { 0 }
     result := bytes_cmp(a_data, b_data, min_len)
     I result != 0 {
         result
-    } E I a_len < b_len {
+    } EL I a_len < b_len {
         0 - 1
-    } E I a_len > b_len {
+    } EL I a_len > b_len {
         1
-    } E {
+    } EL {
         0
     }
 }
@@ -292,12 +292,12 @@ F string_find_byte(s: i64, byte: i64) -> i64 {
     data := load_i64(s)
     i := mut 0
     result := mut 0 - 1
-    L i < len {
+    LW i < len {
         b := load_byte(data + i)
         I b == byte {
             result = i
             i = len  # break
-        } E {
+        } EL {
             i = i + 1
         }
     }
@@ -310,12 +310,12 @@ F string_rfind_byte(s: i64, byte: i64) -> i64 {
     data := load_i64(s)
     i := mut len - 1
     result := mut 0 - 1
-    L i >= 0 {
+    LW i >= 0 {
         b := load_byte(data + i)
         I b == byte {
             result = i
             i = 0 - 1  # break
-        } E {
+        } EL {
             i = i - 1
         }
     }
@@ -326,13 +326,13 @@ F string_rfind_byte(s: i64, byte: i64) -> i64 {
 F string_starts_with(s: i64, prefix: str) -> i64 {
     p_ptr := str_to_ptr(prefix)
     p_len := mut 0
-    L load_byte(p_ptr + p_len) != 0 {
+    LW load_byte(p_ptr + p_len) != 0 {
         p_len = p_len + 1
     }
     s_len := load_i64(s + 8)
     I p_len > s_len {
         0
-    } E {
+    } EL {
         s_data := load_i64(s)
         bytes_equal(s_data, p_ptr, p_len)
     }
@@ -343,13 +343,13 @@ F string_ends_with(s: i64, suffix: str) -> i64 {
     sf_ptr := str_to_ptr(suffix)
     # Compute suffix length via load_byte (str_to_ptr already consumed suffix)
     sf_len := mut 0
-    L load_byte(sf_ptr + sf_len) != 0 {
+    LW load_byte(sf_ptr + sf_len) != 0 {
         sf_len = sf_len + 1
     }
     s_len := load_i64(s + 8)
     I sf_len > s_len {
         0
-    } E {
+    } EL {
         s_data := load_i64(s)
         offset := s_len - sf_len
         bytes_equal(s_data + offset, sf_ptr, sf_len)
@@ -386,10 +386,10 @@ F string_concat(a: i64, b: i64) -> i64 {
 # Helper: check if byte is whitespace (space, tab, newline, cr)
 F is_whitespace(b: i64) -> i64 {
     I b == 32 { 1 }
-    E I b == 9 { 1 }
-    E I b == 10 { 1 }
-    E I b == 13 { 1 }
-    E { 0 }
+    EL I b == 9 { 1 }
+    EL I b == 10 { 1 }
+    EL I b == 13 { 1 }
+    EL { 0 }
 }
 
 # Trim leading and trailing whitespace, returns new string
@@ -399,14 +399,14 @@ F string_trim(s: i64) -> i64 {
     # Find first non-whitespace
     start := mut 0
     found_start := mut 0
-    L found_start == 0 {
+    LW found_start == 0 {
         I start >= len {
             found_start = 1
-        } E {
+        } EL {
             b := load_byte(data + start)
             I is_whitespace(b) == 1 {
                 start = start + 1
-            } E {
+            } EL {
                 found_start = 1
             }
         }
@@ -414,14 +414,14 @@ F string_trim(s: i64) -> i64 {
     # Find last non-whitespace
     end := mut len
     found_end := mut 0
-    L found_end == 0 {
+    LW found_end == 0 {
         I end <= start {
             found_end = 1
-        } E {
+        } EL {
             b := load_byte(data + end - 1)
             I is_whitespace(b) == 1 {
                 end = end - 1
-            } E {
+            } EL {
                 found_end = 1
             }
         }
@@ -450,7 +450,7 @@ F string_print(s: i64) -> i64 {
     data := load_i64(s)
     len := load_i64(s + 8)
     i := mut 0
-    L i < len {
+    LW i < len {
         b := load_byte(data + i)
         putchar(b)
         i = i + 1

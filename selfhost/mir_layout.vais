@@ -82,7 +82,7 @@ F struct_layout_add_field(layout_ptr: i64, field_ptr: i64) -> i64 {
         fields_ptr = malloc(8 * 16)  # initial capacity: 16 fields
         store_i64(layout_ptr + 8, fields_ptr)
         0
-    } E { 0 }
+    } EL { 0 }
 
     store_i64(fields_ptr + fields_len * 8, field_ptr)
     store_i64(layout_ptr + 16, fields_len + 1)
@@ -95,14 +95,14 @@ F struct_layout_free(layout_ptr: i64) -> i64 {
     I fields_ptr != 0 {
         i := mut 0
         L {
-            I i >= fields_len { B } E { 0 }
+            I i >= fields_len { B } EL { 0 }
             fi_ptr := load_i64(fields_ptr + i * 8)
-            I fi_ptr != 0 { field_info_free(fi_ptr) } E { 0 }
+            I fi_ptr != 0 { field_info_free(fi_ptr) } EL { 0 }
             i = i + 1
         }
         free(fields_ptr)
         0
-    } E { 0 }
+    } EL { 0 }
     free(layout_ptr)
     1
 }
@@ -141,7 +141,7 @@ F layout_suggestion_new(kind: i64, struct_name_idx: i64) -> i64 {
     store_i64(ptr + 8, struct_name_idx)
     i := mut 16
     L {
-        I i >= 72 { B } E { 0 }
+        I i >= 72 { B } EL { 0 }
         store_i64(ptr + i, 0)
         i = i + 8
     }
@@ -149,25 +149,25 @@ F layout_suggestion_new(kind: i64, struct_name_idx: i64) -> i64 {
 }
 
 F layout_suggestion_free(sugg_ptr: i64) -> i64 {
-    I sugg_ptr == 0 { R 0 } E { 0 }
+    I sugg_ptr == 0 { R 0 } EL { 0 }
     kind := load_i64(sugg_ptr)
 
     # Free internal arrays
     I kind == LAYOUT_REORDER() {
         new_order_ptr := load_i64(sugg_ptr + 16)
-        I new_order_ptr != 0 { free(new_order_ptr) } E { 0 }
+        I new_order_ptr != 0 { free(new_order_ptr) } EL { 0 }
         0
-    } E I kind == LAYOUT_SPLIT_HOT_COLD() {
+    } EL I kind == LAYOUT_SPLIT_HOT_COLD() {
         hot_ptr := load_i64(sugg_ptr + 16)
         cold_ptr := load_i64(sugg_ptr + 32)
-        I hot_ptr != 0 { free(hot_ptr) } E { 0 }
-        I cold_ptr != 0 { free(cold_ptr) } E { 0 }
+        I hot_ptr != 0 { free(hot_ptr) } EL { 0 }
+        I cold_ptr != 0 { free(cold_ptr) } EL { 0 }
         0
-    } E I kind == LAYOUT_AOS_TO_SOA() {
+    } EL I kind == LAYOUT_AOS_TO_SOA() {
         soa_ptr := load_i64(sugg_ptr + 32)
-        I soa_ptr != 0 { free(soa_ptr) } E { 0 }
+        I soa_ptr != 0 { free(soa_ptr) } EL { 0 }
         0
-    } E { 0 }
+    } EL { 0 }
 
     free(sugg_ptr)
     1
@@ -199,7 +199,7 @@ F layout_ctx_add_suggestion(ctx_ptr: i64, sugg_ptr: i64) -> i64 {
         new_ptr := malloc(8 * new_cap)
         i := mut 0
         L {
-            I i >= suggs_len { B } E { 0 }
+            I i >= suggs_len { B } EL { 0 }
             store_i64(new_ptr + i * 8, load_i64(suggs_ptr + i * 8))
             i = i + 1
         }
@@ -208,7 +208,7 @@ F layout_ctx_add_suggestion(ctx_ptr: i64, sugg_ptr: i64) -> i64 {
         store_i64(ctx_ptr + 16, new_cap)
         suggs_ptr = new_ptr
         0
-    } E { 0 }
+    } EL { 0 }
 
     store_i64(suggs_ptr + suggs_len * 8, sugg_ptr)
     store_i64(ctx_ptr + 8, suggs_len + 1)
@@ -221,13 +221,13 @@ F layout_ctx_free(ctx_ptr: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= suggs_len { B } E { 0 }
+        I i >= suggs_len { B } EL { 0 }
         sugg_ptr := load_i64(suggs_ptr + i * 8)
-        I sugg_ptr != 0 { layout_suggestion_free(sugg_ptr) } E { 0 }
+        I sugg_ptr != 0 { layout_suggestion_free(sugg_ptr) } EL { 0 }
         i = i + 1
     }
 
-    I suggs_ptr != 0 { free(suggs_ptr) } E { 0 }
+    I suggs_ptr != 0 { free(suggs_ptr) } EL { 0 }
     free(ctx_ptr)
     1
 }
@@ -254,7 +254,7 @@ F struct_layout_calculate(layout_ptr: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         fi_ptr := load_i64(fields_ptr + i * 8)
 
         size := load_i64(fi_ptr + 16)
@@ -268,7 +268,7 @@ F struct_layout_calculate(layout_ptr: i64) -> i64 {
         store_i64(fi_ptr + 32, aligned_offset)
 
         offset = aligned_offset + size
-        I alignment > max_align { max_align = alignment } E { 0 }
+        I alignment > max_align { max_align = alignment } EL { 0 }
 
         i = i + 1
     }
@@ -285,7 +285,7 @@ F struct_layout_calculate(layout_ptr: i64) -> i64 {
     I final_size >= CACHE_LINE_SIZE() {
         store_i64(layout_ptr + 48, 1)
         0
-    } E {
+    } EL {
         store_i64(layout_ptr + 48, 0)
         0
     }
@@ -332,14 +332,14 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
     fields_ptr := load_i64(layout_ptr + 8)
     fields_len := load_i64(layout_ptr + 16)
 
-    I fields_len < 2 { R 0 } E { 0 }
+    I fields_len < 2 { R 0 } EL { 0 }
 
     # Create optimized order: sort by alignment descending
     # Copy fields to temp array with (field_idx, alignment) pairs
     temp := malloc(16 * fields_len)
     i := mut 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         fi_ptr := load_i64(fields_ptr + i * 8)
         alignment := load_i64(fi_ptr + 24)
         store_i64(temp + i * 16, i)  # field index
@@ -350,10 +350,10 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
     # Bubble sort by alignment descending (simple, good enough for small N)
     i = 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         j := mut i + 1
         L {
-            I j >= fields_len { B } E { 0 }
+            I j >= fields_len { B } EL { 0 }
             align_i := load_i64(temp + i * 16 + 8)
             align_j := load_i64(temp + j * 16 + 8)
             I align_j > align_i {
@@ -365,7 +365,7 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
                 store_i64(temp + j * 16, idx_i)
                 store_i64(temp + j * 16 + 8, align_i)
                 0
-            } E { 0 }
+            } EL { 0 }
             j = j + 1
         }
         i = i + 1
@@ -375,7 +375,7 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
     new_order := malloc(8 * fields_len)
     i = 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         idx := load_i64(temp + i * 16)
         store_i64(new_order + i * 8, idx)
         i = i + 1
@@ -391,7 +391,7 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
 
     i = 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         orig_idx := load_i64(new_order + i * 8)
         orig_fi := load_i64(fields_ptr + orig_idx * 8)
 
@@ -420,7 +420,7 @@ F suggest_field_reorder(layout_ptr: i64) -> i64 {
         free(opt_layout)
 
         R sugg
-    } E {
+    } EL {
         # No improvement
         free(new_order)
         free(opt_fields_ptr)
@@ -437,20 +437,20 @@ F suggest_split_hot_cold(layout_ptr: i64) -> i64 {
     fields_ptr := load_i64(layout_ptr + 8)
     fields_len := load_i64(layout_ptr + 16)
 
-    I fields_len < 4 { R 0 } E { 0 }  # Need meaningful separation
+    I fields_len < 4 { R 0 } EL { 0 }  # Need meaningful separation
 
     # Count hot and cold fields
     hot_count := mut 0
     cold_count := mut 0
     i := mut 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         fi_ptr := load_i64(fields_ptr + i * 8)
         is_hot := load_i64(fi_ptr + 48)
         I is_hot != 0 {
             hot_count = hot_count + 1
             0
-        } E {
+        } EL {
             cold_count = cold_count + 1
             0
         }
@@ -458,8 +458,8 @@ F suggest_split_hot_cold(layout_ptr: i64) -> i64 {
     }
 
     # Only suggest if both hot and cold exist
-    I hot_count == 0 { R 0 } E { 0 }
-    I cold_count == 0 { R 0 } E { 0 }
+    I hot_count == 0 { R 0 } EL { 0 }
+    I cold_count == 0 { R 0 } EL { 0 }
 
     # Build hot and cold field index arrays
     hot_indices := malloc(8 * hot_count)
@@ -469,14 +469,14 @@ F suggest_split_hot_cold(layout_ptr: i64) -> i64 {
 
     i = 0
     L {
-        I i >= fields_len { B } E { 0 }
+        I i >= fields_len { B } EL { 0 }
         fi_ptr := load_i64(fields_ptr + i * 8)
         is_hot := load_i64(fi_ptr + 48)
         I is_hot != 0 {
             store_i64(hot_indices + hot_idx * 8, i)
             hot_idx = hot_idx + 1
             0
-        } E {
+        } EL {
             store_i64(cold_indices + cold_idx * 8, i)
             cold_idx = cold_idx + 1
             0
@@ -504,7 +504,7 @@ F suggest_aos_to_soa(ctx_ptr: i64, body_ptr: i64, layout_ptr: i64) -> i64 {
 
     # Simplified: if struct has 3+ fields, suggest SoA
     fields_len := load_i64(layout_ptr + 16)
-    I fields_len < 3 { R 0 } E { 0 }
+    I fields_len < 3 { R 0 } EL { 0 }
 
     # Create suggestion (simplified, no deep analysis)
     sugg := layout_suggestion_new(LAYOUT_AOS_TO_SOA(), load_i64(layout_ptr))
@@ -541,14 +541,14 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
     # Phase 1: Discover aggregates
     bi := mut 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -568,11 +568,11 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
                         # For now, just count as discovered struct
                         # In full impl: build StructLayout, infer field sizes
                         0
-                    } E { 0 }
+                    } EL { 0 }
                     0
-                } E { 0 }
+                } EL { 0 }
                 0
-            } E { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -584,14 +584,14 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
     # Scan for Place projections (PROJ_FIELD)
     bi = 0
     L {
-        I bi >= blocks_len { B } E { 0 }
+        I bi >= blocks_len { B } EL { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { B } E { 0 }
+            I si >= stmts_len { B } EL { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -609,7 +609,7 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
                         # Scan projections for PROJ_FIELD
                         pi := mut 0
                         L {
-                            I pi >= proj_len { B } E { 0 }
+                            I pi >= proj_len { B } EL { 0 }
                             p_ptr := load_i64(proj_ptr + pi * 8)
                             p_kind := load_i64(p_ptr)
                             I p_kind == PROJ_FIELD() {
@@ -617,15 +617,15 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
                                 field_idx := load_i64(p_ptr + 8)
                                 # Increment access count (simplified)
                                 0
-                            } E { 0 }
+                            } EL { 0 }
                             pi = pi + 1
                         }
                         0
-                    } E { 0 }
+                    } EL { 0 }
                     0
-                } E { 0 }
+                } EL { 0 }
                 0
-            } E { 0 }
+            } EL { 0 }
 
             si = si + 1
         }
@@ -638,24 +638,24 @@ F layout_analyze_body(ctx_ptr: i64, body_ptr: i64) -> i64 {
     I layouts_count > 0 {
         i := mut 0
         L {
-            I i >= layouts_count { B } E { 0 }
+            I i >= layouts_count { B } EL { 0 }
             layout_ptr := load_i64(layouts + i * 8)
 
             # Try field reorder
             sugg := suggest_field_reorder(layout_ptr)
-            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } E { 0 }
+            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } EL { 0 }
 
             # Try hot/cold split
             sugg = suggest_split_hot_cold(layout_ptr)
-            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } E { 0 }
+            I sugg != 0 { layout_ctx_add_suggestion(ctx_ptr, sugg) } EL { 0 }
 
             i = i + 1
         }
         0
-    } E { 0 }
+    } EL { 0 }
 
     # Cleanup
-    I layouts != 0 { free(layouts) } E { 0 }
+    I layouts != 0 { free(layouts) } EL { 0 }
 
     1
 }
@@ -670,7 +670,7 @@ F layout_analyze_module(ctx_ptr: i64, mod_ptr: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= bodies_len { B } E { 0 }
+        I i >= bodies_len { B } EL { 0 }
         body_ptr := load_i64(bodies_ptr + i * 8)
         layout_analyze_body(ctx_ptr, body_ptr)
         i = i + 1

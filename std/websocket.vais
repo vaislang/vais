@@ -124,39 +124,39 @@ X WsFrame {
 
     # Check if this is a control frame
     F is_control(&self) -> i64 {
-        I self.opcode >= 8 { 1 } E { 0 }
+        I self.opcode >= 8 { 1 } EL { 0 }
     }
 
     # Check if this is a text frame
     F is_text(&self) -> i64 {
-        I self.opcode == WS_OPCODE_TEXT { 1 } E { 0 }
+        I self.opcode == WS_OPCODE_TEXT { 1 } EL { 0 }
     }
 
     # Check if this is a binary frame
     F is_binary(&self) -> i64 {
-        I self.opcode == WS_OPCODE_BINARY { 1 } E { 0 }
+        I self.opcode == WS_OPCODE_BINARY { 1 } EL { 0 }
     }
 
     # Check if this is a close frame
     F is_close(&self) -> i64 {
-        I self.opcode == WS_OPCODE_CLOSE { 1 } E { 0 }
+        I self.opcode == WS_OPCODE_CLOSE { 1 } EL { 0 }
     }
 
     # Check if this is a ping frame
     F is_ping(&self) -> i64 {
-        I self.opcode == WS_OPCODE_PING { 1 } E { 0 }
+        I self.opcode == WS_OPCODE_PING { 1 } EL { 0 }
     }
 
     # Check if this is a pong frame
     F is_pong(&self) -> i64 {
-        I self.opcode == WS_OPCODE_PONG { 1 } E { 0 }
+        I self.opcode == WS_OPCODE_PONG { 1 } EL { 0 }
     }
 
     # Get payload as string (for text frames)
     F payload_text(&self) -> str {
         I self.payload != 0 & self.payload_len > 0 {
             self.payload as str
-        } E {
+        } EL {
             ""
         }
     }
@@ -167,7 +167,7 @@ X WsFrame {
             high := load_byte(self.payload)
             low := load_byte(self.payload + 1)
             high * 256 + low
-        } E {
+        } EL {
             WS_CLOSE_NO_STATUS
         }
     }
@@ -216,7 +216,7 @@ X WsConnection {
 
     # Check if connection is open
     F is_open(&self) -> i64 {
-        I self.state == WS_STATE_OPEN { 1 } E { 0 }
+        I self.state == WS_STATE_OPEN { 1 } EL { 0 }
     }
 
     # Send a WebSocket frame
@@ -251,7 +251,7 @@ X WsConnection {
         sent := __tcp_send(self.fd, buf, frame_len)
         __free(buf)
 
-        I sent < 0 { -1 } E { sent }
+        I sent < 0 { -1 } EL { sent }
     }
 
     # Send a text message
@@ -312,7 +312,7 @@ X WsConnection {
         total := 0
 
         # Read at least 2 bytes for frame header
-        L total < 2 {
+        LW total < 2 {
             n := __tcp_recv(self.fd, buf + total, WS_RECV_BUFFER)
             I n <= 0 {
                 __free(buf)
@@ -332,7 +332,7 @@ X WsConnection {
         consumed := __ws_decode_frame(buf, total, frame_out)
 
         # If incomplete, read more data
-        L consumed == 0 & total < WS_MAX_FRAME_SIZE + 14 {
+        LW consumed == 0 & total < WS_MAX_FRAME_SIZE + 14 {
             n := __tcp_recv(self.fd, buf + total, WS_RECV_BUFFER)
             I n <= 0 {
                 __free(buf)
@@ -377,7 +377,7 @@ X WsConnection {
                 self.send_frame(&close_reply)
                 close_reply.drop()
                 self.state = WS_STATE_CLOSED
-            } E I self.state == WS_STATE_CLOSING {
+            } EL I self.state == WS_STATE_CLOSING {
                 # We initiated close, received response
                 self.state = WS_STATE_CLOSED
             }
@@ -438,7 +438,7 @@ X WsServer {
 
     # Check if server is valid (listener bound successfully)
     F is_valid(&self) -> i64 {
-        I self.listener_fd >= 0 { 1 } E { 0 }
+        I self.listener_fd >= 0 { 1 } EL { 0 }
     }
 
     # Accept a WebSocket connection (performs HTTP upgrade handshake)
@@ -462,7 +462,7 @@ X WsServer {
         }
 
         total := 0
-        L true {
+        LW true {
             n := __tcp_recv(client_fd, buf + total, WS_RECV_BUFFER)
             I n <= 0 {
                 B
@@ -541,7 +541,7 @@ X WsServer {
         self.running = 1
         __ws_log("WebSocket echo server started")
 
-        L self.running == 1 {
+        LW self.running == 1 {
             conn := self.accept()
             I conn.fd < 0 {
                 C
@@ -550,7 +550,7 @@ X WsServer {
             __ws_log("Client connected")
 
             # Handle frames for this connection
-            L conn.is_open() == 1 {
+            LW conn.is_open() == 1 {
                 frame := conn.recv_frame()
 
                 I frame.opcode == -1 {
@@ -561,13 +561,13 @@ X WsServer {
                 I frame.opcode == WS_OPCODE_TEXT {
                     # Echo text back
                     conn.send_text(frame.payload_text())
-                } E I frame.opcode == WS_OPCODE_BINARY {
+                } EL I frame.opcode == WS_OPCODE_BINARY {
                     # Echo binary back
                     conn.send_binary(frame.payload, frame.payload_len)
-                } E I frame.opcode == WS_OPCODE_PING {
+                } EL I frame.opcode == WS_OPCODE_PING {
                     # Respond with pong
                     conn.send_pong()
-                } E I frame.opcode == WS_OPCODE_CLOSE {
+                } EL I frame.opcode == WS_OPCODE_CLOSE {
                     # Close handled automatically in recv_frame
                     B
                 }

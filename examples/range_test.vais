@@ -6,7 +6,7 @@ F test_range() -> i64 {
 
     # Simple range loop: L i:0..5 { }
     sum := mut 0
-    L i:0..5 {
+    LF i:0..5 {
         sum = sum + i
         putchar(i + 48)
         putchar(32)
@@ -25,7 +25,7 @@ F print_num(n: i64) -> i64 {
     I n >= 10 {
         putchar(n / 10 + 48)
         0
-    } E {
+    } EL {
         0
     }
     putchar(n % 10 + 48)
