@@ -453,6 +453,13 @@ impl Parser {
 
     /// Parse type
     pub(crate) fn parse_type(&mut self) -> ParseResult<Spanned<Type>> {
+        self.enter_depth()?;
+        let result = self.parse_type_inner();
+        self.exit_depth();
+        result
+    }
+
+    fn parse_type_inner(&mut self) -> ParseResult<Spanned<Type>> {
         let start = self.current_span().start;
 
         let base_type = self.parse_base_type()?;

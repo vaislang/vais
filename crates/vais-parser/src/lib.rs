@@ -38,6 +38,14 @@ pub enum ParseError {
     /// Invalid or malformed expression
     #[error("Invalid expression")]
     InvalidExpression,
+    /// Maximum recursion depth exceeded during parsing
+    #[error("Maximum parse depth exceeded ({max}) - expression too deeply nested")]
+    DepthExceeded {
+        /// The maximum depth that was exceeded
+        max: usize,
+        /// Source location where the depth was exceeded
+        span: std::ops::Range<usize>,
+    },
 }
 
 impl ParseError {
@@ -47,6 +55,7 @@ impl ParseError {
             ParseError::UnexpectedToken { span, .. } => Some(span.clone()),
             ParseError::UnexpectedEof { span } => Some(span.clone()),
             ParseError::InvalidExpression => None,
+            ParseError::DepthExceeded { span, .. } => Some(span.clone()),
         }
     }
 
@@ -56,6 +65,7 @@ impl ParseError {
             ParseError::UnexpectedToken { .. } => "P001",
             ParseError::UnexpectedEof { .. } => "P002",
             ParseError::InvalidExpression => "P003",
+            ParseError::DepthExceeded { .. } => "P004",
         }
     }
 
@@ -77,6 +87,10 @@ impl ParseError {
             ),
             ParseError::UnexpectedEof { .. } => vais_i18n::get_simple(&key),
             ParseError::InvalidExpression => vais_i18n::get_simple(&key),
+            ParseError::DepthExceeded { max, .. } => vais_i18n::get(
+                &key,
+                &[("max", &max.to_string())],
+            ),
         }
     }
 }
@@ -228,16 +242,9 @@ impl Parser {
         self.depth += 1;
         if self.depth > MAX_PARSE_DEPTH {
             let span = self.current_span();
-            Err(ParseError::UnexpectedToken {
-                found: self
-                    .peek()
-                    .map(|t| t.token.clone())
-                    .unwrap_or(Token::Ident("EOF".to_string())),
+            Err(ParseError::DepthExceeded {
+                max: MAX_PARSE_DEPTH,
                 span,
-                expected: format!(
-                    "expression (maximum nesting depth of {} exceeded)",
-                    MAX_PARSE_DEPTH
-                ),
             })
         } else {
             Ok(())
