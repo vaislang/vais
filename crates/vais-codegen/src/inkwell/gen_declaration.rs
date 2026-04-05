@@ -153,10 +153,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         }
 
-        // Store variant tags
+        // Store variant tags, and record struct-payload variants for match binding.
         for (i, variant) in e.variants.iter().enumerate() {
             self.enum_variants
                 .insert((enum_name.clone(), variant.name.node.clone()), i as i32);
+
+            // If the variant has a single Tuple field that is a named type,
+            // record it so pattern bindings can recover the struct type.
+            if let ast::VariantFields::Tuple(types) = &variant.fields {
+                if types.len() == 1 {
+                    if let ast::Type::Named { name: struct_name, .. } = &types[0].node {
+                        self.enum_variant_struct_types.insert(
+                            (enum_name.clone(), variant.name.node.clone()),
+                            struct_name.clone(),
+                        );
+                    }
+                }
+            }
         }
 
         // Create enum as struct: { i8 tag, i64 data }

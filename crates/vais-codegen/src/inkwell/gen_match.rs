@@ -821,10 +821,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 Ok(())
             }
-            Pattern::Variant { name: _, fields } => {
+            Pattern::Variant { name, fields } => {
                 // Bind variant fields.
                 // Enum is { i8 tag, i64 data } — the data field (index 1) holds the payload.
-                // For single-field variants the payload IS the value.
+                // For single-field variants the payload IS the value (or a pointer if the
+                // payload is a struct >8B that was heap-allocated by the constructor).
                 // For multi-field variants the payload is an anonymous struct; extract each
                 // sub-field with sequential build_extract_value calls.
                 let struct_val = match_val.into_struct_value();
@@ -833,9 +834,70 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_extract_value(struct_val, 1, "variant_data")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
+                // Look up whether this variant carries a struct payload.
+                // (enum_name unknown here — scan enum_variant_struct_types by variant name.)
+                let variant_struct_name: Option<String> = self
+                    .enum_variant_struct_types
+                    .iter()
+                    .find(|((_, v_name), _)| v_name == &name.node)
+                    .map(|(_, s)| s.clone());
+
                 if fields.len() <= 1 {
-                    // Single-field (or no-field) variant: bind directly
+                    // Single-field (or no-field) variant: bind directly.
                     if let Some(first_field) = fields.first() {
+                        if let Some(ref struct_name) = variant_struct_name {
+                            if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                                // data_val is an i64 holding either the bitcast struct
+                                // (if ≤8B) or a heap pointer (if >8B). Determine which
+                                // based on the struct's store size.
+                                let target_data = inkwell::targets::TargetData::create(
+                                    &self.module.get_triple().as_str().to_string_lossy(),
+                                );
+                                let size_bytes = target_data.get_store_size(&struct_ty);
+                                let i64_ty = self.context.i64_type();
+                                let data_i64 = data_val.into_int_value();
+                                let loaded_struct: BasicValueEnum<'ctx> = if size_bytes > 8 {
+                                    // Heap-allocated: i64 → ptr → load struct
+                                    let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
+                                    let heap_ptr = self
+                                        .builder
+                                        .build_int_to_ptr(data_i64, ptr_ty, "variant_heap_ptr")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    self.builder
+                                        .build_load(struct_ty, heap_ptr, "variant_heap_load")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                } else {
+                                    // Small (≤8B): i64 → stack alloca → load as struct
+                                    let tmp_alloca = self
+                                        .builder
+                                        .build_alloca(i64_ty, "variant_small_from_i64")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    self.builder
+                                        .build_store(tmp_alloca, data_i64)
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                                    let typed_ptr = self
+                                        .builder
+                                        .build_bitcast(
+                                            tmp_alloca,
+                                            struct_ty.ptr_type(AddressSpace::default()),
+                                            "variant_small_typed",
+                                        )
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into_pointer_value();
+                                    self.builder
+                                        .build_load(struct_ty, typed_ptr, "variant_small_load")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                };
+                                // Bind the loaded struct value, then record its type name
+                                // so downstream field access can resolve the struct.
+                                self.generate_pattern_bindings(first_field, &loaded_struct)?;
+                                if let Pattern::Ident(ident_name) = &first_field.node {
+                                    self.var_struct_types
+                                        .insert(ident_name.clone(), struct_name.clone());
+                                }
+                                return Ok(());
+                            }
+                        }
                         self.generate_pattern_bindings(first_field, &data_val)?;
                     }
                 } else {

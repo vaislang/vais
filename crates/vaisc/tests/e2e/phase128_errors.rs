@@ -26,8 +26,8 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 #[test]
 fn e2e_p128_err_type_mismatch_bool_for_int() {
-    // Phase 160-A: bool↔int unification restored — bool→i64 is now allowed
-    assert_exit_code(r#"F main() -> i64 = true"#, 1);
+    // Phase 158: bool↔int unification is forbidden — requires explicit `as i64`
+    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
 }
 
 #[test]

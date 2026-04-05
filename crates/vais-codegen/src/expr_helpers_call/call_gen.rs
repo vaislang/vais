@@ -70,28 +70,14 @@ impl CodeGenerator {
                 i
             );
 
-            // Check if the payload slot has native struct type (not i64).
-            // If so, store the struct directly without heap-alloc or bitcast.
-            let raw_field_ty = raw_variant_fields.get(i);
-            let payload_is_native_struct = raw_field_ty
-                .map(|t| matches!(t, ResolvedType::Named { .. }))
-                .unwrap_or(false);
-
-            if payload_is_native_struct {
-                // Native struct payload slot: store the struct value directly.
-                let arg_type = self.infer_expr_type(arg_expr);
-                let llvm_ty = self.type_to_llvm(&arg_type);
-                if !self.is_expr_value(arg_expr) {
-                    // arg_val is a pointer to the struct — load and store
-                    let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, arg_val);
-                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, loaded, llvm_ty, payload_field_ptr);
-                } else {
-                    // arg_val is a struct value — store directly
-                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, arg_val, llvm_ty, payload_field_ptr);
-                }
-                continue;
-            }
+            // NOTE: Previously a `payload_is_native_struct` fast-path stored the
+            // struct value directly into the payload slot. That was unsound
+            // because enum types are generated with uniform i64 payload slots
+            // (see types/type_gen.rs::generate_enum_type), so a 16B struct would
+            // overflow an 8B slot and corrupt memory. Instead we always go
+            // through the i64 slot path below, which heap-allocates large
+            // structs and bitcasts small ones.
+            let _ = raw_variant_fields.get(i);
 
             // Store payload into enum payload area (generic i64 slot)
             // For non-i64 types, bitcast the payload pointer to T* and store directly

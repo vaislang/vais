@@ -32,16 +32,16 @@ fn assert_error_contains(source: &str, expected: &str) {
 
 // ==================== A. Forbidden Coercions (must error) ====================
 
-/// Phase 160-A: bool→i64 implicit coercion is allowed (bool is 0/1 in runtime).
+/// Phase 158: bool→i64 implicit coercion is FORBIDDEN (requires `as i64`).
 #[test]
 fn e2e_phase158_strict_bool_to_i64_return() {
-    assert_compiles(r#"F main() -> i64 = true"#);
+    assert_error_contains(r#"F main() -> i64 = true"#, "mismatch");
 }
 
-/// Phase 160-A: i64→bool implicit coercion is allowed.
+/// Phase 158: i64→bool implicit coercion is FORBIDDEN (requires comparison).
 #[test]
 fn e2e_phase158_strict_i64_to_bool_return() {
-    assert_compiles(r#"F main() -> bool = 42"#);
+    assert_error_contains(r#"F main() -> bool = 42"#, "mismatch");
 }
 
 /// Phase 160-A: int→float implicit coercion is allowed (numeric promotion).

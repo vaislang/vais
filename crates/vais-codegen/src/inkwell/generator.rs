@@ -83,6 +83,11 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Enum variant tags: maps (enum_name, variant_name) -> tag
     pub(super) enum_variants: HashMap<(String, String), i32>,
 
+    /// Enum variant payload struct names: (enum_name, variant_name) -> struct type name
+    /// Only populated for variants whose single payload field is a named struct.
+    /// Used by match pattern bindings to recover struct type for field access.
+    pub(super) enum_variant_struct_types: HashMap<(String, String), String>,
+
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
 
@@ -176,6 +181,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_counter: 0,
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
+            enum_variant_struct_types: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),

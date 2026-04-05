@@ -200,6 +200,9 @@ fn parse(py: Python<'_>, source: String) -> PyResult<Py<PyAny>> {
                 format!("Unexpected end of file at {:?}", span)
             }
             ParseError::InvalidExpression => "Invalid expression".to_string(),
+            ParseError::DepthExceeded { max, span } => {
+                format!("Maximum parse depth exceeded ({}) at {:?}", max, span)
+            }
         };
         PyValueError::new_err(error_msg)
     })?;
@@ -234,6 +237,10 @@ fn check(source: String) -> PyResult<Vec<Error>> {
                     Some((span.start, span.end)),
                 ),
                 ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
+                ParseError::DepthExceeded { max, span } => (
+                    format!("Maximum parse depth exceeded ({})", max),
+                    Some((span.start, span.end)),
+                ),
             };
             return Ok(vec![Error {
                 message,
@@ -303,6 +310,10 @@ fn compile_to_result(
                     Some((span.start, span.end)),
                 ),
                 ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
+                ParseError::DepthExceeded { max, span } => (
+                    format!("Maximum parse depth exceeded ({})", max),
+                    Some((span.start, span.end)),
+                ),
             };
             errors.push(Error {
                 message,

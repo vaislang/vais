@@ -12,59 +12,6 @@
 
 use super::helpers::*;
 
-#[test]
-fn e2e_p183_debug_large_struct_ir() {
-    // Debug test: dump IR for large struct in enum
-    let source = r#"
-S Point {
-    x: i64,
-    y: i64
-}
-
-E Maybe {
-    Nothing,
-    Just(Point)
-}
-
-F main() -> i64 {
-    p := Point { x: 10, y: 32 }
-    opt := Just(p)
-    M opt {
-        Just(val) => val.x + val.y,
-        Nothing => 0
-    }
-}
-"#;
-    let ir = compile_to_ir(source).unwrap();
-    // Print type defs and main function
-    let mut output = String::new();
-    for line in ir.lines() {
-        let l = line.trim();
-        if l.starts_with('%') && l.contains("type") {
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    let mut in_main = false;
-    for line in ir.lines() {
-        if line.contains("@main") && line.contains("define") { in_main = true; }
-        if in_main {
-            output.push_str(line);
-            output.push('\n');
-            if line.trim() == "}" { break; }
-        }
-    }
-    // Also show all lines with Maybe or Point
-    for line in ir.lines() {
-        if line.contains("Maybe") || line.contains("Point") || line.contains("Option") || line.contains("Result") {
-            output.push_str("  [type] ");
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    panic!("IR dump:\n{}", output);
-}
-
 // ==================== 1. Small struct (<=8 bytes) in enum ====================
 
 #[test]

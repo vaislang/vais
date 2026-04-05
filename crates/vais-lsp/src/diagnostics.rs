@@ -27,6 +27,15 @@ pub fn parse_error_to_diagnostic(err: &ParseError, source: &str) -> Diagnostic {
             let pos = Position::new(0, 0);
             (pos, pos, "Invalid expression".to_string())
         }
+        ParseError::DepthExceeded { max, span } => {
+            let pos = offset_to_position(source, span.start);
+            let end_pos = offset_to_position(source, span.end);
+            (
+                pos,
+                end_pos,
+                format!("Maximum parse depth exceeded ({}) — expression too deeply nested", max),
+            )
+        }
     };
 
     Diagnostic {

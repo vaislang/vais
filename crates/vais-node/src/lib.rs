@@ -119,6 +119,9 @@ pub fn parse(source: String) -> Result<ParseResult> {
                 format!("Unexpected end of file at {:?}", span)
             }
             ParseError::InvalidExpression => "Invalid expression".to_string(),
+            ParseError::DepthExceeded { max, span } => {
+                format!("Maximum parse depth exceeded ({}) at {:?}", max, span)
+            }
         };
         Error::new(Status::InvalidArg, error_msg)
     })?;
@@ -164,6 +167,13 @@ pub fn check(source: String) -> Result<Vec<VaisError>> {
                     }),
                 ),
                 ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
+                ParseError::DepthExceeded { max, span } => (
+                    format!("Maximum parse depth exceeded ({})", max),
+                    Some(VaisSpan {
+                        start: span.start as u32,
+                        end: span.end as u32,
+                    }),
+                ),
             };
             return Ok(vec![VaisError {
                 message,

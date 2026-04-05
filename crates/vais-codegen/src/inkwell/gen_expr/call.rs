@@ -525,7 +525,84 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.context.i64_type().const_int(0, false)
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
-                    self.coerce_to_i64(v)?
+                    // Large struct (>8B) cannot fit in i64: heap-allocate and store pointer.
+                    // Small types (i64, f64, ptr, ≤8B struct) use bitcast/coerce_to_i64.
+                    if v.is_struct_value() {
+                        let struct_val = v.into_struct_value();
+                        let struct_ty = struct_val.get_type();
+                        let target_data = inkwell::targets::TargetData::create(
+                            &self.module.get_triple().as_str().to_string_lossy(),
+                        );
+                        let size_bytes = target_data.get_store_size(&struct_ty);
+                        if size_bytes > 8 {
+                            // Heap-allocate: malloc(size) → memcpy struct → ptrtoint to i64
+                            let i64_ty = self.context.i64_type();
+                            let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                            // Call malloc(size)
+                            let malloc_fn = self
+                                .module
+                                .get_function("malloc")
+                                .or_else(|| {
+                                    let malloc_ty = i8_ptr_ty.fn_type(
+                                        &[i64_ty.into()],
+                                        false,
+                                    );
+                                    Some(self.module.add_function("malloc", malloc_ty, None))
+                                })
+                                .unwrap();
+                            let size_val = i64_ty.const_int(size_bytes, false);
+                            let heap_ptr = self
+                                .builder
+                                .build_call(malloc_fn, &[size_val.into()], "variant_heap")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .try_as_basic_value()
+                                .left()
+                                .unwrap()
+                                .into_pointer_value();
+                            // Store struct into heap memory
+                            let typed_ptr = self
+                                .builder
+                                .build_bitcast(
+                                    heap_ptr,
+                                    struct_ty.ptr_type(AddressSpace::default()),
+                                    "variant_heap_typed",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_pointer_value();
+                            self.builder
+                                .build_store(typed_ptr, struct_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            // ptrtoint to i64 for enum data slot
+                            self.builder
+                                .build_ptr_to_int(heap_ptr, i64_ty, "variant_data_as_i64")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        } else {
+                            // Small struct (≤8B): bitcast via stack alloca to i64
+                            let i64_ty = self.context.i64_type();
+                            let tmp_alloca = self
+                                .builder
+                                .build_alloca(struct_ty, "variant_small_tmp")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.builder
+                                .build_store(tmp_alloca, struct_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            let i64_ptr = self
+                                .builder
+                                .build_bitcast(
+                                    tmp_alloca,
+                                    i64_ty.ptr_type(AddressSpace::default()),
+                                    "variant_small_as_i64p",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_pointer_value();
+                            self.builder
+                                .build_load(i64_ty, i64_ptr, "variant_small_as_i64")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_int_value()
+                        }
+                    } else {
+                        self.coerce_to_i64(v)?
+                    }
                 };
                 let mut val = enum_type.get_undef();
                 val = self
