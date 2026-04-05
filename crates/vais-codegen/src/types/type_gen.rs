@@ -17,38 +17,35 @@ impl CodeGenerator {
 
     /// Generate LLVM enum type definition
     pub(crate) fn generate_enum_type(&self, name: &str, info: &EnumInfo) -> String {
-        // Enum is represented as { i32 tag, union payload }
-        // For simplicity, we use the largest variant size for the payload
-        let mut max_payload_size = 0usize;
-        let mut payload_types: Vec<String> = Vec::new();
+        // Enum is represented as { i32 tag, { i64, i64, ... } }
+        // The payload is a union of all variants, using i64 slots.
+        //
+        // All payload fields are stored as i64 by generate_enum_variant_constructor:
+        // - Small types (<=8 bytes): value is bitcast into the i64 slot
+        // - Large types (>8 bytes, e.g., str { i8*, i64 }): heap-allocated, pointer stored as i64
+        // - Pointer types: stored directly as i64
+        //
+        // This uniform i64 representation ensures type consistency between the
+        // enum type definition and the actual storage/extraction IR.
+        let mut max_field_count = 0usize;
 
         for variant in &info.variants {
-            let variant_types = match &variant.fields {
-                EnumVariantFields::Unit => vec![],
-                EnumVariantFields::Tuple(types) => {
-                    types.iter().map(|t| self.type_to_llvm(t)).collect()
-                }
-                EnumVariantFields::Struct(fields) => {
-                    fields.iter().map(|(_, t)| self.type_to_llvm(t)).collect()
-                }
+            let field_count = match &variant.fields {
+                EnumVariantFields::Unit => 0,
+                EnumVariantFields::Tuple(types) => types.len(),
+                EnumVariantFields::Struct(fields) => fields.len(),
             };
-
-            // Estimate size based on actual field types
-            let size: usize = variant_types
-                .iter()
-                .map(|t| self.estimate_type_size(t))
-                .sum();
-            if size > max_payload_size {
-                max_payload_size = size;
-                payload_types = variant_types;
+            if field_count > max_field_count {
+                max_field_count = field_count;
             }
         }
 
-        if payload_types.is_empty() {
+        if max_field_count == 0 {
             // Simple enum with no payload - just use i32 for tag
             format!("%{} = type {{ i32 }}", name)
         } else {
-            // Enum with payload - tag + payload struct
+            // Enum with payload - tag + payload struct of i64 slots
+            let payload_types: Vec<&str> = vec!["i64"; max_field_count];
             format!(
                 "%{} = type {{ i32, {{ {} }} }}",
                 name,

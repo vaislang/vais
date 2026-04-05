@@ -72,6 +72,16 @@ pub enum Token {
     #[token("G", priority = 3)]
     Global,
 
+    // === Unambiguous 2-char Keywords (priority 4 > single-letter priority 3) ===
+    #[token("EN", priority = 4)]
+    EnumKeyword,    // Unambiguous enum (replaces contextual E)
+    #[token("EL", priority = 4)]
+    Else,           // Unambiguous else (replaces contextual E after if)
+    #[token("LF", priority = 4)]
+    ForEach,        // Unambiguous for-each loop (replaces contextual L pattern:iter)
+    #[token("LW", priority = 4)]
+    While,          // Unambiguous while loop (replaces contextual L condition)
+
     // === Type Keywords ===
     #[token("mut")]
     Mut,
@@ -428,6 +438,10 @@ impl fmt::Display for Token {
             Token::Union => write!(f, "O"),
             Token::Extern => write!(f, "N"),
             Token::Global => write!(f, "G"),
+            Token::EnumKeyword => write!(f, "EN"),
+            Token::Else => write!(f, "EL"),
+            Token::ForEach => write!(f, "LF"),
+            Token::While => write!(f, "LW"),
             Token::Yield => write!(f, "yield"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
@@ -621,6 +635,23 @@ fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
         if let Token::Ident(ref s) = tok.token {
             // Only split exactly 2-char idents where both chars are keyword letters
             if s.len() == 2 {
+                // Check if this 2-char sequence is one of the unambiguous 2-char keywords.
+                // These must NOT be split into two single-char keyword tokens.
+                let two_char_keyword = match s.as_str() {
+                    "EN" => Some(Token::EnumKeyword),
+                    "EL" => Some(Token::Else),
+                    "LF" => Some(Token::ForEach),
+                    "LW" => Some(Token::While),
+                    _ => None,
+                };
+                if let Some(kw_token) = two_char_keyword {
+                    result.push(SpannedToken {
+                        token: kw_token,
+                        span: tok.span,
+                    });
+                    continue;
+                }
+
                 let chars: Vec<char> = s.chars().collect();
                 let first = char_to_keyword(chars[0]);
                 let second = char_to_keyword(chars[1]);

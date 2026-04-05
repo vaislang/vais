@@ -199,50 +199,10 @@ impl CodeGenerator {
             }
 
             if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
-                // This is a tuple enum variant constructor
-                let mut ir = String::new();
-
-                // Generate argument values
-                let mut arg_vals = Vec::new();
-                for arg in args {
-                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
-                    ir.push_str(&arg_ir);
-                    arg_vals.push(val);
-                }
-
-                // Create enum value on stack: { i32 tag, i64 payload }
-                let enum_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca %{}", enum_ptr, enum_name);
-
-                // Store tag
-                let tag_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                    tag_ptr,
-                    enum_name,
-                    enum_name,
-                    enum_ptr
-                );
-                write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
-
-                // Store payload fields into the payload sub-struct
-                for (i, arg_val) in arg_vals.iter().enumerate() {
-                    let payload_field_ptr = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
-                        payload_field_ptr,
-                        enum_name,
-                        enum_name,
-                        enum_ptr,
-                        i
-                    );
-                    write_ir!(ir, "  store i64 {}, i64* {}", arg_val, payload_field_ptr);
-                }
-
-                // Return pointer to the enum
-                return Ok((enum_ptr, ir));
+                // Delegate to the canonical enum variant constructor which handles
+                // type-aware payload storage (bitcast for small structs, heap-alloc
+                // for large structs like str).
+                return self.generate_enum_variant_constructor(&enum_name, tag, args, counter);
             }
 
             // Check if this is a SIMD intrinsic

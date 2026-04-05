@@ -127,6 +127,11 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dot => "Dot",
         Token::ColonColon => "ColonColon",
         Token::HashBracket => "HashBracket",
+        // New unambiguous keyword variants — map to same string as their legacy equivalents
+        Token::EnumKeyword => "Enum",
+        Token::Else => "Else",
+        Token::ForEach => "Loop",
+        Token::While => "Loop",
     }
     .to_string()
 }

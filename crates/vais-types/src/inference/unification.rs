@@ -194,10 +194,6 @@ impl TypeChecker {
             // Allow implicit integer type unification (widening within same signedness family).
             // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
-            // Allow bool ↔ integer unification (Phase 160-A).
-            // bool is 0/1 in Vais runtime. Enables `I flag { ... }` and `count += is_active()`.
-            (ResolvedType::Bool, b) if Self::is_integer_type(b) => Ok(()),
-            (a, ResolvedType::Bool) if Self::is_integer_type(a) => Ok(()),
             // Allow int ↔ float unification (Phase 160-A numeric promotion).
             // Integer literals like `0` adapt to f32/f64 context. Enables `x: f32 = 0`.
             (a, b)

@@ -93,8 +93,41 @@ impl CodeGenerator {
             return self.generate_string_method_call(&recv_val, &ir, method_name, args, counter);
         }
 
-        // clone() on any type — return the receiver value unchanged
+        // clone() on any type — return the receiver value unchanged.
+        // For Named types (structs), generate_ident_expr returns a pointer
+        // (%Type*) for SSA/alloca locals. We must load the struct value so
+        // the caller gets a by-value %Type, not a %Type* pointer.
         if method_name == "clone" && args.is_empty() {
+            let inner_recv = match &recv_type {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                other => other,
+            };
+            if matches!(inner_recv, ResolvedType::Named { .. }) {
+                // Check if the receiver is a local variable whose generate_ident_expr
+                // returns a pointer (SSA or alloca Named locals)
+                let is_ptr_receiver = if let Expr::Ident(name) = &receiver.node {
+                    self.fn_ctx.locals.get(name.as_str()).is_some_and(|local| {
+                        matches!(local.ty, ResolvedType::Named { .. })
+                            && (local.is_ssa() || local.is_alloca())
+                    })
+                } else {
+                    // Field access on structs also returns pointers (GEP results)
+                    matches!(&receiver.node, Expr::Field { .. })
+                };
+                if is_ptr_receiver {
+                    let llvm_ty = self.type_to_llvm(inner_recv);
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        llvm_ty,
+                        llvm_ty,
+                        recv_val
+                    );
+                    return Ok((loaded, ir));
+                }
+            }
             return Ok((recv_val, ir));
         }
 
@@ -136,14 +169,16 @@ impl CodeGenerator {
                 let all_concrete = generics.iter().all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
                 if all_concrete {
-                    // Concrete generics: set substitutions and try mangled name
+                    // Concrete generics: set substitutions and try mangled name.
+                    // Use insert() (not or_insert_with) so that concrete receiver-type
+                    // substitutions always override any stale i64-fallback substitution
+                    // that may have been set in an enclosing generic function context.
                     if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
                         for (param, concrete) in struct_def.generics.iter().zip(generics.iter()) {
                             if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
                                 self.generics
                                     .substitutions
-                                    .entry(param.name.node.clone())
-                                    .or_insert_with(|| concrete.clone());
+                                    .insert(param.name.node.clone(), concrete.clone());
                             }
                         }
                     }

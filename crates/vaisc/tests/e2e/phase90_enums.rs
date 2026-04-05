@@ -280,3 +280,110 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ==================== Enum with str Fields (Issue #67) ====================
+
+#[test]
+fn e2e_enum_str_field_select_variant() {
+    // Enum variant with str field: match and extract str, use its presence to branch
+    let source = r#"
+E QueryType {
+    Select(str),
+    Insert(str),
+}
+
+F classify(q: QueryType) -> i64 {
+    M q {
+        Select(s) => 1,
+        Insert(s) => 2
+    }
+}
+
+F main() -> i64 {
+    q := Select("users")
+    classify(q)
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn e2e_enum_str_field_insert_variant() {
+    let source = r#"
+E QueryType {
+    Select(str),
+    Insert(str),
+}
+
+F classify(q: QueryType) -> i64 {
+    M q {
+        Select(s) => 1,
+        Insert(s) => 2
+    }
+}
+
+F main() -> i64 {
+    q := Insert("data")
+    classify(q)
+}
+"#;
+    assert_exit_code(source, 2);
+}
+
+#[test]
+fn e2e_enum_str_field_extract_and_print() {
+    // Extract the str value from enum variant and use it with println
+    let source = r#"
+E Msg {
+    Hello(str),
+    Bye(str),
+}
+
+F main() -> i64 {
+    m := Hello("world")
+    M m {
+        Hello(s) => {
+            println("{s}")
+            42
+        },
+        Bye(s) => {
+            println("{s}")
+            0
+        }
+    }
+}
+"#;
+    let ir = compile_to_ir(source).expect("compile to ir");
+    // Dump the main function IR for debugging
+    std::fs::write("/tmp/vais_debug_enum_str.ll", &ir).ok();
+    let result = compile_and_run(source).expect("compile and run");
+    assert_eq!(result.exit_code, 42);
+    assert!(result.stdout.contains("world"), "stdout should contain 'world', got: {}", result.stdout);
+}
+
+#[test]
+fn e2e_enum_str_field_mixed_with_unit() {
+    // Enum with both str-carrying and unit variants
+    let source = r#"
+E Event {
+    Click(str),
+    Hover(str),
+    Close,
+}
+
+F handle(e: Event) -> i64 {
+    M e {
+        Click(target) => 10,
+        Hover(target) => 20,
+        Close => 30
+    }
+}
+
+F main() -> i64 {
+    a := handle(Click("button"))
+    b := handle(Close)
+    a + b + 2
+}
+"#;
+    assert_exit_code(source, 42);
+}

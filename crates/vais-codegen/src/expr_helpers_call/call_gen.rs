@@ -52,6 +52,11 @@ impl CodeGenerator {
         );
         write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
 
+        // Look up the raw variant field types to determine the actual LLVM payload slot type.
+        // For enums with Generic/I64 fields (builtin Option/Result), the slot is i64.
+        // For enums with concrete Named fields, the slot is the native struct type.
+        let raw_variant_fields = self.get_variant_raw_field_types_by_tag(enum_name, tag);
+
         // Store payload fields
         for (i, (arg_val, arg_expr)) in arg_vals.iter().zip(args.iter()).enumerate() {
             let payload_field_ptr = self.next_temp(counter);
@@ -64,7 +69,31 @@ impl CodeGenerator {
                 enum_ptr,
                 i
             );
-            // Store payload into enum payload area
+
+            // Check if the payload slot has native struct type (not i64).
+            // If so, store the struct directly without heap-alloc or bitcast.
+            let raw_field_ty = raw_variant_fields.get(i);
+            let payload_is_native_struct = raw_field_ty
+                .map(|t| matches!(t, ResolvedType::Named { .. }))
+                .unwrap_or(false);
+
+            if payload_is_native_struct {
+                // Native struct payload slot: store the struct value directly.
+                let arg_type = self.infer_expr_type(arg_expr);
+                let llvm_ty = self.type_to_llvm(&arg_type);
+                if !self.is_expr_value(arg_expr) {
+                    // arg_val is a pointer to the struct — load and store
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, arg_val);
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, loaded, llvm_ty, payload_field_ptr);
+                } else {
+                    // arg_val is a struct value — store directly
+                    write_ir!(ir, "  store {} {}, {}* {}", llvm_ty, arg_val, llvm_ty, payload_field_ptr);
+                }
+                continue;
+            }
+
+            // Store payload into enum payload area (generic i64 slot)
             // For non-i64 types, bitcast the payload pointer to T* and store directly
             // This copies the value INTO the Result struct (no dangling pointer)
             let arg_type = self.infer_expr_type(arg_expr);
@@ -184,14 +213,36 @@ impl CodeGenerator {
                     payload_field_ptr,
                     effective_ty
                 );
-                write_ir!(
-                    ir,
-                    "  store {} {}, {}* {}",
-                    effective_ty,
-                    arg_val,
-                    effective_ty,
-                    cast_ptr
-                );
+                // If arg_val is a pointer to the struct (e.g., from struct literal or local var),
+                // we must load the struct value before storing into the payload slot.
+                if !self.is_expr_value(arg_expr) {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        effective_ty,
+                        effective_ty,
+                        arg_val
+                    );
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        effective_ty,
+                        loaded,
+                        effective_ty,
+                        cast_ptr
+                    );
+                } else {
+                    write_ir!(
+                        ir,
+                        "  store {} {}, {}* {}",
+                        effective_ty,
+                        arg_val,
+                        effective_ty,
+                        cast_ptr
+                    );
+                }
             } else {
                 // Replace "void" with 0 for Unit/() values in enum payloads
                 let store_val = if arg_val == "void" { "0" } else { arg_val };

@@ -342,6 +342,14 @@ impl Parser {
             Token::Loop => {
                 return self.parse_loop_expr(start);
             }
+            Token::ForEach => {
+                // LF: unambiguous for-each loop — no speculative parsing needed
+                return self.parse_foreach_expr(start);
+            }
+            Token::While => {
+                // LW: unambiguous while loop — no speculative parsing needed
+                return self.parse_while_expr(start);
+            }
             Token::Match => {
                 return self.parse_match_expr(start);
             }
@@ -449,8 +457,8 @@ impl Parser {
         let then = self.parse_block_contents()?;
         self.expect_skip(&Token::RBrace)?;
 
-        let else_ = if self.check(&Token::Enum) {
-            // E is used for else (context-dependent)
+        let else_ = if self.check(&Token::Else) || self.check(&Token::Enum) {
+            // EL (Else) is the unambiguous else keyword; E is the old context-dependent form
             self.advance_skip();
             Some(self.parse_else_branch()?)
         } else {
@@ -484,7 +492,7 @@ impl Parser {
             let then = self.parse_block_contents()?;
             self.expect_skip(&Token::RBrace)?;
 
-            let else_ = if self.check(&Token::Enum) {
+            let else_ = if self.check(&Token::Else) || self.check(&Token::Enum) {
                 self.advance_skip();
                 Some(Box::new(self.parse_else_branch()?))
             } else {
@@ -562,6 +570,53 @@ impl Parser {
 
         // Disable struct literals in condition to avoid ambiguity with block start
         // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
+        let old_allow_struct_literal = self.allow_struct_literal;
+        self.allow_struct_literal = false;
+        let condition = self.parse_expr()?;
+        self.allow_struct_literal = old_allow_struct_literal;
+
+        self.expect_skip(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect_skip(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::While {
+                condition: Box::new(condition),
+                body,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse for-each expression using the unambiguous `LF` keyword.
+    /// Syntax: `LF pattern:iter { body }`
+    /// No speculative parsing needed — `LF` is definitively a for-each loop.
+    pub(crate) fn parse_foreach_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        let pattern = self.parse_pattern()?;
+        self.expect_skip(&Token::Colon)?;
+        let iter = self.parse_expr()?;
+
+        self.expect_skip(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect_skip(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::Loop {
+                pattern: Some(pattern),
+                iter: Some(Box::new(iter)),
+                body,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse while expression using the unambiguous `LW` keyword.
+    /// Syntax: `LW condition { body }`
+    /// No speculative parsing needed — `LW` is definitively a while loop.
+    pub(crate) fn parse_while_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        // Disable struct literals in condition to avoid ambiguity with block start
         let old_allow_struct_literal = self.allow_struct_literal;
         self.allow_struct_literal = false;
         let condition = self.parse_expr()?;

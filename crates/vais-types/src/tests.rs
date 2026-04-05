@@ -249,8 +249,9 @@ fn test_if_condition_non_bool() {
     let source = "F f()->i64=I 42{1}E{0}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // Phase 160: integer if condition is allowed (truthy: non-zero)
-    assert!(checker.check_module(&module).is_ok());
+    // bool↔i64 implicit coercion is FORBIDDEN (CLAUDE.md Phase 158 rule).
+    // Integer literal as if-condition must be a type error.
+    assert!(checker.check_module(&module).is_err());
 }
 
 #[test]

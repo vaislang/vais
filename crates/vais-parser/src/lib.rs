@@ -295,6 +295,8 @@ impl Parser {
                     | Token::Defer
                     | Token::If
                     | Token::Loop
+                    | Token::ForEach
+                    | Token::While
                     | Token::Match => {
                         break;
                     }
@@ -304,6 +306,7 @@ impl Parser {
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::Use
                     | Token::Impl
@@ -349,6 +352,7 @@ impl Parser {
                     Token::Function
                     | Token::Struct
                     | Token::Enum
+                    | Token::EnumKeyword
                     | Token::Union
                     | Token::TypeKeyword
                     | Token::Use
@@ -871,7 +875,12 @@ impl Parser {
                     Token::Semi => {
                         return; // Don't consume - let the caller handle it
                     }
-                    Token::Function | Token::Struct | Token::Enum | Token::Trait | Token::Impl
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::EnumKeyword
+                    | Token::Trait
+                    | Token::Impl
                         if depth == 0 =>
                     {
                         return; // At a top-level item - stop

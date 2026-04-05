@@ -36,7 +36,7 @@ impl Parser {
         } else if self.check(&Token::Struct) {
             self.advance_skip();
             Item::Struct(self.parse_struct(is_pub, attributes)?)
-        } else if self.check(&Token::Enum) {
+        } else if self.check(&Token::Enum) || self.check(&Token::EnumKeyword) {
             self.advance_skip();
             Item::Enum(self.parse_enum(is_pub, attributes)?)
         } else if self.check(&Token::Union) {

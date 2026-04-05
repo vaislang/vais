@@ -132,6 +132,11 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Where => "Where",
         // Lifetime tokens
         Token::Lifetime(lt) => return format!("Lifetime({})", lt),
+        // New unambiguous keyword variants — map to same string as their legacy equivalents
+        Token::EnumKeyword => "Enum",
+        Token::Else => "Else",
+        Token::ForEach => "Loop",
+        Token::While => "Loop",
     }
     .to_string()
 }

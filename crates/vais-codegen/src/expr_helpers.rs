@@ -886,7 +886,15 @@ impl CodeGenerator {
                     }
                 }
             }
-            // Not a field, fall through to error
+            // Not a field — check if name is a known struct (used as a namespace for static calls)
+            let resolved = self.resolve_struct_name(name);
+            if self.types.structs.contains_key(&resolved)
+                || self.generics.generated_structs.contains_key(&resolved)
+            {
+                // Struct name used as a namespace identifier (e.g., `StringMap.with_capacity()`).
+                // Return a zero sentinel; the actual call will be handled by generate_expr_call.
+                return Ok(("0".to_string(), String::new()));
+            }
             let mut candidates: Vec<&str> = Vec::new();
             for var_name in self.fn_ctx.locals.keys() {
                 candidates.push(var_name.as_str());
@@ -901,6 +909,16 @@ impl CodeGenerator {
                 name, suggestion_text
             )))
         } else {
+            // Check if name is a known struct (used as a namespace for static method calls,
+            // e.g., `StringMap.with_capacity(16)` in cross-module codegen).
+            let resolved = self.resolve_struct_name(name);
+            if self.types.structs.contains_key(&resolved)
+                || self.generics.generated_structs.contains_key(&resolved)
+            {
+                // Struct name used as a namespace identifier — return zero sentinel.
+                return Ok(("0".to_string(), String::new()));
+            }
+
             // Undefined identifier - provide suggestions
             let mut candidates: Vec<&str> = Vec::new();
 

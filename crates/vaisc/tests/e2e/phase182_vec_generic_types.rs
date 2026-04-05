@@ -390,3 +390,79 @@ F main() -> i64 {
 "#,
     );
 }
+
+// ==================== 6. Vec<T> parameter indexing (Issue #68) ====================
+
+/// Vec<T> passed as a function parameter must preserve element type for indexing.
+///
+/// Bug: When Vec<T> was passed as a function parameter, the inkwell backend's
+/// generate_index treated the Vec struct value as a raw pointer (calling
+/// into_pointer_value on a StructValue), causing a panic. The fix adds Vec-aware
+/// indexing that extracts the data pointer from field 0, uses elem_size from
+/// field 3 for stride, and loads the element with the correct inferred type.
+///
+/// NOTE: assert_compiles — verifies IR generation succeeds without panic. The
+/// text backend was already correct; this test guards the inkwell backend path.
+#[test]
+fn e2e_vec_param_index_compiles() {
+    assert_compiles(
+        r#"
+S Vec<T> {
+    data: i64,
+    len: i64,
+    cap: i64,
+    elem_size: i64
+}
+
+X Vec<T> {
+    F new() -> Vec<T> {
+        Vec { data: 0, len: 0, cap: 0, elem_size: 8 }
+    }
+}
+
+F process_vec(v: Vec<i64>) -> i64 {
+    v[0]
+}
+
+F main() -> i64 {
+    v := Vec.new()
+    process_vec(v)
+}
+"#,
+    );
+}
+
+/// Vec<T> as generic function parameter — the element type must be available
+/// for indexing even when the Vec is passed through a generic function.
+///
+/// NOTE: assert_compiles — tests the specialized function codegen path where
+/// Vec<T> with concrete T (e.g., i64) must preserve element type through
+/// monomorphization for indexing to work correctly.
+#[test]
+fn e2e_vec_param_generic_fn_index_compiles() {
+    assert_compiles(
+        r#"
+S Vec<T> {
+    data: i64,
+    len: i64,
+    cap: i64,
+    elem_size: i64
+}
+
+X Vec<T> {
+    F new() -> Vec<T> {
+        Vec { data: 0, len: 0, cap: 0, elem_size: 8 }
+    }
+}
+
+F get_first<T>(v: Vec<T>) -> T {
+    v[0]
+}
+
+F main() -> i64 {
+    v := Vec.new()
+    get_first(v)
+}
+"#,
+    );
+}

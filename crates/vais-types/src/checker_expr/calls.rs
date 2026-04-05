@@ -155,7 +155,25 @@ impl TypeChecker {
                         }
                     }
                     if i < sig.params.len() {
-                        self.unify(&sig.params[i].1, &arg_type)?;
+                        // Str ↔ I64 coercion for function calls: Vais represents str as i64
+                        // (pointer to string data) at the IR level. The std library declares
+                        // str parameters as i64 (e.g., strlen, starts_with, assert_eq).
+                        // Allow str variables/expressions to be passed to i64 parameters
+                        // (and i64 to str parameters) during function calls, maintaining
+                        // IR compatibility. String LITERALS passed to i64 params are still
+                        // errors (user likely intended a different type).
+                        let param_resolved = self.apply_substitutions(&sig.params[i].1);
+                        let arg_resolved = self.apply_substitutions(&arg_type);
+                        let is_str_literal = matches!(&arg.node, Expr::String(_) | Expr::StringInterp(_));
+                        let is_str_i64_coercion = !is_str_literal
+                            && matches!(
+                                (&param_resolved, &arg_resolved),
+                                (ResolvedType::Str, ResolvedType::I64)
+                                    | (ResolvedType::I64, ResolvedType::Str)
+                            );
+                        if !is_str_i64_coercion {
+                            self.unify(&sig.params[i].1, &arg_type)?;
+                        }
                         // Check dependent type refinement for literal arguments
                         if let ResolvedType::Dependent {
                             var_name,

@@ -122,13 +122,17 @@ impl CodeGenerator {
         let mut params = Vec::new();
 
         if has_self {
-            // Instance method: add self parameter (pointer to struct type)
+            // Instance method: add self parameter (pointer to struct type).
+            // Use Ref(Named{...}) so type_to_llvm emits %TypeName* (a pointer),
+            // matching the actual function definition and the cross-module declare.
+            // Without this, generate_extern_decl would emit %TypeName (no pointer),
+            // causing an LLVM IR type mismatch when non-main modules declare cross-module methods.
             params.push((
                 "self".to_string(),
-                ResolvedType::Named {
+                ResolvedType::Ref(Box::new(ResolvedType::Named {
                     name: type_name.to_string(),
                     generics: vec![],
-                },
+                })),
                 false,
             ));
         }

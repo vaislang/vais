@@ -456,6 +456,183 @@ impl CodeGenerator {
         self.types.constants.contains_key(name)
     }
 
+    /// Resolve the concrete field types for an enum variant by substituting generic
+    /// parameters with the concrete types from the match expression's type.
+    ///
+    /// For example, given `Option<Vec<u64>>::Some(T)`, this returns `[Vec<u64>]`
+    /// by substituting `T` → `Vec<u64>` from the match_type generics.
+    fn resolve_variant_field_types(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+        match_type: &ResolvedType,
+    ) -> Vec<ResolvedType> {
+        use crate::types::EnumVariantFields;
+
+        // Look up the enum definition to find the variant's field types
+        let enum_info = match self.types.enums.get(enum_name) {
+            Some(info) => info,
+            None => return vec![],
+        };
+
+        // Find the variant
+        let variant = match enum_info.variants.iter().find(|v| v.name == variant_name) {
+            Some(v) => v,
+            None => return vec![],
+        };
+
+        // Get the raw field types (may contain Generic("T"), Generic("E"), etc.)
+        let raw_field_types: Vec<&ResolvedType> = match &variant.fields {
+            EnumVariantFields::Unit => return vec![],
+            EnumVariantFields::Tuple(types) => types.iter().collect(),
+            EnumVariantFields::Struct(fields) => fields.iter().map(|(_, ty)| ty).collect(),
+        };
+
+        // Extract the concrete generic args from match_type (e.g., [Vec<u64>] from Option<Vec<u64>>)
+        let concrete_generics = match match_type {
+            ResolvedType::Named { generics, .. } if !generics.is_empty() => generics,
+            _ => {
+                // Non-generic enum: field types are already concrete, return them directly.
+                // This handles enums like `E QueryType { Select(str), Insert(str) }` where
+                // the field types (str) don't need any generic substitution.
+                return raw_field_types.into_iter().cloned().collect();
+            }
+        };
+
+        // Build a substitution map: collect unique generic param names from ALL variants
+        // in declaration order, then map to concrete_generics by index.
+        // e.g., Option: [T] → generics[0]; Result: [T, E] → generics[0], generics[1]
+        let mut generic_param_order: Vec<String> = Vec::new();
+        for v in &enum_info.variants {
+            let field_types: Vec<&ResolvedType> = match &v.fields {
+                EnumVariantFields::Unit => vec![],
+                EnumVariantFields::Tuple(types) => types.iter().collect(),
+                EnumVariantFields::Struct(fields) => fields.iter().map(|(_, ty)| ty).collect(),
+            };
+            for ft in field_types {
+                Self::collect_generic_names(ft, &mut generic_param_order);
+            }
+        }
+
+        // Build substitution map: param_name -> concrete_type
+        let mut substitutions: std::collections::HashMap<String, ResolvedType> =
+            std::collections::HashMap::new();
+        for (idx, param_name) in generic_param_order.iter().enumerate() {
+            if let Some(concrete) = concrete_generics.get(idx) {
+                substitutions.insert(param_name.clone(), concrete.clone());
+            }
+        }
+
+        // Substitute generic params in the variant's field types
+        raw_field_types
+            .into_iter()
+            .map(|ty| Self::substitute_generics(ty, &substitutions))
+            .collect()
+    }
+
+    /// Collect unique generic parameter names from a ResolvedType, preserving first-appearance order.
+    fn collect_generic_names(ty: &ResolvedType, names: &mut Vec<String>) {
+        match ty {
+            ResolvedType::Generic(name) => {
+                if !names.contains(name) {
+                    names.push(name.clone());
+                }
+            }
+            ResolvedType::Named { generics, .. } => {
+                for g in generics {
+                    Self::collect_generic_names(g, names);
+                }
+            }
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
+                Self::collect_generic_names(inner, names);
+            }
+            ResolvedType::Tuple(elems) => {
+                for e in elems {
+                    Self::collect_generic_names(e, names);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Substitute generic type parameters in a ResolvedType using a substitution map.
+    fn substitute_generics(
+        ty: &ResolvedType,
+        subs: &std::collections::HashMap<String, ResolvedType>,
+    ) -> ResolvedType {
+        match ty {
+            ResolvedType::Generic(name) => {
+                subs.get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            ResolvedType::Named { name, generics } => ResolvedType::Named {
+                name: name.clone(),
+                generics: generics.iter().map(|g| Self::substitute_generics(g, subs)).collect(),
+            },
+            ResolvedType::Ref(inner) => {
+                ResolvedType::Ref(Box::new(Self::substitute_generics(inner, subs)))
+            }
+            ResolvedType::RefMut(inner) => {
+                ResolvedType::RefMut(Box::new(Self::substitute_generics(inner, subs)))
+            }
+            ResolvedType::Pointer(inner) => {
+                ResolvedType::Pointer(Box::new(Self::substitute_generics(inner, subs)))
+            }
+            ResolvedType::Tuple(elems) => {
+                ResolvedType::Tuple(elems.iter().map(|e| Self::substitute_generics(e, subs)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// Get the raw (as-registered, before generic substitution) field types
+    /// of a specific enum variant. This determines the actual LLVM payload slot type.
+    ///
+    /// For builtin Option/Result with Generic("T")/Generic("E"), the raw type is Generic,
+    /// meaning the LLVM payload is i64. For user-defined enums with concrete struct fields,
+    /// the raw type is Named, meaning the LLVM payload matches the struct type directly.
+    #[allow(dead_code)]
+    fn get_variant_raw_field_types(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+    ) -> Vec<ResolvedType> {
+        use crate::types::EnumVariantFields;
+        if let Some(enum_info) = self.types.enums.get(enum_name) {
+            if let Some(variant) = enum_info.variants.iter().find(|v| v.name == variant_name) {
+                return match &variant.fields {
+                    EnumVariantFields::Unit => vec![],
+                    EnumVariantFields::Tuple(types) => types.clone(),
+                    EnumVariantFields::Struct(fields) => {
+                        fields.iter().map(|(_, ty)| ty.clone()).collect()
+                    }
+                };
+            }
+        }
+        vec![]
+    }
+
+    /// Get the raw field types of an enum variant by tag index.
+    /// Used by the enum variant constructor to determine payload slot type.
+    pub(crate) fn get_variant_raw_field_types_by_tag(
+        &self,
+        enum_name: &str,
+        tag: i32,
+    ) -> Vec<ResolvedType> {
+        use crate::types::EnumVariantFields;
+        if let Some(enum_info) = self.types.enums.get(enum_name) {
+            if let Some(variant) = enum_info.variants.get(tag as usize) {
+                return match &variant.fields {
+                    EnumVariantFields::Unit => vec![],
+                    EnumVariantFields::Tuple(types) => types.clone(),
+                    EnumVariantFields::Struct(fields) => {
+                        fields.iter().map(|(_, ty)| ty.clone()).collect()
+                    }
+                };
+            }
+        }
+        vec![]
+    }
+
     /// Generate pattern bindings (assign matched values to pattern variables)
     #[inline(never)]
     pub(crate) fn generate_pattern_bindings(
@@ -557,10 +734,40 @@ impl CodeGenerator {
                     .get_enum_name_for_variant(variant_name)
                     .unwrap_or_else(|| "Unknown".to_string());
 
+                // Resolve the actual field types for this variant, substituting generic
+                // parameters with concrete types from match_type.
+                // e.g., Option<Vec<u64>>::Some(T) → field type is Vec<u64>
+                let variant_field_types = self.resolve_variant_field_types(
+                    &enum_name, variant_name, match_type,
+                );
+
                 for (i, field_pat) in fields.iter().enumerate() {
                     // Extract payload field from enum variant
-                    // Enum layout: %EnumName = type { i32 tag, { payload_types... } }
-                    // First get pointer to payload struct (index 1), then get field within it
+                    // Enum layout: %EnumName = type { i32 tag, { i64, i64, ... } }
+                    // All payload slots are i64 (see generate_enum_type).
+                    // Compound types (str, structs, tuples) are stored via bitcast (<=8 bytes)
+                    // or heap-alloc (>8 bytes) by generate_enum_variant_constructor.
+
+                    // Get the resolved field type (fallback to I64 if unavailable)
+                    let field_type = variant_field_types
+                        .get(i)
+                        .cloned()
+                        .unwrap_or(ResolvedType::I64);
+
+                    let llvm_field_ty = self.type_to_llvm(&field_type);
+                    // Check if the field type is compound (not a simple integer/bool/pointer).
+                    // Compound types were stored via bitcast/heap-alloc into the i64 payload slot.
+                    let is_compound_field = llvm_field_ty != "i64"
+                        && llvm_field_ty != "i32"
+                        && llvm_field_ty != "i16"
+                        && llvm_field_ty != "i8"
+                        && llvm_field_ty != "i1"
+                        && !llvm_field_ty.ends_with('*');
+                    let field_size = if is_compound_field {
+                        self.compute_sizeof(&field_type)
+                    } else {
+                        0
+                    };
 
                     if match_val.starts_with('%') {
                         // match_val is a pointer to the enum - use getelementptr
@@ -577,11 +784,86 @@ impl CodeGenerator {
                             i
                         );
 
-                        let field_val = self.next_temp(counter);
-                        write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
-                        let bind_ir =
-                            self.generate_pattern_bindings(field_pat, &field_val, counter)?;
-                        ir.push_str(&bind_ir);
+                        if is_compound_field && field_size > 8 {
+                            // Large compound type (>8 bytes, e.g., str, large struct):
+                            // payload i64 slot holds a heap pointer.
+                            // Load the i64, convert to typed pointer, then load value.
+                            let raw_i64 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", raw_i64, payload_ptr);
+                            let typed_ptr = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                typed_ptr,
+                                raw_i64,
+                                llvm_field_ty
+                            );
+                            if matches!(&field_type, ResolvedType::Named { .. }) {
+                                // Struct type: bind as pointer (field access uses GEP)
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &typed_ptr, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            } else {
+                                // Non-struct compound type (e.g., str, large tuple): load the value
+                                let field_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    field_val,
+                                    llvm_field_ty,
+                                    llvm_field_ty,
+                                    typed_ptr
+                                );
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            }
+                        } else if is_compound_field {
+                            // Small compound type (<=8 bytes): payload i64 slot holds the
+                            // type's raw bits via bitcast. Bitcast the i64* to type*.
+                            let cast_ptr = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast i64* {} to {}*",
+                                cast_ptr,
+                                payload_ptr,
+                                llvm_field_ty
+                            );
+                            if matches!(&field_type, ResolvedType::Named { .. }) {
+                                // Struct type: bind as pointer (field access uses GEP)
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &cast_ptr, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            } else {
+                                // Non-struct compound type (e.g., tuple, str): load the value
+                                let field_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    field_val,
+                                    llvm_field_ty,
+                                    llvm_field_ty,
+                                    cast_ptr
+                                );
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            }
+                        } else if matches!(&field_type, ResolvedType::Named { .. }) {
+                            // Struct field in native payload slot (custom enum with concrete
+                            // struct variant). The GEP already returns the correct struct
+                            // pointer type, so bind directly as pointer.
+                            let bind_ir =
+                                self.generate_pattern_bindings_typed(field_pat, &payload_ptr, counter, &field_type)?;
+                            ir.push_str(&bind_ir);
+                        } else {
+                            // Simple type (i64, i32, pointer, etc.): load directly
+                            let field_val = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
+                            let bind_ir =
+                                self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                            ir.push_str(&bind_ir);
+                        }
                     } else {
                         // It's a value - use extractvalue
                         // Extract from payload sub-struct: index 1 for payload, then i for field
@@ -595,9 +877,76 @@ impl CodeGenerator {
                             i
                         );
 
-                        let bind_ir =
-                            self.generate_pattern_bindings(field_pat, &payload_val, counter)?;
-                        ir.push_str(&bind_ir);
+                        if is_compound_field && field_size > 8 {
+                            // Large compound type: extractvalue yields i64 heap pointer.
+                            // Convert to typed pointer, then load value.
+                            let typed_ptr = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = inttoptr i64 {} to {}*",
+                                typed_ptr,
+                                payload_val,
+                                llvm_field_ty
+                            );
+                            if matches!(&field_type, ResolvedType::Named { .. }) {
+                                // Struct type: bind as pointer (field access uses GEP)
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &typed_ptr, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            } else {
+                                // Non-struct compound type (e.g., str, large tuple): load value
+                                let field_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    field_val,
+                                    llvm_field_ty,
+                                    llvm_field_ty,
+                                    typed_ptr
+                                );
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            }
+                        } else if is_compound_field {
+                            // Small compound type: extractvalue yields i64 containing type bits.
+                            // Store to an alloca and bitcast to typed pointer.
+                            let tmp_alloca = self.next_temp(counter);
+                            self.emit_entry_alloca(&tmp_alloca, "i64");
+                            write_ir!(ir, "  store i64 {}, i64* {}", payload_val, tmp_alloca);
+                            let cast_ptr = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast i64* {} to {}*",
+                                cast_ptr,
+                                tmp_alloca,
+                                llvm_field_ty
+                            );
+                            if matches!(&field_type, ResolvedType::Named { .. }) {
+                                // Struct type: bind as pointer (field access uses GEP)
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &cast_ptr, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            } else {
+                                // Non-struct compound type: load the value
+                                let field_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    field_val,
+                                    llvm_field_ty,
+                                    llvm_field_ty,
+                                    cast_ptr
+                                );
+                                let bind_ir =
+                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                ir.push_str(&bind_ir);
+                            }
+                        } else {
+                            let bind_ir =
+                                self.generate_pattern_bindings_typed(field_pat, &payload_val, counter, &field_type)?;
+                            ir.push_str(&bind_ir);
+                        }
                     }
                 }
 
