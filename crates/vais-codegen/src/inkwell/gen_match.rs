@@ -901,8 +901,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         self.generate_pattern_bindings(first_field, &data_val)?;
                     }
                 } else {
-                    // Multi-field variant: the payload is a struct — extract each sub-field
-                    if data_val.is_struct_value() {
+                    // Multi-field variant: the payload is packed into an anonymous struct
+                    // and stored on the heap. The enum's i64 data slot holds the heap ptr.
+                    // Look up the payload struct type recorded at construction time.
+                    let multi_payload_ty: Option<inkwell::types::StructType<'ctx>> = self
+                        .enum_variant_multi_payload_types
+                        .iter()
+                        .find(|((_, v_name), _)| v_name == &name.node)
+                        .map(|(_, ty)| *ty);
+
+                    if let Some(payload_ty) = multi_payload_ty {
+                        // data_val is the i64 holding the heap pointer. inttoptr to struct*,
+                        // load the struct, then extract each field.
+                        let data_i64 = data_val.into_int_value();
+                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_multi_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let loaded_struct = self
+                            .builder
+                            .build_load(payload_ty, heap_ptr, "variant_multi_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value();
+                        for (idx, field_pat) in fields.iter().enumerate() {
+                            let sub_val = self
+                                .builder
+                                .build_extract_value(
+                                    loaded_struct,
+                                    idx as u32,
+                                    &format!("variant_field_{}", idx),
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.generate_pattern_bindings(field_pat, &sub_val)?;
+                        }
+                    } else if data_val.is_struct_value() {
+                        // Legacy path: payload was packed directly into the i64 slot as a struct
+                        // (should not happen with current constructor, kept for safety).
                         let payload_struct = data_val.into_struct_value();
                         for (idx, field_pat) in fields.iter().enumerate() {
                             let sub_val = self
@@ -916,7 +951,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             self.generate_pattern_bindings(field_pat, &sub_val)?;
                         }
                     } else {
-                        // Payload is not a struct (type mismatch) — bind first field as fallback
+                        // Payload layout unknown — bind first field as fallback
                         if let Some(first_field) = fields.first() {
                             self.generate_pattern_bindings(first_field, &data_val)?;
                         }

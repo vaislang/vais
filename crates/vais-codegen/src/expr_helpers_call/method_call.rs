@@ -858,6 +858,22 @@ impl CodeGenerator {
         args: &[Spanned<Expr>],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Check if this is actually an enum variant constructor (EnumType.Variant(...))
+        // e.g., Shape.Rect(10, 20) or Option.Some(42). Must be handled before the
+        // static-method dispatch because there is no `EnumType_Variant` function to call.
+        if let Some(enum_info) = self.types.enums.get(&type_name.node).cloned() {
+            for (tag, variant) in enum_info.variants.iter().enumerate() {
+                if variant.name == method.node {
+                    return self.generate_enum_variant_constructor(
+                        &type_name.node,
+                        tag as i32,
+                        args,
+                        counter,
+                    );
+                }
+            }
+        }
+
         let mut ir = String::new();
 
         let base_method_name = format!("{}_{}", type_name.node, method.node);

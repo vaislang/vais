@@ -73,7 +73,7 @@ X Result<T, E> {
     }
 
     # Get error value or default
-    F err_or(&self, default: E) -> EL {
+    F err_or(&self, default: E) -> E {
         M self {
             Ok(_) => default,
             Err(e) => e

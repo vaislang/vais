@@ -707,11 +707,23 @@ impl CodeGenerator {
                     // generic struct methods handled by instantiation loop above
                 }
                 Item::Impl(impl_block) => {
-                    let type_name = match &impl_block.target_type.node {
-                        Type::Named { name, .. } => name.clone(),
+                    let (type_name, type_params) = match &impl_block.target_type.node {
+                        Type::Named { name, generics } => (name.clone(), generics.clone()),
                         _ => continue,
                     };
+                    // Skip generic impl blocks — their methods are compiled per-instantiation
+                    // in the instantiation loop above. Compiling the template directly would
+                    // leak generic type parameters (K, V, T) as undefined identifiers.
+                    let is_generic_impl =
+                        !impl_block.generics.is_empty() || !type_params.is_empty();
+                    if is_generic_impl {
+                        continue;
+                    }
                     for method in &impl_block.methods {
+                        // Also skip methods with their own generic parameters.
+                        if !method.node.generics.is_empty() {
+                            continue;
+                        }
                         body_ir.push_str(&self.generate_method_with_span(
                             &type_name,
                             &method.node,

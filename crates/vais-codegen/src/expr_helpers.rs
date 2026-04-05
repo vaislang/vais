@@ -895,6 +895,13 @@ impl CodeGenerator {
                 // Return a zero sentinel; the actual call will be handled by generate_expr_call.
                 return Ok(("0".to_string(), String::new()));
             }
+            // Generic type parameter (e.g., K, V, T, E) leaking as an identifier during
+            // monomorphization — return a zero sentinel. This can happen when a generic method
+            // body references a type parameter in a position that survives as an Expr::Ident
+            // (e.g., synthesized default values for generic return types).
+            if self.generics.substitutions.contains_key(name) {
+                return Ok(("0".to_string(), String::new()));
+            }
             let mut candidates: Vec<&str> = Vec::new();
             for var_name in self.fn_ctx.locals.keys() {
                 candidates.push(var_name.as_str());
@@ -916,6 +923,11 @@ impl CodeGenerator {
                 || self.generics.generated_structs.contains_key(&resolved)
             {
                 // Struct name used as a namespace identifier — return zero sentinel.
+                return Ok(("0".to_string(), String::new()));
+            }
+            // Generic type parameter (e.g., K, V, T, E) leaking as an identifier during
+            // monomorphization — return a zero sentinel (same rationale as the branch above).
+            if self.generics.substitutions.contains_key(name) {
                 return Ok(("0".to_string(), String::new()));
             }
 

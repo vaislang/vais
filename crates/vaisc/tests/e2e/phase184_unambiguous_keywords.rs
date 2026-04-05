@@ -24,7 +24,6 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "multi-field tuple variant pattern binding: payload struct extract fallback only binds first field (pre-existing codegen limitation, unrelated to Phase 184 keywords)"]
 fn e2e_en_keyword_enum_with_data() {
     let source = r#"
 EN Shape {

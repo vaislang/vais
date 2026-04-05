@@ -88,6 +88,13 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Used by match pattern bindings to recover struct type for field access.
     pub(super) enum_variant_struct_types: HashMap<(String, String), String>,
 
+    /// Enum multi-field tuple variant payload struct types:
+    /// (enum_name, variant_name) -> anonymous struct type that packs all fields.
+    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is constructed;
+    /// pattern bindings use this to load the heap-allocated payload and extract each field.
+    pub(super) enum_variant_multi_payload_types:
+        HashMap<(String, String), inkwell::types::StructType<'ctx>>,
+
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
 
@@ -182,6 +189,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
             enum_variant_struct_types: HashMap::new(),
+            enum_variant_multi_payload_types: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),

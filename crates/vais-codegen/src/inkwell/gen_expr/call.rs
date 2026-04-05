@@ -523,6 +523,76 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 );
                 let data_val = if args.is_empty() {
                     self.context.i64_type().const_int(0, false)
+                } else if args.len() > 1 {
+                    // Multi-field tuple variant: pack all fields into an anonymous struct,
+                    // heap-allocate, and store pointer in i64 data slot.
+                    let field_vals: Vec<BasicValueEnum<'ctx>> = args
+                        .iter()
+                        .map(|a| self.generate_expr(&a.node))
+                        .collect::<CodegenResult<Vec<_>>>()?;
+                    let field_tys: Vec<inkwell::types::BasicTypeEnum<'ctx>> =
+                        field_vals.iter().map(|v| v.get_type()).collect();
+                    let payload_ty = self.context.struct_type(&field_tys, false);
+                    let target_data = inkwell::targets::TargetData::create(
+                        &self.module.get_triple().as_str().to_string_lossy(),
+                    );
+                    let size_bytes = target_data.get_store_size(&payload_ty);
+                    let i64_ty = self.context.i64_type();
+                    let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                    // Always heap-alloc for multi-field (simpler than deciding per-size).
+                    let malloc_fn = self
+                        .module
+                        .get_function("malloc")
+                        .or_else(|| {
+                            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+                            Some(self.module.add_function("malloc", malloc_ty, None))
+                        })
+                        .unwrap();
+                    let size_val = i64_ty.const_int(size_bytes, false);
+                    let heap_ptr = self
+                        .builder
+                        .build_call(malloc_fn, &[size_val.into()], "variant_multi_heap")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap()
+                        .into_pointer_value();
+                    let typed_ptr = self
+                        .builder
+                        .build_bitcast(
+                            heap_ptr,
+                            payload_ty.ptr_type(AddressSpace::default()),
+                            "variant_multi_typed",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_pointer_value();
+                    // Build the payload struct and store it.
+                    let mut payload_val = payload_ty.get_undef();
+                    for (i, fv) in field_vals.iter().enumerate() {
+                        payload_val = self
+                            .builder
+                            .build_insert_value(payload_val, *fv, i as u32, &format!("variant_multi_field_{}", i))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value();
+                    }
+                    self.builder
+                        .build_store(typed_ptr, payload_val)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Record the payload struct type so pattern binding can recover field types.
+                    // Look up the enum name that owns this tag value.
+                    let owning_enum_name = self
+                        .enum_variants
+                        .iter()
+                        .find(|((_, v_name), t)| v_name == &fn_name && **t == tag)
+                        .map(|((e_name, _), _)| e_name.clone());
+                    if let Some(enum_name) = owning_enum_name {
+                        self.enum_variant_multi_payload_types
+                            .insert((enum_name, fn_name.clone()), payload_ty);
+                    }
+                    self.builder
+                        .build_ptr_to_int(heap_ptr, i64_ty, "variant_multi_data_as_i64")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into()
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
                     // Large struct (>8B) cannot fit in i64: heap-allocate and store pointer.
