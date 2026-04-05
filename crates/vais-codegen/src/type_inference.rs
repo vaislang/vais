@@ -207,7 +207,7 @@ impl CodeGenerator {
 
     /// Infer type of expression (simple version for let statement)
     pub(crate) fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             self.infer_expr_type_inner(expr)
         })
     }
@@ -341,11 +341,41 @@ impl CodeGenerator {
                 }
                 // Get return type from function info
                 if let Expr::Ident(fn_name) = &func.node {
-                    // Check if this is an enum variant constructor
+                    // Check if this is an enum variant constructor.
+                    // For well-known generic enums (Option, Result), propagate the
+                    // argument type as a generic parameter so downstream pattern matching
+                    // can resolve variant field types correctly (fixes struct erasure).
                     if let Some((enum_name, _)) = self.get_tuple_variant_info(fn_name) {
+                        let generics = match fn_name.as_str() {
+                            "Some" => {
+                                // Option<T> — T is the argument type
+                                if let Some(arg) = args.first() {
+                                    vec![self.infer_expr_type(arg)]
+                                } else {
+                                    vec![]
+                                }
+                            }
+                            "Ok" => {
+                                // Result<T, E> — T is the argument type, E is unknown
+                                if let Some(arg) = args.first() {
+                                    vec![self.infer_expr_type(arg), ResolvedType::I64]
+                                } else {
+                                    vec![]
+                                }
+                            }
+                            "Err" => {
+                                // Result<T, E> — T is unknown, E is the argument type
+                                if let Some(arg) = args.first() {
+                                    vec![ResolvedType::I64, self.infer_expr_type(arg)]
+                                } else {
+                                    vec![]
+                                }
+                            }
+                            _ => vec![],
+                        };
                         return ResolvedType::Named {
                             name: enum_name,
-                            generics: vec![],
+                            generics,
                         };
                     }
                     // Builtins: load_typed returns T, type_size returns i64, sizeof returns i64

@@ -503,12 +503,14 @@ impl CodeGenerator {
                             EnumVariantInfo {
                                 name: "Ok".to_string(),
                                 _tag: 0,
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                                // Use Generic("T") so resolve_variant_field_types can substitute
+                                // the concrete type from match_type generics (fixes struct erasure)
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("T".to_string())]),
                             },
                             EnumVariantInfo {
                                 name: "Err".to_string(),
                                 _tag: 1,
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("E".to_string())]),
                             },
                         ],
                     },
@@ -529,7 +531,9 @@ impl CodeGenerator {
                             EnumVariantInfo {
                                 name: "Some".to_string(),
                                 _tag: 1,
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+                                // Use Generic("T") so resolve_variant_field_types can substitute
+                                // the concrete type from match_type generics (fixes struct erasure)
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("T".to_string())]),
                             },
                         ],
                     },
@@ -577,7 +581,7 @@ impl CodeGenerator {
                     .cloned()
                 {
                     let spec_result =
-                        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
                             self.generate_specialized_function(&generic_fn, inst)
                         });
                     body_ir.push_str(&spec_result?);
@@ -653,7 +657,7 @@ impl CodeGenerator {
             match &item.node {
                 Item::Function(f) => {
                     if f.generics.is_empty() {
-                        match stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+                        match stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
                             self.generate_function_with_span(f, item.span)
                         }) {
                             Ok(ir_fragment) => {

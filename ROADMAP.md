@@ -7,9 +7,20 @@
 
 ---
 
-## Current Tasks (2026-04-04)
+## Current Tasks (2026-04-05) — Phase 184: Cross-module 순환 참조 stack overflow 수정
 mode: auto
-strategy: 3 independent tasks, no file overlap → independent-parallel (Agent × 3)
+max_iterations: 6
+iteration: 1
+- [x] 1. compute_sizeof에 stacker + visited set 추가 (Opus direct) ✅ 2026-04-05
+  근본원인: compute_sizeof()에 stacker 없음 → struct 필드 재귀 탐색 중 스택 소진
+  changes: types/sizeof.rs (stacker + sizeof_visited guard), lib.rs + init.rs (sizeof_visited 필드), 8 files (stacker threshold 4MB/16MB→32MB/64MB)
+- [x] 2. imports.rs 모듈 로딩 시 struct 정의 중복 제거 (impl-sonnet) ✅ 2026-04-05
+  verify: 변경 적용했으나 E2E 13 failed → import-dedup 불필요 (sizeof 수정만으로 해소)
+- [x] 3. vaisdb test_planner 빌드 검증 ✅ 2026-04-05
+  verify: types ✅ cache ✅ rag ✅ — 3파일 모두 IR 생성 성공. E2E 2537 passed / 13 failed (기존 실패, 0 regression)
+progress: 3/3 (100%)
+
+## Previous Tasks (2026-04-04) — Phase 183
 - [x] 1. Fix error_message_tests.rs 5개 실패 (impl-sonnet) ✅ 2026-04-04
   changes: crates/vaisc/tests/error_message_tests.rs (bool→i64 테스트를 struct mismatch로 변경, 5개 수정)
 - [x] 2. Clippy warning 3건 수정 (impl-sonnet) ✅ 2026-04-04

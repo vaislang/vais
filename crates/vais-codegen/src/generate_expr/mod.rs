@@ -45,7 +45,7 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         // Use stacker to grow the stack on demand, preventing stack overflow
         // for deeply nested expressions (e.g., complex struct specializations)
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             use std::sync::atomic::{AtomicUsize, Ordering};
             static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
             let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);

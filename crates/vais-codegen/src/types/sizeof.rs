@@ -81,6 +81,30 @@ impl CodeGenerator {
     /// Compute sizeof for a ResolvedType (in bytes)
     /// Returns the size in Vais's runtime representation
     pub(crate) fn compute_sizeof(&self, ty: &ResolvedType) -> i64 {
+        // For Named types, check and track visited to prevent infinite recursion
+        // from circular struct references (e.g., A contains B, B contains A)
+        if let ResolvedType::Named { name, generics } = ty {
+            let visit_key = if generics.is_empty() {
+                name.clone()
+            } else {
+                self.mangle_struct_name(name, generics)
+            };
+            if self.sizeof_visited.borrow().contains(&visit_key) {
+                return 8; // Break circular reference with pointer-size default
+            }
+            self.sizeof_visited.borrow_mut().insert(visit_key.clone());
+            let result = stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
+                self.compute_sizeof_inner(ty)
+            });
+            self.sizeof_visited.borrow_mut().remove(&visit_key);
+            return result;
+        }
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
+            self.compute_sizeof_inner(ty)
+        })
+    }
+
+    fn compute_sizeof_inner(&self, ty: &ResolvedType) -> i64 {
         match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
             ResolvedType::I16 | ResolvedType::U16 => 2,
@@ -104,6 +128,8 @@ impl CodeGenerator {
             }
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.compute_sizeof(e)).sum(),
             ResolvedType::Named { name, generics } => {
+                // Visited check is done in compute_sizeof() wrapper
+
                 // First try the base name (non-generic or already resolved struct)
                 if let Some(struct_info) = self.types.structs.get(name) {
                     return struct_info

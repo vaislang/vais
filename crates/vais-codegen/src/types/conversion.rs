@@ -89,7 +89,7 @@ impl CodeGenerator {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static TTL_COUNT: AtomicUsize = AtomicUsize::new(0);
         let _c = TTL_COUNT.fetch_add(1, Ordering::Relaxed);
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             self.enter_type_recursion("type_to_llvm")?;
             let result = self.type_to_llvm_impl_inner(ty);
             self.exit_type_recursion();

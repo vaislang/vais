@@ -4,7 +4,7 @@ use crate::types::{LocalVar, StructInfo};
 use crate::{CodeGenerator, CodegenResult};
 use std::collections::HashMap;
 use vais_ast::{Function, FunctionBody, GenericParamKind, Struct};
-use vais_types::ResolvedType;
+use vais_types::{InstantiationKind, ResolvedType};
 
 impl CodeGenerator {
     /// Generate a specialized struct type from a generic struct template
@@ -119,7 +119,7 @@ impl CodeGenerator {
         // Use stacker to handle deep specialization chains.
         // Catch panics from stack overflow and convert to recoverable error.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
                 self.enter_type_recursion("generate_specialized_function")?;
                 let result = self.generate_specialized_function_inner(generic_fn, inst);
                 self.exit_type_recursion();
@@ -247,24 +247,48 @@ impl CodeGenerator {
             .map(|(g, t)| (g.name.node.to_string(), t.clone()))
             .collect();
 
-        // For method specializations (base_name contains '_'), set Self → concrete struct type
-        if let Some(underscore_pos) = inst.base_name.find('_') {
-            let struct_name = &inst.base_name[..underscore_pos];
-            if self.types.structs.contains_key(struct_name)
-                || self.generics.struct_defs.contains_key(struct_name)
-                || self.types.enums.contains_key(struct_name)
+        // For method specializations, set Self → concrete struct type and propagate
+        // the struct's generic parameters (e.g., Vec<T>.push → T = concrete element type).
+        //
+        // Use inst.kind to get the struct name reliably. The old approach of splitting
+        // inst.base_name on '_' was wrong: for InstantiationKind::Method, base_name is
+        // just the method name (e.g., "push"), not "Vec_push", so find('_') returned None
+        // and this entire block was skipped — leaving T unsubstituted (→ i64 fallback).
+        let method_struct_name: Option<String> = match &inst.kind {
+            InstantiationKind::Method { struct_name } => Some(struct_name.clone()),
+            InstantiationKind::Function | InstantiationKind::Struct => {
+                // Legacy fallback: function-style instantiations that embed the struct
+                // name in base_name as "StructName_method". Try to extract struct name
+                // by checking known structs against each underscore-split prefix.
+                inst.base_name.match_indices('_').find_map(|(pos, _)| {
+                    let candidate = &inst.base_name[..pos];
+                    if self.types.structs.contains_key(candidate)
+                        || self.generics.struct_defs.contains_key(candidate)
+                        || self.types.enums.contains_key(candidate)
+                    {
+                        Some(candidate.to_string())
+                    } else {
+                        None
+                    }
+                })
+            }
+        };
+        if let Some(struct_name) = method_struct_name {
+            if self.types.structs.contains_key(&struct_name)
+                || self.generics.struct_defs.contains_key(&struct_name)
+                || self.types.enums.contains_key(&struct_name)
             {
                 substitutions.insert(
                     "Self".to_string(),
                     ResolvedType::Named {
-                        name: struct_name.to_string(),
+                        name: struct_name.clone(),
                         generics: inst.type_args.clone(),
                     },
                 );
                 // If the method has no generics of its own (e.g., Vec<T>.push where T comes
                 // from the struct), use the struct's generic parameters for substitution.
                 if type_params.is_empty() && !inst.type_args.is_empty() {
-                    if let Some(struct_def) = self.generics.struct_defs.get(struct_name) {
+                    if let Some(struct_def) = self.generics.struct_defs.get(&struct_name).cloned() {
                         let struct_type_params: Vec<_> = struct_def
                             .generics
                             .iter()

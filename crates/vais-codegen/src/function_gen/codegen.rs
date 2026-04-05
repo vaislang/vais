@@ -32,7 +32,7 @@ impl CodeGenerator {
         span: Span,
     ) -> CodegenResult<String> {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+            stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
                 self.generate_function_with_span_inner(f, span)
             })
         }));

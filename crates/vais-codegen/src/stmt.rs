@@ -32,7 +32,7 @@ impl CodeGenerator {
         stmt: &Spanned<Stmt>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        stacker::maybe_grow(4 * 1024 * 1024, 16 * 1024 * 1024, || {
+        stacker::maybe_grow(32 * 1024 * 1024, 64 * 1024 * 1024, || {
             self.generate_stmt_inner(stmt, counter)
         })
     }

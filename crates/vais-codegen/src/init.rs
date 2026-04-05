@@ -103,6 +103,7 @@ impl CodeGenerator {
                 current_decreases_info: None,
             },
             type_recursion_depth: std::cell::Cell::new(0),
+            sizeof_visited: std::cell::RefCell::new(std::collections::HashSet::new()),
             wasm_imports: HashMap::new(),
             wasm_exports: HashMap::new(),
             last_error_span: None,

@@ -228,6 +228,9 @@ pub struct CodeGenerator {
     // Type recursion depth tracking (prevents infinite recursion)
     type_recursion_depth: std::cell::Cell<usize>,
 
+    // Sizeof visited set (prevents infinite recursion for circular struct references)
+    sizeof_visited: std::cell::RefCell<std::collections::HashSet<String>>,
+
     // WASM import metadata: function_name -> (module_name, import_name)
     pub(crate) wasm_imports: HashMap<String, (String, String)>,
 
