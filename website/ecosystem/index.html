@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vais Ecosystem - Build Full-Stack with Vais</title>
+  <meta name="description" content="The Vais ecosystem: VaisX (web framework), VaisDB (RAG-native hybrid database), and vais-server (native backend) — all powered by the Vais compiler.">
+  <meta property="og:title" content="Vais Ecosystem - Build Full-Stack with Vais">
+  <meta property="og:description" content="Compile-time web, RAG-native DB, and native backend. One language, full stack.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/logo-icon.png">
+  <meta property="og:url" content="https://vais.dev/ecosystem/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Vais Ecosystem - Build Full-Stack with Vais">
+  <meta name="twitter:description" content="Compile-time web, RAG-native DB, and native backend. One language, full stack.">
+  <meta name="twitter:image" content="/logo-icon.png">
+  <link rel="canonical" href="https://vais.dev/ecosystem/">
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="apple-touch-icon" href="/logo-icon.png">
+  <link rel="stylesheet" href="/src/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <style>
+    /* === Ecosystem page-specific styles === */
+    .eco-hero {
+      position: relative;
+      padding: 140px 0 80px;
+      overflow: hidden;
+    }
+
+    .eco-hero-bg {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 60% at 50% 0%, rgba(124, 106, 239, 0.15) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 40% at 20% 40%, rgba(34, 211, 238, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 40% at 80% 30%, rgba(52, 211, 153, 0.07) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .eco-hero .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+    }
+
+    .eco-hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(124, 106, 239, 0.4);
+      background: rgba(124, 106, 239, 0.1);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--primary-light);
+      margin-bottom: 28px;
+    }
+
+    .eco-hero-title {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 20px;
+    }
+
+    .eco-hero-subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 40px;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .eco-hero-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 72px;
+    }
+
+    /* === Architecture Diagram === */
+    .arch-diagram {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.9;
+      color: var(--text-muted);
+      text-align: left;
+    }
+
+    .arch-diagram .arch-title {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .arch-layer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 4px;
+    }
+
+    .arch-layer-browser {
+      background: rgba(34, 211, 238, 0.08);
+      border: 1px solid rgba(34, 211, 238, 0.2);
+      color: var(--accent);
+    }
+
+    .arch-layer-server {
+      background: rgba(124, 106, 239, 0.08);
+      border: 1px solid rgba(124, 106, 239, 0.2);
+      color: var(--primary-light);
+    }
+
+    .arch-layer-db {
+      background: rgba(52, 211, 153, 0.08);
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      color: var(--accent-green);
+    }
+
+    .arch-layer-compiler {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .arch-arrow {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      margin: 2px 0;
+    }
+
+    .arch-label {
+      font-weight: 700;
+      min-width: 100px;
+    }
+
+    .arch-desc {
+      font-weight: 400;
+      opacity: 0.8;
+    }
+
+    /* === Products Section === */
+    .eco-products {
+      padding: 80px 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(26, 26, 38, 0.4) 50%, transparent 100%);
+    }
+
+    .eco-products .container {
+      max-width: 1100px;
+    }
+
+    .section-eyebrow {
+      text-align: center;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--primary-light);
+      margin-bottom: 12px;
+    }
+
+    .eco-section-title {
+      text-align: center;
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .eco-section-subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      line-height: 1.7;
+      max-width: 560px;
+      margin: 0 auto 56px;
+    }
+
+    .product-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .product-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .product-card:hover {
+      border-color: var(--border-light);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    .product-card-vaisx { border-top: 3px solid var(--accent); }
+    .product-card-vaisdb { border-top: 3px solid var(--accent-green); }
+    .product-card-server { border-top: 3px solid var(--primary-light); }
+
+    .product-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 20px;
+    }
+
+    .product-icon-vaisx  { background: rgba(34, 211, 238, 0.15); color: var(--accent); }
+    .product-icon-vaisdb { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+    .product-icon-server { background: rgba(124, 106, 239, 0.15); color: var(--primary-light); }
+
+    .product-name {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+
+    .product-tagline {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+      font-style: italic;
+    }
+
+    .product-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.65;
+      margin-bottom: 20px;
+      flex: 1;
+    }
+
+    .product-features {
+      list-style: none;
+      margin-bottom: 28px;
+    }
+
+    .product-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      padding: 5px 0;
+    }
+
+    .product-features li::before {
+      content: '▸';
+      font-size: 0.7rem;
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+
+    .product-card-vaisx  .product-features li::before { color: var(--accent); }
+    .product-card-vaisdb .product-features li::before { color: var(--accent-green); }
+    .product-card-server .product-features li::before { color: var(--primary-light); }
+
+    .product-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid;
+      transition: background 0.2s, color 0.2s;
+      margin-top: auto;
+      width: fit-content;
+    }
+
+    .product-card-vaisx  .product-link { color: var(--accent); border-color: rgba(34, 211, 238, 0.3); }
+    .product-card-vaisdb .product-link { color: var(--accent-green); border-color: rgba(52, 211, 153, 0.3); }
+    .product-card-server .product-link { color: var(--primary-light); border-color: rgba(124, 106, 239, 0.3); }
+
+    .product-card-vaisx  .product-link:hover { background: rgba(34, 211, 238, 0.1); color: var(--accent); }
+    .product-card-vaisdb .product-link:hover { background: rgba(52, 211, 153, 0.1); color: var(--accent-green); }
+    .product-card-server .product-link:hover { background: rgba(124, 106, 239, 0.1); color: var(--primary-light); }
+
+    /* === Fullstack Code Section === */
+    .eco-code {
+      padding: 80px 0;
+    }
+
+    .code-fullstack {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .code-fs-header {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+
+    .code-fs-tab {
+      padding: 12px 20px;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-dim);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .code-fs-tab:hover { color: var(--text-muted); }
+    .code-fs-tab.active { color: var(--text); border-bottom-color: var(--primary-light); }
+
+    .code-fs-dots {
+      display: flex;
+      gap: 6px;
+      padding: 0 16px;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+
+    .code-fs-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .code-fs-dot.red    { background: #ff5f57; }
+    .code-fs-dot.yellow { background: #febc2e; }
+    .code-fs-dot.green  { background: #28c840; }
+
+    .code-fs-body {
+      padding: 28px 32px;
+      overflow-x: auto;
+    }
+
+    .code-fs-panel {
+      display: none;
+    }
+
+    .code-fs-panel.active {
+      display: block;
+    }
+
+    .code-fs-panel pre {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+      white-space: pre;
+    }
+
+    /* Syntax colors reuse from main page */
+    .code-fs-panel .kw   { color: #c792ea; }
+    .code-fs-panel .fn   { color: #82aaff; }
+    .code-fs-panel .type { color: #ffcb6b; }
+    .code-fs-panel .str  { color: #c3e88d; }
+    .code-fs-panel .num  { color: #f78c6c; }
+    .code-fs-panel .op   { color: #89ddff; }
+    .code-fs-panel .cm   { color: var(--text-dim); font-style: italic; }
+    .code-fs-panel .attr { color: #c3e88d; }
+
+    /* === CTA Section === */
+    .eco-cta {
+      padding: 100px 0;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .eco-cta-bg {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124, 106, 239, 0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .eco-cta .container {
+      position: relative;
+      z-index: 1;
+    }
+
+    .eco-cta-title {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+
+    .eco-cta-subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      line-height: 1.7;
+      max-width: 500px;
+      margin: 0 auto 40px;
+    }
+
+    .eco-cta-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* === Footer === */
+    .eco-footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+    }
+
+    .eco-footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .eco-footer-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .eco-footer-links a {
+      color: var(--text-dim);
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+
+    .eco-footer-links a:hover {
+      color: var(--text-muted);
+    }
+
+    .eco-footer-copy {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+    }
+
+    @media (max-width: 768px) {
+      .eco-hero { padding: 110px 0 60px; }
+      .eco-hero-title { font-size: 2.2rem; }
+      .arch-diagram { font-size: 0.75rem; padding: 20px 16px; }
+      .product-cards { grid-template-columns: 1fr; }
+      .code-fs-body { padding: 20px 16px; }
+      .eco-footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">
+        <img src="/logo-icon.png" alt="Vais" class="logo-img">
+        <span class="logo-text">Vais</span>
+      </a>
+      <div class="nav-links" id="nav-links">
+        <a href="/ecosystem/" style="color: var(--text);">Ecosystem</a>
+        <a href="/vaisx/">VaisX</a>
+        <a href="https://docs.vais.dev/" class="nav-link-docs">Docs</a>
+        <a href="/blog/" class="nav-link-blog">Blog</a>
+        <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener" aria-label="GitHub repository">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+      </div>
+      <button class="nav-mobile-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-links">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="eco-hero">
+    <div class="eco-hero-bg"></div>
+    <div class="container">
+      <div class="eco-hero-badge">Vais Ecosystem</div>
+      <h1 class="eco-hero-title">
+        Build <span class="gradient-text">Full-Stack</span> with Vais
+      </h1>
+      <p class="eco-hero-subtitle">
+        하나의 언어로 프론트엔드, 백엔드, 데이터베이스를 모두.
+        컴파일 타임 반응성부터 RAG-native 하이브리드 DB까지 — 모두 Vais 컴파일러 위에서 동작합니다.
+      </p>
+      <div class="eco-hero-actions">
+        <a href="https://docs.vais.dev/ecosystem/" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/vaislang/vais" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+
+      <!-- Architecture Diagram -->
+      <div class="arch-diagram" role="img" aria-label="Vais full-stack architecture diagram">
+        <div class="arch-title">// Vais Full-Stack Architecture</div>
+
+        <div class="arch-layer arch-layer-browser">
+          <span class="arch-label">[ Browser ]</span>
+          <span class="arch-desc">VaisX (vais-web) — 컴파일 타임 반응성, SSR/SSG, &lt; 3KB 런타임</span>
+        </div>
+
+        <div class="arch-arrow">↕  HTTP / WebSocket  ↕</div>
+
+        <div class="arch-layer arch-layer-server">
+          <span class="arch-label">[ Server  ]</span>
+          <span class="arch-desc">vais-server — Express/Axum 스타일 라우팅, 미들웨어, 네이티브 vaisdb 통합</span>
+        </div>
+
+        <div class="arch-arrow">↕  native FFI (zero-copy)  ↕</div>
+
+        <div class="arch-layer arch-layer-db">
+          <span class="arch-label">[ Data    ]</span>
+          <span class="arch-desc">VaisDB — Vector + Graph + SQL + FTS, RAG-native 하이브리드 쿼리</span>
+        </div>
+
+        <div class="arch-arrow">↓  vaisc  ↓</div>
+
+        <div class="arch-layer arch-layer-compiler">
+          <span class="arch-label">[ Compile ]</span>
+          <span class="arch-desc">Vais compiler — LLVM IR / WASM / JS ESM 공통 백엔드, 단일 빌드 파이프라인</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Products Section -->
+  <section class="eco-products" id="products">
+    <div class="container">
+      <p class="section-eyebrow">세 가지 핵심 제품</p>
+      <h2 class="eco-section-title">One Language, <span class="gradient-text">Three Pillars</span></h2>
+      <p class="eco-section-subtitle">
+        각 레이어는 독립적으로 사용하거나, Vais 생태계 전체와 함께 결합할 수 있습니다.
+      </p>
+
+      <div class="product-cards">
+        <!-- VaisX -->
+        <div class="product-card product-card-vaisx">
+          <div class="product-icon product-icon-vaisx">VX</div>
+          <div class="product-name">VaisX</div>
+          <div class="product-tagline">vais-web · 풀스택 웹 프레임워크</div>
+          <p class="product-desc">
+            런타임 Virtual DOM 없이 컴파일 타임에 반응성을 해결하는 웹 프레임워크.
+            Vais 컴파일러가 직접 최적화된 DOM 업데이트 코드를 생성합니다.
+          </p>
+          <ul class="product-features">
+            <li>컴파일 타임 반응성 — 런타임 diffing 없음</li>
+            <li>&lt; 3KB 런타임 번들 (gzip)</li>
+            <li>파일 기반 라우팅 + SSR / SSG</li>
+            <li>Vais 타입 시스템과 완전 통합</li>
+            <li>WASM 빌드 지원</li>
+          </ul>
+          <a href="https://docs.vais.dev/ecosystem/vaisx/" class="product-link">
+            문서 보기 →
+          </a>
+        </div>
+
+        <!-- VaisDB -->
+        <div class="product-card product-card-vaisdb">
+          <div class="product-icon product-icon-vaisdb">DB</div>
+          <div class="product-name">VaisDB</div>
+          <div class="product-tagline">RAG-native 하이브리드 데이터베이스</div>
+          <p class="product-desc">
+            벡터 검색, 그래프 쿼리, SQL, 전문 검색(FTS)을 단일 엔진에 통합한
+            임베딩 가능한 데이터베이스. AI 애플리케이션에 최적화되어 있습니다.
+          </p>
+          <ul class="product-features">
+            <li>Vector + Graph + SQL + FTS 하이브리드 쿼리</li>
+            <li>RAG-native — 임베딩 파이프라인 내장</li>
+            <li>임베딩 가능 (프로세스 내 실행)</li>
+            <li>vais-server 네이티브 통합</li>
+            <li>WebAssembly 빌드 지원</li>
+          </ul>
+          <a href="https://docs.vais.dev/ecosystem/vaisdb/" class="product-link">
+            문서 보기 →
+          </a>
+        </div>
+
+        <!-- vais-server -->
+        <div class="product-card product-card-server">
+          <div class="product-icon product-icon-server">SV</div>
+          <div class="product-name">vais-server</div>
+          <div class="product-tagline">네이티브 백엔드 프레임워크</div>
+          <p class="product-desc">
+            Express/Axum 스타일의 라우팅 API를 제공하는 고성능 HTTP 서버.
+            vaisdb와 zero-copy FFI로 직접 연결되며 Vais 타입 안전성을 서버까지 확장합니다.
+          </p>
+          <ul class="product-features">
+            <li>Express / Axum 스타일 선언형 라우팅</li>
+            <li>네이티브 vaisdb 통합 (zero-copy)</li>
+            <li>미들웨어 체인, 비동기 핸들러</li>
+            <li>타입 안전 요청/응답 직렬화</li>
+            <li>WebSocket 지원</li>
+          </ul>
+          <a href="https://docs.vais.dev/ecosystem/vais-server/" class="product-link">
+            문서 보기 →
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Full-Stack Code Example Section -->
+  <section class="eco-code" id="example">
+    <div class="container">
+      <p class="section-eyebrow">풀스택 예시</p>
+      <h2 class="eco-section-title" style="margin-bottom: 12px;">
+        한 눈에 보는 <span class="gradient-text">Vais 풀스택</span>
+      </h2>
+      <p class="eco-section-subtitle">
+        vais-web, vais-server, vaisdb를 함께 사용하는 실제 패턴입니다.
+      </p>
+
+      <div class="code-fullstack">
+        <div class="code-fs-header">
+          <button class="code-fs-tab active" data-tab="frontend">frontend/search.vais</button>
+          <button class="code-fs-tab" data-tab="server">server/routes.vais</button>
+          <button class="code-fs-tab" data-tab="db">db/schema.vais</button>
+          <div class="code-fs-dots">
+            <div class="code-fs-dot red"></div>
+            <div class="code-fs-dot yellow"></div>
+            <div class="code-fs-dot green"></div>
+          </div>
+        </div>
+        <div class="code-fs-body">
+          <!-- Frontend tab -->
+          <div class="code-fs-panel active" id="tab-frontend">
+            <pre><code><span class="cm"># vais-web: 컴파일 타임 반응성, SSR 지원</span>
+<span class="kw">U</span> vais_web::{<span class="type">Component</span>, <span class="fn">signal</span>, <span class="fn">effect</span>}
+<span class="kw">U</span> vais_web::html::{<span class="fn">div</span>, <span class="fn">input</span>, <span class="fn">ul</span>, <span class="fn">li</span>}
+
+<span class="kw">S</span> <span class="type">SearchResult</span> { title: <span class="type">str</span>, score: <span class="type">f32</span> }
+
+<span class="cm"># 컴포넌트 정의 — 컴파일 타임에 DOM 업데이트 코드 생성</span>
+<span class="kw">P</span> <span class="kw">F</span> <span class="fn">SearchPage</span>() -> <span class="type">Component</span> {
+  query   <span class="op">:=</span> <span class="fn">signal</span>(<span class="str">""</span>)
+  results <span class="op">:=</span> <span class="fn">signal</span>(<span class="type">Vec</span>::<span class="fn">new</span>())
+
+  <span class="cm"># effect: query 변경 시 자동 재실행 (컴파일 타임 의존성 추적)</span>
+  <span class="fn">effect</span>(|| {
+    <span class="kw">I</span> query.<span class="fn">get</span>().<span class="fn">len</span>() >= <span class="num">2</span> {
+      res <span class="op">:=</span> <span class="fn">fetch_search</span>(query.<span class="fn">get</span>())
+      results.<span class="fn">set</span>(res)
+    }
+  })
+
+  <span class="fn">div</span>(|| {
+    <span class="fn">input</span>(
+      placeholder: <span class="str">"VaisDB에서 검색..."</span>,
+      on_input: |e| query.<span class="fn">set</span>(e.value)
+    )
+    <span class="fn">ul</span>(|| {
+      <span class="kw">F</span> <span class="fn">render_item</span>(r: <span class="type">SearchResult</span>) {
+        <span class="fn">li</span>(<span class="str">"~{r.title}  (score: ~{r.score:.2})"</span>)
+      }
+      results.<span class="fn">get</span>().<span class="fn">iter</span>() |> <span class="fn">map</span>(<span class="fn">render_item</span>)
+    })
+  })
+}</code></pre>
+          </div>
+
+          <!-- Server tab -->
+          <div class="code-fs-panel" id="tab-server">
+            <pre><code><span class="cm"># vais-server: Express/Axum 스타일 라우팅</span>
+<span class="kw">U</span> vais_server::{<span class="type">App</span>, <span class="type">Router</span>, <span class="type">Json</span>}
+<span class="kw">U</span> vaisdb::{<span class="type">Db</span>, <span class="type">HybridQuery</span>}
+
+<span class="kw">S</span> <span class="type">SearchReq</span>  { q: <span class="type">str</span>, limit: <span class="type">i32</span> }
+<span class="kw">S</span> <span class="type">SearchResp</span> { results: <span class="type">Vec</span>&lt;<span class="type">Hit</span>&gt;, took_ms: <span class="type">f64</span> }
+
+<span class="cm"># GET /api/search?q=...&limit=10</span>
+<span class="kw">A</span> <span class="kw">F</span> <span class="fn">handle_search</span>(req: <span class="type">SearchReq</span>, db: <span class="type">Db</span>) -> <span class="type">Json</span>&lt;<span class="type">SearchResp</span>&gt; {
+  <span class="cm"># HybridQuery: 벡터 + 키워드 동시 검색 (RAG-native)</span>
+  hits <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">hybrid_query</span>(<span class="type">HybridQuery</span> {
+    text:    req.q,
+    top_k:   req.limit,
+    mode:    <span class="str">"rrf"</span>,      <span class="cm"># reciprocal rank fusion</span>
+  })<span class="op">?</span>
+
+  <span class="type">Json</span>(<span class="type">SearchResp</span> {
+    results: hits,
+    took_ms: <span class="fn">elapsed_ms</span>(),
+  })
+}
+
+<span class="kw">F</span> <span class="fn">main</span>() {
+  db  <span class="op">:=</span> <span class="type">Db</span>::<span class="fn">open</span>(<span class="str">"./data/vais.db"</span>)<span class="op">!</span>
+  app <span class="op">:=</span> <span class="type">App</span>::<span class="fn">new</span>()
+    .<span class="fn">state</span>(db)
+    .<span class="fn">get</span>(<span class="str">"/api/search"</span>, <span class="fn">handle_search</span>)
+    .<span class="fn">serve_static</span>(<span class="str">"./dist"</span>)   <span class="cm"># VaisX 빌드 결과물 서빙</span>
+  app.<span class="fn">listen</span>(<span class="str">"0.0.0.0:8080"</span>)<span class="op">!</span>
+}</code></pre>
+          </div>
+
+          <!-- DB tab -->
+          <div class="code-fs-panel" id="tab-db">
+            <pre><code><span class="cm"># VaisDB: Vector + Graph + SQL + FTS 하이브리드</span>
+<span class="kw">U</span> vaisdb::{<span class="type">Db</span>, <span class="type">Collection</span>, <span class="type">EmbedModel</span>}
+
+<span class="kw">S</span> <span class="type">Article</span> {
+  id:      <span class="type">i64</span>,
+  title:   <span class="type">str</span>,
+  body:    <span class="type">str</span>,
+  tags:    <span class="type">Vec</span>&lt;<span class="type">str</span>&gt;,
+  <span class="cm"># 임베딩은 자동 생성 — 별도 파이프라인 불필요</span>
+  <span class="attr">#[embed(model = "text-embedding-3-small", field = "body")]</span>
+  vec:     <span class="type">Vec</span>&lt;<span class="type">f32</span>&gt;,
+}
+
+<span class="kw">F</span> <span class="fn">setup_db</span>() -> <span class="type">Db</span> {
+  db <span class="op">:=</span> <span class="type">Db</span>::<span class="fn">open</span>(<span class="str">"./data/vais.db"</span>)<span class="op">!</span>
+
+  <span class="cm"># 컬렉션 생성: SQL 테이블 + 벡터 인덱스 + FTS 인덱스 자동 설정</span>
+  db.<span class="fn">collection</span>::&lt;<span class="type">Article</span>&gt;(<span class="str">"articles"</span>)
+    .<span class="fn">vector_index</span>(<span class="str">"hnsw"</span>, dim: <span class="num">1536</span>)
+    .<span class="fn">fts_index</span>(fields: [<span class="str">"title"</span>, <span class="str">"body"</span>])
+    .<span class="fn">graph_edges</span>(<span class="str">"related_to"</span>)
+    .<span class="fn">create</span>()<span class="op">!</span>
+
+  db
+}
+
+<span class="cm"># RAG 파이프라인 — 한 줄로 완성</span>
+<span class="kw">A</span> <span class="kw">F</span> <span class="fn">rag_query</span>(db: <span class="type">Db</span>, question: <span class="type">str</span>) -> <span class="type">str</span> {
+  context <span class="op">:=</span> <span class="kw">Y</span> db.<span class="fn">rag</span>(question, top_k: <span class="num">5</span>)<span class="op">?</span>
+  <span class="fn">llm_complete</span>(<span class="str">"~{context}\n\nQ: ~{question}"</span>)<span class="op">!</span>
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="eco-cta">
+    <div class="eco-cta-bg"></div>
+    <div class="container">
+      <h2 class="eco-cta-title">
+        지금 바로 <span class="gradient-text">시작하세요</span>
+      </h2>
+      <p class="eco-cta-subtitle">
+        문서에서 각 제품의 퀵스타트 가이드와 풀스택 튜토리얼을 확인하세요.
+      </p>
+      <div class="eco-cta-actions">
+        <a href="https://docs.vais.dev/ecosystem/" class="btn btn-primary">Get Started</a>
+        <a href="/" class="btn btn-secondary">← Vais 홈으로</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="eco-footer">
+    <div class="container">
+      <div class="eco-footer-inner">
+        <a href="/" class="nav-logo" style="text-decoration: none;">
+          <img src="/logo-icon.png" alt="Vais" class="logo-img">
+          <span class="logo-text" style="font-size: 1rem;">Vais</span>
+        </a>
+        <div class="eco-footer-links">
+          <a href="https://docs.vais.dev/ecosystem/vaisx/">VaisX Docs</a>
+          <a href="https://docs.vais.dev/ecosystem/vaisdb/">VaisDB Docs</a>
+          <a href="https://docs.vais.dev/ecosystem/vais-server/">vais-server Docs</a>
+          <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
+        </div>
+        <span class="eco-footer-copy">&copy; 2026 Vais Contributors</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Tab switching for code examples
+    const fsTabs = document.querySelectorAll('.code-fs-tab');
+    const fsPanels = document.querySelectorAll('.code-fs-panel');
+
+    fsTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+
+        fsTabs.forEach(t => t.classList.remove('active'));
+        fsPanels.forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        const panel = document.getElementById('tab-' + target);
+        if (panel) panel.classList.add('active');
+      });
+    });
+
+    // Mobile nav toggle (reuse pattern from main site)
+    const mobileToggle = document.querySelector('.nav-mobile-toggle');
+    const navLinks = document.getElementById('nav-links');
+
+    if (mobileToggle && navLinks) {
+      mobileToggle.addEventListener('click', () => {
+        const expanded = mobileToggle.getAttribute('aria-expanded') === 'true';
+        mobileToggle.setAttribute('aria-expanded', String(!expanded));
+        navLinks.style.display = expanded ? '' : 'flex';
+      });
+    }
+  </script>
+</body>
+</html>

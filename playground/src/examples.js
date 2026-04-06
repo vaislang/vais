@@ -1178,6 +1178,86 @@ F main() -> i64 {
 
     0
 }`
+  },
+
+  'vais-server-hello': {
+    name: 'vais-server Hello World',
+    description: 'Simple HTTP server with vais-server',
+    code: `U core/app
+U core/config
+U core/context
+
+C PORT: u16 = 8080
+
+F handle_hello(ctx: Context) -> Response {
+    ctx.text(200, "Hello from vais-server!")
+}
+
+F main() -> i64 {
+    config := ServerConfig.default()
+    app := mut App.new(config)
+    app.get("/", "handle_hello")
+
+    M app.listen(":{PORT}") {
+        Ok(_) => { 0 },
+        Err(e) => { println("Error: {e.message}"); 1 },
+    }
+}`
+  },
+
+  'vaisdb-query': {
+    name: 'VaisDB Basic Query',
+    description: 'SQL, vector, graph, and full-text search with VaisDB',
+    code: `U vaisdb/client
+
+F main() -> i64 {
+    db := mut VaisDB.open("myapp.vaisdb")
+
+    # SQL: 테이블 생성
+    db.execute("CREATE TABLE users (id INT, name TEXT, bio TEXT)")
+    db.execute("INSERT INTO users VALUES (1, 'Alice', 'Engineer')")
+
+    # Vector: 시맨틱 검색
+    db.execute("VECTOR_SEARCH(users, [0.1, 0.2, 0.3], 5)")
+
+    # Graph: 관계 탐색
+    db.execute("GRAPH_TRAVERSE('user_1', 'outbound', 2)")
+
+    # Full-text: 텍스트 검색
+    db.execute("FULLTEXT_MATCH(users, 'engineer')")
+
+    0
+}`
+  },
+
+  'fullstack': {
+    name: 'Full-Stack Vais',
+    description: 'vais-web + vais-server + vaisdb end-to-end example',
+    code: `# Full-Stack Vais: vais-web + vais-server + vaisdb
+# Frontend → API Server → Database
+
+# --- Database Layer (VaisDB) ---
+S Todo { id: i64, text: str, done: bool }
+
+# --- API Server (vais-server) ---
+U core/app
+U db/query
+
+F handle_list_todos(ctx: Context) -> Response {
+    sql := QueryBuilder.new()
+        .select("todos")
+        .column("id").column("text").column("done")
+        .order_by("id", SortDirection.Asc)
+        .build()
+    ctx.json(200, db.execute(sql))
+}
+
+F main() -> i64 {
+    app := mut App.new(ServerConfig.default())
+    app.get("/api/todos", "handle_list_todos")
+    app.listen(":8080")
+    0
+}`
   }
 };
 

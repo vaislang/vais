@@ -1750,3 +1750,24 @@ python3 ir_fix.py /tmp/test_graph.ll /tmp/test_graph_fix.ll
 ```
 
 **메인테이너**: Steve
+
+---
+
+## Current Tasks (2026-04-06) — Ecosystem 문서 & 홈페이지 콘텐츠
+mode: auto
+max_iterations: 12
+iteration: 1
+- [x] 8. docs-site VaisX(vais-web) 가이드 (impl-sonnet) ✅ 2026-04-06
+  changes: ecosystem/vais-web/ (README, getting-started, syntax, components)
+- [x] 9. docs-site VaisDB 쿼리 가이드 (impl-sonnet) ✅ 2026-04-06
+  changes: ecosystem/vaisdb/ (README, getting-started, queries, rag)
+- [x] 10. docs-site vais-server API 가이드 (impl-sonnet) ✅ 2026-04-06
+  changes: ecosystem/vais-server/ (README, getting-started, routing, database)
+- [x] 11. docs-site SUMMARY.md + Ecosystem 개요 (Opus direct) ✅ 2026-04-06
+  changes: SUMMARY.md (Ecosystem 섹션 추가), ecosystem/README.md (개요)
+- [x] 12. 홈페이지 생태계 랜딩 페이지 (impl-sonnet) ✅ 2026-04-06
+  changes: website/ecosystem/index.html, website/index.html, website/vite.config.js
+- [x] 13. 플레이그라운드 생태계 예제 (impl-sonnet) ✅ 2026-04-06
+  changes: playground/src/examples.js (vais-server, vaisdb, fullstack 예제 추가)
+  strategy: independent-parallel (8,9,10,12,13 파일 겹침 없음) → 11 순차
+progress: 6/6 (100%)
