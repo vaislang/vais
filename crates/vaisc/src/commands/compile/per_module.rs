@@ -51,12 +51,27 @@ pub(crate) fn compile_per_module(
     let instantiations = checker.get_generic_instantiations();
     let instantiations = &instantiations;
 
-    // Phase 1: Generate IR for all modules (parallelized with rayon)
-    // Collect (module_stem, is_main, ir_string) tuples
-    let module_entries: Vec<_> = modules_map.iter().collect();
-    let ir_results: Vec<Result<(String, bool, String), String>> = module_entries
-        .par_iter()
-        .map(|(module_path, item_indices)| {
+    // Phase 1: Generate IR for all modules (parallelized with rayon by default).
+    //
+    // Set VAIS_PARALLEL_CODEGEN=0 to force sequential codegen. This is useful for
+    // debugging multi-error scenarios where parallel work-stealing causes the
+    // "first reported error" to be non-deterministic across runs, making RCA
+    // of multiple simultaneous codegen bugs very difficult. Sequential mode
+    // processes modules in a stable iteration order.
+    let parallel_codegen = std::env::var("VAIS_PARALLEL_CODEGEN")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true);
+
+    // Collect (module_stem, is_main, ir_string) tuples.
+    // In sequential mode, sort by path to guarantee deterministic error reporting order.
+    // (Parallel mode via rayon also has non-deterministic work-stealing, so sorting here
+    //  doesn't fully stabilize parallel errors but doesn't hurt.)
+    let mut module_entries: Vec<_> = modules_map.iter().collect();
+    if !parallel_codegen {
+        module_entries.sort_by(|a, b| a.0.cmp(b.0));
+    }
+    let ir_results: Vec<Result<(String, bool, String), String>> = {
+        let mapper = |(module_path, item_indices): &(&std::path::PathBuf, &Vec<usize>)| {
             let module_stem = module_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -95,10 +110,21 @@ pub(crate) fn compile_per_module(
                     span: codegen.last_error_span(),
                     error: e,
                 };
+                // Error spans reference the module where the error originated,
+                // not the main entry file. Load the module's own source so the
+                // formatter renders the correct file + line + snippet.
+                let (err_source, err_path): (std::borrow::Cow<'_, str>, &Path) = if is_main {
+                    (std::borrow::Cow::Borrowed(main_source), input)
+                } else {
+                    match fs::read_to_string(module_path.as_path()) {
+                        Ok(s) => (std::borrow::Cow::Owned(s), module_path.as_path()),
+                        Err(_) => (std::borrow::Cow::Borrowed(main_source), input),
+                    }
+                };
                 format!(
                     "Codegen error for {}:\n{}",
                     module_stem,
-                    error_formatter::format_spanned_codegen_error(&spanned, main_source, input,)
+                    error_formatter::format_spanned_codegen_error(&spanned, &err_source, err_path)
                 )
             })?;
 
@@ -115,8 +141,13 @@ pub(crate) fn compile_per_module(
             let ir = vais_codegen::optimize::optimize_ir(&raw_ir, opt);
 
             Ok((module_stem, is_main, ir))
-        })
-        .collect();
+        };
+        if parallel_codegen {
+            module_entries.par_iter().map(mapper).collect()
+        } else {
+            module_entries.iter().map(mapper).collect()
+        }
+    };
 
     // Collect results, bail on first error
     let mut module_irs: Vec<(String, bool, String)> = Vec::with_capacity(ir_results.len());

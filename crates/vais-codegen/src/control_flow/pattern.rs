@@ -335,6 +335,73 @@ impl CodeGenerator {
                             }
                         }
                     }
+                } else if self
+                    .resolve_enum_struct_variant(struct_name)
+                    .is_some()
+                {
+                    // `struct_name` names an enum struct-variant (e.g. `Varchar { max_len }`
+                    // used as short-form inside a `M` arm). Verify the enum's runtime tag
+                    // matches and delegate any inner sub-pattern checks through the enum
+                    // variant payload layout.
+                    let (enum_name, _variant_tag, variant_struct_fields) =
+                        self.resolve_enum_struct_variant(struct_name).unwrap();
+
+                    // Tag check
+                    let tag_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
+                        tag_ptr,
+                        enum_name,
+                        enum_name,
+                        match_val
+                    );
+                    let tag_val = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i32, i32* {}", tag_val, tag_ptr);
+                    let expected_tag = self.get_enum_variant_tag(struct_name);
+                    let tag_ok = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = icmp eq i32 {}, {}",
+                        tag_ok,
+                        tag_val,
+                        expected_tag
+                    );
+                    checks.push(tag_ok);
+
+                    // Sub-pattern checks (only for fields with explicit patterns — shorthand
+                    // `{ field }` bindings are always-match at check time, they only matter
+                    // during bindings generation).
+                    for (field_name, field_pat) in fields {
+                        if let Some(pat) = field_pat {
+                            if let Some(field_idx) = variant_struct_fields
+                                .iter()
+                                .position(|(n, _)| n == &field_name.node)
+                            {
+                                let payload_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
+                                    payload_ptr,
+                                    enum_name,
+                                    enum_name,
+                                    match_val,
+                                    field_idx
+                                );
+                                let field_val = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load i64, i64* {}",
+                                    field_val,
+                                    payload_ptr
+                                );
+                                let (check, check_ir) =
+                                    self.generate_pattern_check(pat, &field_val, counter)?;
+                                ir.push_str(&check_ir);
+                                checks.push(check);
+                            }
+                        }
+                    }
                 }
 
                 // AND all checks together
@@ -396,6 +463,31 @@ impl CodeGenerator {
             for variant in &enum_info.variants {
                 if variant.name == variant_name {
                     return Some(enum_info.name.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Resolve a short-form struct-variant name (e.g. `Varchar`) to its parent
+    /// enum + tag + named-field layout. Returns `None` if `variant_name` is not
+    /// the name of an enum struct-variant (`EnumVariantFields::Struct`).
+    ///
+    /// Used by the pattern match path to recover enum struct-variant semantics
+    /// when the parser produced a `Pattern::Struct` (which happens whenever the
+    /// match arm omits the `EnumType.` qualifier, for example
+    /// `Varchar { max_len } => …`).
+    pub(crate) fn resolve_enum_struct_variant(
+        &self,
+        variant_name: &str,
+    ) -> Option<(String, i32, Vec<(String, ResolvedType)>)> {
+        use crate::types::EnumVariantFields;
+        for enum_info in self.types.enums.values() {
+            for (tag, variant) in enum_info.variants.iter().enumerate() {
+                if variant.name == variant_name {
+                    if let EnumVariantFields::Struct(fields) = &variant.fields {
+                        return Some((enum_info.name.clone(), tag as i32, fields.clone()));
+                    }
                 }
             }
         }
@@ -1002,6 +1094,61 @@ impl CodeGenerator {
                                 );
                                 // SSA style - no alloca needed
                             }
+                        }
+                    }
+                } else if let Some((enum_name, _variant_tag, variant_struct_fields)) =
+                    self.resolve_enum_struct_variant(struct_name)
+                {
+                    // `struct_name` is actually an enum struct-variant used in short form
+                    // (e.g. `Varchar { max_len }` instead of `SqlType.Varchar { max_len }`).
+                    // The enum layout is `%EnumName { i32 tag, { i64, i64, ... } payload }`,
+                    // so each named field lives in payload slot at its declaration index.
+                    for (field_name, field_pat) in fields {
+                        let field_idx = match variant_struct_fields
+                            .iter()
+                            .position(|(n, _)| n == &field_name.node)
+                        {
+                            Some(i) => i,
+                            None => continue,
+                        };
+                        let field_ty = variant_struct_fields[field_idx].1.clone();
+
+                        let payload_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}",
+                            payload_ptr,
+                            enum_name,
+                            enum_name,
+                            match_val,
+                            field_idx
+                        );
+
+                        // Payload slots are stored as i64 in the enum layout. For simple
+                        // integer / bool / pointer fields we can load directly as i64 and
+                        // let downstream uses truncate; for compound types we follow the
+                        // same bitcast/heap-pointer conventions used by the Pattern::Variant
+                        // binding path. Here we default to the simple i64 load — enum
+                        // struct-variants with large compound field types are uncommon and
+                        // currently only affect `Varchar { max_len: u32 }` / `Vector { dim:
+                        // u32 }` style variants in vaisdb, which fit in an i64.
+                        let field_val = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load i64, i64* {}",
+                            field_val,
+                            payload_ptr
+                        );
+
+                        if let Some(pat) = field_pat {
+                            let bind_ir =
+                                self.generate_pattern_bindings(pat, &field_val, counter)?;
+                            ir.push_str(&bind_ir);
+                        } else {
+                            self.fn_ctx.locals.insert(
+                                field_name.node.clone(),
+                                LocalVar::ssa(field_ty, field_val.clone()),
+                            );
                         }
                     }
                 }

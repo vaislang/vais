@@ -176,10 +176,21 @@ pub(crate) fn run_per_module_emit_ir(
                     span: codegen.last_error_span(),
                     error: e,
                 };
+                // Error spans reference the module where the error originated,
+                // not the main entry file. Load the module's own source so the
+                // formatter renders the correct file + line + snippet.
+                let (err_source, err_path): (std::borrow::Cow<'_, str>, &Path) = if is_main {
+                    (std::borrow::Cow::Borrowed(main_source), input)
+                } else {
+                    match fs::read_to_string(module_path.as_path()) {
+                        Ok(s) => (std::borrow::Cow::Owned(s), module_path.as_path()),
+                        Err(_) => (std::borrow::Cow::Borrowed(main_source), input),
+                    }
+                };
                 format!(
                     "Codegen error for {}:\n{}",
                     module_stem,
-                    error_formatter::format_spanned_codegen_error(&spanned, main_source, input,)
+                    error_formatter::format_spanned_codegen_error(&spanned, &err_source, err_path)
                 )
             })?;
 

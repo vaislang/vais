@@ -314,6 +314,38 @@ impl CodeGenerator {
 
             Ok((union_ptr, ir))
         } else {
+            // Fallback: check if type_name is an enum struct-variant (e.g., SqlType.Varchar
+            // written unqualified as `Varchar { max_len: 255 }` inside match arms or return
+            // expressions where the enum context is inferred by the type checker but the
+            // parser produced a bare StructLit without enum_name).
+            //
+            // Scan all known enums for a variant with this name that has Struct fields.
+            // If exactly one such enum contains this variant, delegate to the enum variant
+            // constructor path (same handling as `EnumType.Variant { .. }` qualified form).
+            let matching_enums: Vec<String> = self
+                .types
+                .enums
+                .iter()
+                .filter(|(_, einfo)| {
+                    einfo.variants.iter().any(|v| {
+                        v.name == *type_name
+                            && matches!(v.fields, crate::types::EnumVariantFields::Struct(_))
+                    })
+                })
+                .map(|(ename, _)| ename.clone())
+                .collect();
+
+            if matching_enums.len() == 1 {
+                let enum_name = &matching_enums[0];
+                return self.generate_enum_variant_struct(enum_name, type_name, fields, counter);
+            } else if matching_enums.len() > 1 {
+                return Err(CodegenError::TypeError(format!(
+                    "Ambiguous struct-variant '{}': found in enums {:?}. Use qualified form \
+                     `EnumType.{} {{ .. }}` to disambiguate.",
+                    type_name, matching_enums, type_name
+                )));
+            }
+
             Err(CodegenError::TypeError(format!(
                 "Unknown struct or union: {}",
                 type_name

@@ -173,6 +173,40 @@ impl CodeGenerator {
             // Return pointer to union
             Ok((union_ptr, ir))
         } else {
+            // Fallback: short-form enum struct-variant construction (e.g.
+            // `IntVal { v }` instead of `SqlValue.IntVal { v }`). The type
+            // checker resolves the enum context via inference, but the parser
+            // produces a bare `StructLit` and codegen reaches this point with
+            // `type_name` pointing at the variant name. If exactly one enum has
+            // a struct-variant with this name, delegate to the enum variant
+            // constructor path used by the `EnumType.Variant { .. }` case.
+            use crate::types::EnumVariantFields;
+            let matching_enums: Vec<String> = self
+                .types
+                .enums
+                .iter()
+                .filter(|(_, einfo)| {
+                    einfo.variants.iter().any(|v| {
+                        v.name == *type_name
+                            && matches!(v.fields, EnumVariantFields::Struct(_))
+                    })
+                })
+                .map(|(ename, _)| ename.clone())
+                .collect();
+
+            if matching_enums.len() == 1 {
+                let enum_name = matching_enums[0].clone();
+                return self.generate_enum_variant_struct(
+                    &enum_name, type_name, fields, counter,
+                );
+            } else if matching_enums.len() > 1 {
+                return Err(CodegenError::TypeError(format!(
+                    "Ambiguous struct-variant '{}': found in enums {:?}. \
+                     Use qualified form `EnumType.{} {{ .. }}` to disambiguate.",
+                    type_name, matching_enums, type_name
+                )));
+            }
+
             Err(CodegenError::TypeError(format!(
                 "Unknown struct or union: {}",
                 type_name
