@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775265716946,
+  "lastUpdate": 1775437733527,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34007,6 +34007,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 802662,
             "range": "± 8038",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "b232c1c2214602303fe5ad6b4d68e7c83928863c",
+          "message": "fix(codegen): enum struct-variant pattern destructure + construction fallback + error span fix\n\nThree root-cause fixes that resolve vaisdb test_planner strict build (10/10):\n\n1. Per-module codegen error span misattribution (per_module.rs, parallel.rs):\n   Error formatting always used main_source/input path instead of the\n   module where the error originated. Now loads the module's own source\n   file for accurate file + line + snippet rendering.\n\n2. Enum struct-variant short-form pattern destructure (pattern.rs):\n   Pattern::Struct with an enum variant name (e.g. `Varchar { max_len }`)\n   silently skipped bindings because struct_fields lookup returned None.\n   Added resolve_enum_struct_variant() helper and fallback path that\n   extracts payload fields from the enum layout via getelementptr.\n\n3. Enum struct-variant short-form construction (generate_expr_struct.rs):\n   `Ok(IntVal { v })` failed with \"Unknown struct or union: IntVal\"\n   because generate_expr_struct_lit had no enum variant fallback.\n   Added matching_enums scan (same as expr_helpers_data.rs) to delegate\n   to generate_enum_variant_struct when exactly one enum matches.\n\nAll changes are additive fallback paths — no existing behavior modified.\nVerified: e2e 2546/0, codegen 800/0, types 348/0, parser 112/0,\nworkspace check clean, vaisdb 10/10 strict (serial 3x + parallel 3x).\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-06T10:03:37+09:00",
+          "tree_id": "e846e7a91467e4101c770b389f57c11f2e03869f",
+          "url": "https://github.com/vaislang/vais/commit/b232c1c2214602303fe5ad6b4d68e7c83928863c"
+        },
+        "date": 1775437732906,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3750,
+            "range": "± 24",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7209,
+            "range": "± 352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8157,
+            "range": "± 57",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14745,
+            "range": "± 361",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 19018,
+            "range": "± 340",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 36504,
+            "range": "± 785",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33437,
+            "range": "± 197",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 71986,
+            "range": "± 1251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303693,
+            "range": "± 3792",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 463852,
+            "range": "± 5749",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117510,
+            "range": "± 3122",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 797849,
+            "range": "± 8699",
             "unit": "ns/iter"
           }
         ]
