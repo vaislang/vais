@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775437733527,
+  "lastUpdate": 1775485011258,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34103,6 +34103,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 797849,
             "range": "± 8699",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "dee1e0ec75e6abfad89cf58438118793c1762bf1",
+          "message": "docs: add ecosystem documentation for vais-web, vaisdb, and vais-server\n\n- Add 13 docs-site pages: VaisX syntax/components guide, VaisDB query/RAG\n  guide, vais-server routing/database guide, ecosystem overview\n- Update SUMMARY.md with Ecosystem section (12 linked pages)\n- Add ecosystem landing page to website with product cards\n- Add 3 playground examples (vais-server hello, vaisdb query, fullstack)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-06T23:10:19+09:00",
+          "tree_id": "3144f5977b6f6a905e9a041598af32b0b80c5747",
+          "url": "https://github.com/vaislang/vais/commit/dee1e0ec75e6abfad89cf58438118793c1762bf1"
+        },
+        "date": 1775485010864,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3773,
+            "range": "± 30",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7456,
+            "range": "± 429",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8230,
+            "range": "± 54",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14611,
+            "range": "± 111",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18806,
+            "range": "± 143",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35589,
+            "range": "± 260",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33024,
+            "range": "± 338",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 69188,
+            "range": "± 502",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 304983,
+            "range": "± 3857",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 466107,
+            "range": "± 1639",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 118482,
+            "range": "± 3322",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 800013,
+            "range": "± 7300",
             "unit": "ns/iter"
           }
         ]
