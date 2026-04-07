@@ -11,6 +11,54 @@ use crate::{ParseError, ParseResult, Parser};
 
 use super::has_interpolation;
 
+/// Unescape `\{` → `{` and `\}` → `}` in a plain string literal (non-interpolation path).
+/// The lexer preserves these as `\{`/`\}` in the token so the parser can distinguish
+/// them from `{expr}` string interpolation. Once we know there is no interpolation,
+/// we convert the brace escapes to their literal characters.
+fn unescape_brace_escapes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.peek() {
+                Some(&'{') => {
+                    chars.next();
+                    result.push('{');
+                }
+                Some(&'}') => {
+                    chars.next();
+                    result.push('}');
+                }
+                _ => {
+                    result.push('\\');
+                    if let Some(next) = chars.next() {
+                        result.push(next);
+                    }
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Returns true if the string contains any `\{` or `\}` brace escape sequences.
+fn has_brace_escapes(s: &str) -> bool {
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(&next) = chars.peek() {
+                if next == '{' || next == '}' {
+                    return true;
+                }
+                chars.next();
+            }
+        }
+    }
+    false
+}
+
 impl Parser {
     /// Parse primary expression
     pub(crate) fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
@@ -23,6 +71,7 @@ impl Parser {
     /// Parse a string with interpolation into `Expr::StringInterp`.
     /// Scans the string char-by-char, splitting into literal and expression parts.
     /// `{{`/`}}` are escaped to literal `{`/`}`.
+    /// `\{`/`\}` are brace escapes (literal `{`/`}`, not interpolation).
     /// `{expr}` is sub-lexed and sub-parsed.
     fn parse_string_interpolation(&self, s: &str) -> ParseResult<Expr> {
         let mut parts: Vec<StringInterpPart> = Vec::new();
@@ -30,7 +79,26 @@ impl Parser {
         let mut chars = s.chars().peekable();
 
         while let Some(ch) = chars.next() {
-            if ch == '{' {
+            if ch == '\\' {
+                // Handle brace escapes: \{ -> literal {, \} -> literal }
+                if let Some(&next) = chars.peek() {
+                    if next == '{' {
+                        chars.next();
+                        literal.push('{');
+                        continue;
+                    } else if next == '}' {
+                        chars.next();
+                        literal.push('}');
+                        continue;
+                    }
+                }
+                // Other backslash sequences were already processed by the lexer;
+                // keep them as-is (push backslash + next char).
+                literal.push('\\');
+                if let Some(next) = chars.next() {
+                    literal.push(next);
+                }
+            } else if ch == '{' {
                 if chars.peek() == Some(&'{') {
                     // Escaped {{ -> literal {
                     chars.next();
@@ -140,6 +208,9 @@ impl Parser {
             Token::String(s) => {
                 if has_interpolation(&s) {
                     self.parse_string_interpolation(&s)?
+                } else if has_brace_escapes(&s) {
+                    // No interpolation, but has \{ or \} escapes — unescape them.
+                    Expr::String(unescape_brace_escapes(&s))
                 } else {
                     Expr::String(s)
                 }

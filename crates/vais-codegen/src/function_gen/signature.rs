@@ -44,6 +44,10 @@ impl CodeGenerator {
     pub(crate) fn type_to_llvm_extern(&self, ty: &ResolvedType) -> String {
         match ty {
             ResolvedType::Str => String::from("i8*"),
+            // &str is also passed as i8* in C ABI (not as a pointer to fat pointer)
+            ResolvedType::Ref(inner) if matches!(inner.as_ref(), ResolvedType::Str) => {
+                String::from("i8*")
+            }
             _ => self.type_to_llvm(ty),
         }
     }

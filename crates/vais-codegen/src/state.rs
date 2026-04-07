@@ -95,8 +95,9 @@ pub(crate) struct FunctionContext {
 
     /// Tracks heap allocations (malloc'd pointers) in the current function scope.
     /// At function exit, all tracked pointers are freed automatically.
-    /// Each entry is the LLVM register name holding the i8* pointer (e.g., "%tmp.5").
-    pub(crate) alloc_tracker: Vec<String>,
+    /// Each entry is (alloca_name, original_ptr_reg): the entry-block alloca stores the
+    /// i8* pointer so it can be loaded from any basic block at cleanup time.
+    pub(crate) alloc_tracker: Vec<(String, String)>,
 
     /// Maps temporary variable names (e.g., "%5", "%t.3") to their resolved types.
     /// Used by downstream passes to emit correct LLVM IR types instead of

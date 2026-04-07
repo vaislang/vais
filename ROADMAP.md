@@ -1,16 +1,40 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 183 진행 중 — 테스트/코드 정리)
+> **현재 버전**: 0.1.0 (Phase 185 — codegen 이슈 수정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-04 (Phase 183 진행 중)
+> **최종 업데이트**: 2026-04-07 (Phase 185: vais-monitor 빌드 중 발견된 codegen 이슈)
 
 ---
 
-## Current Tasks (2026-04-05) — Phase 184: Cross-module 순환 참조 stack overflow 수정
-mode: auto
-max_iterations: 6
-iteration: 1
+## Current Tasks (2026-04-07) — Phase 185: Codegen 이슈 (vais-monitor 빌드 중 발견)
+
+vais-monitor 프로젝트 (30 모듈, 11K LOC) 전체 빌드 중 발견된 codegen 이슈.
+29/30 모듈 IR 생성 성공, clang 링크 단계에서 3건 실패.
+
+- [x] 1. extern 함수의 &str 파라미터 fat pointer codegen 수정 (Opus direct) ✅ 2026-04-07
+  근본원인: type_to_llvm_extern이 Ref(Str) → i8* 변환 누락, generate_expr_call에서 Ref(Str) 파라미터 미처리
+  changes: function_gen/signature.rs (Ref(Str)→i8*), generate_expr_call.rs (extern C 호출 시 Ref(Str) raw ptr 추출)
+
+- [x] 2. cross-module G(global) str 상수 forward declaration codegen 수정 (Opus direct) ✅ 2026-04-07
+  근본원인: emit_global_vars에서 Expr::String 미처리 → 기본값 0 → 비정수 타입에 정수 초기값
+  changes: emit.rs (str global → string pool 참조 fat pointer, 복합 타입 → zeroinitializer), registration.rs (str 리터럴 string pool 사전 등록)
+
+- [x] 3. 함수 내부 &str 인자 pass-by-reference codegen 수정 (Opus direct) ✅ 2026-04-07
+  근본원인: type_to_llvm에서 Ref(Str) → { i8*, i64 }* (ptr to fat ptr)로 변환했지만, &str은 str과 동일한 fat pointer 자체여야 함
+  changes: types/conversion.rs (Ref(Str)/RefMut(Str)를 DynTrait/Slice와 동일하게 fat pointer로 변환)
+
+- [x] 4. Y(await) 키워드 파서 지원 — 프리픽스 `Y` 파싱 추가 (impl-sonnet) ✅ 2026-04-07
+  changes: crates/vais-parser/src/expr/unary.rs (Token::Await 체크 → Expr::Await 생성)
+
+- [x] 5. string interpolation 중괄호 이스케이프 지원 (impl-sonnet) ✅ 2026-04-07
+  changes: vais-lexer/lib.rs (\{ \} 이스케이프 보존), vais-parser/expr/primary.rs (unescape_brace_escapes), vais-parser/expr/mod.rs (has_interpolation에서 \{ 건너뛰기), positive_tests.rs (3개 테스트 추가)
+
+progress: 5/5 (100%)
+  strategy: task 1-3 codegen file overlap → sequential; task 4-5 parser/lexer independent → parallel after codegen
+  opus_direct: task 1-3 — &str codegen은 multi-module interface change + design-impl inseparable
+
+## Previous Tasks (2026-04-05) — Phase 184: Cross-module 순환 참조 stack overflow 수정
 - [x] 1. compute_sizeof에 stacker + visited set 추가 (Opus direct) ✅ 2026-04-05
   근본원인: compute_sizeof()에 stacker 없음 → struct 필드 재귀 탐색 중 스택 소진
   changes: types/sizeof.rs (stacker + sizeof_visited guard), lib.rs + init.rs (sizeof_visited 필드), 8 files (stacker threshold 4MB/16MB→32MB/64MB)

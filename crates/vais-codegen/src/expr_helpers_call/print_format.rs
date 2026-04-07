@@ -437,7 +437,7 @@ impl CodeGenerator {
         let buf_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
         // Track allocation for automatic cleanup at scope exit
-        self.track_alloc(buf_ptr.clone());
+        ir.push_str(&self.track_alloc(buf_ptr.clone()));
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);

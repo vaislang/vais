@@ -231,6 +231,11 @@ pub enum Token {
                         '\\' => result.push('\\'),
                         '"' => result.push('"'),
                         '0' => result.push('\0'),
+                        // Brace escapes: \{ and \} produce literal { and }
+                        // These are kept as \{ / \} in the token so the parser
+                        // can distinguish them from string interpolation {expr}.
+                        '{' => { result.push('\\'); result.push('{'); }
+                        '}' => { result.push('\\'); result.push('}'); }
                         'x' => {
                             // Hex escape: \xHH
                             let mut hex = std::string::String::new();

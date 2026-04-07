@@ -393,6 +393,11 @@ impl CodeGenerator {
         global_def: &vais_ast::GlobalDef,
     ) -> CodegenResult<()> {
         let global_name = global_def.name.node.clone();
+        // Pre-register string constants for str-typed globals so they are
+        // available in the string pool when emit_global_vars runs
+        if let vais_ast::Expr::String(ref s) = global_def.value.node {
+            self.get_or_create_string_constant(s);
+        }
         // Store global in the globals map for later code generation
         self.types.globals.insert(
             global_name.clone(),

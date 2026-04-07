@@ -774,6 +774,9 @@ impl CodeGenerator {
         if self.needs_string_helpers {
             if is_main_module {
                 ir.push_str(&self.generate_string_helper_functions());
+            } else {
+                // Non-main modules: declare string helpers as external (defined in main module)
+                ir.push_str(&self.generate_string_helper_declarations());
             }
             if !self.target.is_wasm() {
                 ir.push_str(&self.generate_string_extern_declarations());

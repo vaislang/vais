@@ -62,6 +62,31 @@ fn test_string_literal() {
 }
 
 #[test]
+fn test_string_with_escaped_quotes() {
+    let source = r#""{\"id\":\"classic\"}""#;
+    let tokens = tokenize(source).unwrap();
+    // Should be a single string token containing: {"id":"classic"}
+    assert_eq!(
+        tokens[0].token,
+        Token::String("{\"id\":\"classic\"}".to_string()),
+        "Expected full JSON string with quotes, got: {:?}",
+        tokens[0].token
+    );
+}
+
+#[test]
+fn test_string_escaped_quote_simple() {
+    let source = r#""a\"b""#;
+    let tokens = tokenize(source).unwrap();
+    assert_eq!(
+        tokens[0].token,
+        Token::String("a\"b".to_string()),
+        "Escaped quote should be preserved, got: {:?}",
+        tokens[0].token
+    );
+}
+
+#[test]
 #[allow(clippy::approx_constant)]
 fn test_numbers() {
     let source = "42 3.14 1_000_000";

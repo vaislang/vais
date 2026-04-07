@@ -20,13 +20,33 @@ mod unary;
 /// Check if a string contains interpolation syntax: `{<non-empty>}`.
 /// Empty `{}` is NOT interpolation (backward compat with format strings).
 /// `{{` is an escaped brace, not interpolation.
+/// `\{` is a literal brace escape, not interpolation.
 fn has_interpolation(s: &str) -> bool {
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
-        if ch == '{' {
+        if ch == '\\' {
+            // Brace escapes \{ and \} are literal braces, not interpolation.
+            // Skip the next character so we don't misinterpret \{ as interp.
+            if let Some(&next) = chars.peek() {
+                if next == '{' || next == '}' {
+                    chars.next(); // consume escaped brace
+                    continue;
+                }
+            }
+            // Other backslash sequences: skip next char too (already processed by lexer)
+            chars.next();
+        } else if ch == '{' {
             if chars.peek() == Some(&'{') {
                 // Escaped {{ - skip
                 chars.next();
+            } else if chars.peek() == Some(&'"') || chars.peek() == Some(&'\'') || chars.peek() == Some(&'\\') {
+                // { followed by quote or backslash is JSON/escaped content, not interpolation.
+                // e.g. {"id":"value"} in a string literal — skip past matching }
+                let mut depth = 1;
+                for c in chars.by_ref() {
+                    if c == '{' { depth += 1; }
+                    else if c == '}' { depth -= 1; if depth == 0 { break; } }
+                }
             } else if chars.peek() != Some(&'}') {
                 // Non-empty content inside braces - this is interpolation
                 // Verify there's a closing brace

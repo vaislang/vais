@@ -181,6 +181,8 @@ impl CodeGenerator {
         // Create new constant
         let name = self.make_string_name();
         self.strings.counter += 1;
+        // DEBUG: print ALL string constants
+        eprintln!("[DEBUG STR] {} = {:?} (len={})", name, value, value.len());
         self.strings
             .constants
             .push((name.clone(), value.to_string()));
@@ -507,7 +509,7 @@ impl CodeGenerator {
         let raw_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", raw_ptr, byte_size);
         // Track allocation for automatic cleanup at scope exit
-        self.track_alloc(raw_ptr.clone());
+        ir.push_str(&self.track_alloc(raw_ptr.clone()));
 
         let slice_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = bitcast i8* {} to i64*", slice_ptr, raw_ptr);

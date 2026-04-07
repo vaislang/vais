@@ -194,8 +194,9 @@ impl CodeGenerator {
             counter,
         );
         // Track the trait data allocation for automatic cleanup at scope exit
-        self.track_alloc(format!("%trait_data_{}", alloc_counter));
-        Ok(result)
+        let (val, mut ir) = result;
+        ir.push_str(&self.track_alloc(format!("%trait_data_{}", alloc_counter)));
+        Ok((val, ir))
     }
 
     /// Generate code for a dynamic method call on a trait object

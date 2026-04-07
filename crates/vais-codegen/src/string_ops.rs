@@ -127,7 +127,7 @@ impl CodeGenerator {
                     raw_ptr_for_free,
                     result
                 );
-                self.track_alloc(raw_ptr_for_free);
+                ir.push_str(&self.track_alloc(raw_ptr_for_free));
                 Ok((result, ir))
             }
             BinOp::Eq => {
@@ -320,7 +320,7 @@ impl CodeGenerator {
                     raw_ptr_for_free,
                     result
                 );
-                self.track_alloc(raw_ptr_for_free);
+                ir.push_str(&self.track_alloc(raw_ptr_for_free));
                 Ok((result, ir))
             }
             "startsWith" => {
@@ -487,6 +487,30 @@ impl CodeGenerator {
         ir.push_str("  ret i64 0\n");
         ir.push_str("}\n");
 
+        ir
+    }
+
+    /// Generate `declare` statements for string helper functions defined in the main module.
+    /// Used by non-main modules in per-module compilation so the linker can resolve them.
+    #[inline(never)]
+    pub(crate) fn generate_string_helper_declarations(&self) -> String {
+        let mut ir = String::with_capacity(512);
+        ir.push_str("\n; String helper declarations (defined in main module)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_concat(i8*, i8*)\n");
+        ir.push_str("declare i64 @__vais_str_indexOf(i8*, i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_substring(i8*, i64, i64)\n");
+        ir.push_str("declare i64 @__vais_str_len(i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_char_at(i8*, i64)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_slice(i8*, i64, i64)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_replace(i8*, i8*, i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_trim(i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_to_upper(i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_str_to_lower(i8*)\n");
+        ir.push_str("declare i64 @__vais_str_starts_with(i8*, i8*)\n");
+        ir.push_str("declare i64 @__vais_str_ends_with(i8*, i8*)\n");
+        ir.push_str("declare i64 @__vais_str_contains(i8*, i8*)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_i64_to_str(i64)\n");
+        ir.push_str("declare { i8*, i64 } @__vais_f64_to_str(double)\n");
         ir
     }
 

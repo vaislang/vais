@@ -328,13 +328,14 @@ impl CodeGenerator {
                 .and_then(|f| f.signature.params.get(i))
                 .map(|(_, ty, _)| ty.clone());
 
-            // For extern C functions with Str parameters, extract the raw i8* pointer
-            // from the fat pointer { i8*, i64 } and use i8* as the argument type
+            // For extern C functions with Str or &str parameters, extract the raw i8*
+            // pointer from the fat pointer { i8*, i64 } and use i8* as the argument type.
+            // Both Str and Ref(Str) map to { i8*, i64 } in LLVM IR (fat pointer),
+            // so the same extractvalue logic applies.
             if is_extern_c {
-                if let Some(ResolvedType::Str) = &param_ty {
-                    // Check if the value is actually a fat pointer or an i64
-                    // (pointer-as-integer from "everything is i64" convention).
-                    // If i64, use inttoptr directly; if fat pointer, extractvalue.
+                let is_str_param = matches!(&param_ty, Some(ResolvedType::Str))
+                    || matches!(&param_ty, Some(ResolvedType::Ref(inner)) if matches!(inner.as_ref(), ResolvedType::Str));
+                if is_str_param {
                     let val_ty = self.llvm_type_of(&val);
                     let raw_ptr = if val_ty == "i64" || val_ty.starts_with('i') {
                         let tmp = self.next_temp(counter);
@@ -1094,7 +1095,9 @@ impl CodeGenerator {
                     .as_ref()
                     .map(|f| f.signature.ret.clone())
                     .unwrap_or(ResolvedType::I64);
-                if matches!(actual_ret, ResolvedType::Str) {
+                if matches!(actual_ret, ResolvedType::Str)
+                    || matches!(&actual_ret, ResolvedType::Ref(inner) if matches!(inner.as_ref(), ResolvedType::Str))
+                {
                     let len = self.next_temp(counter);
                     write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, tmp);
                     let fat_ptr = self.build_str_fat_ptr(&tmp, &len, counter, &mut ir);

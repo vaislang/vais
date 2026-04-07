@@ -1273,6 +1273,99 @@ fn test_parse_string_interpolation() {
 }
 
 // =============================================================================
+// Brace Escape Tests
+// =============================================================================
+
+/// Criterion 1: `"\{weight: 1.0\}"` → Expr::String with literal `{weight: 1.0}`
+#[test]
+fn test_brace_escape_full_literal() {
+    // Source: "\{weight: 1.0\}"
+    let source = r#"F f() -> str = "\{weight: 1.0\}""#;
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Function(f) => match &f.body {
+            FunctionBody::Expr(expr) => {
+                // Should be a plain Expr::String, NOT StringInterp
+                assert!(
+                    matches!(&expr.node, Expr::String(s) if s == "{weight: 1.0}"),
+                    "Expected Expr::String(\"{{weight: 1.0}}\"), got {:?}",
+                    expr.node
+                );
+            }
+            _ => panic!("Expected Expr body"),
+        },
+        _ => panic!("Expected Function"),
+    }
+}
+
+/// Criterion 2: `"hello {name}"` → Expr::StringInterp (existing behaviour unchanged)
+#[test]
+fn test_brace_escape_normal_interpolation_unchanged() {
+    let source = r#"F f(name: str) -> str = "hello {name}""#;
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Function(f) => match &f.body {
+            FunctionBody::Expr(expr) => {
+                assert!(
+                    matches!(&expr.node, Expr::StringInterp(_)),
+                    "Expected Expr::StringInterp, got {:?}",
+                    expr.node
+                );
+            }
+            _ => panic!("Expected Expr body"),
+        },
+        _ => panic!("Expected Function"),
+    }
+}
+
+/// Criterion 3: `"\{key\}: {value}"` → StringInterp with literal prefix and interpolated part
+#[test]
+fn test_brace_escape_mixed_literal_and_interp() {
+    // "\{key\}: {value}" — the \{key\} part is literal, {value} is interpolated
+    let source = r#"F f(value: str) -> str = "\{key\}: {value}""#;
+    let tokens = tokenize(source).unwrap();
+    let mut parser = Parser::new(tokens);
+    let module = parser.parse_module().unwrap();
+
+    match &module.items[0].node {
+        Item::Function(f) => match &f.body {
+            FunctionBody::Expr(expr) => {
+                match &expr.node {
+                    Expr::StringInterp(parts) => {
+                        // Should have at least a Lit("{key}: ") part and an Expr part
+                        let has_literal_with_brace = parts.iter().any(|p| {
+                            matches!(p, StringInterpPart::Lit(s) if s.contains("{key}"))
+                        });
+                        let has_interp_expr = parts.iter().any(|p| {
+                            matches!(p, StringInterpPart::Expr(_))
+                        });
+                        assert!(
+                            has_literal_with_brace,
+                            "Expected a Lit part containing '{{key}}', parts: {:?}",
+                            parts
+                        );
+                        assert!(
+                            has_interp_expr,
+                            "Expected an interpolated Expr part, parts: {:?}",
+                            parts
+                        );
+                    }
+                    _ => panic!("Expected Expr::StringInterp, got {:?}", expr.node),
+                }
+            }
+            _ => panic!("Expected Expr body"),
+        },
+        _ => panic!("Expected Function"),
+    }
+}
+
+// =============================================================================
 // Error Handling Operators
 // =============================================================================
 

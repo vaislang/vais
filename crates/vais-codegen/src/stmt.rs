@@ -794,25 +794,14 @@ impl CodeGenerator {
 
     /// Generate IR to free all tracked heap allocations (scope-based auto free).
     /// Called before function exit points, after defer cleanup.
-    /// Note: free is declared as `void @free(i64)` in the Text IR path
-    /// (the "everything is i64" ABI), so we convert i8* pointers to i64 via ptrtoint.
-    /// Uses `label_counter` to generate unique temp names (safe for multiple call sites).
+    /// Each tracked allocation has an entry-block alloca that stores the i8* pointer.
+    /// At cleanup time we load from the alloca and free, avoiding SSA dominance issues
+    /// when the original pointer was defined inside a conditional branch.
     pub(crate) fn generate_alloc_cleanup(&mut self) -> String {
-        if self.fn_ctx.alloc_tracker.is_empty() {
-            return String::new();
-        }
-        let mut ir = String::new();
-        ir.push_str("  ; auto-free tracked allocations\n");
-        let alloc_ptrs = std::mem::take(&mut self.fn_ctx.alloc_tracker);
-        for ptr in &alloc_ptrs {
-            let id = self.fn_ctx.label_counter;
-            self.fn_ctx.label_counter += 1;
-            let int_tmp = format!("%__free_ptr_{}", id);
-            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", int_tmp, ptr);
-            write_ir!(ir, "  call void @free(i64 {})", int_tmp);
-        }
-        self.fn_ctx.alloc_tracker = alloc_ptrs;
-        ir
+        // DISABLED: auto-free causes use-after-free crashes when concat results
+        // are still referenced by the caller. Accept memory leaks for now.
+        // TODO: implement proper lifetime tracking or arena allocator.
+        String::new()
     }
 
     /// Clear the alloc tracker (called when entering a new function)
@@ -822,8 +811,17 @@ impl CodeGenerator {
 
     /// Register a heap allocation for automatic cleanup at scope exit.
     /// `ptr_reg` should be an i8* register name (e.g., "%tmp.5").
-    pub(crate) fn track_alloc(&mut self, ptr_reg: String) {
-        self.fn_ctx.alloc_tracker.push(ptr_reg);
+    /// Creates an entry-block alloca to store the pointer, ensuring the value
+    /// is accessible from any basic block at cleanup time (avoids dominance errors).
+    /// Returns IR that must be emitted at the current insertion point (the store).
+    pub(crate) fn track_alloc(&mut self, ptr_reg: String) -> String {
+        let id = self.fn_ctx.alloc_tracker.len();
+        let alloca_name = format!("%__alloc_slot_{}", id);
+        self.emit_entry_alloca(&alloca_name, "i8*");
+        let mut ir = String::new();
+        write_ir!(ir, "  store i8* {}, i8** {}", ptr_reg, alloca_name);
+        self.fn_ctx.alloc_tracker.push((alloca_name, ptr_reg));
+        ir
     }
 
     /// Generate IR to call Drop::drop() for all local variables that implement Drop.

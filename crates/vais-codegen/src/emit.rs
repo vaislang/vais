@@ -80,7 +80,31 @@ impl CodeGenerator {
                     }
                 }
                 vais_ast::Expr::Float(f) => format!("{}", f),
-                _ => "0".to_string(), // Default zero-initialize for complex expressions
+                vais_ast::Expr::String(s) => {
+                    // Str globals: emit as a reference to the string constant.
+                    // The string constant @.strN is emitted by emit_string_constants.
+                    // Look up the string in the dedup cache to find the constant name.
+                    if let Some(const_name) = self.strings.dedup_cache.get(s.as_str()) {
+                        let len = s.len();
+                        let const_len = len + 1; // +1 for null terminator
+                        format!(
+                            "{{ i8* getelementptr inbounds ([{} x i8], [{} x i8]* @{}, i32 0, i32 0), i64 {} }}",
+                            const_len, const_len, const_name, len
+                        )
+                    } else {
+                        // String not in pool — use zeroinitializer as fallback
+                        "zeroinitializer".to_string()
+                    }
+                }
+                _ => {
+                    // For compound types (structs, arrays, etc.), use zeroinitializer
+                    // instead of 0, which is invalid for non-integer LLVM types
+                    if llvm_ty.starts_with('{') || llvm_ty.starts_with('[') || llvm_ty.starts_with('<') {
+                        "zeroinitializer".to_string()
+                    } else {
+                        "0".to_string()
+                    }
+                }
             };
             let linkage = if info._is_mutable {
                 "global"

@@ -131,18 +131,21 @@ impl CodeGenerator {
             ResolvedType::Ref(inner) => {
                 // &dyn Trait is a fat pointer itself (not a pointer to fat pointer)
                 // &[T] (Slice) and &mut [T] (SliceMut) are also fat pointers { i8*, i64 }
-                // — a slice reference IS a fat pointer, not a pointer to one
+                // &str is also a fat pointer — str is already { i8*, i64 }, so &str = str
+                // — a slice/str reference IS a fat pointer, not a pointer to one
                 match inner.as_ref() {
                     ResolvedType::DynTrait { .. }
                     | ResolvedType::Slice(_)
-                    | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                    | ResolvedType::SliceMut(_)
+                    | ResolvedType::Str => self.type_to_llvm_impl(inner)?,
                     _ => format!("{}*", self.type_to_llvm_impl(inner)?),
                 }
             }
             ResolvedType::RefMut(inner) => match inner.as_ref() {
                 ResolvedType::DynTrait { .. }
                 | ResolvedType::Slice(_)
-                | ResolvedType::SliceMut(_) => self.type_to_llvm_impl(inner)?,
+                | ResolvedType::SliceMut(_)
+                | ResolvedType::Str => self.type_to_llvm_impl(inner)?,
                 _ => format!("{}*", self.type_to_llvm_impl(inner)?),
             },
             ResolvedType::Range(_inner) => {

@@ -1775,9 +1775,9 @@ F main() -> i64 {
 fn test_alloc_tracker_string_concat() {
     // Verify that the alloc_tracker works by checking the generate_alloc_cleanup output
     let mut gen = CodeGenerator::new("test");
-    // Manually track some allocations
-    gen.track_alloc("%ptr1".to_string());
-    gen.track_alloc("%ptr2".to_string());
+    // Manually track some allocations (track_alloc now returns store IR)
+    let _store_ir1 = gen.track_alloc("%ptr1".to_string());
+    let _store_ir2 = gen.track_alloc("%ptr2".to_string());
     let cleanup_ir = gen.generate_alloc_cleanup();
     assert!(
         cleanup_ir.contains("auto-free tracked allocations"),
@@ -1789,14 +1789,10 @@ fn test_alloc_tracker_string_concat() {
         "Expected free calls, got: {}",
         cleanup_ir
     );
+    // Cleanup now loads from alloca slots rather than using raw ptr directly
     assert!(
-        cleanup_ir.contains("ptrtoint i8* %ptr1 to i64"),
-        "Expected ptrtoint for ptr1, got: {}",
-        cleanup_ir
-    );
-    assert!(
-        cleanup_ir.contains("ptrtoint i8* %ptr2 to i64"),
-        "Expected ptrtoint for ptr2, got: {}",
+        cleanup_ir.contains("load i8*, i8**"),
+        "Expected load from alloca slot, got: {}",
         cleanup_ir
     );
 }
@@ -1804,7 +1800,7 @@ fn test_alloc_tracker_string_concat() {
 #[test]
 fn test_alloc_tracker_clear() {
     let mut gen = CodeGenerator::new("test");
-    gen.track_alloc("%ptr1".to_string());
+    let _store_ir = gen.track_alloc("%ptr1".to_string());
     assert!(!gen.fn_ctx.alloc_tracker.is_empty());
     gen.clear_alloc_tracker();
     assert!(gen.fn_ctx.alloc_tracker.is_empty());
