@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775573241881,
+  "lastUpdate": 1775574863762,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34487,6 +34487,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 792181,
             "range": "± 3982",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "c9570b4d1accedcd44b31d5106bceb52a1e0e11c",
+          "message": "fix(clippy): remove identical if/else blocks in expr_helpers.rs\n\nThe if and else branches had the same store IR — merge into a single\nunconditional store.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-08T00:09:05+09:00",
+          "tree_id": "524addd65b41a237970c454fbd85be8bf74a1c33",
+          "url": "https://github.com/vaislang/vais/commit/c9570b4d1accedcd44b31d5106bceb52a1e0e11c"
+        },
+        "date": 1775574863278,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3724,
+            "range": "± 30",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7219,
+            "range": "± 262",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8172,
+            "range": "± 56",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14854,
+            "range": "± 566",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18552,
+            "range": "± 93",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35519,
+            "range": "± 272",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32004,
+            "range": "± 157",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 68242,
+            "range": "± 255",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 302440,
+            "range": "± 1603",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 463773,
+            "range": "± 1907",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 116304,
+            "range": "± 1161",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 796945,
+            "range": "± 2014",
             "unit": "ns/iter"
           }
         ]
