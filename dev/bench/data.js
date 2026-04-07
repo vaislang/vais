@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775570840717,
+  "lastUpdate": 1775573241881,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34391,6 +34391,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 788507,
             "range": "± 8629",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "d0365b368256a567299f0f75161f3adb5b2e88d0",
+          "message": "fix(ci): resolve clippy warnings, format issues, and update auto_free E2E tests\n\n- Fix clippy type_complexity warning in pattern.rs with #[allow]\n- Fix clippy if_same_then_else in expr_helpers_data.rs by merging conditions\n- Fix clippy useless_conversion in inkwell/call.rs by removing .into()\n- Run cargo fmt for consistent formatting\n- Update phase110_auto_free E2E tests to match disabled generate_alloc_cleanup\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-07T23:42:35+09:00",
+          "tree_id": "db0ee7eed3d595222c3e03f486f5e59f028718a9",
+          "url": "https://github.com/vaislang/vais/commit/d0365b368256a567299f0f75161f3adb5b2e88d0"
+        },
+        "date": 1775573241316,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3730,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7348,
+            "range": "± 177",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8462,
+            "range": "± 68",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 15624,
+            "range": "± 119",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18695,
+            "range": "± 268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35774,
+            "range": "± 231",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 32892,
+            "range": "± 173",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70344,
+            "range": "± 448",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303783,
+            "range": "± 1182",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 463327,
+            "range": "± 4204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 119319,
+            "range": "± 650",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 792181,
+            "range": "± 3982",
             "unit": "ns/iter"
           }
         ]
