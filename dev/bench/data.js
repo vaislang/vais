@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775485011258,
+  "lastUpdate": 1775568383916,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34199,6 +34199,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 800013,
             "range": "± 7300",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "f60b74c98d6cc6f88db6bd5b6304bb196a00fde1",
+          "message": "fix(codegen): resolve &str fat pointer, global str init, prefix Y await, and brace escape\n\nPhase 185: Fix 5 issues discovered during vais-monitor 30-module build.\n\n- Treat Ref(Str)/RefMut(Str) as fat pointer { i8*, i64 } instead of pointer-to-fat-pointer,\n  matching the same logic as &[T] and &dyn Trait (types/conversion.rs)\n- Add Ref(Str) → i8* mapping in type_to_llvm_extern for C ABI extern calls (signature.rs)\n- Fix global str constant initializer: emit string pool reference or zeroinitializer\n  instead of invalid integer 0 for { i8*, i64 } type (emit.rs, registration.rs)\n- Add prefix Y (await) parsing in unary expressions (parser/expr/unary.rs)\n- Support \\{ and \\} escape sequences for literal braces in string interpolation\n  (lexer, parser, with 3 new tests)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-07T22:21:25+09:00",
+          "tree_id": "a9b9b2a416ade754da36f1774defb49e83a17531",
+          "url": "https://github.com/vaislang/vais/commit/f60b74c98d6cc6f88db6bd5b6304bb196a00fde1"
+        },
+        "date": 1775568383342,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3106,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6474,
+            "range": "± 65",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7599,
+            "range": "± 65",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 12799,
+            "range": "± 121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17522,
+            "range": "± 113",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33852,
+            "range": "± 191",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31073,
+            "range": "± 154",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66452,
+            "range": "± 1095",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 280489,
+            "range": "± 2075",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 420738,
+            "range": "± 3375",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 121826,
+            "range": "± 613",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 710706,
+            "range": "± 7671",
             "unit": "ns/iter"
           }
         ]
