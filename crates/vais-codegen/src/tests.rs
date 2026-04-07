@@ -1773,26 +1773,28 @@ F main() -> i64 {
 
 #[test]
 fn test_alloc_tracker_string_concat() {
-    // Verify that the alloc_tracker works by checking the generate_alloc_cleanup output
+    // Verify that track_alloc registers allocations and returns store IR.
+    // generate_alloc_cleanup is currently disabled (returns empty) to avoid
+    // use-after-free — so we only test the tracking + store IR path.
     let mut gen = CodeGenerator::new("test");
-    // Manually track some allocations (track_alloc now returns store IR)
-    let _store_ir1 = gen.track_alloc("%ptr1".to_string());
-    let _store_ir2 = gen.track_alloc("%ptr2".to_string());
+    let store_ir1 = gen.track_alloc("%ptr1".to_string());
+    let store_ir2 = gen.track_alloc("%ptr2".to_string());
+    assert!(
+        store_ir1.contains("store i8* %ptr1"),
+        "Expected store for ptr1, got: {}",
+        store_ir1
+    );
+    assert!(
+        store_ir2.contains("store i8* %ptr2"),
+        "Expected store for ptr2, got: {}",
+        store_ir2
+    );
+    assert_eq!(gen.fn_ctx.alloc_tracker.len(), 2);
+    // Cleanup is disabled — should return empty
     let cleanup_ir = gen.generate_alloc_cleanup();
     assert!(
-        cleanup_ir.contains("auto-free tracked allocations"),
-        "Expected auto-free comment, got: {}",
-        cleanup_ir
-    );
-    assert!(
-        cleanup_ir.contains("call void @free"),
-        "Expected free calls, got: {}",
-        cleanup_ir
-    );
-    // Cleanup now loads from alloca slots rather than using raw ptr directly
-    assert!(
-        cleanup_ir.contains("load i8*, i8**"),
-        "Expected load from alloca slot, got: {}",
+        cleanup_ir.is_empty(),
+        "Expected empty cleanup (disabled), got: {}",
         cleanup_ir
     );
 }
