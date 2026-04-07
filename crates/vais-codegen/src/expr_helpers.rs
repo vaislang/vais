@@ -616,27 +616,15 @@ impl CodeGenerator {
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val =
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
-                        // For struct types (Named), the local is a single pointer (%Type*).
-                        // Store the struct value directly into the alloca.
-                        if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
-                            write_ir!(
-                                ir,
-                                "  store {} {}, {}* %{}",
-                                llvm_ty,
-                                coerced_val,
-                                llvm_ty,
-                                local.llvm_name
-                            );
-                        } else {
-                            write_ir!(
-                                ir,
-                                "  store {} {}, {}* %{}",
-                                llvm_ty,
-                                coerced_val,
-                                llvm_ty,
-                                local.llvm_name
-                            );
-                        }
+                        // Store the value into the alloca.
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* %{}",
+                            llvm_ty,
+                            coerced_val,
+                            llvm_ty,
+                            local.llvm_name
+                        );
                     }
                 }
             } else if let Some(global_ty) = self.types.globals.get(name).map(|g| g._ty.clone()) {
