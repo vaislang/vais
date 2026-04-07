@@ -203,8 +203,9 @@ impl TypeChecker {
                 Ok(())
             }
             // Allow f32 ↔ f64 unification (float literal inference).
-            (ResolvedType::F32, ResolvedType::F64)
-            | (ResolvedType::F64, ResolvedType::F32) => Ok(()),
+            (ResolvedType::F32, ResolvedType::F64) | (ResolvedType::F64, ResolvedType::F32) => {
+                Ok(())
+            }
             // Allow unit () ↔ i64 (void context: i64 return in void function)
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
                 Ok(())
@@ -273,9 +274,7 @@ impl TypeChecker {
             (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
             | (ResolvedType::Array(element), ResolvedType::Pointer(p))
-            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => {
-                self.unify(element, p)
-            }
+            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => self.unify(element, p),
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)
@@ -468,7 +467,6 @@ impl TypeChecker {
     pub(crate) fn is_float_type(ty: &ResolvedType) -> bool {
         matches!(ty, ResolvedType::F32 | ResolvedType::F64)
     }
-
 
     /// Check if a type contains any type variables (Var).
     /// Types without Var nodes cannot be affected by apply_substitutions.

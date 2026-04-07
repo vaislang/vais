@@ -78,21 +78,20 @@ impl CodeGenerator {
                 // Coerce value width to match field type (e.g., i8 param stored to i64 field
                 // in specialized function body using generic struct layout)
                 let val_llvm_ty = self.llvm_type_of(&val_to_store);
-                let coerced_val = self.coerce_int_width(
-                    &val_to_store,
-                    &val_llvm_ty,
-                    &llvm_ty,
-                    counter,
-                    &mut ir,
-                );
+                let coerced_val =
+                    self.coerce_int_width(&val_to_store, &val_llvm_ty, &llvm_ty, counter, &mut ir);
                 // Handle Unit/void params: when the resolved type is Unit (void) but the
                 // actual LLVM param is i8, coerce_int_width won't catch this because
                 // llvm_type_of returns "void". Explicitly zext i8→i64 for Unit params.
                 let coerced_val =
                     if llvm_ty == "i64" && (val_llvm_ty == "void" || val_llvm_ty == "i8") {
-                        let local_name =
-                            coerced_val.strip_prefix('%').unwrap_or(&coerced_val);
-                        if self.fn_ctx.locals.get(local_name).is_some_and(|l| l.is_param()) {
+                        let local_name = coerced_val.strip_prefix('%').unwrap_or(&coerced_val);
+                        if self
+                            .fn_ctx
+                            .locals
+                            .get(local_name)
+                            .is_some_and(|l| l.is_param())
+                        {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = zext i8 {} to i64", tmp, coerced_val);
                             tmp
@@ -187,8 +186,7 @@ impl CodeGenerator {
                 .iter()
                 .filter(|(_, einfo)| {
                     einfo.variants.iter().any(|v| {
-                        v.name == *type_name
-                            && matches!(v.fields, EnumVariantFields::Struct(_))
+                        v.name == *type_name && matches!(v.fields, EnumVariantFields::Struct(_))
                     })
                 })
                 .map(|(ename, _)| ename.clone())
@@ -196,9 +194,7 @@ impl CodeGenerator {
 
             if matching_enums.len() == 1 {
                 let enum_name = matching_enums[0].clone();
-                return self.generate_enum_variant_struct(
-                    &enum_name, type_name, fields, counter,
-                );
+                return self.generate_enum_variant_struct(&enum_name, type_name, fields, counter);
             } else if matching_enums.len() > 1 {
                 return Err(CodegenError::TypeError(format!(
                     "Ambiguous struct-variant '{}': found in enums {:?}. \

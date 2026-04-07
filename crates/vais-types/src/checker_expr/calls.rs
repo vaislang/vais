@@ -164,7 +164,8 @@ impl TypeChecker {
                         // errors (user likely intended a different type).
                         let param_resolved = self.apply_substitutions(&sig.params[i].1);
                         let arg_resolved = self.apply_substitutions(&arg_type);
-                        let is_str_literal = matches!(&arg.node, Expr::String(_) | Expr::StringInterp(_));
+                        let is_str_literal =
+                            matches!(&arg.node, Expr::String(_) | Expr::StringInterp(_));
                         let is_str_i64_coercion = !is_str_literal
                             && matches!(
                                 (&param_resolved, &arg_resolved),
@@ -689,16 +690,15 @@ impl TypeChecker {
         }
 
         // Built-in Mutex static methods
-        if type_name.node == "Mutex"
-            && method.node == "new" {
-                for arg in args {
-                    let _ = self.check_expr(arg)?;
-                }
-                return Ok(ResolvedType::Named {
-                    name: "Mutex".to_string(),
-                    generics: vec![self.fresh_type_var()],
-                });
+        if type_name.node == "Mutex" && method.node == "new" {
+            for arg in args {
+                let _ = self.check_expr(arg)?;
             }
+            return Ok(ResolvedType::Named {
+                name: "Mutex".to_string(),
+                generics: vec![self.fresh_type_var()],
+            });
+        }
 
         // Fallback: for unknown types, if method returns Self type
         if method.node == "new"

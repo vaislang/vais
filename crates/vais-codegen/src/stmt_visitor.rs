@@ -260,7 +260,13 @@ impl CodeGenerator {
                     let sizeof = self.compute_sizeof(&resolved_ty);
                     let dst_ptr = self.next_temp(counter);
                     let src_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = bitcast {}* %{} to i8*", dst_ptr, llvm_ty, llvm_name);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {}* %{} to i8*",
+                        dst_ptr,
+                        llvm_ty,
+                        llvm_name
+                    );
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, actual_val);
                     write_ir!(
                         ir,
@@ -535,10 +541,7 @@ impl CodeGenerator {
             // (catches cases where body sext'd i32→i64 but function returns i32)
             let ret_val = {
                 let actual = self.llvm_type_of(&ret_val);
-                if actual != llvm_ty
-                    && actual.starts_with('i')
-                    && llvm_ty.starts_with('i')
-                {
+                if actual != llvm_ty && actual.starts_with('i') && llvm_ty.starts_with('i') {
                     self.coerce_int_width(&ret_val, &actual, &llvm_ty, counter, &mut ir)
                 } else {
                     ret_val

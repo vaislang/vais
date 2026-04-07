@@ -74,13 +74,13 @@ pub enum Token {
 
     // === Unambiguous 2-char Keywords (priority 4 > single-letter priority 3) ===
     #[token("EN", priority = 4)]
-    EnumKeyword,    // Unambiguous enum (replaces contextual E)
+    EnumKeyword, // Unambiguous enum (replaces contextual E)
     #[token("EL", priority = 4)]
-    Else,           // Unambiguous else (replaces contextual E after if)
+    Else, // Unambiguous else (replaces contextual E after if)
     #[token("LF", priority = 4)]
-    ForEach,        // Unambiguous for-each loop (replaces contextual L pattern:iter)
+    ForEach, // Unambiguous for-each loop (replaces contextual L pattern:iter)
     #[token("LW", priority = 4)]
-    While,          // Unambiguous while loop (replaces contextual L condition)
+    While, // Unambiguous while loop (replaces contextual L condition)
 
     // === Type Keywords ===
     #[token("mut")]

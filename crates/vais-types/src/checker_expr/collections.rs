@@ -216,10 +216,7 @@ impl TypeChecker {
                 }))
             }
 
-            Expr::TupleFieldAccess {
-                expr: inner,
-                index,
-            } => {
+            Expr::TupleFieldAccess { expr: inner, index } => {
                 let inner_type = match self.check_expr(inner) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
@@ -340,7 +337,9 @@ impl TypeChecker {
                         ref generics,
                     } if name == "Vec" && !generics.is_empty() => {
                         if is_slice {
-                            Some(Ok(ResolvedType::Pointer(Box::new(self.apply_substitutions(&generics[0])))))
+                            Some(Ok(ResolvedType::Pointer(Box::new(
+                                self.apply_substitutions(&generics[0]),
+                            ))))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),

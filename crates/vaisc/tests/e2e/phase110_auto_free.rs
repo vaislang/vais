@@ -12,6 +12,9 @@ use crate::helpers::{compile_and_run, compile_to_ir};
 
 #[test]
 fn test_auto_free_ir_for_string_concat() {
+    // Auto-free cleanup is currently disabled (returns empty) to prevent
+    // use-after-free when concat results are still referenced by the caller.
+    // Verify that string concat compiles successfully without auto-free.
     let ir = compile_to_ir(
         r#"
 F main() -> i64 {
@@ -21,20 +24,15 @@ F main() -> i64 {
 "#,
     )
     .unwrap();
-    // The auto-free cleanup should emit free calls for tracked allocations
     let main_start = ir
         .find("define i64 @main")
         .expect("main function not found");
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
+    // Alloc tracking stores the pointer in an alloca slot
     assert!(
-        main_ir.contains("auto-free tracked allocations"),
-        "Expected auto-free comment in main function IR:\n{}",
-        main_ir
-    );
-    assert!(
-        main_ir.contains("call void @free"),
-        "Expected free call in main function IR:\n{}",
+        main_ir.contains("__alloc_slot"),
+        "Expected alloc slot tracking in main function IR:\n{}",
         main_ir
     );
 }
@@ -68,6 +66,7 @@ F main() -> i64 {
 
 #[test]
 fn test_auto_free_ir_for_slice() {
+    // Auto-free is disabled; verify slice allocation compiles and tracks alloc slot.
     let ir = compile_to_ir(
         r#"
 F main() -> i64 {
@@ -84,8 +83,8 @@ F main() -> i64 {
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
     assert!(
-        main_ir.contains("auto-free tracked allocations"),
-        "Expected auto-free comment for slice allocation:\n{}",
+        main_ir.contains("@malloc"),
+        "Expected malloc call for slice allocation:\n{}",
         main_ir
     );
 }
@@ -115,7 +114,8 @@ F main() -> i64 {
 }
 
 #[test]
-fn test_multiple_allocs_freed() {
+fn test_multiple_allocs_tracked() {
+    // Auto-free is disabled; verify multiple alloc slots are created for tracking.
     let ir = compile_to_ir(
         r#"
 F main() -> i64 {
@@ -129,11 +129,11 @@ F main() -> i64 {
     let main_start = ir.find("define i64 @main(").unwrap();
     let main_end = ir[main_start..].find("\n}\n").unwrap() + main_start;
     let main_ir = &ir[main_start..main_end];
-    let free_count = main_ir.matches("call void @free").count();
+    let slot_count = main_ir.matches("__alloc_slot").count();
     assert!(
-        free_count >= 2,
-        "Expected at least 2 free calls for 2 string concats, got {}. IR:\n{}",
-        free_count,
+        slot_count >= 2,
+        "Expected at least 2 alloc slot references for 2 string concats, got {}. IR:\n{}",
+        slot_count,
         main_ir
     );
 }

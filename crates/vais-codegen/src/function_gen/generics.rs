@@ -69,7 +69,11 @@ impl CodeGenerator {
             .map(|(_, ty)| {
                 let llvm_ty = self.type_to_llvm(ty);
                 // void is not valid as a struct field type — use i8 for Unit fields
-                if llvm_ty == "void" { "i8".to_string() } else { llvm_ty }
+                if llvm_ty == "void" {
+                    "i8".to_string()
+                } else {
+                    llvm_ty
+                }
             })
             .collect();
 
@@ -129,7 +133,10 @@ impl CodeGenerator {
         match result {
             Ok(r) => r,
             Err(_) => {
-                eprintln!("[WARN] Stack overflow during specialization of '{}' — skipping", inst.mangled_name);
+                eprintln!(
+                    "[WARN] Stack overflow during specialization of '{}' — skipping",
+                    inst.mangled_name
+                );
                 Ok(String::new()) // Return empty IR, function will be undefined
             }
         }
@@ -332,14 +339,22 @@ impl CodeGenerator {
             .map(|(name, concrete_ty)| {
                 let llvm_ty = self.type_to_llvm(concrete_ty);
                 // void is invalid as a parameter type — use i8 for Unit parameters
-                let llvm_ty = if llvm_ty == "void" { "i8".to_string() } else { llvm_ty };
+                let llvm_ty = if llvm_ty == "void" {
+                    "i8".to_string()
+                } else {
+                    llvm_ty
+                };
                 let llvm_name = crate::helpers::sanitize_param_name(name);
                 // For struct-type self parameter, pass as pointer (matches unspecialized convention)
-                let (actual_ty, actual_resolved) = if name == "self" && matches!(concrete_ty, ResolvedType::Named { .. }) {
-                    (format!("{}*", llvm_ty), ResolvedType::Ref(Box::new(concrete_ty.clone())))
-                } else {
-                    (llvm_ty, concrete_ty.clone())
-                };
+                let (actual_ty, actual_resolved) =
+                    if name == "self" && matches!(concrete_ty, ResolvedType::Named { .. }) {
+                        (
+                            format!("{}*", llvm_ty),
+                            ResolvedType::Ref(Box::new(concrete_ty.clone())),
+                        )
+                    } else {
+                        (llvm_ty, concrete_ty.clone())
+                    };
                 // Register parameter as local initially (may be updated below for struct params)
                 self.fn_ctx.locals.insert(
                     name.to_string(),
@@ -485,7 +500,13 @@ impl CodeGenerator {
                     write_ir!(ir, "  ret {} {}", ret_llvm, loaded);
                 } else {
                     // Coerce body value to return type if needed (e.g., i64 → double)
-                    let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                    let coerced = self.coerce_specialized_return(
+                        &value,
+                        &ret_llvm,
+                        &ret_type,
+                        &mut counter,
+                        &mut ir,
+                    );
                     write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
                 }
             }
@@ -511,8 +532,17 @@ impl CodeGenerator {
                             // Check if value needs coercion (e.g., i64 from generic call
                             // but ret_llvm is a struct type like %Vec$u64)
                             let val_ty = self.llvm_type_of(&value);
-                            if val_ty == "i64" && ret_llvm.starts_with('%') && !ret_llvm.ends_with('*') {
-                                let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                            if val_ty == "i64"
+                                && ret_llvm.starts_with('%')
+                                && !ret_llvm.ends_with('*')
+                            {
+                                let coerced = self.coerce_specialized_return(
+                                    &value,
+                                    &ret_llvm,
+                                    &ret_type,
+                                    &mut counter,
+                                    &mut ir,
+                                );
                                 write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
                             } else {
                                 write_ir!(ir, "  ret {} {}", ret_llvm, value);
@@ -531,7 +561,13 @@ impl CodeGenerator {
                         }
                     } else {
                         // Coerce body value to return type if needed
-                        let coerced = self.coerce_specialized_return(&value, &ret_llvm, &ret_type, &mut counter, &mut ir);
+                        let coerced = self.coerce_specialized_return(
+                            &value,
+                            &ret_llvm,
+                            &ret_type,
+                            &mut counter,
+                            &mut ir,
+                        );
                         write_ir!(ir, "  ret {} {}", ret_llvm, coerced);
                     }
                 }
@@ -590,9 +626,22 @@ impl CodeGenerator {
             && value.starts_with('%')
         {
             let tmp_ptr = self.next_temp(counter);
-            write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+            write_ir!(
+                ir,
+                "  {} = inttoptr i64 {} to {}*",
+                tmp_ptr,
+                value,
+                ret_llvm
+            );
             let loaded = self.next_temp(counter);
-            write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+            write_ir!(
+                ir,
+                "  {} = load {}, {}* {}",
+                loaded,
+                ret_llvm,
+                ret_llvm,
+                tmp_ptr
+            );
             return loaded;
         }
         // Default: return as-is

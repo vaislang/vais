@@ -199,9 +199,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     return self.type_mapper.map_type(inner);
                 }
                 // Vec<T>[idx] -> element type T
-                Some(vais_types::ResolvedType::Named { name: type_name, generics })
-                    if type_name == "Vec" && !generics.is_empty() =>
-                {
+                Some(vais_types::ResolvedType::Named {
+                    name: type_name,
+                    generics,
+                }) if type_name == "Vec" && !generics.is_empty() => {
                     return self.type_mapper.map_type(&generics[0]);
                 }
                 _ => {}
@@ -214,8 +215,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Check if an expression resolves to a Vec type (Named { name: "Vec", ... }).
     fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
         if let Expr::Ident(name) = arr_expr {
-            if let Some(vais_types::ResolvedType::Named { name: type_name, .. }) =
-                self.var_resolved_types.get(name)
+            if let Some(vais_types::ResolvedType::Named {
+                name: type_name, ..
+            }) = self.var_resolved_types.get(name)
             {
                 return type_name == "Vec";
             }
@@ -276,7 +278,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // data_ptr comes from a valid Vec data field.
                 let elem_ptr_i8 = unsafe {
                     self.builder
-                        .build_gep(self.context.i8_type(), data_ptr, &[byte_offset], "vec_elem_ptr")
+                        .build_gep(
+                            self.context.i8_type(),
+                            data_ptr,
+                            &[byte_offset],
+                            "vec_elem_ptr",
+                        )
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                 };
 

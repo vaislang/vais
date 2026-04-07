@@ -335,10 +335,7 @@ impl CodeGenerator {
                             }
                         }
                     }
-                } else if self
-                    .resolve_enum_struct_variant(struct_name)
-                    .is_some()
-                {
+                } else if self.resolve_enum_struct_variant(struct_name).is_some() {
                     // `struct_name` names an enum struct-variant (e.g. `Varchar { max_len }`
                     // used as short-form inside a `M` arm). Verify the enum's runtime tag
                     // matches and delegate any inner sub-pattern checks through the enum
@@ -389,12 +386,7 @@ impl CodeGenerator {
                                     field_idx
                                 );
                                 let field_val = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load i64, i64* {}",
-                                    field_val,
-                                    payload_ptr
-                                );
+                                write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
                                 let (check, check_ir) =
                                     self.generate_pattern_check(pat, &field_val, counter)?;
                                 ir.push_str(&check_ir);
@@ -477,6 +469,7 @@ impl CodeGenerator {
     /// when the parser produced a `Pattern::Struct` (which happens whenever the
     /// match arm omits the `EnumType.` qualifier, for example
     /// `Varchar { max_len } => …`).
+    #[allow(clippy::type_complexity)]
     pub(crate) fn resolve_enum_struct_variant(
         &self,
         variant_name: &str,
@@ -635,7 +628,9 @@ impl CodeGenerator {
                     Self::collect_generic_names(g, names);
                 }
             }
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => {
                 Self::collect_generic_names(inner, names);
             }
             ResolvedType::Tuple(elems) => {
@@ -653,12 +648,13 @@ impl CodeGenerator {
         subs: &std::collections::HashMap<String, ResolvedType>,
     ) -> ResolvedType {
         match ty {
-            ResolvedType::Generic(name) => {
-                subs.get(name).cloned().unwrap_or_else(|| ty.clone())
-            }
+            ResolvedType::Generic(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
             ResolvedType::Named { name, generics } => ResolvedType::Named {
                 name: name.clone(),
-                generics: generics.iter().map(|g| Self::substitute_generics(g, subs)).collect(),
+                generics: generics
+                    .iter()
+                    .map(|g| Self::substitute_generics(g, subs))
+                    .collect(),
             },
             ResolvedType::Ref(inner) => {
                 ResolvedType::Ref(Box::new(Self::substitute_generics(inner, subs)))
@@ -669,9 +665,12 @@ impl CodeGenerator {
             ResolvedType::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(Self::substitute_generics(inner, subs)))
             }
-            ResolvedType::Tuple(elems) => {
-                ResolvedType::Tuple(elems.iter().map(|e| Self::substitute_generics(e, subs)).collect())
-            }
+            ResolvedType::Tuple(elems) => ResolvedType::Tuple(
+                elems
+                    .iter()
+                    .map(|e| Self::substitute_generics(e, subs))
+                    .collect(),
+            ),
             other => other.clone(),
         }
     }
@@ -829,9 +828,8 @@ impl CodeGenerator {
                 // Resolve the actual field types for this variant, substituting generic
                 // parameters with concrete types from match_type.
                 // e.g., Option<Vec<u64>>::Some(T) → field type is Vec<u64>
-                let variant_field_types = self.resolve_variant_field_types(
-                    &enum_name, variant_name, match_type,
-                );
+                let variant_field_types =
+                    self.resolve_variant_field_types(&enum_name, variant_name, match_type);
 
                 for (i, field_pat) in fields.iter().enumerate() {
                     // Extract payload field from enum variant
@@ -892,8 +890,12 @@ impl CodeGenerator {
                             );
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &typed_ptr, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &typed_ptr,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Non-struct compound type (e.g., str, large tuple): load the value
@@ -906,8 +908,12 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     typed_ptr
                                 );
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &field_val,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             }
                         } else if is_compound_field {
@@ -923,8 +929,12 @@ impl CodeGenerator {
                             );
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &cast_ptr, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &cast_ptr,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Non-struct compound type (e.g., tuple, str): load the value
@@ -937,23 +947,35 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     cast_ptr
                                 );
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &field_val,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             }
                         } else if matches!(&field_type, ResolvedType::Named { .. }) {
                             // Struct field in native payload slot (custom enum with concrete
                             // struct variant). The GEP already returns the correct struct
                             // pointer type, so bind directly as pointer.
-                            let bind_ir =
-                                self.generate_pattern_bindings_typed(field_pat, &payload_ptr, counter, &field_type)?;
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &payload_ptr,
+                                counter,
+                                &field_type,
+                            )?;
                             ir.push_str(&bind_ir);
                         } else {
                             // Simple type (i64, i32, pointer, etc.): load directly
                             let field_val = self.next_temp(counter);
                             write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
-                            let bind_ir =
-                                self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &field_val,
+                                counter,
+                                &field_type,
+                            )?;
                             ir.push_str(&bind_ir);
                         }
                     } else {
@@ -982,8 +1004,12 @@ impl CodeGenerator {
                             );
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &typed_ptr, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &typed_ptr,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Non-struct compound type (e.g., str, large tuple): load value
@@ -996,8 +1022,12 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     typed_ptr
                                 );
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &field_val,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             }
                         } else if is_compound_field {
@@ -1016,8 +1046,12 @@ impl CodeGenerator {
                             );
                             if matches!(&field_type, ResolvedType::Named { .. }) {
                                 // Struct type: bind as pointer (field access uses GEP)
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &cast_ptr, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &cast_ptr,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             } else {
                                 // Non-struct compound type: load the value
@@ -1030,13 +1064,21 @@ impl CodeGenerator {
                                     llvm_field_ty,
                                     cast_ptr
                                 );
-                                let bind_ir =
-                                    self.generate_pattern_bindings_typed(field_pat, &field_val, counter, &field_type)?;
+                                let bind_ir = self.generate_pattern_bindings_typed(
+                                    field_pat,
+                                    &field_val,
+                                    counter,
+                                    &field_type,
+                                )?;
                                 ir.push_str(&bind_ir);
                             }
                         } else {
-                            let bind_ir =
-                                self.generate_pattern_bindings_typed(field_pat, &payload_val, counter, &field_type)?;
+                            let bind_ir = self.generate_pattern_bindings_typed(
+                                field_pat,
+                                &payload_val,
+                                counter,
+                                &field_type,
+                            )?;
                             ir.push_str(&bind_ir);
                         }
                     }
@@ -1133,12 +1175,7 @@ impl CodeGenerator {
                         // currently only affect `Varchar { max_len: u32 }` / `Vector { dim:
                         // u32 }` style variants in vaisdb, which fit in an i64.
                         let field_val = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = load i64, i64* {}",
-                            field_val,
-                            payload_ptr
-                        );
+                        write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
 
                         if let Some(pat) = field_pat {
                             let bind_ir =

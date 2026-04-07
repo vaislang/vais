@@ -493,7 +493,9 @@ impl CodeGenerator {
         // and get_tuple_variant_info can find Ok/Err/Some/None as enum variants.
         {
             use crate::types::{EnumInfo, EnumVariantFields, EnumVariantInfo};
-            if !self.types.enums.contains_key("Result") && !self.types.structs.contains_key("Result") {
+            if !self.types.enums.contains_key("Result")
+                && !self.types.structs.contains_key("Result")
+            {
                 write_ir!(ir, "%Result = type {{ i32, {{ i64 }} }}");
                 self.types.enums.insert(
                     "Result".to_string(),
@@ -505,18 +507,24 @@ impl CodeGenerator {
                                 _tag: 0,
                                 // Use Generic("T") so resolve_variant_field_types can substitute
                                 // the concrete type from match_type generics (fixes struct erasure)
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic(
+                                    "T".to_string(),
+                                )]),
                             },
                             EnumVariantInfo {
                                 name: "Err".to_string(),
                                 _tag: 1,
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("E".to_string())]),
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic(
+                                    "E".to_string(),
+                                )]),
                             },
                         ],
                     },
                 );
             }
-            if !self.types.enums.contains_key("Option") && !self.types.structs.contains_key("Option") {
+            if !self.types.enums.contains_key("Option")
+                && !self.types.structs.contains_key("Option")
+            {
                 write_ir!(ir, "%Option = type {{ i32, {{ i64 }} }}");
                 self.types.enums.insert(
                     "Option".to_string(),
@@ -533,7 +541,9 @@ impl CodeGenerator {
                                 _tag: 1,
                                 // Use Generic("T") so resolve_variant_field_types can substitute
                                 // the concrete type from match_type generics (fixes struct erasure)
-                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic("T".to_string())]),
+                                fields: EnumVariantFields::Tuple(vec![ResolvedType::Generic(
+                                    "T".to_string(),
+                                )]),
                             },
                         ],
                     },

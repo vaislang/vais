@@ -1339,12 +1339,11 @@ fn test_brace_escape_mixed_literal_and_interp() {
                 match &expr.node {
                     Expr::StringInterp(parts) => {
                         // Should have at least a Lit("{key}: ") part and an Expr part
-                        let has_literal_with_brace = parts.iter().any(|p| {
-                            matches!(p, StringInterpPart::Lit(s) if s.contains("{key}"))
-                        });
-                        let has_interp_expr = parts.iter().any(|p| {
-                            matches!(p, StringInterpPart::Expr(_))
-                        });
+                        let has_literal_with_brace = parts
+                            .iter()
+                            .any(|p| matches!(p, StringInterpPart::Lit(s) if s.contains("{key}")));
+                        let has_interp_expr =
+                            parts.iter().any(|p| matches!(p, StringInterpPart::Expr(_)));
                         assert!(
                             has_literal_with_brace,
                             "Expected a Lit part containing '{{key}}', parts: {:?}",

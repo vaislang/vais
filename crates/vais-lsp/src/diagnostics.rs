@@ -33,7 +33,10 @@ pub fn parse_error_to_diagnostic(err: &ParseError, source: &str) -> Diagnostic {
             (
                 pos,
                 end_pos,
-                format!("Maximum parse depth exceeded ({}) — expression too deeply nested", max),
+                format!(
+                    "Maximum parse depth exceeded ({}) — expression too deeply nested",
+                    max
+                ),
             )
         }
     };

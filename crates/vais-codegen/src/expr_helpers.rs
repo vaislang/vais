@@ -430,8 +430,18 @@ impl CodeGenerator {
             let fat1 = self.next_temp(counter);
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = inttoptr i64 {} to i8*", ptr_val, val);
-            write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0", fat1, ptr_val);
-            write_ir!(ir, "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1", result, fat1);
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                fat1,
+                ptr_val
+            );
+            write_ir!(
+                ir,
+                "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1",
+                result,
+                fat1
+            );
             return Ok((result, ir));
         }
 
@@ -442,7 +452,13 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = ptrtoint {} {} to i64", result, src_llvm_ty, val);
             } else {
                 // Named struct type — the SSA value is actually a pointer (from alloca)
-                write_ir!(ir, "  {} = ptrtoint {}* {} to i64", result, src_llvm_ty, val);
+                write_ir!(
+                    ir,
+                    "  {} = ptrtoint {}* {} to i64",
+                    result,
+                    src_llvm_ty,
+                    val
+                );
             }
             return Ok((result, ir));
         }
@@ -453,7 +469,10 @@ impl CodeGenerator {
         // Only widen (i8/i16/i32 → i64) from known types, not narrow.
         {
             let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
-                || self.fn_ctx.locals.contains_key(val.strip_prefix('%').unwrap_or(&val));
+                || self
+                    .fn_ctx
+                    .locals
+                    .contains_key(val.strip_prefix('%').unwrap_or(&val));
             if has_known_type
                 && src_llvm_ty.starts_with('i')
                 && llvm_type.starts_with('i')
@@ -464,9 +483,23 @@ impl CodeGenerator {
                 if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
                     let result = self.next_temp(counter);
                     if src_bits > dst_bits {
-                        write_ir!(ir, "  {} = trunc {} {} to {}", result, src_llvm_ty, val, llvm_type);
+                        write_ir!(
+                            ir,
+                            "  {} = trunc {} {} to {}",
+                            result,
+                            src_llvm_ty,
+                            val,
+                            llvm_type
+                        );
                     } else {
-                        write_ir!(ir, "  {} = sext {} {} to {}", result, src_llvm_ty, val, llvm_type);
+                        write_ir!(
+                            ir,
+                            "  {} = sext {} {} to {}",
+                            result,
+                            src_llvm_ty,
+                            val,
+                            llvm_type
+                        );
                     }
                     return Ok((result, ir));
                 }
@@ -665,10 +698,23 @@ impl CodeGenerator {
                             });
                             if is_ssa_named_ptr {
                                 let loaded = self.next_temp(counter);
-                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    llvm_ty,
+                                    llvm_ty,
+                                    val
+                                );
                                 loaded
                             } else {
-                                self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
+                                self.coerce_int_width(
+                                    &val,
+                                    &actual_val_ty,
+                                    &llvm_ty,
+                                    counter,
+                                    &mut ir,
+                                )
                             }
                         } else {
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
@@ -740,8 +786,7 @@ impl CodeGenerator {
             );
             // Coerce value to match element type (e.g., i8 from trunc → i64 for Vec store)
             let val_ty = self.llvm_type_of(&val);
-            let store_val =
-                self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir);
+            let store_val = self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir);
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",

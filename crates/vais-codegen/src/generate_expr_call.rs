@@ -560,7 +560,10 @@ impl CodeGenerator {
             // types or locals — skip when llvm_type_of falls back to i64.
             {
                 let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
-                    || self.fn_ctx.locals.contains_key(val.strip_prefix('%').unwrap_or(&val));
+                    || self
+                        .fn_ctx
+                        .locals
+                        .contains_key(val.strip_prefix('%').unwrap_or(&val));
                 if has_known_type {
                     let val_ty = self.llvm_type_of(&val);
                     if val_ty != arg_ty
@@ -595,13 +598,7 @@ impl CodeGenerator {
                 let inferred = self.infer_expr_type(arg);
                 if !matches!(inferred, ResolvedType::Named { .. }) {
                     let ptr_tmp = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = inttoptr i64 {} to {}*",
-                        ptr_tmp,
-                        val,
-                        arg_ty
-                    );
+                    write_ir!(ir, "  {} = inttoptr i64 {} to {}*", ptr_tmp, val, arg_ty);
                     let loaded = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -633,7 +630,12 @@ impl CodeGenerator {
                     self.emit_entry_alloca(&alloca, vec_struct);
                     // Extract data pointer from slice and convert to i64
                     let data_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", data_ptr, val);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        val
+                    );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, data_ptr);
                     // Extract length from slice
@@ -641,16 +643,44 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, val);
                     // Store fields: data, len, cap (=len), elem_size (=1 for u8, 8 for default)
                     let f0 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 0", f0, vec_struct, vec_struct, alloca);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        f0,
+                        vec_struct,
+                        vec_struct,
+                        alloca
+                    );
                     write_ir!(ir, "  store i64 {}, i64* {}", data_i64, f0);
                     let f1 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 1", f1, vec_struct, vec_struct, alloca);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+                        f1,
+                        vec_struct,
+                        vec_struct,
+                        alloca
+                    );
                     write_ir!(ir, "  store i64 {}, i64* {}", len, f1);
                     let f2 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 2", f2, vec_struct, vec_struct, alloca);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 2",
+                        f2,
+                        vec_struct,
+                        vec_struct,
+                        alloca
+                    );
                     write_ir!(ir, "  store i64 {}, i64* {}", len, f2);
                     let f3 = self.next_temp(counter);
-                    write_ir!(ir, "  {} = getelementptr {}, {}* {}, i32 0, i32 3", f3, vec_struct, vec_struct, alloca);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
+                        f3,
+                        vec_struct,
+                        vec_struct,
+                        alloca
+                    );
                     // elem_size: determine from type name (Vec$u8 → 1, default → 8)
                     let elem_size = if vec_struct.contains("u8") || vec_struct.contains("i8") {
                         "1"
@@ -883,10 +913,7 @@ impl CodeGenerator {
             // If arg is a { i8*, i64 } slice, extractvalue index 0 gives the pointer
             if arg_full.starts_with("{ i8*, i64 }") || arg_full.contains("{ i8*, i64 }") {
                 // arg is like "{ i8*, i64 } %t5"
-                let val_name = arg_full
-                    .split_whitespace()
-                    .last()
-                    .unwrap_or("%unknown");
+                let val_name = arg_full.split_whitespace().last().unwrap_or("%unknown");
                 let ptr_tmp = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -936,7 +963,8 @@ impl CodeGenerator {
             // Convert i32 result to i64 for consistency
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
-            self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+            self.fn_ctx
+                .register_temp_type(&result, vais_types::ResolvedType::I64);
             Ok((result, ir))
         } else if ret_ty == "void" {
             // Check for recursive call with decreases clause
@@ -1037,7 +1065,8 @@ impl CodeGenerator {
             // Without this, generate_expr_inner's catch-all registers the
             // semantic return type (I32/U32), causing downstream coercion
             // to think the value is i32 when it's actually i64.
-            self.fn_ctx.register_temp_type(&tmp, vais_types::ResolvedType::I64);
+            self.fn_ctx
+                .register_temp_type(&tmp, vais_types::ResolvedType::I64);
             Ok((tmp, ir))
         } else {
             // Check for recursive call with decreases clause
@@ -1220,7 +1249,13 @@ impl CodeGenerator {
                     let alloca_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
                     let dst_ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, alloca_tmp);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast {}* {} to i8*",
+                        dst_ptr,
+                        llvm_ty,
+                        alloca_tmp
+                    );
                     let src_ptr = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
                     write_ir!(
@@ -1383,33 +1418,34 @@ impl CodeGenerator {
                 } else {
                     // Specialized context: value is the concrete struct type.
                     // If val is a value (not pointer), alloca+store to get a pointer
-                    let src_ptr =
-                        if self.is_expr_value(&args[1]) || matches!(resolved_t, ResolvedType::Str) {
-                            let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
-                            *counter += 1;
-                            self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
-                            write_ir!(
-                                ir,
-                                "  store {} {}, {}* {}",
-                                llvm_ty,
-                                val_val,
-                                llvm_ty,
-                                tmp_alloca
-                            );
-                            let cast = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = bitcast {}* {} to i8*",
-                                cast,
-                                llvm_ty,
-                                tmp_alloca
-                            );
-                            cast
-                        } else {
-                            let cast = self.next_temp(counter);
-                            write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
-                            cast
-                        };
+                    let src_ptr = if self.is_expr_value(&args[1])
+                        || matches!(resolved_t, ResolvedType::Str)
+                    {
+                        let tmp_alloca = format!("%__store_typed_tmp.{}", counter);
+                        *counter += 1;
+                        self.emit_entry_alloca(&tmp_alloca, &llvm_ty);
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            llvm_ty,
+                            val_val,
+                            llvm_ty,
+                            tmp_alloca
+                        );
+                        let cast = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* {} to i8*",
+                            cast,
+                            llvm_ty,
+                            tmp_alloca
+                        );
+                        cast
+                    } else {
+                        let cast = self.next_temp(counter);
+                        write_ir!(ir, "  {} = bitcast {}* {} to i8*", cast, llvm_ty, val_val);
+                        cast
+                    };
                     write_ir!(
                         ir,
                         "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",

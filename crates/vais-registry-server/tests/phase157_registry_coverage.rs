@@ -2,6 +2,12 @@
 //!
 //! Covers: semver_resolve, signing, error, config, models, storage
 
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use chrono::Utc;
+use std::path::PathBuf;
+use tempfile::TempDir;
+use uuid::Uuid;
 use vais_registry_server::{
     config::ServerConfig,
     error::ServerError,
@@ -9,16 +15,12 @@ use vais_registry_server::{
         DependencyKind, DependencySpec, Package, PackageOwner, PackageVersion, PublishRequest,
         RegistryStats, SearchQuery, User,
     },
-    semver_resolve::{are_compatible, compare_versions, parse_version_req, resolve_best_version, satisfies},
+    semver_resolve::{
+        are_compatible, compare_versions, parse_version_req, resolve_best_version, satisfies,
+    },
     signing::{validate_public_key, verify_signature, SignatureError},
     storage::{create_archive, sha256_hex, PackageStorage},
 };
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use chrono::Utc;
-use std::path::PathBuf;
-use tempfile::TempDir;
-use uuid::Uuid;
 
 // ============================================================
 // semver_resolve — extra coverage
@@ -616,7 +618,9 @@ fn test_storage_overwrite_version() {
     let dir = TempDir::new().unwrap();
     let storage = PackageStorage::new(dir.path().to_path_buf()).unwrap();
     storage.store_archive("pkg", "1.0.0", b"old").unwrap();
-    storage.store_archive("pkg", "1.0.0", b"new content").unwrap();
+    storage
+        .store_archive("pkg", "1.0.0", b"new content")
+        .unwrap();
     let data = storage.read_archive("pkg", "1.0.0").unwrap();
     assert_eq!(data, b"new content");
 }
@@ -624,7 +628,11 @@ fn test_storage_overwrite_version() {
 #[test]
 fn test_create_archive_produces_valid_gzip() {
     let dir = TempDir::new().unwrap();
-    std::fs::write(dir.path().join("vais.toml"), "[package]\nname=\"x\"\nversion=\"1.0.0\"\n").unwrap();
+    std::fs::write(
+        dir.path().join("vais.toml"),
+        "[package]\nname=\"x\"\nversion=\"1.0.0\"\n",
+    )
+    .unwrap();
     let archive = create_archive(dir.path()).unwrap();
     // GZip magic bytes: 1f 8b
     assert!(archive.len() >= 2);

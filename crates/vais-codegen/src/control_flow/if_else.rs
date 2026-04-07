@@ -29,8 +29,7 @@ impl CodeGenerator {
 
                 // Check each branch independently for struct pointer vs value
                 let is_named_phi = matches!(&block_type, ResolvedType::Named { .. });
-                let then_is_ptr =
-                    is_named_phi && !self.is_block_result_value(then_stmts);
+                let then_is_ptr = is_named_phi && !self.is_block_result_value(then_stmts);
 
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;

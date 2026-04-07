@@ -317,15 +317,12 @@ impl CodeGenerator {
                     // Get the return type of the current function
                     let (ret_type, ret_resolved) =
                         if let Some(fn_name) = &self.fn_ctx.current_function {
-                            let result = self.types
-                                .functions
-                                .get(fn_name)
-                                .map(|info| {
-                                    (
-                                        self.type_to_llvm(&info.signature.ret),
-                                        info.signature.ret.clone(),
-                                    )
-                                });
+                            let result = self.types.functions.get(fn_name).map(|info| {
+                                (
+                                    self.type_to_llvm(&info.signature.ret),
+                                    info.signature.ret.clone(),
+                                )
+                            });
                             result.unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
                         } else {
                             ("i64".to_string(), ResolvedType::I64)
@@ -461,19 +458,9 @@ impl CodeGenerator {
                             // Float width coercion (e.g., double→float fptrunc)
                             let tmp = self.next_temp(counter);
                             if val_ty == "double" && ret_type == "float" {
-                                write_ir!(
-                                    ir,
-                                    "  {} = fptrunc double {} to float",
-                                    tmp,
-                                    final_val
-                                );
+                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, final_val);
                             } else {
-                                write_ir!(
-                                    ir,
-                                    "  {} = fpext float {} to double",
-                                    tmp,
-                                    final_val
-                                );
+                                write_ir!(ir, "  {} = fpext float {} to double", tmp, final_val);
                             }
                             tmp
                         } else if val_ty != ret_type

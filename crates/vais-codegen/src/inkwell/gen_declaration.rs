@@ -162,7 +162,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // record it so pattern bindings can recover the struct type.
             if let ast::VariantFields::Tuple(types) = &variant.fields {
                 if types.len() == 1 {
-                    if let ast::Type::Named { name: struct_name, .. } = &types[0].node {
+                    if let ast::Type::Named {
+                        name: struct_name, ..
+                    } = &types[0].node
+                    {
                         self.enum_variant_struct_types.insert(
                             (enum_name.clone(), variant.name.node.clone()),
                             struct_name.clone(),

@@ -390,13 +390,12 @@ impl CodeGenerator {
                 );
 
         // Detect Vec source: Vec<T>, &Vec<T>, or &mut Vec<T>
-        let is_vec_source =
-            matches!(&arr_type, ResolvedType::Named { name, .. } if name == "Vec")
-                || matches!(
-                    &arr_type,
-                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
-                    if matches!(inner.as_ref(), ResolvedType::Named { name, .. } if name == "Vec")
-                );
+        let is_vec_source = matches!(&arr_type, ResolvedType::Named { name, .. } if name == "Vec")
+            || matches!(
+                &arr_type,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Named { name, .. } if name == "Vec")
+            );
 
         // Get start index (default 0)
         let start_val = if let Some(start_expr) = start {

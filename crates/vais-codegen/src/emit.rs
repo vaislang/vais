@@ -99,7 +99,10 @@ impl CodeGenerator {
                 _ => {
                     // For compound types (structs, arrays, etc.), use zeroinitializer
                     // instead of 0, which is invalid for non-integer LLVM types
-                    if llvm_ty.starts_with('{') || llvm_ty.starts_with('[') || llvm_ty.starts_with('<') {
+                    if llvm_ty.starts_with('{')
+                        || llvm_ty.starts_with('[')
+                        || llvm_ty.starts_with('<')
+                    {
                         "zeroinitializer".to_string()
                     } else {
                         "0".to_string()

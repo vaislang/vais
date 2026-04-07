@@ -120,13 +120,12 @@ impl TypeChecker {
         // Imported function bodies may reference symbols not available in the
         // current compilation unit (transitive dependencies). Errors from imported
         // code should not be reported to the user — only local code errors matter.
-        let body_check_imported_end = if self.imported_item_count > 0
-            && self.imported_item_count < module.items.len()
-        {
-            self.imported_item_count
-        } else {
-            0
-        };
+        let body_check_imported_end =
+            if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                self.imported_item_count
+            } else {
+                0
+            };
         for (idx, item) in module.items.iter().enumerate() {
             let is_imported = idx < body_check_imported_end;
             match &item.node {

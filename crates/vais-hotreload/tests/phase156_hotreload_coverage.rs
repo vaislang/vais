@@ -140,10 +140,7 @@ fn test_config_with_output_dir_absolute() {
 #[test]
 fn test_config_with_output_dir_relative() {
     let config = HotReloadConfig::new("f.vais").with_output_dir("relative/path");
-    assert_eq!(
-        config.output_dir.unwrap(),
-        PathBuf::from("relative/path")
-    );
+    assert_eq!(config.output_dir.unwrap(), PathBuf::from("relative/path"));
 }
 
 #[test]

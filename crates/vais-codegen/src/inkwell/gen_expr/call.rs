@@ -571,7 +571,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     for (i, fv) in field_vals.iter().enumerate() {
                         payload_val = self
                             .builder
-                            .build_insert_value(payload_val, *fv, i as u32, &format!("variant_multi_field_{}", i))
+                            .build_insert_value(
+                                payload_val,
+                                *fv,
+                                i as u32,
+                                &format!("variant_multi_field_{}", i),
+                            )
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                             .into_struct_value();
                     }
@@ -592,7 +597,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.builder
                         .build_ptr_to_int(heap_ptr, i64_ty, "variant_multi_data_as_i64")
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                        .into()
                 } else {
                     let v = self.generate_expr(&args[0].node)?;
                     // Large struct (>8B) cannot fit in i64: heap-allocate and store pointer.
@@ -607,16 +611,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         if size_bytes > 8 {
                             // Heap-allocate: malloc(size) → memcpy struct → ptrtoint to i64
                             let i64_ty = self.context.i64_type();
-                            let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+                            let i8_ptr_ty =
+                                self.context.i8_type().ptr_type(AddressSpace::default());
                             // Call malloc(size)
                             let malloc_fn = self
                                 .module
                                 .get_function("malloc")
                                 .or_else(|| {
-                                    let malloc_ty = i8_ptr_ty.fn_type(
-                                        &[i64_ty.into()],
-                                        false,
-                                    );
+                                    let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
                                     Some(self.module.add_function("malloc", malloc_ty, None))
                                 })
                                 .unwrap();

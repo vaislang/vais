@@ -521,7 +521,9 @@ fn test_tokens_to_string_float_literal() {
 #[test]
 fn test_hygienic_context_multiple_vars_unique() {
     let mut ctx = HygienicContext::new();
-    let names: Vec<_> = (0..10).map(|i| ctx.hygienize(&format!("var{}", i))).collect();
+    let names: Vec<_> = (0..10)
+        .map(|i| ctx.hygienize(&format!("var{}", i)))
+        .collect();
     // All hygienic names should be unique
     let unique_count = {
         let mut set = std::collections::HashSet::new();
@@ -665,11 +667,7 @@ fn test_collect_macros_multiple_defs() {
 fn test_derive_registry_all_supported() {
     let registry = DeriveRegistry::new();
     for name in &["Debug", "Clone", "PartialEq", "Default", "Hash", "Error"] {
-        assert!(
-            registry.is_supported(name),
-            "{} should be supported",
-            name
-        );
+        assert!(registry.is_supported(name), "{} should be supported", name);
     }
 }
 
@@ -766,7 +764,10 @@ fn test_proc_macro_line_builtin() {
     let line_mac = registry.get("line").unwrap();
     let result = line_mac.expand(TokenStream::new()).unwrap();
     assert_eq!(result.len(), 1);
-    assert!(matches!(result.iter().next(), Some(TokenTree::Literal(LiteralToken::Integer(_)))));
+    assert!(matches!(
+        result.iter().next(),
+        Some(TokenTree::Literal(LiteralToken::Integer(_)))
+    ));
 }
 
 #[test]

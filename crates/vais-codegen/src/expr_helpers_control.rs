@@ -130,8 +130,7 @@ impl CodeGenerator {
         } else if !then_terminated {
             // Coerce integer width if the value type differs from the phi type
             let actual_ty = self.llvm_type_of(&then_val);
-            let coerced =
-                self.coerce_int_width(&then_val, &actual_ty, &phi_llvm, counter, &mut ir);
+            let coerced = self.coerce_int_width(&then_val, &actual_ty, &phi_llvm, counter, &mut ir);
             // Also coerce float width (e.g., float→double or double→float for phi)
             let actual_after = self.llvm_type_of(&coerced);
             if actual_after != phi_llvm

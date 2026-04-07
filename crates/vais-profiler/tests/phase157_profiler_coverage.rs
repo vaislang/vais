@@ -27,16 +27,13 @@ fn empty_snapshot() -> ProfileSnapshot {
 fn full_snapshot() -> ProfileSnapshot {
     ProfileSnapshot {
         duration: Some(Duration::from_millis(500)),
-        samples: vec![
-            ("hotfn".to_string(), 80),
-            ("coldfn".to_string(), 20),
-        ],
+        samples: vec![("hotfn".to_string(), 80), ("coldfn".to_string(), 20)],
         memory_stats: MemoryStats {
             total_allocations: 200,
             total_deallocations: 150,
             total_allocated_bytes: 2_097_152, // 2 MB
-            current_allocated_bytes: 524_288,  // 0.5 MB
-            peak_allocated_bytes: 1_048_576,   // 1 MB
+            current_allocated_bytes: 524_288, // 0.5 MB
+            peak_allocated_bytes: 1_048_576,  // 1 MB
         },
         call_graph: vec![
             ("main".to_string(), "hotfn".to_string(), 80),
@@ -685,7 +682,10 @@ fn test_profiler_start_stop_cycle() {
 fn test_profiler_double_start_returns_error() {
     let profiler = Profiler::default();
     profiler.start().unwrap();
-    assert!(matches!(profiler.start(), Err(ProfilerError::AlreadyRunning)));
+    assert!(matches!(
+        profiler.start(),
+        Err(ProfilerError::AlreadyRunning)
+    ));
     profiler.stop().unwrap();
 }
 

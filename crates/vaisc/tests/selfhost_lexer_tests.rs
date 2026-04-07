@@ -1856,10 +1856,10 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Unsafe => -1,        // unsafe blocks
         Token::Yield => -1,         // yield keyword
         // New unambiguous keyword variants
-        Token::EnumKeyword => 3,    // same as Token::Enum (TOK_KW_E)
-        Token::Else => -1,          // else is context-dependent (E token reused), not a separate selfhost token
-        Token::ForEach => 5,        // same as Token::Loop (TOK_KW_L)
-        Token::While => -1,         // while is context-dependent (L token reused), not a separate selfhost token
+        Token::EnumKeyword => 3, // same as Token::Enum (TOK_KW_E)
+        Token::Else => -1, // else is context-dependent (E token reused), not a separate selfhost token
+        Token::ForEach => 5, // same as Token::Loop (TOK_KW_L)
+        Token::While => -1, // while is context-dependent (L token reused), not a separate selfhost token
     }
 }
 

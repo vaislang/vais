@@ -39,13 +39,22 @@ fn has_interpolation(s: &str) -> bool {
             if chars.peek() == Some(&'{') {
                 // Escaped {{ - skip
                 chars.next();
-            } else if chars.peek() == Some(&'"') || chars.peek() == Some(&'\'') || chars.peek() == Some(&'\\') {
+            } else if chars.peek() == Some(&'"')
+                || chars.peek() == Some(&'\'')
+                || chars.peek() == Some(&'\\')
+            {
                 // { followed by quote or backslash is JSON/escaped content, not interpolation.
                 // e.g. {"id":"value"} in a string literal — skip past matching }
                 let mut depth = 1;
                 for c in chars.by_ref() {
-                    if c == '{' { depth += 1; }
-                    else if c == '}' { depth -= 1; if depth == 0 { break; } }
+                    if c == '{' {
+                        depth += 1;
+                    } else if c == '}' {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
                 }
             } else if chars.peek() != Some(&'}') {
                 // Non-empty content inside braces - this is interpolation

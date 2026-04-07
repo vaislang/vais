@@ -52,10 +52,8 @@ fn test_sandbox_config_duplicate_capability_not_added() {
 
 #[test]
 fn test_sandbox_config_with_capabilities_dedup() {
-    let config = SandboxConfig::restrictive().with_capabilities(vec![
-        PluginCapability::Time,
-        PluginCapability::Time,
-    ]);
+    let config = SandboxConfig::restrictive()
+        .with_capabilities(vec![PluginCapability::Time, PluginCapability::Time]);
     let time_count = config
         .capabilities
         .iter()
@@ -307,7 +305,9 @@ fn test_dynload_error_version_incompatible_all_fields() {
 
 #[test]
 fn test_dynload_error_security_violation_display() {
-    let err = DynloadError::SecurityViolation("attempted filesystem write without capability".to_string());
+    let err = DynloadError::SecurityViolation(
+        "attempted filesystem write without capability".to_string(),
+    );
     let display = err.to_string();
     assert!(display.contains("attempted filesystem write"));
 }

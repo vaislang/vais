@@ -39,7 +39,10 @@ impl CodeGenerator {
         match result {
             Ok(r) => r,
             Err(_) => {
-                eprintln!("[WARN] Stack overflow during codegen of '{}' — skipping", f.name.node);
+                eprintln!(
+                    "[WARN] Stack overflow during codegen of '{}' — skipping",
+                    f.name.node
+                );
                 Ok(String::new())
             }
         }
@@ -307,7 +310,13 @@ impl CodeGenerator {
                             }
                             tmp
                         } else {
-                            self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                            self.coerce_int_width(
+                                &value,
+                                &val_llvm,
+                                &ret_llvm,
+                                &mut counter,
+                                &mut ir,
+                            )
                         }
                     } else {
                         value
@@ -369,11 +378,33 @@ impl CodeGenerator {
                                 // bitcast via alloca to reconcile.
                                 let tmp_alloca = self.next_temp(&mut counter);
                                 self.emit_entry_alloca(&tmp_alloca, &val_llvm);
-                                write_ir!(ir, "  store {} {}, {}* {}", val_llvm, value, val_llvm, tmp_alloca);
+                                write_ir!(
+                                    ir,
+                                    "  store {} {}, {}* {}",
+                                    val_llvm,
+                                    value,
+                                    val_llvm,
+                                    tmp_alloca
+                                );
                                 let cast_ptr = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = bitcast {}* {} to {}*", cast_ptr, val_llvm, tmp_alloca, ret_llvm);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast_ptr,
+                                    val_llvm,
+                                    tmp_alloca,
+                                    ret_llvm
+                                );
                                 let loaded = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = load {}, {}* {}{}", loaded, ret_llvm, ret_llvm, cast_ptr, ret_dbg);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}{}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    cast_ptr,
+                                    ret_dbg
+                                );
                                 write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                             } else {
                                 write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
@@ -428,12 +459,31 @@ impl CodeGenerator {
                                 && !ret_llvm.ends_with('*')
                             {
                                 let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}*",
+                                    tmp_ptr,
+                                    value,
+                                    ret_llvm
+                                );
                                 let loaded = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    tmp_ptr
+                                );
                                 loaded
                             } else {
-                                self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                                self.coerce_int_width(
+                                    &value,
+                                    &val_llvm,
+                                    &ret_llvm,
+                                    &mut counter,
+                                    &mut ir,
+                                )
                             }
                         } else {
                             value
@@ -709,12 +759,31 @@ impl CodeGenerator {
                                 && !ret_llvm.ends_with('*')
                             {
                                 let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp_ptr, value, ret_llvm);
+                                write_ir!(
+                                    ir,
+                                    "  {} = inttoptr i64 {} to {}*",
+                                    tmp_ptr,
+                                    value,
+                                    ret_llvm
+                                );
                                 let loaded = self.next_temp(&mut counter);
-                                write_ir!(ir, "  {} = load {}, {}* {}", loaded, ret_llvm, ret_llvm, tmp_ptr);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {}, {}* {}",
+                                    loaded,
+                                    ret_llvm,
+                                    ret_llvm,
+                                    tmp_ptr
+                                );
                                 loaded
                             } else {
-                                self.coerce_int_width(&value, &val_llvm, &ret_llvm, &mut counter, &mut ir)
+                                self.coerce_int_width(
+                                    &value,
+                                    &val_llvm,
+                                    &ret_llvm,
+                                    &mut counter,
+                                    &mut ir,
+                                )
                             }
                         } else {
                             value

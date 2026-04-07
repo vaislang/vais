@@ -17,16 +17,16 @@ use vais_types::{OwnershipChecker, TypeChecker};
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn check_ok(source: &str) {
-    let module = parse(source)
-        .unwrap_or_else(|e| panic!("Parse failed for:\n{source}\nErr: {e:?}"));
+    let module =
+        parse(source).unwrap_or_else(|e| panic!("Parse failed for:\n{source}\nErr: {e:?}"));
     let mut tc = TypeChecker::new();
     tc.check_module(&module)
         .unwrap_or_else(|e| panic!("Type check failed for:\n{source}\nErr: {e:?}"));
 }
 
 fn check_err(source: &str) {
-    let module = parse(source)
-        .unwrap_or_else(|e| panic!("Parse failed for:\n{source}\nErr: {e:?}"));
+    let module =
+        parse(source).unwrap_or_else(|e| panic!("Parse failed for:\n{source}\nErr: {e:?}"));
     let mut tc = TypeChecker::new();
     assert!(
         tc.check_module(&module).is_err(),

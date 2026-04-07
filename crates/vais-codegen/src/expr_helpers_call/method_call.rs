@@ -28,7 +28,9 @@ impl CodeGenerator {
             // try to recover concrete generics from the receiver expression context.
             if let ResolvedType::Named { name, generics } = &recv_type {
                 let has_concrete_generics = !generics.is_empty()
-                    && generics.iter().all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                    && generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
                 if !has_concrete_generics
                     && (name == "Vec" || name == "HashMap" || name == "Option")
                 {
@@ -44,17 +46,14 @@ impl CodeGenerator {
                             ResolvedType::Pointer(i) => i.as_ref(),
                             other => other,
                         };
-                        if let ResolvedType::Named {
-                            name: sname,
-                            ..
-                        } = inner
-                        {
+                        if let ResolvedType::Named { name: sname, .. } = inner {
                             let resolved = self.resolve_struct_name(sname);
                             for candidate in &[sname.as_str(), resolved.as_str()] {
                                 if let Some(si) = self.types.structs.get(*candidate) {
                                     for (fname, ftype) in &si.fields {
                                         if fname == &field.node {
-                                            if let ResolvedType::Named { generics: fg, .. } = ftype {
+                                            if let ResolvedType::Named { generics: fg, .. } = ftype
+                                            {
                                                 if !fg.is_empty() {
                                                     recv_type = ftype.clone();
                                                 }
@@ -63,14 +62,16 @@ impl CodeGenerator {
                                         }
                                     }
                                 }
-                                if !matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty()) {
+                                if !matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty())
+                                {
                                     break;
                                 }
                             }
                         }
                     }
                     // Strategy B: TC expr_types — try TC-resolved type
-                    if matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty()) {
+                    if matches!(&recv_type, ResolvedType::Named { generics, .. } if generics.is_empty())
+                    {
                         if let Some(tc_ty) = self.tc_expr_type(receiver) {
                             if let ResolvedType::Named { generics: tg, .. } = tc_ty {
                                 if !tg.is_empty() {
@@ -166,7 +167,9 @@ impl CodeGenerator {
 
             if !generics.is_empty() {
                 // Check if generics are all concrete (not Generic("T") or Var)
-                let all_concrete = generics.iter().all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                let all_concrete = generics
+                    .iter()
+                    .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
                 if all_concrete {
                     // Concrete generics: set substitutions and try mangled name.
@@ -199,13 +202,20 @@ impl CodeGenerator {
                             // Set substitutions for the resolved type
                             if let Some(dollar_pos) = resolved.find('$') {
                                 let type_suffix = &resolved[dollar_pos + 1..];
-                                let resolved_type = self.resolve_type_suffix_to_resolved(type_suffix);
-                                if let Some(struct_def) = self.generics.struct_defs.get(name).cloned() {
+                                let resolved_type =
+                                    self.resolve_type_suffix_to_resolved(type_suffix);
+                                if let Some(struct_def) =
+                                    self.generics.struct_defs.get(name).cloned()
+                                {
                                     for param in struct_def.generics.iter() {
-                                        if !matches!(param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
-                                            self.generics
-                                                .substitutions
-                                                .insert(param.name.node.clone(), resolved_type.clone());
+                                        if !matches!(
+                                            param.kind,
+                                            vais_ast::GenericParamKind::Lifetime { .. }
+                                        ) {
+                                            self.generics.substitutions.insert(
+                                                param.name.node.clone(),
+                                                resolved_type.clone(),
+                                            );
                                         }
                                     }
                                 }
@@ -457,39 +467,39 @@ impl CodeGenerator {
                             ))
                     };
                     if !skip_erasure {
-                    // Generic erasure: struct → i64 via alloca+store+ptrtoint
-                    if self.is_expr_value(arg) {
-                        let alloca_tmp = self.next_temp(counter);
-                        self.emit_entry_alloca(&alloca_tmp, &struct_llvm);
-                        write_ir!(
-                            ir,
-                            "  store {} {}, {}* {}",
-                            struct_llvm,
-                            val,
-                            struct_llvm,
-                            alloca_tmp
-                        );
-                        let ptr_tmp = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = ptrtoint {}* {} to i64",
-                            ptr_tmp,
-                            struct_llvm,
-                            alloca_tmp
-                        );
-                        val = ptr_tmp;
-                    } else {
-                        // val is already a pointer — just ptrtoint
-                        let ptr_tmp = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = ptrtoint {}* {} to i64",
-                            ptr_tmp,
-                            struct_llvm,
-                            val
-                        );
-                        val = ptr_tmp;
-                    }
+                        // Generic erasure: struct → i64 via alloca+store+ptrtoint
+                        if self.is_expr_value(arg) {
+                            let alloca_tmp = self.next_temp(counter);
+                            self.emit_entry_alloca(&alloca_tmp, &struct_llvm);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                struct_llvm,
+                                val,
+                                struct_llvm,
+                                alloca_tmp
+                            );
+                            let ptr_tmp = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = ptrtoint {}* {} to i64",
+                                ptr_tmp,
+                                struct_llvm,
+                                alloca_tmp
+                            );
+                            val = ptr_tmp;
+                        } else {
+                            // val is already a pointer — just ptrtoint
+                            let ptr_tmp = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = ptrtoint {}* {} to i64",
+                                ptr_tmp,
+                                struct_llvm,
+                                val
+                            );
+                            val = ptr_tmp;
+                        }
                     }
                 } else if !self.is_expr_value(arg) {
                     // Non-generic struct param: load from pointer
@@ -646,12 +656,7 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = load i64, i64* {}", old_es, es_ptr);
                         write_ir!(ir, "  store i64 {}, i64* {}", elem_size, es_ptr);
                         let needs_adjust = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = icmp eq i64 {}, 8",
-                            needs_adjust,
-                            old_es
-                        );
+                        write_ir!(ir, "  {} = icmp eq i64 {}, 8", needs_adjust, old_es);
                         let lbl_adjust = format!("vec_es_adjust.{}", counter);
                         let lbl_done = format!("vec_es_done.{}", counter);
                         *counter += 1;
@@ -723,8 +728,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> Option<String> {
         let _ = counter; // unused here, kept for API symmetry with the specialization variant
-        let arg_types: Vec<ResolvedType> =
-            args.iter().map(|a| self.infer_expr_type(a)).collect();
+        let arg_types: Vec<ResolvedType> = args.iter().map(|a| self.infer_expr_type(a)).collect();
         let informative_args: Vec<&ResolvedType> = arg_types
             .iter()
             .filter(|t| {
@@ -784,8 +788,7 @@ impl CodeGenerator {
         args: &[Spanned<Expr>],
         counter: &mut usize,
     ) -> Option<String> {
-        let arg_types: Vec<ResolvedType> =
-            args.iter().map(|a| self.infer_expr_type(a)).collect();
+        let arg_types: Vec<ResolvedType> = args.iter().map(|a| self.infer_expr_type(a)).collect();
         // Filter out non-informative types (I64 is the default fallback)
         let informative_args: Vec<&ResolvedType> = arg_types
             .iter()
@@ -809,9 +812,7 @@ impl CodeGenerator {
             .map(|s| {
                 s.generics
                     .iter()
-                    .filter(|g| {
-                        !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
-                    })
+                    .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
                     .count()
             })
             .unwrap_or(1);

@@ -206,13 +206,7 @@ impl CodeGenerator {
                 coll_val
             );
             let typed = self.next_temp(counter);
-            write_ir!(
-                ir,
-                "  {} = bitcast i8* {} to {}*",
-                typed,
-                raw,
-                elem_llvm_ty
-            );
+            write_ir!(ir, "  {} = bitcast i8* {} to {}*", typed, raw, elem_llvm_ty);
             typed
         } else if is_vec {
             // Vec: load data pointer from struct field 0 (stored as i64), cast to elem*

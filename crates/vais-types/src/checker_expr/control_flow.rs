@@ -231,7 +231,9 @@ impl TypeChecker {
                             // recover as Unit (void side-effect call in match arm)
                             use vais_ast::Expr;
                             match &arm.body.node {
-                                Expr::Call { .. } | Expr::MethodCall { .. } | Expr::StaticMethodCall { .. } => {
+                                Expr::Call { .. }
+                                | Expr::MethodCall { .. }
+                                | Expr::StaticMethodCall { .. } => {
                                     self.pop_scope();
                                     ResolvedType::Unit
                                 }

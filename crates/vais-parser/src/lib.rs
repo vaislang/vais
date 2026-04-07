@@ -87,10 +87,9 @@ impl ParseError {
             ),
             ParseError::UnexpectedEof { .. } => vais_i18n::get_simple(&key),
             ParseError::InvalidExpression => vais_i18n::get_simple(&key),
-            ParseError::DepthExceeded { max, .. } => vais_i18n::get(
-                &key,
-                &[("max", &max.to_string())],
-            ),
+            ParseError::DepthExceeded { max, .. } => {
+                vais_i18n::get(&key, &[("max", &max.to_string())])
+            }
         }
     }
 }
@@ -948,10 +947,9 @@ impl Parser {
             self.advance_skip();
             let mut brace_depth = 0;
             while !self.is_at_end() {
-                if self.check(&Token::LBrace)
-                    && brace_depth == 0 {
-                        break;
-                    }
+                if self.check(&Token::LBrace) && brace_depth == 0 {
+                    break;
+                }
                 if let Some(tok) = self.peek() {
                     if tok.token == Token::LBrace {
                         brace_depth += 1;
@@ -1145,10 +1143,10 @@ fn to_snake_case(s: &str) -> String {
     for c in s.chars() {
         if c.is_alphanumeric() {
             result.push(c.to_ascii_lowercase());
-        } else if (c == ' ' || c == '-' || c == '_')
-            && !result.is_empty() && !result.ends_with('_') {
-                result.push('_');
-            }
+        } else if (c == ' ' || c == '-' || c == '_') && !result.is_empty() && !result.ends_with('_')
+        {
+            result.push('_');
+        }
         // Skip other chars (punctuation, etc.)
     }
     // Remove trailing underscore

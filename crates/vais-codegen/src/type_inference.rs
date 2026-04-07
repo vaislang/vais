@@ -184,10 +184,8 @@ impl CodeGenerator {
         param_ty: &ResolvedType,
         inferred_ty: &ResolvedType,
     ) -> bool {
-        let param_is_slice = matches!(
-            param_ty,
-            ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
-        ) || matches!(param_ty, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+        let param_is_slice = matches!(param_ty, ResolvedType::Slice(_) | ResolvedType::SliceMut(_))
+            || matches!(param_ty, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
             if matches!(inner.as_ref(), ResolvedType::Slice(_) | ResolvedType::SliceMut(_)));
 
         if !param_is_slice {
@@ -288,22 +286,21 @@ impl CodeGenerator {
                     // When the struct/enum is actually registered, use the resolved name
                     // (which may be a mangled specialization). This ensures that cross-module
                     // field access generates correct IR when the struct is found in the registry.
-                    let resolved_name =
-                        if self.types.structs.contains_key(name.as_str())
-                            || self.types.enums.contains_key(name.as_str())
-                        {
-                            // Struct/enum is directly registered — use its canonical name.
-                            name.clone()
-                        } else if self.generics.generated_structs.contains_key(name.as_str()) {
-                            // Already a specialized/mangled struct name (e.g., "Point$i64").
-                            name.clone()
-                        } else if let Some(mangled) = self.generics.struct_aliases.get(name.as_str()) {
-                            // Base generic name has a registered specialization alias.
-                            mangled.clone()
-                        } else {
-                            // Not found anywhere — return as-is; may be resolved later.
-                            name.clone()
-                        };
+                    let resolved_name = if self.types.structs.contains_key(name.as_str())
+                        || self.types.enums.contains_key(name.as_str())
+                    {
+                        // Struct/enum is directly registered — use its canonical name.
+                        name.clone()
+                    } else if self.generics.generated_structs.contains_key(name.as_str()) {
+                        // Already a specialized/mangled struct name (e.g., "Point$i64").
+                        name.clone()
+                    } else if let Some(mangled) = self.generics.struct_aliases.get(name.as_str()) {
+                        // Base generic name has a registered specialization alias.
+                        mangled.clone()
+                    } else {
+                        // Not found anywhere — return as-is; may be resolved later.
+                        name.clone()
+                    };
                     ResolvedType::Named {
                         name: resolved_name,
                         generics: vec![],
@@ -589,17 +586,19 @@ impl CodeGenerator {
                             ref name,
                             ref generics,
                         } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
-                        ResolvedType::Ref(ref inner)
-                        | ResolvedType::RefMut(ref inner) => match inner.as_ref() {
-                            ResolvedType::Named {
-                                ref name,
-                                ref generics,
-                            } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
-                            ResolvedType::Slice(elem)
-                            | ResolvedType::SliceMut(elem) => *elem.clone(),
-                            ResolvedType::Array(elem) => *elem.clone(),
-                            _ => ResolvedType::I64,
-                        },
+                        ResolvedType::Ref(ref inner) | ResolvedType::RefMut(ref inner) => {
+                            match inner.as_ref() {
+                                ResolvedType::Named {
+                                    ref name,
+                                    ref generics,
+                                } if name == "Vec" && !generics.is_empty() => generics[0].clone(),
+                                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                                    *elem.clone()
+                                }
+                                ResolvedType::Array(elem) => *elem.clone(),
+                                _ => ResolvedType::I64,
+                            }
+                        }
                         _ => ResolvedType::I64,
                     }
                 }
@@ -609,7 +608,10 @@ impl CodeGenerator {
                 ResolvedType::I64
             }
             Expr::MethodCall {
-                receiver, method, args, ..
+                receiver,
+                method,
+                args,
+                ..
             } => {
                 // Get method return type from struct definition
                 let recv_type = self.infer_expr_type(receiver);
@@ -670,8 +672,7 @@ impl CodeGenerator {
                     // Strategy 1: use receiver's generic args to construct mangled name
                     // (e.g., Cell<bool>.get() -> Cell_get$bool)
                     if !generics.is_empty() {
-                        let mangled =
-                            vais_types::mangle_name(&method_name, generics);
+                        let mangled = vais_types::mangle_name(&method_name, generics);
                         if let Some(fn_info) = self.types.functions.get(&mangled) {
                             return fn_info.signature.ret.clone();
                         }
@@ -762,20 +763,20 @@ impl CodeGenerator {
                 ResolvedType::I64
             }
             Expr::StaticMethodCall {
-                type_name, method, args,
+                type_name,
+                method,
+                args,
             } => {
                 // Get static method return type from function info.
                 // Check specialized versions first via fn_instantiations so
                 // generic return types (e.g., Box<T>) are resolved to concrete
                 // types (e.g., Box<i64>) when a specialization exists.
                 let method_name = format!("{}_{}", type_name.node, method.node);
-                if let Some(inst_list) =
-                    self.generics.fn_instantiations.get(&method_name).cloned()
+                if let Some(inst_list) = self.generics.fn_instantiations.get(&method_name).cloned()
                 {
                     let arg_types: Vec<ResolvedType> =
                         args.iter().map(|a| self.infer_expr_type(a)).collect();
-                    let mangled =
-                        self.resolve_generic_call(&method_name, &arg_types, &inst_list);
+                    let mangled = self.resolve_generic_call(&method_name, &arg_types, &inst_list);
                     if let Some(fn_info) = self.types.functions.get(&mangled) {
                         return fn_info.signature.ret.clone();
                     }

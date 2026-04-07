@@ -358,7 +358,11 @@ F main() -> i64 {
     std::fs::write("/tmp/vais_debug_enum_str.ll", &ir).ok();
     let result = compile_and_run(source).expect("compile and run");
     assert_eq!(result.exit_code, 42);
-    assert!(result.stdout.contains("world"), "stdout should contain 'world', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("world"),
+        "stdout should contain 'world', got: {}",
+        result.stdout
+    );
 }
 
 #[test]

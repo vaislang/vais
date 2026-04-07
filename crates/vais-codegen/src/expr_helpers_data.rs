@@ -396,9 +396,11 @@ impl CodeGenerator {
             vais_types::ResolvedType::Named {
                 ref name,
                 ref generics,
-            } if name == "Vec" && !generics.is_empty() => {
-                (self.type_to_llvm(&generics[0]), false, Some(generics[0].clone()))
-            }
+            } if name == "Vec" && !generics.is_empty() => (
+                self.type_to_llvm(&generics[0]),
+                false,
+                Some(generics[0].clone()),
+            ),
             // &Vec<T>[idx]
             vais_types::ResolvedType::Ref(ref inner)
             | vais_types::ResolvedType::RefMut(ref inner) => {
@@ -406,14 +408,18 @@ impl CodeGenerator {
                     vais_types::ResolvedType::Named {
                         ref name,
                         ref generics,
-                    } if name == "Vec" && !generics.is_empty() => {
-                        (self.type_to_llvm(&generics[0]), false, Some(generics[0].clone()))
-                    }
+                    } if name == "Vec" && !generics.is_empty() => (
+                        self.type_to_llvm(&generics[0]),
+                        false,
+                        Some(generics[0].clone()),
+                    ),
                     vais_types::ResolvedType::Slice(ref elem)
                     | vais_types::ResolvedType::SliceMut(ref elem) => {
                         (self.type_to_llvm(elem), true, None)
                     }
-                    vais_types::ResolvedType::Array(ref elem) => (self.type_to_llvm(elem), false, None),
+                    vais_types::ResolvedType::Array(ref elem) => {
+                        (self.type_to_llvm(elem), false, None)
+                    }
                     _ => {
                         // Treat as i64 pointer indexing
                         ("i64".to_string(), false, None)
@@ -697,7 +703,10 @@ impl CodeGenerator {
                         write_ir!(
                             ir,
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                            tag_ptr, name, name, enum_ptr
+                            tag_ptr,
+                            name,
+                            name,
+                            enum_ptr
                         );
                         write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
                         return Ok((enum_ptr, ir));
@@ -716,7 +725,9 @@ impl CodeGenerator {
 
         // Unwrap Ref/RefMut/Pointer to get the inner Named type (for &self and *T patterns)
         let resolved_type = match &obj_type {
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) | ResolvedType::Pointer(inner) => inner.as_ref(),
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
             other => other,
         };
 
@@ -730,10 +741,8 @@ impl CodeGenerator {
             // was not found in types.structs or struct_aliases. Also check generated_structs
             // (specialized types like Cell$bool) and fall back to the base struct name
             // (stripping the '$' mangling suffix) if still not found.
-            let type_name = if self.types.structs.contains_key(&type_name) {
-                type_name
-            } else if self.generics.generated_structs.contains_key(&type_name)
-                && self.types.structs.contains_key(&type_name)
+            let type_name = if self.types.structs.contains_key(&type_name)
+                || self.generics.generated_structs.contains_key(&type_name)
             {
                 type_name
             } else if type_name.contains('$') {
@@ -743,8 +752,16 @@ impl CodeGenerator {
                     type_name
                 } else {
                     // Fall back to base name (before '$') to get field layout
-                    let base = type_name.split('$').next().unwrap_or(&type_name).to_string();
-                    if self.types.structs.contains_key(&base) { base } else { type_name }
+                    let base = type_name
+                        .split('$')
+                        .next()
+                        .unwrap_or(&type_name)
+                        .to_string();
+                    if self.types.structs.contains_key(&base) {
+                        base
+                    } else {
+                        type_name
+                    }
                 }
             } else {
                 type_name
@@ -925,13 +942,25 @@ impl CodeGenerator {
             None
         });
 
-        if let Some(ResolvedType::Named { name: ref fallback_name, .. }) = fallback_type {
+        if let Some(ResolvedType::Named {
+            name: ref fallback_name,
+            ..
+        }) = fallback_type
+        {
             let type_name = self.resolve_struct_name(fallback_name);
             let type_name = if self.types.structs.contains_key(&type_name) {
                 type_name
             } else if type_name.contains('$') {
-                let base = type_name.split('$').next().unwrap_or(&type_name).to_string();
-                if self.types.structs.contains_key(&base) { base } else { type_name }
+                let base = type_name
+                    .split('$')
+                    .next()
+                    .unwrap_or(&type_name)
+                    .to_string();
+                if self.types.structs.contains_key(&base) {
+                    base
+                } else {
+                    type_name
+                }
             } else {
                 type_name
             };
