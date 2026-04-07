@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775568383916,
+  "lastUpdate": 1775570840717,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34295,6 +34295,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 710706,
             "range": "± 7671",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "7f927c039609c1841953217d976dd2ccfc399dfd",
+          "message": "fix(test): update alloc_tracker test to match disabled cleanup behavior\n\ngenerate_alloc_cleanup is disabled (returns empty) to prevent use-after-free.\nUpdate test_alloc_tracker_string_concat to test track_alloc store IR and\nverify cleanup returns empty, matching actual behavior.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-07T23:02:21+09:00",
+          "tree_id": "d53c4c969f60e8c7a5eb9ec238bb90859f40a75c",
+          "url": "https://github.com/vaislang/vais/commit/7f927c039609c1841953217d976dd2ccfc399dfd"
+        },
+        "date": 1775570840213,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 4013,
+            "range": "± 211",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7836,
+            "range": "± 178",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8916,
+            "range": "± 97",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 15645,
+            "range": "± 404",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 20070,
+            "range": "± 170",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 38199,
+            "range": "± 219",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 35633,
+            "range": "± 144",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 75373,
+            "range": "± 2060",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 298264,
+            "range": "± 1138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 458078,
+            "range": "± 4404",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 110690,
+            "range": "± 1317",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 788507,
+            "range": "± 8629",
             "unit": "ns/iter"
           }
         ]
