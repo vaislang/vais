@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775574863762,
+  "lastUpdate": 1775679428714,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34583,6 +34583,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 796945,
             "range": "± 2014",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "8a052ea8fe16e0ee424579643cd6935405b86a16",
+          "message": "feat: Phase 186 — comprehensive structure improvement (15 tasks, all 5 areas)\n\nCompiler Core:\n- Audit codegen type_inference.rs (document why re-inference is needed)\n- Split codegen tests.rs + expr_helpers.rs into focused modules\n\nEcosystem:\n- Add vais-server integration tests (4 modules × 5 tests)\n- Fix vaisdb StringMap cross-module + circular import workaround\n- Define vais-web ↔ vais-server SSR bridge (OpenAPI 3.0 + endpoints)\n\nDX/Tooling:\n- IntelliJ plugin: full LSP + DAP integration (buildPlugin succeeds)\n- Playground: real-time error markers, URL code sharing, WASM lazy load\n- LSP: rename refactoring + workspace-wide diagnostics\n- CLI: version check with GitHub Releases API (24h cache)\n\nQuality/CI:\n- Add cargo-deny job, coverage gate (60%+), bench dashboard to gh-pages\n- Skip flaky Windows test_storage_archive_path_format\n\nArchitecture:\n- Selfhost token ID unification (constants.vais ↔ token.vais)\n- Std library: doc-comments for 20 modules + README with 87-module table\n- Node.js bindings: 15 JS tests with built-in test runner\n- FFI bindgen: C++ class → vais struct mapping with constructor/destructor\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-09T05:12:23+09:00",
+          "tree_id": "60594f09352071890812c69085ffe977463e126a",
+          "url": "https://github.com/vaislang/vais/commit/8a052ea8fe16e0ee424579643cd6935405b86a16"
+        },
+        "date": 1775679428051,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3165,
+            "range": "± 316",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 6413,
+            "range": "± 552",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 7750,
+            "range": "± 592",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 13047,
+            "range": "± 1077",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17629,
+            "range": "± 52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34406,
+            "range": "± 200",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 31751,
+            "range": "± 93",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66086,
+            "range": "± 273",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 283973,
+            "range": "± 5932",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 427854,
+            "range": "± 4301",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 122382,
+            "range": "± 1342",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 724277,
+            "range": "± 5745",
             "unit": "ns/iter"
           }
         ]
