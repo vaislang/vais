@@ -1,0 +1,15 @@
+test lexer/tokenize/fibonacci ... bench:       3,165 ns/iter (+/- 316)
+test lexer/tokenize/sort ... bench:       6,413 ns/iter (+/- 552)
+test lexer/tokenize/struct_heavy ... bench:       7,750 ns/iter (+/- 592)
+test lexer/tokenize/complex ... bench:      13,047 ns/iter (+/- 1,077)
+
+test parser/parse/fibonacci ... bench:      17,629 ns/iter (+/- 52)
+test parser/parse/sort ... bench:      34,406 ns/iter (+/- 200)
+test parser/parse/struct_heavy ... bench:      31,751 ns/iter (+/- 93)
+test parser/parse/complex ... bench:      66,086 ns/iter (+/- 273)
+
+test type_checker/check/fibonacci ... bench:     283,973 ns/iter (+/- 5,932)
+test type_checker/check/sort ... bench:     427,854 ns/iter (+/- 4,301)
+test type_checker/check/struct_heavy ... bench:     122,382 ns/iter (+/- 1,342)
+test type_checker/check/complex ... bench:     724,277 ns/iter (+/- 5,745)
+
