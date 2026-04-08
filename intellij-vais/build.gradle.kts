@@ -20,7 +20,7 @@ dependencies {
 intellij {
     version.set("2023.3")
     type.set("IC") // IntelliJ IDEA Community Edition
-    plugins.set(listOf(/* Plugin Dependencies */))
+    plugins.set(listOf("com.intellij.java"))
 }
 
 tasks {
@@ -35,7 +35,7 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("233")
-        untilBuild.set("241.*")
+        untilBuild.set("243.*")
     }
 
     signPlugin {

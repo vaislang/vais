@@ -324,7 +324,7 @@ X Lexer {
             # self (115='s', 101='e', 108='l', 102='f')
             I c0 == 115 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF(), start, self.pos) }
             # Self (83='S', 101='e', 108='l', 102='f')
-            I c0 == 83 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF_UPPER(), start, self.pos) }
+            I c0 == 83 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF_TYPE(), start, self.pos) }
             # move (109='m', 111='o', 118='v', 101='e')
             I c0 == 109 && c1 == 111 && c2 == 118 && c3 == 101 { R token_simple(TOK_KW_MOVE(), start, self.pos) }
             # lazy (108='l', 97='a', 122='z', 121='y')

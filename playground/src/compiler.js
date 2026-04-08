@@ -25,7 +25,7 @@ export class VaisCompiler {
   }
 
   async initialize() {
-    // Try server first
+    // Try server first (fast health check)
     try {
       const response = await fetch(`${this.apiUrl}/api/health`, {
         signal: AbortSignal.timeout(2000),
@@ -41,32 +41,35 @@ export class VaisCompiler {
       console.warn('Playground server not available');
     }
 
-    // If no server, check if WASM compilation endpoint is available
+    // WASM availability check is deferred until first compile attempt
+    // to avoid blocking initial page load with a 5s timeout probe.
     if (!this.serverAvailable) {
-      try {
-        const response = await fetch(`${this.apiUrl}/api/compile-wasm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: 'F main()->i64{0}', target: 'wasm32' }),
-          signal: AbortSignal.timeout(5000),
-        });
-        if (response.ok) {
-          this.wasmAvailable = true;
-          this.mode = MODE_WASM;
-          console.log('WASM compilation available');
-        }
-      } catch {
-        // WASM compilation not available either
-      }
-    }
-
-    if (!this.serverAvailable && !this.wasmAvailable) {
       this.mode = MODE_MOCK;
-      console.warn('Using mock mode (server and WASM both unavailable)');
     }
 
     this.isReady = true;
     return true;
+  }
+
+  /** Lazy WASM probe: called on first compile when server is unavailable */
+  async _probeWasm() {
+    if (this._wasmProbed) return;
+    this._wasmProbed = true;
+    try {
+      const response = await fetch(`${this.apiUrl}/api/compile-wasm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'F main()->i64{0}', target: 'wasm32' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (response.ok) {
+        this.wasmAvailable = true;
+        this.mode = MODE_WASM;
+        console.log('WASM compilation available');
+      }
+    } catch {
+      // WASM compilation not available
+    }
   }
 
   /** Get current compilation mode */
@@ -95,6 +98,20 @@ export class VaisCompiler {
     return this.mockCompile(sourceCode);
   }
 
+  /**
+   * Compile-only (no execution) — used for live error checking.
+   * Falls back to mockCompile when server is unavailable.
+   */
+  async compileOnly(sourceCode) {
+    if (!this.isReady) {
+      await this.initialize();
+    }
+    if (this.serverAvailable) {
+      return this.serverCompile(sourceCode, { execute: false, emit_ir: false, target: 'native' });
+    }
+    return this.mockCompile(sourceCode);
+  }
+
   async execute(ir) {
     // Mock execution for fallback
     return this.mockExecute(ir);
@@ -103,6 +120,11 @@ export class VaisCompiler {
   async compileAndRun(sourceCode, target = 'native') {
     if (!this.isReady) {
       await this.initialize();
+    }
+
+    // Lazy WASM probe on first actual compile (not at startup)
+    if (!this.serverAvailable && !this._wasmProbed) {
+      await this._probeWasm();
     }
 
     // Handle JS target - compile only, no execution

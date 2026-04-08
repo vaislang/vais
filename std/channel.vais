@@ -1,3 +1,74 @@
+# ============================================================================
+# Module: channel
+# ============================================================================
+#
+# CSP(Communicating Sequential Processes) 스타일의 채널 통신 모듈입니다.
+# 스레드 간 메시지 패싱을 위한 유계(bounded) 및 무계(unbounded) 채널을 제공합니다.
+#
+# 구현 방식:
+#   - 유계 채널: 링 버퍼 + mutex/condvar 동기화
+#   - 무계 채널: 연결 리스트 기반 큐
+#
+# 참고:
+#   기본 Channel<T>, Sender<T>, Receiver<T>는 std/sync에 정의됨.
+#   이 모듈은 UnboundedChannel과 channel_select를 추가합니다.
+#
+# 주요 타입:
+#   UnboundedSender<T>    - 무계 채널 송신 측 핸들
+#   UnboundedReceiver<T>  - 무계 채널 수신 측 핸들
+#   SelectSet             - 다중 채널 폴링 집합
+#
+# 주요 함수:
+#   unbounded_channel<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>)
+#                           - 무계 채널 생성 (쌍 반환)
+#   channel_select(set, timeout_ms) -> i64
+#                           - 준비된 채널 인덱스 반환 (-1이면 타임아웃)
+#
+# UnboundedSender 메서드:
+#   .send(val)              - 값 전송 (블로킹 없음)
+#   .close()                - 채널 닫기
+#   .is_closed() -> i64     - 채널 닫힘 여부
+#
+# UnboundedReceiver 메서드:
+#   .recv() -> Option<T>    - 값 수신 (None이면 채널 닫힘 + 비어있음)
+#   .try_recv() -> Option<T> - 비블로킹 수신 시도
+#   .close()                - 수신 측 핸들 닫기
+#
+# SelectSet 메서드:
+#   SelectSet::new()               - 새 SelectSet 생성
+#   .add_receiver(recv)            - 수신 채널 등록
+#   .add_sender(send, val)         - 송신 채널 등록
+#
+# 사용 예제:
+#
+#   U std/channel
+#
+#   # 무계 채널 생성
+#   (tx, rx) := unbounded_channel()
+#
+#   # 다른 스레드에서 전송
+#   spawn {
+#       tx.send(42)
+#       tx.send(100)
+#       tx.close()
+#   }
+#
+#   # 수신 루프
+#   L {
+#       val := rx.recv()
+#       M val {
+#           Some(v) => print("received: {v}"),
+#           None    => B   # 채널 닫힘
+#       }
+#   }
+#
+#   # 다중 채널 select
+#   set := SelectSet::new()
+#   set.add_receiver(rx1)
+#   set.add_receiver(rx2)
+#   idx := channel_select(set, 1000)  # 최대 1초 대기
+#   print("ready channel: {idx}")
+#
 # channel.vais - CSP-style channel communication
 #
 # Provides bounded and unbounded channels for concurrent message passing.

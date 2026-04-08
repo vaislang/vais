@@ -1,3 +1,56 @@
+# ============================================================================
+# Module: random
+# ============================================================================
+#
+# 의사 난수 생성(PRNG) 모듈입니다.
+# Linear Congruential Generator(LCG)와 C 표준 라이브러리 rand/srand를 조합하여
+# 빠르고 재현 가능한 난수 시퀀스를 생성합니다.
+#
+# 알고리즘:
+#   LCG: Xn+1 = (A * Xn + C) mod M
+#   A = 1103515245 (multiplier)
+#   C = 12345 (increment)
+#   M = 2^31 (modulus)
+#
+# 주요 상수:
+#   LCG_A = 1103515245   # 곱수
+#   LCG_C = 12345        # 증분
+#   LCG_M = 2147483648   # 모듈러스 (2^31)
+#
+# 주요 함수:
+#   random_seed(seed: i64)           - 전역 LCG 시드 설정
+#   random_next() -> i64             - 다음 LCG 난수 생성 (0..LCG_M)
+#   random_range(min, max: i64) -> i64 - [min, max) 범위 정수 난수
+#   random_bool() -> i64             - 0 또는 1 랜덤 반환
+#   random_f64() -> f64              - [0.0, 1.0) 범위 실수 난수
+#   random_f64_range(lo, hi: f64) -> f64 - [lo, hi) 범위 실수 난수
+#   random_shuffle(arr, len: i64)    - 배열 원소 Fisher-Yates 셔플
+#   random_choice(arr, len: i64) -> i64 - 배열에서 임의 원소 선택
+#
+# 외부 함수:
+#   srand(seed: i64) -> i64          - C rand 시드 초기화
+#   rand() -> i64                    - C rand() 호출
+#
+# 사용 예제:
+#
+#   U std/random
+#
+#   # 시드 초기화
+#   random_seed(42)
+#
+#   # 정수 난수
+#   n := random_range(1, 100)
+#   print("dice roll: {n}")
+#
+#   # 실수 난수
+#   f := random_f64()
+#   print("random float: {f}")
+#
+#   # 배열 셔플
+#   arr := malloc(5 * 8)
+#   # ... 배열 초기화 ...
+#   random_shuffle(arr, 5)
+#
 # Random number generation library
 # Provides pseudo-random number generation using Linear Congruential Generator (LCG)
 # and C standard library rand/srand functions

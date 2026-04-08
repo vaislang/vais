@@ -1,7 +1,28 @@
-//! Type inference utilities for Vais code generator
+//! Type inference utilities for Vais code generator.
 //!
-//! This module contains functions for inferring types of expressions
-//! and blocks during code generation.
+//! ## Why codegen re-infers types
+//!
+//! The type checker (vais-types) resolves all types at the semantic level,
+//! but codegen needs additional type information that the TC doesn't provide:
+//!
+//! - **Block type** (`infer_block_type`): determines LLVM phi node types for
+//!   if-else/match expressions. The TC resolves the overall expression type,
+//!   but codegen needs to know the type of each branch independently.
+//!
+//! - **Value vs pointer** (`is_expr_value`): struct literals produce alloca
+//!   pointers, while function calls produce SSA values. This distinction is
+//!   purely an IR concern — the TC doesn't track it.
+//!
+//! - **Expression type** (`infer_expr_type`): used for integer width coercion,
+//!   struct-to-i64 erasure, and cross-module type tag resolution. The TC result
+//!   is available via `tc_expr_type()` (span-keyed lookup) but not yet integrated
+//!   into all codegen paths.
+//!
+//! ## Future optimization
+//!
+//! When `expr_types` (span→ResolvedType map from TC) is fully integrated,
+//! many `infer_expr_type` calls can be replaced with `tc_expr_type()` lookups,
+//! reducing redundant AST traversal in codegen.
 
 use crate::CodeGenerator;
 use vais_ast::{BinOp, Expr, Spanned, Stmt};

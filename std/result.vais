@@ -1,3 +1,55 @@
+# ============================================================================
+# Module: result
+# ============================================================================
+#
+# 성공 또는 실패를 표현하는 Result<T, E> 타입 모듈입니다.
+# 예외 대신 명시적인 Ok(T) / Err(E) 변형으로 오류를 전파합니다.
+# Rust의 Result<T, E>와 동일한 의미론을 따릅니다.
+#
+# 주요 타입:
+#   Result<T, E>   - 열거형: Ok(T) | Err(E)
+#                    태그(i32): 0 = Ok, 1 = Err
+#
+# 주요 메서드:
+#   .is_ok()              - 성공이면 1, 실패이면 0
+#   .is_err()             - 실패이면 1, 성공이면 0
+#   .unwrap()             - Ok 값 추출; Err이면 패닉
+#   .unwrap_err()         - Err 값 추출; Ok이면 패닉
+#   .unwrap_or(default)   - Ok 값 추출; Err이면 default 반환
+#   .map(f)               - Ok이면 f 적용, Err이면 그대로
+#   .map_err(f)           - Err이면 f 적용, Ok이면 그대로
+#   .and_then(f)          - Ok이면 f 적용(Result 반환), Err이면 그대로
+#   .or_else(f)           - Err이면 f 적용(Result 반환), Ok이면 그대로
+#   .expect(msg)          - Ok 값 추출; Err이면 msg와 함께 패닉
+#
+# 연산자:
+#   ?   - try 연산자: Err이면 현재 함수에서 Err 조기 반환
+#   !   - unwrap 연산자: Ok 값 추출 (Err이면 패닉)
+#
+# 사용 예제:
+#
+#   U std/result
+#
+#   # Result 생성
+#   ok_val: Result<i64, str> = Ok(100)
+#   err_val: Result<i64, str> = Err("something went wrong")
+#
+#   # 분기 처리
+#   M ok_val {
+#       Ok(v)  => print("success: {v}"),
+#       Err(e) => print("error: {e}")
+#   }
+#
+#   # ? 연산자로 오류 전파
+#   F parse_num(s: str) -> Result<i64, str> {
+#       n := try_parse_i64(s)?
+#       Ok(n * 2)
+#   }
+#
+#   # 체이닝
+#   result := ok_val.map(|x| x + 1).unwrap_or(0)
+#   print("{result}")   # 출력: 101
+#
 # Result type - represents success or failure
 # Ok(T) or Err(E)
 # Layout: {i32 tag, i64 value} where tag=0 is Ok, tag=1 is Err

@@ -1,3 +1,69 @@
+# ============================================================================
+# Module: net
+# ============================================================================
+#
+# TCP/UDP 소켓 네트워크 연산 모듈입니다.
+# BSD 소켓 API를 extern C 함수로 감싸 플랫폼 중립적인 인터페이스를 제공합니다.
+# 호스트 주소는 null-terminated 문자열(예: "127.0.0.1"), 포트는 i64로 전달합니다.
+#
+# 주요 상수:
+#   AF_INET           = 2    # IPv4 주소 패밀리
+#   AF_INET6          = 30   # IPv6 주소 패밀리 (macOS), 10 (Linux)
+#   SOCK_STREAM       = 1    # TCP 소켓
+#   SOCK_DGRAM        = 2    # UDP 소켓
+#   IPPROTO_TCP       = 6    # TCP 프로토콜
+#   IPPROTO_UDP       = 17   # UDP 프로토콜
+#   INADDR_ANY        = 0    # 모든 인터페이스에 바인딩
+#   NET_ERR_SOCKET    = -1   # 소켓 생성 실패
+#   NET_ERR_CONNECT   = -2   # 연결 실패
+#   NET_ERR_BIND      = -3   # 바인드 실패
+#
+# 주요 함수:
+#   tcp_connect(host, port)           - TCP 클라이언트 소켓 연결 (Result<i64, i64>)
+#   tcp_listen(port, backlog)         - TCP 서버 소켓 바인딩 + 리슨 (Result<i64, i64>)
+#   tcp_accept(server_fd)             - 클라이언트 연결 수락 (Result<i64, i64>)
+#   net_send(fd, buf, len)            - 데이터 송신 (Result<i64, i64>)
+#   net_recv(fd, buf, len)            - 데이터 수신 (Result<i64, i64>)
+#   net_close(fd)                     - 소켓 닫기
+#   udp_socket()                      - UDP 소켓 생성 (Result<i64, i64>)
+#   udp_bind(fd, port)                - UDP 소켓 바인딩 (Result<i64, i64>)
+#   udp_sendto(fd, buf, len, host, port) - UDP 데이터그램 송신
+#   udp_recvfrom(fd, buf, len)        - UDP 데이터그램 수신
+#
+# 사용 예제:
+#
+#   U std/net
+#
+#   # TCP 클라이언트 연결
+#   conn := tcp_connect("127.0.0.1", 8080)
+#   M conn {
+#       Ok(fd) => {
+#           msg := "GET / HTTP/1.0\r\n\r\n"
+#           net_send(fd, msg, strlen(msg))
+#           buf := malloc(4096)
+#           n := net_recv(fd, buf, 4096)
+#           net_close(fd)
+#           free(buf)
+#       },
+#       Err(e) => print("connect error: {e}")
+#   }
+#
+#   # TCP 서버
+#   server := tcp_listen(8080, 128)
+#   M server {
+#       Ok(srv_fd) => {
+#           client := tcp_accept(srv_fd)
+#           M client {
+#               Ok(cli_fd) => {
+#                   net_send(cli_fd, "Hello!\n", 7)
+#                   net_close(cli_fd)
+#               },
+#               Err(e) => print("accept error: {e}")
+#           }
+#       },
+#       Err(e) => print("listen error: {e}")
+#   }
+#
 # Net library - network operations (TCP/UDP sockets)
 # Uses BSD socket API via extern C functions
 #

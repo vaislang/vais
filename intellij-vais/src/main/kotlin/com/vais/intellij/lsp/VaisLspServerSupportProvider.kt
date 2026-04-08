@@ -11,11 +11,29 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * LSP client and server manager for Vais language.
+ * LSP server support provider for Vais language.
  *
- * Manages LSP server lifecycle per project. Provides document synchronization
- * (didOpen/didClose/didChange) and exposes the LSP server for IDE features
- * like completion, hover, go-to-definition, and references.
+ * Entry point for IntelliJ's LSP integration. Manages one LSP connection
+ * per project, delegates to VaisLspManager for lifecycle control.
+ */
+class VaisLspServerSupportProvider {
+
+    fun fileSupported(extension: String?): Boolean = extension == "vais"
+
+    fun ensureStarted(project: Project): VaisLspConnection? =
+        VaisLspManager.getInstance().startServer(project)
+
+    fun getConnection(project: Project): VaisLspConnection? =
+        VaisLspManager.getInstance().getConnection(project)
+}
+
+/**
+ * LSP manager singleton: one connection per project basePath.
+ *
+ * Manages the connection to vais-lsp binary via LSP4J.
+ * Provides document synchronization (didOpen/didChange/didClose/didSave)
+ * and exposes the server proxy for completion, hover, go-to-definition,
+ * diagnostics, and other LSP features.
  */
 class VaisLspManager private constructor() {
     private val logger = Logger.getInstance(VaisLspManager::class.java)
@@ -39,13 +57,11 @@ class VaisLspManager private constructor() {
     fun startServer(project: Project): VaisLspConnection? {
         val basePath = project.basePath ?: return null
 
-        if (servers.containsKey(basePath)) {
-            return servers[basePath]
-        }
+        servers[basePath]?.takeIf { it.isAlive() }?.let { return it }
 
         val descriptor = VaisLspServerDescriptor(project)
         if (!descriptor.isLspAvailable()) {
-            logger.warn("vais-lsp binary not found")
+            logger.warn("vais-lsp binary not found, skipping LSP startup")
             return null
         }
 
@@ -54,7 +70,7 @@ class VaisLspManager private constructor() {
             val process = commandLine.createProcess()
 
             val client = VaisLanguageClient()
-            val launcher = LSPLauncher.createClientLauncher(
+            val launcher: Launcher<LanguageServer> = LSPLauncher.createClientLauncher(
                 client,
                 process.inputStream,
                 process.outputStream
@@ -63,7 +79,8 @@ class VaisLspManager private constructor() {
             launcher.startListening()
             val server = launcher.remoteProxy
 
-            // Initialize the server with comprehensive capabilities
+            // Initialize with full client capabilities for completion, hover,
+            // goto-definition, diagnostics, inlay hints, signature help, code actions.
             val initParams = InitializeParams().apply {
                 rootUri = "file://$basePath"
                 capabilities = ClientCapabilities().apply {
@@ -90,9 +107,15 @@ class VaisLspManager private constructor() {
                         references = ReferencesCapabilities().apply {
                             dynamicRegistration = true
                         }
-                        formatting = FormattingCapabilities()
-                        diagnostic = DiagnosticCapabilities()
-                        signatureHelp = SignatureHelpCapabilities()
+                        formatting = FormattingCapabilities().apply {
+                            dynamicRegistration = true
+                        }
+                        diagnostic = DiagnosticCapabilities().apply {
+                            dynamicRegistration = true
+                        }
+                        signatureHelp = SignatureHelpCapabilities().apply {
+                            dynamicRegistration = true
+                        }
                         documentSymbol = DocumentSymbolCapabilities().apply {
                             dynamicRegistration = true
                         }
@@ -132,10 +155,10 @@ class VaisLspManager private constructor() {
 }
 
 /**
- * Represents an active LSP connection.
+ * An active LSP connection to vais-lsp.
  *
- * Provides convenience methods for document synchronization and
- * LSP feature requests.
+ * Wraps the LSP4J server proxy and provides convenience methods for
+ * document synchronization notifications required by the protocol.
  */
 class VaisLspConnection(
     val server: LanguageServer,
@@ -143,11 +166,8 @@ class VaisLspConnection(
     val client: VaisLanguageClient
 ) {
     private val logger = Logger.getInstance(VaisLspConnection::class.java)
-    private var documentVersion = ConcurrentHashMap<String, Int>()
+    private val documentVersion = ConcurrentHashMap<String, Int>()
 
-    /**
-     * Notify the server that a document was opened.
-     */
     fun didOpen(uri: String, text: String) {
         documentVersion[uri] = 1
         server.textDocumentService.didOpen(
@@ -157,9 +177,6 @@ class VaisLspConnection(
         )
     }
 
-    /**
-     * Notify the server that a document was changed.
-     */
     fun didChange(uri: String, text: String) {
         val version = (documentVersion[uri] ?: 0) + 1
         documentVersion[uri] = version
@@ -171,33 +188,20 @@ class VaisLspConnection(
         )
     }
 
-    /**
-     * Notify the server that a document was closed.
-     */
     fun didClose(uri: String) {
         documentVersion.remove(uri)
         server.textDocumentService.didClose(
-            DidCloseTextDocumentParams(
-                TextDocumentIdentifier(uri)
-            )
+            DidCloseTextDocumentParams(TextDocumentIdentifier(uri))
         )
     }
 
-    /**
-     * Notify the server that a document was saved.
-     */
     fun didSave(uri: String, text: String? = null) {
         server.textDocumentService.didSave(
-            DidSaveTextDocumentParams(
-                TextDocumentIdentifier(uri),
-                text
-            )
+            DidSaveTextDocumentParams(TextDocumentIdentifier(uri), text)
         )
     }
 
-    fun isAlive(): Boolean {
-        return process.isAlive
-    }
+    fun isAlive(): Boolean = process.isAlive
 
     fun shutdown() {
         try {
@@ -205,13 +209,16 @@ class VaisLspConnection(
             server.exit()
             process.destroyForcibly()
         } catch (e: Exception) {
-            logger.warn("Error shutting down LSP server", e)
+            logger.warn("Error shutting down LSP server: ${e.message}")
         }
     }
 }
 
 /**
- * LSP client implementation for receiving messages from the server.
+ * LSP client callback receiver for messages pushed by the server.
+ *
+ * Diagnostics are forwarded to registered handlers so the IDE
+ * can annotate editors with errors and warnings.
  */
 class VaisLanguageClient : LanguageClient {
     private val logger = Logger.getInstance(VaisLanguageClient::class.java)
@@ -230,18 +237,15 @@ class VaisLanguageClient : LanguageClient {
     }
 
     override fun showMessage(params: MessageParams?) {
-        params?.let {
-            logger.info("LSP Message [${it.type}]: ${it.message}")
-        }
+        params?.let { logger.info("LSP Message [${it.type}]: ${it.message}") }
     }
 
-    override fun showMessageRequest(params: ShowMessageRequestParams?): CompletableFuture<MessageActionItem> {
-        return CompletableFuture.completedFuture(null)
-    }
+    override fun showMessageRequest(
+        params: ShowMessageRequestParams?
+    ): CompletableFuture<MessageActionItem> =
+        CompletableFuture.completedFuture(null)
 
     override fun logMessage(params: MessageParams?) {
-        params?.let {
-            logger.debug("LSP Log [${it.type}]: ${it.message}")
-        }
+        params?.let { logger.debug("LSP Log [${it.type}]: ${it.message}") }
     }
 }

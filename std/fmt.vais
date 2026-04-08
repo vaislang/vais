@@ -1,3 +1,62 @@
+# ============================================================================
+# Module: fmt
+# ============================================================================
+#
+# 문자열 포맷팅 및 숫자-문자열 변환 유틸리티 모듈입니다.
+# 플레이스홀더 기반 포맷, 패딩, 정렬, 커스텀 Display 구현을 위한
+# FormatBuilder 등을 제공합니다.
+#
+# 주요 상수:
+#   FMT_BUF_SIZE = 256   # 기본 포맷 버퍼 크기
+#   ALIGN_LEFT   = 0     # 왼쪽 정렬
+#   ALIGN_CENTER = 1     # 중앙 정렬
+#   ALIGN_RIGHT  = 2     # 오른쪽 정렬
+#
+# 주요 함수:
+#   fmt_i64(n: i64) -> str             - i64 → 10진수 문자열
+#   fmt_i64_radix(n, radix: i64) -> str - i64 → 지정 진수 문자열
+#   fmt_f64(x: f64, prec: i64) -> str  - f64 → 소수점 prec 자리 문자열
+#   fmt_bool(b: i64) -> str            - i64 → "true"/"false"
+#   fmt_pad(s: str, width: i64, align: i64, fill: i8) -> str
+#                                       - 지정 폭/정렬/채움 문자로 패딩
+#   fmt_format(template: str, args) -> str  - {} 플레이스홀더 치환
+#   fmt_join(parts, sep: str) -> str    - 문자열 배열을 구분자로 연결
+#   fmt_repeat(s: str, n: i64) -> str  - 문자열 n회 반복
+#
+# FormatBuilder (커스텀 Display):
+#   FormatBuilder::new()               - 빈 포맷 빌더 생성
+#   .write_str(s)                      - 문자열 추가
+#   .write_i64(n)                      - 정수 추가
+#   .write_f64(x, prec)               - 실수 추가
+#   .finish() -> str                   - 최종 문자열 반환
+#
+# 사용 예제:
+#
+#   U std/fmt
+#
+#   # 정수 → 문자열
+#   s := fmt_i64(42)
+#   print(s)                       # 출력: 42
+#
+#   # 16진수 변환
+#   hex := fmt_i64_radix(255, 16)
+#   print(hex)                     # 출력: ff
+#
+#   # 실수 포맷
+#   pi_str := fmt_f64(3.14159, 2)
+#   print(pi_str)                  # 출력: 3.14
+#
+#   # 패딩
+#   padded := fmt_pad("hi", 10, ALIGN_RIGHT, 0x20)
+#   print(padded)                  # 출력: "        hi"
+#
+#   # FormatBuilder
+#   b := FormatBuilder::new()
+#   b.write_str("val=")
+#   b.write_i64(99)
+#   result := b.finish()
+#   print(result)                  # 출력: val=99
+#
 # std/fmt - Formatting utilities
 # Provides string formatting, number-to-string conversion, and format builders
 #

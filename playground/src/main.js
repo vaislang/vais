@@ -14,6 +14,9 @@ class Playground {
     this.currentExample = null;
     this.isRunning = false;
     this.currentTarget = 'native';
+    this._debounceTimer = null;
+    this._compilerInitialized = false;
+    this._compilerInitializing = false;
 
     this.init();
   }
@@ -29,17 +32,28 @@ class Playground {
     this.setupExamplesList();
     this.setupEventListeners();
 
-    // Load default example
-    this.loadExample('hello-world');
+    // Restore code from URL hash, or load default example
+    if (!this.restoreFromHash()) {
+      this.loadExample('hello-world');
+    }
 
-    // Initialize compiler
+    // Initialize compiler eagerly (server check is fast; WASM is lazy)
+    this._initCompiler();
+  }
+
+  async _initCompiler() {
+    if (this._compilerInitialized || this._compilerInitializing) return;
+    this._compilerInitializing = true;
     try {
       await this.compiler.initialize();
+      this._compilerInitialized = true;
       const modeLabel = this.compiler.getModeLabel();
       this.updateStatus('ready', `Ready (${modeLabel})`);
     } catch (error) {
       this.updateStatus('error', 'Compiler initialization failed');
       this.appendOutput(`Error: ${error.message}`, 'error');
+    } finally {
+      this._compilerInitializing = false;
     }
   }
 
@@ -80,6 +94,50 @@ class Playground {
       e?.preventDefault();
       this.formatCode();
     });
+
+    // Debounced real-time error checking on content change
+    this.editor.onDidChangeModelContent(() => {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(() => {
+        this._runLiveErrorCheck();
+      }, 500);
+    });
+  }
+
+  async _runLiveErrorCheck() {
+    // Ensure compiler is initialized before checking
+    if (!this._compilerInitialized) {
+      await this._initCompiler();
+    }
+    const code = this.editor.getValue();
+    if (!code.trim()) {
+      monaco.editor.setModelMarkers(this.editor.getModel(), 'vais', []);
+      return;
+    }
+    try {
+      const result = await this.compiler.compileOnly(code);
+      const markers = (result.errors || []).map(err => ({
+        severity: monaco.MarkerSeverity.Error,
+        startLineNumber: err.line || 1,
+        startColumn: err.column || 1,
+        endLineNumber: err.line || 1,
+        endColumn: (err.column || 1) + (err.length || 1),
+        message: err.message,
+        source: 'vais',
+      }));
+      const warnMarkers = (result.warnings || []).map(w => ({
+        severity: monaco.MarkerSeverity.Warning,
+        startLineNumber: w.line || 1,
+        startColumn: w.column || 1,
+        endLineNumber: w.line || 1,
+        endColumn: (w.column || 1) + (w.length || 1),
+        message: w.message,
+        source: 'vais',
+      }));
+      monaco.editor.setModelMarkers(this.editor.getModel(), 'vais', [...markers, ...warnMarkers]);
+    } catch {
+      // Silently ignore live-check errors to not disrupt UX
+    }
   }
 
   setupExamplesList() {
@@ -132,6 +190,11 @@ class Playground {
       this.clearOutput();
     });
 
+    // Share button
+    document.getElementById('share-btn').addEventListener('click', () => {
+      this.shareCode();
+    });
+
     // Target selector
     document.getElementById('target-select').addEventListener('change', (e) => {
       this.currentTarget = e.target.value;
@@ -145,6 +208,33 @@ class Playground {
         this.formatCode();
       }
     });
+  }
+
+  shareCode() {
+    const code = this.editor.getValue();
+    const encoded = btoa(unescape(encodeURIComponent(code)));
+    const url = `${window.location.origin}${window.location.pathname}#code=${encoded}`;
+    navigator.clipboard.writeText(url).then(() => {
+      this.appendOutput('Share URL copied to clipboard!', 'success');
+    }).catch(() => {
+      // Fallback: show the URL in output
+      this.appendOutput(`Share URL: ${url}`, 'info');
+    });
+    // Update browser URL without reloading
+    window.history.replaceState(null, '', url);
+  }
+
+  restoreFromHash() {
+    const hash = window.location.hash;
+    const match = hash.match(/^#code=(.+)$/);
+    if (!match) return false;
+    try {
+      const code = decodeURIComponent(escape(atob(match[1])));
+      this.editor.setValue(code);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   loadExample(key) {

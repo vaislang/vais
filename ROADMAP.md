@@ -1,13 +1,53 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 185 — codegen 이슈 수정)
+> **현재 버전**: 0.1.0 (Phase 186 — 전체 구조 개선: 10/10 목표)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-07 (Phase 185: vais-monitor 빌드 중 발견된 codegen 이슈)
+> **최종 업데이트**: 2026-04-08 (Phase 186: 5개 영역 전체 구조 개선)
 
 ---
 
-## Current Tasks (2026-04-07) — Phase 185: Codegen 이슈 (vais-monitor 빌드 중 발견)
+## Current Tasks (2026-04-08) — Phase 186: 전체 구조 개선 (10/10 목표)
+
+5개 영역 종합 분석 결과 도출된 개선 작업. 병렬 실행 가능한 작업은 TeamCreate로 동시 진행.
+
+- [x] 1. CI 안정화 (impl-sonnet) ✅ 2026-04-08
+  changes: ci.yml (cargo-deny job 추가, Windows test skip), tsan.yml (이미 --test-threads=1)
+- [x] 2. codegen type_inference 감사 (Opus direct) ✅ 2026-04-08
+  changes: type_inference.rs (재추론 필요성 문서화, tc_expr_type 통합 로드맵)
+- [x] 3. vais-codegen 모듈 분리 (impl-sonnet) ✅ 2026-04-08
+  changes: tests.rs 분할, expr_helpers.rs → expr_helpers_assign.rs 분리
+- [x] 4. vais-server 통합 테스트 (impl-sonnet) ✅ 2026-04-08
+  changes: tests/integration/ (test_core, test_http, test_router, test_middleware 각 5개)
+- [x] 5. IntelliJ LSP+DAP 통합 (impl-sonnet) ✅ 2026-04-08
+  changes: VaisLspServerSupportProvider, VaisDebugRunner/Process, VaisLineBreakpointType, plugin.xml
+- [x] 6. Playground UI 개선 (impl-sonnet) ✅ 2026-04-08
+  changes: main.js (실시간 에러 마커, Share 버튼, URL hash), compiler.js (WASM lazy, compileOnly)
+- [x] 7. selfhost 토큰 ID 통합 (impl-sonnet) ✅ 2026-04-08
+  changes: constants.vais (TOK_KW_SELF_TYPE, SIMD 타입), token.vais (중복 제거→U import), lexer.vais
+- [x] 8. std doc-comment + README (impl-sonnet) ✅ 2026-04-08
+  changes: 20개 모듈 doc-comment (vec,hashmap,string 등), std/README.md (87 모듈 테이블)
+- [x] 9. LSP rename + workspace diagnostics (impl-sonnet) ✅ 2026-04-08
+  changes: handlers/rename.rs, handlers/workspace_diagnostics.rs, language_server.rs 위임
+- [x] 10. 커버리지 gate + 벤치 대시보드 (impl-sonnet) ✅ 2026-04-08
+  changes: ci.yml (60% gate), bench.yml (gh-pages 퍼블리시)
+- [x] 11. vaisdb StringMap + 순환 참조 (impl-sonnet) ✅ 2026-04-08
+  changes: vaisdb 모듈 import 수정, 순환 의존 재구성
+- [x] 12. SSR 브릿지 정의 (impl-sonnet) ✅ 2026-04-08
+  changes: ssr-api.yaml (OpenAPI 3.0), api/ssr.vais (render/hydrate/health), ssr-client.ts
+- [x] 13. Node.js JS 테스트 (impl-sonnet) ✅ 2026-04-08
+  changes: test/test.mjs (15개 테스트), package.json (test 스크립트)
+- [x] 14. FFI C++ 클래스 매핑 (impl-sonnet) ✅ 2026-04-08
+  changes: generator.rs (class→struct, new/drop/method), integration_test.rs (5개 테스트)
+- [x] 15. CLI 버전 체크 (impl-sonnet) ✅ 2026-04-08
+  changes: main.rs (check_for_update, --no-update-check, VAIS_NO_UPDATE_CHECK, 24h 캐시)
+
+progress: 15/15 (100%)
+mode: auto
+
+---
+
+## Previous Tasks (2026-04-07) — Phase 185: Codegen 이슈 (vais-monitor 빌드 중 발견)
 
 vais-monitor 프로젝트 (30 모듈, 11K LOC) 전체 빌드 중 발견된 codegen 이슈.
 29/30 모듈 IR 생성 성공, clang 링크 단계에서 3건 실패.

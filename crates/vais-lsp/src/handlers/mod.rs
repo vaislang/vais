@@ -6,4 +6,6 @@ pub(crate) mod formatting;
 pub(crate) mod highlight;
 pub(crate) mod hover;
 pub(crate) mod navigation;
+pub(crate) mod rename;
 pub(crate) mod signature;
+pub(crate) mod workspace_diagnostics;

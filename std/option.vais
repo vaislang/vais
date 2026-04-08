@@ -1,3 +1,54 @@
+# ============================================================================
+# Module: option
+# ============================================================================
+#
+# 선택적 값을 표현하는 Option<T> 타입 모듈입니다.
+# null 대신 명시적인 Some(T) / None 변형으로 값의 부재를 표현합니다.
+# Rust의 Option<T>와 동일한 의미론을 따릅니다.
+#
+# 주요 타입:
+#   Option<T>   - 열거형: Some(T) | None
+#
+# 주요 메서드:
+#   .is_some()          - 값이 있으면 1, 없으면 0
+#   .is_none()          - 값이 없으면 1, 있으면 0
+#   .unwrap()           - Some 값 추출; None이면 패닉
+#   .unwrap_or(default) - Some 값 추출; None이면 default 반환
+#   .map(f)             - Some이면 f 적용, None이면 None 그대로
+#   .and_then(f)        - Some이면 f 적용(Option 반환), None이면 None
+#   .or(other)          - Some이면 자신, None이면 other 반환
+#   .expect(msg)        - Some 값 추출; None이면 msg와 함께 패닉
+#
+# 연산자:
+#   ?   - try 연산자: None이면 현재 함수에서 None 조기 반환
+#   !   - unwrap 연산자: Some 값 추출 (None이면 패닉)
+#
+# 사용 예제:
+#
+#   U std/option
+#
+#   # Option 생성
+#   a: Option<i64> = Some(42)
+#   b: Option<i64> = None
+#
+#   # 값 확인
+#   print("{a.is_some()}")      # 출력: 1
+#   print("{b.is_none()}")      # 출력: 1
+#
+#   # 안전한 언래핑
+#   val := a.unwrap_or(0)
+#   print("{val}")              # 출력: 42
+#
+#   # 체이닝
+#   result := a.map(|x| x * 2).unwrap_or(0)
+#   print("{result}")           # 출력: 84
+#
+#   # ? 연산자
+#   F safe_get(opt: Option<i64>) -> Option<i64> {
+#       v := opt?
+#       Some(v + 1)
+#   }
+#
 # Option type - represents an optional value
 # Some(T) or None
 

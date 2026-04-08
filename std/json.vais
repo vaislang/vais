@@ -1,3 +1,70 @@
+# ============================================================================
+# Module: json
+# ============================================================================
+#
+# 경량 JSON 파서 및 생성기 모듈입니다.
+# null, bool, 숫자(i64/f64), 문자열, 배열, 객체를 지원합니다.
+# 재귀 하강(recursive descent) 방식으로 파싱합니다.
+#
+# JSON 값 타입 판별자(discriminant):
+#   0 = null
+#   1 = bool    (data: 0=false, 1=true)
+#   2 = number  (data: i64 정수값)
+#   3 = number  (data: 소수점 값 * 1000000, 6자리 고정소수점)
+#   4 = string  (data: 포인터, extra: 길이)
+#   5 = array   (data: 배열 구조체 포인터)
+#   6 = object  (data: 오브젝트 구조체 포인터)
+#
+# 주요 타입:
+#   JsonValue    - JSON 값 래퍼 (type_tag: i64, data: i64, extra: i64)
+#   JsonArray    - JSON 배열 (items 포인터, len, cap)
+#   JsonObject   - JSON 객체 (keys, values 포인터, len, cap)
+#
+# 파싱 함수:
+#   json_parse(s: str) -> JsonValue         - JSON 문자열 파싱
+#   json_parse_value(s, pos) -> JsonValue   - 내부 재귀 파서
+#   json_parse_string(s, pos) -> JsonValue  - 문자열 파싱
+#   json_parse_number(s, pos) -> JsonValue  - 숫자 파싱
+#   json_parse_array(s, pos) -> JsonValue   - 배열 파싱
+#   json_parse_object(s, pos) -> JsonValue  - 객체 파싱
+#
+# 생성 함수:
+#   json_null() -> JsonValue                - null 값 생성
+#   json_bool(b: i64) -> JsonValue          - bool 값 생성
+#   json_int(n: i64) -> JsonValue           - 정수 값 생성
+#   json_string(s: str) -> JsonValue        - 문자열 값 생성
+#   json_array_new() -> JsonValue           - 빈 배열 생성
+#   json_object_new() -> JsonValue          - 빈 객체 생성
+#   json_array_push(arr, val)               - 배열에 원소 추가
+#   json_object_set(obj, key, val)          - 객체에 키-값 추가
+#
+# 접근 함수:
+#   json_get_int(val) -> i64                - 정수 값 추출
+#   json_get_bool(val) -> i64               - bool 값 추출
+#   json_get_string(val) -> str             - 문자열 추출
+#   json_object_get(obj, key) -> JsonValue  - 객체에서 키로 값 조회
+#   json_array_get(arr, idx) -> JsonValue   - 배열에서 인덱스로 값 조회
+#   json_serialize(val) -> str              - JsonValue를 JSON 문자열로 직렬화
+#
+# 사용 예제:
+#
+#   U std/json
+#
+#   # JSON 파싱
+#   raw := "{\"name\":\"Alice\",\"age\":30}"
+#   val := json_parse(raw)
+#   name := json_object_get(val, "name")
+#   age  := json_object_get(val, "age")
+#   print("{json_get_string(name)}")   # 출력: Alice
+#   print("{json_get_int(age)}")       # 출력: 30
+#
+#   # JSON 생성
+#   obj := json_object_new()
+#   json_object_set(obj, "x", json_int(42))
+#   json_object_set(obj, "ok", json_bool(1))
+#   output := json_serialize(obj)
+#   print("{output}")   # 출력: {"x":42,"ok":true}
+#
 # JSON - Lightweight JSON parser and generator
 # Supports: null, bool, number (i64), string, array, object
 # Uses recursive approach with explicit parser state passing

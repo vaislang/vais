@@ -1,3 +1,66 @@
+# ============================================================================
+# Module: file
+# ============================================================================
+#
+# 기본 파일 I/O 연산 모듈입니다.
+# C 표준 라이브러리(fopen/fread/fwrite/fseek/fclose 등)를 extern으로 사용합니다.
+# Option<T> / Result<T, E>로 에러를 처리합니다.
+#
+# 주요 타입:
+#   File   - 파일 핸들 래퍼 (handle: i64 = FILE*, mode: i64)
+#
+# 시크 원점 상수:
+#   SEEK_SET = 0   # 파일 시작부터
+#   SEEK_CUR = 1   # 현재 위치부터
+#   SEEK_END = 2   # 파일 끝부터
+#
+# 파일 모드:
+#   mode = 0   # 닫힘/유효하지 않음
+#   mode = 1   # 읽기 전용 ("r")
+#   mode = 2   # 쓰기 전용 ("w")
+#   mode = 3   # 추가 ("a")
+#
+# 주요 함수 / 메서드:
+#   File::open(path)         - 읽기 모드로 파일 열기 (Result<File, i64>)
+#   File::create(path)       - 쓰기 모드로 파일 생성/열기 (Result<File, i64>)
+#   File::append(path)       - 추가 모드로 파일 열기 (Result<File, i64>)
+#   .read_all()              - 파일 전체 내용을 문자열로 읽기 (Option<String>)
+#   .read_bytes(buf, n)      - 최대 n 바이트 읽기 (i64 = 읽은 바이트 수)
+#   .write_str(s)            - 문자열 쓰기 (Result<i64, i64>)
+#   .write_bytes(buf, n)     - 바이트 버퍼 쓰기 (Result<i64, i64>)
+#   .seek(offset, origin)    - 파일 커서 이동 (Result<i64, i64>)
+#   .tell()                  - 현재 커서 위치 반환 (i64)
+#   .close()                 - 파일 닫기
+#   .is_open()               - 파일이 열려 있는지 확인
+#
+# 사용 예제:
+#
+#   U std/file
+#
+#   # 파일 전체 읽기
+#   f := File::open("config.txt")
+#   M f {
+#       Ok(file) => {
+#           contents := file.read_all()
+#           M contents {
+#               Some(s) => print("{s.as_str()}"),
+#               None    => print("read error")
+#           }
+#           file.close()
+#       },
+#       Err(e) => print("open error: {e}")
+#   }
+#
+#   # 파일 쓰기
+#   wf := File::create("output.txt")
+#   M wf {
+#       Ok(file) => {
+#           file.write_str("Hello, file!")
+#           file.close()
+#       },
+#       Err(e) => print("create error: {e}")
+#   }
+#
 # File I/O - basic file operations
 # Uses C standard library functions via extern
 # Updated to use Option<T> and Result<T, E> for error handling

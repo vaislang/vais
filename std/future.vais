@@ -1,3 +1,69 @@
+# ============================================================================
+# Module: future
+# ============================================================================
+#
+# Future와 비동기 런타임 타입 모듈입니다.
+# 스택리스 코루틴 기반 async/await 구현을 제공합니다.
+# Vais의 비동기 실행 모델의 핵심 추상화입니다.
+#
+# 실행 모델:
+#   - 스택리스 코루틴: Future는 힙에 상태 머신으로 저장됨
+#   - poll 기반: Future::poll() → Poll::Pending | Poll::Ready(value)
+#   - 단일 스레드 이벤트 루프 또는 멀티 스레드 실행기와 호환
+#
+# 주요 타입:
+#   Poll           - poll 결과 열거형: Pending | Ready(i64)
+#   Future         - Future 트레이트 객체 (poll_fn 포인터 + state)
+#   Waker          - 태스크 재깨움 핸들 (wake_fn 포인터 + data)
+#   Context        - poll 호출 컨텍스트 (waker 포함)
+#   Task           - 스케줄러 태스크 단위 (future + 상태)
+#   JoinHandle<T>  - spawn된 태스크 결과 핸들
+#
+# Poll 메서드:
+#   .is_ready() -> i64    - Ready이면 1, Pending이면 0
+#   .is_pending() -> i64  - Pending이면 1, Ready이면 0
+#   .value() -> i64       - Ready 값 추출 (Pending이면 패닉)
+#
+# Future 함수:
+#   future_new(poll_fn, state) -> Future   - 새 Future 생성
+#   future_poll(fut, ctx) -> Poll          - Future를 한 번 poll
+#   future_ready(val) -> Future            - 즉시 완료되는 Future
+#   future_pending() -> Future             - 영구 Pending Future
+#   future_map(fut, f) -> Future           - 결과에 함수 적용
+#   future_then(fut, f) -> Future          - 결과로 새 Future 생성 (flatmap)
+#
+# 런타임 함수:
+#   spawn(fut) -> JoinHandle               - 새 태스크로 Future 예약
+#   block_on(fut) -> i64                   - Future가 완료될 때까지 블로킹 실행
+#   yield_now() -> Future                  - 현재 태스크를 큐 뒤로 양보
+#
+# 사용 예제:
+#
+#   U std/future
+#
+#   # async 함수 정의 (A 키워드)
+#   A F fetch(url: str) -> str {
+#       # ... 비동기 작업 ...
+#       "result"
+#   }
+#
+#   # await (Y 키워드)
+#   A F main_async() -> i64 {
+#       result := Y fetch("https://example.com")
+#       print("{result}")
+#       0
+#   }
+#
+#   # block_on으로 동기 컨텍스트에서 실행
+#   F main() -> i64 {
+#       block_on(main_async())
+#   }
+#
+#   # 즉시 완료 Future
+#   ready_fut := future_ready(42)
+#   val := block_on(ready_fut)
+#   print("{val}")    # 출력: 42
+#
 # Future and async runtime types
 # Stackless coroutine-based async/await implementation
 

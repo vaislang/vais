@@ -1,3 +1,47 @@
+# ============================================================================
+# Module: hashmap
+# ============================================================================
+#
+# 제네릭 키·값 쌍을 저장하는 해시 테이블 모듈입니다.
+# 충돌 해결 방식으로 Separate Chaining을 사용합니다.
+# 키 타입은 Hash 트레이트를 구현해야 합니다.
+#
+# 주요 타입:
+#   HashMap<K, V>   - 해시 테이블 구조체
+#   HashEntry<K, V> - 내부 버킷 엔트리 (키, 값, 해시, next 포인터)
+#
+# 주요 함수 / 메서드:
+#   HashMap::new()              - 기본 버킷 수(16)로 빈 맵 생성
+#   HashMap::with_capacity(n)   - n개 버킷으로 빈 맵 생성
+#   .insert(key, val)           - 키-값 쌍 삽입 (기존 키면 덮어씀)
+#   .get(key)                   - 키로 값 조회 (Option<V>)
+#   .remove(key)                - 키 제거 (Option<V>)
+#   .contains_key(key)          - 키 존재 여부 확인
+#   .len()                      - 저장된 엔트리 수 반환
+#   .is_empty()                 - 빈 맵 여부 확인
+#   .clear()                    - 모든 엔트리 제거
+#   .rehash()                   - 버킷 크기를 2배로 늘려 재배치
+#   .free()                     - 내부 메모리 해제
+#
+# 사용 예제:
+#
+#   U std/hashmap
+#
+#   # 문자열 → 정수 맵
+#   m := HashMap::new()
+#   m.insert("apple", 1)
+#   m.insert("banana", 2)
+#   m.insert("cherry", 3)
+#
+#   val := m.get("banana")
+#   M val {
+#       Some(v) => print("banana = {v}"),  # 출력: banana = 2
+#       None    => print("not found")
+#   }
+#
+#   m.remove("apple")
+#   print("{m.len()}")    # 출력: 2
+#
 # HashMap - hash table with generic keys and values
 # Uses separate chaining for collision resolution
 # Updated to use Option<T> for error handling

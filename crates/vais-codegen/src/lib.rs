@@ -55,6 +55,7 @@ mod emit;
 mod error;
 mod expr;
 mod expr_helpers;
+mod expr_helpers_assign;
 mod expr_helpers_call;
 mod expr_helpers_control;
 mod expr_helpers_data;
@@ -150,10 +151,6 @@ pub(crate) fn escape_llvm_string(s: &str) -> String {
     result
 }
 
-#[cfg(test)]
-use diagnostics::edit_distance;
-#[cfg(test)]
-pub(crate) use diagnostics::suggest_type_conversion;
 pub(crate) use diagnostics::{format_did_you_mean, suggest_similar};
 pub use target::TargetTriple;
 // Re-export type structs from types module

@@ -227,7 +227,20 @@ impl<'a> Generator<'a> {
                 cls.name
             ));
 
-            // Generate opaque pointer type for class instance
+            // Generate vais struct mapping for the C++ class
+            output.push_str(&format!("    struct {} {{\n", cls.name));
+            for field in &cls.fields {
+                if field.access == AccessSpecifier::Public {
+                    output.push_str(&format!(
+                        "        {}: {},\n",
+                        field.name,
+                        self.type_to_vais(&field.field_type)
+                    ));
+                }
+            }
+            output.push_str("    }\n\n");
+
+            // Also generate opaque pointer type alias for C interop
             output.push_str(&format!("    type {}Handle = *mut ();\n\n", cls.name));
 
             // Generate constructor wrapper
@@ -237,9 +250,9 @@ impl<'a> Generator<'a> {
                     cls.name, cls.name
                 ));
 
-                // Generate destructor wrapper
+                // Generate destructor wrapper (drop convention)
                 output.push_str(&format!(
-                    "    fn {}_delete(ptr: {}Handle);\n\n",
+                    "    fn {}_drop(self: *mut {});\n\n",
                     cls.name, cls.name
                 ));
             }
@@ -257,7 +270,7 @@ impl<'a> Generator<'a> {
                 if field.access == AccessSpecifier::Public {
                     // Getter
                     output.push_str(&format!(
-                        "    fn {}_get_{}(ptr: {}Handle) -> {};\n\n",
+                        "    fn {}_get_{}(self: *const {}) -> {};\n\n",
                         cls.name,
                         field.name,
                         cls.name,
@@ -266,7 +279,7 @@ impl<'a> Generator<'a> {
 
                     // Setter
                     output.push_str(&format!(
-                        "    fn {}_set_{}(ptr: {}Handle, value: {});\n\n",
+                        "    fn {}_set_{}(self: *mut {}, value: {});\n\n",
                         cls.name,
                         field.name,
                         cls.name,
@@ -302,10 +315,14 @@ impl<'a> Generator<'a> {
         output.push_str(&wrapper_name);
         output.push('(');
 
-        // Add 'this' pointer for non-static methods
+        // Add 'self' pointer for non-static methods (using vais self convention)
         let mut params = Vec::new();
         if !method.is_static && !method.is_constructor {
-            params.push(format!("ptr: {}Handle", cls.name));
+            if method.is_const {
+                params.push(format!("self: *const {}", cls.name));
+            } else {
+                params.push(format!("self: *mut {}", cls.name));
+            }
         }
 
         // Add method parameters

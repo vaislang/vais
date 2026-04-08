@@ -1,3 +1,67 @@
+# ============================================================================
+# Module: async
+# ============================================================================
+#
+# 비동기 프로그래밍 유틸리티 및 컴비네이터 모듈입니다.
+# std/future와 std/runtime 위에 구축된 고수준 비동기 추상화를 제공합니다.
+#
+# 주요 타입:
+#   TimeoutFuture    - 데드라인이 있는 Future 래퍼
+#   RetryFuture      - 실패 시 재시도 로직이 있는 Future 래퍼
+#   RaceFuture       - 여러 Future 중 가장 먼저 완료된 것 반환
+#   AsyncMutex       - async-aware 뮤텍스 (비동기 잠금)
+#   AsyncChannel<T>  - async-aware 채널 (비동기 send/recv)
+#   DebounceFuture   - 마지막 호출 후 일정 시간 대기 후 실행
+#   ThrottleFuture   - 일정 주기 이내 중복 호출 무시
+#
+# 주요 함수:
+#   timeout(fut, duration) -> TimeoutFuture  - Future에 타임아웃 적용
+#   retry(fut, n, delay) -> RetryFuture      - 최대 n회 재시도
+#   race(futs) -> RaceFuture                 - 가장 먼저 완료된 Future 반환
+#   race_ok(futs) -> RaceFuture              - Ok를 먼저 반환한 Future 선택
+#   spawn(fut)                               - 새 태스크로 Future 실행
+#   join_all(futs)                           - 모든 Future 완료 대기
+#   select(futs)                             - 첫 번째 준비된 Future 처리
+#
+# AsyncMutex 메서드:
+#   AsyncMutex::new()          - 새 비동기 뮤텍스 생성
+#   .lock() -> Future<Guard>   - 잠금 획득 (비동기)
+#   .try_lock() -> Option<Guard> - 즉시 잠금 시도
+#
+# AsyncChannel 메서드:
+#   AsyncChannel::new(cap)       - 용량 cap의 비동기 채널 생성
+#   .send(val) -> Future<i64>   - 값 전송 (비동기)
+#   .recv() -> Future<Option<T>> - 값 수신 (비동기)
+#   .close()                    - 채널 닫기
+#
+# 사용 예제:
+#
+#   U std/async
+#   U std/future
+#
+#   # 타임아웃
+#   A F fetch_with_timeout(url: str) -> Result<str, str> {
+#       fut := http_get(url)
+#       result := Y timeout(fut, Duration::from_secs(5))
+#       M result {
+#           Ok(body) => Ok(body),
+#           Err(_)   => Err("request timed out")
+#       }
+#   }
+#
+#   # 재시도
+#   A F fetch_with_retry(url: str) -> Result<str, str> {
+#       Y retry(http_get(url), 3, Duration::from_millis(500))
+#   }
+#
+#   # 비동기 뮤텍스
+#   mutex := AsyncMutex::new()
+#   A F critical_section() -> i64 {
+#       guard := Y mutex.lock()
+#       # ... 임계 구역 ...
+#       0
+#   }
+#
 # std/async - Async utilities and combinators
 # Provides high-level async programming utilities built on top of
 # std/future and std/runtime.

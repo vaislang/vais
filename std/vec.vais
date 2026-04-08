@@ -1,3 +1,47 @@
+# ============================================================================
+# Module: vec
+# ============================================================================
+#
+# 동적 크기 배열(growable array) 모듈입니다.
+# 타입 안전한 메모리 레이아웃으로 T 타입 원소를 저장합니다.
+# sizeof(T)를 stride로 사용하고 load_typed/store_typed로 메모리에 접근합니다.
+#
+# 주요 타입:
+#   Vec<T>   - 동적 배열 구조체 (data, len, cap, elem_size 필드)
+#
+# 주요 함수 / 메서드:
+#   Vec::new()            - 기본 용량으로 빈 배열 생성
+#   Vec::with_capacity(n) - n개 용량으로 빈 배열 생성
+#   .push(val)            - 원소 추가 (필요 시 용량 2배 확장)
+#   .pop()                - 마지막 원소 제거 및 반환 (Option<T>)
+#   .get(idx)             - 인덱스 접근 (Option<T>)
+#   .set(idx, val)        - 인덱스에 값 설정
+#   .len()                - 현재 원소 수 반환
+#   .is_empty()           - 빈 배열 여부 확인
+#   .clear()              - 모든 원소 제거 (메모리는 유지)
+#   .insert(idx, val)     - 특정 위치에 원소 삽입
+#   .remove(idx)          - 특정 위치 원소 제거 (Option<T>)
+#   .contains(val)        - 값 포함 여부 확인
+#   .free()               - 내부 메모리 해제
+#
+# 사용 예제:
+#
+#   U std/vec
+#
+#   # 정수 배열 생성 및 사용
+#   v := Vec::new()
+#   v.push(10)
+#   v.push(20)
+#   v.push(30)
+#   print("{v.len()}")        # 출력: 3
+#   val := v.get(1)
+#   M val {
+#       Some(x) => print("{x}"),   # 출력: 20
+#       None    => print("out of bounds")
+#   }
+#   v.remove(0)
+#   print("{v.len()}")        # 출력: 2
+#
 # Vec - dynamic array (growable)
 # Stores elements of type T with type-safe memory layout
 # Uses sizeof(T) for element stride and load_typed/store_typed for memory access

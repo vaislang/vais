@@ -18,6 +18,7 @@ use colored::Colorize;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::OnceLock;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use commands::pkg::PkgCommands;
 use vais_codegen::TargetTriple;
@@ -28,6 +29,93 @@ use vais_types::TypeChecker;
 /// Global ownership checking configuration
 /// None = disabled, Some(true) = strict errors (default), Some(false) = warn-only
 static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
+
+fn check_for_update() {
+    let current = env!("CARGO_PKG_VERSION");
+
+    // Determine cache path: ~/.vais/update-check.json
+    let cache_path = dirs::home_dir()
+        .map(|h| h.join(".vais").join("update-check.json"));
+
+    // Check cache TTL (24 hours)
+    const TTL_SECS: u64 = 24 * 60 * 60;
+    if let Some(ref path) = cache_path {
+        if let Ok(data) = std::fs::read_to_string(path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                let cached_ts = json["checked_at"].as_u64().unwrap_or(0);
+                let latest = json["latest"].as_str().unwrap_or("").to_string();
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs();
+                if now.saturating_sub(cached_ts) < TTL_SECS && !latest.is_empty() {
+                    // Use cached result
+                    let latest_ver = latest.trim_start_matches('v');
+                    let current_ver = current.trim_start_matches('v');
+                    if semver::Version::parse(latest_ver)
+                        .and_then(|l| semver::Version::parse(current_ver).map(|c| l > c))
+                        .unwrap_or(false)
+                    {
+                        eprintln!(
+                            "⚡ Update available: {} → {} (visit https://github.com/vaislang/vais/releases)",
+                            current, latest_ver
+                        );
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    // Fetch from GitHub API with 2s timeout
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(2))
+        .build();
+    let result = agent
+        .get("https://api.github.com/repos/vaislang/vais/releases/latest")
+        .set("User-Agent", &format!("vaisc/{}", current))
+        .call();
+
+    let latest_tag = match result {
+        Ok(resp) => {
+            if let Ok(json) = resp.into_json::<serde_json::Value>() {
+                json["tag_name"].as_str().unwrap_or("").to_string()
+            } else {
+                return;
+            }
+        }
+        Err(_) => return,
+    };
+
+    // Write cache
+    if let Some(ref path) = cache_path {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+        let cache = serde_json::json!({
+            "checked_at": now,
+            "latest": latest_tag,
+        });
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, cache.to_string());
+    }
+
+    // Compare versions
+    let latest_ver = latest_tag.trim_start_matches('v');
+    let current_ver = current.trim_start_matches('v');
+    if semver::Version::parse(latest_ver)
+        .and_then(|l| semver::Version::parse(current_ver).map(|c| l > c))
+        .unwrap_or(false)
+    {
+        eprintln!(
+            "⚡ Update available: {} → {} (visit https://github.com/vaislang/vais/releases)",
+            current, latest_ver
+        );
+    }
+}
 
 /// Global MIR borrow checking flag
 static STRICT_BORROW: OnceLock<bool> = OnceLock::new();
@@ -179,6 +267,10 @@ struct Cli {
     /// Requires compilation with --features inkwell
     #[arg(long, global = true)]
     inkwell: bool,
+
+    /// Skip the update availability check
+    #[arg(long, global = true)]
+    no_update_check: bool,
 }
 
 #[derive(Subcommand)]
@@ -497,6 +589,11 @@ fn main() {
 
 fn main_inner() {
     let cli = Cli::parse();
+
+    // Run update check unless disabled by flag or env var
+    if !cli.no_update_check && std::env::var("VAIS_NO_UPDATE_CHECK").as_deref() != Ok("1") {
+        check_for_update();
+    }
 
     // Install panic handler for crash reporting
     let report_crash = cli.report_crash;
