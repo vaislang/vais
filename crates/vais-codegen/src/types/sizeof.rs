@@ -224,6 +224,10 @@ impl CodeGenerator {
                             .sum();
                     }
                 }
+                // Box<T>, Rc<T>, Arc<T> are always pointer-sized (8 bytes on 64-bit)
+                if matches!(name.as_str(), "Box" | "Rc" | "Arc") {
+                    return 8;
+                }
                 // Unknown named type: warn and fall back to pointer-sized i64
                 eprintln!(
                     "[vais-codegen] compute_sizeof: unknown Named type '{}' (generics={:?}), \

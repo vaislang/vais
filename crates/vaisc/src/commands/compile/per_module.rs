@@ -163,55 +163,59 @@ pub(crate) fn compile_per_module(
         );
     }
 
-    // Phase 2: Compile .ll → .o with content-hash caching (parallelized)
+    // Phase 2: Compile .ll → .o with content-hash caching (parallelized unless
+    // VAIS_PARALLEL_CODEGEN=0, in which case sequential to match Phase 1 ordering).
     let compile_start = std::time::Instant::now();
 
-    let obj_results: Vec<Result<(PathBuf, bool), String>> = module_irs
-        .par_iter()
-        .map(|(module_stem, _is_main, ir)| {
-            // Compute content hash of the IR
-            let ir_hash = incremental::compute_content_hash(ir);
-            let cached_obj_path =
-                incremental::get_ir_cached_object_path(&cache_dir, &ir_hash, effective_opt_level);
+    let compile_one = |(module_stem, _is_main, ir): &(String, bool, String)| {
+        // Compute content hash of the IR
+        let ir_hash = incremental::compute_content_hash(ir);
+        let cached_obj_path =
+            incremental::get_ir_cached_object_path(&cache_dir, &ir_hash, effective_opt_level);
 
-            // Check cache: if .o exists for this IR hash, skip clang
-            if cached_obj_path.exists() {
-                return Ok((cached_obj_path, true)); // true = cache hit
-            }
+        // Check cache: if .o exists for this IR hash, skip clang
+        if cached_obj_path.exists() {
+            return Ok((cached_obj_path, true)); // true = cache hit
+        }
 
-            // Cache miss: write .ll, compile to .o
-            let ll_path = cache_dir.join(format!("{}.ll", module_stem));
-            fs::write(&ll_path, ir)
-                .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
+        // Cache miss: write .ll, compile to .o
+        let ll_path = cache_dir.join(format!("{}.ll", module_stem));
+        fs::write(&ll_path, ir)
+            .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
 
-            let opt_flag = format!("-O{}", effective_opt_level.min(3));
-            let mut compile_args = vec![
-                "-c".to_string(),
-                opt_flag,
-                ll_path.display().to_string(),
-                "-o".to_string(),
-                cached_obj_path.display().to_string(),
-            ];
-            if debug {
-                compile_args.push("-g".to_string());
-            }
+        let opt_flag = format!("-O{}", effective_opt_level.min(3));
+        let mut compile_args = vec![
+            "-c".to_string(),
+            opt_flag,
+            ll_path.display().to_string(),
+            "-o".to_string(),
+            cached_obj_path.display().to_string(),
+        ];
+        if debug {
+            compile_args.push("-g".to_string());
+        }
 
-            let compile_output = std::process::Command::new("clang")
-                .args(&compile_args)
-                .output()
-                .map_err(|e| format!("Cannot run clang: {}", e))?;
+        let compile_output = std::process::Command::new("clang")
+            .args(&compile_args)
+            .output()
+            .map_err(|e| format!("Cannot run clang: {}", e))?;
 
-            if !compile_output.status.success() {
-                let stderr = String::from_utf8_lossy(&compile_output.stderr);
-                return Err(format!(
-                    "clang compilation failed for module '{}': {}",
-                    module_stem, stderr
-                ));
-            }
+        if !compile_output.status.success() {
+            let stderr = String::from_utf8_lossy(&compile_output.stderr);
+            return Err(format!(
+                "clang compilation failed for module '{}': {}",
+                module_stem, stderr
+            ));
+        }
 
-            Ok((cached_obj_path, false)) // false = cache miss
-        })
-        .collect();
+        Ok((cached_obj_path, false)) // false = cache miss
+    };
+
+    let obj_results: Vec<Result<(PathBuf, bool), String>> = if parallel_codegen {
+        module_irs.par_iter().map(compile_one).collect()
+    } else {
+        module_irs.iter().map(compile_one).collect()
+    };
 
     // Collect .o paths
     let mut obj_files: Vec<PathBuf> = Vec::with_capacity(obj_results.len());
