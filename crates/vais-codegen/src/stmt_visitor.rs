@@ -487,10 +487,12 @@ impl CodeGenerator {
                 };
 
             // Coerce return value to match declared function return type
+            let mut coerced = false;
             let ret_val = if llvm_ty != "void" {
                 let expr_type = self.infer_expr_type(expr);
                 let val_llvm_ty = self.type_to_llvm(&expr_type);
                 if val_llvm_ty != llvm_ty {
+                    coerced = true;
                     if (val_llvm_ty == "float" || val_llvm_ty == "double")
                         && (llvm_ty == "float" || llvm_ty == "double")
                     {
@@ -516,6 +518,7 @@ impl CodeGenerator {
                             tmp
                         }
                     } else {
+                        coerced = false;
                         ret_val
                     }
                 } else {
@@ -539,13 +542,16 @@ impl CodeGenerator {
 
             // Final safety: coerce if actual IR value type differs from ret type
             // (catches cases where body sext'd i32→i64 but function returns i32)
-            let ret_val = {
+            // Skip if we already coerced above to avoid double trunc
+            let ret_val = if !coerced {
                 let actual = self.llvm_type_of(&ret_val);
                 if actual != llvm_ty && actual.starts_with('i') && llvm_ty.starts_with('i') {
                     self.coerce_int_width(&ret_val, &actual, &llvm_ty, counter, &mut ir)
                 } else {
                     ret_val
                 }
+            } else {
+                ret_val
             };
 
             write_ir!(ir, "  ret {} {}", llvm_ty, ret_val);

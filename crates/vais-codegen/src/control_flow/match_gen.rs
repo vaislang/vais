@@ -37,6 +37,21 @@ impl CodeGenerator {
             match_val_raw
         };
 
+        // For str match values, extract the raw i8* pointer from the fat ptr { i8*, i64 }
+        // so that strcmp in pattern matching receives the correct type.
+        let match_val = if matches!(&match_type, ResolvedType::Str) {
+            let raw_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                raw_ptr,
+                match_val
+            );
+            raw_ptr
+        } else {
+            match_val
+        };
+
         let merge_label = self.next_label("match.merge");
         let mut arm_labels: Vec<String> = Vec::with_capacity(arms.len());
         let mut arm_values: Vec<(String, String)> = Vec::with_capacity(arms.len()); // (value, label)

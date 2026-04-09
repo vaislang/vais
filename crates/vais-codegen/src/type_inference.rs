@@ -259,6 +259,9 @@ impl CodeGenerator {
                 // Look up local variable type
                 if let Some(local) = self.fn_ctx.locals.get(name) {
                     local.ty.clone()
+                } else if let Some(global_info) = self.types.globals.get(name) {
+                    // Global variable: use its declared type
+                    global_info._ty.clone()
                 } else if self.is_unit_enum_variant(name) {
                     // Unit enum variant (e.g., None)
                     for enum_info in self.types.enums.values() {
@@ -1033,6 +1036,10 @@ impl CodeGenerator {
             Expr::Block(stmts) => {
                 // Block returns the type of its last expression
                 self.infer_block_type(stmts)
+            }
+            Expr::Assign { value, .. } | Expr::AssignOp { value, .. } => {
+                // Assignment returns the assigned value's type
+                self.infer_expr_type(value)
             }
             _ => ResolvedType::I64, // Default fallback for remaining expressions
         }

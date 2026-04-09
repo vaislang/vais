@@ -274,22 +274,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Ok(phi.as_basic_value())
         } else if !incoming.is_empty() {
-            // Types differ: use the then-branch type as the canonical type
-            // and attempt to coerce the other branch values
-            let target_type = then_val.get_type();
+            // Types differ between branches — this happens when if/else is used as a
+            // statement (not expression) and each branch ends with a different-typed
+            // value. Build a phi on i64 (unit type) since the result is unused.
+            let i64_type = self.context.i64_type();
             let phi = self
                 .builder
-                .build_phi(target_type, "if_result")
+                .build_phi(i64_type, "if_result")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            for (val, block) in &incoming {
-                let coerced = val.as_basic_value_enum();
-                if coerced.get_type() == target_type {
-                    phi.add_incoming(&[(&coerced, *block)]);
-                } else {
-                    // Coerce: try bitcast for same-size types, or use zero as fallback
-                    let fallback = target_type.const_zero();
-                    phi.add_incoming(&[(&fallback, *block)]);
-                }
+            let zero = i64_type.const_int(0, false);
+            for (_val, block) in &incoming {
+                phi.add_incoming(&[(&zero, *block)]);
             }
             Ok(phi.as_basic_value())
         } else {
@@ -729,11 +724,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .get_function("free")
             .ok_or_else(|| CodegenError::UndefinedFunction("free".to_string()))?;
         // Clone to avoid borrow conflict
-        let ptrs: Vec<_> = self.alloc_tracker.clone();
-        for ptr in ptrs {
-            self.builder
-                .build_call(free_fn, &[ptr.into()], "")
+        let slots: Vec<_> = self.alloc_tracker.clone();
+        let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        for slot in slots {
+            // Load the actual pointer from the entry-block alloca slot
+            let loaded = self.builder
+                .build_load(ptr_type, slot, "alloc_cleanup_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_pointer_value();
+            // Only free if not null (slot initialized to null, may not have been written in loop)
+            let is_null = self.builder
+                .build_is_null(loaded, "is_null_check")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+            let free_block = self.context.append_basic_block(current_fn, "free_alloc");
+            let skip_block = self.context.append_basic_block(current_fn, "skip_free");
+            self.builder.build_conditional_branch(is_null, skip_block, free_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.position_at_end(free_block);
+            self.builder
+                .build_call(free_fn, &[loaded.into()], "")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.build_unconditional_branch(skip_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.position_at_end(skip_block);
         }
         Ok(())
     }

@@ -27,7 +27,12 @@ impl CodeGenerator {
 
         let ret_type = self.resolve_fn_return_type(f, func_name);
 
-        let ret_llvm = self.type_to_llvm(&ret_type);
+        // Use i64 placeholder for void return types since void cannot be a struct field
+        let ret_llvm = if matches!(ret_type, vais_types::ResolvedType::Unit) {
+            "i64".to_string()
+        } else {
+            self.type_to_llvm(&ret_type)
+        };
 
         // Reset async state tracking
         self.lambdas.async_state_counter = 0;

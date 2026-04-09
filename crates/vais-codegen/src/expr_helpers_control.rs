@@ -102,7 +102,22 @@ impl CodeGenerator {
         );
 
         // Infer block type to detect struct/enum results that need loading
-        let phi_type = self.infer_block_type(then);
+        let then_type = self.infer_block_type(then);
+        let else_type = if let Some(else_branch) = else_ {
+            match else_branch {
+                vais_ast::IfElse::Else(stmts) => self.infer_block_type(stmts),
+                vais_ast::IfElse::ElseIf(_, nested_then, _) => self.infer_block_type(nested_then),
+            }
+        } else {
+            ResolvedType::I64
+        };
+        // If branch types differ (e.g., str vs i64), use i64 as the phi type
+        // since the if/else is used as a statement and the result is unused
+        let phi_type = if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type) {
+            ResolvedType::I64
+        } else {
+            then_type
+        };
         let phi_llvm = self.type_to_llvm(&phi_type);
 
         // Check each branch independently for struct pointer vs value
@@ -234,7 +249,24 @@ impl CodeGenerator {
         let result = self.next_temp(counter);
         let is_void = crate::helpers::is_void_result(&phi_llvm, &phi_type);
 
-        if is_void || !has_else {
+        // Check for struct/non-struct type mismatch that would cause LLVM IR errors.
+        // Only flag mismatches between fundamentally incompatible types (e.g., { i8*, i64 } vs i64).
+        // We cannot rely on llvm_type_of for accurate SSA type tracking, so only check
+        // when the phi type is a struct but a branch value is clearly an integer, or vice versa.
+        let phi_is_struct = phi_llvm.starts_with('{') || phi_llvm.starts_with('%');
+        let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
+        let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
+        let phi_type_mismatch = if phi_is_struct {
+            // phi expects struct — check if any branch clearly produces a non-struct value
+            (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
+                || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
+        } else {
+            // phi expects a scalar — check if any branch clearly produces a struct
+            (!then_from_label.is_empty() && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
+                || (!else_from_label.is_empty() && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
+        };
+
+        if is_void || !has_else || phi_type_mismatch {
             ir.push_str(&crate::helpers::void_placeholder_ir(&result));
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
             write_ir!(

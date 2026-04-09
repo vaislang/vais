@@ -439,6 +439,13 @@ impl CodeGenerator {
                         self.ref_constants
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
+                    } else if ret_llvm.starts_with('{') {
+                        // Inline struct return: if value is scalar, use zeroinitializer.
+                        if value.starts_with('%') && self.llvm_type_of(&value).starts_with('{') {
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        } else {
+                            write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                        }
                     } else {
                         // Coerce return value width if needed (int, float, struct).
                         let value = if value.starts_with('%') {

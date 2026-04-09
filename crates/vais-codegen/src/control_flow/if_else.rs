@@ -24,7 +24,20 @@ impl CodeGenerator {
                 let local_merge = self.next_label("elseif.merge");
 
                 // Infer the type of the then block for phi node
-                let block_type = self.infer_block_type(then_stmts);
+                let then_type = self.infer_block_type(then_stmts);
+                let else_type_resolved = if let Some(eb) = else_branch {
+                    match eb.as_ref() {
+                        IfElse::Else(stmts) => self.infer_block_type(stmts),
+                        IfElse::ElseIf(_, nested_then, _) => self.infer_block_type(nested_then),
+                    }
+                } else {
+                    vais_types::ResolvedType::I64
+                };
+                let block_type = if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
+                    vais_types::ResolvedType::I64
+                } else {
+                    then_type
+                };
                 let llvm_type = self.type_to_llvm(&block_type);
 
                 // Check each branch independently for struct pointer vs value
@@ -199,8 +212,20 @@ impl CodeGenerator {
                 // (phi nodes cannot have void type in LLVM IR)
                 let is_void_type = matches!(block_type, ResolvedType::Unit);
 
+                // Check for struct/non-struct type mismatch
+                let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
+                let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
+                let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
+                let phi_type_mismatch = if phi_is_struct {
+                    (!then_from_label.is_empty() && then_actual_ty.starts_with('i') && !then_val_for_phi.starts_with("zeroinitializer"))
+                        || (!else_from_label.is_empty() && else_actual_ty.starts_with('i') && else_val_for_phi != "0")
+                } else {
+                    (!then_from_label.is_empty() && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
+                        || (!else_from_label.is_empty() && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
+                };
+
                 // Build phi node only from non-terminated predecessors and non-void types
-                if is_void_type {
+                if is_void_type || phi_type_mismatch {
                     ir.push_str(&crate::helpers::void_placeholder_ir(&result));
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     write_ir!(

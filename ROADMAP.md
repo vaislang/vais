@@ -1,13 +1,456 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 186 — 전체 구조 개선: 10/10 목표)
+> **현재 버전**: 0.1.0 (Phase 188 — Inkwell codegen 타입 불일치 버그 5건 수정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-08 (Phase 186: 5개 영역 전체 구조 개선)
+> **최종 업데이트**: 2026-04-09 (Phase 188: vais-monitor 15K LOC 빌드 중 발견된 Inkwell codegen 버그 5건)
 
 ---
 
-## Current Tasks (2026-04-08) — Phase 186: 전체 구조 개선 (10/10 목표)
+## Current Tasks (2026-04-09) — Phase 188: Inkwell codegen 타입 불일치 버그 수정
+
+vais-monitor (42개 모듈, 13K+ LOC) 빌드 시 20/35개 모듈 성공, 15개 모듈에서 LLVM IR 타입 불일치 에러 발생.
+파싱/타입체크 단계는 전체 통과. Inkwell 백엔드의 codegen에서 5가지 유형의 버그 확인.
+
+**이미 수정됨 (Phase 188 시작 전):**
+- ✅ 루프 내 문자열 연결 dominance 에러 — alloca 슬롯 기반으로 수정 (gen_expr/binary.rs, gen_stmt.rs, gen_aggregate.rs)
+
+### 버그 1: if/else 분기 phi 노드에서 str fat ptr vs i64 타입 불일치 (6개 모듈)
+
+**증상**: if/else 표현식에서 양쪽 분기가 str을 반환할 때, phi 노드가 한쪽을 `i64`, 다른 쪽을 `{ ptr, i64 }` (str fat ptr)로 처리
+
+**실제 IR (chunker.ll:740)**:
+```llvm
+  store { i8*, i64 } %t95, { i8*, i64 }* %chunks.70   ; else 브랜치: str fat ptr
+  br label %merge20
+merge20:
+  %t97 = phi i64 [ %t68, %then18 ], [ %t95, %else19 ]  ; ← %t95는 { ptr, i64 }인데 i64로 기대
+```
+
+**원인 패턴 (vais 코드)**:
+```vais
+I chunks == "[]" {
+    chunks = "[\"" + trimmed + "\"]"       # then: 문자열 연결 → str
+} EL {
+    chunks = str_slice(...) + "..." + "\"]"  # else: 문자열 연결 → str
+}
+```
+phi 노드 생성 시 양 분기의 타입을 통일하지 않음. str이 두 경로에서 다른 내부 표현으로 emit됨.
+
+**영향 모듈**: chunker, engine, handler, incident, logs, pipeline
+
+**관련 파일**:
+- `crates/vais-codegen/src/inkwell/gen_expr/` — if/else expression codegen (phi 노드 생성)
+- `crates/vais-codegen/src/inkwell/gen_stmt.rs` — if/else statement codegen
+
+- [x] 1. if/else phi 노드 str 타입 통일 수정 (Opus direct) ✅ 2026-04-10
+  changes: gen_stmt.rs (inkwell phi i64 fallback), expr_helpers_control.rs (text phi type mismatch guard), control_flow/if_else.rs (elseif phi guard), type_inference.rs (Assign type inference, global var type), function_gen/codegen.rs (struct return zeroinitializer)
+
+### 버그 2: str fat ptr에서 raw ptr 추출 누락 — strcmp/extern 호출 시 (2개 모듈)
+
+**증상**: str(`{ ptr, i64 }`) 타입 변수를 strcmp 등 C extern 함수에 전달 시, raw ptr(`i8*`)을 extractvalue로 추출하지 않고 fat ptr 전체를 전달
+
+**실제 IR (alert.ll:2289)**:
+```llvm
+  %t1 = call i32 @strcmp(i8* %op, ...)  ; ← %op이 { i8*, i64 }인데 i8*로 사용
+```
+
+**원인 패턴 (vais 코드)**:
+```vais
+F evaluate_condition(op: str, ...) -> bool {
+    I op == "gt" { ... }   # str == 비교 시 strcmp 호출 → fat ptr에서 ptr 추출 필요
+}
+```
+
+**영향 모듈**: alert, runtime
+
+**관련 파일**:
+- `crates/vais-codegen/src/inkwell/gen_expr/binary.rs` — string comparison codegen (Eq/Neq)
+- `crates/vais-codegen/src/inkwell/gen_expr/` — extern call argument preparation
+
+- [x] 2. str fat ptr → raw ptr 추출 추가 (strcmp 등 C extern 호출 시) (Opus direct) ✅ 2026-04-10
+  changes: control_flow/match_gen.rs (str match extractvalue before strcmp)
+
+### 버그 3: bool(i1) vs i64 타입 변환 누락 (4개 모듈)
+
+**증상**: bool 타입 결과(i1)를 i64 컨텍스트에서 사용하거나, i64를 i1 비교에 사용할 때 zext/trunc 누락
+
+**실제 IR (middleware.ll:900)**:
+```llvm
+  %t34 = trunc i64 %t33 to i1    ; %t33은 zext된 i64
+  %t35 = trunc i64 %t34 to i1    ; ← %t34는 이미 i1인데 i64로 취급
+```
+
+**원인 패턴**: bool 결과의 zext→trunc 체인에서 중간 타입 추적 실패
+
+**영향 모듈**: anomaly, healthcheck, middleware, users
+
+**관련 파일**:
+- `crates/vais-codegen/src/inkwell/gen_expr/binary.rs` — comparison result type handling
+- `crates/vais-codegen/src/inkwell/gen_expr/` — bool coercion logic
+
+- [x] 3. bool(i1) ↔ i64 타입 변환 정합성 수정 (Opus direct) ✅ 2026-04-10
+  changes: types/conversion.rs (Bool→1 in get_integer_bits), type_inference.rs (global var type lookup), stmt_visitor.rs (prevent double trunc on bool return)
+
+### 버그 4: i64 * f64 혼합 산술에서 암묵적 타입 승격 누락 (1개 모듈)
+
+**증상**: `(cnt - 1) * percentile` 에서 `cnt-1`은 i64, `percentile`은 f64(double). `fmul double`에 i64를 직접 사용하여 타입 불일치
+
+**실제 IR (metric.ll:1491)**:
+```llvm
+  %t90 = sub i64 %t85, 1              ; i64
+  %t91 = fmul double %t90, %percentile ; ← %t90(i64)를 double로 사용 — sitofp 필요
+```
+
+**원인 패턴**:
+```vais
+idx_f := floor((cnt - 1) * percentile)   # cnt: i64, percentile: f64
+```
+컴파일러가 i64 → f64 자동 승격(sitofp)을 수행하지 않음
+
+**영향 모듈**: metric
+
+**관련 파일**:
+- `crates/vais-codegen/src/inkwell/gen_expr/binary.rs` — arithmetic op type coercion
+- 또는 ICE를 유발하는 코드 경로 (최소 재현에서 패닉 발생)
+
+- [x] 4. i64 * f64 혼합 산술 자동 타입 승격 (sitofp) 추가 (Opus direct) ✅ 2026-04-10
+  changes: expr_helpers.rs (sitofp for mixed int*float arithmetic in text codegen)
+
+### 버그 5: async 함수 상태 구조체에 void 필드 포함 (1개 모듈)
+
+**증상**: `A F worker() { ... }` (반환 타입 없는 async 함수)의 상태 구조체가 `{ i64, void }`로 생성 — LLVM에서 void는 struct 필드로 불법
+
+**실제 IR (alert_eval.ll:543)**:
+```llvm
+%start_alert_eval_worker__AsyncState = type { i64, void }  ; ← void 필드 불법
+```
+
+**원인 패턴**:
+```vais
+A F start_alert_eval_worker() {   # 반환 타입 없음 → void
+    LW true { ... sleep_ms(60000) }
+}
+```
+async state struct 생성 시 함수 반환 타입이 void이면 필드로 포함하지 않아야 함
+
+**영향 모듈**: alert_eval
+
+**관련 파일**:
+- `crates/vais-codegen/src/inkwell/` — async function codegen (AsyncState struct 생성)
+
+- [x] 5. async void 함수의 상태 구조체에서 void 필드 제거 (Opus direct) ✅ 2026-04-10
+  changes: function_gen/async_gen.rs (void→i64 placeholder in async state struct)
+
+### 버그 간 관계
+
+5개 버그 모두 `crates/vais-codegen/src/inkwell/` 내 파일이지만 서로 독립적인 코드 경로.
+버그 1(phi), 2(strcmp), 3(bool), 4(arithmetic), 5(async)는 파일 겹침 주의하며 순차 수정 권장.
+우선순위: 2(가장 간단) → 3 → 4 → 5 → 1(가장 복잡)
+
+### 검증
+
+모든 버그 수정 후:
+```bash
+# 컴파일러 빌드 + 테스트
+cd /Users/sswoo/study/projects/vais && cargo build --release -p vaisc && cargo test -p vaisc
+
+# vais-monitor 전체 빌드
+cd /Users/sswoo/study/projects/vais-monitor/server && rm -rf src/.vais-cache && vaisc pkg build
+
+# 기대: 35/35 모듈 OK
+```
+
+progress: 5/5 (100%)
+mode: auto
+max_iterations: 12
+iteration: 2
+strategy: file overlap (binary.rs shared) → sequential, order: 2→3→4→5→1
+opus_direct: all 5 tasks — design-impl inseparable (LLVM IR codegen type system bugs require understanding phi nodes, type coercion semantics)
+
+---
+
+## 🗺️ 중장기 발전 로드맵 (2026-04-10 수립)
+
+> **현재 위치**: Phase 188 (Inkwell codegen 버그 수정 중)
+> **핵심 진단**: 대부분의 컴파일러 에러가 "제네릭을 i64로 지우는 것"에서 비롯됨. Monomorphization 완성이 최우선.
+> **목표**: v0.2.0 안정 릴리스 (다중 파일 프로젝트가 안정적으로 컴파일됨)
+
+### 의존 관계
+
+```
+Phase A: 설계 결정 (189)
+    ↓
+Phase B: 근본 수술 (190~192)
+    ├─ Monomorphization 구현 ←── 근본 원인 제거
+    ├─ 타입 coercion 해킹 제거 ←── Monomorphization 후 가능
+    ├─ IR 후처리기 축소 ←── 근본 원인 제거 후 불필요
+    └─ Phase 188 잔여 IR 버그 수정
+    ↓
+Phase C: 안정화 (193~195)
+    ├─ Cross-module 해킹 제거
+    ├─ vais-monitor 35/35 전체 컴파일
+    └─ v0.2.0 릴리스
+    ↓
+장기: 생태계 & 확장 (196+)
+```
+
+---
+
+### Phase 189 (예정): 설계 결정 — String 표현 & Monomorphization 전략
+
+> **목적**: 근본 수술 전 아키텍처 결정을 확정하여 구현 방향성 보장
+
+#### 결정 1: String 내부 표현 통일
+
+**현재 문제**: Str 타입이 코드 경로에 따라 i64, `{i8*, i64}` fat pointer, `i8*` raw pointer로 다르게 표현됨.
+- phi 노드 타입 불일치 (Phase 188 버그 1)
+- strcmp 호출 시 extractvalue 누락 (Phase 188 버그 2)
+- extern 함수와 내부 함수의 표현 불일치
+
+**선택지**:
+- **Option A (권장)**: Str = 항상 `{i8*, i64}` fat pointer. extern 호출 시 명시적 extractvalue.
+- **Option B**: Str = `i8*` (null-terminated) + 별도 len 관리. C 호환 우선.
+
+#### 결정 2: Monomorphization 전략
+
+**현재 문제**: codegen이 모든 제네릭 T를 i64로 치환 → sizeof(T) > 8인 타입에서 데이터 손실.
+
+**선택지**:
+- **Option A (권장)**: Rust 방식 — 타입별 함수 생성 (`Vec_push$i64`, `Vec_push$MyStruct`)
+  - 장점: 최적 성능, LLVM 최적화 효과적, 이미 부분 구현 (Phase 141~146)
+  - 단점: 바이너리 크기 증가
+- **Option B**: Go 방식 — Dictionary passing (runtime type info)
+  - 장점: 바이너리 작음
+  - 단점: 런타임 오버헤드, VAIS의 Rust 스타일 설계와 불일치
+
+#### 결정 3: Phase 188 버그와의 관계
+
+5개 Inkwell 버그 중 Monomorphization 완성 후 자동 해결 가능성:
+- 버그 1 (phi str): String 표현 통일로 해결 가능성 높음
+- 버그 2 (strcmp): String 표현 통일로 해결
+- 버그 3 (bool): 독립적 — 별도 수정 필요
+- 버그 4 (mixed arithmetic): 독립적 — 별도 수정 필요
+- 버그 5 (async void): 독립적 — 별도 수정 필요
+
+**결론**: 버그 3,4,5는 Phase 188에서 먼저 수정. 버그 1,2는 Phase 189 설계 결정 후 재평가.
+
+---
+
+### Phase 190~192 (예정): 근본 수술 — Monomorphization & 타입 정합성
+
+> **목적**: 컴파일러 타입 시스템의 근본 문제 해결. 기능 추가 아닌 기초 강화.
+
+#### Phase 190: Monomorphization 코드젠 구현
+
+**대상 파일**:
+- `crates/vais-codegen/src/types/conversion.rs` — `type_to_llvm`에서 제네릭 i64 fallback 제거
+- `crates/vais-codegen/src/generics_helpers.rs` — 구체 타입별 함수 생성 로직
+- `crates/vais-codegen/src/module_gen/instantiations.rs` — monomorphized 인스턴스 관리
+- `crates/vais-codegen/src/inkwell/gen_expr/` — call site에서 monomorphized 함수 디스패치
+
+**완료 기준**:
+- `Vec<T>`, `Option<T>`, `Result<T,E>`가 구체 타입별 LLVM struct로 생성
+- `Vec<MyStruct>.push()`가 sizeof(MyStruct) 기반 정확한 메모리 레이아웃 사용
+- E2E 0 regression
+
+#### Phase 191: 타입 coercion 해킹 제거
+
+**대상 파일**:
+- `crates/vais-types/src/inference/unification.rs` (210~250줄) — Bool↔I64, Str↔I64, Unit↔I64 coercion 제거
+- `crates/vais-types/src/checker_expr/calls.rs` (158~175줄) — Str↔I64 함수 호출 coercion 제거
+
+**완료 기준**:
+- CLAUDE.md Phase 158 타입 변환 규칙 100% 준수
+- `phase158_type_strict.rs` E2E 보호 테스트 통과
+- coercion 제거 후 새로운 TC 에러 0건 (Monomorphization이 올바르게 타입 전파)
+
+#### Phase 192: IR 후처리기 축소 & 잔여 버그 수정
+
+**목표**: IR 후처리기 1000줄 → 100줄 이하
+**근거**: Monomorphization + 타입 coercion 제거 후 대부분의 IR 패치가 불필요해짐
+
+**완료 기준**:
+- ir_fix.py (또는 동등 Rust 코드)가 100줄 이하
+- VaisDB 8/8 테스트 스위트 통과
+- vais-monitor 빌드 시 IR 후처리 없이 clang 컴파일 성공
+
+---
+
+### Phase 193~195 (예정): 안정화 — v0.2.0 릴리스 준비
+
+#### Phase 193: Cross-module 해킹 제거
+
+**대상**: H5~H10 hardcoded fallback (300줄+)
+- Monomorphization 완료 후 해킹 대부분 불필요
+- 제거 후 cross-module 제네릭 함수 호출이 정확한 타입으로 dispatch
+
+**완료 기준**:
+- H5~H10 해킹 코드 전량 제거
+- multi-file 프로젝트의 cross-module 제네릭이 정상 동작
+
+#### Phase 194: 실전 프로젝트 전체 컴파일 달성
+
+**검증 프로젝트**:
+- vais-monitor: 35/35 모듈 (현재 20/35)
+- VaisDB: 8/8 테스트 스위트 (현재 부분 통과)
+
+**완료 기준**:
+- vais-monitor 35/35 모듈 OK (IR 후처리 없이)
+- VaisDB 303+ 테스트 중 95%+ 통과
+- E2E 테스트 0 fail
+
+#### Phase 195: v0.2.0 릴리스
+
+**체크리스트**:
+- 보안 감사 (cargo audit)
+- 문서 업데이트 (LANGUAGE_SPEC, STDLIB, FFI_GUIDE)
+- 성능 벤치마크 갱신
+- GitHub Release + Homebrew + Docker 배포
+- CHANGELOG 작성
+
+---
+
+### 장기 로드맵 (Phase 196+)
+
+> v0.2.0 안정화 이후 검토. 우선순위는 커뮤니티 피드백에 따라 조정.
+
+| 방향 | 내용 | 예상 Phase |
+|------|------|-----------|
+| **가독성 개선** | `fn`/`struct` 등 긴 키워드 별칭(alias) 허용 검토. 진입장벽 낮춤 | 196~197 |
+| **패키지 생태계** | HTTP 서버, SQL 클라이언트, JSON 파서 등 핵심 라이브러리 확보 (현재 9개 → 30+) | 198~200 |
+| **킬러 유스케이스** | "AI가 VAIS로 WASM 플러그인 생성" 시나리오 검증 & 데모 | 201 |
+| **증분 컴파일** | 대규모 프로젝트에서 변경 파일만 재컴파일. `vaisc check` 빠른 검증 모드 | 202~204 |
+| **셀프호스팅 LLVM 백엔드** | Rust Inkwell 의존 제거, VAIS로 LLVM IR 생성 (진정한 bootstrap) | 205~210 |
+| **Dynamic Dispatch** | vtable 기반 `&dyn Trait` 다형성 완전 구현 | 211~212 |
+| **공식 벤치마크** | C/Rust 대비 성능 데이터 공개, 공식 사이트 게시 | 213 |
+
+---
+
+## Previous Tasks (2026-04-09) — Phase 187: Cross-module 컴파일러 버그 수정
+
+vais-monitor 프로젝트 (40+ 모듈, 15K+ LOC) 빌드 시도 중 발견된 컴파일러 버그 2건.
+`vaisc check`와 `vaisc build` 모두 실패하며, 단순 재현 가능한 최소 케이스로 확인 완료.
+
+### 버그 1: cross-module struct 필드 resolution 실패 (vais-types)
+
+**증상**: 다른 파일에서 정의된 struct의 `X`(impl) static method로 생성한 인스턴스의 필드에 접근하면 "No such field" 에러
+
+**최소 재현**:
+```
+# config.vais
+S Config { host: str, port: i64 }
+X Config {
+    F from_env() -> Config { Config { host: "localhost", port: 8080 } }
+}
+
+# main.vais
+U config
+F main() -> i64 {
+    cfg := Config::from_env()
+    println(cfg.host)    # ← error[E030] No such field 'host' on type 'Config'
+    cfg.port
+}
+```
+단일 파일에서는 정상 동작. `vaisc check`는 같은 디렉토리의 모든 .vais를 자동 스캔하지만, cross-file impl 블록에서 반환된 struct의 필드를 resolve하지 못함.
+
+**추정 원인**: `vais-types` checker_module에서 cross-file struct 등록 시 `register_impl`이 `struct_def.methods`에 메서드를 추가하지만, 별도 파일의 struct 필드 정보가 타입 체커의 `check_field_access` 시점에 완전히 merge되지 않음. 또는 `register_struct` pass 1a에서 cross-file struct의 fields가 누락됨.
+
+**관련 파일**:
+- `crates/vais-types/src/checker_module/traits.rs` — `register_impl` (cross-file struct lookup)
+- `crates/vais-types/src/checker_module/mod.rs` — 2-pass registration (pass 1a: structs, pass 1b: impls)
+- `crates/vais-types/src/checker_expr/collections.rs:141-216` — `Expr::Field` 필드 접근 체크
+- `crates/vais-types/src/checker_module/registration.rs:186-194` — `register_struct` 필드 등록
+
+**영향**: 모든 multi-file vais 프로젝트에서 cross-module struct 필드 접근 불가. vais-monitor의 모든 모듈이 이 패턴을 사용.
+
+- [x] 1. cross-module struct 필드 resolution 수정 (Opus direct) ✅ 2026-04-09
+  근본원인: cmd_check가 단일 파일만 처리 — TypeChecker::new()로 독립 인스턴스 생성, U import를 no-op 처리, load_module_with_imports 미호출 → import된 파일의 struct/함수가 등록되지 않음
+  [대상 파일]: crates/vaisc/src/commands/simple.rs (cmd_check 함수 — load_module_with_imports 통합), crates/vais-types/src/checker_module/mod.rs (Item::Use no-op 제거 또는 외부에서 merge)
+  [완료 기준]:
+  - 위 최소 재현 케이스가 `vaisc check` 통과
+  - cross-module struct 리터럴 생성(`Point { x: 1, y: 2 }`)이 "Undefined type" 에러 없이 통과
+  - cross-module impl static method 반환값의 필드 접근이 정상 동작
+  - E2E 테스트 regression 없음 (`cargo test -p vaisc`)
+  [검증]:
+  ```bash
+  # 최소 재현 테스트
+  mkdir -p /tmp/cross_module_test
+  echo 'S Config { host: str, port: i64 }
+  X Config { F new() -> Config { Config { host: "hi", port: 80 } } }' > /tmp/cross_module_test/config.vais
+  echo 'U config
+  F main() -> i64 { cfg := Config::new(); println(cfg.host); cfg.port }' > /tmp/cross_module_test/main.vais
+  cd /tmp/cross_module_test && vaisc check main.vais  # 기대: OK
+  cd /tmp/cross_module_test && vaisc build main.vais -o test && ./test  # 기대: "hi" 출력, exit 80
+  ```
+
+### 버그 2: build 모듈 해석 — 서브디렉토리에서 상위 디렉토리 모듈 참조 실패 (vaisc imports.rs)
+
+**증상**: `vaisc build src/main.vais`에서 서브디렉토리(models/) 파일이 `U runtime`으로 상위 디렉토리(src/)의 runtime.vais를 import할 때 "Cannot find module" 에러
+
+**최소 재현**:
+```
+# src/runtime.vais
+F helper() -> i64 { 42 }
+
+# src/models/user.vais
+U runtime              # ← error: Cannot find module 'runtime'
+F use_helper() -> i64 { helper() }
+
+# src/main.vais
+U runtime
+U models/user
+F main() -> i64 { use_helper() }
+```
+
+**추정 원인**: `crates/vaisc/src/imports.rs`의 `resolve_import_path` 함수가 모듈 검색 시 importing 파일의 디렉토리만 검색하고, 프로젝트 루트(entry point의 디렉토리)를 fallback으로 검색하지 않음. `models/user.vais`가 `U runtime`을 시도하면 `models/runtime.vais`만 찾고, 상위의 `src/runtime.vais`는 시도하지 않음.
+
+**관련 파일**:
+- `crates/vaisc/src/imports.rs:520-598` — `resolve_import_path` 함수 (모듈 경로 해석)
+- 특히 line 527-531: `search_base`가 importing 파일의 디렉토리로 설정됨
+
+**수정 방향**: `resolve_import_path`에서 현재 파일 디렉토리에서 못 찾으면 entry point(main.vais)의 디렉토리를 fallback으로 검색. 또는 Rust의 crate root 개념처럼 프로젝트 루트를 별도 관리.
+
+**영향**: 서브디렉토리 구조를 가진 모든 multi-file 프로젝트의 build가 실패. check는 다른 경로로 동작하여 이 문제를 겪지 않음.
+
+- [x] 2. build 모듈 해석 — 서브디렉토리→상위 모듈 fallback 검색 추가 (Opus direct) ✅ 2026-04-09
+  근본원인: imports.rs:128 `base_dir = path.parent()` — importing 파일의 디렉토리만 검색, entry point 디렉토리로의 fallback 없음. source_root 개념 미존재.
+  [대상 파일]: crates/vaisc/src/imports.rs (resolve_import_path에 source_root fallback 추가, load_module_with_imports_internal에 source_root 파라미터 threading)
+  [완료 기준]:
+  - 위 최소 재현 케이스가 `vaisc build` 통과
+  - 서브디렉토리 파일이 상위 디렉토리 모듈을 `U modulename`으로 import 가능
+  - 기존 flat 구조 (같은 디렉토리) import에 영향 없음
+  - E2E 테스트 regression 없음
+  [검증]:
+  ```bash
+  mkdir -p /tmp/subdir_test/src/models
+  echo 'F helper() -> i64 { 42 }' > /tmp/subdir_test/src/runtime.vais
+  echo 'U runtime
+  F use_it() -> i64 { helper() }' > /tmp/subdir_test/src/models/user.vais
+  echo 'U runtime
+  U models/user
+  F main() -> i64 { use_it() }' > /tmp/subdir_test/src/main.vais
+  cd /tmp/subdir_test && vaisc build src/main.vais -o test && ./test  # 기대: exit 42
+  ```
+
+### 버그 간 관계
+
+버그 1(타입 체커)과 버그 2(빌드 모듈 해석)는 독립적이지만, vais-monitor 빌드를 위해서는 둘 다 수정 필요.
+파일 겹침 없음: 버그 1은 vais-types crate, 버그 2는 vaisc crate → 병렬 수정 가능.
+
+### 추가 발견사항 (check vs build 동작 차이)
+
+- `vaisc check`는 같은 디렉토리의 모든 `.vais` 파일을 자동 스캔 (U import 무시)
+- `vaisc build`는 U import를 통해 명시적으로 모듈을 resolve
+- `vaisc check`에서 존재하지 않는 모듈을 `U nonexistent`로 import해도 에러 없이 통과
+- 이 동작 차이는 의도된 것일 수 있으나, check의 신뢰성을 낮춤 → 별도 이슈로 추적 필요
+
+progress: 2/2 (100%)
+mode: completed
+
+---
+
+## Previous Tasks (2026-04-08) — Phase 186: 전체 구조 개선 (10/10 목표)
 
 5개 영역 종합 분석 결과 도출된 개선 작업. 병렬 실행 가능한 작업은 TeamCreate로 동시 진행.
 

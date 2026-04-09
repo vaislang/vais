@@ -275,6 +275,10 @@ impl CodeGenerator {
                 let mut actual_left = left_val.clone();
                 let mut actual_right = right_val.clone();
 
+                // Check for int operands that need sitofp conversion
+                let left_is_int = !left_is_f32 && !left_is_f64;
+                let right_is_int = !right_is_f32 && !right_is_f64;
+
                 if (left_is_f32 && right_is_f64) || (left_is_f64 && right_is_f32) {
                     // Mixed f32/f64 — promote f32 to f64
                     float_llvm = "double";
@@ -292,6 +296,20 @@ impl CodeGenerator {
                     float_llvm = "float";
                 } else {
                     float_llvm = "double";
+                }
+
+                // Convert int operands to float (sitofp) for mixed int*float arithmetic
+                if left_is_int {
+                    let conv = self.next_temp(counter);
+                    let int_llvm = self.type_to_llvm(&left_type);
+                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_left, float_llvm);
+                    actual_left = conv;
+                }
+                if right_is_int {
+                    let conv = self.next_temp(counter);
+                    let int_llvm = self.type_to_llvm(&right_type);
+                    write_ir!(ir, "  {} = sitofp {} {} to {}", conv, int_llvm, actual_right, float_llvm);
+                    actual_right = conv;
                 }
 
                 write_ir!(
