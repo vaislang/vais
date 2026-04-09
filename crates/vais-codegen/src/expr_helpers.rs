@@ -408,7 +408,17 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = sub {} 0, {}{}", tmp, int_llvm, val, dbg_info);
             }
             UnaryOp::Not => {
-                write_ir!(ir, "  {} = xor i1 {}, 1{}", tmp, val, dbg_info);
+                // Logical NOT: convert to i1 via icmp ne, then xor to flip
+                let val_ty = self.llvm_type_of(&val);
+                let bool_val = if val_ty == "i1" {
+                    val.clone()
+                } else {
+                    let to_bool = self.next_temp(counter);
+                    write_ir!(ir, "  {} = icmp ne {} {}, 0", to_bool, val_ty, val);
+                    to_bool
+                };
+                // xor i1 produces i1 — keep as i1 and let callers zext if needed
+                write_ir!(ir, "  {} = xor i1 {}, 1{}", tmp, bool_val, dbg_info);
             }
             UnaryOp::BitNot => {
                 write_ir!(ir, "  {} = xor {} {}, -1{}", tmp, int_llvm, val, dbg_info);

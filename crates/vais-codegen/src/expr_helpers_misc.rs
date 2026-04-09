@@ -64,8 +64,10 @@ impl CodeGenerator {
         inner: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let (future_ptr, future_ir) = self.generate_expr(inner, counter)?;
+        let (future_ptr_raw, future_ir) = self.generate_expr(inner, counter)?;
         let mut ir = future_ir;
+        // void results (from non-async functions) cannot be used as i64 pointer args
+        let future_ptr = if future_ptr_raw == "void" { "0".to_string() } else { future_ptr_raw };
 
         // Determine the poll function to call:
         // 1. Try static AST analysis (direct call/spawn expressions)
@@ -106,18 +108,19 @@ impl CodeGenerator {
             // Extract the async function name from the poll function name
             let async_fn_name = poll_func.trim_end_matches("__poll");
             // Look up the function's return type in the registry
-            self.types
+            let ret_ty = self.types
                 .functions
                 .get(async_fn_name)
                 .map(|info| self.type_to_llvm(&info.signature.ret))
                 .unwrap_or_else(|| {
-                    // Also check resolved_function_sigs from the type checker
                     self.types
                         .resolved_function_sigs
                         .get(async_fn_name)
                         .map(|sig| self.type_to_llvm(&sig.ret))
                         .unwrap_or_else(|| "i64".to_string())
-                })
+                });
+            // void cannot be a struct field — use i64 placeholder for void async returns
+            if ret_ty == "void" { "i64".to_string() } else { ret_ty }
         };
         let poll_ret_ty = format!("{{ i64, {} }}", inner_ret_llvm);
 

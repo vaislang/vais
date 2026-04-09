@@ -921,7 +921,12 @@ impl CodeGenerator {
                     }
                 }
             }
-            Expr::Unary { expr: inner, .. } => self.infer_expr_type(inner),
+            Expr::Unary { op, expr: inner } => {
+                match op {
+                    vais_ast::UnaryOp::Not => ResolvedType::Bool,
+                    _ => self.infer_expr_type(inner),
+                }
+            }
             Expr::Ternary { then, .. } => {
                 // Ternary returns the type of its then branch
                 self.infer_expr_type(then)

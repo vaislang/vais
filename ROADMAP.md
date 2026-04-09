@@ -1,13 +1,43 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 188 — Inkwell codegen 타입 불일치 버그 5건 수정)
+> **현재 버전**: 0.1.0 (Phase 189 — text codegen 타입 불일치 잔여 7건 수정)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-09 (Phase 188: vais-monitor 15K LOC 빌드 중 발견된 Inkwell codegen 버그 5건)
+> **최종 업데이트**: 2026-04-10 (Phase 189: Phase 188 수정 후 잔여 LLVM IR 타입 불일치 7개 모듈)
 
 ---
 
-## Current Tasks (2026-04-09) — Phase 188: Inkwell codegen 타입 불일치 버그 수정
+## Current Tasks (2026-04-10) — Phase 189: text codegen 타입 불일치 잔여 버그 수정
+
+Phase 188에서 5개 핵심 버그를 수정했으나 vais-monitor 37개 모듈 중 7개에서 추가 에러 잔존.
+30/37 모듈 성공, 7개 모듈에서 4가지 유형의 LLVM IR 타입 불일치 에러.
+
+- [ ] 1. bool(i1)↔i64 xor/icmp 연산 순서 정합성 수정 (Opus direct)
+  [대상 파일]: expr_helpers.rs, expr_helpers_control.rs
+  [완료 기준]: handler, users 모듈 clang 통과
+
+- [ ] 2. async void poll 함수 반환 타입 void→i64 대체 (Opus direct)
+  [대상 파일]: function_gen/async_gen.rs
+  [완료 기준]: healthcheck 모듈 clang 통과
+
+- [ ] 3. str fat ptr→i64/ptr inttoptr 타입 불일치 수정 (Opus direct)
+  [대상 파일]: expr_helpers*.rs, stmt.rs
+  [완료 기준]: anomaly, runtime 모듈 clang 통과
+
+- [ ] 4. void placeholder→struct phi/return 유입 차단 (Opus direct)
+  [대상 파일]: expr_helpers_control.rs, control_flow/if_else.rs, function_gen/codegen.rs
+  [완료 기준]: engine, incident 모듈 clang 통과
+
+progress: 0/4 (0%)
+mode: auto
+max_iterations: 10
+iteration: 1
+strategy: file overlap (expr_helpers*.rs shared) → sequential, order: 1→2→3→4
+opus_direct: all 4 tasks — LLVM IR codegen type bugs, design-impl inseparable
+
+---
+
+## Previous Tasks (2026-04-10) — Phase 188: Inkwell codegen 타입 불일치 버그 수정 ✅
 
 vais-monitor (42개 모듈, 13K+ LOC) 빌드 시 20/35개 모듈 성공, 15개 모듈에서 LLVM IR 타입 불일치 에러 발생.
 파싱/타입체크 단계는 전체 통과. Inkwell 백엔드의 codegen에서 5가지 유형의 버그 확인.
@@ -173,157 +203,190 @@ opus_direct: all 5 tasks — design-impl inseparable (LLVM IR codegen type syste
 ## 🗺️ 중장기 발전 로드맵 (2026-04-10 수립)
 
 > **현재 위치**: Phase 188 (Inkwell codegen 버그 수정 중)
-> **핵심 진단**: 대부분의 컴파일러 에러가 "제네릭을 i64로 지우는 것"에서 비롯됨. Monomorphization 완성이 최우선.
 > **목표**: v0.2.0 안정 릴리스 (다중 파일 프로젝트가 안정적으로 컴파일됨)
+
+### 기존 히스토리에서 배운 것
+
+Phase 141~188에 걸쳐 동일 근본 원인("i64 erasure")을 점진적으로 수정해옴. 핵심 교훈:
+
+| 이미 해결된 것 | Phase | 상태 |
+|---------------|-------|------|
+| R1 Monomorphization 기본 구조 (specialized 함수 생성, `$` mangling) | 141~146 | ✅ 동작 |
+| R2 IR Postprocessor → 컴파일러 자체 생성 전환 | 142~148 | ✅ 전환 완료 |
+| compute_sizeof Named type 해석 | 150 | ✅ struct 필드 합산 |
+| TC expr_types → codegen 연결 | 150 | ✅ 타입 정보 전달 |
+| match phi value/pointer 통일 | 150 | ✅ alloca+store 변환 |
+| Bool↔I64 coercion 제거 (TC) | 151 | ✅ unification.rs |
+| str fat pointer `{i8*,i64}` 전환 시작 | 77~78 | ✅ C ABI 자동 변환 |
+| cross-module struct 필드 resolution | 187 | ✅ load_module_with_imports |
+| 서브디렉토리 import fallback | 187 | ✅ source_root |
+| Vec<f32> 제네릭 타입 보존 | 182 | ✅ substitution 조회 우선 |
+| VaisDB codegen deeper 에러 42→6→0 (표면 레이어) | 172~181 | ✅ 각 Phase별 해소 |
+
+| 반복되는 패턴 (양파 깊이) | 교훈 |
+|--------------------------|------|
+| 매 Phase마다 "해결" → deeper 에러 노출 (172→173→177→180→181→182→188) | 점진적 coercion 추가는 끝이 없음 |
+| i64 fallback 부분 제거 시도 (Phase 17~19, 141~146) → 특정 경로만 수정 | 전체 codegen 경로 통합이 안 됨 |
+| coercion 토글 (Phase 151 제거 → 이후 재추가 필요) | 근본 해결 없이 제거하면 다시 필요해짐 |
+| ir_fix.py 500+ iterations → bus error (Phase 150) | 후처리는 근본 해결이 아님 |
+
+**핵심 진단**: Monomorphization 기본 구조는 Phase 141~146에서 완성. specialized 함수가 생성되지만, **generic body 내부에서 i64로 erased된 값이 specialized 함수에 전달되는 불일치가 잔존**. Phase 172~188의 deeper 에러들은 모두 이 불일치의 변형.
 
 ### 의존 관계
 
 ```
-Phase A: 설계 결정 (189)
+Phase 188: Inkwell 버그 5건 (버그 3,4,5 독립적 → 먼저 수정)
     ↓
-Phase B: 근본 수술 (190~192)
-    ├─ Monomorphization 구현 ←── 근본 원인 제거
-    ├─ 타입 coercion 해킹 제거 ←── Monomorphization 후 가능
-    ├─ IR 후처리기 축소 ←── 근본 원인 제거 후 불필요
-    └─ Phase 188 잔여 IR 버그 수정
+Phase 189: 설계 결정 (str 표현 통일 + i64 fallback 제거 전략)
     ↓
-Phase C: 안정화 (193~195)
-    ├─ Cross-module 해킹 제거
+Phase 190~191: i64 fallback 잔존 경로 전량 제거
+    ├─ generic body의 i64 erased 값 → concrete type 변환 경로 통합
+    ├─ str 표현 `{i8*, i64}` 통일 (Phase 77~78 전환 미완료 경로)
+    └─ TC coercion 잔여분 제거 (Phase 151 이후 재추가된 것들)
+    ↓
+Phase 192~193: 안정화 & 실전 검증
     ├─ vais-monitor 35/35 전체 컴파일
-    └─ v0.2.0 릴리스
+    ├─ VaisDB 95%+ 테스트 통과
+    └─ Cross-module 해킹 H5~H10 제거
     ↓
-장기: 생태계 & 확장 (196+)
+Phase 194: v0.2.0 릴리스
+    ↓
+장기: 생태계 & 확장 (195+)
 ```
 
 ---
 
-### Phase 189 (예정): 설계 결정 — String 표현 & Monomorphization 전략
+### Phase 189 (예정): 설계 결정 — str 표현 통일 & i64 fallback 제거 전략
 
-> **목적**: 근본 수술 전 아키텍처 결정을 확정하여 구현 방향성 보장
+> **목적**: Phase 172~188에서 반복된 "양파 깊이" 패턴을 끊기 위한 아키텍처 결정
 
 #### 결정 1: String 내부 표현 통일
 
-**현재 문제**: Str 타입이 코드 경로에 따라 i64, `{i8*, i64}` fat pointer, `i8*` raw pointer로 다르게 표현됨.
-- phi 노드 타입 불일치 (Phase 188 버그 1)
-- strcmp 호출 시 extractvalue 누락 (Phase 188 버그 2)
-- extern 함수와 내부 함수의 표현 불일치
+**현재 상태**: Phase 77~78에서 str fat pointer `{i8*, i64}` 전환을 시작했으나, 일부 codegen 경로에서 i64 표현이 잔존.
+- phi 노드 타입 불일치 (Phase 188 버그 1) — 분기별 str 표현 불일치
+- strcmp 호출 시 extractvalue 누락 (Phase 188 버그 2) — fat ptr vs raw ptr
+- Phase 177에서 String_print extractvalue 에러 수정 (inttoptr 우회) — 근본 수정 아닌 워크어라운드
 
 **선택지**:
-- **Option A (권장)**: Str = 항상 `{i8*, i64}` fat pointer. extern 호출 시 명시적 extractvalue.
-- **Option B**: Str = `i8*` (null-terminated) + 별도 len 관리. C 호환 우선.
+- **Option A (권장)**: Str = 항상 `{i8*, i64}` fat pointer. extern 호출 시 명시적 extractvalue. Phase 77~78 방향 완성.
+- **Option B**: Str = `i8*` (null-terminated) + 별도 len 관리. C 호환 우선이나 Phase 77~78 전환을 되돌려야 함.
 
-#### 결정 2: Monomorphization 전략
+#### 결정 2: i64 fallback 잔존 경로 제거 전략
 
-**현재 문제**: codegen이 모든 제네릭 T를 i64로 치환 → sizeof(T) > 8인 타입에서 데이터 손실.
+**현재 상태**: Phase 141~146에서 Monomorphization 기본 구조 완성. `Vec_push$i64`, `Vec_push$MyStruct` 등 specialized 함수 생성 동작. Phase 150에서 TC expr_types 연결, Phase 182에서 substitution 조회 우선 등 인프라 보강 완료. 그러나:
+- `type_to_llvm`에서 Generic/Named type → i64 fallback 경로 잔존 (conversion.rs)
+- generic body 내부의 변수가 i64로 erased → specialized 함수 호출 시 타입 불일치
+- Phase 182에서 `substitution 조회 → i64 fallback` 순서로 수정했으나 모든 경로 커버 안 됨
 
-**선택지**:
-- **Option A (권장)**: Rust 방식 — 타입별 함수 생성 (`Vec_push$i64`, `Vec_push$MyStruct`)
-  - 장점: 최적 성능, LLVM 최적화 효과적, 이미 부분 구현 (Phase 141~146)
-  - 단점: 바이너리 크기 증가
-- **Option B**: Go 방식 — Dictionary passing (runtime type info)
-  - 장점: 바이너리 작음
-  - 단점: 런타임 오버헤드, VAIS의 Rust 스타일 설계와 불일치
+**전략 선택지**:
+- **Option A (권장)**: i64 fallback 경로를 `unreachable!()` 또는 `InternalError`로 교체하고, 실패하는 경로를 하나씩 수정. Phase 17~19에서 시도한 방향이나, 당시와 달리 TC expr_types(150), substitution 조회(182), compute_sizeof(150) 등 인프라가 갖춰짐.
+- **Option B**: 현재처럼 점진적 coercion 추가 계속. Phase 172~188 패턴 반복 위험.
 
-#### 결정 3: Phase 188 버그와의 관계
+#### 결정 3: Phase 188 버그 처리 순서
 
-5개 Inkwell 버그 중 Monomorphization 완성 후 자동 해결 가능성:
-- 버그 1 (phi str): String 표현 통일로 해결 가능성 높음
-- 버그 2 (strcmp): String 표현 통일로 해결
-- 버그 3 (bool): 독립적 — 별도 수정 필요
-- 버그 4 (mixed arithmetic): 독립적 — 별도 수정 필요
-- 버그 5 (async void): 독립적 — 별도 수정 필요
-
-**결론**: 버그 3,4,5는 Phase 188에서 먼저 수정. 버그 1,2는 Phase 189 설계 결정 후 재평가.
+5개 Inkwell 버그와의 관계:
+- 버그 1 (phi str): str 표현 통일(결정 1)로 해결 가능성 높음 → Phase 189 이후 재평가
+- 버그 2 (strcmp): str 표현 통일(결정 1)로 해결 → Phase 189 이후 재평가
+- 버그 3 (bool i1↔i64): 독립적 — Phase 188에서 먼저 수정
+- 버그 4 (i64*f64 mixed): 독립적 — Phase 188에서 먼저 수정
+- 버그 5 (async void): 독립적 — Phase 188에서 먼저 수정
 
 ---
 
-### Phase 190~192 (예정): 근본 수술 — Monomorphization & 타입 정합성
+### Phase 190~191 (예정): i64 fallback 잔존 경로 전량 제거
 
-> **목적**: 컴파일러 타입 시스템의 근본 문제 해결. 기능 추가 아닌 기초 강화.
+> **목적**: Phase 141~146 Monomorphization + Phase 150 TC expr_types + Phase 182 substitution 조회 인프라를 활용하여, codegen 전체에서 i64 fallback을 제거. Phase 172~188의 "양파 깊이" 반복을 근본적으로 종료.
 
-#### Phase 190: Monomorphization 코드젠 구현
+#### Phase 190: codegen i64 fallback → InternalError 전환 + 수정
 
-**대상 파일**:
-- `crates/vais-codegen/src/types/conversion.rs` — `type_to_llvm`에서 제네릭 i64 fallback 제거
-- `crates/vais-codegen/src/generics_helpers.rs` — 구체 타입별 함수 생성 로직
-- `crates/vais-codegen/src/module_gen/instantiations.rs` — monomorphized 인스턴스 관리
-- `crates/vais-codegen/src/inkwell/gen_expr/` — call site에서 monomorphized 함수 디스패치
+**접근 방식**: `type_to_llvm`의 i64 fallback을 `InternalError`로 바꾼 후, E2E 테스트에서 실패하는 경로를 TC expr_types 또는 substitution으로 수정.
 
-**완료 기준**:
-- `Vec<T>`, `Option<T>`, `Result<T,E>`가 구체 타입별 LLVM struct로 생성
-- `Vec<MyStruct>.push()`가 sizeof(MyStruct) 기반 정확한 메모리 레이아웃 사용
-- E2E 0 regression
-
-#### Phase 191: 타입 coercion 해킹 제거
+**이미 갖춰진 인프라** (재구현 불필요):
+- TC expr_types: `HashMap<Span, ResolvedType>` (Phase 150)
+- substitution 조회: generic param → concrete type (Phase 182에서 i64 fallback 전 우선 조회)
+- specialized 함수 생성: `$` mangling (Phase 141~146)
+- compute_sizeof: Named type struct 필드 합산 (Phase 150)
+- Vec 런타임 stride: elem_size 기반 인덱싱 (Phase 150)
+- `&Vec<T>` → `&[T]` deref coercion (Phase 150)
 
 **대상 파일**:
-- `crates/vais-types/src/inference/unification.rs` (210~250줄) — Bool↔I64, Str↔I64, Unit↔I64 coercion 제거
-- `crates/vais-types/src/checker_expr/calls.rs` (158~175줄) — Str↔I64 함수 호출 coercion 제거
+- `crates/vais-codegen/src/types/conversion.rs` — `type_to_llvm` i64 fallback 제거
+- `crates/vais-codegen/src/inkwell/gen_expr/` — call arg, store, load, ret, phi의 type coercion 통합
+- `crates/vais-codegen/src/type_inference.rs` — TC expr_types 우선 참조 확대 (Phase 150 기반)
 
 **완료 기준**:
-- CLAUDE.md Phase 158 타입 변환 규칙 100% 준수
+- `type_to_llvm`에서 Generic/Named → i64 fallback 경로 0개
+- E2E 2512+ passed / 0 fail (regression 0)
+- VaisDB clang 에러 감소 확인
+
+#### Phase 191: str 표현 통일 + TC coercion 최종 정리
+
+**str 표현** (Phase 189 결정 기반):
+- Phase 77~78에서 시작한 `{i8*, i64}` 전환을 모든 codegen 경로에서 완성
+- Phase 177 inttoptr 워크어라운드 제거 → 정상 extractvalue로 교체
+- extern 함수 호출 시 자동 extractvalue(0) 삽입
+
+**TC coercion 정리**:
+- Phase 151에서 제거 후 재추가된 coercion 확인 & 최종 제거
+- CLAUDE.md Phase 158 규칙 100% 준수 검증
 - `phase158_type_strict.rs` E2E 보호 테스트 통과
-- coercion 제거 후 새로운 TC 에러 0건 (Monomorphization이 올바르게 타입 전파)
-
-#### Phase 192: IR 후처리기 축소 & 잔여 버그 수정
-
-**목표**: IR 후처리기 1000줄 → 100줄 이하
-**근거**: Monomorphization + 타입 coercion 제거 후 대부분의 IR 패치가 불필요해짐
 
 **완료 기준**:
-- ir_fix.py (또는 동등 Rust 코드)가 100줄 이하
-- VaisDB 8/8 테스트 스위트 통과
-- vais-monitor 빌드 시 IR 후처리 없이 clang 컴파일 성공
+- str 관련 codegen 경로에서 i64 표현 0곳
+- unification.rs에 금지된 coercion (Bool↔I64, Str↔I64, Unit↔I64) 0건
+- Phase 188 버그 1,2 해소 확인
 
 ---
 
-### Phase 193~195 (예정): 안정화 — v0.2.0 릴리스 준비
+### Phase 192~193 (예정): 안정화 — 실전 검증 & 해킹 제거
 
-#### Phase 193: Cross-module 해킹 제거
+#### Phase 192: 실전 프로젝트 전체 컴파일
 
-**대상**: H5~H10 hardcoded fallback (300줄+)
-- Monomorphization 완료 후 해킹 대부분 불필요
-- 제거 후 cross-module 제네릭 함수 호출이 정확한 타입으로 dispatch
-
-**완료 기준**:
-- H5~H10 해킹 코드 전량 제거
-- multi-file 프로젝트의 cross-module 제네릭이 정상 동작
-
-#### Phase 194: 실전 프로젝트 전체 컴파일 달성
-
-**검증 프로젝트**:
-- vais-monitor: 35/35 모듈 (현재 20/35)
-- VaisDB: 8/8 테스트 스위트 (현재 부분 통과)
+**검증 프로젝트** (기존 히스토리 기준):
+- vais-monitor: 35/35 모듈 (현재 20/35, Phase 186~188에서 진행 중)
+- VaisDB: 8/8 테스트 스위트 (Phase 150에서 test_graph 48/48 달성, test_btree 12/12)
 
 **완료 기준**:
 - vais-monitor 35/35 모듈 OK (IR 후처리 없이)
 - VaisDB 303+ 테스트 중 95%+ 통과
 - E2E 테스트 0 fail
 
-#### Phase 195: v0.2.0 릴리스
+#### Phase 193: Cross-module 해킹 H5~H10 제거
+
+**현재 상태**: Phase 187에서 cross-module struct 필드 resolution, 서브디렉토리 import fallback 해결. 그러나 H5~H10 hardcoded method/constant fallback (300줄+)은 잔존.
+- i64 fallback 제거(Phase 190) 후 해킹 대부분 불필요해질 것으로 예상
+
+**완료 기준**:
+- H5~H10 해킹 코드 전량 제거
+- multi-file 프로젝트의 cross-module 제네릭이 정상 동작
+- vais-monitor + VaisDB 재검증
+
+---
+
+### Phase 194 (예정): v0.2.0 릴리스
 
 **체크리스트**:
 - 보안 감사 (cargo audit)
 - 문서 업데이트 (LANGUAGE_SPEC, STDLIB, FFI_GUIDE)
-- 성능 벤치마크 갱신
+- 성능 벤치마크 갱신 (현재: 50K LOC → 58.8ms, Fib35 C 대비 1.06x)
 - GitHub Release + Homebrew + Docker 배포
-- CHANGELOG 작성
+- CHANGELOG 작성 (Phase 141~194 변경 요약)
 
 ---
 
-### 장기 로드맵 (Phase 196+)
+### 장기 로드맵 (Phase 195+)
 
 > v0.2.0 안정화 이후 검토. 우선순위는 커뮤니티 피드백에 따라 조정.
 
-| 방향 | 내용 | 예상 Phase |
-|------|------|-----------|
-| **가독성 개선** | `fn`/`struct` 등 긴 키워드 별칭(alias) 허용 검토. 진입장벽 낮춤 | 196~197 |
-| **패키지 생태계** | HTTP 서버, SQL 클라이언트, JSON 파서 등 핵심 라이브러리 확보 (현재 9개 → 30+) | 198~200 |
-| **킬러 유스케이스** | "AI가 VAIS로 WASM 플러그인 생성" 시나리오 검증 & 데모 | 201 |
-| **증분 컴파일** | 대규모 프로젝트에서 변경 파일만 재컴파일. `vaisc check` 빠른 검증 모드 | 202~204 |
-| **셀프호스팅 LLVM 백엔드** | Rust Inkwell 의존 제거, VAIS로 LLVM IR 생성 (진정한 bootstrap) | 205~210 |
-| **Dynamic Dispatch** | vtable 기반 `&dyn Trait` 다형성 완전 구현 | 211~212 |
-| **공식 벤치마크** | C/Rust 대비 성능 데이터 공개, 공식 사이트 게시 | 213 |
+| 방향 | 내용 | 근거 | 예상 Phase |
+|------|------|------|-----------|
+| **가독성 개선** | `fn`/`struct` 등 긴 키워드 별칭(alias) 허용 | 단일 문자 키워드의 진입장벽 낮춤 | 195~196 |
+| **패키지 생태계** | HTTP 서버, SQL 클라이언트 등 핵심 라이브러리 | 현재 9개 → 30+, 실용성 확보 | 197~200 |
+| **킬러 유스케이스** | "AI가 VAIS로 WASM 플러그인 생성" 시나리오 | VAIS의 강점(다중 백엔드 + AI 토큰 효율)을 살리는 데모 | 201 |
+| **증분 컴파일** | 변경 파일만 재컴파일, `vaisc check` 빠른 검증 | 대규모 프로젝트 지원 (현재 vaisc incremental.rs 존재) | 202~204 |
+| **셀프호스팅 LLVM 백엔드** | Rust Inkwell 의존 제거, VAIS로 LLVM IR 생성 | 진정한 bootstrap. 현재 selfhost 50K+ LOC 기반 | 205~210 |
+| **Dynamic Dispatch** | vtable 기반 `&dyn Trait` 다형성 | R5에서 static dispatch만 구현 (Phase 141~146) | 211~212 |
+| **공식 벤치마크** | C/Rust 대비 성능 데이터 공개 | 공식 사이트 게시, 채택 촉진 | 213 |
 
 ---
 
