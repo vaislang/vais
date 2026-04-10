@@ -968,8 +968,16 @@ impl CodeGenerator {
                             ir.push_str(&bind_ir);
                         } else {
                             // Simple type (i64, i32, pointer, etc.): load directly
-                            let field_val = self.next_temp(counter);
-                            write_ir!(ir, "  {} = load i64, i64* {}", field_val, payload_ptr);
+                            let raw_val = self.next_temp(counter);
+                            write_ir!(ir, "  {} = load i64, i64* {}", raw_val, payload_ptr);
+                            let field_val = if llvm_field_ty == "i1" {
+                                // Bool field: payload slot is i64, but binding needs i1 for branch instructions
+                                let bool_val = self.next_temp(counter);
+                                write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, raw_val);
+                                bool_val
+                            } else {
+                                raw_val
+                            };
                             let bind_ir = self.generate_pattern_bindings_typed(
                                 field_pat,
                                 &field_val,
@@ -1073,9 +1081,17 @@ impl CodeGenerator {
                                 ir.push_str(&bind_ir);
                             }
                         } else {
+                            let field_val = if llvm_field_ty == "i1" {
+                                // Bool field: extracted payload is i64, but binding needs i1 for branch instructions
+                                let bool_val = self.next_temp(counter);
+                                write_ir!(ir, "  {} = trunc i64 {} to i1", bool_val, payload_val);
+                                bool_val
+                            } else {
+                                payload_val.clone()
+                            };
                             let bind_ir = self.generate_pattern_bindings_typed(
                                 field_pat,
-                                &payload_val,
+                                &field_val,
                                 counter,
                                 &field_type,
                             )?;
