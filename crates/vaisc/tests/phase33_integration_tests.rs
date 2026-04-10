@@ -439,7 +439,7 @@ F main() -> i64 {
 
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"],
+        &["/Users/sswoo/study/projects/vais/compiler/std/log_runtime.c"],
     );
 
     match result {
@@ -478,7 +478,7 @@ F main() -> i64 {
 
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"],
+        &["/Users/sswoo/study/projects/vais/compiler/std/log_runtime.c"],
     );
 
     match result {
@@ -631,7 +631,7 @@ F main() -> i64 {
 
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/compress_runtime.c"],
+        &["/Users/sswoo/study/projects/vais/compiler/std/compress_runtime.c"],
     );
 
     match result {
