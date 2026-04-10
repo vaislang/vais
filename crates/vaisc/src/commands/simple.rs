@@ -3,15 +3,18 @@
 use crate::commands::build::cmd_build;
 use crate::configure_type_checker;
 use crate::error_formatter;
+use crate::imports::load_module_with_imports_internal;
 use crate::utils::{print_plugin_diagnostics, walkdir};
 use colored::Colorize;
+use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
+use vais_query::QueryDatabase;
 use vais_types::TypeChecker;
 
 pub(crate) fn cmd_run(
@@ -68,23 +71,61 @@ pub(crate) fn cmd_check(
     verbose: bool,
     plugins: &PluginRegistry,
 ) -> Result<(), String> {
-    let source = fs::read_to_string(input)
+    // Canonicalize input path to ensure parent directory is resolvable
+    let canonical_input = input
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(input));
+
+    let source = fs::read_to_string(&canonical_input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
     if verbose {
         println!("{} {}", "Checking".green().bold(), input.display());
     }
 
-    // Tokenize
+    // Tokenize (quick syntax check)
     let _tokens = tokenize(&source).map_err(|e| format!("Lexer error: {}", e))?;
 
-    // Parse
-    let ast =
-        parse(&source).map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
+    // Parse with import resolution — load all imported modules into a merged AST
+    let mut query_db = QueryDatabase::new();
+    query_db.set_cfg_values(std::collections::HashMap::new());
+    let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
+    let mut loading_stack: Vec<PathBuf> = Vec::new();
+    let source_root = canonical_input.parent().map(|p| p.to_path_buf());
+    let merged = load_module_with_imports_internal(
+        &canonical_input,
+        &mut loaded_modules,
+        &mut loading_stack,
+        verbose,
+        &source,
+        &query_db,
+        source_root.as_deref(),
+    );
 
-    // Run lint plugins
+    let ast = match merged {
+        Ok(module) => module,
+        Err(import_err) => {
+            // Fall back to single-file parse if import resolution fails
+            if verbose {
+                println!("{} import resolution: {}", "warning:".yellow().bold(), import_err);
+            }
+            let parsed = parse(&source)
+                .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
+            vais_ast::Module {
+                items: parsed.items,
+                modules_map: None,
+            }
+        }
+    };
+
+    // Run lint plugins on merged AST
     if !plugins.is_empty() {
-        let diagnostics = plugins.run_lint(&ast);
+        // Convert Module to ast::Module for plugins
+        let plugin_ast = parse(&source).unwrap_or_else(|_| vais_ast::Module {
+            items: vec![],
+            modules_map: None,
+        });
+        let diagnostics = plugins.run_lint(&plugin_ast);
         if !diagnostics.is_empty() {
             print_plugin_diagnostics(&diagnostics, &source, input);
 
@@ -98,7 +139,7 @@ pub(crate) fn cmd_check(
         }
     }
 
-    // Type check
+    // Type check merged AST (includes all imported struct/function definitions)
     let mut checker = TypeChecker::new();
     configure_type_checker(&mut checker);
     if let Err(e) = checker.check_module(&ast) {

@@ -8,6 +8,7 @@ use crate::error_formatter;
 use crate::imports::load_module_with_imports_internal;
 use colored::Colorize;
 use std::collections::HashSet;
+use std::path::Path;
 use std::fs;
 use std::path::PathBuf;
 use vais_ast::Item;
@@ -66,6 +67,7 @@ pub(crate) fn cmd_build_js(
         verbose,
         &main_source,
         &query_db,
+        input.parent().map(|p| p as &Path),
     )?;
     let parse_time = parse_start.elapsed();
 

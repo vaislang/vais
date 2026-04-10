@@ -251,6 +251,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
+            input.parent().map(|p| p as &Path),
         )?
     } else {
         load_module_with_imports_internal(
@@ -260,6 +261,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
+            input.parent().map(|p| p as &Path),
         )?
     };
     let parse_time = parse_start.elapsed();
