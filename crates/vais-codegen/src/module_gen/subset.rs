@@ -798,6 +798,15 @@ impl CodeGenerator {
             ir.push_str(&self.debug_info.finalize());
         }
 
+        // Emit cross-module async poll function declarations
+        if !self.fn_ctx.async_poll_declares.is_empty() {
+            ir.push_str("\n; Cross-module async poll function declarations\n");
+            for decl in &self.fn_ctx.async_poll_declares {
+                ir.push_str(decl);
+                ir.push('\n');
+            }
+        }
+
         // Add WASM import/export metadata attributes
         if self.target.is_wasm() && (!self.wasm_imports.is_empty() || !self.wasm_exports.is_empty())
         {

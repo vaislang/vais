@@ -130,6 +130,10 @@ pub(crate) struct FunctionContext {
     /// Accumulated during method call processing and emitted after the current
     /// function's body in the final IR output.
     pub(crate) pending_specialized_ir: Vec<String>,
+
+    /// Cross-module async poll function declarations needed by await expressions.
+    /// Collected during await codegen and emitted at module level (outside functions).
+    pub(crate) async_poll_declares: std::collections::HashSet<String>,
 }
 
 impl FunctionContext {

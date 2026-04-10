@@ -128,6 +128,21 @@ impl CodeGenerator {
         let poll_ready = self.next_label("await_ready");
         let poll_pending = self.next_label("await_pending");
 
+        // Ensure poll function is declared if not defined in this module.
+        // Cross-module async calls need an extern declaration for the __poll function.
+        // Skip only if the base async function is a local async definition (has is_async=true).
+        let base_async_name = poll_func.trim_end_matches("__poll");
+        let is_local_async_fn = self.types.functions.get(base_async_name)
+            .map(|info| info.signature.is_async)
+            .unwrap_or(false);
+        if !is_local_async_fn
+            && !self.types.functions.contains_key(&poll_func)
+        {
+            self.fn_ctx.async_poll_declares.insert(
+                format!("declare {} @{}(i64)", poll_ret_ty, poll_func)
+            );
+        }
+
         write_ir!(ir, "  br label %{}\n", poll_start);
         write_ir!(ir, "{}:", poll_start);
 

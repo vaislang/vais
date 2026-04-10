@@ -66,6 +66,7 @@ impl CodeGenerator {
                 scope_stack: Vec::with_capacity(8),
                 entry_allocas: Vec::new(),
                 pending_specialized_ir: Vec::new(),
+                async_poll_declares: std::collections::HashSet::new(),
             },
             strings: StringPool {
                 constants: Vec::with_capacity(16),
