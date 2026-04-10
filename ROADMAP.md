@@ -1,13 +1,44 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 189 — text codegen 타입 불일치 6건 수정 완료, 37/37 모듈 clang 통과)
+> **현재 버전**: 0.1.0 (Phase 190 — DX Quick Wins + 런타임 라이브러리)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-10 (Phase 189: vais-monitor 37/37 모듈 clang 컴파일 성공)
+> **최종 업데이트**: 2026-04-10 (Phase 189 완료, 안정화 달성: vais-monitor 37/37, vaisdb 13/13, E2E 0 fail)
 
 ---
 
-## Current Tasks (2026-04-10) — Phase 189: text codegen 타입 불일치 잔여 버그 수정 ✅
+## Current Tasks (2026-04-10) — Phase 190: DX 개선 + 런타임 안정화
+
+Phase 189까지 "에러 0" 안정화 달성. 다음은 사용자 경험 개선과 실행 가능한 바이너리 생성.
+
+### DX Quick Wins (컴파일러 수정)
+- [ ] 1. str.push_str() 메서드 추가 (impl-sonnet)
+  [대상 파일]: crates/vais-codegen/src/string_ops.rs, std/string.vais
+  [완료 기준]: `s.push_str("hello")` 컴파일 + E2E 테스트 추가
+- [ ] 2. str.as_bytes() 메서드 추가 (impl-sonnet)
+  [대상 파일]: crates/vais-codegen/src/string_ops.rs
+  [완료 기준]: `let bytes = s.as_bytes()` 컴파일 + E2E 테스트 추가
+- [ ] 3. Vec[i].field 직접 접근 지원 (Opus direct)
+  [대상 파일]: crates/vais-codegen/src/inkwell/gen_aggregate.rs (inkwell), generate_expr_struct.rs (text)
+  [완료 기준]: `v[0].name` 직접 컴파일 (현재 `tmp := v[0]; tmp.name` 우회 필요)
+
+### 런타임 라이브러리 (vais-monitor 링크 성공 목표)
+- [ ] 4. vais-monitor 런타임 stub 라이브러리 생성 (impl-sonnet)
+  [대상]: db_query, json_get, json_set, jwt_encode/decode, i64_to_str 등 extern 함수 구현
+  [완료 기준]: vais-monitor 링크 성공 + 기본 실행
+- [ ] 5. vais-monitor ICE "await on non-Future" 잔여 해결 (Opus direct) [blockedBy: 4]
+  [참고]: type_inference.rs resolved_function_sigs.is_async 경로 추가 완료. cross-module async 함수 등록 누락 해결 필요
+
+### 문자열 메모리 안정화 (별도 Phase 권장)
+- [ ] 6. 문자열 concat 메모리 누수 해결 — drop-tracking 리팩토링 (Opus direct)
+  [대상 파일]: crates/vais-codegen/src/string_ops.rs, vtable.rs
+  [위험도]: 높음 — ownership tracking 전체에 영향
+
+progress: 0/6 (0%)
+
+---
+
+## Previous Tasks (2026-04-10) — Phase 189: text codegen 타입 불일치 잔여 버그 수정 ✅
 
 Phase 188에서 5개 핵심 버그를 수정했으나 vais-monitor 37개 모듈 중 7개에서 추가 에러 잔존.
 → 6건 수정하여 37/37 모듈 clang 통과 달성.
