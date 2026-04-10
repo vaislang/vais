@@ -23,15 +23,35 @@ impl CodeGenerator {
         body: &[Spanned<Stmt>],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
+        // Phase 24 Task 6: unwrap .iter() / .enumerate() method calls on the
+        // collection expression. The type checker (Task 5) accepts these as
+        // virtual no-op / EnumerateIter wrappers; codegen desugars them to
+        // index-based iteration over the underlying collection.
+        //   - .iter() peels off; the inner receiver is iterated normally.
+        //   - .enumerate() peels off and sets is_enumerate=true so the loop
+        //     body binds (idx, elem) instead of just elem.
+        // Repeated calls (e.g. .iter().enumerate(), .enumerate().iter()) are
+        // collapsed by looping the unwrap until no more iterator adapters
+        // are visible.
+        let (effective_iter_owned, is_enumerate) = match iter {
+            Some(it) => Self::unwrap_iter_adapters(it),
+            None => (None, false),
+        };
+        let effective_iter = effective_iter_owned.as_ref().or(iter);
+
         // Check if this is a range-based for loop
-        let is_range_loop = iter
+        let is_range_loop = effective_iter
             .as_ref()
             .is_some_and(|it| matches!(&it.node, Expr::Range { .. }));
 
         if is_range_loop {
-            if let (Some(pat), Some(it)) = (pattern, iter) {
+            if let (Some(pat), Some(it)) = (pattern, effective_iter) {
                 // Range-based for loop: L pattern : start..end { body }
-                return self.generate_range_for_loop(pat, it, body, counter);
+                // .enumerate() over a range is unusual but should still work —
+                // for now, fall through to collection_for_loop only if enumerate.
+                if !is_enumerate {
+                    return self.generate_range_for_loop(pat, it, body, counter);
+                }
             }
         }
 
@@ -39,9 +59,18 @@ impl CodeGenerator {
         // When we have a named pattern variable (not Wildcard) and a non-range iter expression,
         // generate an index-based iteration over the collection.
         // Wildcard patterns (L _:condition) are conditional (while) loops, not collection iteration.
-        if let (Some(pat), Some(iter_expr)) = (pattern, iter) {
-            if matches!(&pat.node, Pattern::Ident(_)) {
-                return self.generate_collection_for_loop(pat, iter_expr, body, counter);
+        // Phase 24 Task 6: also accept Pattern::Tuple when is_enumerate is true.
+        if let (Some(pat), Some(iter_expr)) = (pattern, effective_iter) {
+            let pattern_ok = matches!(&pat.node, Pattern::Ident(_))
+                || (is_enumerate && matches!(&pat.node, Pattern::Tuple(_)));
+            if pattern_ok {
+                return self.generate_collection_for_loop(
+                    pat,
+                    iter_expr,
+                    body,
+                    counter,
+                    is_enumerate,
+                );
             }
         }
 
@@ -109,6 +138,44 @@ impl CodeGenerator {
         Ok(("0".to_string(), ir))
     }
 
+    /// Phase 24 Task 6: peel `.iter()` / `.enumerate()` method calls off a
+    /// for-each iterator expression. Returns the unwrapped expression (owned,
+    /// as we may have constructed nothing — `None` means use the original)
+    /// and a flag indicating whether `.enumerate()` was seen anywhere in the
+    /// chain.
+    ///
+    /// `.iter()` is treated as a no-op at the type/codegen level: the
+    /// receiver is already iterable. `.enumerate()` switches the loop into
+    /// index-yielding mode. Both adapters can be chained in any order; the
+    /// returned expression is the innermost non-adapter receiver.
+    fn unwrap_iter_adapters(iter: &Spanned<Expr>) -> (Option<Spanned<Expr>>, bool) {
+        let mut current = iter.clone();
+        let mut peeled = false;
+        let mut enumerate_seen = false;
+        loop {
+            match &current.node {
+                Expr::MethodCall {
+                    receiver, method, args,
+                } if args.is_empty()
+                    && (method.node == "iter" || method.node == "enumerate") =>
+                {
+                    if method.node == "enumerate" {
+                        enumerate_seen = true;
+                    }
+                    let next = (**receiver).clone();
+                    current = next;
+                    peeled = true;
+                }
+                _ => break,
+            }
+        }
+        if peeled {
+            (Some(current), enumerate_seen)
+        } else {
+            (None, false)
+        }
+    }
+
     /// Generate code for a collection for-each loop: `L elem : &collection { body }`.
     ///
     /// Produces an index-based loop that:
@@ -117,6 +184,10 @@ impl CodeGenerator {
     /// 3. Creates an internal index counter (i64).
     /// 4. On each iteration: loads the element at the current index into the pattern
     ///    variable, executes the loop body, and increments the counter.
+    ///
+    /// Phase 24 Task 6: when `is_enumerate` is true, the pattern is expected
+    /// to be a Pattern::Tuple([idx_pat, elem_pat]) and the loop binds the
+    /// current index to idx_pat and the element to elem_pat on each iteration.
     #[inline(never)]
     fn generate_collection_for_loop(
         &mut self,
@@ -124,6 +195,7 @@ impl CodeGenerator {
         iter_expr: &Spanned<Expr>,
         body: &[Spanned<Stmt>],
         counter: &mut usize,
+        is_enumerate: bool,
     ) -> CodegenResult<(String, String)> {
         let mut ir = String::new();
 
@@ -239,8 +311,45 @@ impl CodeGenerator {
         self.emit_entry_alloca(&idx_var, "i64");
         write_ir!(ir, "  store i64 0, i64* {}", idx_var);
 
-        // 4. Create pattern variable alloca and register in locals
-        if let Pattern::Ident(name) = &pattern.node {
+        // Phase 24 Task 6: extract the (idx_name, elem_name) pair from the
+        // pattern. For Pattern::Ident("x"), elem_name="x" and there is no
+        // user-visible idx variable. For Pattern::Tuple([i, x]) under
+        // is_enumerate, idx_name is the first inner pattern's name and
+        // elem_name is the second's. Other tuple shapes are ignored (the
+        // outer guard in generate_loop_with_pattern only routes valid shapes
+        // to this function).
+        let (idx_user_name, elem_user_name): (Option<String>, Option<String>) =
+            match &pattern.node {
+                Pattern::Ident(name) => (None, Some(name.clone())),
+                Pattern::Tuple(inner) if is_enumerate && inner.len() == 2 => {
+                    let idx_n = match &inner[0].node {
+                        Pattern::Ident(n) => Some(n.clone()),
+                        Pattern::Wildcard => None,
+                        _ => None,
+                    };
+                    let elem_n = match &inner[1].node {
+                        Pattern::Ident(n) => Some(n.clone()),
+                        Pattern::Wildcard => None,
+                        _ => None,
+                    };
+                    (idx_n, elem_n)
+                }
+                _ => (None, None),
+            };
+
+        // 4a. If enumerate-bound, register an i64 alloca for the index variable.
+        if let Some(idx_name) = &idx_user_name {
+            let idx_llvm = format!("{}.foreach_idx.{}", idx_name, self.fn_ctx.label_counter);
+            self.fn_ctx.label_counter += 1;
+            let idx_llvm_var = format!("%{}", idx_llvm);
+            self.emit_entry_alloca(&idx_llvm_var, "i64");
+            self.fn_ctx
+                .locals
+                .insert(idx_name.clone(), LocalVar::alloca(ResolvedType::I64, idx_llvm));
+        }
+
+        // 4b. Create the element variable alloca and register in locals.
+        if let Some(name) = &elem_user_name {
             let var_name = format!("{}.foreach.{}", name, self.fn_ctx.label_counter);
             self.fn_ctx.label_counter += 1;
             let llvm_name = format!("%{}", var_name);
@@ -291,8 +400,21 @@ impl CodeGenerator {
         let body_idx = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", body_idx, idx_var);
 
+        // Phase 24 Task 6: if enumerate-bound, store the current index into
+        // the user-visible index variable's alloca slot before running the body.
+        if let Some(idx_name) = &idx_user_name {
+            if let Some(idx_local) = self.fn_ctx.locals.get(idx_name).cloned() {
+                write_ir!(
+                    ir,
+                    "  store i64 {}, i64* %{}",
+                    body_idx,
+                    idx_local.llvm_name
+                );
+            }
+        }
+
         // Get element pointer and load element
-        if let Pattern::Ident(name) = &pattern.node {
+        if let Some(name) = &elem_user_name {
             if let Some(local) = self.fn_ctx.locals.get(name).cloned() {
                 let llvm_name = format!("%{}", local.llvm_name);
 
