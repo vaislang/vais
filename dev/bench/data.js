@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775679428714,
+  "lastUpdate": 1775836030356,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34679,6 +34679,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 724277,
             "range": "± 5745",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "610c67f55d111c01373ce3a2267b68154da1d604",
+          "message": "feat(codegen): Phase 24-6 — .iter()/.enumerate() codegen + tuple binding in for-each\n\nCodegen now desugars .iter() and .enumerate() method calls on the for-each\nloop's iterator expression. unwrap_iter_adapters peels nested adapter calls\n(both methods, in any order) until the innermost receiver is reached, while\nremembering whether enumerate was seen anywhere in the chain.\n\nWhen the chain includes .enumerate() and the loop pattern is a 2-element\ntuple, generate_collection_for_loop allocates an i64 slot for the index\nbinding alongside the existing element slot, and stores the current loop\nindex into it on each iteration. Wildcard patterns (`(i, _)`, `(_, x)`) are\nsupported via per-name extraction. Pattern::Ident continues to work\nunchanged for the no-index case.\n\nchanges:\n  - crates/vais-codegen/src/generate_expr/loops.rs:\n      * unwrap_iter_adapters helper (peel .iter()/.enumerate() chains)\n      * generate_loop_with_pattern: route Pattern::Tuple under enumerate\n      * generate_collection_for_loop: is_enumerate parameter, idx slot\n        alloca + store, elem slot guarded on elem_user_name\n  - crates/vaisc/tests/e2e/phase184_unambiguous_keywords.rs:\n      * 4 phase24 e2e tests with inline Vec<T> fixture (matches existing\n        e2e_lf_keyword_basic_foreach pattern; e2e tests do not load std/)\n\nverify:\n  - cargo test -p vaisc --test e2e e2e_phase24_vec: 4 passed / 0 failed\n  - cargo test -p vaisc --test e2e (full): 2555 passed / 0 failed / 0 ignored\n    (baseline 2551 + new 4, regression 0건)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-10T23:20:31+09:00",
+          "tree_id": "21acebc3a62ab4555a31903ad94282cc0ec3cda5",
+          "url": "https://github.com/vaislang/vais/commit/610c67f55d111c01373ce3a2267b68154da1d604"
+        },
+        "date": 1775836029579,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3746,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7098,
+            "range": "± 48",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8343,
+            "range": "± 124",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14728,
+            "range": "± 236",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18818,
+            "range": "± 132",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35914,
+            "range": "± 231",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33033,
+            "range": "± 116",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 71058,
+            "range": "± 450",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 300588,
+            "range": "± 901",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 459099,
+            "range": "± 2076",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 116282,
+            "range": "± 1523",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 794904,
+            "range": "± 2791",
             "unit": "ns/iter"
           }
         ]
