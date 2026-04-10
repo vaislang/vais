@@ -120,9 +120,41 @@ F main() -> i64 {
 // ==================== LF (for-each loop) ====================
 
 #[test]
-#[ignore = "LF keyword + Vec.new() type inference: separate codegen issue (Vec<i64> implicit generic inference path)"]
 fn e2e_lf_keyword_basic_foreach() {
+    // NOTE: e2e tests do not load std/vec.vais, so Vec must be defined
+    // inline in the test source (same pattern as phase182/advanced tests).
+    // The LF keyword itself — not Vec — is what this test verifies.
     let source = r#"
+S Vec<T> {
+    data: i64,
+    len: i64,
+    elem_size: i64
+}
+
+X Vec<T> {
+    F new() -> Vec<T> {
+        es := type_size()
+        data := malloc(16 * es)
+        Vec { data: data, len: 0, elem_size: es }
+    }
+
+    F push(&self, value: T) -> i64 {
+        ptr := self.data + self.len * self.elem_size
+        store_typed(ptr, value)
+        self.len = self.len + 1
+        self.len
+    }
+
+    F get(&self, index: i64) -> T {
+        ptr := self.data + index * self.elem_size
+        load_typed(ptr)
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+}
+
 F main() -> i64 {
     sum := mut 0
     v := Vec.new()
