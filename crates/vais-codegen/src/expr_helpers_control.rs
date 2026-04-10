@@ -296,7 +296,13 @@ impl CodeGenerator {
             // Check if any incoming value has a type mismatch with the phi type.
             // When the phi type is str { i8*, i64 } but an incoming is i64 (void placeholder),
             // replace the mismatched incoming with a str zeroinitializer.
-            let then_safe = if phi_llvm == "{ i8*, i64 }" && then_actual_ty.starts_with('i') {
+            // Also: if a branch's last expression was a void-returning call
+            // (`generate_expr` returned the literal "void"), we cannot use that
+            // as a phi incoming value — substitute the appropriate zero/null
+            // for the phi type.
+            let then_is_void = then_val_for_phi == "void";
+            let else_is_void = else_val_for_phi == "void";
+            let then_safe = if phi_llvm == "{ i8*, i64 }" && (then_actual_ty.starts_with('i') || then_is_void) {
                 let zinit = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -304,10 +310,12 @@ impl CodeGenerator {
                     zinit
                 );
                 zinit
+            } else if then_is_void {
+                "0".to_string()
             } else {
                 then_val_for_phi.clone()
             };
-            let else_safe = if phi_llvm == "{ i8*, i64 }" && else_actual_ty.starts_with('i') {
+            let else_safe = if phi_llvm == "{ i8*, i64 }" && (else_actual_ty.starts_with('i') || else_is_void) {
                 let zinit = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -315,6 +323,8 @@ impl CodeGenerator {
                     zinit
                 );
                 zinit
+            } else if else_is_void {
+                "0".to_string()
             } else {
                 else_val_for_phi.clone()
             };
@@ -332,22 +342,24 @@ impl CodeGenerator {
             // this if-expression's value gets the correct struct/enum type.
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !then_from_label.is_empty() {
+            let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
             write_ir!(
                 ir,
                 "  {} = phi {} [ {}, %{} ]",
                 result,
                 phi_llvm,
-                then_val_for_phi,
+                safe,
                 then_from_label
             );
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !else_from_label.is_empty() {
+            let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
             write_ir!(
                 ir,
                 "  {} = phi {} [ {}, %{} ]",
                 result,
                 phi_llvm,
-                else_val_for_phi,
+                safe,
                 else_from_label
             );
             self.fn_ctx.register_temp_type(&result, phi_type.clone());

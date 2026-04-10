@@ -246,14 +246,19 @@ impl CodeGenerator {
                         self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
                     }
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
+                    // Substitute "void" placeholders (from void-returning calls
+                    // as the last block expression) with a literal 0 — phi cannot
+                    // accept void as an incoming value.
+                    let then_safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
+                    let else_safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
                         result,
                         llvm_type,
-                        then_val_for_phi,
+                        then_safe,
                         then_from_label,
-                        else_val_for_phi,
+                        else_safe,
                         else_from_label
                     );
                     // Register the phi result type so a parent if-else (which
@@ -262,22 +267,24 @@ impl CodeGenerator {
                     // fallback in llvm_type_of.
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !then_from_label.is_empty() {
+                    let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
                         result,
                         llvm_type,
-                        then_val_for_phi,
+                        safe,
                         then_from_label
                     );
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
+                    let safe = if else_val_for_phi == "void" { "0".to_string() } else { else_val_for_phi.clone() };
                     write_ir!(
                         ir,
                         "  {} = phi {} [ {}, %{} ]",
                         result,
                         llvm_type,
-                        else_val_for_phi,
+                        safe,
                         else_from_label
                     );
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
