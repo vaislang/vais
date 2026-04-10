@@ -186,3 +186,6 @@ C8_QUICK_REFERENCE.md
 COMPILER_AUDIT.md
 NAVIGATION_AUDIT_REPORT.md
 STDLIB_ANALYSIS.txt
+
+# Claude Code local state
+.claude/
