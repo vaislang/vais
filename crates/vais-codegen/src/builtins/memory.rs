@@ -11,6 +11,9 @@ impl CodeGenerator {
         );
 
         // free: (i64) -> void
+        // Note: declare uses i64 param, but call sites special-case to i8*.
+        // The mismatch is handled by generate_expr_call.rs which converts
+        // the i64 arg to i8* via inttoptr before calling @free.
         register_extern!(
             self,
             "free",

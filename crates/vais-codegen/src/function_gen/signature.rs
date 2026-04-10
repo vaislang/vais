@@ -62,6 +62,17 @@ impl CodeGenerator {
 
         let ret = self.type_to_llvm_extern(&info.signature.ret);
 
+        // Special handling for C memory functions: declare with C ABI types
+        // to match call-site IR (which uses i8* for pointers).
+        // Without this, declare uses i64 (from register_extern) causing
+        // declare/call type mismatch → LLVM undefined behavior → SIGSEGV.
+        match info.signature.name.as_str() {
+            "malloc" => return "declare i8* @malloc(i64)".to_string(),
+            "free" => return "declare void @free(i8*)".to_string(),
+            "realloc" => return "declare i8* @realloc(i8*, i64)".to_string(),
+            _ => {}
+        }
+
         // Special handling for fopen_ptr: generate wrapper that calls fopen
         if info.signature.name == "fopen_ptr" {
             // fopen uses i8* (C strings) for both path and mode

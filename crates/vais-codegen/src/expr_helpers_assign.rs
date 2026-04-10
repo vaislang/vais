@@ -27,13 +27,46 @@ impl CodeGenerator {
                         // Without this, loop bodies would use stale SSA values
                         let local_ty = local.ty.clone();
                         let llvm_ty = self.type_to_llvm(&local_ty);
+                        let old_ssa_val = local.llvm_name.clone();
                         let alloca_name = format!("{}.{}", name, counter);
                         *counter += 1;
-                        // Create alloca, store current value (coerce width if mismatched)
+                        // Determine if the old SSA value can be safely referenced
+                        // from the entry block. Only literal immediate values
+                        // (numbers) of scalar integer/float types are guaranteed
+                        // safe — register references (%tN) may not dominate
+                        // entry, and aggregate types cannot use a numeric literal.
+                        let is_scalar_ty = llvm_ty.starts_with('i')
+                            || llvm_ty == "double"
+                            || llvm_ty == "float";
+                        let is_immediate = old_ssa_val
+                            .chars()
+                            .next()
+                            .map_or(false, |c| c.is_ascii_digit() || c == '-');
+                        let can_init_in_entry = is_scalar_ty && is_immediate;
+                        if can_init_in_entry {
+                            // Emit alloca + initial store (with original value) in entry.
+                            // This guarantees the alloca is initialized on all paths,
+                            // including paths that bypass the reassignment branch.
+                            self.fn_ctx.entry_allocas.push(format!(
+                                "  %{} = alloca {}\n  store {} {}, {}* %{}",
+                                alloca_name,
+                                llvm_ty,
+                                llvm_ty,
+                                old_ssa_val,
+                                llvm_ty,
+                                alloca_name
+                            ));
+                        } else {
+                            // Fallback: alloca only; the reassignment store covers the
+                            // reachable paths (legacy behavior). Non-immediate SSA values
+                            // cannot safely be stored in the entry block because their
+                            // definitions may not dominate it.
+                            self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
+                        }
+                        // Now store the new (reassignment) value
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val =
                             self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
-                        self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
                         write_ir!(
                             ir,
                             "  store {} {}, {}* %{}",
