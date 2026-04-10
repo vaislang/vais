@@ -234,8 +234,33 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .into()
                     })
                     .into_pointer_value();
-                // Track allocation for automatic cleanup at scope exit
-                self.alloc_tracker.push(buf);
+                // Track allocation via entry-block alloca slot to avoid dominance issues in loops.
+                // Create an alloca in the entry block, store the malloc'd pointer there,
+                // and record the alloca (not the raw pointer) in alloc_tracker.
+                let current_fn = self.builder.get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+                let entry_block = current_fn.get_first_basic_block().unwrap();
+                let current_block = self.builder.get_insert_block().unwrap();
+                // Position at end of entry block (before terminator if exists)
+                if let Some(terminator) = entry_block.get_terminator() {
+                    self.builder.position_before(&terminator);
+                } else {
+                    self.builder.position_at_end(entry_block);
+                }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                let alloc_slot = self.builder.build_alloca(ptr_type, &format!("__str_alloc_slot_{}", self.alloc_tracker.len()))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Initialize slot to null so cleanup is safe even if loop never executes
+                self.builder.build_store(alloc_slot, ptr_type.const_null())
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Restore builder position
+                self.builder.position_at_end(current_block);
+                // Store the malloc'd pointer into the slot
+                self.builder.build_store(alloc_slot, buf)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.alloc_tracker.push(alloc_slot);
 
                 // Copy first string
                 let args1: Vec<BasicMetadataValueEnum> =

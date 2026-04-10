@@ -591,12 +591,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             self.module.add_function("strcmp", fn_type, None)
                         });
 
+                        // Extract raw ptr from str fat pointer if needed
+                        let match_raw_ptr = self.extract_str_raw_ptr(*match_val)?;
+
                         // Call strcmp
                         let cmp_result = self
                             .builder
                             .build_call(
                                 strcmp_fn,
-                                &[(*match_val).into(), pattern_str.into()],
+                                &[match_raw_ptr.into(), pattern_str.into()],
                                 "strcmp_result",
                             )
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
