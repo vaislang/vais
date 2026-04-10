@@ -69,7 +69,6 @@ F main() -> i64 {
 }
 
 #[test]
-#[ignore = "EN+EL keyword + Option type — shadow user-defined Option with builtin, codegen ptr mismatch (separate issue)"]
 fn e2e_el_keyword_mixed_with_en() {
     // EN for enum, EL for else — no ambiguity
     let source = r#"

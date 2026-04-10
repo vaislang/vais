@@ -1,0 +1,284 @@
+# ============================================================================
+# Module: hashset
+# ============================================================================
+#
+# 제네릭 타입 T를 저장하는 해시 셋 모듈입니다.
+# 충돌 해결 방식으로 Separate Chaining을 사용합니다.
+#
+# 주요 타입:
+#   HashSet<T>      - 해시 셋 구조체
+#   HashSetEntry<T> - 내부 버킷 엔트리 (값, next 포인터)
+#
+# 주요 함수 / 메서드:
+#   HashSet::new()              - 기본 버킷 수(16)로 빈 셋 생성
+#   HashSet::with_capacity(n)   - n개 버킷으로 빈 셋 생성
+#   .insert(value)              - 원소 삽입 (이미 있으면 무시)
+#   .contains(&value)           - 원소 존재 여부 확인
+#   .remove(&value)             - 원소 제거
+#   .len()                      - 저장된 원소 수 반환
+#   .is_empty()                 - 빈 셋 여부 확인
+#   .clear()                    - 모든 원소 제거
+#   .free()                     - 내부 메모리 해제
+#
+# 사용 예제:
+#
+#   U std/hashset
+#
+#   visited := mut HashSet.new()
+#   visited.insert(42)
+#   I visited.contains(&42) { print("found") }
+#   visited.remove(&42)
+#
+
+U std/hash
+
+# Helper function to initialize bucket array
+F hashset_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+    I idx >= cap {
+        0
+    } EL {
+        store_i64(buckets + idx * 8, 0)
+        hashset_init_buckets(buckets, idx + 1, cap)
+    }
+}
+
+# Helper function for clear - free entry chain
+F hashset_clear_entries(entry_ptr: i64) -> i64 {
+    I entry_ptr == 0 {
+        0
+    } EL {
+        next := load_i64(entry_ptr + 8)
+        free(entry_ptr)
+        hashset_clear_entries(next)
+    }
+}
+
+# Helper function for clear - process all buckets
+F hashset_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+    I idx >= cap {
+        0
+    } EL {
+        entry_ptr := load_i64(buckets + idx * 8)
+        hashset_clear_entries(entry_ptr)
+        store_i64(buckets + idx * 8, 0)
+        hashset_clear_buckets(buckets, idx + 1, cap)
+    }
+}
+
+# Helper to count total entries
+F hashset_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
+    I idx >= cap {
+        0
+    } EL {
+        entry_ptr := load_i64(buckets + idx * 8)
+        chain_count := hashset_count_chain(entry_ptr)
+        chain_count + hashset_count_entries(buckets, idx + 1, cap)
+    }
+}
+
+# Helper to count entries in a chain
+F hashset_count_chain(entry_ptr: i64) -> i64 {
+    I entry_ptr == 0 {
+        0
+    } EL {
+        next := load_i64(entry_ptr + 8)
+        1 + hashset_count_chain(next)
+    }
+}
+
+# Rehash helper: iterate buckets
+F hashset_rehash_bucket_raw(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+    I idx >= old_cap {
+        0
+    } EL {
+        entry_ptr := load_i64(old_buckets + idx * 8)
+        hashset_rehash_entries_raw(new_buckets, new_cap, entry_ptr)
+        hashset_rehash_bucket_raw(new_buckets, new_cap, old_buckets, idx + 1, old_cap)
+    }
+}
+
+# Rehash helper: process entry chain
+F hashset_rehash_entries_raw(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
+    I entry_ptr == 0 {
+        0
+    } EL {
+        value := load_typed(entry_ptr)
+        next := load_i64(entry_ptr + 8)
+
+        # Hash the value
+        h := mult_hash(value)
+        hash_idx := h % new_cap
+
+        # Insert at head of bucket
+        old_head := load_i64(new_buckets + hash_idx * 8)
+        new_entry := malloc(16)
+        store_typed(new_entry, value)
+        store_i64(new_entry + 8, old_head)
+        store_i64(new_buckets + hash_idx * 8, new_entry)
+
+        # Free old entry and process next
+        free(entry_ptr)
+        hashset_rehash_entries_raw(new_buckets, new_cap, next)
+    }
+}
+
+# Entry node for linked list in each bucket
+S HashSetEntry<T> {
+    value: T,       # The value stored in the set
+    next: i64       # Pointer to next HashSetEntry (0 if none)
+}
+
+# HashSet structure - generic hash set using separate chaining
+S HashSet<T> {
+    buckets: i64,   # Pointer to array of bucket heads (entry pointers)
+    size: i64,      # Number of elements
+    cap: i64        # Number of buckets
+}
+
+X HashSet<T> {
+    # Create a new HashSet with given capacity
+    F with_capacity(capacity: i64) -> HashSet<T> {
+        cap := I capacity < 8 { 8 } EL { capacity }
+        buckets := malloc(cap * 8)
+        hashset_init_buckets(buckets, 0, cap)
+        HashSet { buckets: buckets, size: 0, cap: cap }
+    }
+
+    # Get number of elements
+    F len(&self) -> i64 {
+        self.size
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } EL { 0 }
+    }
+
+    # Compute bucket index for a value
+    F hash_idx(&self, value: T) -> i64 {
+        h := mult_hash(value)
+        h % self.cap
+    }
+
+    # Check if value exists in chain
+    F contains_in_chain(&self, entry_ptr: i64, value: T) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            entry_val := load_typed(entry_ptr)
+            I entry_val == value {
+                1
+            } EL {
+                next := load_i64(entry_ptr + 8)
+                @.contains_in_chain(next, value)
+            }
+        }
+    }
+
+    # Check if value exists in set (takes reference to value)
+    F contains(&self, value: &T) -> i64 {
+        v := *value
+        idx := @.hash_idx(v)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        @.contains_in_chain(entry_ptr, v)
+    }
+
+    # Insert value into set (idempotent - safe to call with existing value)
+    F insert(&self, value: T) -> i64 {
+        # Check if already exists
+        I @.contains(&value) == 1 {
+            0
+        } EL {
+            idx := @.hash_idx(value)
+            entry_ptr := load_i64(self.buckets + idx * 8)
+
+            # Insert new entry at head of bucket
+            new_entry := malloc(16)
+            store_typed(new_entry, value)
+            store_i64(new_entry + 8, entry_ptr)
+            store_i64(self.buckets + idx * 8, new_entry)
+            self.size = self.size + 1
+
+            # Rehash if load factor > 0.75
+            I self.size * 4 > self.cap * 3 {
+                @.rehash()
+            }
+            1
+        }
+    }
+
+    # Remove value from set (takes reference to value)
+    # Returns 1 if removed, 0 if not found
+    F remove(&self, value: &T) -> i64 {
+        v := *value
+        idx := @.hash_idx(v)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        @.remove_from_chain(idx, 0, entry_ptr, v)
+    }
+
+    # Helper to remove from chain
+    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, value: T) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } EL {
+            entry_val := load_typed(entry_ptr)
+            I entry_val == value {
+                next := load_i64(entry_ptr + 8)
+                _ := I prev_ptr == 0 {
+                    store_i64(self.buckets + bucket_idx * 8, next)
+                    0
+                } EL {
+                    store_i64(prev_ptr + 8, next)
+                    0
+                }
+                free(entry_ptr)
+                self.size = self.size - 1
+                1
+            } EL {
+                next := load_i64(entry_ptr + 8)
+                @.remove_from_chain(bucket_idx, entry_ptr, next, value)
+            }
+        }
+    }
+
+    # Rehash to double capacity
+    F rehash(&self) -> i64 {
+        old_buckets := self.buckets
+        old_cap := self.cap
+        new_cap := old_cap * 2
+
+        new_buckets := malloc(new_cap * 8)
+        hashset_init_buckets(new_buckets, 0, new_cap)
+
+        self.buckets = new_buckets
+        self.cap = new_cap
+
+        hashset_rehash_bucket_raw(new_buckets, new_cap, old_buckets, 0, old_cap)
+
+        self.size = hashset_count_entries(new_buckets, 0, new_cap)
+
+        free(old_buckets)
+        1
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        hashset_clear_buckets(self.buckets, 0, self.cap)
+        self.size = 0
+        0
+    }
+
+    # Free all memory
+    F free(&self) -> i64 {
+        @.clear()
+        free(self.buckets)
+        self.buckets = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Convenience constructor - create new HashSet with default capacity
+F hashset_new() -> HashSet<i64> {
+    HashSet.with_capacity(16)
+}
