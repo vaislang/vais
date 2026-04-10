@@ -183,9 +183,9 @@ impl CodeGenerator {
                     LocalVar::ssa(ty.clone(), param_ptr),
                 );
             }
-            // For &str parameters (Ref(Str)), the LLVM param type is { i8*, i64 }*
-            // (pointer to fat pointer). The body code uses extractvalue { i8*, i64 } %param, N
-            // which expects the fat pointer by value. Load it at function entry.
+            // For &str parameters (Ref(Str)), the LLVM param type is { i8*, i64 }
+            // (value, not pointer — since type_to_llvm treats &str as str fat ptr).
+            // Register an SSA alias so body code uses the param directly by value.
             let is_ref_str = matches!(
                 &ty,
                 ResolvedType::Ref(inner) if matches!(inner.as_ref(), ResolvedType::Str)
@@ -195,18 +195,11 @@ impl CodeGenerator {
             );
             if is_ref_str {
                 let src_llvm_name = crate::helpers::sanitize_param_name(&p.name.node);
-                let loaded_name = format!("__{}_val", p.name.node);
-                let loaded = format!("%{}", loaded_name);
-                write_ir!(
-                    ir,
-                    "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* %{}",
-                    loaded,
-                    src_llvm_name
-                );
-                // Update locals to use the loaded fat pointer value (SSA)
+                let param_val = format!("%{}", src_llvm_name);
+                // Use the param value directly (no load needed — it's already by-value)
                 self.fn_ctx.locals.insert(
                     p.name.node.to_string(),
-                    LocalVar::ssa(ResolvedType::Str, loaded),
+                    LocalVar::ssa(ResolvedType::Str, param_val),
                 );
             }
         }

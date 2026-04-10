@@ -267,16 +267,56 @@ impl CodeGenerator {
         };
 
         if is_void || !has_else || phi_type_mismatch {
-            ir.push_str(&crate::helpers::void_placeholder_ir(&result));
+            // When the phi type is str { i8*, i64 }, use a zeroinitializer instead
+            // of void placeholder (i64 0) to avoid type mismatch downstream.
+            if phi_llvm == "{ i8*, i64 }" {
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                    result
+                );
+                // Register as Str so downstream code doesn't override with wrong type
+                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+            } else {
+                ir.push_str(&crate::helpers::void_placeholder_ir(&result));
+                // Register void placeholder as I64 to prevent generate_expr catch-all
+                // from overriding with the inferred expression type (e.g., Str).
+                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+            }
         } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
+            // Check if any incoming value has a type mismatch with the phi type.
+            // When the phi type is str { i8*, i64 } but an incoming is i64 (void placeholder),
+            // replace the mismatched incoming with a str zeroinitializer.
+            let then_safe = if phi_llvm == "{ i8*, i64 }" && then_actual_ty.starts_with('i') {
+                let zinit = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                    zinit
+                );
+                zinit
+            } else {
+                then_val_for_phi.clone()
+            };
+            let else_safe = if phi_llvm == "{ i8*, i64 }" && else_actual_ty.starts_with('i') {
+                let zinit = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                    zinit
+                );
+                zinit
+            } else {
+                else_val_for_phi.clone()
+            };
             write_ir!(
                 ir,
                 "  {} = phi {} [ {}, %{} ], [ {}, %{} ]",
                 result,
                 phi_llvm,
-                then_val_for_phi,
+                then_safe,
                 then_from_label,
-                else_val_for_phi,
+                else_safe,
                 else_from_label
             );
         } else if !then_from_label.is_empty() {
@@ -298,7 +338,19 @@ impl CodeGenerator {
                 else_from_label
             );
         } else {
-            ir.push_str(&crate::helpers::void_placeholder_ir(&result));
+            // Both branches terminated (e.g., both have explicit return).
+            // This merge is unreachable but codegen still emits it.
+            if phi_llvm == "{ i8*, i64 }" {
+                write_ir!(
+                    ir,
+                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                    result
+                );
+                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::Str);
+            } else {
+                ir.push_str(&crate::helpers::void_placeholder_ir(&result));
+                self.fn_ctx.register_temp_type(&result, vais_types::ResolvedType::I64);
+            }
         }
 
         Ok((result, ir))

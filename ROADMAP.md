@@ -1,39 +1,37 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 189 — text codegen 타입 불일치 잔여 7건 수정)
+> **현재 버전**: 0.1.0 (Phase 189 — text codegen 타입 불일치 6건 수정 완료, 37/37 모듈 clang 통과)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-10 (Phase 189: Phase 188 수정 후 잔여 LLVM IR 타입 불일치 7개 모듈)
+> **최종 업데이트**: 2026-04-10 (Phase 189: vais-monitor 37/37 모듈 clang 컴파일 성공)
 
 ---
 
-## Current Tasks (2026-04-10) — Phase 189: text codegen 타입 불일치 잔여 버그 수정
+## Current Tasks (2026-04-10) — Phase 189: text codegen 타입 불일치 잔여 버그 수정 ✅
 
 Phase 188에서 5개 핵심 버그를 수정했으나 vais-monitor 37개 모듈 중 7개에서 추가 에러 잔존.
-30/37 모듈 성공, 7개 모듈에서 4가지 유형의 LLVM IR 타입 불일치 에러.
+→ 6건 수정하여 37/37 모듈 clang 통과 달성.
 
-- [ ] 1. bool(i1)↔i64 xor/icmp 연산 순서 정합성 수정 (Opus direct)
-  [대상 파일]: expr_helpers.rs, expr_helpers_control.rs
-  [완료 기준]: handler, users 모듈 clang 통과
+- [x] 1. async poll 함수 temp_var_types 오염 + bool(i1)↔i64 타입 추적 (Opus direct) ✅ 2026-04-10
+  changes: function_gen/async_gen.rs (poll 시작 시 temp_var_types/scope_stack/future_poll_fns clear)
+  verify: healthcheck, users 모듈 clang 통과
 
-- [ ] 2. async void poll 함수 반환 타입 void→i64 대체 (Opus direct)
-  [대상 파일]: function_gen/async_gen.rs
-  [완료 기준]: healthcheck 모듈 clang 통과
+- [x] 2. async void poll body 결과 "void" → i64 0 placeholder (Opus direct) ✅ 2026-04-10
+  changes: function_gen/async_gen.rs (body_result.0 == "void" → "0" 대체)
+  verify: healthcheck, anomaly 모듈 clang 통과
 
-- [ ] 3. str fat ptr→i64/ptr inttoptr 타입 불일치 수정 (Opus direct)
-  [대상 파일]: expr_helpers*.rs, stmt.rs
-  [완료 기준]: anomaly, runtime 모듈 clang 통과
+- [x] 3. &str 파라미터 불필요 load 제거 (Opus direct) ✅ 2026-04-10
+  changes: function_gen/codegen.rs (Ref(Str) 파라미터 load 삭제, 값 직접 사용)
+  verify: runtime 모듈 clang 통과
 
-- [ ] 4. void placeholder→struct phi/return 유입 차단 (Opus direct)
-  [대상 파일]: expr_helpers_control.rs, control_flow/if_else.rs, function_gen/codegen.rs
-  [완료 기준]: engine, incident 모듈 clang 통과
+- [x] 4. void placeholder→str phi/ret 유입 차단 (Opus direct) ✅ 2026-04-10
+  changes: expr_helpers_control.rs (str zeroinitializer + register_temp_type 3곳), control_flow/if_else.rs (동일 패턴), stmt.rs (ret i64→str 불일치 처리)
+  verify: engine, incident, handler 모듈 clang 통과
 
-progress: 0/4 (0%)
+progress: 4/4 (100%) ✅
 mode: auto
-max_iterations: 10
-iteration: 1
-strategy: file overlap (expr_helpers*.rs shared) → sequential, order: 1→2→3→4
-opus_direct: all 4 tasks — LLVM IR codegen type bugs, design-impl inseparable
+strategy: sequential (expr_helpers*.rs shared), Opus direct
+verify: 37/37 모듈 clang 통과, E2E 147 passed / 0 failed, bootstrap 1 pre-existing fail
 
 ---
 

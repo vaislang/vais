@@ -465,6 +465,19 @@ impl CodeGenerator {
                             tmp
                         } else if val_ty != ret_type
                             && val_ty == "i64"
+                            && ret_type == "{ i8*, i64 }"
+                        {
+                            // Str return type mismatch — value is i64 (void placeholder)
+                            // but return type is str fat pointer. Use zeroinitializer.
+                            let zinit = self.next_temp(counter);
+                            write_ir!(
+                                ir,
+                                "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                                zinit
+                            );
+                            zinit
+                        } else if val_ty != ret_type
+                            && val_ty == "i64"
                             && ret_type.starts_with('%')
                             && !ret_type.ends_with('*')
                         {
