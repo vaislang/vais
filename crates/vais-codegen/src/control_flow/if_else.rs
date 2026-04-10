@@ -77,7 +77,11 @@ impl CodeGenerator {
                         llvm_type,
                         then_val
                     );
-
+                    // Register the loaded struct value's type so downstream
+                    // phi-mismatch detection sees it as the correct struct
+                    // type rather than the i64 fallback (fixes ret type
+                    // mismatch on enum-returning if-expressions).
+                    self.fn_ctx.register_temp_type(&loaded, block_type.clone());
                     loaded
                 } else if !then_terminated {
                     // Coerce integer width if the value type differs from the phi type
@@ -152,7 +156,9 @@ impl CodeGenerator {
                         llvm_type,
                         else_val
                     );
-
+                    // Register the loaded struct value's type — see comment
+                    // on the matching then-branch register_temp_type call.
+                    self.fn_ctx.register_temp_type(&loaded, block_type.clone());
                     loaded
                 } else if !else_terminated && has_else {
                     // Coerce integer width if the value type differs from the phi type
@@ -250,6 +256,11 @@ impl CodeGenerator {
                         else_val_for_phi,
                         else_from_label
                     );
+                    // Register the phi result type so a parent if-else (which
+                    // sees this nested merge as its else_val) can detect it
+                    // as the correct struct/enum type rather than the i64
+                    // fallback in llvm_type_of.
+                    self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !then_from_label.is_empty() {
                     write_ir!(
                         ir,
@@ -259,6 +270,7 @@ impl CodeGenerator {
                         then_val_for_phi,
                         then_from_label
                     );
+                    self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
                     write_ir!(
                         ir,
@@ -268,6 +280,7 @@ impl CodeGenerator {
                         else_val_for_phi,
                         else_from_label
                     );
+                    self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else {
                     // Unreachable merge block — add terminator
                     ir.push_str("  unreachable\n");

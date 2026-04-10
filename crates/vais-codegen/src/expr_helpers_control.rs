@@ -141,6 +141,12 @@ impl CodeGenerator {
                 phi_llvm,
                 then_val
             );
+            // Register the loaded struct value's type so the downstream
+            // phi_type_mismatch check sees this as a struct value rather
+            // than the i64 fallback (fixes ret type mismatch on
+            // enum-returning if-expressions like
+            // `I cond { Failure(42) } E { Success(a/b) }`).
+            self.fn_ctx.register_temp_type(&loaded, phi_type.clone());
             loaded
         } else if !then_terminated {
             // Coerce integer width if the value type differs from the phi type
@@ -206,6 +212,9 @@ impl CodeGenerator {
                     phi_llvm,
                     else_val
                 );
+                // Register the loaded struct value's type — see comment on
+                // the matching then-branch register_temp_type call.
+                self.fn_ctx.register_temp_type(&loaded, phi_type.clone());
                 loaded
             } else if !else_terminated && has_else {
                 // Coerce integer width if the value type differs from the phi type
@@ -319,6 +328,9 @@ impl CodeGenerator {
                 else_safe,
                 else_from_label
             );
+            // Register the phi result type so a parent expression seeing
+            // this if-expression's value gets the correct struct/enum type.
+            self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !then_from_label.is_empty() {
             write_ir!(
                 ir,
@@ -328,6 +340,7 @@ impl CodeGenerator {
                 then_val_for_phi,
                 then_from_label
             );
+            self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !else_from_label.is_empty() {
             write_ir!(
                 ir,
@@ -337,6 +350,7 @@ impl CodeGenerator {
                 else_val_for_phi,
                 else_from_label
             );
+            self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else {
             // Both branches terminated (e.g., both have explicit return).
             // This merge is unreachable but codegen still emits it.
