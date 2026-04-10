@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775836030356,
+  "lastUpdate": 1775837169139,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -34775,6 +34775,102 @@ window.BENCHMARK_DATA = {
             "name": "type_checker/check/complex",
             "value": 794904,
             "range": "± 2791",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "dfaf8015c10b9ac081630eadb36f8e7707d15c17",
+          "message": "test(phase33): update hardcoded std runtime paths for new monorepo layout\n\nLocal development tree moved to vais/compiler/ as part of monorepo\nrestructuring. Phase 33 integration tests reference std/*_runtime.c via\nabsolute paths for extra source compilation; updated the three call sites\nto point at the new compiler/std location.\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-04-11T00:56:18+09:00",
+          "tree_id": "fdfb1afd95b5314304aac8327512bf22fd18e19b",
+          "url": "https://github.com/vaislang/vais/commit/dfaf8015c10b9ac081630eadb36f8e7707d15c17"
+        },
+        "date": 1775837168301,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 3753,
+            "range": "± 33",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 7322,
+            "range": "± 170",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 8265,
+            "range": "± 48",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 14248,
+            "range": "± 97",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18534,
+            "range": "± 170",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 35524,
+            "range": "± 209",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 33172,
+            "range": "± 208",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 70733,
+            "range": "± 386",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 303315,
+            "range": "± 2093",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 464299,
+            "range": "± 3709",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 117882,
+            "range": "± 1216",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 795499,
+            "range": "± 6150",
             "unit": "ns/iter"
           }
         ]
