@@ -138,16 +138,23 @@ impl TypeChecker {
                     };
 
                     // Try to infer the element type from the iterator
-                    if let Some(elem_type) = self.get_iterator_item_type(&iter_type) {
-                        // Bind the pattern variable with the inferred element type
+                    let elem_type = self
+                        .get_iterator_item_type(&iter_type)
+                        .unwrap_or(ResolvedType::Unknown);
+
+                    // Phase 24 Task 5: use register_pattern_bindings for full
+                    // tuple destructuring support. Previously only Pattern::Ident
+                    // was bound, so `L (i, x): vec.enumerate() { ... }` left
+                    // `i` and `x` undefined. register_pattern_bindings already
+                    // handles Pattern::Tuple vs ResolvedType::Tuple recursively.
+                    if let Err(e) = self.register_pattern_bindings(pattern, &elem_type) {
+                        self.loop_depth -= 1;
+                        self.pop_scope();
+                        return Some(Err(e));
+                    }
+
+                    if matches!(elem_type, ResolvedType::Unknown) {
                         if let Pattern::Ident(name) = &pattern.node {
-                            self.define_var(name, elem_type, false);
-                        }
-                    } else {
-                        // Couldn't infer iterator item type — define as Unknown to avoid
-                        // "undefined variable" errors in the loop body (Phase 162).
-                        if let Pattern::Ident(name) = &pattern.node {
-                            self.define_var(name, ResolvedType::Unknown, false);
                             self.warnings.push(format!(
                                 "Cannot infer iterator item type for variable '{}' in loop",
                                 name

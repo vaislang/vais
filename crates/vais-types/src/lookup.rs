@@ -396,6 +396,18 @@ impl TypeChecker {
             ResolvedType::Named { name, generics } if name == "Vec" && !generics.is_empty() => {
                 return Some(generics[0].clone());
             }
+            // Phase 24 Task 5: EnumerateIter<T> — yields (i64, T) tuples
+            // This is a virtual iterator type produced by Vec<T>.enumerate()
+            // in calls.rs. For-each loop over it binds a Pattern::Tuple([i, x])
+            // against ResolvedType::Tuple([I64, T]).
+            ResolvedType::Named { name, generics }
+                if name == "EnumerateIter" && !generics.is_empty() =>
+            {
+                return Some(ResolvedType::Tuple(vec![
+                    ResolvedType::I64,
+                    generics[0].clone(),
+                ]));
+            }
             _ => {}
         }
 

@@ -498,6 +498,40 @@ impl TypeChecker {
         // H5-H6 builtin Vec/HashMap/ByteBuffer/Mutex methods removed
         // C1 fix enables proper impl lookup from std modules
 
+        // Phase 24 Task 5: .iter() / .enumerate() builtin for iterable receivers
+        // Matches any type whose item type is derivable via get_iterator_item_type
+        // (Vec<T>, Array<T>, Slice<T>, Range<T>, ConstArray, etc.).
+        //
+        // .iter() is a no-op at the type level — it returns the receiver unchanged,
+        // so the for-each loop checker keeps extracting the element type the same way.
+        // .enumerate() returns a virtual EnumerateIter<T> whose item type is (i64, T);
+        // see lookup.rs get_iterator_item_type_inner for the binding. Codegen
+        // (Task 6) recognizes these method calls in for-each loops and desugars
+        // them to index-based iteration.
+        if args.is_empty() && (method.node == "iter" || method.node == "enumerate") {
+            if let Some(elem_ty) = self.get_iterator_item_type(&receiver_type) {
+                // Skip EnumerateIter here — if the receiver is already EnumerateIter<T>,
+                // elem_ty is already (i64, T) and we must NOT wrap it again.
+                let is_enumerate_iter = matches!(
+                    &receiver_type,
+                    ResolvedType::Named { name, .. } if name == "EnumerateIter"
+                );
+                if method.node == "iter" {
+                    // .iter() is idempotent at the type level.
+                    return Ok(receiver_type.clone());
+                }
+                // .enumerate()
+                if is_enumerate_iter {
+                    // Already an EnumerateIter — chaining is a no-op.
+                    return Ok(receiver_type.clone());
+                }
+                return Ok(ResolvedType::Named {
+                    name: "EnumerateIter".to_string(),
+                    generics: vec![elem_ty],
+                });
+            }
+        }
+
         // Minimal builtin fallbacks (kept because VaisDB structs lack explicit impl blocks for these)
         // clone: identity-copy semantics for any struct
         if method.node == "clone" && args.is_empty() {
