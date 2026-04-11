@@ -6,8 +6,14 @@
 //!
 //! Performance: Uses rayon for parallel file hash computation.
 
-/// Cache version for compatibility checking
-pub(crate) const CACHE_VERSION: u32 = 1;
+/// Cache version for compatibility checking.
+///
+/// Bump history:
+/// - v1: initial
+/// - v2: Task #11 (Phase 4a) — added `CacheState::std_hash`, so any v1
+///   cache would miss the std-change invalidation path. Bumping
+///   forces a one-time full rebuild after upgrade.
+pub(crate) const CACHE_VERSION: u32 = 2;
 
 /// Compiler version for cache invalidation
 pub(crate) const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -26,7 +32,7 @@ pub use cache::IncrementalCache;
 pub use detect::{
     can_skip_type_checking, compute_content_hash, compute_file_hash, compute_signature_hash,
     detect_function_changes, get_cache_dir, get_ir_cached_object_path, has_ir_cached_object,
-    update_tc_cache, DefinitionExtractor, FunctionChangeSet, ImportTracker,
+    hash_std_directory, update_tc_cache, DefinitionExtractor, FunctionChangeSet, ImportTracker,
 };
 pub use graph::DependencyGraph;
 pub use stats::{CacheMissReason, CacheStats, IncrementalStats};

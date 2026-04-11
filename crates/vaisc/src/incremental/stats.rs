@@ -27,6 +27,10 @@ pub enum CacheMissReason {
     FileDeleted,
     /// Cache was corrupted or incompatible
     CacheCorrupted,
+    /// Vais standard library (compiler/std/) changed since last build.
+    /// Every known file is invalidated because std is an implicit
+    /// dependency of every compilation unit. Phase 4a / Task #11.
+    StdChanged,
 }
 
 /// Incremental compilation statistics
@@ -115,6 +119,7 @@ mod tests {
             CacheMissReason::OptionsChanged,
             CacheMissReason::FileDeleted,
             CacheMissReason::CacheCorrupted,
+            CacheMissReason::StdChanged,
         ];
         for reason in &reasons {
             let json = serde_json::to_string(reason).unwrap();
@@ -276,8 +281,9 @@ mod tests {
             CacheMissReason::OptionsChanged,
             CacheMissReason::FileDeleted,
             CacheMissReason::CacheCorrupted,
+            CacheMissReason::StdChanged,
         ];
-        assert_eq!(variants.len(), 7);
+        assert_eq!(variants.len(), 8);
         // Ensure all are distinct
         for (i, a) in variants.iter().enumerate() {
             for (j, b) in variants.iter().enumerate() {

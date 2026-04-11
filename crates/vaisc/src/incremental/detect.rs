@@ -26,6 +26,91 @@ pub fn compute_content_hash(content: &str) -> String {
     format!("{:x}", result)
 }
 
+/// Compute an aggregate SHA-256 digest of the Vais standard library at
+/// `std_root` (Task #11 / Phase 4a).
+///
+/// The std library is an implicit dependency of every compilation unit
+/// but is not tracked in `dep_graph.file_metadata`, so a change to e.g.
+/// `compiler/std/vec.vais` would not invalidate any cached object. This
+/// helper walks `std_root` recursively, collects every `.vais`, `.c`,
+/// and `.h` file, sorts them by relative path (so the output is
+/// deterministic), and feeds each file's content into a single rolling
+/// hasher. The returned digest is stored in `CacheState::std_hash` and
+/// compared on the next build — any difference forces every known file
+/// to be rebuilt (via `CacheMissReason::StdChanged`).
+///
+/// Returns an error if the directory cannot be walked or if a file
+/// cannot be read. Non-source files (`.md`, `.toml`, etc.) are
+/// intentionally skipped — they do not affect compilation output and
+/// including them would cause spurious invalidations when e.g.
+/// README.md is edited.
+pub fn hash_std_directory(std_root: &Path) -> Result<String, String> {
+    if !std_root.exists() {
+        return Err(format!(
+            "std directory not found at '{}'",
+            std_root.display()
+        ));
+    }
+
+    // Collect source files into a flat list so we can sort deterministically.
+    let mut files: Vec<PathBuf> = Vec::new();
+    collect_std_source_files(std_root, &mut files)?;
+    files.sort();
+
+    let mut hasher = Sha256::new();
+    // Include the file count so that adding an empty file still changes
+    // the aggregate (even though an empty file hashes to the same value
+    // as no file at all).
+    hasher.update((files.len() as u64).to_le_bytes());
+
+    for file in &files {
+        // Hash the relative path inside std/ so renames are detected.
+        let rel = file.strip_prefix(std_root).unwrap_or(file);
+        let rel_bytes = rel.to_string_lossy();
+        hasher.update((rel_bytes.len() as u64).to_le_bytes());
+        hasher.update(rel_bytes.as_bytes());
+
+        // Hash the file content.
+        let content = fs::read(file).map_err(|e| {
+            format!("Cannot read std file '{}': {}", file.display(), e)
+        })?;
+        hasher.update((content.len() as u64).to_le_bytes());
+        hasher.update(&content);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Recursively collect .vais / .c / .h source files under `dir`,
+/// pushing each path into `out`. Symlinks are followed only once per
+/// canonical path to avoid infinite loops.
+fn collect_std_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| {
+        format!("Cannot read std directory '{}': {}", dir.display(), e)
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|e| {
+            format!("Cannot read std entry in '{}': {}", dir.display(), e)
+        })?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|e| {
+            format!("Cannot stat '{}': {}", path.display(), e)
+        })?;
+        if file_type.is_dir() {
+            collect_std_source_files(&path, out)?;
+        } else if file_type.is_file() {
+            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if matches!(ext, "vais" | "c" | "h") {
+                    out.push(path);
+                }
+            }
+        }
+        // Symlinks are skipped — std should not contain symlinks, and
+        // following them would complicate deterministic hashing.
+    }
+    Ok(())
+}
+
 /// Compute a signature hash for a set of AST items.
 /// This captures the "public interface" — function signatures, struct fields,
 /// enum variants, trait definitions — but NOT function bodies.

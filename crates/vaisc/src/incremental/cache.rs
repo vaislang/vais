@@ -61,6 +61,41 @@ impl IncrementalCache {
         self.current_options = Some(options);
     }
 
+    /// Check whether the Vais standard library changed since the last
+    /// successful build (Task #11 / Phase 4a). Returns `true` if the
+    /// caller should invalidate every known file; `false` if the cached
+    /// std hash still matches.
+    ///
+    /// When std cannot be located (no `compiler/std/` under any search
+    /// path), this returns `false` and leaves the cached hash untouched
+    /// — typical for a standalone test fixture that does not depend on
+    /// stdlib. A warning-worthy case, but not a cache miss.
+    ///
+    /// On success (or inconclusive), the stored `state.std_hash` is
+    /// updated in-place so that the next detect call sees the fresh
+    /// value. This is safe even if the build later fails: the on-disk
+    /// std files already match the stored hash, so correctness is
+    /// preserved and no staleness is introduced.
+    pub(super) fn check_std_invalidation(&mut self) -> bool {
+        use super::detect::hash_std_directory;
+        let Some(std_root) = crate::imports::get_std_path() else {
+            // No std on disk — skip the check. First-build behavior is
+            // unchanged for standalone fixtures.
+            return false;
+        };
+        let current_hash = match hash_std_directory(&std_root) {
+            Ok(h) => h,
+            Err(_) => return false, // unreadable std dir → do not invalidate
+        };
+        let invalidate = match &self.state.std_hash {
+            Some(prev) if prev == &current_hash => false,
+            Some(_) => true,  // hash drifted → invalidate
+            None => false,    // first build after upgrade → adopt new hash
+        };
+        self.state.std_hash = Some(current_hash);
+        invalidate
+    }
+
     /// Detect which files need recompilation (parallelized with rayon)
     pub fn detect_changes(&mut self, entry_file: &Path) -> Result<DirtySet, String> {
         let mut dirty_set = DirtySet::default();
@@ -76,6 +111,18 @@ impl IncrementalCache {
                 }
                 return Ok(dirty_set);
             }
+        }
+
+        // Task #11: std library is an implicit dependency of every file.
+        // If the aggregate std hash drifted since the last successful
+        // build, invalidate every known file. The std hash is updated
+        // in-place regardless of the comparison outcome so the next
+        // build sees a fresh baseline.
+        if self.check_std_invalidation() {
+            for file in self.state.dep_graph.file_metadata.keys() {
+                dirty_set.modified_files.insert(file.clone());
+            }
+            return Ok(dirty_set);
         }
 
         // Check which files were modified
@@ -424,6 +471,15 @@ impl IncrementalCache {
             }
         }
 
+        // Task #11: std library invalidation (see detect_changes above).
+        if self.check_std_invalidation() {
+            let mut ds = dirty_set.lock().unwrap_or_else(|e| e.into_inner());
+            for file in self.state.dep_graph.file_metadata.keys() {
+                ds.modified_files.insert(file.clone());
+            }
+            return Ok(std::mem::take(&mut *ds));
+        }
+
         let entry_canonical = entry_file
             .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
@@ -639,6 +695,25 @@ impl IncrementalCache {
                 stats.total_check_time_ms = start_time.elapsed().as_millis() as u64;
                 return Ok((dirty_set, stats));
             }
+        }
+
+        // Task #11: std library is an implicit dependency of every file.
+        // Same rationale as the non-stats variant above: if the std
+        // aggregate hash drifted, everything gets a `StdChanged` miss
+        // reason and the caller rebuilds the world.
+        if self.check_std_invalidation() {
+            for file in self.state.dep_graph.file_metadata.keys() {
+                dirty_set.modified_files.insert(file.clone());
+                stats
+                    .miss_reasons
+                    .entry(file.clone())
+                    .or_default()
+                    .push(CacheMissReason::StdChanged);
+                stats.cache_misses += 1;
+            }
+            stats.files_checked = self.state.dep_graph.file_metadata.len();
+            stats.total_check_time_ms = start_time.elapsed().as_millis() as u64;
+            return Ok((dirty_set, stats));
         }
 
         // Check which files were modified

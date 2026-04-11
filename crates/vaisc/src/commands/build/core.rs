@@ -593,6 +593,7 @@ fn check_cache_skip(
                             incremental::CacheMissReason::OptionsChanged => "options changed",
                             incremental::CacheMissReason::FileDeleted => "deleted",
                             incremental::CacheMissReason::CacheCorrupted => "cache corrupted",
+                            incremental::CacheMissReason::StdChanged => "std changed",
                         })
                         .collect();
                     let file_name = file.file_name().and_then(|n| n.to_str()).unwrap_or("?");

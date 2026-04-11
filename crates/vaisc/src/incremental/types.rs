@@ -73,6 +73,22 @@ pub struct CacheState {
     pub compilation_options: Option<CompilationOptions>,
     pub dep_graph: super::graph::DependencyGraph,
     pub last_build: u64,
+    /// Aggregate SHA-256 of the Vais standard library directory at the time
+    /// of the last successful build. Computed by
+    /// `detect::hash_std_directory` which walks `compiler/std/` and hashes
+    /// every `.vais` / `.c` / `.h` file in sorted order. When this value
+    /// differs from the current std hash, `detect_changes(_with_stats)`
+    /// marks every known file as dirty with `CacheMissReason::StdChanged`
+    /// — the std library is an implicit dependency of every compilation
+    /// unit and is not present in `dep_graph.file_metadata`.
+    ///
+    /// `None` on a fresh cache (first build in that directory) and on any
+    /// cache state that pre-dates Task #11 (the pre-v2 format did not
+    /// record this). Either case skips the std invalidation check on that
+    /// build — the regular per-file hash path still detects source
+    /// modifications. Phase 4a / Task #11.
+    #[serde(default)]
+    pub std_hash: Option<String>,
 }
 
 impl Default for CacheState {
@@ -83,6 +99,7 @@ impl Default for CacheState {
             compilation_options: None,
             dep_graph: super::graph::DependencyGraph::new(),
             last_build: 0,
+            std_hash: None,
         }
     }
 }
@@ -456,6 +473,7 @@ mod tests {
             }),
             dep_graph: super::super::graph::DependencyGraph::new(),
             last_build: 12345,
+            std_hash: Some("deadbeef".to_string()),
         };
         let json = serde_json::to_string(&state).unwrap();
         let parsed: CacheState = serde_json::from_str(&json).unwrap();
@@ -463,6 +481,27 @@ mod tests {
         assert_eq!(parsed.compiler_version, "0.1.0");
         assert!(parsed.compilation_options.is_some());
         assert_eq!(parsed.last_build, 12345);
+        assert_eq!(parsed.std_hash.as_deref(), Some("deadbeef"));
+    }
+
+    /// Backward-compat: a v1 CacheState JSON (no std_hash field) must
+    /// deserialize cleanly with std_hash defaulting to None. Task #11.
+    #[test]
+    fn test_cache_state_v1_missing_std_hash_defaults_none() {
+        let v1_json = r#"{
+            "version": 1,
+            "compiler_version": "0.1.0",
+            "compilation_options": null,
+            "dep_graph": {
+                "forward_deps": {},
+                "reverse_deps": {},
+                "file_metadata": {}
+            },
+            "last_build": 0
+        }"#;
+        let parsed: CacheState =
+            serde_json::from_str(v1_json).expect("v1 JSON should deserialize");
+        assert!(parsed.std_hash.is_none());
     }
 
     // ── DirtySet tests ──
