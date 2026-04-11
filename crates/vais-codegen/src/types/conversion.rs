@@ -203,25 +203,30 @@ impl CodeGenerator {
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // Generic parameter without substitution — use i64 fallback.
+                    // Generic parameter without substitution.
                     //
                     // With transitive instantiation (Phase 67), this path is now mostly reached
                     // only for un-specialized fallback versions of generic functions — i.e., when
                     // generate_module_with_instantiations generates a backward-compatible i64 version
                     // of a generic function that has no concrete instantiation.
                     //
-                    // NOTE: returning Err here would break nested types like &T → i64 instead of i64*,
-                    // because the error short-circuits the wrapper type conversion.
+                    // Phase 191: `strict_generic_mode` promotes this warning to a hard
+                    // `InternalError` via `emit_warning_or_error`. Default mode keeps the
+                    // historical i64 fallback.
+                    //
+                    // NOTE: returning Err here can break nested types like &T → i64 instead of
+                    // i64*, because the error short-circuits the wrapper type conversion. Strict
+                    // generic mode is therefore opt-in and expected to surface those leaks.
                     let context = self
                         .fn_ctx
                         .current_function
                         .as_deref()
                         .unwrap_or("<unknown>")
                         .to_string();
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: param.clone(),
                         context,
-                    });
+                    })?;
                     String::from("i64")
                 }
             }
@@ -230,18 +235,20 @@ impl CodeGenerator {
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // ConstGeneric parameter without substitution — use i64 fallback.
-                    // Same rationale as Generic above: kept for backward-compatible fallback.
+                    // ConstGeneric parameter without substitution.
+                    // Same rationale as Generic above. Phase 191 routes through
+                    // `emit_warning_or_error` so `strict_generic_mode` can promote
+                    // the warning to an `InternalError`.
                     let context = self
                         .fn_ctx
                         .current_function
                         .as_deref()
                         .unwrap_or("<unknown>")
                         .to_string();
-                    self.emit_warning(crate::CodegenWarning::GenericFallback {
+                    self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: param.clone(),
                         context,
-                    });
+                    })?;
                     String::from("i64")
                 }
             }
