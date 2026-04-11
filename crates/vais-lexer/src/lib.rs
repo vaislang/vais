@@ -31,6 +31,17 @@ pub enum Token {
     #[regex(r"#\n", logos::skip)]
     // Skip empty # lines
 
+    // === VaisX Template Comments (HTML comments in .vaisx files) ===
+    // Allows UTF-8 (Korean, emoji, CJK) inside HTML comments.
+    // Added 2026-04-11 for monitor/web layout.vaisx Korean comment support.
+    // Uses a callback to handle the tricky `-->` termination (dash-run ambiguity
+    // that pure logos regex can't express cleanly — logos is greedy+longest-match
+    // and tends to mis-parse `-->` endings in `<!-- ... -->` when the body contains
+    // dashes or when multiple alternatives exist).
+    #[token("<!--", skip_html_comment)]
+    // === VaisX Template Doctype (HTML5 doctype declaration) ===
+    #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(ascii_case))]
+
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
     #[token("F", priority = 3)]
@@ -214,86 +225,7 @@ pub enum Token {
     #[regex(r"[0-9][0-9_]*\.[0-9][0-9_]*([eE][+-]?[0-9]+)?", |lex| lex.slice().replace('_', "").parse::<f64>().ok())]
     Float(f64),
 
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| {
-        let s = lex.slice();
-        let inner = &s[1..s.len()-1];
-        // Process escape sequences
-        let mut result = std::string::String::new();
-        let mut chars = inner.chars().peekable();
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if let Some(&next) = chars.peek() {
-                    chars.next();
-                    match next {
-                        'n' => result.push('\n'),
-                        't' => result.push('\t'),
-                        'r' => result.push('\r'),
-                        '\\' => result.push('\\'),
-                        '"' => result.push('"'),
-                        '0' => result.push('\0'),
-                        // Brace escapes: \{ and \} produce literal { and }
-                        // These are kept as \{ / \} in the token so the parser
-                        // can distinguish them from string interpolation {expr}.
-                        '{' => { result.push('\\'); result.push('{'); }
-                        '}' => { result.push('\\'); result.push('}'); }
-                        'x' => {
-                            // Hex escape: \xHH
-                            let mut hex = std::string::String::new();
-                            for _ in 0..2 {
-                                if let Some(&h) = chars.peek() {
-                                    if h.is_ascii_hexdigit() {
-                                        hex.push(h);
-                                        chars.next();
-                                    }
-                                }
-                            }
-                            if let Ok(code) = u8::from_str_radix(&hex, 16) {
-                                result.push(code as char);
-                            }
-                        }
-                        'u' => {
-                            // Unicode escape: \u{XXXX} (1-6 hex digits)
-                            if chars.peek() == Some(&'{') {
-                                chars.next(); // consume '{'
-                                let mut hex = std::string::String::new();
-                                while let Some(&h) = chars.peek() {
-                                    if h == '}' {
-                                        chars.next(); // consume '}'
-                                        break;
-                                    }
-                                    if h.is_ascii_hexdigit() && hex.len() < 6 {
-                                        hex.push(h);
-                                        chars.next();
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                                    if let Some(ch) = char::from_u32(code) {
-                                        result.push(ch);
-                                    }
-                                }
-                            } else {
-                                // Not followed by '{', keep as-is
-                                result.push('\\');
-                                result.push('u');
-                            }
-                        }
-                        _ => {
-                            // Unknown escape, keep as-is
-                            result.push('\\');
-                            result.push(next);
-                        }
-                    }
-                } else {
-                    result.push('\\');
-                }
-            } else {
-                result.push(c);
-            }
-        }
-        Some(result)
-    })]
+    #[regex(r#""([^"\\]|\\.)*""#, parse_string_literal)]
     String(String),
 
     // === Identifiers ===
@@ -302,7 +234,21 @@ pub enum Token {
     Ident(String),
 
     // === Lifetime identifiers ===
-    // Lifetime names start with ' followed by identifier (e.g., 'a, 'static)
+    //
+    // Lifetime names start with `'` followed by identifier chars (e.g., `'a`, `'static`).
+    //
+    // Disambiguation from single-quote strings (2026-04-11):
+    // Raw regex alone cannot choose between `'abc` (lifetime) and `'abc...'` (string)
+    // because logos has no lookahead. We match lifetime greedily here and then
+    // **post-process in `tokenize()`** — if the source byte right after the matched
+    // lifetime is `'`, we retroactively convert the Lifetime token into a String.
+    //
+    // This means `'hello'` first tokenizes as Lifetime("hello") then gets promoted
+    // to String("hello") in the post-process pass. `'a` followed by `>` or whitespace
+    // stays a Lifetime.
+    //
+    // Empty string `''` and strings starting with a non-identifier char (`'안녕'`,
+    // `'123'`) are handled by a separate `'` token + callback below.
     #[regex(r"'[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice()[1..].to_string())]
     Lifetime(String),
 
@@ -556,6 +502,120 @@ impl fmt::Display for Token {
     }
 }
 
+/// Parse a string literal (both `"..."` and `'...'` forms) into its processed value.
+///
+/// Strips the outer quotes and handles escape sequences:
+/// `\n`, `\t`, `\r`, `\\`, `\"`, `\'`, `\0`, `\xHH` (hex), `\u{XXXX}` (unicode),
+/// and VaisX brace escapes `\{` / `\}` (preserved as `\{` / `\}` for the parser
+/// to distinguish from string interpolation).
+///
+/// Shared between `"..."` and `'...'` regexes so both quote forms behave identically
+/// (added 2026-04-11 for VaisX template JS-style single-quote strings).
+fn parse_string_literal(lex: &mut logos::Lexer<Token>) -> Option<std::string::String> {
+    let s = lex.slice();
+    let inner = &s[1..s.len() - 1]; // strip outer quote (1 byte each, ASCII)
+    let mut result = std::string::String::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(&next) = chars.peek() {
+                chars.next();
+                match next {
+                    'n' => result.push('\n'),
+                    't' => result.push('\t'),
+                    'r' => result.push('\r'),
+                    '\\' => result.push('\\'),
+                    '"' => result.push('"'),
+                    '\'' => result.push('\''),
+                    '0' => result.push('\0'),
+                    // Brace escapes: \{ and \} produce literal { and }.
+                    // Kept as \{ / \} in the token so the parser can
+                    // distinguish them from string interpolation {expr}.
+                    '{' => {
+                        result.push('\\');
+                        result.push('{');
+                    }
+                    '}' => {
+                        result.push('\\');
+                        result.push('}');
+                    }
+                    'x' => {
+                        // Hex escape: \xHH
+                        let mut hex = std::string::String::new();
+                        for _ in 0..2 {
+                            if let Some(&h) = chars.peek() {
+                                if h.is_ascii_hexdigit() {
+                                    hex.push(h);
+                                    chars.next();
+                                }
+                            }
+                        }
+                        if let Ok(code) = u8::from_str_radix(&hex, 16) {
+                            result.push(code as char);
+                        }
+                    }
+                    'u' => {
+                        // Unicode escape: \u{XXXX} (1-6 hex digits)
+                        if chars.peek() == Some(&'{') {
+                            chars.next(); // consume '{'
+                            let mut hex = std::string::String::new();
+                            while let Some(&h) = chars.peek() {
+                                if h == '}' {
+                                    chars.next(); // consume '}'
+                                    break;
+                                }
+                                if h.is_ascii_hexdigit() && hex.len() < 6 {
+                                    hex.push(h);
+                                    chars.next();
+                                } else {
+                                    break;
+                                }
+                            }
+                            if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                                if let Some(ch) = char::from_u32(code) {
+                                    result.push(ch);
+                                }
+                            }
+                        } else {
+                            // Not followed by '{', keep as-is
+                            result.push('\\');
+                            result.push('u');
+                        }
+                    }
+                    _ => {
+                        // Unknown escape, keep as-is
+                        result.push('\\');
+                        result.push(next);
+                    }
+                }
+            } else {
+                result.push('\\');
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    Some(result)
+}
+
+/// Skip callback for VaisX HTML comments `<!-- ... -->`.
+///
+/// Invoked after `<!--` is matched. Advances the lexer's `bump` position
+/// past the closing `-->`, skipping the whole comment (including UTF-8 content).
+/// If `-->` is not found, bumps to end-of-input (permissive — parser will
+/// report the missing terminator if needed).
+///
+/// Returns `Skip` so logos treats this as a skipped token, not a real one.
+fn skip_html_comment(lex: &mut logos::Lexer<Token>) -> logos::Skip {
+    let remainder = lex.remainder();
+    if let Some(end) = remainder.find("-->") {
+        lex.bump(end + 3); // consume up through "-->"
+    } else {
+        lex.bump(remainder.len());
+    }
+    logos::Skip
+}
+
 /// Token with source location information.
 ///
 /// Associates each token with its byte range in the source code,
@@ -615,17 +675,234 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
                 });
             }
             Err(_) => {
-                return Err(LexError::InvalidToken(lexer.span().start));
+                // === Single-quote string fallback (2026-04-11) ===
+                //
+                // logos can't disambiguate `'abc'` (string) from `'abc` (lifetime)
+                // with pure regex alternation. When we hit an InvalidToken at a `'`
+                // position, we have one of three situations:
+                //
+                //   (a) `'ident'` — Lifetime("ident") was tokenized for `'ident`,
+                //       and we're now at the closing `'`. Rewrite the previous
+                //       Lifetime token to a String and drop the closing `'`.
+                //
+                //   (b) `'a.b.c'` or `'foo bar'` — Lifetime("a") was tokenized,
+                //       then Dot/Ident/etc, then we hit the closing `'`. Walk
+                //       backwards through tokens until we find a Lifetime whose
+                //       start is preceded by no other `'` on the same line, then
+                //       collapse everything from that Lifetime through the closing
+                //       `'` into a single String token using the raw source slice.
+                //
+                //   (c) Standalone `'` opening (e.g., `'안녕'`, `''`, `'123'`):
+                //       The Lifetime regex never matched, so logos errored on the
+                //       opening `'`. Scan forward for a closing `'` and emit String.
+                //
+                //   (d) None of the above → propagate the LexError.
+                let err_pos = lexer.span().start;
+                let err_byte = source.as_bytes().get(err_pos).copied();
+                // Either err_pos itself is a `'` (closing or opening), OR a previous
+                // token is a Lifetime that started with `'` (meaning we are inside an
+                // unfinished single-quote string and hit an unexpected char like `\`).
+                let inside_single_quote = matches!(err_byte, Some(b'\'')) || {
+                    tokens.last().map_or(false, |last| {
+                        matches!(last.token, Token::Lifetime(_))
+                            && source.as_bytes().get(last.span.start) == Some(&b'\'')
+                    })
+                };
+                if inside_single_quote {
+                    // Walk backwards to find the opening Lifetime (whose start byte is `'`).
+                    let mut start_idx: Option<usize> = None;
+                    for (i, t) in tokens.iter().enumerate().rev() {
+                        if let Token::Lifetime(_) = t.token {
+                            if source.as_bytes().get(t.span.start) == Some(&b'\'') {
+                                start_idx = Some(i);
+                                break;
+                            }
+                        }
+                    }
+                    let recovery: Option<(usize, usize, std::string::String)> =
+                        if let Some(i) = start_idx {
+                            let opener = tokens[i].span.start;
+                            scan_single_quote_string(source, opener)
+                                .map(|(v, end)| (i, end, v))
+                                .filter(|(_, end, _)| *end > err_pos)
+                        } else if err_byte == Some(b'\'') {
+                            scan_single_quote_string(source, err_pos)
+                                .map(|(v, end)| (tokens.len(), end, v))
+                                .filter(|(_, end, _)| *end > err_pos + 1)
+                        } else {
+                            None
+                        };
+                    if let Some((truncate_idx, end_pos, string_value)) = recovery {
+                        let opener = if truncate_idx < tokens.len() {
+                            tokens[truncate_idx].span.start
+                        } else {
+                            err_pos
+                        };
+                        tokens.truncate(truncate_idx);
+                        tokens.push(SpannedToken {
+                            token: Token::String(string_value),
+                            span: opener..end_pos,
+                        });
+                        // Restart the logos lexer from `end_pos`. We need a *new*
+                        // Lexer because the current one has its internal state
+                        // tied to the original source span, and `bump` has tricky
+                        // semantics on the error path. To preserve absolute span
+                        // offsets across the restart, we lex the suffix and add
+                        // `end_pos` to every span before pushing.
+                        //
+                        // Loop until the suffix is fully consumed. If the suffix
+                        // itself contains another single-quote string, we recurse
+                        // through the same recovery logic by re-entering this
+                        // outer loop. To avoid borrow conflicts we extract the
+                        // remaining tokens recursively via a helper call.
+                        if !source.is_char_boundary(end_pos) {
+                            return Err(LexError::InvalidToken(err_pos));
+                        }
+                        let suffix_tokens = tokenize_suffix(source, end_pos)?;
+                        tokens.extend(suffix_tokens);
+                        // Suffix fully consumed — exit the outer loop entirely.
+                        break;
+                    }
+                }
+                return Err(LexError::InvalidToken(err_pos));
             }
         }
     }
 
-    // Post-process: split identifiers that start with single-char keywords.
-    // logos longest-match makes "EI" → Ident("EI") instead of Enum + If.
-    // Split these into keyword + remaining identifier.
-    let tokens = split_keyword_idents(tokens);
+    Ok(post_process_tokens(tokens, source))
+}
 
-    Ok(tokens)
+/// Tokenize a suffix of `source` starting at byte offset `offset`, returning
+/// tokens with absolute spans (i.e., spans relative to the original `source`).
+///
+/// Used by the InvalidToken recovery path to continue lexing after a manually-
+/// recovered single-quote string. Recursively applies the same recovery logic,
+/// so chained single-quote strings (e.g., a `t('a')` call followed later by
+/// an `import './x'` statement) all get handled.
+fn tokenize_suffix(
+    source: &str,
+    offset: usize,
+) -> Result<Vec<SpannedToken>, LexError> {
+    if offset >= source.len() {
+        return Ok(Vec::new());
+    }
+    if !source.is_char_boundary(offset) {
+        return Err(LexError::InvalidToken(offset));
+    }
+    let suffix = &source[offset..];
+    // Tokenize the suffix as a standalone source. This recursively re-uses
+    // the InvalidToken recovery path because `tokenize` is what we're inside.
+    let sub_tokens = tokenize(suffix)?;
+    // Rewrite spans to be absolute.
+    let mut result = Vec::with_capacity(sub_tokens.len());
+    for tok in sub_tokens {
+        result.push(SpannedToken {
+            token: tok.token,
+            span: (tok.span.start + offset)..(tok.span.end + offset),
+        });
+    }
+    Ok(result)
+}
+
+/// Final post-processing applied after the main lexing loop completes.
+/// Currently runs (1) Lifetime → String coalescing for `'ident'` form and
+/// (2) keyword identifier splitting (`EI` → `Enum + If`).
+fn post_process_tokens(tokens: Vec<SpannedToken>, source: &str) -> Vec<SpannedToken> {
+    let tokens = coalesce_single_quote_strings(tokens, source);
+    split_keyword_idents(tokens)
+}
+
+/// Scan for a single-quote string starting at `start` (must point to `'`).
+/// Returns `(parsed_value, end_pos_after_closing_quote)` on success.
+/// Handles `\'`, `\\`, `\n`, `\t`, `\r`, `\0`, `\xHH`, `\u{X..}`, `\{`, `\}`.
+/// Aborts on raw newline (single-quote strings are single-line by design).
+///
+/// Iterates by Rust `char` (UTF-8-aware) so that multi-byte characters never
+/// land mid-codepoint. Backslash escapes that take an ASCII escape char advance
+/// by exactly 2 bytes (both ASCII); for non-ASCII chars after `\` we keep the
+/// backslash and the char literally and advance by `1 + char.len_utf8()`.
+fn scan_single_quote_string(source: &str, start: usize) -> Option<(std::string::String, usize)> {
+    // Defensive: callers from the InvalidToken recovery path may pass an opener
+    // that is not actually `'` if the token vector got reordered. Bail out
+    // cleanly instead of panicking.
+    if source.as_bytes().get(start) != Some(&b'\'') {
+        return None;
+    }
+    let mut i = start + 1;
+    let mut result = std::string::String::new();
+    while i < source.len() {
+        // SAFETY: i is always at a char boundary because we only ever advance
+        // by char.len_utf8() or by ASCII byte counts (1 or 2 ASCII bytes).
+        let rest = &source[i..];
+        let c = rest.chars().next()?;
+        if c == '\n' {
+            return None; // unterminated
+        }
+        if c == '\'' {
+            return Some((result, i + 1));
+        }
+        if c == '\\' {
+            // Look at the byte/char immediately after the backslash.
+            let after_backslash = i + 1;
+            let next_char = source[after_backslash..].chars().next();
+            match next_char {
+                Some('n') => { result.push('\n'); i = after_backslash + 1; }
+                Some('t') => { result.push('\t'); i = after_backslash + 1; }
+                Some('r') => { result.push('\r'); i = after_backslash + 1; }
+                Some('\\') => { result.push('\\'); i = after_backslash + 1; }
+                Some('\'') => { result.push('\''); i = after_backslash + 1; }
+                Some('"') => { result.push('"'); i = after_backslash + 1; }
+                Some('0') => { result.push('\0'); i = after_backslash + 1; }
+                Some('{') => { result.push('\\'); result.push('{'); i = after_backslash + 1; }
+                Some('}') => { result.push('\\'); result.push('}'); i = after_backslash + 1; }
+                Some(other) => {
+                    // Unknown escape, keep both `\` and the char literally.
+                    // `other` may be multi-byte UTF-8 — advance by its char length.
+                    result.push('\\');
+                    result.push(other);
+                    i = after_backslash + other.len_utf8();
+                }
+                None => {
+                    // Trailing backslash at EOF — unterminated string.
+                    return None;
+                }
+            }
+            continue;
+        }
+        // Regular char.
+        result.push(c);
+        i += c.len_utf8();
+    }
+    None // EOF without closing quote
+}
+
+/// Coalesce `Lifetime("name")` tokens that are actually single-quote strings.
+///
+/// If a Lifetime token is immediately followed in the source by `'` (the closing
+/// quote of `'name'`), rewrite it as a String and remove the trailing `'` (which
+/// would otherwise have been an unbalanced apostrophe that the InvalidToken handler
+/// might also have caught, depending on what comes after).
+fn coalesce_single_quote_strings(
+    tokens: Vec<SpannedToken>,
+    source: &str,
+) -> Vec<SpannedToken> {
+    let bytes = source.as_bytes();
+    let mut result = Vec::with_capacity(tokens.len());
+    for tok in tokens {
+        if let Token::Lifetime(ref name) = tok.token {
+            let after = tok.span.end;
+            if bytes.get(after) == Some(&b'\'') {
+                // `'name'` form: rewrite as String, extend span to include closing `'`.
+                result.push(SpannedToken {
+                    token: Token::String(name.clone()),
+                    span: tok.span.start..after + 1,
+                });
+                continue;
+            }
+        }
+        result.push(tok);
+    }
+    result
 }
 
 /// Split specific two-char identifiers that are actually keyword pairs.

@@ -181,8 +181,6 @@ impl CodeGenerator {
         // Create new constant
         let name = self.make_string_name();
         self.strings.counter += 1;
-        // DEBUG: print ALL string constants
-        eprintln!("[DEBUG STR] {} = {:?} (len={})", name, value, value.len());
         self.strings
             .constants
             .push((name.clone(), value.to_string()));

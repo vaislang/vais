@@ -845,3 +845,203 @@ fn test_split_keyword_idents_no_split_mixed() {
     assert_eq!(tokens.len(), 1);
     assert_eq!(tokens[0].token, Token::Ident("Foo".to_string()));
 }
+
+// === UTF-8 support: non-ASCII in strings, comments, and VaisX HTML comments ===
+// Added 2026-04-11: monitor/web/app/layout.vaisx was blocked at position 100
+// by a Korean HTML comment. logos 0.14 is Unicode-aware for regex char classes,
+// so string literals already accept UTF-8; the missing piece was HTML comments.
+
+#[test]
+fn test_utf8_string_korean() {
+    let tokens = tokenize(r#""안녕하세요""#).unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("안녕하세요".to_string()));
+}
+
+#[test]
+fn test_utf8_string_emoji() {
+    let tokens = tokenize(r#""🚀 Vais""#).unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("🚀 Vais".to_string()));
+}
+
+#[test]
+fn test_utf8_string_mixed_ascii_korean() {
+    let tokens = tokenize(r#""Hello 안녕 World""#).unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("Hello 안녕 World".to_string()));
+}
+
+#[test]
+fn test_utf8_line_comment_korean() {
+    // # line comment followed by Korean text must be skipped cleanly
+    let source = "# 안녕하세요 주석\nF main(){}";
+    let tokens = tokenize(source).unwrap();
+    assert_eq!(tokens[0].token, Token::Function);
+    assert_eq!(tokens[1].token, Token::Ident("main".to_string()));
+}
+
+#[test]
+fn test_vaisx_html_comment_korean() {
+    // VaisX template HTML comment with Korean (reproduces layout.vaisx:8 case)
+    let source = "<!-- 인증 페이지: 레이아웃 없이 전체 화면 -->\n";
+    let tokens = tokenize(source).unwrap();
+    // HTML comment is skipped entirely → zero tokens
+    assert_eq!(tokens.len(), 0, "HTML comment should be skipped, got: {:?}", tokens);
+}
+
+#[test]
+fn test_vaisx_html_comment_ascii() {
+    let source = "<!-- plain ascii comment -->";
+    let tokens = tokenize(source).unwrap();
+    assert_eq!(tokens.len(), 0);
+}
+
+#[test]
+fn test_vaisx_html_comment_multiline() {
+    let source = "<!-- line1\n   line2 한글\n   line3 -->";
+    let tokens = tokenize(source).unwrap();
+    assert_eq!(tokens.len(), 0);
+}
+
+#[test]
+fn test_vaisx_layout_first_lines() {
+    // Actual layout.vaisx first 8 lines — previously failed at position 100
+    let source = concat!(
+        "<template>\n",
+        "  <div class=\"app-root\">\n",
+        "    {#if isAuthRoute}\n",
+        "      <!-- 인증 페이지: 레이아웃 없이 전체 화면 -->\n",
+        "      <div class=\"auth-shell\"></div>\n",
+        "    {:else}\n",
+        "      <div class=\"app-layout\"></div>\n",
+        "    {/if}\n",
+        "  </div>\n",
+        "</template>\n",
+    );
+    // Must tokenize without LexError. We don't assert exact token sequence
+    // (that's the parser's job) — only that lexer accepts the UTF-8 comment.
+    let result = tokenize(source);
+    assert!(
+        result.is_ok(),
+        "VaisX layout with Korean HTML comment must lex cleanly, got: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn test_vaisx_doctype_skipped() {
+    let source = "<!DOCTYPE html>\n<template></template>";
+    let tokens = tokenize(source).unwrap();
+    // doctype skipped; remaining tokens are <, template, >, <, /, template, >
+    assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "template")));
+}
+
+#[test]
+fn test_utf8_identifier_rejected() {
+    // Korean identifiers must still be rejected (keeps keyword space clean)
+    // `F 안녕()` — lexer should emit Function then fail on the Korean ident
+    let result = tokenize("F 안녕()");
+    assert!(result.is_err(), "non-ASCII identifier must be rejected");
+}
+
+// === Single-quote string literals (VaisX / JS style) ===
+// Added 2026-04-11 for monitor/web layout.vaisx which uses `{t('common.loading')}`
+// patterns. Shares escape processing with `"..."` via parse_string_literal helper.
+// Must not regress Rust-style lifetimes (`'a`, `'static`).
+
+#[test]
+fn test_single_quote_string_basic() {
+    let tokens = tokenize("'hello'").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("hello".to_string()));
+}
+
+#[test]
+fn test_single_quote_string_utf8() {
+    let tokens = tokenize("'안녕'").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("안녕".to_string()));
+}
+
+#[test]
+fn test_single_quote_string_with_dots() {
+    // `'common.loading'` — must not be confused with lifetime `'common` + `.` + `loading`
+    let tokens = tokenize("'common.loading'").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("common.loading".to_string()));
+}
+
+#[test]
+fn test_single_quote_string_escaped_apostrophe() {
+    let tokens = tokenize(r"'it\'s'").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("it's".to_string()));
+}
+
+#[test]
+fn test_single_quote_empty_string() {
+    let tokens = tokenize("''").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::String("".to_string()));
+}
+
+#[test]
+fn test_single_quote_i18n_call() {
+    // VaisX pattern: `t('common.loading')` inside an interpolation brace `{...}`.
+    // This is what layout.vaisx has at position 796.
+    let tokens = tokenize("t('common.loading')").unwrap();
+    assert_eq!(tokens[0].token, Token::Ident("t".to_string()));
+    assert_eq!(tokens[1].token, Token::LParen);
+    assert_eq!(tokens[2].token, Token::String("common.loading".to_string()));
+    assert_eq!(tokens[3].token, Token::RParen);
+}
+
+#[test]
+fn test_lifetime_a_not_broken_by_string_rule() {
+    // Bare `'a` (no closing quote) must still be a lifetime.
+    // Input: `F f<'a>()` — angle brackets and `<` ensure lifetime context.
+    let tokens = tokenize("F f<'a>()").unwrap();
+    // Find the lifetime token — there should be exactly one `Lifetime("a")`.
+    let has_lifetime = tokens.iter().any(|t| t.token == Token::Lifetime("a".to_string()));
+    assert!(has_lifetime, "Lifetime 'a must still tokenize, got: {:?}", tokens);
+}
+
+#[test]
+fn test_lifetime_static_not_broken() {
+    let tokens = tokenize("'static").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].token, Token::Lifetime("static".to_string()));
+}
+
+#[test]
+fn test_lifetime_then_identifier() {
+    // `'a T` — lifetime followed by a type identifier. Common in generic signatures.
+    let tokens = tokenize("'a T").unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert_eq!(tokens[0].token, Token::Lifetime("a".to_string()));
+    assert_eq!(tokens[1].token, Token::TypeKeyword);
+}
+
+#[test]
+fn test_single_quote_string_in_interpolation() {
+    // `{t('key')}` — the brace interpolation pattern used in VaisX.
+    let tokens = tokenize("{t('key')}").unwrap();
+    assert_eq!(tokens[0].token, Token::LBrace);
+    assert_eq!(tokens[1].token, Token::Ident("t".to_string()));
+    assert_eq!(tokens[2].token, Token::LParen);
+    assert_eq!(tokens[3].token, Token::String("key".to_string()));
+    assert_eq!(tokens[4].token, Token::RParen);
+    assert_eq!(tokens[5].token, Token::RBrace);
+}
+
+#[test]
+fn test_single_quote_es_module_import() {
+    // `import Sidebar from './components/sidebar.vaisx'` —
+    // VaisX template ES module import statement (layout.vaisx line 34, position 1041).
+    let tokens = tokenize("import Sidebar from './components/sidebar.vaisx'").unwrap();
+    let has_path = tokens.iter().any(|t| {
+        matches!(&t.token, Token::String(s) if s == "./components/sidebar.vaisx")
+    });
+    assert!(has_path, "ES module import path must tokenize as String, got: {:?}", tokens);
+}
