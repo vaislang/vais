@@ -169,6 +169,17 @@ pub struct TypeChecker {
     // Used to evaluate refinement predicates at function call sites
     pub(crate) dependent_predicates: RefCell<HashMap<String, vais_ast::Expr>>,
 
+    // Implicit error propagation mode (--implicit-try opt-in, Phase 4b.1 / #7).
+    //
+    // When enabled, a call-site argument whose type is `Result<T, E>` or `Option<T>`
+    // passed to a parameter of type `T` is automatically treated as if `?` had been
+    // written on the argument, provided the enclosing function returns a compatible
+    // `Result<_, E>` or `Option<_>`. The set of argument spans that were implicitly
+    // unwrapped is recorded in `implicit_try_sites` so that codegen can emit the
+    // same IR path as an explicit `Expr::Try`.
+    pub implicit_try_mode: bool,
+    pub(crate) implicit_try_sites: HashSet<(usize, usize)>,
+
     // Loop nesting depth — used to validate break/continue are inside a loop
     pub(crate) loop_depth: usize,
 
@@ -214,6 +225,8 @@ impl TypeChecker {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             dependent_predicates: RefCell::new(HashMap::new()),
+            implicit_try_mode: false,
+            implicit_try_sites: HashSet::new(),
             loop_depth: 0,
             moved_vars: HashSet::new(),
             expr_types: HashMap::new(),
@@ -225,6 +238,24 @@ impl TypeChecker {
     /// Enable strict ownership checking (errors instead of warnings)
     pub fn set_strict_ownership(&mut self, strict: bool) {
         self.ownership_check_mode = Some(strict);
+    }
+
+    /// Enable implicit error propagation (Phase 4b.1 / #7).
+    ///
+    /// When on, a call-site argument of type `Result<T, E>` passed to a `T`
+    /// parameter is auto-unwrapped via the same semantics as `?`, provided
+    /// the enclosing function returns a matching `Result<_, E>` (ditto for
+    /// `Option<T>`). The transformation is recorded per argument span so that
+    /// codegen can emit the same IR path as an explicit `Expr::Try`.
+    pub fn set_implicit_try_mode(&mut self, enable: bool) {
+        self.implicit_try_mode = enable;
+    }
+
+    /// Query whether a given argument span was implicitly unwrapped by the
+    /// implicit error propagation pass. Codegen uses this to wrap the
+    /// argument in Try semantics on the fly.
+    pub fn is_implicit_try_site(&self, span: (usize, usize)) -> bool {
+        self.implicit_try_sites.contains(&span)
     }
 
     /// Disable ownership checking entirely
@@ -332,6 +363,15 @@ impl TypeChecker {
     /// Keyed by (span.start, span.end) tuples.
     pub fn get_expr_types(&self) -> &HashMap<(usize, usize), ResolvedType> {
         &self.expr_types
+    }
+
+    /// Get the set of argument spans that were auto-unwrapped by the
+    /// implicit error propagation pass (Phase 4b.1 / #7).
+    ///
+    /// Codegen consumes this via `set_implicit_try_sites` to wrap the
+    /// corresponding call-site arguments in `Expr::Try` semantics.
+    pub fn get_implicit_try_sites(&self) -> &HashSet<(usize, usize)> {
+        &self.implicit_try_sites
     }
 
     /// Get the struct definition (for codegen)

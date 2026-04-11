@@ -420,7 +420,6 @@ impl CodeGenerator {
     /// Get bit width for integer types
     pub(crate) fn get_integer_bits(&self, ty: &ResolvedType) -> u32 {
         match ty {
-            ResolvedType::Bool => 1,
             ResolvedType::I8 | ResolvedType::U8 => 8,
             ResolvedType::I16 | ResolvedType::U16 => 16,
             ResolvedType::I32 | ResolvedType::U32 => 32,

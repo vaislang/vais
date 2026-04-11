@@ -30,6 +30,18 @@ use vais_types::TypeChecker;
 /// None = disabled, Some(true) = strict errors (default), Some(false) = warn-only
 static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
 
+/// Global implicit error propagation configuration (Phase 4b.1 / #7).
+///
+/// `true` enables auto-`?` at call sites whose argument is a `Result<T, E>`
+/// (or `Option<T>`) being passed to a `T` parameter. Controlled by the
+/// `--implicit-try` CLI flag. Default is `false` so existing code is
+/// unaffected.
+static IMPLICIT_TRY_MODE: OnceLock<bool> = OnceLock::new();
+
+pub(crate) fn get_implicit_try_mode() -> bool {
+    IMPLICIT_TRY_MODE.get().copied().unwrap_or(false)
+}
+
 fn check_for_update() {
     let current = env!("CARGO_PKG_VERSION");
 
@@ -175,6 +187,9 @@ pub(crate) fn configure_type_checker(checker: &mut TypeChecker) {
         Some(false) => {} // default: warn-only
         None => checker.disable_ownership_check(),
     }
+    if get_implicit_try_mode() {
+        checker.set_implicit_try_mode(true);
+    }
 }
 
 #[derive(Parser)]
@@ -271,6 +286,20 @@ struct Cli {
     /// Skip the update availability check
     #[arg(long, global = true)]
     no_update_check: bool,
+
+    /// Enable implicit error propagation (Phase 4b.1 / #7).
+    ///
+    /// When set, a call-site argument of type `Result<T, E>` passed to a
+    /// parameter of type `T` is auto-unwrapped as if the programmer had
+    /// written `?` on the argument. The enclosing function must return a
+    /// compatible `Result<_, E>`; otherwise the type checker reports an
+    /// error rather than silently mis-propagating. The same rule applies
+    /// to `Option<T>` arguments and `Option<_>` return types.
+    ///
+    /// This is an opt-in, experimental flag (Phase 4b token reduction).
+    /// Existing code that does not use the flag is unaffected.
+    #[arg(long, global = true)]
+    implicit_try: bool,
 }
 
 #[derive(Subcommand)]
@@ -366,6 +395,12 @@ enum Commands {
         #[arg(long, value_name = "BYTES", default_value = "536870912")]
         cache_limit: u64,
 
+        /// Enable incremental compilation (hash-based change detection, skip unchanged modules)
+        /// On first run (cold): populates the cache. On subsequent runs (warm): skips
+        /// unchanged files, reusing prior type-check and codegen results.
+        #[arg(long)]
+        incremental: bool,
+
         /// Disable incremental compilation cache entirely
         #[arg(long)]
         no_cache: bool,
@@ -401,6 +436,12 @@ enum Commands {
         /// Arguments to pass to the program
         #[arg(last = true)]
         args: Vec<String>,
+
+        /// Execute via Cranelift JIT (no LLVM, no clang link step).
+        /// Requires the `jit` cargo feature. Falls back to LLVM+clang path on JIT errors.
+        /// Currently limited to programs with `F main() -> i64` and a subset of language features.
+        #[arg(long)]
+        jit: bool,
     },
 
     /// Check a Vais source file for errors
@@ -628,6 +669,9 @@ fn main_inner() {
     };
     let _ = OWNERSHIP_MODE.set(ownership_mode);
 
+    // Configure implicit error propagation mode (Phase 4b.1 / #7)
+    let _ = IMPLICIT_TRY_MODE.set(cli.implicit_try);
+
     // Configure MIR borrow checking
     let _ = STRICT_BORROW.set(cli.strict_borrow);
 
@@ -678,6 +722,10 @@ fn main_inner() {
             inkwell: _build_inkwell,
             per_module,
             cache_limit,
+            // `incremental` flag is a no-op: incremental caching is ALWAYS enabled
+            // unless `--force-rebuild` or `--no-cache` is set. The flag is kept in
+            // the CLI for backwards-compat and documentation but has no behavioural effect.
+            incremental: _,
             no_cache,
             warm_cache,
             clear_cache,
@@ -916,6 +964,26 @@ fn main_inner() {
                 };
                 #[cfg(not(feature = "inkwell"))]
                 let use_inkwell = _build_inkwell || cli.inkwell;
+
+                // Phase 4b.1 / #7: implicit error propagation is currently
+                // wired for the text-IR backend (vais-codegen) only. The
+                // Inkwell backend's 2-field `{ i8, i64 }` Result layout does
+                // not line up with the multi-field `%Result` layout the
+                // text-IR emits for Result<T, Str>, so wrapping a call-site
+                // argument in `Expr::Try` triggers an "aggregate extract
+                // index out of range" verifier error. Until that is
+                // addressed separately, fail fast instead of producing
+                // invalid IR.
+                if cli.implicit_try && use_inkwell {
+                    eprintln!(
+                        "{}: `--implicit-try` is only supported with the \
+                         text-IR backend; re-run without the Inkwell path \
+                         (for example `VAIS_SINGLE_MODULE=1 vaisc build …` \
+                         or `vaisc run …`).",
+                        "error".red().bold()
+                    );
+                    exit(1);
+                }
                 commands::build::cmd_build_with_timing(
                     &resolved_input,
                     output,
@@ -942,8 +1010,8 @@ fn main_inner() {
                 )
             }
         }
-        Some(Commands::Run { input, args }) => {
-            commands::simple::cmd_run(&input, &args, cli.verbose, &plugins)
+        Some(Commands::Run { input, args, jit }) => {
+            commands::simple::cmd_run(&input, &args, cli.verbose, &plugins, jit)
         }
         Some(Commands::Check { input }) => {
             commands::simple::cmd_check(&input, cli.verbose, &plugins)

@@ -1,0 +1,19 @@
+# std/os/linux.vais - Linux arm64 syscall numbers
+# Phase 4.1 syscall primitive support.
+# Source: linux/arch/arm64/include/uapi/asm/unistd.h (generic 64-bit AArch64)
+#
+# NOTE: x86_64 numbers differ (exit=60, read=0, write=1, ...).
+#       Use std/os/linux_x86_64.vais when that target is added in Phase 4.3.
+#
+# Usage:
+#   U std/os/linux
+#   # then call __syscall(SYS_write, fd, buf, count)
+
+C SYS_exit: i64 = 93
+C SYS_read: i64 = 63
+C SYS_write: i64 = 64
+C SYS_openat: i64 = 56
+C SYS_close: i64 = 57
+C SYS_mmap: i64 = 222
+C SYS_munmap: i64 = 215
+C SYS_clock_gettime: i64 = 113

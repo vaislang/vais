@@ -452,7 +452,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let mut arg_values: Vec<BasicMetadataValueEnum> =
                     captured_vals.iter().map(|(_, val)| (*val).into()).collect();
                 for arg in args {
-                    arg_values.push(self.generate_expr(&arg.node)?.into());
+                    // Implicit error propagation (Phase 4b.1 / #7): if TC
+                    // marked this arg for auto-unwrap, take the Try branch
+                    // to reuse the existing generate_try logic.
+                    let val = if self.is_implicit_try_site(arg.span)
+                        && !matches!(&arg.node, Expr::Try(_))
+                    {
+                        self.generate_try(&arg.node)?
+                    } else {
+                        self.generate_expr(&arg.node)?
+                    };
+                    arg_values.push(val.into());
                 }
                 let call = self
                     .builder
@@ -730,7 +740,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let param_types: Vec<_> = fn_type.get_param_types();
         let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
-            let val = self.generate_expr(&arg.node)?;
+            // Implicit error propagation (Phase 4b.1 / #7): wrap the arg in
+            // Try semantics when the type checker flagged it for auto-unwrap.
+            let val = if self.is_implicit_try_site(arg.span)
+                && !matches!(&arg.node, Expr::Try(_))
+            {
+                self.generate_try(&arg.node)?
+            } else {
+                self.generate_expr(&arg.node)?
+            };
             let coerced: BasicMetadataValueEnum = if let Some(param_ty) = param_types.get(i) {
                 if param_ty.is_pointer_type() && val.is_struct_value() {
                     // Fat string { ptr, i64 } → extract raw ptr

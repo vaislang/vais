@@ -284,6 +284,12 @@ pub struct CodeGenerator {
     // Used by infer_expr_type to look up TC-resolved types before falling back
     // to the legacy inference heuristics.
     pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+
+    // Argument spans that were implicitly unwrapped by the implicit error
+    // propagation pass (Phase 4b.1 / #7, `--implicit-try`). For each span
+    // present, the call-site arg is wrapped as if the user had written `?`
+    // on it, reusing the existing `Expr::Try` codegen path.
+    pub(crate) implicit_try_sites: std::collections::HashSet<(usize, usize)>,
 }
 
 #[cfg(test)]

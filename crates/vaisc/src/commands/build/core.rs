@@ -181,9 +181,21 @@ pub(crate) fn cmd_build(
 ) -> Result<(), String> {
     use incremental::{get_cache_dir, CompilationOptions, IncrementalCache};
 
-    // Initialize incremental compilation cache
+    // Initialize incremental compilation cache.
+    // The cache is always initialized (for metadata tracking) but skip-on-hit
+    // behaviour is controlled by the `--force-rebuild` flag (default: incremental enabled).
     let cache_dir = get_cache_dir(input);
     let mut cache = IncrementalCache::new(cache_dir).ok();
+
+    if verbose {
+        if let Some(ref c) = cache {
+            println!(
+                "{} incremental cache at {}",
+                "Incremental:".cyan().bold(),
+                c.cache_dir().display()
+            );
+        }
+    }
 
     // Set compilation options for cache validity checking
     if let Some(ref mut c) = cache {

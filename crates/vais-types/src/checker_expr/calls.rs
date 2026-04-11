@@ -172,7 +172,28 @@ impl TypeChecker {
                                 (ResolvedType::Str, ResolvedType::I64)
                                     | (ResolvedType::I64, ResolvedType::Str)
                             );
-                        if !is_str_i64_coercion {
+                        // Implicit error propagation (Phase 4b.1 / #7).
+                        //
+                        // Only try when opt-in is on. The helper is a no-op when
+                        // `self.implicit_try_mode == false` so the legacy unify path
+                        // below is unchanged for existing code.
+                        //
+                        // Skip when the argument is already an explicit Try — the
+                        // user wrote `?` manually and `Expr::Try` has already
+                        // been resolved by `check_expr`, producing the unwrapped
+                        // inner type, so there is nothing to do here.
+                        let already_try = matches!(&arg.node, Expr::Try(_));
+                        let propagated = if !already_try {
+                            self.try_implicit_error_propagation(
+                                &sig.params[i].1,
+                                &arg_type,
+                                arg.span,
+                                is_str_i64_coercion,
+                            )?
+                        } else {
+                            None
+                        };
+                        if propagated.is_none() && !is_str_i64_coercion {
                             self.unify(&sig.params[i].1, &arg_type)?;
                         }
                         // Check dependent type refinement for literal arguments
@@ -789,5 +810,165 @@ impl TypeChecker {
             span: Some(method.span),
             suggestion,
         })
+    }
+
+    /// Implicit error propagation (Phase 4b.1 / #7).
+    ///
+    /// Applied at call-site argument type checking when
+    /// `self.implicit_try_mode == true`. Detects the pattern
+    /// `param_ty = T` while `arg_ty = Result<T, E>` (or `Option<T>`) and,
+    /// when valid, unwraps `arg_ty` to its inner success type — mirroring
+    /// what an explicit `?` on the argument would do.
+    ///
+    /// Returns:
+    /// - `Ok(Some(inner))` — unwrap succeeded, caller should use `inner` in
+    ///   place of `arg_ty` and the site has been recorded for codegen.
+    /// - `Ok(None)` — no implicit-try transformation is applicable; the
+    ///   caller should continue with the existing unification path.
+    /// - `Err(TypeError)` — the transformation was applicable but the
+    ///   enclosing function does not return a compatible `Result`/`Option`
+    ///   so propagation would be unsound. The caller must surface the error
+    ///   rather than fall through to regular unification.
+    ///
+    /// Only the direct `Expr::Call` path uses this today. Method calls and
+    /// indirect calls fall through unchanged, which preserves existing
+    /// behavior for code that does not opt in.
+    pub(crate) fn try_implicit_error_propagation(
+        &mut self,
+        param_ty: &ResolvedType,
+        arg_ty: &ResolvedType,
+        arg_span: Span,
+        is_str_i64_coercion: bool,
+    ) -> TypeResult<Option<ResolvedType>> {
+        if !self.implicit_try_mode {
+            return Ok(None);
+        }
+        // Never trigger for the legacy str↔i64 coercion — that path has its
+        // own unify skip and is orthogonal to error propagation.
+        if is_str_i64_coercion {
+            return Ok(None);
+        }
+        let param_resolved = self.apply_substitutions(param_ty);
+        let arg_resolved = self.apply_substitutions(arg_ty);
+        // If the parameter itself is Result/Option, the user is passing the
+        // whole container deliberately — do not unwrap.
+        if matches!(
+            &param_resolved,
+            ResolvedType::Result(_, _) | ResolvedType::Optional(_)
+        ) {
+            return Ok(None);
+        }
+        // Named Result<T,E> / Option<T> on the parameter side is also a
+        // deliberate pass-through.
+        if let ResolvedType::Named { name, .. } = &param_resolved {
+            if name == "Result" || name == "Option" {
+                return Ok(None);
+            }
+        }
+
+        // Extract (inner_ok, err_opt, is_option) from the argument type.
+        let unwrap = |ty: &ResolvedType| -> Option<(ResolvedType, Option<ResolvedType>, bool)> {
+            match ty {
+                ResolvedType::Result(ok, err) => {
+                    Some(((**ok).clone(), Some((**err).clone()), false))
+                }
+                ResolvedType::Optional(ok) => Some(((**ok).clone(), None, true)),
+                ResolvedType::Named { name, generics } if name == "Result" => {
+                    let ok = generics.first().cloned().unwrap_or(ResolvedType::I64);
+                    let err = generics.get(1).cloned();
+                    Some((ok, err, false))
+                }
+                ResolvedType::Named { name, generics } if name == "Option" => {
+                    let ok = generics.first().cloned().unwrap_or(ResolvedType::I64);
+                    Some((ok, None, true))
+                }
+                _ => None,
+            }
+        };
+        let Some((inner_ok, arg_err, is_option)) = unwrap(&arg_resolved) else {
+            return Ok(None);
+        };
+
+        // Cheap compatibility probe: does the inner success type unify with
+        // the parameter? Perform this on a checkpoint so a failure here does
+        // not leak stray substitutions into later checking.
+        let snapshot = self.substitutions.clone();
+        let unifies = self.unify(param_ty, &inner_ok).is_ok();
+        if !unifies {
+            self.substitutions = snapshot;
+            return Ok(None);
+        }
+        // Commit the unification — caller will use `inner_ok` as the arg
+        // type but we must not re-unify, so we record the success here and
+        // leave `self.substitutions` as-is.
+
+        // Enclosing-function compatibility: propagation requires the caller
+        // to return Result/Option that matches the argument's container.
+        let Some(current_ret) = self.current_fn_ret.clone() else {
+            self.substitutions = snapshot;
+            return Err(TypeError::Mismatch {
+                expected: "enclosing function returning Result or Option \
+                           (required by --implicit-try)"
+                    .to_string(),
+                found: "no function context".to_string(),
+                span: Some(arg_span),
+            });
+        };
+        let current_resolved = self.apply_substitutions(&current_ret);
+        let ret_unwrap = unwrap(&current_resolved);
+        let (ret_err_opt, ret_is_option) = match ret_unwrap {
+            Some((_, err, is_opt)) => (err, is_opt),
+            None => {
+                self.substitutions = snapshot;
+                return Err(TypeError::Mismatch {
+                    expected: if is_option {
+                        "Option<_> return type (required by --implicit-try \
+                         when propagating Option)"
+                            .to_string()
+                    } else {
+                        "Result<_, _> return type (required by --implicit-try \
+                         when propagating Result)"
+                            .to_string()
+                    },
+                    found: current_resolved.to_string(),
+                    span: Some(arg_span),
+                });
+            }
+        };
+        if is_option != ret_is_option {
+            // Result → Option or vice versa: not directly propagatable.
+            self.substitutions = snapshot;
+            return Err(TypeError::Mismatch {
+                expected: if is_option {
+                    "Option<_> return type".to_string()
+                } else {
+                    "Result<_, _> return type".to_string()
+                },
+                found: current_resolved.to_string(),
+                span: Some(arg_span),
+            });
+        }
+        // For Result, err types must unify so the propagation is type-safe.
+        if let (Some(arg_err_ty), Some(ret_err_ty)) = (arg_err.as_ref(), ret_err_opt.as_ref()) {
+            if self.unify(ret_err_ty, arg_err_ty).is_err() {
+                self.substitutions = snapshot;
+                return Err(TypeError::Mismatch {
+                    expected: format!(
+                        "Result<_, {}> (to match argument's error type)",
+                        arg_err_ty
+                    ),
+                    found: current_resolved.to_string(),
+                    span: Some(arg_span),
+                });
+            }
+        }
+
+        // All compatibility checks passed — record the site and return the
+        // unwrapped inner type. The caller uses this as the effective
+        // argument type; codegen will consult `is_implicit_try_site` to wrap
+        // the original argument in Try semantics.
+        self.implicit_try_sites
+            .insert((arg_span.start, arg_span.end));
+        Ok(Some(inner_ok))
     }
 }

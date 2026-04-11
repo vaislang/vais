@@ -32,19 +32,6 @@ pub(crate) fn filter_imported_items(
     }
 }
 
-/// Load a module and recursively resolve its imports
-pub(crate) fn load_module_with_imports(
-    path: &PathBuf,
-    loaded: &mut HashSet<PathBuf>,
-    loading_stack: &mut Vec<PathBuf>,
-    verbose: bool,
-    query_db: &QueryDatabase,
-) -> Result<Module, String> {
-    let source =
-        fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, loading_stack, verbose, &source, query_db, None)
-}
-
 /// Load a module with source_root for subdirectory → parent directory import resolution
 pub(crate) fn load_module_with_imports_rooted(
     path: &PathBuf,
@@ -506,16 +493,6 @@ pub(crate) fn get_std_path() -> Option<PathBuf> {
     }
 
     None
-}
-
-/// Resolve import path to file path with security validation
-/// `source_root` is an optional fallback directory (entry point's parent) to search
-/// when the import is not found relative to `base_dir` (the importing file's directory).
-pub(crate) fn resolve_import_path(
-    base_dir: &Path,
-    path: &[vais_ast::Spanned<String>],
-) -> Result<PathBuf, String> {
-    resolve_import_path_with_root(base_dir, path, None)
 }
 
 /// Resolve import path with optional source root fallback

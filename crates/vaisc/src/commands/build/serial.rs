@@ -393,6 +393,7 @@ fn generate_with_inkwell(
         vais_codegen::InkwellCodeGenerator::new_with_target(&context, module_name, target.clone());
     gen.set_resolved_functions(checker.get_all_functions_with_methods());
     gen.set_type_aliases(checker.get_type_aliases().clone());
+    gen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
     let instantiations = checker.get_generic_instantiations();
     if instantiations.is_empty() {
         gen.generate_module(final_ast)

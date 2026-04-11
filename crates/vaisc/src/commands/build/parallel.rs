@@ -121,6 +121,7 @@ pub(crate) fn run_per_module_emit_ir(
     let resolved_functions = checker.get_all_functions_with_methods();
     let resolved_type_aliases = checker.get_type_aliases().clone();
     let resolved_expr_types = checker.get_expr_types().clone();
+    let resolved_implicit_try_sites = checker.get_implicit_try_sites().clone();
     let instantiations = checker.get_generic_instantiations();
     for inst in &instantiations {
         eprintln!(
@@ -150,6 +151,7 @@ pub(crate) fn run_per_module_emit_ir(
             codegen.set_resolved_functions(resolved_functions.clone());
             codegen.set_type_aliases(resolved_type_aliases.clone());
             codegen.set_expr_types(resolved_expr_types.clone());
+            codegen.set_implicit_try_sites(resolved_implicit_try_sites.clone());
             codegen.set_string_prefix(&module_stem);
 
             if gc {

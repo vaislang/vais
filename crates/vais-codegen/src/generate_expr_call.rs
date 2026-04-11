@@ -319,7 +319,24 @@ impl CodeGenerator {
         let is_extern_c = fn_info.as_ref().map(|f| f.is_extern).unwrap_or(false);
 
         for (i, arg) in args.iter().enumerate() {
-            let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
+            // Implicit error propagation (Phase 4b.1 / #7): if the type
+            // checker flagged this argument for auto-unwrap, wrap it in
+            // `Expr::Try` before codegen. That reuses the existing
+            // `generate_try_expr` path which evaluates the inner expression,
+            // checks the Result/Option tag, and propagates the error case
+            // through the enclosing function's return. The set is empty
+            // unless the compiler was invoked with `--implicit-try`, so
+            // regular code is unaffected.
+            let owned_try_arg;
+            let arg_for_gen: &Spanned<Expr> = if self.is_implicit_try_site(arg.span)
+                && !matches!(&arg.node, Expr::Try(_))
+            {
+                owned_try_arg = Spanned::new(Expr::Try(Box::new(arg.clone())), arg.span);
+                &owned_try_arg
+            } else {
+                arg
+            };
+            let (mut val, arg_ir) = self.generate_expr(arg_for_gen, counter)?;
             ir.push_str(&arg_ir);
 
             // Get parameter type from function info if available
@@ -350,7 +367,7 @@ impl CodeGenerator {
                 }
             }
 
-            let inferred_ty = self.infer_expr_type(arg);
+            let inferred_ty = self.infer_expr_type(arg_for_gen);
             let arg_ty = if let Some(ref ty) = param_ty {
                 if matches!(ty, ResolvedType::Generic(_)) {
                     self.type_to_llvm(&inferred_ty)
@@ -405,7 +422,9 @@ impl CodeGenerator {
                 Some(ty) => ty.clone(),
                 None => inferred_ty,
             };
-            if matches!(type_to_check, ResolvedType::Named { .. }) && !self.is_expr_value(arg) {
+            if matches!(type_to_check, ResolvedType::Named { .. })
+                && !self.is_expr_value(arg_for_gen)
+            {
                 let loaded = self.next_temp(counter);
                 write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
                 val = loaded;
@@ -429,7 +448,7 @@ impl CodeGenerator {
 
                 if let Some(trait_name) = dyn_trait {
                     // Get the concrete type of the argument
-                    let arg_expr_type = self.infer_expr_type(arg);
+                    let arg_expr_type = self.infer_expr_type(arg_for_gen);
                     let concrete_type_name = match &arg_expr_type {
                         ResolvedType::Named { name, .. } => Some(name.clone()),
                         ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
@@ -514,7 +533,7 @@ impl CodeGenerator {
             // Convert i64 to str fat pointer { i8*, i64 } when parameter expects str but arg is i64
             if let Some(ref param_type) = param_ty {
                 if matches!(param_type, ResolvedType::Str) {
-                    let actual_ty = self.infer_expr_type(arg);
+                    let actual_ty = self.infer_expr_type(arg_for_gen);
                     if matches!(actual_ty, ResolvedType::I64) {
                         let raw_ptr = self.next_temp(counter);
                         write_ir!(ir, "  {} = inttoptr i64 {} to i8*", raw_ptr, val);
@@ -545,7 +564,7 @@ impl CodeGenerator {
                 } else if val_ty == "i64" {
                     // llvm_type_of returned fallback i64 — check the inferred expression type
                     // to detect Named/struct types that are actually pointers
-                    let inferred = self.infer_expr_type(arg);
+                    let inferred = self.infer_expr_type(arg_for_gen);
                     if matches!(inferred, ResolvedType::Named { .. }) {
                         let struct_llvm = self.type_to_llvm(&inferred);
                         let tmp = self.next_temp(counter);
@@ -595,7 +614,7 @@ impl CodeGenerator {
             // This happens in generic function bodies (e.g., Vec_map) that call
             // specialized methods (e.g., Vec_push$BTreeLeafEntry)
             if arg_ty.starts_with('%') && !arg_ty.ends_with('*') {
-                let inferred = self.infer_expr_type(arg);
+                let inferred = self.infer_expr_type(arg_for_gen);
                 if !matches!(inferred, ResolvedType::Named { .. }) {
                     let ptr_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to {}*", ptr_tmp, val, arg_ty);
@@ -616,7 +635,7 @@ impl CodeGenerator {
             // TC allows Ref(Vec<T>) ↔ Slice(T) coercion (Phase 163).
             // Build a temporary Vec on the stack: { ptrtoint data, len, len, elem_size }.
             if arg_ty.ends_with('*') && arg_ty.starts_with('%') {
-                let inferred = self.infer_expr_type(arg);
+                let inferred = self.infer_expr_type(arg_for_gen);
                 let is_slice_arg = matches!(
                     &inferred,
                     ResolvedType::Slice(_) | ResolvedType::SliceMut(_)

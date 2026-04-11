@@ -2,7 +2,7 @@
 //!
 //! Provides type-safe LLVM IR generation using the inkwell crate.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -132,6 +132,12 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Type aliases from type checker (for resolving type alias names in codegen)
     pub(super) type_aliases: HashMap<String, vais_types::ResolvedType>,
+
+    /// Argument spans that were implicitly unwrapped by the type checker's
+    /// implicit error propagation pass (Phase 4b.1 / #7, `--implicit-try`).
+    /// Each call-site arg whose span is in this set is wrapped in `Expr::Try`
+    /// before codegen, reusing the existing Try handling.
+    pub(super) implicit_try_sites: HashSet<(usize, usize)>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -196,6 +202,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),
+            implicit_try_sites: HashSet::new(),
         };
 
         // Declare built-in functions
@@ -535,6 +542,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Set type aliases from the type checker.
     pub fn set_type_aliases(&mut self, aliases: HashMap<String, vais_types::ResolvedType>) {
         self.type_aliases = aliases;
+    }
+
+    /// Set the implicit-try argument spans collected by the type checker
+    /// (Phase 4b.1 / #7). See `CodeGenerator::set_implicit_try_sites` on the
+    /// text-IR generator for the contract — this is the Inkwell mirror.
+    pub fn set_implicit_try_sites(&mut self, sites: HashSet<(usize, usize)>) {
+        self.implicit_try_sites = sites;
+    }
+
+    /// Query whether the argument at the given span was marked for implicit
+    /// error propagation by the type checker.
+    #[inline]
+    pub(super) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
+        self.implicit_try_sites
+            .contains(&(span.start, span.end))
     }
 
     /// Returns the LLVM IR as a string.

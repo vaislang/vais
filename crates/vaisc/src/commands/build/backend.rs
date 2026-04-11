@@ -57,6 +57,7 @@ pub(crate) fn generate_with_text_backend(
     codegen.set_resolved_functions(checker.get_all_functions_with_methods());
     codegen.set_type_aliases(checker.get_type_aliases().clone());
     codegen.set_expr_types(checker.get_expr_types().clone());
+    codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
 
     // Enable multi-error mode for graceful degradation:
     // collect codegen errors instead of stopping at the first one.

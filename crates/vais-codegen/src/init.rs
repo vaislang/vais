@@ -116,6 +116,7 @@ impl CodeGenerator {
             ref_constants: Vec::new(),
             ref_constant_counter: 0,
             expr_types: HashMap::new(),
+            implicit_try_sites: std::collections::HashSet::new(),
         };
 
         // Register built-in extern functions
@@ -204,6 +205,29 @@ impl CodeGenerator {
         self.expr_types = types;
     }
 
+    /// Set the implicit-try argument spans collected by the type checker
+    /// (Phase 4b.1 / #7). When `--implicit-try` is on, the type checker
+    /// records each call-site argument that it auto-unwrapped; codegen
+    /// consults this set to wrap the argument in `Expr::Try` semantics on
+    /// the fly, reusing the existing Try codegen path.
+    ///
+    /// Call sites must invoke this alongside `set_expr_types` so that the
+    /// two views of the type checker's output stay in sync.
+    pub fn set_implicit_try_sites(
+        &mut self,
+        sites: std::collections::HashSet<(usize, usize)>,
+    ) {
+        self.implicit_try_sites = sites;
+    }
+
+    /// Query whether the argument at the given span was marked for implicit
+    /// error propagation by the type checker.
+    #[inline]
+    pub(crate) fn is_implicit_try_site(&self, span: vais_ast::Span) -> bool {
+        self.implicit_try_sites
+            .contains(&(span.start, span.end))
+    }
+
     /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
     pub fn set_string_prefix(&mut self, prefix: &str) {
         self.strings.prefix = Some(prefix.to_string());
@@ -275,6 +299,7 @@ impl CodeGenerator {
     /// - [`CodegenWarning::GenericFallback`] is **always** promoted to
     ///   [`CodegenError::InternalError`] (Phase 191 v3 — unconditional). The
     ///   historical `strict_generic_mode` opt-in was removed.
+    ///
     /// All other warning types remain warnings.
     #[inline(never)]
     pub(crate) fn emit_warning_or_error(

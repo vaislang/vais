@@ -8,7 +8,7 @@ use crate::utils::{print_plugin_diagnostics, walkdir};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use vais_codegen::TargetTriple;
 use vais_lexer::tokenize;
@@ -22,7 +22,28 @@ pub(crate) fn cmd_run(
     args: &[String],
     verbose: bool,
     plugins: &PluginRegistry,
+    use_jit: bool,
 ) -> Result<(), String> {
+    // When --jit is requested, try Cranelift JIT first and fall back to LLVM+clang on error.
+    // The JIT path skips the entire clang link step (which measured at 96% of hello.vais
+    // build time at Phase 4 iter 2), yielding a large wall-clock speedup for programs that
+    // fit JIT's current feature coverage (single-file, i64 main, no extern IO).
+    if use_jit {
+        match cmd_run_jit(input, verbose) {
+            Ok(()) => return Ok(()),
+            Err(jit_err) => {
+                if verbose {
+                    println!(
+                        "{} JIT path failed, falling back to LLVM+clang: {}",
+                        "⚠".yellow().bold(),
+                        jit_err
+                    );
+                }
+                // Fall through to LLVM+clang path below
+            }
+        }
+    }
+
     // Build first (no debug for run command by default, native target only, use incremental cache, no hot reload, no LTO/PGO)
     let bin_path = input.with_extension("");
     cmd_build(
@@ -64,6 +85,54 @@ pub(crate) fn cmd_run(
     }
 
     Ok(())
+}
+
+/// Execute a Vais source file via Cranelift JIT without touching LLVM or clang.
+///
+/// Requires the `jit` cargo feature (returns an error when the feature is disabled,
+/// so that cmd_run's fallback path takes over).
+///
+/// Current limitations:
+/// - Single-file only (no imports)
+/// - Program must define `F main() -> i64` or `__repl_main`
+/// - JIT feature coverage is a subset of LLVM codegen (see `crates/vais-jit/src/tiered/tests.rs`)
+#[cfg(feature = "jit")]
+fn cmd_run_jit(input: &PathBuf, verbose: bool) -> Result<(), String> {
+    use vais_jit::JitCompiler;
+
+    let source = fs::read_to_string(input)
+        .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
+
+    if verbose {
+        println!("{} {} (JIT)", "Running".green().bold(), input.display());
+    }
+
+    // Parse
+    let ast = parse(&source).map_err(|e| format!("Parse error: {}", e))?;
+
+    // Type check
+    let mut checker = TypeChecker::new();
+    configure_type_checker(&mut checker);
+    checker
+        .check_module(&ast)
+        .map_err(|e| format!("Type error: {}", e))?;
+
+    // JIT compile and run main
+    let mut jit =
+        JitCompiler::new().map_err(|e| format!("JIT init failed: {}", e))?;
+    let exit_code = jit
+        .compile_and_run_main(&ast)
+        .map_err(|e| format!("JIT execution failed: {}", e))?;
+
+    if exit_code != 0 {
+        std::process::exit(exit_code as i32);
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "jit"))]
+fn cmd_run_jit(_input: &PathBuf, _verbose: bool) -> Result<(), String> {
+    Err("vaisc was built without the `jit` feature; rebuild with `--features jit`".to_string())
 }
 
 pub(crate) fn cmd_check(
