@@ -665,32 +665,15 @@ fn run_type_check(
             checker = final_checker;
 
             if !all_errors.is_empty() {
-                // In multi_error_mode (VAIS_TC_NONFATAL), add parallel TC errors
-                // to collected_errors as non-fatal instead of failing immediately.
-                // This allows codegen to proceed with partially type-checked code.
-                let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
-                if tc_nonfatal {
-                    for err_msg in &all_errors {
-                        checker
-                            .collected_errors
-                            .push(vais_types::TypeError::InferFailed {
-                                kind: "module".to_string(),
-                                name: "parallel_tc".to_string(),
-                                context: err_msg.clone(),
-                                span: None,
-                                suggestion: None,
-                            });
-                    }
-                    Ok(())
-                } else {
-                    Err(vais_types::TypeError::InferFailed {
-                        kind: "module".to_string(),
-                        name: "parallel_tc".to_string(),
-                        context: all_errors.join("\n---\n"),
-                        span: None,
-                        suggestion: None,
-                    })
-                }
+                // Phase 158/#4: VAIS_TC_NONFATAL was removed — TC errors are always
+                // fatal. Parallel TC errors are surfaced as a single InferFailed.
+                Err(vais_types::TypeError::InferFailed {
+                    kind: "module".to_string(),
+                    name: "parallel_tc".to_string(),
+                    context: all_errors.join("\n---\n"),
+                    span: None,
+                    suggestion: None,
+                })
             } else {
                 Ok(())
             }
@@ -698,10 +681,8 @@ fn run_type_check(
             checker.check_module(final_ast)
         };
 
-        // Handle type checking result
+        // Handle type checking result (Phase 158/#4: TC errors are always fatal).
         if let Err(e) = tc_result {
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
-
             if suggest_fixes {
                 print_suggested_fixes(&e, main_source);
             }
@@ -712,50 +693,29 @@ fn run_type_check(
                     error_formatter::format_type_error(collected_err, main_source, input)
                 );
             }
-
-            if tc_nonfatal {
-                // Non-fatal: print error summary as warning and continue to codegen
-                eprintln!(
-                    "{}: {} type error(s) found (non-fatal, continuing to codegen)",
-                    "warning".yellow().bold(),
-                    total_errors
-                );
-            } else {
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                if total_errors > 1 {
-                    eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
-                }
-                return Err(error_formatter::format_type_error(&e, main_source, input));
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
             }
+            if total_errors > 1 {
+                eprintln!("{}: {} errors found", "error".red().bold(), total_errors);
+            }
+            return Err(error_formatter::format_type_error(&e, main_source, input));
         }
 
-        // Even if check_module succeeded, there may be collected errors
+        // Even if check_module succeeded, there may be collected errors.
+        // Phase 158/#4: these are fatal — no VAIS_TC_NONFATAL escape hatch.
         if !checker.get_collected_errors().is_empty() {
             let total_errors = checker.get_collected_errors().len();
-            let tc_nonfatal = std::env::var("VAIS_TC_NONFATAL").is_ok_and(|v| v == "1");
-
             for collected_err in checker.get_collected_errors() {
                 eprintln!(
                     "{}",
                     error_formatter::format_type_error(collected_err, main_source, input)
                 );
             }
-
-            if tc_nonfatal {
-                // Non-fatal mode: print errors as warnings and continue to codegen
-                eprintln!(
-                    "{}: {} type error(s) found (non-fatal, continuing to codegen)",
-                    "warning".yellow().bold(),
-                    total_errors
-                );
-            } else {
-                if let Some(ref mut c) = cache {
-                    incremental::update_tc_cache(c, final_ast, false);
-                }
-                return Err(format!("{} type error(s) found", total_errors));
+            if let Some(ref mut c) = cache {
+                incremental::update_tc_cache(c, final_ast, false);
             }
+            return Err(format!("{} type error(s) found", total_errors));
         }
 
         // Update cache: TC passed

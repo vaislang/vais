@@ -109,9 +109,14 @@ impl CodeGenerator {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             strict_type_mode: true,
+            // Phase 191 v2: default on. E2E measurement on 2026-04-11 showed
+            // 2514/0/0 pass under `VAIS_STRICT_GENERIC=1`, confirming the
+            // historical i64 fallback path is not actually exercised in the
+            // tested codebase. Can still be opted out via
+            // `set_strict_generic_mode(false)` or `VAIS_STRICT_GENERIC=0`.
             strict_generic_mode: std::env::var("VAIS_STRICT_GENERIC")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false),
+                .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+                .unwrap_or(true),
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),

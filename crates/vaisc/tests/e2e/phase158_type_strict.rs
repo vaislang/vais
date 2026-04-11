@@ -182,3 +182,125 @@ F main() -> i64 { x := 3.14; y := x as i64; y }
 fn e2e_phase158_strict_trivial_compile() {
     assert_compiles(r#"F main() -> i64 = 0"#);
 }
+
+// ==================== E. Phase 158 CI Gate (source-level) ====================
+//
+// ROADMAP #4: guard against regression by scanning `vais-types/src/inference/unification.rs`
+// for forbidden coercion patterns. If any of these names appear in the source the gate
+// fails, forcing the author to either rename the function or acknowledge a Phase 158 RFC.
+//
+// The list mirrors CLAUDE.md "Type Conversion Rules" and BASELINE_2026-04-11.md section 6.
+
+/// Locate the unification source file regardless of where `cargo test` is run from.
+fn find_unification_rs() -> Option<std::path::PathBuf> {
+    // Start from CARGO_MANIFEST_DIR (crates/vaisc) and walk up to the workspace root.
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let mut dir = std::path::PathBuf::from(manifest);
+    for _ in 0..5 {
+        let candidate = dir.join("crates/vais-types/src/inference/unification.rs");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+#[test]
+fn e2e_phase158_ci_gate_no_forbidden_coercions() {
+    let path = match find_unification_rs() {
+        Some(p) => p,
+        None => {
+            // If we genuinely can't find the source (e.g. running from a stripped
+            // cargo package), skip loudly rather than fail silently. This keeps the
+            // gate meaningful when the file is present and skipped otherwise.
+            eprintln!(
+                "[phase158-gate] skipped: unable to locate vais-types/src/inference/unification.rs"
+            );
+            return;
+        }
+    };
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
+
+    // Forbidden function-name fragments. These are the coercion shapes that
+    // Phase 158 explicitly prohibits — adding any of them reintroduces the
+    // yo-yo pattern that the rule exists to prevent.
+    const FORBIDDEN: &[&str] = &[
+        "coerce_bool",
+        "bool_to_i64",
+        "i64_to_bool",
+        "int_to_float",
+        "float_to_int",
+        "str_to_i64",
+        "i64_to_str",
+        "narrow_int",
+        "coerce_to_i64",
+        "as_i64_implicit",
+    ];
+
+    let mut hits: Vec<&str> = Vec::new();
+    for name in FORBIDDEN {
+        if src.contains(name) {
+            hits.push(name);
+        }
+    }
+    assert!(
+        hits.is_empty(),
+        "Phase 158 CI gate: forbidden coercion identifier(s) found in \
+         vais-types/src/inference/unification.rs: {:?}. \
+         Type coercion rules were tightened in Phase 158 (see CLAUDE.md \
+         'Type Conversion Rules'). If you genuinely need to reintroduce one \
+         of these conversions, update this gate list and the CLAUDE.md rules \
+         in the same commit.",
+        hits
+    );
+}
+
+#[test]
+fn e2e_phase158_ci_gate_no_vais_tc_nonfatal_escape_hatch() {
+    // Phase 158/ROADMAP #4: VAIS_TC_NONFATAL was removed in iter 12. Guard against
+    // it creeping back in — any occurrence under `crates/vaisc/src/commands/build/`
+    // is a regression.
+    let manifest = match std::env::var("CARGO_MANIFEST_DIR") {
+        Ok(m) => std::path::PathBuf::from(m),
+        Err(_) => return, // skip silently — gate only meaningful with CARGO_MANIFEST_DIR
+    };
+    let build_dir = manifest.join("src/commands/build");
+    if !build_dir.exists() {
+        eprintln!(
+            "[phase158-gate] skipped: build/ dir not found at {}",
+            build_dir.display()
+        );
+        return;
+    }
+    let mut offenders: Vec<String> = Vec::new();
+    let entries = match std::fs::read_dir(&build_dir) {
+        Ok(e) => e,
+        Err(e) => panic!("failed to read {}: {}", build_dir.display(), e),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("rs") {
+            continue;
+        }
+        if let Ok(src) = std::fs::read_to_string(&path) {
+            // Match identifier-level occurrences; a comment that merely mentions
+            // the flag inside a prose sentence is fine, but a `std::env::var("VAIS_TC_NONFATAL")`
+            // call is not.
+            if src.contains("std::env::var(\"VAIS_TC_NONFATAL\"")
+                || src.contains("env::var(\"VAIS_TC_NONFATAL\"")
+            {
+                offenders.push(path.display().to_string());
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "Phase 158 CI gate: `VAIS_TC_NONFATAL` env-var escape hatch reappeared in: {:?}. \
+         This hatch was removed in ROADMAP #4 — TC errors must always be fatal.",
+        offenders
+    );
+}

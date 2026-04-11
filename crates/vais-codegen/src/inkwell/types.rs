@@ -40,9 +40,10 @@ impl<'ctx> TypeMapper<'ctx> {
             generic_substitutions: HashMap::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
             strict_type_mode: true,
+            // Phase 191 v2: default on (see init.rs rationale).
             strict_generic_mode: std::env::var("VAIS_STRICT_GENERIC")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false),
+                .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+                .unwrap_or(true),
             pending_error: std::cell::RefCell::new(None),
         }
     }
