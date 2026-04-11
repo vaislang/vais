@@ -109,6 +109,9 @@ impl CodeGenerator {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             strict_type_mode: true,
+            strict_generic_mode: std::env::var("VAIS_STRICT_GENERIC")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),
@@ -245,10 +248,22 @@ impl CodeGenerator {
     ///
     /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
     /// reaching codegen) become hard errors instead of warnings with i64
-    /// fallback. Generic/ConstGeneric fallbacks remain as warnings since they
-    /// are legitimate during monomorphization.
+    /// fallback. Generic/ConstGeneric fallbacks remain as warnings in this
+    /// mode — use [`Self::set_strict_generic_mode`] to also promote those
+    /// to hard errors (Phase 191).
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.strict_type_mode = strict;
+    }
+
+    /// Enable strict generic mode (Phase 191 — i64 fallback removal).
+    ///
+    /// When enabled, any un-monomorphized `Generic(_)` or `ConstGeneric(_)`
+    /// reaching `type_to_llvm` is promoted from warning to
+    /// [`CodegenError::InternalError`] instead of silently erasing to `i64`.
+    /// Default: off (preserves historical fallback path). Can also be toggled
+    /// via the `VAIS_STRICT_GENERIC=1` environment variable at construction.
+    pub fn set_strict_generic_mode(&mut self, strict: bool) {
+        self.strict_generic_mode = strict;
     }
 
     /// Record a structured codegen warning.
@@ -260,11 +275,13 @@ impl CodeGenerator {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or return an error in strict type mode for ICE-level fallbacks.
+    /// Emit a warning, or return an error in strict modes for ICE-level fallbacks.
     ///
-    /// In strict mode, [`CodegenWarning::UnresolvedTypeFallback`] is promoted to
-    /// [`CodegenError::InternalError`]. Other warning types (e.g., `GenericFallback`)
-    /// remain warnings in all modes.
+    /// - In `strict_type_mode`, [`CodegenWarning::UnresolvedTypeFallback`] is
+    ///   promoted to [`CodegenError::InternalError`].
+    /// - In `strict_generic_mode` (Phase 191), [`CodegenWarning::GenericFallback`]
+    ///   is likewise promoted to [`CodegenError::InternalError`].
+    /// All other warning types remain warnings in all modes.
     #[inline(never)]
     pub(crate) fn emit_warning_or_error(
         &self,
@@ -279,6 +296,18 @@ impl CodeGenerator {
                 return Err(crate::CodegenError::InternalError(format!(
                     "[strict] {} in {} codegen — i64 fallback disabled",
                     type_desc, backend
+                )));
+            }
+        }
+        if self.strict_generic_mode {
+            if let crate::CodegenWarning::GenericFallback {
+                ref param,
+                ref context,
+            } = warning
+            {
+                return Err(crate::CodegenError::InternalError(format!(
+                    "[strict-generic] un-monomorphized generic parameter '{}' reached codegen in '{}' — i64 fallback disabled (Phase 191)",
+                    param, context
                 )));
             }
         }

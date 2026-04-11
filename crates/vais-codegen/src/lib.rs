@@ -248,9 +248,18 @@ pub struct CodeGenerator {
 
     // When true, ICE-level type fallbacks (Var, Unknown, Lifetime reaching
     // codegen) are promoted from warnings to hard errors.
-    // Default: false (backward compatible — i64 fallback with warning).
-    // Set to true via `set_strict_type_mode(true)` for stricter validation.
+    // Default: true. Can be disabled via `set_strict_type_mode(false)` or
+    // `VAIS_STRICT_TYPE_MODE=0` env var.
     pub strict_type_mode: bool,
+
+    // When true, un-monomorphized Generic/ConstGeneric reaching codegen is
+    // promoted from warning to `InternalError` (Phase 191 — i64 fallback
+    // removal). Default: false (preserves the historical i64 fallback path
+    // for backward compatibility). Opt in via `set_strict_generic_mode(true)`
+    // or `VAIS_STRICT_GENERIC=1` env var. Once enabled, any un-substituted
+    // Generic(_)/ConstGeneric(_) reaching `type_to_llvm` will abort codegen
+    // with an ICE-level error instead of silently erasing to `i64`.
+    pub strict_generic_mode: bool,
 
     // String interning pool for identifier deduplication.
     // Reduces memory usage by storing each unique function/struct/variable name once.

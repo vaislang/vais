@@ -227,9 +227,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
     /// reaching codegen) become hard errors instead of warnings with i64
     /// fallback in the Inkwell TypeMapper. Generic/ConstGeneric fallbacks
-    /// remain as warnings since they are legitimate during monomorphization.
+    /// remain as warnings unless [`Self::set_strict_generic_mode`] is also
+    /// enabled (Phase 191).
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.type_mapper.strict_type_mode = strict;
+    }
+
+    /// Enable strict generic mode (Phase 191 — i64 fallback removal).
+    ///
+    /// When enabled, un-monomorphized `Generic(_)` / `ConstGeneric(_)` reaching
+    /// the inkwell `TypeMapper::map_type` is promoted from warning to a deferred
+    /// `InternalError` (retrievable via `take_pending_error`) instead of silently
+    /// erasing to `i64`. Default: off. Also togglable via the
+    /// `VAIS_STRICT_GENERIC=1` environment variable at construction time.
+    pub fn set_strict_generic_mode(&mut self, strict: bool) {
+        self.type_mapper.strict_generic_mode = strict;
     }
 
     /// Generates code for an entire Vais module.
