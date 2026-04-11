@@ -6,7 +6,6 @@
 // Submodules organized by expression category
 mod binary;
 mod call;
-mod lambda;
 mod literal;
 mod misc;
 mod unary;
@@ -167,9 +166,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Comptime: evaluate at compile time (for now, just evaluate normally)
             Expr::Comptime { body } => self.generate_expr(&body.node),
 
-            // Lazy: create deferred evaluation thunk
-            Expr::Lazy(inner) => self.generate_lazy(&inner.node),
-
             // Await: evaluate the inner expression (async functions compile as synchronous
             // in Inkwell backend, so await is effectively identity — the function has
             // already completed and returned its result directly)
@@ -227,9 +223,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             // Spread: just evaluate the inner expression
             Expr::Spread(inner) => self.generate_expr(&inner.node),
-
-            // Force: evaluate a lazy value (check computed flag, call thunk if needed)
-            Expr::Force(inner) => self.generate_force(&inner.node),
 
             // Yield: evaluate the inner expression and return its value.
             // Yields the value to the generator's caller. In the current synchronous

@@ -398,12 +398,6 @@ impl EffectInferrer {
             // Macro invocation - unknown effects
             Expr::MacroInvoke(_) => EffectSet::total(),
 
-            // Lazy expression - defers effects until forced
-            Expr::Lazy(inner) => self.infer_expr_effects(&inner.node, functions),
-
-            // Force expression - evaluates lazy value
-            Expr::Force(inner) => self.infer_expr_effects(&inner.node, functions),
-
             // Map literal is pure
             Expr::MapLit(pairs) => {
                 let mut effects = EffectSet::pure();

@@ -190,12 +190,6 @@ fn test_display_future() {
 }
 
 #[test]
-fn test_display_lazy() {
-    let ty = ResolvedType::Lazy(Box::new(ResolvedType::I64));
-    assert_eq!(format!("{}", ty), "Lazy<i64>");
-}
-
-#[test]
 fn test_display_vector() {
     let ty = ResolvedType::Vector {
         element: Box::new(ResolvedType::F32),

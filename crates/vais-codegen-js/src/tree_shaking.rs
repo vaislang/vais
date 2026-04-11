@@ -241,8 +241,7 @@ impl TreeShaker {
             | Type::Ref(elem_type)
             | Type::RefMut(elem_type)
             | Type::Slice(elem_type)
-            | Type::SliceMut(elem_type)
-            | Type::Lazy(elem_type) => {
+            | Type::SliceMut(elem_type) => {
                 Self::collect_type_deps(&elem_type.node, deps);
             }
             Type::ConstArray { element, .. } => {
@@ -492,7 +491,7 @@ impl TreeShaker {
             Expr::MacroInvoke(_) => {
                 // Macro invocations are expanded during parsing, tokens don't carry dep info
             }
-            Expr::Old(expr) | Expr::Assume(expr) | Expr::Lazy(expr) | Expr::Force(expr) => {
+            Expr::Old(expr) | Expr::Assume(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
             Expr::Assert { condition, message } => {

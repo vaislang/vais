@@ -40,30 +40,6 @@ impl TypeChecker {
                 Some(Ok(inner_type))
             }
 
-            Expr::Lazy(inner) => {
-                let inner_type = match self.check_expr(inner) {
-                    Ok(t) => t,
-                    Err(e) => return Some(Err(e)),
-                };
-                // lazy expr creates a Lazy<T> thunk
-                Some(Ok(ResolvedType::Lazy(Box::new(inner_type))))
-            }
-
-            Expr::Force(inner) => {
-                let inner_type = match self.check_expr(inner) {
-                    Ok(t) => t,
-                    Err(e) => return Some(Err(e)),
-                };
-                // force expr evaluates a Lazy<T> and returns T
-                match inner_type {
-                    ResolvedType::Lazy(t) => Some(Ok(*t)),
-                    _ => {
-                        // If not a Lazy type, force is a no-op (identity)
-                        Some(Ok(inner_type))
-                    }
-                }
-            }
-
             _ => None,
         }
     }

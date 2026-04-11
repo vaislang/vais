@@ -421,13 +421,6 @@ fn test_type_to_llvm_never() {
 }
 
 #[test]
-fn test_type_to_llvm_lazy() {
-    let gen = CodeGenerator::new("test");
-    let lazy = ResolvedType::Lazy(Box::new(ResolvedType::I64));
-    assert_eq!(gen.type_to_llvm(&lazy), "{ i1, i64, i8* }");
-}
-
-#[test]
 fn test_type_to_llvm_vector() {
     let gen = CodeGenerator::new("test");
     let vec = ResolvedType::Vector {

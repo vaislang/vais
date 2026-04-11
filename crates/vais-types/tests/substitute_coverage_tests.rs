@@ -398,21 +398,6 @@ fn test_substitute_associated_generics_change() {
 }
 
 #[test]
-fn test_substitute_lazy() {
-    let subs = make_sub("T", ResolvedType::I64);
-    let ty = ResolvedType::Lazy(Box::new(ResolvedType::Generic("T".to_string())));
-    let result = substitute_type(&ty, &subs);
-    assert_eq!(result, ResolvedType::Lazy(Box::new(ResolvedType::I64)));
-}
-
-#[test]
-fn test_substitute_lazy_no_change() {
-    let subs = make_sub("T", ResolvedType::I64);
-    let ty = ResolvedType::Lazy(Box::new(ResolvedType::Bool));
-    assert_eq!(substitute_type(&ty, &subs), ty);
-}
-
-#[test]
 fn test_substitute_linear() {
     let subs = make_sub("T", ResolvedType::I64);
     let ty = ResolvedType::Linear(Box::new(ResolvedType::Generic("T".to_string())));

@@ -1631,49 +1631,6 @@ F main() -> i64 {
     assert_exit_code(source, 60);
 }
 
-// --- Lazy Evaluation Tests (Phase 42) ---
-
-#[test]
-fn exec_lazy_basic() {
-    let source = r#"
-F main() -> i64 {
-    x := lazy 42
-    y := force x
-    y
-}
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
-fn exec_lazy_computation() {
-    let source = r#"
-F compute(x: i64) -> i64 = x * 2 + 1
-
-F main() -> i64 {
-    x := lazy compute(20)
-    y := force x
-    y
-}
-"#;
-    // 20 * 2 + 1 = 41
-    assert_exit_code(source, 41);
-}
-
-#[test]
-fn exec_lazy_multiple_force() {
-    let source = r#"
-F main() -> i64 {
-    x := lazy 10
-    a := force x
-    b := force x
-    a + b
-}
-"#;
-    // 10 + 10 = 20
-    assert_exit_code(source, 20);
-}
-
 // --- Closure Capture Modes (Phase 42) ---
 
 #[test]

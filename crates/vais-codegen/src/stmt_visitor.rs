@@ -193,12 +193,6 @@ impl CodeGenerator {
                     .closures
                     .insert(name.node.clone(), closure_info);
             }
-            // If this was a lazy expression, register the thunk info
-            if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
-                self.lambdas
-                    .lazy_bindings
-                    .insert(name.node.clone(), lazy_info);
-            }
             // Track future→poll function mapping for variable-based await.
             // Use resolve_poll_func_name (instance method) instead of the static
             // extract_poll_func_name_from_expr because Spawn expressions require
@@ -319,12 +313,6 @@ impl CodeGenerator {
                 self.lambdas
                     .closures
                     .insert(name.node.clone(), closure_info);
-            }
-            // If this was a lazy expression, register the thunk info
-            if let Some(lazy_info) = self.lambdas.last_lazy_info.take() {
-                self.lambdas
-                    .lazy_bindings
-                    .insert(name.node.clone(), lazy_info);
             }
 
             // Track Named-type locals in the current scope for block-scoped drop cleanup.

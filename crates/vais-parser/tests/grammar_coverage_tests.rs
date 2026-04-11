@@ -567,11 +567,6 @@ mod types {
     }
 
     #[test]
-    fn grammar_type_lazy() {
-        assert_parses("F f(x: Lazy<i64>) -> i64 = 0");
-    }
-
-    #[test]
     fn grammar_type_fn_type() {
         assert_parses("F f(cb: (i64, i64) -> i64) -> i64 = 0");
     }
@@ -1016,20 +1011,6 @@ mod expressions {
         assert_parses_expr("assume(x > 0)");
     }
 
-    // --- Lazy ---
-
-    #[test]
-    fn grammar_expr_lazy() {
-        assert_parses_expr("lazy 42");
-    }
-
-    // --- Force ---
-
-    #[test]
-    fn grammar_expr_force() {
-        assert_parses_expr("force x");
-    }
-
     // --- Pipe operator ---
 
     #[test]
@@ -1413,8 +1394,6 @@ fn grammar_sync_expr_variants() {
             | Expr::Assert { .. }
             | Expr::Assume(_)
             | Expr::Error { .. }
-            | Expr::Lazy(_)
-            | Expr::Force(_)
             | Expr::EnumAccess { .. }
             | Expr::TupleFieldAccess { .. } => {}
         }
@@ -1484,7 +1463,6 @@ fn grammar_sync_type_variants() {
             | Type::SliceMut(_)
             | Type::RefLifetime { .. }
             | Type::RefMutLifetime { .. }
-            | Type::Lazy(_)
             | Type::Fn { .. }
             | Type::Unit
             | Type::Infer

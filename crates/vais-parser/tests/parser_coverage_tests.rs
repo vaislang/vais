@@ -744,18 +744,6 @@ fn test_parse_comptime() {
     assert_eq!(module.items.len(), 1);
 }
 
-#[test]
-fn test_parse_lazy_force() {
-    let source = r#"
-        F test() -> i64 {
-            x := lazy 42
-            force x
-        }
-    "#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
-}
-
 // ============================================================================
 // Complex programs
 // ============================================================================

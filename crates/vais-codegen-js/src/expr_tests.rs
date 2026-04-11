@@ -540,23 +540,6 @@ fn test_generate_yield() {
 }
 
 #[test]
-fn test_generate_lazy() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Lazy(Box::new(Spanned::new(Expr::Int(42), Span::new(0, 2))));
-    assert_eq!(gen.generate_expr(&expr).unwrap(), "(() => 42)");
-}
-
-#[test]
-fn test_generate_force() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Force(Box::new(Spanned::new(
-        Expr::Ident("lazy_val".to_string()),
-        Span::new(0, 8),
-    )));
-    assert_eq!(gen.generate_expr(&expr).unwrap(), "lazy_val()");
-}
-
-#[test]
 fn test_generate_assert_without_message() {
     let mut gen = JsCodeGenerator::new();
     let expr = Expr::Assert {

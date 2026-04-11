@@ -414,9 +414,6 @@ impl LintAnalyzer {
             Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.collect_usages_in_expr(&inner.node);
             }
-            Expr::Lazy(inner) | Expr::Force(inner) => {
-                self.collect_usages_in_expr(&inner.node);
-            }
             Expr::Assert { condition, message } => {
                 self.collect_usages_in_expr(&condition.node);
                 if let Some(msg) = message {
@@ -498,7 +495,6 @@ impl LintAnalyzer {
             | Type::Pointer(inner)
             | Type::Optional(inner)
             | Type::Result(inner)
-            | Type::Lazy(inner)
             | Type::Linear(inner)
             | Type::Affine(inner) => {
                 self.collect_usages_in_type(&inner.node);

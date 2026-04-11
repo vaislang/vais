@@ -53,8 +53,6 @@ pub enum Type {
         lifetime: String,
         inner: Box<Spanned<Type>>,
     },
-    /// Lazy type: `Lazy<T>` - Deferred evaluation thunk
-    Lazy(Box<Spanned<Type>>),
     /// Function type: `(A,B)->C`
     Fn {
         params: Vec<Spanned<Type>>,

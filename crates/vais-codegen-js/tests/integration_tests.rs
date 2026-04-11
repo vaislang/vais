@@ -661,54 +661,6 @@ fn test_range_loop_with_break() {
 }
 
 // ============================================================================
-// 11. Lazy Evaluation (Phase 42) (3 tests)
-// ============================================================================
-
-#[test]
-fn test_lazy_expression() {
-    let source = r#"
-        F expensive() -> i64 { 42 }
-        F test() {
-            x := lazy expensive()
-            x
-        }
-    "#;
-    let js = parse_and_generate(source);
-    assert!(js.contains("expensive"));
-    // Lazy should generate some wrapper (arrow function or lazy helper)
-    assert!(js.contains("function"));
-}
-
-#[test]
-fn test_force_lazy_value() {
-    let source = r#"
-        F compute() -> i64 { 100 }
-        F test() -> i64 {
-            x := lazy compute()
-            force x
-        }
-    "#;
-    let js = parse_and_generate(source);
-    assert!(js.contains("compute"));
-    // Force should call the lazy value
-    assert!(js.contains("x") || js.contains("compute"));
-}
-
-#[test]
-fn test_lazy_with_closure() {
-    let source = r#"
-        F test() -> i64 {
-            y := 5
-            x := lazy y * 2
-            force x
-        }
-    "#;
-    let js = parse_and_generate(source);
-    assert!(js.contains("y"));
-    assert!(js.contains("* 2") || js.contains("*2"));
-}
-
-// ============================================================================
 // 12. Closure Capture Modes (Phase 42) (3 tests)
 // ============================================================================
 

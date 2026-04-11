@@ -145,12 +145,6 @@ impl TypeChecker {
             | Expr::Yield(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
-            Expr::Lazy(inner) => {
-                self.collect_free_vars(&inner.node, bound, free);
-            }
-            Expr::Force(inner) => {
-                self.collect_free_vars(&inner.node, bound, free);
-            }
             Expr::Cast { expr, .. } => {
                 self.collect_free_vars(&expr.node, bound, free);
             }

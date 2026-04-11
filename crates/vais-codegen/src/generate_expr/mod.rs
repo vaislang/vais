@@ -266,16 +266,6 @@ impl CodeGenerator {
                 message
             ))),
 
-            // Lazy and Force expressions - delegate to visitor
-            Expr::Lazy(inner) => {
-                use crate::visitor::ExprVisitor;
-                self.visit_lazy(inner, counter)
-            }
-            Expr::Force(inner) => {
-                use crate::visitor::ExprVisitor;
-                self.visit_force(inner, counter)
-            }
-
             // Enum variant access: EnumName::Variant or EnumName::Variant(data)
             // Unit variant: treat as identifier lookup (same as Expr::Ident(variant))
             // Tuple variant with data: treat as call Variant(data)

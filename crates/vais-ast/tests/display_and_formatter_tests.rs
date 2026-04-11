@@ -308,12 +308,6 @@ fn test_display_type_ref_mut_lifetime() {
 }
 
 #[test]
-fn test_display_type_lazy() {
-    let ty = Type::Lazy(Box::new(named_type("i64")));
-    assert_eq!(format!("{}", ty), "Lazy<i64>");
-}
-
-#[test]
 fn test_display_type_impl_trait_single() {
     let ty = Type::ImplTrait {
         bounds: vec![sp_str("Display")],
@@ -835,13 +829,6 @@ fn test_expr_comptime() {
         body: Box::new(sp_expr(Expr::Int(100))),
     };
     assert!(matches!(expr, Expr::Comptime { .. }));
-}
-
-#[test]
-fn test_expr_lazy_force() {
-    let lazy_expr = Expr::Lazy(Box::new(sp_expr(Expr::Int(42))));
-    let force_expr = Expr::Force(Box::new(sp_expr(lazy_expr)));
-    assert!(matches!(force_expr, Expr::Force(_)));
 }
 
 #[test]

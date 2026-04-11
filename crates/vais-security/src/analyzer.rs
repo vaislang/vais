@@ -364,12 +364,6 @@ impl SecurityAnalyzer {
             Expr::Old(expr) => {
                 self.analyze_expr(&expr.node, expr.span);
             }
-            Expr::Lazy(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
-            Expr::Force(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
             // Literals and simple expressions
             Expr::StringInterp(parts) => {
                 for part in parts {

@@ -177,12 +177,6 @@ fn test_lifetime_display() {
 }
 
 #[test]
-fn test_lazy_force_display() {
-    assert_token_display(&Token::Lazy, "lazy");
-    assert_token_display(&Token::Force, "force");
-}
-
-#[test]
 fn test_tokenize_all_keywords() {
     // Tokenize a source that uses many different keywords
     let source = "F S E I L M A R B C T U P W X D O N G";

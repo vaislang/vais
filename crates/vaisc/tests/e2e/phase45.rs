@@ -1,27 +1,8 @@
 use super::helpers::*;
 
 // ==================== Phase 45: Language Basic Edge Cases ====================
-// Tests for: lazy/force, comptime, union, match guard, or/range patterns,
+// Tests for: comptime, union, match guard, or/range patterns,
 // for/while loops, const, global, macro parse, defer parse, assert expr.
-
-// ===== Lazy / Force =====
-// Note: lazy_basic (lazy 42, force → 42) covered in phase42.rs (e2e_phase42_lazy_force_basic)
-// and execution_tests.rs (exec_lazy_basic).
-// Note: lazy_computation (lazy (a+b), force → 30) covered in phase42.rs (e2e_phase42_lazy_force_with_capture).
-
-#[test]
-fn e2e_phase45_lazy_multiple_force() {
-    // Forcing the same lazy value twice should be valid
-    let source = r#"
-F main() -> i64 {
-    x := lazy 21
-    a := force x
-    b := force x
-    R a + b
-}
-"#;
-    assert_exit_code(source, 42);
-}
 
 // ===== Comptime =====
 

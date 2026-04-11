@@ -184,18 +184,6 @@ pub(crate) struct ClosureInfo {
     pub is_ref_capture: bool,
 }
 
-/// Information about a lazy thunk (deferred evaluation)
-#[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields reserved for lazy evaluation codegen
-pub(crate) struct LazyThunkInfo {
-    /// The generated LLVM thunk function name
-    pub thunk_name: String,
-    /// Captured variable names, LLVM types, and loaded values (var_name, llvm_type, llvm_value)
-    pub captures: Vec<(String, String, String)>,
-    /// LLVM type of the inner (computed) value
-    pub inner_llvm_ty: String,
-}
-
 /// Information about an await point in an async function.
 /// Used to track suspension points in the async state machine.
 #[derive(Debug, Clone)]

@@ -23,8 +23,7 @@ impl TypeChecker {
             | ResolvedType::Range(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => Self::occurs_in(id, inner),
+            | ResolvedType::Affine(inner) => Self::occurs_in(id, inner),
             ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
                 Self::occurs_in(id, ok) || Self::occurs_in(id, err)
             }
@@ -412,8 +411,6 @@ impl TypeChecker {
                     })
                 }
             }
-            // Lazy type unification
-            (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait: unification accepts any concrete type.
@@ -507,8 +504,7 @@ impl TypeChecker {
             | ResolvedType::Range(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
-            | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner) => Self::contains_var(inner),
+            | ResolvedType::Affine(inner) => Self::contains_var(inner),
             ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
                 Self::contains_var(ok) || Self::contains_var(err)
             }

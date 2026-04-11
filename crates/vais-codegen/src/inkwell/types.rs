@@ -314,23 +314,6 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
-            ResolvedType::Lazy(inner) => {
-                // Lazy<T> = { i1 computed, T value, ptr thunk_fn }
-                let inner_ty = self.map_type(inner);
-                self.context
-                    .struct_type(
-                        &[
-                            self.context.bool_type().into(), // computed flag
-                            inner_ty,                        // cached value
-                            self.context
-                                .i8_type()
-                                .ptr_type(inkwell::AddressSpace::default())
-                                .into(), // thunk function pointer
-                        ],
-                        false,
-                    )
-                    .into()
-            }
             ResolvedType::ConstGeneric(name) => {
                 // Check if we have a substitution for this const generic parameter.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {

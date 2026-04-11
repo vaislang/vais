@@ -44,8 +44,6 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Linear => "Linear",
         Token::Affine => "Affine",
         Token::Move => "Move",
-        Token::Lazy => "Lazy",
-        Token::Force => "Force",
         Token::I8 => "i8",
         Token::I16 => "i16",
         Token::I32 => "i32",

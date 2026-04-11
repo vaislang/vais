@@ -212,7 +212,6 @@ impl TypeChecker {
                 lifetime: lifetime.clone(),
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
-            Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
             Type::ImplTrait { bounds } => {
                 let resolved_bounds: Vec<String> = bounds.iter().map(|b| b.node.clone()).collect();
                 ResolvedType::ImplTrait {

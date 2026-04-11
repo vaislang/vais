@@ -191,13 +191,6 @@ pub enum Expr {
         /// Tokens that were skipped during recovery
         skipped_tokens: Vec<String>,
     },
-    /// Lazy expression: `lazy expr` - Deferred evaluation
-    /// The expression is not evaluated until explicitly forced.
-    /// Creates a `Lazy<T>` thunk that memoizes the result.
-    Lazy(Box<Spanned<Expr>>),
-    /// Force expression: `force expr` - Force evaluation of lazy value
-    /// Evaluates a lazy thunk and returns the cached result.
-    Force(Box<Spanned<Expr>>),
     /// Enum variant access via namespace: `EnumName::VariantName`
     /// Optionally carries tuple-variant data: `EnumName::VariantName(data)`
     EnumAccess {

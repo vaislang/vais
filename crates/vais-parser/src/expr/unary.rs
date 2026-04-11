@@ -1,7 +1,7 @@
 //! Unary operator parsing.
 //!
 //! Handles prefix unary operators: negation (-), logical not (!), bitwise not (~),
-//! reference (&), dereference (*), lazy evaluation (lazy), force evaluation (force),
+//! reference (&), dereference (*),
 //! and prefix await (Y).
 
 use vais_ast::*;
@@ -80,28 +80,6 @@ impl Parser {
             let end = expr.span.end;
             return Ok(Spanned::new(
                 Expr::Deref(Box::new(expr)),
-                Span::new(start, end),
-            ));
-        }
-
-        // lazy expr - deferred evaluation
-        if self.check(&Token::Lazy) {
-            self.advance_skip();
-            let expr = self.parse_unary()?;
-            let end = expr.span.end;
-            return Ok(Spanned::new(
-                Expr::Lazy(Box::new(expr)),
-                Span::new(start, end),
-            ));
-        }
-
-        // force expr - force evaluation of lazy value
-        if self.check(&Token::Force) {
-            self.advance_skip();
-            let expr = self.parse_unary()?;
-            let end = expr.span.end;
-            return Ok(Spanned::new(
-                Expr::Force(Box::new(expr)),
                 Span::new(start, end),
             ));
         }

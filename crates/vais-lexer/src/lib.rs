@@ -140,12 +140,6 @@ pub enum Token {
     #[token("where")]
     Where,
 
-    // === Lazy Evaluation ===
-    #[token("lazy")]
-    Lazy,
-    #[token("force")]
-    Force,
-
     // === Primitive Types ===
     #[token("i8")]
     I8,
@@ -492,9 +486,6 @@ impl fmt::Display for Token {
             Token::Where => write!(f, "where"),
             // Lifetime
             Token::Lifetime(name) => write!(f, "'{}", name),
-            // Lazy evaluation
-            Token::Lazy => write!(f, "lazy"),
-            Token::Force => write!(f, "force"),
         }
     }
 }

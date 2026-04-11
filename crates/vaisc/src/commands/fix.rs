@@ -372,8 +372,6 @@ fn count_ident_in_expr(expr: &Expr, name: &str) -> usize {
         | Expr::Await(e)
         | Expr::Try(e)
         | Expr::Unwrap(e)
-        | Expr::Lazy(e)
-        | Expr::Force(e)
         | Expr::Old(e)
         | Expr::Assume(e) => count_ident_in_expr(&e.node, name),
         Expr::Cast { expr, .. } => count_ident_in_expr(&expr.node, name),
@@ -550,8 +548,6 @@ fn collect_used_idents_in_expr(expr: &Expr, used: &mut HashSet<String>) {
         | Expr::Await(e)
         | Expr::Try(e)
         | Expr::Unwrap(e)
-        | Expr::Lazy(e)
-        | Expr::Force(e)
         | Expr::Old(e)
         | Expr::Assume(e) => collect_used_idents_in_expr(&e.node, used),
         Expr::Cast { expr, .. } => collect_used_idents_in_expr(&expr.node, used),
@@ -734,7 +730,6 @@ fn collect_type_idents(ty: &Type, used: &mut HashSet<String>) {
         | Type::Pointer(inner)
         | Type::Optional(inner)
         | Type::Result(inner)
-        | Type::Lazy(inner)
         | Type::Linear(inner)
         | Type::Affine(inner) => {
             collect_type_idents(&inner.node, used);

@@ -99,9 +99,6 @@ impl TypeChecker {
             ResolvedType::Future(inner) => {
                 ResolvedType::Future(Box::new(self.apply_substitutions(inner)))
             }
-            ResolvedType::Lazy(inner) => {
-                ResolvedType::Lazy(Box::new(self.apply_substitutions(inner)))
-            }
             ResolvedType::Named { name, generics } => ResolvedType::Named {
                 name: name.clone(),
                 generics: generics

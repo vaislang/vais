@@ -1,10 +1,9 @@
-//! Phase 145: R2 IR Type Accuracy — float coercion + lazy/force type registration
+//! Phase 145: R2 IR Type Accuracy — float coercion + type registration
 //!
 //! Tests for:
 //! 1. float parameter correctness in functions and methods
 //! 2. f32 <-> f64 coercion in arithmetic and assignments
 //! 3. str parameter passed as fat pointer in impl methods
-//! 4. lazy/force expression type tracking (register_temp_type)
 
 use super::helpers::*;
 
@@ -207,63 +206,3 @@ F main() -> i64 {
     assert_exit_code(source, 1);
 }
 
-// ==================== 4. lazy/force type tracking ====================
-
-#[test]
-fn e2e_p145_lazy_force_i64() {
-    // lazy/force with i64 — result should be trackable
-    let source = r#"
-F main() -> i64 {
-    x := lazy { 42 }
-    result := force x
-    result
-}
-"#;
-    assert_exit_code(source, 42);
-}
-
-#[test]
-fn e2e_p145_lazy_force_bool() {
-    // lazy/force with bool — type should be registered correctly
-    let source = r#"
-F main() -> i64 {
-    flag := lazy { true }
-    v := force flag
-    I v { R 1 }
-    R 0
-}
-"#;
-    assert_exit_code(source, 1);
-}
-
-#[test]
-fn e2e_p145_lazy_force_expression() {
-    // lazy captures outer variable, force evaluates it
-    let source = r#"
-F main() -> i64 {
-    base := 10
-    doubled := lazy { base * 2 }
-    result := force doubled
-    result
-}
-"#;
-    assert_exit_code(source, 20);
-}
-
-#[test]
-fn e2e_p145_lazy_type_registration_ir() {
-    // Verify that lazy/force compiles without IR type errors
-    let source = r#"
-F compute(x: i64) -> i64 {
-    x + 1
-}
-
-F main() -> i64 {
-    n := 41
-    lazy_val := lazy { compute(n) }
-    result := force lazy_val
-    result
-}
-"#;
-    assert_exit_code(source, 42);
-}

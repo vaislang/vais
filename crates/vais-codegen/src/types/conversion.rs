@@ -307,13 +307,6 @@ impl CodeGenerator {
                 // Map is represented as a pointer to key array (parallel arrays)
                 format!("{}*", self.type_to_llvm_impl(key)?)
             }
-            ResolvedType::Lazy(inner) => {
-                // Lazy<T> is represented as a struct with:
-                // - computed: i1 (has been evaluated)
-                // - value: T (cached value)
-                // - thunk: closure pointer (function to compute value)
-                format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
-            }
             ResolvedType::Tuple(elems) => {
                 let elem_types: Vec<String> = elems
                     .iter()

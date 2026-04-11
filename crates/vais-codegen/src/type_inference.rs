@@ -838,19 +838,6 @@ impl CodeGenerator {
                 // assert and assume return unit
                 ResolvedType::Unit
             }
-            Expr::Lazy(inner) => {
-                // lazy expr returns Lazy<T> where T is the type of expr
-                let inner_type = self.infer_expr_type(inner);
-                ResolvedType::Lazy(Box::new(inner_type))
-            }
-            Expr::Force(inner) => {
-                // force expr unwraps Lazy<T> to T, or returns T if not lazy
-                let inner_type = self.infer_expr_type(inner);
-                match inner_type {
-                    ResolvedType::Lazy(t) => *t,
-                    other => other,
-                }
-            }
             Expr::Field {
                 expr: obj_expr,
                 field,

@@ -165,10 +165,6 @@ pub(crate) struct LambdaState {
     pub(crate) async_await_points: Vec<crate::types::AsyncAwaitPoint>,
     /// Current async function info
     pub(crate) current_async_function: Option<crate::types::AsyncFunctionInfo>,
-    /// Last generated lazy thunk info (for Let statement to track lazy bindings)
-    pub(crate) last_lazy_info: Option<crate::types::LazyThunkInfo>,
-    /// Lazy binding info: variable name -> lazy thunk info
-    pub(crate) lazy_bindings: HashMap<String, crate::types::LazyThunkInfo>,
 }
 
 /// String constant pool — string literals, counters, module prefix

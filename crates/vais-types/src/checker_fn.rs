@@ -780,7 +780,6 @@ impl TypeChecker {
             | ResolvedType::Future(inner)
             | ResolvedType::Linear(inner)
             | ResolvedType::Affine(inner)
-            | ResolvedType::Lazy(inner)
             | ResolvedType::Range(inner) => Self::contains_unresolved_type(inner),
             ResolvedType::Array(inner) => Self::contains_unresolved_type(inner),
             ResolvedType::ConstArray { element, .. } => Self::contains_unresolved_type(element),

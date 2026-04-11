@@ -349,8 +349,6 @@ impl Formatter {
                 // Format error expressions as comments
                 format!("/* ERROR: {} */", message)
             }
-            Expr::Lazy(inner) => format!("lazy {}", self.format_expr(&inner.node)),
-            Expr::Force(inner) => format!("force {}", self.format_expr(&inner.node)),
             Expr::EnumAccess {
                 enum_name,
                 variant,

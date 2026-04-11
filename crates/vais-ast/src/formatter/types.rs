@@ -114,9 +114,6 @@ impl Formatter {
             Type::RefMutLifetime { lifetime, inner } => {
                 format!("&'{} mut {}", lifetime, self.format_type(&inner.node))
             }
-            Type::Lazy(inner) => {
-                format!("Lazy<{}>", self.format_type(&inner.node))
-            }
             Type::ImplTrait { bounds } => {
                 let bs: Vec<&str> = bounds.iter().map(|b| b.node.as_str()).collect();
                 format!("X {}", bs.join(" + "))

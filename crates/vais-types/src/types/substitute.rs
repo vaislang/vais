@@ -348,13 +348,6 @@ fn substitute_type_impl(
                 generics: new_generics,
             }
         }
-        ResolvedType::Lazy(inner) => {
-            let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
-            if inner.as_ref() == &new_inner {
-                return ty.clone();
-            }
-            ResolvedType::Lazy(Box::new(new_inner))
-        }
         ResolvedType::Linear(inner) => {
             let new_inner = substitute_type_impl(inner, substitutions, depth + 1);
             if inner.as_ref() == &new_inner {

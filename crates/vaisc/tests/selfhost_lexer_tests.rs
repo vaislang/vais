@@ -1742,8 +1742,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Linear => 123,   // TOK_KW_LINEAR
         Token::Affine => 124,   // TOK_KW_AFFINE
         Token::Move => 125,     // TOK_KW_MOVE
-        Token::Lazy => 127,     // TOK_KW_LAZY
-        Token::Force => 128,    // TOK_KW_FORCE
         Token::Where => 129,    // TOK_KW_WHERE
 
         // Type keywords (31-44)

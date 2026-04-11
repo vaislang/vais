@@ -124,9 +124,6 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Linear => "Linear",
         Token::Affine => "Affine",
         Token::Move => "Move",
-        // Lazy evaluation keywords
-        Token::Lazy => "Lazy",
-        Token::Force => "Force",
         // Where clause
         Token::Where => "Where",
         // Lifetime tokens

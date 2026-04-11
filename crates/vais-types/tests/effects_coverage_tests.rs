@@ -534,18 +534,6 @@ fn test_infer_macro_invoke() {
 }
 
 #[test]
-fn test_infer_lazy_force() {
-    let mut inferrer = EffectInferrer::new();
-    let fns = empty_fns();
-    assert!(inferrer
-        .infer_expr_effects(&Expr::Lazy(Box::new(int_expr(42))), &fns)
-        .is_pure());
-    assert!(inferrer
-        .infer_expr_effects(&Expr::Force(Box::new(ident_expr("x"))), &fns)
-        .is_pure());
-}
-
-#[test]
 fn test_infer_map_literal() {
     let mut inferrer = EffectInferrer::new();
     let fns = empty_fns();

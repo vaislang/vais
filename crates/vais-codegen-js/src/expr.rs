@@ -265,16 +265,6 @@ impl JsCodeGenerator {
                 Ok(format!("yield {e}"))
             }
 
-            // --- Lazy / Force ---
-            Expr::Lazy(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("(() => {e})"))
-            }
-            Expr::Force(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("{e}()"))
-            }
-
             // --- Assert ---
             Expr::Assert { condition, message } => {
                 let c = self.generate_expr(&condition.node)?;

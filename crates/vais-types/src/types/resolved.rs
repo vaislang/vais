@@ -251,10 +251,6 @@ pub enum ResolvedType {
     /// Lifetime parameter (e.g., 'a, 'static)
     Lifetime(String),
 
-    /// Lazy type: `Lazy<T>` - Deferred evaluation thunk
-    /// Contains a closure that computes T when forced, and caches the result.
-    Lazy(Box<ResolvedType>),
-
     /// Existential type: `impl Trait` (Vais: `X Trait`)
     /// Represents an opaque return type implementing the given trait bounds.
     /// During monomorphization, resolved to the concrete return type.
@@ -497,7 +493,6 @@ impl std::fmt::Display for ResolvedType {
                 write!(f, "&'{} mut {}", lifetime, inner)
             }
             ResolvedType::Lifetime(name) => write!(f, "'{}", name),
-            ResolvedType::Lazy(inner) => write!(f, "Lazy<{}>", inner),
             ResolvedType::ImplTrait { bounds } => {
                 write!(f, "impl {}", bounds.join(" + "))
             }
@@ -907,14 +902,6 @@ mod tests {
         assert_eq!(ResolvedType::Unknown.to_string(), "?");
         assert_eq!(ResolvedType::Var(0).to_string(), "?0");
         assert_eq!(ResolvedType::Generic("T".to_string()).to_string(), "T");
-    }
-
-    #[test]
-    fn test_display_lazy() {
-        assert_eq!(
-            ResolvedType::Lazy(Box::new(ResolvedType::I64)).to_string(),
-            "Lazy<i64>"
-        );
     }
 
     #[test]
