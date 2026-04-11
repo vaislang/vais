@@ -1,0 +1,94 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: 'Number of parallel mutation jobs'
+        required: false
+        default: '2'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  mutants:
+    name: Mutation Tests (core crates)
+    runs-on: ubuntu-latest
+    # Mutation testing is long — allow up to 6 hours.
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mutants-
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked
+
+      - name: Run mutation tests
+        run: |
+          cargo mutants \
+            --config mutants.toml \
+            --no-shuffle \
+            -j ${{ github.event.inputs.jobs || '2' }} \
+            --output mutants.out
+        # Continue even if mutants survive — the artifact records them.
+        continue-on-error: true
+
+      - name: Summarize results
+        if: always()
+        run: |
+          echo "## Mutation Testing Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f mutants.out/mutants.json ]; then
+            CAUGHT=$(python3 -c "
+          import json, sys
+          data = json.load(open('mutants.out/mutants.json'))
+          caught   = sum(1 for m in data if m.get('status') in ('caught', 'Caught'))
+          missed   = sum(1 for m in data if m.get('status') in ('missed', 'Missed'))
+          timeout  = sum(1 for m in data if m.get('status') in ('timeout', 'Timeout'))
+          unviable = sum(1 for m in data if m.get('status') in ('unviable', 'Unviable'))
+          total    = caught + missed + timeout + unviable
+          rate     = round(caught / total * 100, 1) if total else 0
+          print(f'Total: {total} | Caught: {caught} | Missed: {missed} | Timeout: {timeout} | Unviable: {unviable} | Catch rate: {rate}%')
+          " 2>/dev/null || echo "could not parse mutants.json")
+            echo "$CAUGHT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "mutants.out/mutants.json not found — see artifact for raw output." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload mutants.out artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-out
+          path: mutants.out/
+          retention-days: 30
