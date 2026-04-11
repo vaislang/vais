@@ -16,6 +16,7 @@ mod builtins;
 mod closures_iter;
 mod concurrency;
 mod modules_system;
+mod phase9_duplicate_define_declare;
 mod phase109_bounds_check;
 mod phase110_auto_free;
 mod phase111_error_paths;

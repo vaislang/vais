@@ -10,6 +10,60 @@ const WASM_PAGE_SIZE: u32 = 65536;
 /// This value can be adjusted for applications with different memory layouts.
 const WASM_HEAP_START_OFFSET: u32 = 1_048_576;
 
+/// Names of runtime intrinsic functions whose bodies are emitted by
+/// [`CodeGenerator::generate_helper_functions`]. Because the bodies live in
+/// the main module IR, the usual `declare @name(...)` line produced by
+/// [`CodeGenerator::generate_extern_decl`] is redundant and must be suppressed
+/// in the same module — LLVM/clang rejects a `declare` + `define` pair for the
+/// same symbol in the same module as an invalid redefinition (ROADMAP #9).
+///
+/// Other per-module .ll files that only *reference* these symbols still need a
+/// normal `declare` and should not be affected by this list. The caller is
+/// responsible for passing the "is this the main module" flag.
+pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
+    "__panic",
+    "__contract_fail",
+    "__load_byte",
+    "__store_byte",
+    "__load_i64",
+    "__store_i64",
+    "__swap",
+    "__store_f64",
+    "__load_i8",
+    "__store_i8",
+    "__load_i16",
+    "__store_i16",
+    "__load_i32",
+    "__store_i32",
+    "__store_f32",
+    "__load_f32",
+    "__load_f64",
+    "__call_poll",
+    "__extract_poll_status",
+    "__extract_poll_value",
+    "__time_now_ms",
+    "__kevent_register",
+    "__kevent_wait",
+    "__kevent_get_fd",
+    "__kevent_get_filter",
+    "__write_byte",
+    "__read_byte",
+    "__readdir_wrapper",
+    "__getcwd_wrapper",
+    "__stat_size",
+    "__stat_mtime",
+    "__wasm_strlen",
+    "__wasi_puts",
+];
+
+/// Check whether a function name is a runtime intrinsic whose body is emitted
+/// by `generate_helper_functions`. Used by [`CodeGenerator::generate_extern_decl`]
+/// to avoid emitting a redundant `declare` in the main module.
+#[inline]
+pub(crate) fn is_runtime_intrinsic(name: &str) -> bool {
+    RUNTIME_INTRINSIC_NAMES.contains(&name)
+}
+
 impl CodeGenerator {
     /// Generate helper functions for low-level memory operations
     pub(crate) fn generate_helper_functions(&self) -> String {

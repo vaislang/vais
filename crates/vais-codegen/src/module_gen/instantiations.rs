@@ -568,6 +568,12 @@ impl CodeGenerator {
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
         for (_, info) in &sorted_fns {
+            // ROADMAP #9: skip `declare` for runtime intrinsics whose body is emitted
+            // by `generate_helper_functions()` in this same main module.
+            if crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name) {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
             if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');

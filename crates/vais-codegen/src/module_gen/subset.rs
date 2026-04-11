@@ -505,6 +505,18 @@ impl CodeGenerator {
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
         for (key, info) in &sorted_fns {
+            // ROADMAP #9: in the main module, skip `declare` for runtime intrinsics —
+            // `generate_helper_functions()` already emits the `define` body in the
+            // same module, so an additional `declare` is an LLVM-level redefinition.
+            // User code can still register the intrinsic via `X F` extern syntax; the
+            // filter fires only when the name matches a known runtime helper AND we're
+            // currently emitting the main module.
+            if is_main_module
+                && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name)
+            {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
             if !declared_fns.contains(&info.signature.name)
                 && !module_functions.contains(&info.signature.name)
                 && !module_functions.contains(*key)
