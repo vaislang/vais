@@ -26,6 +26,7 @@ mod free_vars;
 mod lookup;
 mod resolve;
 mod scope;
+mod totality;
 // Re-export bidirectional type checking support
 pub use inference::CheckMode;
 

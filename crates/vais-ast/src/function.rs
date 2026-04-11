@@ -26,6 +26,20 @@ pub struct Function {
     pub is_pub: bool,
     /// Whether this is an async function
     pub is_async: bool,
+    /// Whether this function is marked `partial`.
+    ///
+    /// A `partial` function is allowed to panic at runtime — i.e. it may
+    /// contain expressions that trigger `Effect::Panic` (division by zero,
+    /// array / slice out-of-bounds, `Option::None` unwrap, `Result::Err`
+    /// unwrap, explicit `panic!`, `assert`, `abort`, `exit`). Functions
+    /// without the `partial` modifier are "total" and the type checker
+    /// must prove they are panic-free before compilation succeeds.
+    ///
+    /// This is the Phase 4c.2 (Task #53) totality gate — see
+    /// `crates/vais-types/src/checker_fn.rs` for the enforcement site and
+    /// `crates/vais-types/src/effects.rs` for the inferrer that classifies
+    /// which expressions raise `Effect::Panic`.
+    pub is_partial: bool,
     /// Attributes like `#[cfg(test)]`, `#\[inline\]`, etc.
     pub attributes: Vec<Attribute>,
     /// Where clause predicates (e.g., `where T: Display + Clone`)

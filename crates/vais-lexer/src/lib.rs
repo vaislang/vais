@@ -130,6 +130,15 @@ pub enum Token {
     #[token("unsafe")]
     Unsafe,
 
+    // === Totality Modifier (Phase 4c.2 / Task #53) ===
+    // `partial F foo() { ... }` marks a function that may panic
+    // (div-by-zero, array OOB, None unwrap, Err unwrap).
+    // Functions without `partial` must be proved panic-free by the type
+    // checker via the existing EffectInferrer reached through the
+    // partial-function gate in `check_function`.
+    #[token("partial")]
+    Partial,
+
     // === Linear Types Keywords ===
     #[token("linear")]
     Linear,
@@ -399,6 +408,7 @@ impl fmt::Display for Token {
             Token::As => write!(f, "as"),
             Token::Pure => write!(f, "pure"),
             Token::Effect => write!(f, "effect"),
+            Token::Partial => write!(f, "partial"),
             Token::Io => write!(f, "io"),
             Token::Unsafe => write!(f, "unsafe"),
             Token::I8 => write!(f, "i8"),

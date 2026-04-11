@@ -130,6 +130,10 @@ fn make_fn(name: &str, params: Vec<Param>, ret_type: Option<Type>, body_expr: Ex
         body: FunctionBody::Block(vec![sp(Stmt::Expr(Box::new(sp(body_expr))))]),
         is_pub: false,
         is_async: false,
+        // Derive-generated methods (Debug/Clone/PartialEq/...) are held to
+        // the default totality contract. If a derive-backed body needs to
+        // panic it must construct a `partial`-marked function explicitly.
+        is_partial: false,
         attributes: vec![],
         where_clause: vec![],
     }

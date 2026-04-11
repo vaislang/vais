@@ -180,6 +180,10 @@ impl<'a> AstExpander<'a> {
             body,
             is_pub: func.is_pub,
             is_async: func.is_async,
+            // Macro expansion preserves the original totality marker — a
+            // `partial F foo()` that the user wrote stays partial after
+            // expansion; a total function stays total.
+            is_partial: func.is_partial,
             attributes: func.attributes,
             where_clause: func.where_clause,
         })

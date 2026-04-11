@@ -106,6 +106,16 @@ pub enum TypeError {
         span: Option<Span>,
     },
 
+    #[error("Total function '{function_name}' may panic ({reason}); mark it as `partial` if panics are intentional")]
+    TotalFunctionViolation {
+        function_name: String,
+        /// A short, human-readable description of the first panic-source
+        /// encountered (e.g. "contains `panic!`", "contains division",
+        /// "contains Option unwrap", "calls partial function `foo`").
+        reason: String,
+        span: Option<Span>,
+    },
+
     #[error("Lifetime inference failed for function '{function_name}': cannot determine output lifetime with {input_count} input lifetimes (use explicit lifetime annotations)")]
     LifetimeElisionFailed {
         function_name: String,
@@ -244,6 +254,7 @@ impl TypeError {
             TypeError::MoveAfterUse { move_at, .. } => *move_at,
             TypeError::DependentPredicateNotBool { span, .. } => *span,
             TypeError::RefinementViolation { span, .. } => *span,
+            TypeError::TotalFunctionViolation { span, .. } => *span,
             TypeError::LifetimeElisionFailed { span, .. } => *span,
             TypeError::LifetimeOutlivesStatic { span, .. } => *span,
             TypeError::LifetimeTooShort { span, .. } => *span,
@@ -349,6 +360,7 @@ impl TypeError {
             TypeError::MoveAfterUse { .. } => "E016",
             TypeError::DependentPredicateNotBool { .. } => "E017",
             TypeError::RefinementViolation { .. } => "E018",
+            TypeError::TotalFunctionViolation { .. } => "E034",
             TypeError::LifetimeElisionFailed { .. } => "E019",
             TypeError::LifetimeOutlivesStatic { .. } => "E020",
             TypeError::LifetimeTooShort { .. } => "E021",
@@ -538,6 +550,14 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 Some(format!("the value does not satisfy the refinement predicate `{}`; ensure the value meets the constraint", predicate))
             }
+            TypeError::TotalFunctionViolation {
+                function_name,
+                reason,
+                ..
+            } => Some(format!(
+                "function `{}` is total by default but its body {}; add the `partial` modifier (e.g. `partial F {}(...) {{ ... }}`) if the panic is intentional, or refactor the body to eliminate the panic source",
+                function_name, reason, function_name
+            )),
         }
     }
 
@@ -613,6 +633,14 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 vais_i18n::get(&key, &[("predicate", predicate)])
             }
+            TypeError::TotalFunctionViolation {
+                function_name,
+                reason,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[("function_name", function_name), ("reason", reason)],
+            ),
             TypeError::LifetimeElisionFailed {
                 function_name,
                 input_count,

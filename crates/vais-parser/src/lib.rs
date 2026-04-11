@@ -503,6 +503,10 @@ impl Parser {
                     body: FunctionBody::Block(stmts),
                     is_pub: false,
                     is_async: false,
+                    // Synthetic main wrapper — exempt from Phase 4c.2
+                    // totality gate (it hoists top-level user statements
+                    // whose panic-freedom was never declared).
+                    is_partial: true,
                     attributes: vec![],
                     where_clause: vec![],
                 };
@@ -1098,6 +1102,9 @@ impl Parser {
             body: FunctionBody::Block(body_stmts),
             is_pub: false,
             is_async: false,
+            // Synthetic test wrapper — exempt from totality gate, same as
+            // the synthetic main hoist above.
+            is_partial: true,
             attributes: vec![],
             where_clause: vec![],
         };

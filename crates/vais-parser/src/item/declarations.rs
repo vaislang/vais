@@ -5,10 +5,14 @@ use crate::{ParseError, ParseResult, Parser};
 
 impl Parser {
     /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
+    ///
+    /// `is_partial` marks the function as exempt from the Phase 4c.2 totality
+    /// gate — see `vais_ast::Function::is_partial` for the full semantics.
     pub(crate) fn parse_function(
         &mut self,
         is_pub: bool,
         is_async: bool,
+        is_partial: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<Function> {
         let name = self.parse_ident()?;
@@ -57,6 +61,7 @@ impl Parser {
             body,
             is_pub,
             is_async,
+            is_partial,
             attributes,
             where_clause,
         })
@@ -86,12 +91,24 @@ impl Parser {
             if self.check(&Token::Function)
                 || self.check(&Token::Pub)
                 || self.check(&Token::Async)
+                || self.check(&Token::Partial)
                 || !method_attrs.is_empty()
             {
                 let is_method_pub = self.check(&Token::Pub);
                 if is_method_pub {
                     self.advance();
                 }
+                // Phase 4c.2 — optional `partial` on struct methods.
+                // Accept before or after `P`: both `P partial F` and
+                // `partial P F` feel natural to users. We only accept
+                // the canonical `P partial F` here; the other order can
+                // be added later if users ask.
+                let is_method_partial = if self.check(&Token::Partial) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
                 // Check for async method: `A F method_name(...)`
                 let is_method_async = if self.check(&Token::Async) {
                     self.advance();
@@ -100,7 +117,12 @@ impl Parser {
                     false
                 };
                 self.expect(&Token::Function)?;
-                let method = self.parse_function(is_method_pub, is_method_async, method_attrs)?;
+                let method = self.parse_function(
+                    is_method_pub,
+                    is_method_async,
+                    is_method_partial,
+                    method_attrs,
+                )?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(method, Span::new(start, end)));
             } else {

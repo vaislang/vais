@@ -168,6 +168,32 @@ impl TypeChecker {
             }
         }
 
+        // Phase 4c.2 / Task #53 — totality gate.
+        //
+        // After body type checking, before ownership, walk the module
+        // call graph and reject any non-`partial` function that can
+        // transitively reach a runtime panic. This is a pure syntactic
+        // + call-graph analysis implemented in `crate::totality`;
+        // see that module for the exact set of panic sources.
+        //
+        // Imported modules are skipped: we only enforce totality on
+        // code authored in this compilation unit, not on symbols pulled
+        // in via `use`. An imported partial function can still be
+        // called from a total local function — such a call will be
+        // rejected by the totality walk because the imported partial
+        // function's name lands in `partial_fns`.
+        let local_module_for_totality = if self.imported_item_count > 0
+            && self.imported_item_count < module.items.len()
+        {
+            Module {
+                items: module.items[self.imported_item_count..].to_vec(),
+                modules_map: None,
+            }
+        } else {
+            module.clone()
+        };
+        self.try_or_collect(crate::totality::enforce_totality(&local_module_for_totality))?;
+
         // Third pass: ownership and borrow checking (skip imported items)
         if let Some(strict) = self.ownership_check_mode {
             let mut ownership_checker = ownership::OwnershipChecker::new_collecting();

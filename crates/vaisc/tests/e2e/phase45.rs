@@ -195,9 +195,11 @@ F main() -> i64 {
 
 #[test]
 fn e2e_phase45_assert_expr() {
-    // assert() builtin should compile without error
+    // assert() builtin should compile without error.
+    // Phase 4c.2: `assert` is a panic source, so the caller must be
+    // marked `partial` to opt out of the totality gate.
     let source = r#"
-F main() -> i64 {
+partial F main() -> i64 {
     x := 10
     assert(x > 0)
     R x

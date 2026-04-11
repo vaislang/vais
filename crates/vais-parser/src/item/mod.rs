@@ -24,15 +24,29 @@ impl Parser {
             self.advance_skip();
         }
 
+        // Phase 4c.2 / Task #53 — optional `partial` modifier on top-level
+        // functions. Accepted positions:
+        //   partial F foo() ...        (sync partial function)
+        //   partial A F foo() ...      (async partial function)
+        //   P partial F foo() ...      (pub sync partial)
+        //   P partial A F foo() ...    (pub async partial)
+        // Only legal immediately before `F` or `A F`; attached to anything
+        // else it falls through and produces the standard "unexpected token"
+        // error in the else-branch below.
+        let is_partial = self.check(&Token::Partial);
+        if is_partial {
+            self.advance_skip();
+        }
+
         let start = self.current_span().start;
 
         let item = if self.check(&Token::Function) {
             self.advance_skip();
-            Item::Function(self.parse_function(is_pub, false, attributes)?)
+            Item::Function(self.parse_function(is_pub, false, is_partial, attributes)?)
         } else if self.check(&Token::Async) {
             self.advance_skip();
             self.expect_skip(&Token::Function)?;
-            Item::Function(self.parse_function(is_pub, true, attributes)?)
+            Item::Function(self.parse_function(is_pub, true, is_partial, attributes)?)
         } else if self.check(&Token::Struct) {
             self.advance_skip();
             Item::Struct(self.parse_struct(is_pub, attributes)?)

@@ -171,6 +171,13 @@ impl Parser {
             } else {
                 let start = self.current_span().start;
                 let method_attrs = self.parse_attributes()?;
+                // Phase 4c.2 — optional `partial` on impl methods.
+                let is_partial = if self.check(&Token::Partial) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
                 // Check for async method: `A F method_name(...)`
                 let is_async = if self.check(&Token::Async) {
                     self.advance();
@@ -179,7 +186,7 @@ impl Parser {
                     false
                 };
                 self.expect(&Token::Function)?;
-                let func = self.parse_function(false, is_async, method_attrs)?;
+                let func = self.parse_function(false, is_async, is_partial, method_attrs)?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(func, Span::new(start, end)));
             }
