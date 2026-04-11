@@ -613,11 +613,6 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
         RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
         Lifetime(name) => format!("'{}", name),
-        ImplTrait { bounds } => format!("impl {}", bounds.join(" + ")),
-        HigherKinded { name, arity } => {
-            let holes = (0..*arity).map(|_| "_").collect::<Vec<_>>().join(", ");
-            format!("{}<{}>", name, holes)
-        }
     }
 }
 

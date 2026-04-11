@@ -1978,7 +1978,6 @@ BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
                | PointerType | RefType | SliceType | DynTraitType
                | LinearType    (* [Experimental] — borrow checker integration incomplete *)
                | AffineType    (* [Experimental] — borrow checker integration incomplete *)
-               | ImplTraitType
                | DependentType (* [Experimental] *)
                | FnPtrType
 

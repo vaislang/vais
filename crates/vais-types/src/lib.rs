@@ -122,9 +122,6 @@ pub struct TypeChecker {
     // Current const generic parameters (maps const param name to its type)
     pub(crate) current_const_generics: HashMap<String, ResolvedType>,
 
-    // Current higher-kinded type parameters (maps HKT param name to arity)
-    pub(crate) current_hkt_generics: HashMap<String, usize>,
-
     // Type variable counter for inference
     pub(crate) next_type_var: Cell<usize>,
 
@@ -203,7 +200,6 @@ impl TypeChecker {
             current_generics: Vec::new(),
             current_generic_bounds: HashMap::new(),
             current_const_generics: HashMap::new(),
-            current_hkt_generics: HashMap::new(),
             next_type_var: Cell::new(0),
             substitutions: HashMap::with_capacity(32),
             exhaustiveness_checker: ExhaustivenessChecker::new(),

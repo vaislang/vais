@@ -4,7 +4,7 @@
 //! 1. Generic Associated Types (GAT) — trait with parameterized associated types
 //! 2. Specialization patterns — blanket vs concrete impls
 //! 3. Monomorphization edge cases — nested generics, const generics, multi-level chains
-//! 4. Type system consistency — ImplTrait/Lifetime/Var fallback behavior
+//! 4. Type system consistency — Lifetime/Var fallback behavior
 
 use super::helpers::*;
 

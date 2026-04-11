@@ -654,17 +654,6 @@ impl Parser {
         self.tokens.get(self.pos + 1)
     }
 
-    /// Save the current parser position for backtracking
-    pub(crate) fn save_position(&self) -> usize {
-        self.pos
-    }
-
-    /// Restore the parser to a previously saved position
-    pub(crate) fn restore_position(&mut self, pos: usize) {
-        self.pos = pos;
-        self.pending_gt_count = 0;
-    }
-
     /// Check if the current "token" is `>`, accounting for a pending `>`
     /// left over from splitting a `>>` (Token::Shr) in nested generic contexts.
     /// Also returns true for `>>` (Token::Shr) because `>>` will be split into

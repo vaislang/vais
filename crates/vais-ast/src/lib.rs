@@ -190,10 +190,6 @@ impl std::fmt::Display for Type {
             Type::RefMutLifetime { lifetime, inner } => {
                 write!(f, "&'{} mut {}", lifetime, inner.node)
             }
-            Type::ImplTrait { bounds } => {
-                let names: Vec<&str> = bounds.iter().map(|b| b.node.as_str()).collect();
-                write!(f, "impl {}", names.join(" + "))
-            }
         }
     }
 }

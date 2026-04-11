@@ -225,24 +225,7 @@ impl CodeGenerator {
                     self.infer_type_args(inner, arg_inner, type_params, inferred);
                 }
             }
-            // HKT type constructor parameter: infer F from F<A> = Vec<A> → F = Vec
-            ResolvedType::HigherKinded { name, .. } => {
-                if type_params.contains(&name) {
-                    // Extract the type constructor name from the concrete argument type
-                    if let ResolvedType::Named {
-                        name: concrete_name,
-                        ..
-                    } = arg_type
-                    {
-                        inferred
-                            .entry(name.clone())
-                            .or_insert_with(|| ResolvedType::Named {
-                                name: concrete_name.clone(),
-                                generics: vec![],
-                            });
-                    }
-                }
-            }
+            // HKT removed in ROADMAP #18.
             _ => {}
         }
     }

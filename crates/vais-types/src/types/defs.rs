@@ -50,8 +50,6 @@ pub struct FunctionSig {
     pub effect_annotation: EffectAnnotation,
     /// Inferred effects (populated during type checking)
     pub inferred_effects: Option<EffectSet>,
-    /// Higher-kinded type parameters: maps HKT param name to expected arity
-    pub hkt_params: HashMap<String, usize>,
     /// Generic callees: tracks generic functions called from this function's body.
     /// Each entry is (callee_name, Vec<param_index_or_generic_name>) — the generic args
     /// passed to the callee, expressed as indices into this function's generic params
@@ -74,7 +72,6 @@ impl Default for FunctionSig {
             contracts: None,
             effect_annotation: EffectAnnotation::Infer,
             inferred_effects: None,
-            hkt_params: HashMap::new(),
             generic_callees: vec![],
         }
     }

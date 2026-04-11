@@ -216,21 +216,8 @@ fn test_display_dyn_trait_with_generics() {
     assert_eq!(format!("{}", ty), "dyn Iterator<i64>");
 }
 
-#[test]
-fn test_display_impl_trait() {
-    let ty = ResolvedType::ImplTrait {
-        bounds: vec!["Display".to_string(), "Debug".to_string()],
-    };
-    assert_eq!(format!("{}", ty), "impl Display + Debug");
-}
-
-#[test]
-fn test_display_impl_trait_single_bound() {
-    let ty = ResolvedType::ImplTrait {
-        bounds: vec!["Clone".to_string()],
-    };
-    assert_eq!(format!("{}", ty), "impl Clone");
-}
+// test_display_impl_trait / test_display_impl_trait_single_bound REMOVED (ROADMAP #18):
+// ResolvedType::ImplTrait was removed.
 
 #[test]
 fn test_display_associated() {
@@ -277,15 +264,8 @@ fn test_display_affine() {
     assert_eq!(format!("{}", ty), "affine str");
 }
 
-#[test]
-fn test_display_higher_kinded() {
-    let ty = ResolvedType::HigherKinded {
-        name: "F".to_string(),
-        arity: 1,
-    };
-    let s = format!("{}", ty);
-    assert!(s.contains("F"));
-}
+// test_display_higher_kinded REMOVED (ROADMAP #18):
+// ResolvedType::HigherKinded was removed.
 
 // ============================================================================
 // ResolvedConst

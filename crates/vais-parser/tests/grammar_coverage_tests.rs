@@ -596,16 +596,8 @@ mod types {
         assert_parses("F f(x: affine i64) -> i64 = 0");
     }
 
-    #[test]
-    fn grammar_type_impl_trait() {
-        // Vais uses `X Trait` for existential/impl trait (not `impl`)
-        assert_parses("F f(x: i64) -> X Display = 0");
-    }
-
-    #[test]
-    fn grammar_type_impl_trait_multi_bound() {
-        assert_parses("F f(x: i64) -> X Display + Debug = 0");
-    }
+    // grammar_type_impl_trait{,_multi_bound} REMOVED (ROADMAP #18):
+    // `X Trait` return-position existential types were removed.
 }
 
 // =============================================================================
@@ -1470,11 +1462,10 @@ fn grammar_sync_type_variants() {
             | Type::Associated { .. }
             | Type::Linear(_)
             | Type::Affine(_)
-            | Type::ImplTrait { .. }
             | Type::Dependent { .. } => {}
         }
     }
-    // Count: 25 variants as of Phase 64
+    // Count: 24 variants after ImplTrait removal (ROADMAP #18)
 }
 
 /// Compile-time guard: if Pattern variants change, this match will fail to compile.
@@ -2017,47 +2008,9 @@ mod const_params_and_variance {
         assert_parses("F f<-T: Clone>(x: T) -> i64 = 0");
     }
 
-    // --- Higher-kinded type parameters (HKT) ---
-
-    #[test]
-    fn grammar_hkt_basic() {
-        // Note: use 'Ctr' not 'F' because F is a keyword in Vais
-        // Use space between > > to avoid >> being tokenized as Shr
-        let m = parse_ok("F f<Ctr<_> >(x: i64) -> i64 = 0");
-        match &m.items[0].node {
-            Item::Function(f) => {
-                assert!(f.generics[0].is_higher_kinded());
-                match &f.generics[0].kind {
-                    GenericParamKind::HigherKinded { arity, .. } => {
-                        assert_eq!(arity, &1);
-                    }
-                    other => panic!("Expected HigherKinded, got {:?}", other),
-                }
-            }
-            other => panic!("Expected Function, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn grammar_hkt_multi_arity() {
-        // Use space between > > to avoid >> tokenized as Shr
-        let m = parse_ok("F f<Ctr<_, _> >(x: i64) -> i64 = 0");
-        match &m.items[0].node {
-            Item::Function(f) => match &f.generics[0].kind {
-                GenericParamKind::HigherKinded { arity, .. } => {
-                    assert_eq!(arity, &2);
-                }
-                other => panic!("Expected HigherKinded, got {:?}", other),
-            },
-            other => panic!("Expected Function, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn grammar_hkt_with_bound() {
-        // Use space between > > to avoid >> tokenized as Shr
-        assert_parses("F f<Ctr<_>: Functor>(x: i64) -> i64 = 0");
-    }
+    // --- Higher-kinded type parameters (HKT) — REMOVED (ROADMAP #18) ---
+    // HKT parameter syntax `F<_>` was removed from the language.
+    // Tests grammar_hkt_basic / grammar_hkt_multi_arity / grammar_hkt_with_bound deleted.
 }
 
 // =============================================================================

@@ -243,10 +243,10 @@ impl CodeGenerator {
 
     /// Enable strict type mode.
     ///
-    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`,
-    /// `ImplTrait`, `HigherKinded` reaching codegen) become hard errors instead
-    /// of warnings with i64 fallback. Generic/ConstGeneric fallbacks remain as
-    /// warnings since they are legitimate during monomorphization.
+    /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
+    /// reaching codegen) become hard errors instead of warnings with i64
+    /// fallback. Generic/ConstGeneric fallbacks remain as warnings since they
+    /// are legitimate during monomorphization.
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.strict_type_mode = strict;
     }

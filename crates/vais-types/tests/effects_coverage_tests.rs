@@ -264,7 +264,6 @@ fn test_infer_call_with_sig_effects() {
         contracts: None,
         effect_annotation: EffectAnnotation::Infer,
         inferred_effects: Some(EffectSet::alloc()),
-        hkt_params: HashMap::new(),
         generic_callees: vec![],
     };
     let mut fns = HashMap::new();
@@ -292,7 +291,6 @@ fn test_infer_call_with_sig_no_effects() {
         contracts: None,
         effect_annotation: EffectAnnotation::Infer,
         inferred_effects: None,
-        hkt_params: HashMap::new(),
         generic_callees: vec![],
     };
     let mut fns = HashMap::new();

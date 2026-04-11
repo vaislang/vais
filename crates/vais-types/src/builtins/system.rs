@@ -80,7 +80,6 @@ impl TypeChecker {
                     contracts: None,
                     effect_annotation: EffectAnnotation::Infer,
                     inferred_effects: None,
-                    hkt_params: HashMap::new(),
                     generic_callees: vec![],
                 },
             );

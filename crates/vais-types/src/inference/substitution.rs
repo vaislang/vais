@@ -314,40 +314,14 @@ impl TypeChecker {
                 effects: effects.clone(),
             },
             ResolvedType::Named { name, generics } => {
-                // Check if the name is an HKT parameter being substituted.
-                // NOTE: This HKT application logic is mirrored in types/substitute.rs::substitute_type().
-                // Any changes here must be synchronized with that function.
-                if let Some(subst) = substitutions.get(name) {
-                    if !generics.is_empty() {
-                        // HKT application: F<A> where F maps to Vec → Vec<A>
-                        if let ResolvedType::Named {
-                            name: concrete_name,
-                            ..
-                        }
-                        | ResolvedType::HigherKinded {
-                            name: concrete_name,
-                            ..
-                        } = subst
-                        {
-                            ResolvedType::Named {
-                                name: concrete_name.clone(),
-                                generics: generics
-                                    .iter()
-                                    .map(|g| self.substitute_generics(g, substitutions))
-                                    .collect(),
-                            }
-                        } else {
-                            // Fallback: substitute generics normally
-                            ResolvedType::Named {
-                                name: name.clone(),
-                                generics: generics
-                                    .iter()
-                                    .map(|g| self.substitute_generics(g, substitutions))
-                                    .collect(),
-                            }
-                        }
-                    } else {
+                // Higher-kinded substitution was removed in ROADMAP #18. If the name is
+                // being substituted and there are no generics, replace directly; otherwise
+                // recurse into the generics normally.
+                if generics.is_empty() {
+                    if let Some(subst) = substitutions.get(name) {
                         subst.clone()
+                    } else {
+                        ty.clone()
                     }
                 } else {
                     ResolvedType::Named {
@@ -359,10 +333,6 @@ impl TypeChecker {
                     }
                 }
             }
-            ResolvedType::HigherKinded { name, .. } => substitutions
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| ty.clone()),
             _ => ty.clone(),
         };
 
@@ -517,44 +487,7 @@ impl TypeChecker {
             )?;
         }
 
-        // Verify HKT arity: when an HKT param is substituted with a concrete type,
-        // check that the concrete type constructor has the expected arity.
-        // Uses O(G + H) index lookup instead of O(H × G) position scan.
-        if all_concrete && !sig.hkt_params.is_empty() {
-            let generic_index: HashMap<&str, usize> = sig
-                .generics
-                .iter()
-                .enumerate()
-                .map(|(i, name)| (name.as_str(), i))
-                .collect();
-
-            for (param_name, &expected_arity) in &sig.hkt_params {
-                if let Some(&idx) = generic_index.get(param_name.as_str()) {
-                    if let Some(concrete_ty) = inferred_type_args.get(idx) {
-                        let actual_arity = match concrete_ty {
-                            ResolvedType::Named { generics, .. } => generics.len(),
-                            ResolvedType::HigherKinded { arity, .. } => *arity,
-                            _ => 0, // Non-generic types have arity 0
-                        };
-                        if actual_arity != expected_arity
-                            && !matches!(concrete_ty, ResolvedType::Generic(_))
-                        {
-                            return Err(TypeError::Mismatch {
-                                expected: format!(
-                                    "type constructor with arity {} for HKT parameter '{}'",
-                                    expected_arity, param_name
-                                ),
-                                found: format!(
-                                    "type '{}' with arity {}",
-                                    concrete_ty, actual_arity
-                                ),
-                                span: None,
-                            });
-                        }
-                    }
-                }
-            }
-        }
+        // HKT arity verification removed in ROADMAP #18.
 
         // Substitute generics in the return type
         let return_type = self.substitute_generics(&sig.ret, &generic_substitutions);

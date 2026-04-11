@@ -459,23 +459,8 @@ fn e2e_p128_err_negate_string() {
     assert_compile_error(r#"F main() -> i64 = -"hello""#);
 }
 
-// ==================== L. ImplTrait Position Errors ====================
-
-#[test]
-fn e2e_p128_err_impl_trait_param_position() {
-    let source = r#"
-W Showable {
-    F show(&self) -> i64
-}
-F display(item: X Showable) -> i64 = 0
-F main() -> i64 { 0 }
-"#;
-    let result = compile_to_ir(source);
-    assert!(
-        result.is_err(),
-        "impl Trait in parameter position should fail"
-    );
-}
+// ==================== L. ImplTrait — REMOVED (ROADMAP #18) ====================
+// `X Trait` existential types were removed from the language.
 
 // ==================== M. Positive Counterparts (should compile) ====================
 

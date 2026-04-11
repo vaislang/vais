@@ -154,32 +154,8 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
-#[test]
-fn e2e_phase40_impl_trait_return_type() {
-    // impl Trait return type (IR generation only, codegen uses i64 fallback)
-    let source = r#"
-W Display {
-    F show(&self) -> i64
-}
-
-S Value { n: i64 }
-
-X Value: Display {
-    F show(&self) -> i64 {
-        self.n
-    }
-}
-
-F make_value() -> X Display {
-    Value { n: 42 }
-}
-
-F main() -> i64 {
-    0
-}
-"#;
-    compile_to_ir(source).expect("should compile impl trait return");
-}
+// e2e_phase40_impl_trait_return_type REMOVED (ROADMAP #18): `X Trait` return-position
+// existential types were removed. Use explicit generic bounds instead.
 
 #[test]
 fn e2e_phase40_trait_alias_with_bounds() {

@@ -297,13 +297,6 @@ impl TreeShaker {
                 Self::collect_type_deps(&base.node, deps);
                 Self::collect_expr_deps(&predicate.node, deps);
             }
-            Type::ImplTrait { bounds } => {
-                for b in bounds {
-                    if !Self::is_builtin_type(&b.node) {
-                        deps.insert(b.node.clone());
-                    }
-                }
-            }
             Type::Infer | Type::Unit => {}
         }
     }

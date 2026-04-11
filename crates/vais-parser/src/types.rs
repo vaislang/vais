@@ -147,55 +147,7 @@ impl Parser {
 
         let name = self.parse_ident()?;
 
-        // Check for HKT pattern: Name<_> or Name<_, _>
-        if self.check(&Token::Lt) {
-            // Save position to backtrack if this isn't actually HKT
-            let saved_pos = self.save_position();
-
-            self.advance(); // consume '<'
-
-            // Check if first token inside is '_' (underscore identifier)
-            let mut arity = 0usize;
-            let mut is_hkt = false;
-
-            if self.check_ident("_") {
-                arity = 1;
-                self.advance(); // consume '_'
-
-                // Count additional underscore parameters: <_, _, _>
-                // Arity is capped at 32 to prevent excessive memory usage
-                const MAX_HKT_ARITY: usize = 32;
-                while self.check(&Token::Comma) && arity < MAX_HKT_ARITY {
-                    self.advance(); // consume ','
-                    if self.check_ident("_") {
-                        arity += 1;
-                        self.advance(); // consume '_'
-                    } else {
-                        // Not a valid HKT pattern — backtrack
-                        break;
-                    }
-                }
-
-                if self.check(&Token::Gt) {
-                    self.advance(); // consume '>'
-                    is_hkt = true;
-                }
-            }
-
-            if is_hkt {
-                // Parse optional bounds: F<_>: Functor
-                let bounds = if self.check(&Token::Colon) {
-                    self.advance();
-                    self.parse_trait_bounds()?
-                } else {
-                    Vec::new()
-                };
-                return Ok(GenericParam::new_higher_kinded(name, arity, bounds));
-            }
-
-            // Not HKT — restore position and fall through to normal parsing
-            self.restore_position(saved_pos);
-        }
+        // Higher-kinded type parameters (F<_>, F<_, _>) were removed in ROADMAP #18.
 
         let bounds = if self.check(&Token::Colon) {
             self.advance();
@@ -613,11 +565,6 @@ impl Parser {
             self.advance();
             let inner = self.parse_base_type()?;
             Type::Affine(Box::new(inner))
-        } else if self.check(&Token::Impl) {
-            // Existential type: X Trait or X Trait + Trait2 (impl Trait)
-            self.advance();
-            let bounds = self.parse_trait_bounds()?;
-            Type::ImplTrait { bounds }
         } else if self.check(&Token::LBrace) {
             // Dependent type (refinement type): {x: T | predicate}
             self.advance();

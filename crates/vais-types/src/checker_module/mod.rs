@@ -26,22 +26,6 @@ pub(crate) struct SavedGenericState {
     pub bounds: HashMap<String, Vec<String>>,
     /// Const generic values (e.g., {"N": ResolvedType::I64})
     pub const_generics: HashMap<String, ResolvedType>,
-    /// Higher-kinded type generics with their arity (e.g., {"F": 1} for F<_>)
-    pub hkt_generics: HashMap<String, usize>,
-}
-
-/// Extract HKT parameter names and arities from AST generic parameters.
-pub(crate) fn extract_hkt_params(generics: &[vais_ast::GenericParam]) -> HashMap<String, usize> {
-    generics
-        .iter()
-        .filter_map(|g| {
-            if let vais_ast::GenericParamKind::HigherKinded { arity, .. } = &g.kind {
-                Some((g.name.node.clone(), *arity))
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 impl TypeChecker {
@@ -234,12 +218,7 @@ impl TypeChecker {
                 .iter()
                 .map(|g| {
                     let mut expanded_bounds = Vec::new();
-                    // For HKT params, use the bounds from their kind
-                    let raw_bounds = match &g.kind {
-                        GenericParamKind::HigherKinded { bounds, .. } => bounds,
-                        _ => &g.bounds,
-                    };
-                    for b in raw_bounds {
+                    for b in &g.bounds {
                         if let Some(alias_bounds) = self.trait_aliases.get(&b.node) {
                             expanded_bounds.extend(alias_bounds.iter().cloned());
                         } else {
@@ -265,24 +244,10 @@ impl TypeChecker {
         let prev_const_generics =
             std::mem::replace(&mut self.current_const_generics, new_const_generics);
 
-        // Track HKT generic parameters with their arity
-        let new_hkt_generics: HashMap<String, usize> = generics
-            .iter()
-            .filter_map(|g| {
-                if let GenericParamKind::HigherKinded { arity, .. } = &g.kind {
-                    Some((g.name.node.clone(), *arity))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let prev_hkt_generics = std::mem::replace(&mut self.current_hkt_generics, new_hkt_generics);
-
         SavedGenericState {
             generics: prev_generics,
             bounds: prev_bounds,
             const_generics: prev_const_generics,
-            hkt_generics: prev_hkt_generics,
         }
     }
 
@@ -291,7 +256,6 @@ impl TypeChecker {
         self.current_generics = saved.generics;
         self.current_generic_bounds = saved.bounds;
         self.current_const_generics = saved.const_generics;
-        self.current_hkt_generics = saved.hkt_generics;
     }
 
     /// Merge where clause bounds into current generic bounds.

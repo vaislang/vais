@@ -545,11 +545,6 @@ impl LintAnalyzer {
                     self.collect_usages_in_type(&g.node);
                 }
             }
-            Type::ImplTrait { bounds } => {
-                for b in bounds {
-                    self.used_idents.insert(b.node.clone());
-                }
-            }
             Type::Dependent { base, .. } => {
                 self.collect_usages_in_type(&base.node);
             }

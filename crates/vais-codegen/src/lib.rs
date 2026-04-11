@@ -246,8 +246,8 @@ pub struct CodeGenerator {
     pub multi_error_mode: bool,
     pub(crate) collected_errors: Vec<SpannedCodegenError>,
 
-    // When true, ICE-level type fallbacks (Var, Unknown, Lifetime, HKT,
-    // ImplTrait reaching codegen) are promoted from warnings to hard errors.
+    // When true, ICE-level type fallbacks (Var, Unknown, Lifetime reaching
+    // codegen) are promoted from warnings to hard errors.
     // Default: false (backward compatible — i64 fallback with warning).
     // Set to true via `set_strict_type_mode(true)` for stricter validation.
     pub strict_type_mode: bool,

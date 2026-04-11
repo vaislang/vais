@@ -256,13 +256,6 @@ impl CodeGenerator {
                 // vtable_ptr: i8* pointing to the vtable for this trait
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
-            ResolvedType::ImplTrait { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved ImplTrait"),
-                    backend: String::from("text"),
-                })?;
-                String::from("i64")
-            }
             ResolvedType::FnPtr {
                 params,
                 ret,
@@ -373,13 +366,6 @@ impl CodeGenerator {
                     assoc_name: assoc_name.clone(),
                     base_type: base_desc,
                 });
-                String::from("i64")
-            }
-            ResolvedType::HigherKinded { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved HKT"),
-                    backend: String::from("text"),
-                })?;
                 String::from("i64")
             }
         })
@@ -599,9 +585,6 @@ impl CodeGenerator {
                     .iter()
                     .map(|g| self.ast_type_to_resolved_impl(&g.node))
                     .collect(),
-            },
-            Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
-                bounds: bounds.iter().map(|b| b.node.clone()).collect(),
             },
             Type::Slice(inner) => {
                 ResolvedType::Slice(Box::new(self.ast_type_to_resolved_impl(&inner.node)))

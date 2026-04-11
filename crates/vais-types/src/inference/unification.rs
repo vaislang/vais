@@ -413,19 +413,7 @@ impl TypeChecker {
             }
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
-            // ImplTrait: unification accepts any concrete type.
-            // Bound checking happens at the TypeChecker level (type_implements_trait),
-            // not in the inference engine, since TypeInference has no trait impl data.
-            // This is consistent with DynTrait handling above.
-            (ResolvedType::ImplTrait { .. }, _) | (_, ResolvedType::ImplTrait { .. }) => Ok(()),
-            // HigherKinded: type constructor parameters unify with any type.
-            // At monomorphization time, F<_> gets replaced with a concrete type constructor.
-            // SAFETY: Trait bounds on HKT params are deferred to monomorphization.
-            // The TC validates bounds when concrete types are substituted, not during unification.
-            // This matches ImplTrait/DynTrait patterns above.
-            (ResolvedType::HigherKinded { .. }, _) | (_, ResolvedType::HigherKinded { .. }) => {
-                Ok(())
-            }
+            // ImplTrait / HigherKinded were removed in ROADMAP #18.
             // Auto-deref: &T unifies with T (implicit dereference)
             (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
                 self.unify(inner, other)
@@ -490,9 +478,7 @@ impl TypeChecker {
             | ResolvedType::Never
             | ResolvedType::Unknown
             | ResolvedType::Generic(_)
-            | ResolvedType::HigherKinded { .. }
-            | ResolvedType::Lifetime(_)
-            | ResolvedType::ImplTrait { .. } => false,
+            | ResolvedType::Lifetime(_) => false,
             // Wrapper types with one inner
             ResolvedType::Array(inner)
             | ResolvedType::Optional(inner)

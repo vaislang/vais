@@ -19,8 +19,7 @@ pub enum Variance {
     Contravariant,
 }
 
-/// Generic parameter kind - either a type parameter, const parameter, lifetime parameter,
-/// or higher-kinded type parameter
+/// Generic parameter kind - either a type parameter, const parameter, or lifetime parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenericParamKind {
     /// Type parameter with optional trait bounds (e.g., T, T: Display + Clone)
@@ -31,15 +30,6 @@ pub enum GenericParamKind {
     Lifetime {
         /// Lifetime bounds (e.g., 'a: 'b means 'a outlives 'b)
         bounds: Vec<String>,
-    },
-    /// Higher-kinded type parameter (e.g., F<_> or F<_, _>)
-    /// Represents a type constructor that takes `arity` type arguments.
-    /// Example: `F<_>` has arity 1, `F<_, _>` has arity 2
-    HigherKinded {
-        /// Number of type arguments this constructor takes
-        arity: usize,
-        /// Optional trait bounds on the type constructor
-        bounds: Vec<Spanned<String>>,
     },
 }
 
@@ -97,28 +87,9 @@ impl GenericParam {
         }
     }
 
-    /// Create a higher-kinded type parameter (e.g., F<_>)
-    pub fn new_higher_kinded(
-        name: Spanned<String>,
-        arity: usize,
-        bounds: Vec<Spanned<String>>,
-    ) -> Self {
-        Self {
-            name,
-            bounds: vec![],
-            kind: GenericParamKind::HigherKinded { arity, bounds },
-            variance: Variance::Invariant,
-        }
-    }
-
     /// Check if this is a const generic parameter
     pub fn is_const(&self) -> bool {
         matches!(self.kind, GenericParamKind::Const { .. })
-    }
-
-    /// Check if this is a higher-kinded type parameter
-    pub fn is_higher_kinded(&self) -> bool {
-        matches!(self.kind, GenericParamKind::HigherKinded { .. })
     }
 
     /// Check if this parameter is covariant

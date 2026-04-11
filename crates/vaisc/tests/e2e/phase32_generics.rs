@@ -4,7 +4,7 @@
 //! basic trait definitions/impls, and struct composition patterns.
 //!
 //! NOTE: Does not duplicate phase30.rs (basic monomorphization) or
-//! phase37.rs (trait alias / impl Trait).
+//! phase37.rs (trait alias).
 
 use super::helpers::*;
 

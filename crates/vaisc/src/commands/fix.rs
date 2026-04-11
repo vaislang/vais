@@ -779,11 +779,6 @@ fn collect_type_idents(ty: &Type, used: &mut HashSet<String>) {
                 collect_type_idents(&g.node, used);
             }
         }
-        Type::ImplTrait { bounds } => {
-            for b in bounds {
-                used.insert(b.node.clone());
-            }
-        }
         Type::Dependent { base, .. } => {
             collect_type_idents(&base.node, used);
         }

@@ -171,12 +171,6 @@ fn mangle_type_into(ty: &ResolvedType, buf: &mut String) {
             buf.push('_');
             mangle_type_into(element, buf);
         }
-        ResolvedType::HigherKinded { name, arity } => {
-            buf.push_str("hkt");
-            buf.push_str(&arity.to_string());
-            buf.push('_');
-            buf.push_str(name);
-        }
         _ => buf.push_str("unknown"),
     }
 }

@@ -396,9 +396,6 @@ impl JitCompiler {
                 lifetime: lifetime.clone(),
                 inner: Box::new(self.resolve_type(&inner.node)),
             },
-            Type::ImplTrait { bounds } => ResolvedType::ImplTrait {
-                bounds: bounds.iter().map(|b| b.node.clone()).collect(),
-            },
         }
     }
 

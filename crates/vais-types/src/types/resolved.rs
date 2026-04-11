@@ -250,23 +250,6 @@ pub enum ResolvedType {
 
     /// Lifetime parameter (e.g., 'a, 'static)
     Lifetime(String),
-
-    /// Existential type: `impl Trait` (Vais: `X Trait`)
-    /// Represents an opaque return type implementing the given trait bounds.
-    /// During monomorphization, resolved to the concrete return type.
-    ImplTrait {
-        bounds: Vec<String>,
-    },
-
-    /// Higher-kinded type parameter: a type constructor (e.g., F in F<_>)
-    /// Represents a type that takes type arguments to produce a concrete type.
-    /// Example: Vec is a type constructor of arity 1 (Vec<_>), HashMap has arity 2.
-    HigherKinded {
-        /// Name of the type constructor parameter
-        name: String,
-        /// Number of type arguments this constructor expects
-        arity: usize,
-    },
 }
 
 impl ResolvedType {
@@ -493,19 +476,6 @@ impl std::fmt::Display for ResolvedType {
                 write!(f, "&'{} mut {}", lifetime, inner)
             }
             ResolvedType::Lifetime(name) => write!(f, "'{}", name),
-            ResolvedType::ImplTrait { bounds } => {
-                write!(f, "impl {}", bounds.join(" + "))
-            }
-            ResolvedType::HigherKinded { name, arity } => {
-                write!(f, "{}<", name)?;
-                for i in 0..*arity {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "_")?;
-                }
-                write!(f, ">")
-            }
         }
     }
 }
@@ -904,22 +874,8 @@ mod tests {
         assert_eq!(ResolvedType::Generic("T".to_string()).to_string(), "T");
     }
 
-    #[test]
-    fn test_display_impl_trait() {
-        let it = ResolvedType::ImplTrait {
-            bounds: vec!["Display".to_string(), "Debug".to_string()],
-        };
-        assert_eq!(it.to_string(), "impl Display + Debug");
-    }
-
-    #[test]
-    fn test_display_higher_kinded() {
-        let hkt = ResolvedType::HigherKinded {
-            name: "F".to_string(),
-            arity: 2,
-        };
-        assert_eq!(hkt.to_string(), "F<_, _>");
-    }
+    // test_display_impl_trait / test_display_higher_kinded REMOVED (ROADMAP #18):
+    // ResolvedType::ImplTrait and ResolvedType::HigherKinded were removed.
 
     // ========== ResolvedType Equality ==========
 

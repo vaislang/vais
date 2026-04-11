@@ -624,7 +624,7 @@ fn test_generic_fn_two_params() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 22. checker_fn — ImplTrait in parameter position (must error)
+// 22. [REMOVED] ImplTrait parameter-position test (ROADMAP #18: ImplTrait removed)
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ═════════════════════════════════════════════════════════════════════════════

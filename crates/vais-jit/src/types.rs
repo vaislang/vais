@@ -85,10 +85,6 @@ impl TypeMapper {
             | ResolvedType::RefMutLifetime { inner, .. } => self.map_type(inner),
             // Lifetime marker: pointer
             ResolvedType::Lifetime(_) => Ok(self.pointer_type),
-            // impl Trait: monomorphized to concrete type at codegen, fallback to i64
-            ResolvedType::ImplTrait { .. } => Ok(types::I64),
-            // HKT: monomorphized to concrete type at codegen, fallback to i64
-            ResolvedType::HigherKinded { .. } => Ok(types::I64),
         }
     }
 

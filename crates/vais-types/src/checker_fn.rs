@@ -29,23 +29,8 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in f.params.iter().enumerate() {
-            // ImplTrait in parameter position is not supported —
-            // it would require universal quantification (generics desugaring)
-            // which is not yet implemented in Vais codegen.
-            if matches!(param.ty.node, Type::ImplTrait { .. }) {
-                return Err(TypeError::InferFailed {
-                    kind: "parameter".to_string(),
-                    name: param.name.node.clone(),
-                    context: format!(
-                        "{} — `impl Trait` is only supported in return position",
-                        f.name.node
-                    ),
-                    span: Some(param.name.span),
-                    suggestion: Some(
-                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
-                    ),
-                });
-            }
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
 
             let ty = if i < registered_param_types.len() {
                 registered_param_types[i].clone()
@@ -269,7 +254,7 @@ impl TypeChecker {
         self.check_unused_variables(&param_names);
 
         // Validate that no unresolved type variables survive into codegen for non-generic functions.
-        // Generic functions may legitimately contain Generic/ConstGeneric/ImplTrait/etc. in their
+        // Generic functions may legitimately contain Generic/ConstGeneric/etc. in their
         // signatures; those are checked at instantiation time instead.
         if f.generics.is_empty() {
             // Check parameter types
@@ -507,21 +492,8 @@ impl TypeChecker {
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
         for (i, param) in method.params.iter().enumerate() {
-            // ImplTrait in parameter position is not supported
-            if param.name.node != "self" && matches!(param.ty.node, Type::ImplTrait { .. }) {
-                return Err(TypeError::InferFailed {
-                    kind: "parameter".to_string(),
-                    name: param.name.node.clone(),
-                    context: format!(
-                        "{}::{} — `impl Trait` is only supported in return position",
-                        self_type_name, method.name.node
-                    ),
-                    span: Some(param.name.span),
-                    suggestion: Some(
-                        "Use a generic type parameter instead: `F foo<T: Trait>(x: T)`".to_string(),
-                    ),
-                });
-            }
+            // ImplTrait parameter-position rejection removed in ROADMAP #18:
+            // Type::ImplTrait no longer exists in the AST.
 
             // Handle &self parameter specially
             if param.name.node == "self" {
@@ -766,9 +738,9 @@ impl TypeChecker {
         match ty {
             ResolvedType::Var(id) => Some(format!("type variable #{}", id)),
             ResolvedType::Unknown => Some("unknown type".to_string()),
-            // Generic/ConstGeneric/ImplTrait/Associated/HigherKinded are OK in generic function
-            // DEFINITIONS — they only become errors when they survive monomorphization,
-            // so we don't check them here; they're checked at instantiation time.
+            // Generic/ConstGeneric/Associated are OK in generic function DEFINITIONS —
+            // they only become errors when they survive monomorphization, so we don't
+            // check them here; they're checked at instantiation time.
 
             // Recurse into compound types
             ResolvedType::Pointer(inner)
@@ -805,8 +777,8 @@ impl TypeChecker {
             }
             ResolvedType::Associated { base, generics, .. } => Self::contains_unresolved_type(base)
                 .or_else(|| generics.iter().find_map(Self::contains_unresolved_type)),
-            // All other types (primitives, Never, Generic, ConstGeneric, ImplTrait,
-            // HigherKinded, Lifetime) are acceptable outside of monomorphization contexts.
+            // All other types (primitives, Never, Generic, ConstGeneric, Lifetime)
+            // are acceptable outside of monomorphization contexts.
             _ => None,
         }
     }

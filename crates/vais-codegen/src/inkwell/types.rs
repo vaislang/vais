@@ -350,20 +350,6 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Dependent types are transparent at runtime — use base type
                 self.map_type(base)
             }
-            ResolvedType::ImplTrait { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved ImplTrait"),
-                    backend: String::from("inkwell"),
-                });
-                self.context.i64_type().into()
-            }
-            ResolvedType::HigherKinded { .. } => {
-                self.emit_warning_or_error(crate::CodegenWarning::UnresolvedTypeFallback {
-                    type_desc: String::from("unresolved HKT"),
-                    backend: String::from("inkwell"),
-                });
-                self.context.i64_type().into()
-            }
         }
     }
 }

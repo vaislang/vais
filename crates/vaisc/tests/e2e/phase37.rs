@@ -138,112 +138,11 @@ F main() -> i64 {
     compile_to_ir(source).expect("should parse nested trait aliases");
 }
 
-// ===== Existential Types (impl Trait) Tests =====
-
-#[test]
-fn e2e_impl_trait_return_parse() {
-    // Verify impl Trait return type parsing
-    let source = r#"
-W Numeric {
-    F value(&self) -> i64
-}
-
-S MyNum { n: i64 }
-X MyNum: Numeric {
-    F value(&self) -> i64 { self.n }
-}
-
-F make_num() -> X Numeric {
-    MyNum { n: 42 }
-}
-
-F main() -> i64 {
-    0
-}
-"#;
-    compile_to_ir(source).expect("should parse impl trait return");
-}
-
-#[test]
-fn e2e_impl_trait_multiple_bounds_parse() {
-    // Verify impl Trait with multiple bounds
-    let source = r#"
-W TraitA {
-    F method_a(&self) -> i64
-}
-
-W TraitB {
-    F method_b(&self) -> i64
-}
-
-S Impl { val: i64 }
-X Impl: TraitA {
-    F method_a(&self) -> i64 { self.val }
-}
-X Impl: TraitB {
-    F method_b(&self) -> i64 { self.val * 2 }
-}
-
-F make_thing() -> X TraitA + TraitB {
-    Impl { val: 10 }
-}
-
-F main() -> i64 {
-    0
-}
-"#;
-    compile_to_ir(source).expect("should parse multi-bound impl trait");
-}
-
-#[test]
-fn e2e_impl_trait_generic_function_parse() {
-    // Verify impl Trait in generic function
-    let source = r#"
-W Display {
-    F show(&self) -> i64
-}
-
-S MyType { n: i64 }
-X MyType: Display {
-    F show(&self) -> i64 { self.n }
-}
-
-F create<T: Display>(val: i64) -> X Display {
-    MyType { n: val }
-}
-
-F main() -> i64 {
-    0
-}
-"#;
-    compile_to_ir(source).expect("should parse impl trait in generic");
-}
-
-#[test]
-fn e2e_impl_trait_where_clause_parse() {
-    // Verify impl Trait with where clause
-    let source = r#"
-W Trait {
-    F method(&self) -> i64
-}
-
-S Thing { x: i64 }
-X Thing: Trait {
-    F method(&self) -> i64 { self.x }
-}
-
-F produce<T>() -> X Trait
-where T: Trait
-{
-    Thing { x: 99 }
-}
-
-F main() -> i64 {
-    0
-}
-"#;
-    compile_to_ir(source).expect("should parse impl trait with where");
-}
+// ===== Existential Types (impl Trait) — REMOVED (ROADMAP #18) =====
+// `X Trait` return-position existential types were removed from the language
+// in favor of explicit generic parameters (`F foo<T: Trait>() -> T`).
+// Prior tests (e2e_impl_trait_return_parse, e2e_impl_trait_multiple_bounds_parse,
+// e2e_impl_trait_generic_function_parse, e2e_impl_trait_where_clause_parse) deleted.
 
 // ===== Const Evaluation Tests =====
 //

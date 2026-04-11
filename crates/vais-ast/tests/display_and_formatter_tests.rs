@@ -307,21 +307,8 @@ fn test_display_type_ref_mut_lifetime() {
     assert_eq!(format!("{}", ty), "&'b mut Vec");
 }
 
-#[test]
-fn test_display_type_impl_trait_single() {
-    let ty = Type::ImplTrait {
-        bounds: vec![sp_str("Display")],
-    };
-    assert_eq!(format!("{}", ty), "impl Display");
-}
-
-#[test]
-fn test_display_type_impl_trait_multiple() {
-    let ty = Type::ImplTrait {
-        bounds: vec![sp_str("Display"), sp_str("Clone")],
-    };
-    assert_eq!(format!("{}", ty), "impl Display + Clone");
-}
+// test_display_type_impl_trait_{single,multiple} REMOVED (ROADMAP #18):
+// Type::ImplTrait was removed from the AST.
 
 // ============================================================================
 // ConstExpr Display Tests
@@ -422,7 +409,6 @@ fn test_generic_param_new_type() {
     let param = GenericParam::new_type(sp_str("T"), vec![sp_str("Display")]);
     assert_eq!(param.name.node, "T");
     assert!(!param.is_const());
-    assert!(!param.is_higher_kinded());
     assert!(!param.is_covariant());
     assert!(!param.is_contravariant());
     assert!(matches!(param.kind, GenericParamKind::Type { .. }));
@@ -446,7 +432,6 @@ fn test_generic_param_new_type_with_variance_contravariant() {
 fn test_generic_param_new_const() {
     let param = GenericParam::new_const(sp_str("N"), named_type("u64"));
     assert!(param.is_const());
-    assert!(!param.is_higher_kinded());
     assert!(param.bounds.is_empty());
 }
 
@@ -454,7 +439,6 @@ fn test_generic_param_new_const() {
 fn test_generic_param_new_lifetime() {
     let param = GenericParam::new_lifetime(sp_str("'a"), vec!["'b".to_string()]);
     assert!(!param.is_const());
-    assert!(!param.is_higher_kinded());
     match &param.kind {
         GenericParamKind::Lifetime { bounds } => {
             assert_eq!(bounds, &["'b"]);
@@ -463,19 +447,8 @@ fn test_generic_param_new_lifetime() {
     }
 }
 
-#[test]
-fn test_generic_param_new_higher_kinded() {
-    let param = GenericParam::new_higher_kinded(sp_str("F"), 2, vec![sp_str("Functor")]);
-    assert!(param.is_higher_kinded());
-    assert!(!param.is_const());
-    match &param.kind {
-        GenericParamKind::HigherKinded { arity, bounds } => {
-            assert_eq!(*arity, 2);
-            assert_eq!(bounds.len(), 1);
-        }
-        _ => panic!("Expected HigherKinded kind"),
-    }
-}
+// test_generic_param_new_higher_kinded REMOVED (ROADMAP #18):
+// GenericParamKind::HigherKinded was removed from the AST.
 
 // ============================================================================
 // BinOp Precedence Tests - Complete coverage

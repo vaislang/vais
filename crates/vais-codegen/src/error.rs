@@ -62,7 +62,7 @@ pub enum CodegenError {
     RecursionLimitExceeded(String),
 
     /// Internal compiler error: a type that should have been resolved before codegen
-    /// (e.g., generic, associated type, ImplTrait) was not resolved.
+    /// (e.g., generic, associated type) was not resolved.
     #[error("ICE: {0}")]
     InternalError(String),
 }
@@ -245,8 +245,8 @@ pub enum CodegenWarning {
         params: Vec<String>,
     },
 
-    /// An ICE-level type (Var, Unknown, Lifetime, ImplTrait, HKT)
-    /// reached codegen and fell back to i64.
+    /// An ICE-level type (Var, Unknown, Lifetime) reached codegen and fell
+    /// back to i64.
     UnresolvedTypeFallback {
         /// Description of the type that was unresolved
         type_desc: String,
@@ -615,11 +615,11 @@ mod tests {
     #[test]
     fn test_warning_unresolved_type_fallback_display() {
         let w = CodegenWarning::UnresolvedTypeFallback {
-            type_desc: "unresolved ImplTrait".to_string(),
+            type_desc: "bare lifetime".to_string(),
             backend: "inkwell".to_string(),
         };
         let msg = w.to_string();
-        assert!(msg.contains("unresolved ImplTrait"));
+        assert!(msg.contains("bare lifetime"));
         assert!(msg.contains("inkwell"));
         assert!(msg.contains("i64 fallback"));
     }

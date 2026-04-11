@@ -90,51 +90,8 @@ F main() -> i64 {
     assert_exit_code(source, 5);
 }
 
-// ==================== 2. ImplTrait Parameter Position TC Error ====================
-
-#[test]
-fn e2e_p126_impl_trait_return_position_ok() {
-    // ImplTrait in return position should parse and compile fine
-    let source = r#"
-W Numeric {
-    F value(&self) -> i64
-}
-S Num { v: i64 }
-X Num: Numeric {
-    F value(&self) -> i64 = self.v
-}
-F make_num() -> X Numeric {
-    Num { v: 42 }
-}
-F main() -> i64 {
-    42
-}
-"#;
-    compile_to_ir(source).expect("impl Trait in return position should compile");
-}
-
-#[test]
-fn e2e_p126_impl_trait_param_position_error() {
-    // ImplTrait in parameter position should be rejected by TC
-    let source = r#"
-W Printable {
-    F show(&self) -> i64
-}
-F display(item: X Printable) -> i64 = 0
-F main() -> i64 { 0 }
-"#;
-    let result = compile_to_ir(source);
-    assert!(
-        result.is_err(),
-        "impl Trait in parameter position should be rejected"
-    );
-    let err = result.unwrap_err();
-    assert!(
-        err.contains("impl Trait") || err.contains("return position"),
-        "Error should mention impl Trait: {}",
-        err
-    );
-}
+// ==================== 2. ImplTrait — REMOVED (ROADMAP #18) ====================
+// `X Trait` existential types were removed in favor of explicit generics.
 
 // ==================== 3. Never Type Codegen ====================
 

@@ -34,30 +34,15 @@ fn substitute_type_impl(
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         ResolvedType::Named { name, generics } => {
-            // HKT application: if name itself is a substitution target (e.g., F<A> where F=Vec),
-            // replace the constructor name and recurse into generic args.
-            // NOTE: This HKT application logic is mirrored in inference.rs::substitute_generics().
-            // Any changes here must be synchronized with that function.
+            // Direct substitution: if name itself is a substitution target (e.g., bare T → I64),
+            // return the substituted type.
             if let Some(subst) = substitutions.get(name) {
-                if !generics.is_empty() {
-                    // F<A> where F→Vec, A→i64 becomes Vec<i64>
-                    let concrete_name = match subst {
-                        ResolvedType::Named { name: concrete, .. }
-                        | ResolvedType::HigherKinded { name: concrete, .. } => concrete.clone(),
-                        _ => name.clone(),
-                    };
-                    let new_generics: Vec<ResolvedType> = generics
-                        .iter()
-                        .map(|g| substitute_type_impl(g, substitutions, depth + 1))
-                        .collect();
-                    return ResolvedType::Named {
-                        name: concrete_name,
-                        generics: new_generics,
-                    };
-                } else {
-                    // No generics applied — direct substitution (e.g., bare F)
+                if generics.is_empty() {
                     return subst.clone();
                 }
+                // Named<T> where the type constructor itself is substituted: fall through to
+                // recurse into generics, since higher-kinded substitutions were removed
+                // in ROADMAP #18 along with ResolvedType::HigherKinded.
             }
 
             // Early return if no generics to recurse into
@@ -233,11 +218,6 @@ fn substitute_type_impl(
                 size: new_size,
             }
         }
-        // HigherKinded: substitute if a mapping exists
-        ResolvedType::HigherKinded { name, .. } => substitutions
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| ty.clone()),
         ResolvedType::Map(k, v) => {
             let new_k = substitute_type_impl(k, substitutions, depth + 1);
             let new_v = substitute_type_impl(v, substitutions, depth + 1);
@@ -309,12 +289,6 @@ fn substitute_type_impl(
             ResolvedType::DynTrait {
                 trait_name: trait_name.clone(),
                 generics: new_generics,
-            }
-        }
-        ResolvedType::ImplTrait { bounds } => {
-            // Bounds are String trait names, no type substitution needed
-            ResolvedType::ImplTrait {
-                bounds: bounds.clone(),
             }
         }
         ResolvedType::Associated {

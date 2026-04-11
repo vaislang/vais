@@ -1,10 +1,11 @@
 //! Comprehensive type substitution coverage tests
 //!
-//! Targets uncovered lines in types/substitute.rs (229 uncovered, 58% coverage)
+//! Targets uncovered lines in types/substitute.rs.
 //! Focus: substitute_type for various ResolvedType variants including
-//! Vector, ConstGeneric, ConstArray, HigherKinded, Map, Range, FnPtr,
-//! DynTrait, ImplTrait, Associated, Lazy, Linear, Affine, Dependent,
-//! RefLifetime, RefMutLifetime
+//! Vector, ConstGeneric, ConstArray, Map, Range, FnPtr,
+//! DynTrait, Associated, Linear, Affine, Dependent,
+//! RefLifetime, RefMutLifetime.
+//! (HigherKinded/ImplTrait removed in ROADMAP #18.)
 
 use std::collections::HashMap;
 use vais_types::{substitute_type, EffectSet, ResolvedType};
@@ -203,38 +204,8 @@ fn test_substitute_const_generic_not_found() {
     assert_eq!(result, ty);
 }
 
-#[test]
-fn test_substitute_higher_kinded() {
-    let subs = make_sub(
-        "F",
-        ResolvedType::Named {
-            name: "Vec".to_string(),
-            generics: vec![],
-        },
-    );
-    let ty = ResolvedType::HigherKinded {
-        name: "F".to_string(),
-        arity: 1,
-    };
-    let result = substitute_type(&ty, &subs);
-    assert_eq!(
-        result,
-        ResolvedType::Named {
-            name: "Vec".to_string(),
-            generics: vec![],
-        }
-    );
-}
-
-#[test]
-fn test_substitute_higher_kinded_not_found() {
-    let subs = make_sub("T", ResolvedType::I64);
-    let ty = ResolvedType::HigherKinded {
-        name: "F".to_string(),
-        arity: 1,
-    };
-    assert_eq!(substitute_type(&ty, &subs), ty);
-}
+// test_substitute_higher_kinded{,_not_found} REMOVED (ROADMAP #18):
+// ResolvedType::HigherKinded was removed.
 
 #[test]
 fn test_substitute_map() {
@@ -332,16 +303,7 @@ fn test_substitute_dyn_trait_no_change() {
     assert_eq!(substitute_type(&ty, &subs), ty);
 }
 
-#[test]
-fn test_substitute_impl_trait() {
-    let subs = make_sub("T", ResolvedType::I64);
-    let ty = ResolvedType::ImplTrait {
-        bounds: vec!["Display".to_string()],
-    };
-    // ImplTrait bounds are Strings, no type substitution
-    let result = substitute_type(&ty, &subs);
-    assert_eq!(result, ty);
-}
+// test_substitute_impl_trait REMOVED (ROADMAP #18): ResolvedType::ImplTrait was removed.
 
 #[test]
 fn test_substitute_associated() {
