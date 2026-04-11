@@ -1710,7 +1710,7 @@ F main() -> i64 {
 }
 
 #[test]
-fn test_spawn_generates_call() {
+fn test_plain_call_generates_call() {
     let source = r#"
 F worker() -> i64 {
     R 1
@@ -1722,7 +1722,6 @@ F main() -> i64 {
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
-    // spawn expression should generate function call
     assert!(ir.contains("call i64 @worker()"));
 }
 

@@ -98,7 +98,6 @@ impl ExprVisitor for CodeGenerator {
                 inclusive,
             } => self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter),
             Expr::Await(inner) => self.visit_await(inner, counter),
-            Expr::Spawn(inner) => self.visit_spawn(inner, counter),
             Expr::Yield(inner) => self.visit_expr(inner, counter),
             Expr::Lambda { params, body, .. } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
@@ -473,50 +472,6 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_await(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         self.generate_await_expr(inner, counter)
-    }
-
-    fn visit_spawn(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
-        let inner_type = self.infer_expr_type(inner);
-        let (inner_val, inner_ir) = self.visit_expr(inner, counter)?;
-
-        // If inner is already a Future (async call), pass through
-        if matches!(inner_type, ResolvedType::Future(_)) {
-            let mut ir = inner_ir;
-            write_ir!(ir, "; Spawned async task at {}", inner_val);
-            return Ok((inner_val, ir));
-        }
-
-        // Sync value: wrap in an immediate Future state struct {i64 state=-1, i64 result}
-        let mut ir = inner_ir;
-        let state_ptr = self.next_temp(counter);
-        write_ir!(ir, "  {} = call i64 @malloc(i64 16)", state_ptr);
-        let typed_ptr = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = inttoptr i64 {} to {{i64, i64}}*",
-            typed_ptr,
-            state_ptr
-        );
-        let state_field = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0",
-            state_field,
-            typed_ptr
-        );
-        write_ir!(ir, "  store i64 -1, i64* {}", state_field);
-        let result_field = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1",
-            result_field,
-            typed_ptr
-        );
-        write_ir!(ir, "  store i64 {}, i64* {}", inner_val, result_field);
-
-        self.needs_sync_spawn_poll = true;
-        write_ir!(ir, "; Spawned sync task (wrapped) at {}", state_ptr);
-        Ok((state_ptr, ir))
     }
 
     fn visit_lambda(

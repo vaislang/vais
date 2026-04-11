@@ -1,6 +1,6 @@
 //! Special expression code generation.
 //!
-//! Handles Spawn, Comptime, and Range expressions.
+//! Handles Comptime and Range expressions.
 //! Note: Try (?) and Unwrap (!) are in expr_helpers_misc.rs.
 
 use vais_ast::*;
@@ -8,70 +8,6 @@ use vais_ast::*;
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 
 impl CodeGenerator {
-    /// Generate code for spawn expression: create a concurrent task.
-    /// For async function calls, the inner expression already returns a state pointer.
-    /// For sync expressions, spawn wraps the value in a Future struct:
-    ///   malloc {i64 state=-1, i64 result=value}, return pointer as i64.
-    #[inline(never)]
-    pub(crate) fn generate_spawn_expr(
-        &mut self,
-        inner: &Spanned<Expr>,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        let inner_type = self.infer_expr_type(inner);
-        let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
-
-        // If inner is already a Future (async call), pass through
-        let is_async_call = if let Expr::Call { func, .. } = &inner.node {
-            if let Expr::Ident(name) = &func.node {
-                self.types
-                    .functions
-                    .get(name.as_str())
-                    .is_some_and(|info| info.signature.is_async)
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if matches!(inner_type, vais_types::ResolvedType::Future(_)) || is_async_call {
-            return Ok((inner_val, inner_ir));
-        }
-
-        // Sync value: wrap in an immediate Future state struct {i64 state, i64 result}
-        let mut ir = inner_ir;
-        let state_ptr = self.next_temp(counter);
-        write_ir!(ir, "  {} = call i64 @malloc(i64 16)", state_ptr);
-        let typed_ptr = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = inttoptr i64 {} to {{i64, i64}}*",
-            typed_ptr,
-            state_ptr
-        );
-        // Store state = -1 (completed)
-        let state_field = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0",
-            state_field,
-            typed_ptr
-        );
-        write_ir!(ir, "  store i64 -1, i64* {}", state_field);
-        // Store result value
-        let result_field = self.next_temp(counter);
-        write_ir!(
-            ir,
-            "  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1",
-            result_field,
-            typed_ptr
-        );
-        write_ir!(ir, "  store i64 {}, i64* {}", inner_val, result_field);
-
-        self.needs_sync_spawn_poll = true;
-        Ok((state_ptr, ir))
-    }
-
     /// Generate code for comptime expression: evaluate at compile time and emit constant.
     #[inline(never)]
     pub(crate) fn generate_comptime_expr(

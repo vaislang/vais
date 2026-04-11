@@ -30,7 +30,6 @@ pub fn token_to_string(token: &Token) -> String {
         Token::SelfUpper => "Self",
         Token::True => "True",
         Token::False => "False",
-        Token::Spawn => "Spawn",
         Token::Await => "Await",
         Token::Yield => "Yield",
         Token::Const => "Const",

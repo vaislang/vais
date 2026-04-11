@@ -137,7 +137,6 @@ impl CodeGenerator {
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner)
             | Expr::Yield(inner)
             | Expr::Lazy(inner)
             | Expr::Force(inner)

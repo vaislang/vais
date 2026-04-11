@@ -209,10 +209,6 @@ impl JsCodeGenerator {
                 let e = self.generate_expr(&inner.node)?;
                 Ok(format!("(await {e})"))
             }
-            Expr::Spawn(inner) => {
-                let e = self.generate_expr(&inner.node)?;
-                Ok(format!("Promise.resolve().then(() => {e})"))
-            }
 
             // --- Error handling ---
             Expr::Try(inner) => {

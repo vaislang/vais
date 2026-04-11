@@ -1919,20 +1919,6 @@ F main() -> i64 = 0
     assert_exit_code(source, 0);
 }
 
-#[test]
-fn exec_spawn_compiles() {
-    let source = r#"
-F task() -> i64 = 42
-
-F main() -> i64 {
-    spawn task()
-    0
-}
-"#;
-    // spawn on sync function produces valid IR — sync spawn wraps value in Future struct
-    assert_exit_code(source, 0);
-}
-
 // --- Advanced Pattern Matching ---
 
 #[test]

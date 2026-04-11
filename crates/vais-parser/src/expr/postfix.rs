@@ -249,7 +249,6 @@ impl Parser {
                             | Token::If
                             | Token::Loop
                             | Token::Match
-                            | Token::Spawn
                             | Token::Pipe      // lambda
                             | Token::Move      // move lambda
                             | Token::Minus     // unary minus

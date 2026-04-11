@@ -424,24 +424,6 @@ impl Parser {
             Token::Match => {
                 return self.parse_match_expr(start);
             }
-            Token::Spawn => {
-                // Spawn can be: spawn { expr } or spawn expr
-                let body = if self.check(&Token::LBrace) {
-                    // spawn { expr }
-                    self.expect_skip(&Token::LBrace)?;
-                    let body = self.parse_expr()?;
-                    self.expect_skip(&Token::RBrace)?;
-                    body
-                } else {
-                    // spawn expr (e.g., spawn async_func(args))
-                    self.parse_unary()?
-                };
-                let end = self.prev_span().end;
-                return Ok(Spanned::new(
-                    Expr::Spawn(Box::new(body)),
-                    Span::new(start, end),
-                ));
-            }
             Token::Yield => {
                 // Yield expression: yield expr
                 let value = self.parse_expr()?;
@@ -1116,7 +1098,6 @@ impl Parser {
             // Multi-character keywords that can appear in import paths or identifiers
             Token::Io => "io".to_string(),
             Token::Mut => "mut".to_string(),
-            Token::Spawn => "spawn".to_string(),
             Token::Yield => "yield".to_string(),
             Token::SelfLower => "self".to_string(),
             Token::Str => "str".to_string(),

@@ -165,8 +165,6 @@ pub enum Expr {
         /// Capture mode for closure (by-value, move, by-ref, by-mut-ref)
         capture_mode: CaptureMode,
     },
-    /// Spawn: `spawn{expr}`
-    Spawn(Box<Spanned<Expr>>),
     /// Yield: `Y expr` - Yield a value from a generator function
     Yield(Box<Spanned<Expr>>),
     /// Comptime: `comptime { expr }` - Evaluated at compile time

@@ -536,7 +536,6 @@ fn is_vais_keyword(word: &str) -> bool {
             | "from"
             | "as"
             | "match"
-            | "spawn"
             | "defer"
     )
 }

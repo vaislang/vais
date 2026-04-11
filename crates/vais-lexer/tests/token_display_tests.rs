@@ -41,7 +41,6 @@ fn test_word_keyword_display() {
     assert_token_display(&Token::SelfUpper, "Self");
     assert_token_display(&Token::True, "true");
     assert_token_display(&Token::False, "false");
-    assert_token_display(&Token::Spawn, "spawn");
     assert_token_display(&Token::Await, "Y");
     assert_token_display(&Token::Const, "const");
     assert_token_display(&Token::Comptime, "comptime");

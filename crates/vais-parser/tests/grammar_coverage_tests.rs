@@ -968,13 +968,6 @@ mod expressions {
         assert_parses_expr("move |x| x + 1");
     }
 
-    // --- Spawn ---
-
-    #[test]
-    fn grammar_expr_spawn() {
-        assert_parses_expr("spawn foo()");
-    }
-
     // --- Yield ---
 
     #[test]
@@ -1413,7 +1406,6 @@ fn grammar_sync_expr_variants() {
             | Expr::Assign { .. }
             | Expr::AssignOp { .. }
             | Expr::Lambda { .. }
-            | Expr::Spawn(_)
             | Expr::Yield(_)
             | Expr::Comptime { .. }
             | Expr::MacroInvoke(_)

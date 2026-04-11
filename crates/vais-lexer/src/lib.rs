@@ -104,8 +104,6 @@ pub enum Token {
     True,
     #[token("false")]
     False,
-    #[token("spawn")]
-    Spawn,
     #[token("await")]
     #[token("Y", priority = 3)]
     Await,
@@ -399,7 +397,6 @@ impl fmt::Display for Token {
             Token::SelfUpper => write!(f, "Self"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
-            Token::Spawn => write!(f, "spawn"),
             Token::Await => write!(f, "Y"),
             Token::Const => write!(f, "const"),
             Token::Comptime => write!(f, "comptime"),
@@ -703,7 +700,7 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
                 // token is a Lifetime that started with `'` (meaning we are inside an
                 // unfinished single-quote string and hit an unexpected char like `\`).
                 let inside_single_quote = matches!(err_byte, Some(b'\'')) || {
-                    tokens.last().map_or(false, |last| {
+                    tokens.last().is_some_and(|last| {
                         matches!(last.token, Token::Lifetime(_))
                             && source.as_bytes().get(last.span.start) == Some(&b'\'')
                     })

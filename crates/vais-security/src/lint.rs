@@ -414,7 +414,7 @@ impl LintAnalyzer {
             Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.collect_usages_in_expr(&inner.node);
             }
-            Expr::Spawn(inner) | Expr::Lazy(inner) | Expr::Force(inner) => {
+            Expr::Lazy(inner) | Expr::Force(inner) => {
                 self.collect_usages_in_expr(&inner.node);
             }
             Expr::Assert { condition, message } => {

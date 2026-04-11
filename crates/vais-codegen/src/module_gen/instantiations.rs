@@ -863,7 +863,6 @@ pub(super) fn is_function_called_in_module(name: &str, module: &Module) -> bool 
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner)
             | Expr::Yield(inner) => expr_calls(name, &inner.node),
             Expr::Assign { target, value } | Expr::AssignOp { target, value, .. } => {
                 expr_calls(name, &target.node) || expr_calls(name, &value.node)

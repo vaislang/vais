@@ -460,9 +460,6 @@ impl TreeShaker {
             Expr::Ref(expr) | Expr::Deref(expr) => {
                 Self::collect_expr_deps(&expr.node, deps);
             }
-            Expr::Spawn(expr) => {
-                Self::collect_expr_deps(&expr.node, deps);
-            }
             Expr::Lambda { params, body, .. } => {
                 for param in params {
                     Self::collect_type_deps(&param.ty.node, deps);

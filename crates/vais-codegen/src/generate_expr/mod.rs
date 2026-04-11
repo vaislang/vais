@@ -223,9 +223,6 @@ impl CodeGenerator {
             // Await expression: poll the future until Ready
             Expr::Await(inner) => self.generate_await_expr(inner, counter),
 
-            // Spawn expression: create a concurrent task
-            Expr::Spawn(inner) => self.generate_spawn_expr(inner, counter),
-
             // Yield expression: yield a value from a generator.
             Expr::Yield(inner) => self.generate_yield_expr(inner, counter),
 

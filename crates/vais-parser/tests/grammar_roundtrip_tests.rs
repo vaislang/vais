@@ -24,7 +24,7 @@ fn collect_vais_files(dir: &Path) -> Vec<PathBuf> {
         .unwrap_or_else(|e| panic!("Failed to read directory {:?}: {}", dir, e))
         .filter_map(|entry| {
             let path = entry.ok()?.path();
-            if path.extension().map_or(false, |e| e == "vais") {
+            if path.extension().is_some_and(|e| e == "vais") {
                 Some(path)
             } else {
                 None

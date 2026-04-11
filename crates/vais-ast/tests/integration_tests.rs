@@ -1364,26 +1364,6 @@ fn test_macro_invoke_expr() {
 // ============================================================================
 
 #[test]
-fn test_expr_spawn() {
-    let expr = Expr::Spawn(Box::new(spanned(
-        Expr::Call {
-            func: Box::new(spanned(Expr::Ident("task".to_string()), 0, 4)),
-            args: vec![],
-        },
-        0,
-        6,
-    )));
-
-    match expr {
-        Expr::Spawn(inner) => match inner.node {
-            Expr::Call { .. } => {}
-            _ => panic!("Expected Call inside Spawn"),
-        },
-        _ => panic!("Expected Spawn expr"),
-    }
-}
-
-#[test]
 fn test_expr_yield_and_await() {
     let yield_expr = Expr::Yield(Box::new(spanned(Expr::Int(42), 0, 2)));
     let await_expr = Expr::Await(Box::new(spanned(

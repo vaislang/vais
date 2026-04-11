@@ -961,14 +961,6 @@ impl CodeGenerator {
                 ResolvedType::Range(Box::new(elem_type))
             }
             Expr::Unit => ResolvedType::Unit,
-            Expr::Spawn(inner) => {
-                let inner_ty = self.infer_expr_type(inner);
-                // Spawn wraps non-Future values in Future<T>
-                match inner_ty {
-                    ResolvedType::Future(_) => inner_ty,
-                    other => ResolvedType::Future(Box::new(other)),
-                }
-            }
             Expr::Await(inner) => {
                 let inner_ty = self.infer_expr_type(inner);
                 // Await unwraps Future<T> to T

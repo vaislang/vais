@@ -41,7 +41,7 @@ impl CodeGenerator {
                         let is_immediate = old_ssa_val
                             .chars()
                             .next()
-                            .map_or(false, |c| c.is_ascii_digit() || c == '-');
+                            .is_some_and(|c| c.is_ascii_digit() || c == '-');
                         let can_init_in_entry = is_scalar_ty && is_immediate;
                         if can_init_in_entry {
                             // Emit alloca + initial store (with original value) in entry.

@@ -30,26 +30,6 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Spawn(inner) => {
-                let inner_type = match self.check_expr(inner) {
-                    Ok(t) => t,
-                    Err(e) => return Some(Err(e)),
-                };
-                // Spawn semantics:
-                // - `spawn async_fn()` where inner is Future<T>: returns Future<T> as-is
-                //   (the async function already produces a Future; spawn schedules it)
-                // - `spawn expr` where inner is non-Future T: wraps in Future<T>
-                //   (creates an immediately-completed task; useful for lifting sync values
-                //   into async context, e.g., `spawn 42` → Future<i64>)
-                // Note: Current runtime uses synchronous fallback (no green threads/coroutines).
-                // The Future<T> wrapper preserves type-level async semantics for future
-                // runtime upgrades (e.g., work-stealing scheduler, coroutine state machines).
-                match inner_type {
-                    ResolvedType::Future(_) => Some(Ok(inner_type)),
-                    other => Some(Ok(ResolvedType::Future(Box::new(other)))),
-                }
-            }
-
             Expr::Yield(inner) => {
                 let inner_type = match self.check_expr(inner) {
                     Ok(t) => t,

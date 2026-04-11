@@ -515,7 +515,7 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Spawn(inner) | Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
+            Expr::Await(inner) | Expr::Try(inner) | Expr::Unwrap(inner) => {
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }

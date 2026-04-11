@@ -349,9 +349,6 @@ impl SecurityAnalyzer {
             Expr::Lambda { body, .. } => {
                 self.analyze_expr(&body.node, body.span);
             }
-            Expr::Spawn(expr) => {
-                self.analyze_expr(&expr.node, expr.span);
-            }
             Expr::Comptime { body } => {
                 self.analyze_expr(&body.node, body.span);
             }

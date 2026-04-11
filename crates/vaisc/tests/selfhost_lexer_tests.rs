@@ -1734,7 +1734,6 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
         Token::As => 27,        // TOK_KW_AS
         Token::Const => 28,     // TOK_KW_CONST
-        Token::Spawn => 29,     // TOK_KW_SPAWN
         Token::Macro => 30,     // TOK_KW_MACRO
 
         // Additional keywords (121-128)

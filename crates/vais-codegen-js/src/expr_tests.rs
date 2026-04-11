@@ -388,19 +388,6 @@ fn test_generate_await() {
 }
 
 #[test]
-fn test_generate_spawn() {
-    let mut gen = JsCodeGenerator::new();
-    let expr = Expr::Spawn(Box::new(Spanned::new(
-        Expr::Ident("task".to_string()),
-        Span::new(0, 4),
-    )));
-    assert_eq!(
-        gen.generate_expr(&expr).unwrap(),
-        "Promise.resolve().then(() => task)"
-    );
-}
-
-#[test]
 fn test_generate_try_operator() {
     let mut gen = JsCodeGenerator::new();
     let expr = Expr::Try(Box::new(Spanned::new(

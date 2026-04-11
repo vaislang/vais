@@ -824,12 +824,6 @@ fn test_expr_lambda() {
 }
 
 #[test]
-fn test_expr_spawn() {
-    let expr = Expr::Spawn(Box::new(sp_expr(Expr::Int(42))));
-    assert!(matches!(expr, Expr::Spawn(_)));
-}
-
-#[test]
 fn test_expr_yield() {
     let expr = Expr::Yield(Box::new(sp_expr(Expr::Int(42))));
     assert!(matches!(expr, Expr::Yield(_)));

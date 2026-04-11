@@ -46,7 +46,7 @@ impl ReplHelper {
             // Single-letter keywords
             "F", "S", "E", "I", "L", "M", "W", "X", "A", "R", "B", "C", "T", "U", "P",
             // Common keywords
-            "mut", "self", "Self", "true", "false", "spawn", "await", "weak", "clone",
+            "mut", "self", "Self", "true", "false", "await", "weak", "clone",
             // Primitive types
             "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
             "bool", "str", "char",

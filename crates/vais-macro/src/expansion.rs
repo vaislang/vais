@@ -422,7 +422,6 @@ impl<'a> AstExpander<'a> {
             Expr::Ref(inner) => Expr::Ref(Box::new(self.expand_expr(*inner)?)),
             Expr::Deref(inner) => Expr::Deref(Box::new(self.expand_expr(*inner)?)),
             Expr::Spread(inner) => Expr::Spread(Box::new(self.expand_expr(*inner)?)),
-            Expr::Spawn(inner) => Expr::Spawn(Box::new(self.expand_expr(*inner)?)),
             Expr::Yield(inner) => Expr::Yield(Box::new(self.expand_expr(*inner)?)),
             Expr::Comptime { body } => Expr::Comptime {
                 body: Box::new(self.expand_expr(*body)?),

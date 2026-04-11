@@ -360,13 +360,6 @@ fn test_parse_defer() {
 }
 
 #[test]
-fn test_parse_spawn() {
-    let source = r#"F test() -> i64 = spawn 42"#;
-    let module = parse_ok(source);
-    assert_eq!(module.items.len(), 1);
-}
-
-#[test]
 fn test_parse_comptime() {
     let source = "F test() -> i64 = comptime { 4 * 8 }";
     let module = parse_ok(source);

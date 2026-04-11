@@ -205,9 +205,6 @@ pub trait ExprVisitor {
     /// Visit an await expression
     fn visit_await(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
 
-    /// Visit a spawn expression
-    fn visit_spawn(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
-
     /// Visit a lambda expression
     fn visit_lambda(
         &mut self,

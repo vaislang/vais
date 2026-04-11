@@ -142,7 +142,6 @@ impl TypeChecker {
             | Expr::Try(inner)
             | Expr::Unwrap(inner)
             | Expr::Await(inner)
-            | Expr::Spawn(inner)
             | Expr::Yield(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }

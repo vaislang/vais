@@ -231,11 +231,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Force: evaluate a lazy value (check computed flag, call thunk if needed)
             Expr::Force(inner) => self.generate_force(&inner.node),
 
-            // Spawn: evaluate inner expression to create a concurrent task.
-            // In Inkwell backend, async functions compile as synchronous, so spawn
-            // evaluates the inner expression immediately (eager evaluation).
-            Expr::Spawn(inner) => self.generate_expr(&inner.node),
-
             // Yield: evaluate the inner expression and return its value.
             // Yields the value to the generator's caller. In the current synchronous
             // model, this evaluates and returns the value directly.

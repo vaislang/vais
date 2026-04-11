@@ -351,13 +351,6 @@ impl EffectInferrer {
                 effects
             }
 
-            // Spawn has async effect
-            Expr::Spawn(inner) => {
-                let mut effects = self.infer_expr_effects(&inner.node, functions);
-                effects.add(Effect::Async);
-                effects
-            }
-
             // Yield suspends the generator
             Expr::Yield(inner) => self.infer_expr_effects(&inner.node, functions),
 

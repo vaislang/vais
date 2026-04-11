@@ -8,11 +8,9 @@ use vais_ast::{Expr, Param, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    /// Resolve the poll function name for an await expression, using `self` to
-    /// check whether the called function is actually async. This is critical for
-    /// Spawn expressions: if the inner call targets a non-async function, Spawn
-    /// codegen wraps the result in a sync wrapper struct and we must use
-    /// `__sync_spawn__poll` (not the inner function's `__poll`).
+    /// Resolve the poll function name for an await expression. Matches `Call`
+    /// and `MethodCall` expressions whose callee names an async function; other
+    /// expressions return `None` and the caller falls back to the generic path.
     #[inline(never)]
     pub(crate) fn resolve_poll_func_name(&self, expr: &Expr) -> Option<String> {
         match expr {
@@ -32,27 +30,6 @@ impl CodeGenerator {
                 }
             }
             Expr::MethodCall { method, .. } => Some(format!("{}__poll", method.node)),
-            Expr::Spawn(inner) => {
-                // Check whether the inner call is to an async function.
-                // This must mirror generate_expr(Spawn)'s passthrough condition:
-                // async calls produce a Future and are passed through, so we use
-                // the inner function's __poll. Non-async calls get wrapped in a
-                // sync struct, so we must use __sync_spawn__poll.
-                if let Expr::Call { func, .. } = &inner.node {
-                    if let Expr::Ident(name) = &func.node {
-                        let is_async = self
-                            .types
-                            .functions
-                            .get(name.as_str())
-                            .is_some_and(|info| info.signature.is_async);
-                        if is_async {
-                            return Some(format!("{}__poll", name));
-                        }
-                    }
-                }
-                // For non-async or non-Call inner, Spawn creates a sync wrapper
-                Some("__sync_spawn__poll".to_string())
-            }
             Expr::SelfCall => None,
             _ => None,
         }
