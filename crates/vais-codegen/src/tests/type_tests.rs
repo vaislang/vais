@@ -4,9 +4,10 @@ use vais_parser::parse;
 // ==================== Strict Type Mode Tests ====================
 
 #[test]
-fn test_strict_mode_generic_fallback_remains_warning() {
-    // Default mode (strict_type_mode=on, strict_generic_mode=off): Generic fallback stays
-    // a warning and codegen still succeeds, preserving the historical Phase 127 contract.
+fn test_generic_identity_monomorphized_succeeds() {
+    // Phase 191 v3: strict generic mode is now unconditional. `identity<T>` used
+    // as `identity(42)` should be fully monomorphized by Phase 67 before reaching
+    // codegen, so compilation must succeed.
     let source = r#"
 F identity<T>(x: T) -> T { x }
 F main() -> i64 { identity(42) }
@@ -18,14 +19,12 @@ F main() -> i64 { identity(42) }
     gen.set_resolved_functions(checker.get_all_functions().clone());
     gen.set_type_aliases(checker.get_type_aliases().clone());
     gen.set_strict_type_mode(true);
-    gen.set_strict_generic_mode(false);
     let instantiations = checker.get_generic_instantiations();
     let result = if instantiations.is_empty() {
         gen.generate_module(&module)
     } else {
         gen.generate_module_with_instantiations(&module, &instantiations)
     };
-    // Should succeed — Generic fallback remains allowed while strict_generic_mode is off.
     assert!(result.is_ok(), "Expected success, got: {:?}", result.err());
 }
 
@@ -95,40 +94,32 @@ fn test_emit_warning_or_error_strict_mode() {
 }
 
 #[test]
-fn test_emit_warning_or_error_strict_mode_generic_fallback() {
-    let mut gen = CodeGenerator::new("test");
-    gen.set_strict_type_mode(true);
-    // Historical behavior: without `strict_generic_mode`, GenericFallback stays a warning
-    // even when `strict_type_mode` is on.
-    gen.set_strict_generic_mode(false);
+fn test_emit_warning_or_error_generic_fallback_always_errors() {
+    // Phase 191 v3: `GenericFallback` is **unconditionally** promoted to
+    // `InternalError`. The historical `strict_generic_mode` opt-in and its
+    // setter were removed; there's no way to downgrade this warning.
+    let gen = CodeGenerator::new("test");
     let result = gen.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
         param: String::from("T"),
         context: String::from("test_fn"),
     });
-    assert!(result.is_ok());
-    assert_eq!(gen.get_warnings().len(), 1);
-}
-
-#[test]
-fn test_emit_warning_or_error_strict_generic_mode_promotes() {
-    // Phase 191: `strict_generic_mode` promotes GenericFallback to a hard error.
-    let mut gen = CodeGenerator::new("test");
-    gen.set_strict_generic_mode(true);
-    let result = gen.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
-        param: String::from("T"),
-        context: String::from("test_fn"),
-    });
-    assert!(result.is_err());
-    // No warning should have been recorded because it was promoted to an error.
+    assert!(
+        result.is_err(),
+        "Phase 191 v3 must always error on GenericFallback, got: {:?}",
+        result
+    );
+    // No warning recorded — it was promoted to an error.
     assert_eq!(gen.get_warnings().len(), 0);
-    // Toggling the flag off restores warning behavior.
-    gen.set_strict_generic_mode(false);
-    let result = gen.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
+    // Disabling the other strict mode does NOT change this — GenericFallback
+    // is always an error regardless of `strict_type_mode`.
+    let mut gen2 = CodeGenerator::new("test");
+    gen2.set_strict_type_mode(false);
+    let result2 = gen2.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
         param: String::from("U"),
         context: String::from("test_fn"),
     });
-    assert!(result.is_ok());
-    assert_eq!(gen.get_warnings().len(), 1);
+    assert!(result2.is_err());
+    assert_eq!(gen2.get_warnings().len(), 0);
 }
 
 #[cfg(feature = "inkwell-codegen")]

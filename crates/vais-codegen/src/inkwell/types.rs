@@ -19,11 +19,9 @@ pub(crate) struct TypeMapper<'ctx> {
     /// When true, ICE-level fallbacks become errors instead of warnings.
     /// Set from `InkwellCodeGenerator::set_strict_type_mode()`.
     pub(crate) strict_type_mode: bool,
-    /// When true, un-monomorphized Generic/ConstGeneric reaching `map_type`
-    /// is promoted from warning to deferred `InternalError` (Phase 191).
-    /// Set from `InkwellCodeGenerator::set_strict_generic_mode()` or via
-    /// the `VAIS_STRICT_GENERIC=1` environment variable.
-    pub(crate) strict_generic_mode: bool,
+    // Phase 191 v3 (2026-04-11): `strict_generic_mode` removed. Un-monomorphized
+    // `Generic(_)` / `ConstGeneric(_)` reaching `map_type` is always promoted to
+    // a deferred `InternalError` via `pending_error`.
     /// Deferred error from `map_type` when strict mode is enabled.
     /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from
     /// ICE-level fallbacks are stored here for the caller to check via
@@ -40,10 +38,6 @@ impl<'ctx> TypeMapper<'ctx> {
             generic_substitutions: HashMap::new(),
             warnings: std::cell::RefCell::new(Vec::new()),
             strict_type_mode: true,
-            // Phase 191 v2: default on (see init.rs rationale).
-            strict_generic_mode: std::env::var("VAIS_STRICT_GENERIC")
-                .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
-                .unwrap_or(true),
             pending_error: std::cell::RefCell::new(None),
         }
     }
@@ -53,15 +47,16 @@ impl<'ctx> TypeMapper<'ctx> {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or store a deferred error in strict modes for ICE-level fallbacks.
+    /// Emit a warning, or store a deferred error for ICE-level fallbacks.
     ///
-    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors from strict modes
-    /// are stored in `pending_error` for the caller to check via `take_pending_error()`.
-    /// The i64 fallback value is still returned so `map_type` can complete, but the
-    /// caller should check for and propagate the error before using the result.
+    /// Since `map_type` returns `BasicTypeEnum` (not `Result`), errors are stored
+    /// in `pending_error` for the caller to check via `take_pending_error()`.
+    /// The `i64` placeholder value is still returned so `map_type` can complete,
+    /// but the caller must propagate the error before using the result.
     ///
     /// - `strict_type_mode` promotes `UnresolvedTypeFallback` to a deferred error.
-    /// - `strict_generic_mode` (Phase 191) promotes `GenericFallback` to a deferred error.
+    /// - `GenericFallback` is **always** promoted to a deferred error
+    ///   (Phase 191 v3 — unconditional).
     fn emit_warning_or_error(&self, warning: crate::CodegenWarning) {
         if self.strict_type_mode {
             if let crate::CodegenWarning::UnresolvedTypeFallback {
@@ -69,7 +64,6 @@ impl<'ctx> TypeMapper<'ctx> {
                 ref backend,
             } = warning
             {
-                // Store the first error (don't overwrite if one is already pending)
                 let mut pending = self.pending_error.borrow_mut();
                 if pending.is_none() {
                     *pending = Some(crate::CodegenError::InternalError(format!(
@@ -80,21 +74,19 @@ impl<'ctx> TypeMapper<'ctx> {
                 return;
             }
         }
-        if self.strict_generic_mode {
-            if let crate::CodegenWarning::GenericFallback {
-                ref param,
-                ref context,
-            } = warning
-            {
-                let mut pending = self.pending_error.borrow_mut();
-                if pending.is_none() {
-                    *pending = Some(crate::CodegenError::InternalError(format!(
-                        "[strict-generic] un-monomorphized generic parameter '{}' reached codegen in '{}' — i64 fallback disabled (Phase 191)",
-                        param, context
-                    )));
-                }
-                return;
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            let mut pending = self.pending_error.borrow_mut();
+            if pending.is_none() {
+                *pending = Some(crate::CodegenError::InternalError(format!(
+                    "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                    param, context
+                )));
             }
+            return;
         }
         self.emit_warning(warning);
     }
@@ -242,14 +234,16 @@ impl<'ctx> TypeMapper<'ctx> {
                     .into()
             }
             ResolvedType::Generic(name) => {
-                // Check if we have a substitution for this generic parameter.
+                // Phase 191 v3: un-monomorphized generic parameters are a hard codegen
+                // error. With transitive instantiation (Phase 67) active, the
+                // `None` branch should only be reached on a Phase 67 bug. The
+                // deferred error is stored via `emit_warning_or_error`; the
+                // `i64_type()` return is a placeholder so `map_type` can finish
+                // its walk — the caller must check `take_pending_error()` before
+                // using the result.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // Generic parameter without substitution — use i64 fallback (default) or
-                    // defer an `InternalError` when `strict_generic_mode` is enabled (Phase 191).
-                    // With transitive instantiation (Phase 67), this path is now mostly
-                    // reached only for un-specialized fallback versions of generic functions.
                     self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: name.clone(),
                         context: String::from("<inkwell>"),
@@ -344,13 +338,10 @@ impl<'ctx> TypeMapper<'ctx> {
                 self.map_type(inner)
             }
             ResolvedType::ConstGeneric(name) => {
-                // Check if we have a substitution for this const generic parameter.
+                // Phase 191 v3: same unconditional-error policy as `Generic` above.
                 if let Some(concrete) = self.generic_substitutions.get(name.as_str()).cloned() {
                     self.map_type(&concrete)
                 } else {
-                    // ConstGeneric parameter without substitution — same policy as
-                    // `Generic` above. Phase 191: `strict_generic_mode` promotes this
-                    // to a deferred `InternalError` via `emit_warning_or_error`.
                     self.emit_warning_or_error(crate::CodegenWarning::GenericFallback {
                         param: name.clone(),
                         context: String::from("<inkwell>"),

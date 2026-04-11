@@ -199,24 +199,14 @@ impl CodeGenerator {
                 }
             }
             ResolvedType::Generic(param) => {
-                // Check if we have a substitution for this generic parameter
+                // Phase 191 v3: un-monomorphized generic parameters are a hard
+                // codegen error. Transitive instantiation (Phase 67) is expected
+                // to substitute every call site before codegen runs; a leak here
+                // is an ICE. `emit_warning_or_error` unconditionally promotes
+                // `GenericFallback` to `InternalError` and the `?` propagates it.
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // Generic parameter without substitution.
-                    //
-                    // With transitive instantiation (Phase 67), this path is now mostly reached
-                    // only for un-specialized fallback versions of generic functions — i.e., when
-                    // generate_module_with_instantiations generates a backward-compatible i64 version
-                    // of a generic function that has no concrete instantiation.
-                    //
-                    // Phase 191: `strict_generic_mode` promotes this warning to a hard
-                    // `InternalError` via `emit_warning_or_error`. Default mode keeps the
-                    // historical i64 fallback.
-                    //
-                    // NOTE: returning Err here can break nested types like &T → i64 instead of
-                    // i64*, because the error short-circuits the wrapper type conversion. Strict
-                    // generic mode is therefore opt-in and expected to surface those leaks.
                     let context = self
                         .fn_ctx
                         .current_function
@@ -227,18 +217,19 @@ impl CodeGenerator {
                         param: param.clone(),
                         context,
                     })?;
-                    String::from("i64")
+                    // Unreachable: emit_warning_or_error always returns Err for
+                    // GenericFallback after Phase 191 v3. Keep `unreachable!()`
+                    // as a type-level marker so the match arm still types-checks.
+                    unreachable!(
+                        "Phase 191 v3: emit_warning_or_error must return Err for GenericFallback"
+                    );
                 }
             }
             ResolvedType::ConstGeneric(param) => {
-                // Check if we have a substitution for this const generic parameter
+                // Phase 191 v3: same policy as `Generic` above.
                 if let Some(concrete) = self.get_generic_substitution(param) {
                     self.type_to_llvm_impl(&concrete)?
                 } else {
-                    // ConstGeneric parameter without substitution.
-                    // Same rationale as Generic above. Phase 191 routes through
-                    // `emit_warning_or_error` so `strict_generic_mode` can promote
-                    // the warning to an `InternalError`.
                     let context = self
                         .fn_ctx
                         .current_function
@@ -249,7 +240,9 @@ impl CodeGenerator {
                         param: param.clone(),
                         context,
                     })?;
-                    String::from("i64")
+                    unreachable!(
+                        "Phase 191 v3: emit_warning_or_error must return Err for GenericFallback"
+                    );
                 }
             }
             ResolvedType::Vector { element, lanes } => {

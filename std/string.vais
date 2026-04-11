@@ -728,3 +728,83 @@ F str_from_int_rev_rec(buf: i64, tmp: i64, idx: i64, pos: i64) -> i64 {
         str_from_int_rev_rec(buf, tmp, idx - 1, pos + 1)
     }
 }
+
+# =====================================================
+# str_slice: substring [start, end) from a raw str pointer
+# Clamps start/end to valid range. Returns new null-terminated i64 pointer.
+# =====================================================
+
+F str_slice(s: i64, start: i64, end: i64) -> i64 {
+    len := strlen(s)
+    # Clamp bounds
+    s_start := I start < 0 { 0 } EL { start }
+    s_end := I end > len { len } EL { end }
+    I s_start > s_end { s_end = s_start }
+    new_len := s_end - s_start
+    I new_len <= 0 {
+        buf := malloc(1)
+        store_byte(buf, 0)
+        R buf
+    }
+    buf := malloc(new_len + 1)
+    memcpy(buf, s + s_start, new_len)
+    store_byte(buf + new_len, 0)
+    buf
+}
+
+# =====================================================
+# str_to_f64: parse a null-terminated string as f64
+# Supports: optional leading '-', integer part, optional '.' + fractional part.
+# Returns 0.0 on empty or invalid input.
+# =====================================================
+
+F str_to_f64(s: i64) -> f64 {
+    len := strlen(s)
+    I len <= 0 { R 0.0 }
+    # Detect sign
+    is_neg := 0
+    idx := 0
+    first := load_byte(s)
+    I first == 45 {
+        is_neg = 1
+        idx = 1
+    }
+    # Parse integer part
+    int_val := str_to_f64_int(s, len, idx, 0.0)
+    int_end := str_to_f64_int_end(s, len, idx)
+    # Check for decimal point (ASCII 46 = '.')
+    result := I int_end < len && load_byte(s + int_end) == 46 {
+        frac := str_to_f64_frac(s, len, int_end + 1, 0.1, 0.0)
+        int_val + frac
+    } EL {
+        int_val
+    }
+    I is_neg == 1 { 0.0 - result } EL { result }
+}
+
+F str_to_f64_int(s: i64, len: i64, idx: i64, acc: f64) -> f64 {
+    I idx >= len { acc }
+    EL {
+        c := load_byte(s + idx)
+        I c < 48 || c > 57 { acc }
+        EL { str_to_f64_int(s, len, idx + 1, acc * 10.0 + (c - 48) as f64) }
+    }
+}
+
+F str_to_f64_int_end(s: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { idx }
+    EL {
+        c := load_byte(s + idx)
+        I c < 48 || c > 57 { idx }
+        EL { str_to_f64_int_end(s, len, idx + 1) }
+    }
+}
+
+F str_to_f64_frac(s: i64, len: i64, idx: i64, place: f64, acc: f64) -> f64 {
+    I idx >= len { acc }
+    EL {
+        c := load_byte(s + idx)
+        I c < 48 || c > 57 { acc }
+        EL { str_to_f64_frac(s, len, idx + 1, place * 0.1, acc + (c - 48) as f64 * place) }
+    }
+}

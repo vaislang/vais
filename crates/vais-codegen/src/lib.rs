@@ -252,14 +252,13 @@ pub struct CodeGenerator {
     // `VAIS_STRICT_TYPE_MODE=0` env var.
     pub strict_type_mode: bool,
 
-    // When true, un-monomorphized Generic/ConstGeneric reaching codegen is
-    // promoted from warning to `InternalError` (Phase 191 — i64 fallback
-    // removal). Default: false (preserves the historical i64 fallback path
-    // for backward compatibility). Opt in via `set_strict_generic_mode(true)`
-    // or `VAIS_STRICT_GENERIC=1` env var. Once enabled, any un-substituted
-    // Generic(_)/ConstGeneric(_) reaching `type_to_llvm` will abort codegen
-    // with an ICE-level error instead of silently erasing to `i64`.
-    pub strict_generic_mode: bool,
+    // Phase 191 v3 (2026-04-11, iter 15): the historical `i64` fallback for
+    // un-monomorphized `Generic(_)` / `ConstGeneric(_)` was removed entirely.
+    // Any such type reaching `type_to_llvm` now aborts codegen with an
+    // ICE-level `InternalError`. The previous `strict_generic_mode` opt-in
+    // flag, its setter, and the `VAIS_STRICT_GENERIC` env var are all gone —
+    // the only remaining behavior is "strict." Keep this comment anchor so
+    // future PRs can grep `Phase 191` and find the full history.
 
     // String interning pool for identifier deduplication.
     // Reduces memory usage by storing each unique function/struct/variable name once.

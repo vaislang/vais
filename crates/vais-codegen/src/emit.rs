@@ -62,13 +62,34 @@ impl CodeGenerator {
         }
     }
 
-    /// Emit global variable declarations.
-    pub(crate) fn emit_global_vars(&self, ir: &mut String) {
+    /// Emit global variable declarations, with optional ownership filtering.
+    ///
+    /// If `owned` is `None`, every registered global is emitted as a full
+    /// definition (legacy single-module path). If `owned` is `Some(set)`,
+    /// globals in the set are emitted as definitions and globals **not** in
+    /// the set are emitted as `external global` declarations instead. This
+    /// is the multi-module path used by `subset.rs` — see ROADMAP Phase 2
+    /// iter 15 (monitor D1 link pass) for the duplicate-symbol bug this
+    /// prevents.
+    pub(crate) fn emit_global_vars_with_ownership(
+        &self,
+        ir: &mut String,
+        owned: Option<&std::collections::HashSet<String>>,
+    ) {
         if self.types.globals.is_empty() {
             return;
         }
         for (name, info) in &self.types.globals {
             let llvm_ty = self.type_to_llvm(&info._ty);
+            // Non-owner module in a multi-module build: emit as `external
+            // global` (declaration only). clang will resolve the symbol to
+            // the owner module's definition at link time.
+            if let Some(set) = owned {
+                if !set.contains(name) {
+                    write_ir!(ir, "@{} = external global {}", name, llvm_ty);
+                    continue;
+                }
+            }
             // Evaluate constant initializer to a literal value
             let init_val = match &info._value.node {
                 vais_ast::Expr::Int(n) => n.to_string(),
@@ -117,6 +138,13 @@ impl CodeGenerator {
             write_ir!(ir, "@{} = {} {} {}", name, linkage, llvm_ty, init_val);
         }
         ir.push('\n');
+    }
+
+    /// Thin wrapper matching the legacy signature — emits every global as a
+    /// full definition. Used by the single-module path (`mod.rs`,
+    /// `instantiations.rs`) which always owns every global in its module.
+    pub(crate) fn emit_global_vars(&self, ir: &mut String) {
+        self.emit_global_vars_with_ownership(ir, None);
     }
 
     /// Emit body IR, lambda functions, and vtable globals.

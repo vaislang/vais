@@ -109,14 +109,8 @@ impl CodeGenerator {
             multi_error_mode: false,
             collected_errors: Vec::new(),
             strict_type_mode: true,
-            // Phase 191 v2: default on. E2E measurement on 2026-04-11 showed
-            // 2514/0/0 pass under `VAIS_STRICT_GENERIC=1`, confirming the
-            // historical i64 fallback path is not actually exercised in the
-            // tested codebase. Can still be opted out via
-            // `set_strict_generic_mode(false)` or `VAIS_STRICT_GENERIC=0`.
-            strict_generic_mode: std::env::var("VAIS_STRICT_GENERIC")
-                .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
-                .unwrap_or(true),
+            // Phase 191 v3: `strict_generic_mode` field removed entirely.
+            // See the comment block above the field declaration in `lib.rs`.
             ident_pool: crate::string_pool::IdentPool::with_capacity(256),
             warnings: std::cell::RefCell::new(Vec::new()),
             ref_constants: Vec::new(),
@@ -260,16 +254,10 @@ impl CodeGenerator {
         self.strict_type_mode = strict;
     }
 
-    /// Enable strict generic mode (Phase 191 — i64 fallback removal).
-    ///
-    /// When enabled, any un-monomorphized `Generic(_)` or `ConstGeneric(_)`
-    /// reaching `type_to_llvm` is promoted from warning to
-    /// [`CodegenError::InternalError`] instead of silently erasing to `i64`.
-    /// Default: off (preserves historical fallback path). Can also be toggled
-    /// via the `VAIS_STRICT_GENERIC=1` environment variable at construction.
-    pub fn set_strict_generic_mode(&mut self, strict: bool) {
-        self.strict_generic_mode = strict;
-    }
+    // `set_strict_generic_mode` removed in Phase 191 v3 — strict behavior is
+    // now unconditional and the opt-in flag no longer exists. Call sites
+    // previously using this setter should be deleted (the default is
+    // equivalent to the old "strict on" mode).
 
     /// Record a structured codegen warning.
     ///
@@ -280,13 +268,14 @@ impl CodeGenerator {
         self.warnings.borrow_mut().push(warning);
     }
 
-    /// Emit a warning, or return an error in strict modes for ICE-level fallbacks.
+    /// Emit a warning, or return an error for ICE-level fallbacks.
     ///
     /// - In `strict_type_mode`, [`CodegenWarning::UnresolvedTypeFallback`] is
     ///   promoted to [`CodegenError::InternalError`].
-    /// - In `strict_generic_mode` (Phase 191), [`CodegenWarning::GenericFallback`]
-    ///   is likewise promoted to [`CodegenError::InternalError`].
-    /// All other warning types remain warnings in all modes.
+    /// - [`CodegenWarning::GenericFallback`] is **always** promoted to
+    ///   [`CodegenError::InternalError`] (Phase 191 v3 — unconditional). The
+    ///   historical `strict_generic_mode` opt-in was removed.
+    /// All other warning types remain warnings.
     #[inline(never)]
     pub(crate) fn emit_warning_or_error(
         &self,
@@ -304,17 +293,15 @@ impl CodeGenerator {
                 )));
             }
         }
-        if self.strict_generic_mode {
-            if let crate::CodegenWarning::GenericFallback {
-                ref param,
-                ref context,
-            } = warning
-            {
-                return Err(crate::CodegenError::InternalError(format!(
-                    "[strict-generic] un-monomorphized generic parameter '{}' reached codegen in '{}' — i64 fallback disabled (Phase 191)",
-                    param, context
-                )));
-            }
+        if let crate::CodegenWarning::GenericFallback {
+            ref param,
+            ref context,
+        } = warning
+        {
+            return Err(crate::CodegenError::InternalError(format!(
+                "un-monomorphized generic parameter '{}' reached codegen in '{}' — Phase 191 v3 (no fallback)",
+                param, context
+            )));
         }
         self.emit_warning(warning);
         Ok(())

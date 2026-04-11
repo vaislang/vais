@@ -51,6 +51,13 @@ impl CodeGenerator {
         // and register functions — tracking which are "ours" vs external
         let mut module_functions: std::collections::HashSet<String> =
             std::collections::HashSet::new();
+        // ROADMAP Phase 2 iter 15: track which globals belong to THIS subset so
+        // `emit_global_vars_subset` can emit non-owner modules as `external global`
+        // declarations instead of duplicate definitions. Without this, every
+        // module in a multi-module build emits `@G = global …` and clang reports
+        // "duplicate symbol _G" at link time (monitor ROADMAP #7 smoke test).
+        let mut module_globals: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for (idx, item) in full_module.items.iter().enumerate() {
             let is_ours = index_set.contains(&idx);
@@ -133,6 +140,14 @@ impl CodeGenerator {
                 }
                 Item::Global(global_def) => {
                     self.register_global(global_def)?;
+                    // Track ownership so emit_global_vars_subset can emit this
+                    // definition only in the owner module (see module_globals
+                    // comment above). Items not in `index_set` are from other
+                    // modules in the same compilation and must be emitted as
+                    // `external global` declarations there.
+                    if is_ours {
+                        module_globals.insert(global_def.name.node.clone());
+                    }
                 }
                 Item::TraitAlias(ta) => {
                     let bounds: Vec<String> = ta.bounds.iter().map(|b| b.node.clone()).collect();
@@ -749,7 +764,10 @@ impl CodeGenerator {
         }
 
         self.emit_string_constants(&mut ir, is_main_module);
-        self.emit_global_vars(&mut ir);
+        // ROADMAP Phase 2 iter 15: emit globals owned by this subset as real
+        // definitions, and all other registered globals as `external global`
+        // declarations so clang can resolve them across modules at link time.
+        self.emit_global_vars_with_ownership(&mut ir, Some(&module_globals));
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
         // Add WASM runtime for main module
