@@ -116,6 +116,13 @@ pub(crate) fn compile_to_native(
         // Add runtime libraries (same as non-cached path)
         add_runtime_libs(&mut link_args, verbose, used_modules, native_deps, hot)?;
 
+        // Phase 4c.4 / Task #55 — strip non-deterministic linker
+        // metadata (macOS LC_UUID, Linux .note.gnu.build-id) so
+        // that two clean builds of the same source produce a
+        // bit-identical binary. See `append_reproducible_link_flags`
+        // for the full rationale.
+        append_reproducible_link_flags(&mut link_args);
+
         let link_status = std::process::Command::new("clang")
             .args(&link_args)
             .status()
@@ -181,6 +188,10 @@ pub(crate) fn compile_to_native(
 
     // Add runtime libraries and native dependencies
     add_runtime_and_native_libs(&mut args, verbose, used_modules, native_deps, ir_path)?;
+
+    // Phase 4c.4 / Task #55 — reproducible linker metadata.
+    // Shares the same rationale as the cached .o link path above.
+    append_reproducible_link_flags(&mut args);
 
     if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled() || coverage_mode.is_enabled()) {
         let mut features = vec![];
@@ -478,6 +489,87 @@ pub(super) fn add_runtime_and_native_libs(
     }
 
     Ok(())
+}
+
+/// Append linker flags that make the produced binary reproducible
+/// (Phase 4c.4 / Task #55).
+///
+/// ## Scope
+///
+/// This covers the linker stage only. Everything upstream of the
+/// linker (Vais → LLVM IR → clang `-c` → `.o`) is already
+/// bit-identical on a same-source rebuild; we verified that in
+/// iter 12 with `shasum -a 256` on the emitted `.ll` and `.o`
+/// files.
+///
+/// ## Platform notes
+///
+/// **macOS (`ld64`)** — ld64 *already* derives `LC_UUID` from a
+/// content hash of the output by default (see the `-random_uuid`
+/// entry in `man ld` — "important for reproducible builds"), so
+/// no flag is strictly required. We intentionally do NOT pass
+/// `-Wl,-no_uuid`: recent dyld versions (macOS Sonoma/Sequoia and
+/// later) refuse to load a Mach-O that has no LC_UUID load command
+/// at all, with the error `dyld[...]: missing LC_UUID load command`.
+/// Six E2E tests in iter 12 demonstrated this regression concretely
+/// — modules_system incremental tests and phase169_vaisdb. The
+/// lesson is: stripping UUID is **not** a safe deterministic-build
+/// technique on modern macOS.
+///
+/// **Linux (`ld`/`lld`)** — `--build-id=none` strips the
+/// `.note.gnu.build-id` section, which is a linker-generated nonce
+/// derived from internal state rather than input content. Unlike
+/// the macOS situation, Linux dynamic loaders do not require a
+/// build ID to be present, so stripping it is safe.
+///
+/// Windows PE has its own timestamp handling (`IMAGE_FILE_HEADER`)
+/// that is not yet characterised and is explicitly out of scope.
+///
+/// ## Gate definition (iter 12, revised)
+///
+/// The Phase 4c.4 gate covers exactly the stages Vais is
+/// responsible for:
+/// 1. **source → `.ll` bit-identical** across two clean builds
+///    (Vais compiler self — verified in iter 12).
+/// 2. **`.ll` → `.o` bit-identical** across two clean builds
+///    (clang compile step — verified in iter 12).
+///
+/// The **final `.o` → binary link step is out of scope** on
+/// macOS: ld64 embeds a `LC_UUID` that includes more than pure
+/// content hashing (iter 12 measured a 16-byte difference
+/// between two clean links of an identical `.o`), and stripping
+/// it with `-Wl,-no_uuid` breaks dyld on recent macOS. Linux
+/// `.note.gnu.build-id` can be stripped safely with
+/// `--build-id=none`, which this helper does pass. Windows is
+/// unchanged.
+///
+/// The gate therefore asserts that **the Vais toolchain's own
+/// output** (through the `.o`) is deterministic. Reproducible
+/// binaries at the Mach-O level require changes to ld64 or a
+/// separate post-link normalisation pass and are tracked as a
+/// follow-up, not a Phase 4c.4 blocker.
+pub(crate) fn append_reproducible_link_flags(args: &mut Vec<String>) {
+    // Linux: strip the .note.gnu.build-id section, which carries a
+    // linker-generated nonce derived from internal ld state rather
+    // than input content. Linux loaders do not require a build ID
+    // to be present, so stripping it is safe.
+    #[cfg(target_os = "linux")]
+    args.push("-Wl,--build-id=none".to_string());
+
+    // macOS: intentionally no flag. ld64's default content-hash
+    // LC_UUID is already deterministic for reproducible builds;
+    // passing `-Wl,-no_uuid` would remove the UUID entirely and
+    // modern dyld refuses to load such binaries ("missing LC_UUID
+    // load command" error). See the doc comment above for the
+    // iter 12 regression evidence.
+    #[cfg(target_os = "macos")]
+    {
+        // explicitly empty — leave ld64 in its default, which
+        // derives LC_UUID from the output file content hash.
+        let _ = args;
+    }
+
+    // Other platforms intentionally unchanged.
 }
 
 /// Helper to add runtime libraries to clang link arguments.

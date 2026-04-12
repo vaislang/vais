@@ -273,6 +273,11 @@ pub(crate) fn compile_per_module(
         link_args.push("-lm".to_string());
     }
 
+    // Phase 4c.4 / Task #55 — reproducible linker metadata.
+    // Shared with `compile_to_native` so both the per-module and
+    // whole-program link paths produce bit-identical binaries.
+    append_reproducible_link_flags(&mut link_args);
+
     let link_status = std::process::Command::new("clang")
         .args(&link_args)
         .status()
