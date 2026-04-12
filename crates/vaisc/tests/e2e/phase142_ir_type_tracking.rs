@@ -85,7 +85,7 @@ F main() -> i64 {
     R x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 30);
 }
 
 #[test]
@@ -102,7 +102,7 @@ F main() -> i64 {
     R x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 20);
 }
 
 #[test]
@@ -118,7 +118,7 @@ F main() -> i64 {
     R x
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 42);
 }
 
 // ==================== 3. Width propagation in expressions ====================
@@ -136,7 +136,7 @@ F main() -> i64 {
     R result
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 10);
 }
 
 #[test]

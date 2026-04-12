@@ -69,7 +69,7 @@ fn e2e_phase158_strict_f32_to_f64_return() {
 F widen(x: f32) -> f64 { x }
 F main() -> i64 { widen(1.0 as f32) as i64 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 1);
 }
 
 /// Float literal inference: f64 literal infers to f32 when context expects f32.
