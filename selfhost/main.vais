@@ -820,6 +820,10 @@ F parser_advance(p: i64) -> i64 {
     pos
 }
 
+F parser_check(p: i64, kind: i64) -> i64 {
+    I parser_current_kind(p) == kind { 1 } EL { 0 }
+}
+
 F parser_expect(p: i64, kind: i64) -> i64 {
     I parser_current_kind(p) == kind {
         parser_advance(p)
