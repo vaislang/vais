@@ -535,6 +535,19 @@ impl CodeGenerator {
             }
         }
 
+        // Float literal → integer: a float literal (e.g., "3.140000e+00") typed as i64 by
+        // the "everything is i64" fallback needs fptosi when cast to i64. Without this,
+        // `ret i64 3.140000e+00` is emitted which is invalid LLVM IR.
+        if src_llvm_ty.starts_with('i') && llvm_type.starts_with('i') {
+            let is_float_literal =
+                !val.starts_with('%') && (val.contains("e+") || val.contains("e-"));
+            if is_float_literal {
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = fptosi double {} to {}", result, val, llvm_type);
+                return Ok((result, ir));
+            }
+        }
+
         // Float width coercion: f32 ↔ f64 (fpext/fptrunc)
         if (src_llvm_ty == "float" && llvm_type == "double")
             || (src_llvm_ty == "double" && llvm_type == "float")
@@ -556,7 +569,18 @@ impl CodeGenerator {
             let is_float_literal =
                 !val.starts_with('%') && (val.contains("e+") || val.contains("e-"));
             if is_float_literal {
-                // Return the literal directly — it's already a valid LLVM float constant
+                if llvm_type == "float" {
+                    // f32 target: parse double literal → truncate to f32 → emit as LLVM hex.
+                    // LLVM requires float constants to be exactly representable or in hex form.
+                    // Hex format uses the double-precision encoding of the f32 value.
+                    if let Ok(d) = val.parse::<f64>() {
+                        let f = d as f32;
+                        let f_as_double = f as f64;
+                        let bits = f_as_double.to_bits();
+                        return Ok((format!("0x{:016X}", bits), ir));
+                    }
+                }
+                // double target: return the literal directly
                 return Ok((val.clone(), ir));
             }
             let result = self.next_temp(counter);

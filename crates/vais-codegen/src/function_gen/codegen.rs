@@ -251,15 +251,33 @@ impl CodeGenerator {
 
                 // main() with f64/f32 body needs fptosi conversion to i64
                 let value = if is_main_float_ret {
-                    let float_ty = if matches!(ret_type_raw, ResolvedType::F32) {
-                        "float"
+                    let is_float_literal = !value.starts_with('%')
+                        && (value.contains("e+") || value.contains("e-"));
+                    let is_int_literal =
+                        !value.starts_with('%') && value.chars().all(|c| c.is_ascii_digit() || c == '-');
+                    if is_int_literal {
+                        // Integer literal (e.g., 42) for `F main() -> f64 = 42` — already i64
+                        value
+                    } else if is_float_literal || value.starts_with('%') {
+                        // Float literals are always in double format (e.g., "1.000000e+00").
+                        // Use the actual LLVM type for variables (%foo), but always "double"
+                        // for bare float literals — even when declared return is f32.
+                        let float_ty = if value.starts_with('%') {
+                            if matches!(ret_type_raw, ResolvedType::F32) {
+                                "float"
+                            } else {
+                                "double"
+                            }
+                        } else {
+                            "double" // bare literal is always double-precision format
+                        };
+                        let converted = format!("%main_fptosi.{}", counter);
+                        counter += 1;
+                        write_ir!(ir, "  {} = fptosi {} {} to i64", converted, float_ty, value);
+                        converted
                     } else {
-                        "double"
-                    };
-                    let converted = format!("%main_fptosi.{}", counter);
-                    counter += 1;
-                    write_ir!(ir, "  {} = fptosi {} {} to i64", converted, float_ty, value);
-                    converted
+                        value
+                    }
                 } else {
                     value
                 };
@@ -281,6 +299,20 @@ impl CodeGenerator {
                     );
                     write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else {
+                    // Phase 191: float literal returned as integer — needs fptosi.
+                    // E.g., `F main() -> i64 = 3.14` generates `ret i64 3.140000e+00`
+                    // which is invalid; should be `fptosi double 3.14... to i64`.
+                    let value = if ret_llvm.starts_with('i')
+                        && !value.starts_with('%')
+                        && (value.contains("e+") || value.contains("e-"))
+                    {
+                        let tmp = self.next_temp(&mut counter);
+                        write_ir!(ir, "  {} = fptosi double {} to {}", tmp, value, ret_llvm);
+                        tmp
+                    } else {
+                        value
+                    };
+
                     // Coerce return value width if needed. Use i64 as assumed source
                     // for small int returns (body convention is "everything is i64").
                     let ret_width = Self::int_type_width(&ret_llvm);
