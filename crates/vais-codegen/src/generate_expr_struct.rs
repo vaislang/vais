@@ -73,14 +73,20 @@ impl CodeGenerator {
                     // Case 2: Outside specialized context (e.g., main()) — check if exactly
                     // one specialization exists via struct_aliases. This handles cases like
                     // `Entry { key: 42, value: "hello" }` where Entry<str> was generated.
-                    // Only safe when there's exactly one specialization (alias is unique).
+                    // Only safe when there's exactly one specialization AND we're not inside
+                    // the base generic method of the same struct (which uses i64-uniform params).
+                    let is_self_struct_method = self
+                        .fn_ctx
+                        .current_function
+                        .as_deref()
+                        .is_some_and(|fn_name| fn_name.starts_with(&format!("{}_", name.node)));
                     let generated_count = self
                         .generics
                         .generated_structs
                         .keys()
                         .filter(|k| k.starts_with(&format!("{}$", name.node)))
                         .count();
-                    if generated_count == 1 {
+                    if generated_count == 1 && !is_self_struct_method {
                         if let Some(mangled) = self.generics.struct_aliases.get(&name.node) {
                             if let Some(specialized) =
                                 self.types.structs.get(mangled.as_str()).cloned()
@@ -93,8 +99,7 @@ impl CodeGenerator {
                             (type_name.clone(), struct_info.fields.clone())
                         }
                     } else {
-                        // Multiple specializations — can't determine which one to use.
-                        // Fall back to base struct (i64-uniform layout).
+                        // Multiple specializations or self-struct method — fall back to base.
                         (type_name.clone(), struct_info.fields.clone())
                     }
                 }

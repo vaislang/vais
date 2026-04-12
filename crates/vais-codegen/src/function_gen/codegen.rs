@@ -515,6 +515,48 @@ impl CodeGenerator {
         let resolved_struct_name = self.resolve_struct_name(struct_name);
         let struct_name = resolved_struct_name.as_str();
 
+        // Phase 191: For specialized structs (e.g., "Vec$f32"), set up generic
+        // substitutions so method params/return types use concrete types instead
+        // of falling back to i64. Extract base name, look up AST generic params
+        // and specialized struct fields to build the substitution map.
+        let old_substitutions = if let Some(dollar_pos) = struct_name.find('$') {
+            let base_name = &struct_name[..dollar_pos];
+            if let Some(struct_def) = self.generics.struct_defs.get(base_name).cloned() {
+                if let Some(specialized) = self.types.structs.get(struct_name).cloned() {
+                    let type_params: Vec<_> = struct_def
+                        .generics
+                        .iter()
+                        .filter(|g| {
+                            !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. })
+                        })
+                        .collect();
+                    // Match generic params to concrete types from specialized fields:
+                    // struct_def.fields has generic types (T), specialized.fields has concrete types (f32)
+                    let mut subst = std::collections::HashMap::new();
+                    for (ast_field, spec_field) in
+                        struct_def.fields.iter().zip(specialized.fields.iter())
+                    {
+                        if let vais_ast::Type::Named { name, .. } = &ast_field.ty.node {
+                            if type_params.iter().any(|p| &p.name.node == name) {
+                                subst.insert(name.clone(), spec_field.1.clone());
+                            }
+                        }
+                    }
+                    if !subst.is_empty() {
+                        Some(std::mem::replace(&mut self.generics.substitutions, subst))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
@@ -801,6 +843,12 @@ impl CodeGenerator {
 
         self.fn_ctx.current_function = None;
         self.fn_ctx.current_return_type = None;
+
+        // Restore previous substitutions if we set them for a specialized struct
+        if let Some(old) = old_substitutions {
+            self.generics.substitutions = old;
+        }
+
         Ok(ir)
     }
 }
