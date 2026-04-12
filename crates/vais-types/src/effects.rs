@@ -540,8 +540,49 @@ impl EffectInferrer {
         effects
     }
 
-    /// Get declared effects from function attributes
-    fn get_declared_effects(&self, func: &Function) -> Option<EffectSet> {
+    /// Get declared effects from a function's Phase 4c.3 prefix keyword
+    /// (`pure F`, `io F`, `alloc F`) or, for backwards compatibility, from
+    /// its `#[pure]` / `#[effect(...)]` attributes.
+    ///
+    /// The prefix keyword takes precedence over attributes when both are
+    /// present — the keyword is the user's direct declaration, while
+    /// attributes predate Task #54 and may coexist in legacy code.
+    ///
+    /// # Subtype rules (Phase 4c.3 / Task #54)
+    ///
+    /// Returns the *maximum permitted* effect set for each prefix:
+    /// - `pure F` → `{}` (pure only, no IO, no Alloc, no Panic, no ...)
+    /// - `io F`   → `{Read, Write, IO}` (may also call `pure` callees)
+    /// - `alloc F` → `{Read, Write, Alloc}` (may also call `pure` callees)
+    ///
+    /// `Effect::Async` and `Effect::Panic` are *not* added to the
+    /// declared ceiling: async requires the `A F` modifier (handled
+    /// orthogonally in `infer_function_effects`) and panics require
+    /// the `partial F` modifier (Phase 4c.2 totality gate). This keeps
+    /// effect prefixes composable with the existing modifiers.
+    pub(crate) fn get_declared_effects(&self, func: &Function) -> Option<EffectSet> {
+        // Phase 4c.3 keyword prefix — highest precedence.
+        if let Some(prefix) = func.declared_effect {
+            let mut effects = EffectSet::pure();
+            match prefix {
+                EffectPrefix::Pure => {
+                    // Pure ceiling: empty effect set; the union below stays pure.
+                }
+                EffectPrefix::Io => {
+                    effects.add(Effect::Read);
+                    effects.add(Effect::Write);
+                    effects.add(Effect::IO);
+                }
+                EffectPrefix::Alloc => {
+                    effects.add(Effect::Read);
+                    effects.add(Effect::Write);
+                    effects.add(Effect::Alloc);
+                }
+            }
+            return Some(effects);
+        }
+
+        // Legacy attribute-based effect declarations (pre-Task #54).
         for attr in &func.attributes {
             match attr.name.as_str() {
                 "pure" => return Some(EffectSet::pure()),

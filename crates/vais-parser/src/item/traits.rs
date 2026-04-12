@@ -178,6 +178,9 @@ impl Parser {
                 } else {
                     false
                 };
+                // Phase 4c.3 (Task #54) — optional effect prefix on impl
+                // methods. Canonical order: `partial pure F method()`.
+                let declared_effect = self.parse_effect_prefix();
                 // Check for async method: `A F method_name(...)`
                 let is_async = if self.check(&Token::Async) {
                     self.advance();
@@ -186,7 +189,13 @@ impl Parser {
                     false
                 };
                 self.expect(&Token::Function)?;
-                let func = self.parse_function(false, is_async, is_partial, method_attrs)?;
+                let func = self.parse_function(
+                    false,
+                    is_async,
+                    is_partial,
+                    declared_effect,
+                    method_attrs,
+                )?;
                 let end = self.prev_span().end;
                 methods.push(Spanned::new(func, Span::new(start, end)));
             }

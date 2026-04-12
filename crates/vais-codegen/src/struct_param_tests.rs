@@ -70,6 +70,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(Spanned::new(Expr::Int(42), Span::default()))),
             is_pub: true,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }
@@ -239,6 +241,8 @@ mod tests {
             ))),
             is_pub: true,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         };

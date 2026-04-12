@@ -184,6 +184,8 @@ impl<'a> AstExpander<'a> {
             // `partial F foo()` that the user wrote stays partial after
             // expansion; a total function stays total.
             is_partial: func.is_partial,
+            // Preserve the user-written effect prefix across macro expansion.
+            declared_effect: func.declared_effect,
             attributes: func.attributes,
             where_clause: func.where_clause,
         })

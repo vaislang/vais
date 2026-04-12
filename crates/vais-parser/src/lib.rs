@@ -507,6 +507,10 @@ impl Parser {
                     // totality gate (it hoists top-level user statements
                     // whose panic-freedom was never declared).
                     is_partial: true,
+                    // Synthetic main wrapper carries no declared effect —
+                    // user code is inferred; the Phase 4c.3 subtype rule
+                    // only fires on explicit `pure/io/alloc` prefixes.
+                    declared_effect: None,
                     attributes: vec![],
                     where_clause: vec![],
                 };
@@ -1105,6 +1109,9 @@ impl Parser {
             // Synthetic test wrapper — exempt from totality gate, same as
             // the synthetic main hoist above.
             is_partial: true,
+            // Synthetic test wrapper — no declared effect, same rationale
+            // as the synthetic main hoist.
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         };

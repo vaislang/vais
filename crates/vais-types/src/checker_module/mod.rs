@@ -194,6 +194,18 @@ impl TypeChecker {
         };
         self.try_or_collect(crate::totality::enforce_totality(&local_module_for_totality))?;
 
+        // Phase 4c.3 / Task #54 — effect purity gate.
+        //
+        // Walks the same local-only module slice that the totality gate
+        // uses and verifies that every `pure F` / `io F` / `alloc F`
+        // prefixed function stays within its declared effect ceiling.
+        // Functions without an effect prefix are inferred and do not
+        // participate directly — see `crate::effect_purity` for the
+        // subtype rules and the exact builtin classification.
+        self.try_or_collect(crate::effect_purity::enforce_effect_purity(
+            &local_module_for_totality,
+        ))?;
+
         // Third pass: ownership and borrow checking (skip imported items)
         if let Some(strict) = self.ownership_check_mode {
             let mut ownership_checker = ownership::OwnershipChecker::new_collecting();

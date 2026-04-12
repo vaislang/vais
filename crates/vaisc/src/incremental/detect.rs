@@ -881,6 +881,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))), // old body
             is_pub: false,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }))];
@@ -910,6 +912,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(42)))), // new body
             is_pub: false,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }))];
@@ -929,6 +933,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))),
             is_pub: false,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }))];
@@ -941,6 +947,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(make_spanned(Expr::Int(0)))),
             is_pub: false,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }))];

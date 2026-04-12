@@ -134,6 +134,9 @@ fn make_fn(name: &str, params: Vec<Param>, ret_type: Option<Type>, body_expr: Ex
         // the default totality contract. If a derive-backed body needs to
         // panic it must construct a `partial`-marked function explicitly.
         is_partial: false,
+        // Derive-generated methods carry no declared effect — the
+        // subtype rule only kicks in when the user writes a prefix.
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }

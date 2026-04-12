@@ -22,6 +22,7 @@ mod phase110_auto_free;
 mod phase111_error_paths;
 mod phase4b1_implicit_try;
 mod phase4c2_partial;
+mod phase4c3_effect;
 mod phase114_monomorphization;
 mod phase115_wasm;
 mod phase119_type_system;

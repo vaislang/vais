@@ -91,6 +91,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(Spanned::new(nested_field_access, Span::default()))),
             is_pub: true,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         }
@@ -182,6 +184,8 @@ mod tests {
             body: FunctionBody::Expr(Box::new(Spanned::new(simple_field_access, Span::default()))),
             is_pub: true,
             is_async: false,
+            is_partial: false,
+            declared_effect: None,
             attributes: vec![],
             where_clause: vec![],
         };

@@ -367,6 +367,8 @@ fn test_try_operator_codegen() {
                 ))),
                 is_pub: false,
                 is_async: false,
+                is_partial: false,
+                declared_effect: None,
                 attributes: vec![],
                 where_clause: vec![],
             }),

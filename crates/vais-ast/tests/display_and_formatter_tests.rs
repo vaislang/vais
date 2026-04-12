@@ -1379,6 +1379,8 @@ fn test_formatter_format_function_simple() {
         }))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }));
@@ -1398,6 +1400,8 @@ fn test_formatter_format_function_pub_async() {
         )))))]),
         is_pub: true,
         is_async: true,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     }));
@@ -1618,6 +1622,8 @@ fn test_formatter_format_impl() {
                 }))),
                 is_pub: false,
                 is_async: false,
+                is_partial: false,
+                declared_effect: None,
                 attributes: vec![],
                 where_clause: vec![],
             },
@@ -1806,6 +1812,8 @@ fn test_function_clone() {
         body: FunctionBody::Expr(Box::new(sp_expr(Expr::Ident("x".to_string())))),
         is_pub: false,
         is_async: false,
+        is_partial: false,
+        declared_effect: None,
         attributes: vec![],
         where_clause: vec![],
     };

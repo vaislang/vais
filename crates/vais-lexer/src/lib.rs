@@ -121,6 +121,15 @@ pub enum Token {
     As,
 
     // === Effect System Keywords ===
+    // `pure F foo()`, `io F foo()` — Phase 4c.3 (Task #54) prefix
+    // modifiers. `pure` and `io` are full reserved keywords. `alloc`
+    // is a **contextual** keyword: the lexer still emits it as
+    // `Token::Ident("alloc")`, and the parser reinterprets it as an
+    // effect prefix only when it occurs in a function-modifier
+    // position (before `F` / `A F`, after `P` / `partial`). This
+    // preserves backwards compatibility with the existing `std/
+    // allocator.vais` and `std/arena.vais` modules, which use `alloc`
+    // as a method / variable name in ~40 places.
     #[token("pure")]
     Pure,
     #[token("effect")]

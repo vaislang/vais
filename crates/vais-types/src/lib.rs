@@ -22,6 +22,7 @@ mod builtins;
 mod checker_expr;
 mod checker_fn;
 mod checker_module;
+mod effect_purity;
 mod free_vars;
 mod lookup;
 mod resolve;
