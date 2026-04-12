@@ -5,14 +5,14 @@
 //! 2. Generic struct field access after monomorphization (codegen)
 //! 3. Slice source open-end slicing `slice[start..]` (codegen)
 
-use crate::helpers::assert_compiles;
+use crate::helpers::{assert_compiles, assert_exit_code};
 
 // ==================== Task 1: Nested Slice Coercion ====================
 
 /// &Vec<i64> should unify with &[i64] parameter via Ref(Vec<T>)↔Slice(T) coercion
 #[test]
 fn e2e_phase164_basic_vec_to_slice_coercion() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     data: i64,
@@ -35,13 +35,14 @@ F main() -> i64 {
     result
 }
 "#,
+        0,
     );
 }
 
 /// Nested slice type: function accepting &[&[i64]] — TC should parse and accept
 #[test]
 fn e2e_phase164_nested_slice_param_type() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F process(data: &[&[i64]]) -> i64 {
     0
@@ -51,6 +52,7 @@ F main() -> i64 {
     0
 }
 "#,
+        0,
     );
 }
 
@@ -60,7 +62,7 @@ F main() -> i64 {
 /// The ROADMAP pattern: data[offset..] where data is &[u8]
 #[test]
 fn e2e_phase164_slice_open_end_from_ref_slice() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F process(data: &[i64], offset: i64) -> i64 {
     rest := data[offset..]
@@ -71,13 +73,14 @@ F main() -> i64 {
     0
 }
 "#,
+        0,
     );
 }
 
 /// slice[start..] on a direct Slice source
 #[test]
 fn e2e_phase164_slice_open_end_direct_slice() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F get_tail(s: &[i64]) -> i64 {
     tail := s[1..]
@@ -88,6 +91,7 @@ F main() -> i64 {
     0
 }
 "#,
+        0,
     );
 }
 

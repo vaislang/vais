@@ -4,12 +4,12 @@
 //! in cross-module codegen, where typed pointers can cause LLVM type mismatches
 //! between Vec struct pointers and slice fat pointers.
 
-use crate::helpers::assert_compiles;
+use crate::helpers::{assert_compiles, assert_exit_code};
 
 /// Basic: function expecting &[i64] called with &Vec<i64>
 #[test]
 fn e2e_phase166_vec_to_slice_arg_coercion() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     data: i64,
@@ -31,13 +31,14 @@ F main() -> i64 {
     sum_slice(&v)
 }
 "#,
+        0,
     );
 }
 
 /// Nested slice: function expecting &[&[u8]] called with &Vec<&[u8]>
 #[test]
 fn e2e_phase166_nested_vec_to_slice_coercion() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     data: i64,
@@ -59,6 +60,7 @@ F main() -> i64 {
     encode_composite_key(&parts)
 }
 "#,
+        0,
     );
 }
 

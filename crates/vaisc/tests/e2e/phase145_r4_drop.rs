@@ -74,7 +74,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -136,7 +136,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -187,7 +187,7 @@ F main() -> i64 {
     maybe_exit(0)
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -210,7 +210,7 @@ F main() -> i64 {
     0
 }
 "#;
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ===== Struct scope and field access tests =====

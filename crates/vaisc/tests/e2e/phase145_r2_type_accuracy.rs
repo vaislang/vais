@@ -143,7 +143,7 @@ F main() -> i64 {
 }
 "#;
     // This verifies the IR compiles without error (fpext is emitted by cast codegen)
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 #[test]
@@ -160,7 +160,7 @@ F main() -> i64 {
 }
 "#;
     // This verifies the IR compiles without error (fptrunc is emitted by cast codegen)
-    assert_compiles(source);
+    assert_exit_code(source, 0);
 }
 
 // ==================== 3. str parameter fat pointer in impl methods ====================

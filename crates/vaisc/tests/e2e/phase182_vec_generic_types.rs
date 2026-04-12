@@ -29,7 +29,7 @@ use super::helpers::*;
 /// targets IR correctness rather than runtime float semantics.
 #[test]
 fn e2e_phase182_vec_f32_generic_compiles() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     data: i64,
@@ -52,6 +52,7 @@ F main() -> i64 {
     v.len()
 }
 "#,
+        0,
     );
 }
 

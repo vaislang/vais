@@ -468,9 +468,11 @@ impl OwnershipChecker {
             }
 
             Expr::StructLit { fields, .. } => {
+                // check_expr_ownership already handles the move via use_var,
+                // so we don't need check_move_from_expr here (which would
+                // incorrectly report E022 since the value is already marked as moved)
                 for (_, e) in fields {
                     self.check_expr_ownership(e)?;
-                    self.check_move_from_expr(e)?;
                 }
                 Ok(())
             }

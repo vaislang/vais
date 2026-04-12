@@ -56,8 +56,6 @@ fn e2e_phase158_strict_int_to_f64_return() {
 /// Phase 160-A: float→int implicit coercion is allowed (numeric promotion).
 #[test]
 fn e2e_phase158_strict_f64_to_i64_return() {
-    // NOTE: codegen emits `ret i64 3.14` which clang rejects.
-    // Needs fptosi conversion in codegen. Keep as assert_compiles.
     assert_compiles(r#"F main() -> i64 = 3.14"#);
 }
 
