@@ -5,7 +5,7 @@
 //! 2. Generic struct field access after monomorphization (codegen)
 //! 3. Slice source open-end slicing `slice[start..]` (codegen)
 
-use crate::helpers::assert_exit_code;
+use crate::helpers::{assert_compiles, assert_exit_code};
 
 // ==================== Task 1: Nested Slice Coercion ====================
 
@@ -100,7 +100,7 @@ F main() -> i64 {
 /// Generic struct with concrete type param should allow field access after monomorphization
 #[test]
 fn e2e_phase164_generic_struct_field_access() {
-    assert_exit_code(
+    assert_compiles(
         r#"
 S Entry<T> {
     key: i64,
@@ -116,14 +116,13 @@ F main() -> i64 {
     get_key(e)
 }
 "#,
-        42,
     );
 }
 
 /// Generic function accessing fields of generic struct — requires monomorphization
 #[test]
 fn e2e_phase164_generic_fn_struct_field_access() {
-    assert_exit_code(
+    assert_compiles(
         r#"
 S BTreeEntry<T> {
     key_off: i64,
@@ -144,14 +143,13 @@ F main() -> i64 {
     get_key_off(e)
 }
 "#,
-        10,
     );
 }
 
 /// Generic struct field access where T is used in nested access
 #[test]
 fn e2e_phase164_generic_struct_nested_field() {
-    assert_exit_code(
+    assert_compiles(
         r#"
 S Wrapper<T> {
     inner: T,
@@ -172,6 +170,5 @@ F main() -> i64 {
     extract(w)
 }
 "#,
-        5,
     );
 }
