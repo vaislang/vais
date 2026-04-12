@@ -745,6 +745,16 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
+                        // Phase 191: skip base generic method if specialized version exists
+                        let base_method_name = format!("{}_{}", type_name, method.node.name.node);
+                        let has_specialization = self
+                            .generics
+                            .generated_functions
+                            .keys()
+                            .any(|k| k.starts_with(&format!("{}$", base_method_name)));
+                        if has_specialization {
+                            continue;
+                        }
                         match self.generate_method_with_span(&type_name, &method.node, method.span)
                         {
                             Ok(ir_fragment) => {

@@ -207,6 +207,16 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     // Generate methods for this struct
                     for method in &s.methods {
+                        // Phase 191: skip base method if specialized version exists
+                        let base_method_name = format!("{}_{}", s.name.node, method.node.name.node);
+                        let has_specialization = self
+                            .generics
+                            .generated_functions
+                            .keys()
+                            .any(|k| k.starts_with(&format!("{}$", base_method_name)));
+                        if has_specialization {
+                            continue;
+                        }
                         match self.generate_method_with_span(
                             &s.name.node,
                             &method.node,
@@ -237,6 +247,19 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
+                        // Phase 191: skip base generic method if a specialized version
+                        // was already generated. The specialized version (e.g., Vec_new$f32)
+                        // has correct typed params; the base version (Vec_new) has i64-uniform
+                        // params that produce type-mismatched IR with specialized struct layouts.
+                        let base_method_name = format!("{}_{}", type_name, method.node.name.node);
+                        let has_specialization = self
+                            .generics
+                            .generated_functions
+                            .keys()
+                            .any(|k| k.starts_with(&format!("{}$", base_method_name)));
+                        if has_specialization {
+                            continue;
+                        }
                         match self.generate_method_with_span(&type_name, &method.node, method.span)
                         {
                             Ok(ir_fragment) => {

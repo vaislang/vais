@@ -733,10 +733,27 @@ impl CodeGenerator {
 
         if let ResolvedType::Named {
             name: orig_type_name,
-            ..
+            generics: type_generics,
         } = resolved_type
         {
-            let type_name = self.resolve_struct_name(orig_type_name);
+            // Phase 191: for Named types with concrete generics (e.g., Vec<i32>),
+            // use the mangled name (Vec$i32) to GEP on the correctly-typed struct.
+            let type_name = if !type_generics.is_empty()
+                && type_generics
+                    .iter()
+                    .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+            {
+                let mangled = self.mangle_struct_name(orig_type_name, type_generics);
+                if self.types.structs.contains_key(&mangled)
+                    || self.generics.generated_structs.contains_key(&mangled)
+                {
+                    mangled
+                } else {
+                    self.resolve_struct_name(orig_type_name)
+                }
+            } else {
+                self.resolve_struct_name(orig_type_name)
+            };
             // Bug 2 fix: resolve_struct_name may return an unresolved name if the struct
             // was not found in types.structs or struct_aliases. Also check generated_structs
             // (specialized types like Cell$bool) and fall back to the base struct name
