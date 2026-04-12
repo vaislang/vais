@@ -374,13 +374,43 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = zext i1 {} to i64", result, is_zero);
                 Ok((result, ir))
             }
+            "push_str" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Unsupported(format!(
+                        "builtin 'push_str' requires 1 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&arg_ir);
+                let arg_ptr = self.extract_str_ptr(&arg_val, counter, &mut ir);
+                let result = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = call {{ i8*, i64 }} @__vais_str_concat(i8* {}, i8* {})",
+                    result,
+                    recv_ptr,
+                    arg_ptr
+                );
+                let raw_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                    raw_ptr,
+                    result
+                );
+                ir.push_str(&self.track_alloc(raw_ptr));
+                Ok((result, ir))
+            }
             "clone" | "to_string" | "as_str" => {
                 // Strings are immutable fat pointers — clone is identity
                 Ok((recv_val.to_string(), ir))
             }
             "as_bytes" => {
-                // as_bytes returns the raw pointer (first field of fat pointer)
-                Ok((recv_ptr, ir))
+                // as_bytes returns the raw pointer as i64 (ptrtoint for C interop)
+                let result = self.next_temp(counter);
+                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, recv_ptr);
+                Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
                 "string method '{}' not supported",

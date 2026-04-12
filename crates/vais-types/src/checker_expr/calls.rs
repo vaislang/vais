@@ -496,6 +496,39 @@ impl TypeChecker {
                     }
                     return Ok(ResolvedType::Bool);
                 }
+                "push_str" => {
+                    if args.len() != 1 {
+                        return Err(TypeError::ArgCount {
+                            expected: 1,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    let arg_type = self.check_expr(&args[0])?;
+                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    return Ok(ResolvedType::Str);
+                }
+                "as_bytes" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    // Returns raw byte pointer (i8* as i64)
+                    return Ok(ResolvedType::I64);
+                }
+                "clone" | "to_string" | "as_str" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(ResolvedType::Str);
+                }
                 _ => {} // Fall through to error
             }
         }

@@ -650,7 +650,7 @@ impl CodeGenerator {
                     return match method.node.as_str() {
                         "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith"
                         | "isEmpty" => ResolvedType::I64,
-                        "substring" => ResolvedType::Str,
+                        "substring" | "push_str" => ResolvedType::Str,
                         _ => ResolvedType::I64,
                     };
                 }
