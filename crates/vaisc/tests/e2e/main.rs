@@ -63,6 +63,7 @@ mod phase169_vaisdb;
 mod phase182_vec_generic_types;
 mod phase183_option_result_struct;
 mod phase184_unambiguous_keywords;
+mod phase190_vec_field_access;
 mod phase30;
 mod phase31;
 mod phase32;

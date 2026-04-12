@@ -101,6 +101,36 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .to_string(),
                 ))
             }
+            Expr::Index { expr: inner, .. } => {
+                // v[i].field: infer the element struct type from the container's resolved type.
+                // Supports `Vec<S>`, `[S]`, `[S; N]` — any indexable whose element is a named struct.
+                if let Expr::Ident(var_name) = &inner.node {
+                    use vais_types::ResolvedType;
+                    let elem_ty = match self.var_resolved_types.get(var_name) {
+                        Some(ResolvedType::Named { name, generics })
+                            if name == "Vec" && !generics.is_empty() =>
+                        {
+                            Some(&generics[0])
+                        }
+                        Some(
+                            ResolvedType::Slice(inner)
+                            | ResolvedType::SliceMut(inner)
+                            | ResolvedType::Array(inner),
+                        ) => Some(inner.as_ref()),
+                        _ => None,
+                    };
+                    if let Some(ResolvedType::Named { name: sname, .. }) = elem_ty {
+                        if self.generated_structs.contains_key(sname) {
+                            return Ok(sname.clone());
+                        }
+                    }
+                }
+                Err(CodegenError::InternalError(
+                    "Type inference failed: cannot determine struct type for indexed expression. \
+                     Hint: ensure the container has an explicit element type (e.g., `Vec<MyStruct>`)."
+                        .to_string(),
+                ))
+            }
             Expr::If { .. } => Err(CodegenError::InternalError(
                 "Type inference failed: cannot determine struct type for an `if` expression. \
                  Hint: assign the result to a variable with an explicit struct type annotation."
