@@ -574,6 +574,21 @@ impl CodeGenerator {
                 }
             }
 
+            // Bool parameter coercion: when the callee declares an i1 parameter
+            // but the caller-side value is an integer (e.g. the result of a
+            // comparison that codegen zext'd to i64 "for consistency"), emit an
+            // `icmp ne <val>, 0` so any nonzero integer becomes `true`. Applied
+            // outside the has_known_type guard below because these temps are
+            // typically unregistered i64 fallbacks after zext.
+            if arg_ty == "i1" {
+                let val_ty = self.llvm_type_of(&val);
+                if val_ty != "i1" && val_ty.starts_with('i') {
+                    let tmp = self.next_temp(counter);
+                    write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, val_ty, val);
+                    val = tmp;
+                }
+            }
+
             // Final coercion: if the value type is reliably known (not fallback)
             // and differs from arg_ty, coerce. Only check temps with registered
             // types or locals — skip when llvm_type_of falls back to i64.
@@ -585,7 +600,14 @@ impl CodeGenerator {
                         .contains_key(val.strip_prefix('%').unwrap_or(&val));
                 if has_known_type {
                     let val_ty = self.llvm_type_of(&val);
-                    if val_ty != arg_ty
+                    // i1 → wider int: when the arg type is wider and the value
+                    // is an i1 (e.g. a raw comparison flowing into an i64 param),
+                    // zext up to the expected width.
+                    if val_ty == "i1" && arg_ty != "i1" && arg_ty.starts_with('i') {
+                        let tmp = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext i1 {} to {}", tmp, val, arg_ty);
+                        val = tmp;
+                    } else if val_ty != arg_ty
                         && val_ty.starts_with('i')
                         && arg_ty.starts_with('i')
                         && val_ty != "i1"
