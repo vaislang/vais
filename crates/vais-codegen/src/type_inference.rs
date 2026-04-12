@@ -441,6 +441,9 @@ impl CodeGenerator {
                         let mangled = self.resolve_generic_call(fn_name, &arg_types, &inst_list);
                         if let Some(fn_info) = self.types.functions.get(&mangled) {
                             let ret_ty = fn_info.signature.ret.clone();
+                            if fn_info.signature.is_async {
+                                return ResolvedType::Future(Box::new(ret_ty));
+                            }
                             if ret_ty == ResolvedType::I32 {
                                 return ResolvedType::I64;
                             }
