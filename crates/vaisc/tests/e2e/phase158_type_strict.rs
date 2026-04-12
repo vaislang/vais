@@ -45,18 +45,17 @@ fn e2e_phase158_strict_i64_to_bool_return() {
 }
 
 /// Phase 160-A: int→float implicit coercion is allowed (numeric promotion).
+/// Phase 191: main() float return with integer body now passes through as i64.
 #[test]
 fn e2e_phase158_strict_int_to_f64_return() {
-    // NOTE: codegen emits `ret f64 42.0` which is valid IR but non-i64
-    // main return means the exit code is platform-dependent. Keep as
-    // assert_compiles until non-i64 ABI is resolved.
-    assert_compiles(r#"F main() -> f64 = 42"#);
+    assert_exit_code(r#"F main() -> f64 = 42"#, 42);
 }
 
 /// Phase 160-A: float→int implicit coercion is allowed (numeric promotion).
+/// Phase 191: float literal in i64 return now emits fptosi.
 #[test]
 fn e2e_phase158_strict_f64_to_i64_return() {
-    assert_compiles(r#"F main() -> i64 = 3.14"#);
+    assert_exit_code(r#"F main() -> i64 = 3.14"#, 3);
 }
 
 /// Float literal inference: f32 ↔ f64 unification is now allowed.
@@ -168,15 +167,14 @@ F main() -> i64 { x := true as i64; x }
 }
 
 /// Phase 158 rule: explicit `as` cast f64→i64 is permitted (truncating).
-/// Note: codegen for fptosi is a known limitation (pre-existing), so we only
-/// verify type-checking acceptance here via assert_compiles.
+/// Phase 191: fptosi now correctly handles float literal → i64 cast.
 #[test]
 fn e2e_phase158_strict_explicit_cast_f64_to_i64() {
-    // f64→i64 with explicit `as` cast should pass TC (codegen fptosi is separate issue)
-    assert_compiles(
+    assert_exit_code(
         r#"
 F main() -> i64 { x := 3.14; y := x as i64; y }
 "#,
+        3,
     );
 }
 
