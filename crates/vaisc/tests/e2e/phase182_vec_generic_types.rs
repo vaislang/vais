@@ -125,12 +125,9 @@ F main() -> i64 {
 // ==================== 2. Vec<i32> — assert_compiles ====================
 
 /// Vec<i32> struct IR must specialize the element field to `i32`, not `i64`.
-///
-/// NOTE: assert_compiles is used instead of assert_exit_code because a
-/// pre-existing codegen limitation produces `trunc i64 %t to i32` with `%t`
-/// already typed as `i32`, which clang rejects. The test verifies that the
-/// Vec<i32> specialization in the IR uses `i32` for the field type (not
-/// erased to `i64`), which is what Phase 182 fixes.
+/// NOTE: assert_compiles — struct literal uses specialized layout (%Vec$i32),
+/// but method dispatch (len/get) still uses base struct GEP (%Vec).
+/// Full fix requires specialized method codegen (Phase 4d.5+).
 #[test]
 fn e2e_phase182_vec_i32_struct_field_type_preserved() {
     assert_compiles(
@@ -163,10 +160,8 @@ F main() -> i64 {
 }
 
 /// Vec<u8> struct IR must specialize to `i8`, not `i64`.
-///
-/// NOTE: assert_compiles — same pre-existing limitation as Vec<i32>: the
-/// truncation cast IR is rejected by clang. The test verifies the
-/// specialization emits the correct element type in the struct definition.
+/// NOTE: assert_compiles — same as Vec<i32>: struct literal uses specialized
+/// layout but method dispatch uses base struct GEP.
 #[test]
 fn e2e_phase182_vec_u8_struct_field_type_preserved() {
     assert_compiles(

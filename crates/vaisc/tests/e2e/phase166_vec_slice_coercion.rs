@@ -65,6 +65,8 @@ F main() -> i64 {
 }
 
 /// Vec passed directly (not as &Vec) to slice parameter
+/// NOTE: assert_compiles — Vec→slice coercion compiles to valid IR but
+/// runtime behavior is unstable (process() receives Vec struct as slice ptr).
 #[test]
 fn e2e_phase166_vec_direct_to_slice() {
     assert_compiles(

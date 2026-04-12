@@ -19,22 +19,103 @@ impl CodeGenerator {
 
         // First check if it's a struct
         if let Some(struct_info) = self.types.structs.get(type_name).cloned() {
+            // Check if the struct has generic field types and we have active substitutions.
+            // If so, try to find the specialized struct (e.g., Vec$f32 instead of Vec) so
+            // that alloca/GEP use the correct specialized layout.
+            let has_generic_fields = struct_info.fields.iter().any(|(_, ty)| {
+                matches!(
+                    ty,
+                    ResolvedType::Generic(_) | ResolvedType::Var(_)
+                )
+            });
+            let (effective_type_name, effective_fields) = if has_generic_fields {
+                if !self.generics.substitutions.is_empty() {
+                    // Case 1: Inside a specialized function — use substitutions to resolve
+                    let concrete_types: Vec<ResolvedType> = struct_info
+                        .fields
+                        .iter()
+                        .filter_map(|(_, ty)| {
+                            if let ResolvedType::Generic(param) = ty {
+                                self.generics.substitutions.get(param).cloned()
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    if !concrete_types.is_empty() {
+                        let mangled = self.mangle_struct_name(&name.node, &concrete_types);
+                        if let Some(specialized) = self.types.structs.get(&mangled).cloned() {
+                            (mangled, specialized.fields)
+                        } else {
+                            // Fallback: substitute field types in place
+                            let subst_fields: Vec<(String, ResolvedType)> = struct_info
+                                .fields
+                                .iter()
+                                .map(|(n, ty)| {
+                                    let concrete =
+                                        vais_types::substitute_type(ty, &self.generics.substitutions);
+                                    (n.clone(), concrete)
+                                })
+                                .collect();
+                            let alias_name = self
+                                .generics
+                                .struct_aliases
+                                .get(&name.node)
+                                .cloned()
+                                .unwrap_or_else(|| type_name.clone());
+                            (alias_name, subst_fields)
+                        }
+                    } else {
+                        (type_name.clone(), struct_info.fields.clone())
+                    }
+                } else {
+                    // Case 2: Outside specialized context (e.g., main()) — check if exactly
+                    // one specialization exists via struct_aliases. This handles cases like
+                    // `Entry { key: 42, value: "hello" }` where Entry<str> was generated.
+                    // Only safe when there's exactly one specialization (alias is unique).
+                    let generated_count = self
+                        .generics
+                        .generated_structs
+                        .keys()
+                        .filter(|k| k.starts_with(&format!("{}$", name.node)))
+                        .count();
+                    if generated_count == 1 {
+                        if let Some(mangled) = self.generics.struct_aliases.get(&name.node) {
+                            if let Some(specialized) =
+                                self.types.structs.get(mangled.as_str()).cloned()
+                            {
+                                (mangled.clone(), specialized.fields)
+                            } else {
+                                (type_name.clone(), struct_info.fields.clone())
+                            }
+                        } else {
+                            (type_name.clone(), struct_info.fields.clone())
+                        }
+                    } else {
+                        // Multiple specializations — can't determine which one to use.
+                        // Fall back to base struct (i64-uniform layout).
+                        (type_name.clone(), struct_info.fields.clone())
+                    }
+                }
+            } else {
+                (type_name.clone(), struct_info.fields.clone())
+            };
+
             let mut ir = String::new();
 
             // Allocate struct on stack (hoisted to entry block)
             let struct_ptr = self.next_temp(counter);
-            self.emit_entry_alloca(&struct_ptr, &format!("%{}", type_name));
+            self.emit_entry_alloca(&struct_ptr, &format!("%{}", effective_type_name));
 
             // Store each field
             for (field_name, field_expr) in fields {
                 // Find field index
-                let field_idx = struct_info
-                    .fields
+                let field_idx = effective_fields
                     .iter()
                     .position(|(n, _)| n == &field_name.node)
                     .ok_or_else(|| {
-                        let candidates: Vec<&str> = struct_info
-                            .fields
+                        let candidates: Vec<&str> = effective_fields
                             .iter()
                             .map(|(name, _)| name.as_str())
                             .collect();
@@ -42,7 +123,7 @@ impl CodeGenerator {
                         let suggestion_text = format_did_you_mean(&suggestions);
                         CodegenError::TypeError(format!(
                             "Unknown field '{}' in struct '{}'{}",
-                            field_name.node, type_name, suggestion_text
+                            field_name.node, effective_type_name, suggestion_text
                         ))
                     })?;
 
@@ -54,13 +135,13 @@ impl CodeGenerator {
                     ir,
                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
                     field_ptr,
-                    type_name,
-                    type_name,
+                    effective_type_name,
+                    effective_type_name,
                     struct_ptr,
                     field_idx
                 );
 
-                let field_ty = &struct_info.fields[field_idx].1;
+                let field_ty = &effective_fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
 
                 // For struct-typed fields, val might be a pointer that needs to be loaded
