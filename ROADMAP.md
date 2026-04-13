@@ -1,53 +1,87 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 190 — DX Quick Wins + 런타임 라이브러리)
+> **현재 버전**: 0.1.0 (Phase 190 완료 → Phase 190.5 준비)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-10 (Phase 189 완료, 안정화 달성: vais-monitor 37/37, vaisdb 13/13, E2E 0 fail)
+> **최종 업데이트**: 2026-04-13 (Phase 190 완료: 5/6 + 신규 #7, E2E 2563 passed / 0 fail)
 
 ---
 
-## Current Tasks (2026-04-10) — Phase 190: DX 개선 + 런타임 안정화
+## Current Tasks — Phase 190.5: 문자열 메모리 안정화 (drop-tracking)
 
 mode: pending
-iteration: 2
+iteration: 1
 max_iterations: 30
 
-Phase 189까지 "에러 0" 안정화 달성. 다음은 사용자 경험 개선과 실행 가능한 바이너리 생성.
+> Phase 190의 나머지 작업 #6만 독립 Phase로 분리. `/clear` 후 `/harness`로 이어받을 수 있도록 아래 컨텍스트를 그대로 사용.
+> 나머지 Phase 190 완료 이력은 "## Phase 190 완료 기록" 섹션 참조.
 
-  strategy: #3 Opus direct (codegen design-impl inseparable) + #4 impl-sonnet background (runtime stub, independent crate). #6 Opus sequential after #3. #5 after #4.
-  opus_direct: #3 Vec[i].field, #6 drop-tracking — codegen design-impl inseparable per skill-config.
-  strategy: #7 Opus direct sequential (codegen signature resolution, high-risk type system).
-  opus_direct: #7 — signature resolution touches call args, declares, bool↔i64 coercion boundaries; design-impl inseparable.
-  strategy: #5 Opus direct sequential (cross-module async registration, type inference design).
-  opus_direct: #5 — async sig propagation across modules couples TC and codegen; design-impl inseparable.
+### 배경
 
-### DX Quick Wins (컴파일러 수정)
+Phase 190 작업 중 문자열 연산 경로(push_str/as_bytes, concat)가 런타임에서 동작함을 확인했으나, `+` concat 체인이 중간 결과 버퍼를 해제하지 않아 장기 실행 서버(vais-monitor 등)에서 메모리가 단조 증가한다. 현재 `__vais_str_concat`은 새 버퍼를 할당하고 반환하지만, 이전 피연산자의 소유권(drop) 추적이 codegen 레벨에서 일관적이지 않아 이중 해제 위험 때문에 해제 자체가 보류되어 있다.
+
+**왜 위험도 높음**:
+- `vtable.rs`의 destructor 발행 경로와 `string_ops.rs`의 concat/슬라이스 코드가 결합돼 있음.
+- 현재 alloc_slot 패턴은 가변 재할당(`store i8* %tNN, i8** %__alloc_slot_X`)으로 최신 값만 보존 — 중간 값들은 "소유되지 않음"으로 간주되어 drop이 누락됨. 단순히 drop을 추가하면 여전히 참조되는 버퍼를 해제해 UAF 발생.
+- ownership tracking을 드물게 잘못 건드리면 trait object / Vec / 사용자 struct destructor가 연쇄 깨짐. E2E 2563건 중 수십 건이 회귀 가능.
+
+### 작업
+
+- [ ] 1. 문자열 concat drop-tracking 리팩토링 (Opus direct)
+  [대상 파일]:
+    - crates/vais-codegen/src/string_ops.rs (concat/append/push_str 경로)
+    - crates/vais-codegen/src/vtable.rs (destructor 엔트리, str에 대한 drop impl)
+    - crates/vais-codegen/src/inkwell/gen_expr/ (alloc_slot 라이프사이클 참고, 수정 최소화)
+  [완료 기준]:
+    - `a + b + c + d` 체인 컴파일 후 valgrind/ASan 기준 누수 0
+    - vais-monitor 장기 실행 시 RSS 증가가 입력량에 비례(상수 시간 내 수렴)
+    - E2E 2563 passed / 0 fail 유지 (특히 phase134_strings, phase90_strings, phase183_option_result_struct)
+    - 새 E2E 테스트 추가: phase190_str_concat_drop.rs (누수 시나리오 assert_exit_code)
+
+### 접근 제안 (1차 분석 산물)
+
+1. 현재 구조 매핑 — `string_ops.rs`의 concat 진입점에서 반환 값이 `alloc_slot`에 저장될 때 이전 슬롯 포인터를 drop 대상 리스트에 등록하는 경로가 있는지 확인. 없으면 `fn_ctx.drop_list`류 상태를 신설할지 기존 RAII 경로 재사용할지 결정.
+2. 안전 경계 — literal (`@str.N` globals)과 heap-allocated 구분자 필요. `build_str_fat_ptr`가 literal로부터 생성한 fat pointer와 `strdup`/concat 경로로 생성한 포인터가 같은 표현을 쓰므로, tag bit 또는 별도 타입 스코프 도입 고민.
+3. destructor 쓰기 순서 — 블록 종료 시점에 "이 스코프에서 생성된 중간 concat 결과"만 drop. `inkwell` 백엔드의 기존 RAII 인프라(이미 Vec/struct에 대해 있음)를 재사용할 것인지, text-IR 백엔드에 독자 drop emit을 추가할 것인지 결정.
+4. RFC 초안 (구현 전 필수) — CLAUDE.md Phase 158 엄격 타입 전환 규칙과 동일한 수준으로 "문자열 소유권 모델"을 문서화. 이후 구현은 이 RFC 기준으로만 변경.
+
+### 선결 조건
+
+- 이 Phase를 시작하기 전에: `git pull` + `cargo test -p vaisc --test e2e 2>&1 | tail -3`으로 2563 baseline 재확인.
+- valgrind/ASan 사용 가능한지 확인 (`cargo install cargo-valgrind` 혹은 macOS의 `leaks` 커맨드).
+- `vais-apps/monitor` 장기 실행 harness(5분 이상 구동 + RSS 측정 스크립트) 준비 필요.
+
+### 전략
+
+  strategy: Opus direct sequential + pre-RFC 단계 (구현 전 RFC 초안 작성 → 사용자 리뷰 → 구현).
+  opus_direct: design-impl inseparable — ownership 모델 전체 재정의, 단순 delegate 위험.
+
+progress: 0/1
+
+---
+
+## Phase 190 완료 기록 (2026-04-13)
+
+> 이 섹션은 이력 참조용. 신규 작업은 위 "Current Tasks" 참조.
+
+### DX Quick Wins
 - [x] 1. str.push_str() 메서드 추가 (impl-sonnet) — 커밋 f5729869
 - [x] 2. str.as_bytes() 메서드 추가 (impl-sonnet) — 커밋 f5729869
-- [x] 3. Vec[i].field 직접 접근 지원 (Opus direct) ✅ 2026-04-13
+- [x] 3. Vec[i].field 직접 접근 지원 (Opus direct) — 커밋 e37af621
   changes: gen_match.rs `infer_struct_name` — `Expr::Index` 케이스 추가. Vec<S>/&[S]/[S;N] 모두 지원.
-  tests: phase190_vec_field_access.rs 3건 추가. E2E 2558 passed / 0 fail.
+  tests: phase190_vec_field_access.rs 3건 추가.
 
 ### 런타임 라이브러리 (vais-monitor 링크 성공 목표)
-- [x] 4. vais-monitor 런타임 stub 라이브러리 생성 (impl-sonnet) ✅ 2026-04-13
-  note: monitor_runtime.c (1660 LOC, 27 C-side symbols, sqlite/crypto/jwt/json) 이미 존재 — 이터 15에서 착수됨.
-  verification: 37 모듈 중 36 clang OK. 1건(main_anomaly.ll) 컴파일러 codegen 버그 — 분리된 #7으로 이관.
-- [x] 5. vais-monitor ICE "await on non-Future" 잔여 해결 (Opus direct) ✅ 2026-04-13
-  changes: type_inference.rs — generic-resolved Call 경로에서도 is_async → Future<T> 래핑 적용 (기존 direct-call / resolved_function_sigs 경로와 동일).
-  verification: vais-monitor 37/37 OK, 링크/실행 OK. E2E 2563 passed / 0 fail (+2 phase190_generic_async 테스트).
+- [x] 4. vais-monitor 런타임 stub 라이브러리 생성 (impl-sonnet) — monitor_runtime.c (1660 LOC, iter 15)
+  verification: 37/37 clang OK (#7 수정 후).
+- [x] 5. vais-monitor ICE "await on non-Future" 잔여 해결 (Opus direct) — 커밋 258618d2
+  changes: type_inference.rs — generic-resolved Call 경로에서 is_async → Future<T> 래핑 적용.
+  verification: vais-monitor 37/37 OK, 링크/실행 OK. E2E 2563 passed / 0 fail (+2 phase190_generic_async).
 
-### 문자열 메모리 안정화 (별도 Phase 권장)
-- [ ] 6. 문자열 concat 메모리 누수 해결 — drop-tracking 리팩토링 (Opus direct)
-  [대상 파일]: crates/vais-codegen/src/string_ops.rs, vtable.rs
-  [위험도]: 높음 — ownership tracking 전체에 영향
-
-progress: 5/6 (83%) + #7 done
-
-### Phase 190 추가 (신규 분리 작업)
-- [x] 7. vais-monitor main_anomaly.ll codegen 시그니처 불일치 해결 (Opus direct) ✅ 2026-04-13
-  changes: generate_expr_call.rs — i1 인자 coercion 추가 (icmp ne 트렁케이션). i1↔wider-int 양방향 확장 규칙 정리.
-  verification: vais-monitor 37/37 모듈 clang OK + 링크 성공 + 바이너리 실행 OK. E2E 2561 passed / 0 fail (+3 새 테스트).
+### 신규 분리 작업
+- [x] 7. vais-monitor main_anomaly.ll codegen 시그니처 불일치 해결 (Opus direct) — 커밋 50e00e70
+  changes: generate_expr_call.rs — i1 인자 coercion 추가 (icmp ne 트렁케이션). i1↔wider-int 양방향 확장.
+  verification: vais-monitor 37/37 clang + 링크 + 실행 OK. E2E 2561 → 2563 (+5 테스트 누적).
 
 ---
 
