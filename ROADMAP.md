@@ -3,11 +3,133 @@
 
 > **현재 버전**: 0.1.0 (Phase 190 완료 → Phase 190.5 준비)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-14 (Phase 190.5 + 190.6 완료: string concat drop-tracking + let/PHI UAF fix, E2E 2563+8 passed / 0 failed)
+> **최종 업데이트**: 2026-04-14 (Phase 190.5 + 190.6 완료 → Phase 191 follow-up 5건 등록)
 
 ---
 
-## Current Tasks — Phase 190.5: 문자열 메모리 안정화 (drop-tracking)
+## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
+
+mode: pending
+iteration: 1
+max_iterations: 30
+
+> Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
+> 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
+> 순서를 제안(#1 → #2 → #3 → #4 → #5)했으나 사용자가 임의 순서 가능.
+>
+> **공통 참조 자료**: `docs/rfcs/RFC-001-string-ownership.md` (전체 소유권 모델),
+> `crates/vais-codegen/src/inkwell/gen_stmt.rs` (scope_str_stack + var_string_slot
+> 패턴 — 이 파일의 구현을 다른 소유 경로에도 적용).
+
+### 작업
+
+- [ ] 1. vais-apps/monitor RSS plateau 자동화 스크립트 (impl-sonnet)
+  [목표]: RFC-001 §9가 요구한 "장기 실행 서버 RSS가 상수 시간 내 수렴" 검증을 자동화.
+  [대상 파일]:
+    - vais-apps/monitor/bench/rss_plateau.sh (신규)
+    - (선택) CI workflow에 연결 시 .github/workflows/ 수정
+  [기능]:
+    - monitor 바이너리를 5분(기본, 인자로 조정 가능) 구동
+    - `ps -o rss=`로 1초 간격 샘플링, CSV 저장
+    - 첫 30초(워밍업) 이후 샘플의 max-min 델타가 X MB 미만이면 PASS, 초과면 FAIL
+    - 결과 요약 출력 (시작 RSS / 안정화 RSS / 최대 RSS / delta / verdict)
+  [완료 기준]:
+    - 현재 바이너리로 실행 시 PASS (190.5/190.6 fix 효과 입증)
+    - README.md 혹은 docs/PERFORMANCE_TESTING.md에 사용법 1개 섹션 추가
+    - 임시 파일(CSV) 정리 로직 포함
+  [복잡도]: 낮음 — 쉘 스크립팅 + 문서. Rust 코드 변경 없음.
+
+- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct)
+  [목표]: 컨테이너에 소유된 heap string이 컨테이너 destructor에서 free되도록 연결.
+  [현재 상태]: Vec<str> push된 heap 문자열은 컨테이너가 drop돼도 문자열 버퍼는 leak.
+  [대상 파일]:
+    - crates/vais-codegen/src/vtable.rs (Vec/struct destructor emission)
+    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (Vec의 str push 시 소유권 이전)
+    - crates/vais-codegen/src/string_ops.rs (concat 결과가 Vec.push() 인자로 갈 때 scope-drop 제외)
+    - (필요 시) state.rs: Vec<PointerValue> 멤버 tracking
+  [설계 질문]:
+    - Vec<str>의 각 요소마다 free가 필요한지(heap) 아닌지(literal) 구분 — tag bit 없이 어떻게?
+      → 후보 A: Vec<str> 전용 destructor(각 요소에 대해 free 호출) + 리터럴은 push 자체를 "clone to heap"으로 항상 승격
+      → 후보 B: Vec 내부에 소유 플래그 추가 (ABI 변경)
+      → 후보 C: push 시점에 heap 여부 확인 — 소유권 있으면 Vec로 transfer, 리터럴이면 strdup
+    - 사용자 struct에 `name: str` 필드가 있을 때 struct destructor의 표준 drop 순서 확인
+  [완료 기준]:
+    - 새 e2e 테스트 phase191_container_str_drop.rs 3개 이상:
+      (a) Vec<str> push + drop → leaks 0
+      (b) struct { name: str } 로컬 → drop 시 name free
+      (c) Vec<struct { s: str }> 중첩 — 외곽 Vec drop 시 내부 전부 정리
+    - E2E baseline 유지 (2571 passed + new)
+    - RFC-001 §8에서 이 항목 check 처리
+  [복잡도]: 높음 — RFC 설계 결정(§4.4 수준) 필요. 사전 RFC 초안 권장.
+
+- [ ] 3. Trait object str 반환 (Opus direct)
+  [목표]: `dyn Trait` 메서드가 str을 반환할 때 소유권 규약 정립 + 구현.
+  [현재 상태]: RFC-001 §5.3에서 "out of scope"로 명시, 현재 호출 시 동작 불확정.
+  [대상 파일]:
+    - crates/vais-codegen/src/trait_dispatch.rs (vtable 메서드 호출)
+    - crates/vais-codegen/src/vtable.rs (메서드 시그니처 정규화)
+    - (RFC 업데이트 필요): docs/rfcs/RFC-002-trait-object-string.md (신규)
+  [설계 질문]:
+    - trait 메서드의 str 반환은 callee owns(Owned) vs callee lends(Borrowed) 중 어디? Rust의 `-> String` vs `-> &str` 대응.
+    - vtable 호출 후 caller가 받은 pointer의 drop 책임자 명확화
+  [완료 기준]:
+    - RFC-002 작성 + 사용자 리뷰 + 구현
+    - e2e 테스트: trait 메서드가 concat 결과 반환 후 호출자가 2번 사용 → 내용 동일 + 종료 시 leaks 0
+    - E2E baseline 유지
+  [복잡도]: 중~높음 — trait 시스템과 얽힘. pre-RFC 필수.
+
+- [ ] 4. 클로저 캡처된 str 소유권 (Opus direct)
+  [목표]: `||` 클로저가 str을 캡처할 때 소유권/수명 규약 + UAF 방지.
+  [현재 상태]: RFC-001 §7에서 "closures + long-running concat 안전 문제" 명시, 현재 alias-by-copy로 UAF 잠재 위험.
+  [대상 파일]:
+    - crates/vais-codegen/src/inkwell/gen_expr/lambda.rs / crates/vais-codegen/src/lambda_codegen.rs
+    - RFC 업데이트: docs/rfcs/RFC-003-closure-string-capture.md (신규)
+  [설계 질문]:
+    - 캡처: move(소유권 이전) vs by-ref(& 수명)
+    - Rust `move` 키워드 대응 검토 (Vais에 키워드 없음 — 기본 동작 결정 필요)
+    - FnOnce/FnMut/Fn 분류가 Vais에 존재하는지 확인 필요
+  [완료 기준]:
+    - RFC-003 작성 + 사용자 리뷰 + 구현
+    - e2e: let s = "a"+"b"; let f = || println(s); f(); f() → 동일 출력 2번 + 종료 시 leaks 0
+    - E2E baseline 유지
+  [복잡도]: 높음 — 클로저 런타임(captures struct)과 얽힘. pre-RFC 필수.
+
+- [ ] 5. Text-IR backend scope-drop parity (impl-sonnet → Opus 필요 시)
+  [목표]: Text-IR 백엔드에도 inkwell과 동등한 block-scope drop 도입.
+  [현재 상태]: 190.5/190.6에서 text-IR은 return-transfer + intermediate-free + let-var + PHI merge만.
+    루프 body concat 결과의 "final un-consumed value"는 여전히 fn 종료까지 leak.
+  [대상 파일]:
+    - crates/vais-codegen/src/stmt.rs (enter_scope / exit_scope 확장 — 이미 scope_stack 존재)
+    - crates/vais-codegen/src/stmt_visitor.rs (block 진입/퇴출마다 push/pop)
+    - crates/vais-codegen/src/state.rs (scope_str_stack 추가 — inkwell과 대칭)
+  [설계 참조]:
+    - inkwell generate_block의 scope_str_stack push → last_value transfer → remaining slots free 패턴을 그대로 텍스트 IR에 복제.
+    - 기존 fn_ctx.scope_stack(드롭용 var 리스트)와 별개의 `string_scope_stack: Vec<Vec<slot_name>>` 권장.
+  [완료 기준]:
+    - text-IR로 빌드한 loop 프로그램도 누수 없이 종료 (e2e에서 기본 검증)
+    - RFC-001 §5.4 "single implementation path" 요구사항 충족
+    - E2E baseline 유지
+  [복잡도]: 중간 — inkwell 구현을 참조 가능하므로 impl-sonnet 위임 시도. 막히면 Opus direct로 승격.
+
+### 전략
+
+  strategy: 독립 작업 — 파일 중첩 없음 (각각 다른 경로)
+  execution: 난이도/위험도 기준 제안 순서 #1(쉘, 가장 안전) → #5(text-IR, 참조 구현 있음) →
+             #2/3/4(RFC 필요, Opus direct). RFC 작업은 사전 설계 초안 + 사용자 리뷰 필수.
+  blockedBy: 없음 (모두 병렬 가능하지만 충돌 방지 및 리뷰 부담 고려해 순차 권장)
+
+progress: 0/5
+
+---
+
+## Phase 190.5 + 190.6 완료 기록 (2026-04-14, commit 57697a74)
+
+> 이 섹션은 이력 참조용. 신규 작업은 위 "Current Tasks" 참조.
+> RFC-001 sign-off 완료. E2E 2571/0, 회귀 테스트 8개 (phase190_str_concat_drop.rs).
+
+---
+
+## Phase 190.5: 문자열 메모리 안정화 (drop-tracking) — 완료 상세
 
 mode: pending
 iteration: 1
