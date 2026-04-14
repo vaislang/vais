@@ -89,11 +89,27 @@ impl StmtVisitor for CodeGenerator {
                 .unwrap_or(&last_value)
                 .trim()
                 .to_string();
-            let transfer_slot: Option<String> = self
-                .fn_ctx
-                .string_value_slot
-                .get(&val_key)
-                .cloned();
+            let transfer_slot: Option<String> = {
+                // 1. SSA register lookup (current path — works when var name == SSA reg)
+                if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
+                    Some(slot)
+                } else {
+                    // 2. Ident fallback: if the last non-terminator stmt is a bare
+                    //    expression resolving to a local name, look up var_string_slot by
+                    //    that name. Survives SSA representation changes (e.g. alloca-backed
+                    //    `let mut s`), guarding against dangling-pointer UAF.
+                    let last_stmt = stmts.iter().rev().find(|s| {
+                        !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
+                    });
+                    last_stmt.and_then(|s| match &s.node {
+                        Stmt::Expr(e) => match &e.node {
+                            Expr::Ident(name) => self.fn_ctx.var_string_slot.get(name).cloned(),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                }
+            };
 
             // Step 1: free all string-scope slots BEFORE Named-type drops.
             // (Strings are raw heap; Named drops may reference their contents.)

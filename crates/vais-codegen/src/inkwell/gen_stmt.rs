@@ -44,7 +44,28 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let transfer_slot = if last_value.is_struct_value() {
             use inkwell::values::AsValueRef;
             let key = last_value.into_struct_value().as_value_ref() as usize;
-            self.string_value_slot.get(&key).copied()
+            // 1. SSA struct-value lookup (current path)
+            if let Some(slot) = self.string_value_slot.get(&key).copied() {
+                Some(slot)
+            } else {
+                // 2. Ident fallback: when the last non-terminator stmt is a bare
+                //    Ident expression, look up var_string_slot by variable name.
+                //    Guards against UAF when alloca-backed locals produce a fresh
+                //    load SSA that doesn't match string_value_slot.
+                let last_stmt = stmts.iter().rev().find(|s| {
+                    !matches!(
+                        &s.node,
+                        Stmt::Break(_) | Stmt::Continue | Stmt::Return(_)
+                    )
+                });
+                last_stmt.and_then(|s| match &s.node {
+                    Stmt::Expr(e) => match &e.node {
+                        Expr::Ident(name) => self.var_string_slot.get(name).copied(),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+            }
         } else {
             None
         };

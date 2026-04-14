@@ -9,13 +9,12 @@
 
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
-mode: pending
-iteration: 3
+mode: auto
+iteration: 4
 max_iterations: 30
-session_checkpoint: 2026-04-14 — /clear 직전. 다음 fresh session에서 #2a부터 시작 권장.
-  완료: #1 (RSS 스크립트, 675d4c1 monitor), #5 (text-IR parity, 7814ba62).
-  RFC-002 Approved: e1edb7bb. 구현 subtasks 분할: 3bc2e51b.
-  다음 작업 후보: #2a (Vec<str> impl, Opus direct) 또는 #7 (transfer_slot Ident fallback, impl-sonnet, 빠름).
+session_checkpoint: 2026-04-14 — fresh session 복귀. 전체 자동 진행 선택.
+  순서: #7(impl-sonnet) → #6(Opus) → #2a → #2b → #2c → #3 → #4. #8은 #6 완료 후 unblock.
+  완료: #1 (RSS 스크립트), #5 (text-IR parity). RFC-002 Approved.
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
@@ -188,20 +187,22 @@ session_checkpoint: 2026-04-14 — /clear 직전. 다음 fresh session에서 #2a
     - 양 백엔드 동일 동작
   [복잡도]: 중 — loop_stack 범위 내 프레임 집계 필요.
 
-- [ ] 7. transfer_slot lookup Ident fallback (impl-sonnet)
-  [출처]: team-review W2 (stmt_visitor.rs:87-96). 현재는 last_value의 SSA 레지스터만 조회.
-  [상태]: Str local이 `is_simple_type=true` 덕분에 SSA let optimization으로 우연 일치.
-    향후 `let mut s := ...` 또는 Str의 alloca화 시 transfer_slot=None → 내부 scope가 free → UAF.
-  [대상 파일]:
-    - crates/vais-codegen/src/stmt_visitor.rs (visit_block_stmts의 transfer_slot 계산 지점)
-    - crates/vais-codegen/src/inkwell/gen_stmt.rs (동일 한계)
-  [설계]:
-    - 마지막 표현식이 Expr::Ident(name)이면 var_string_slot.get(name) fallback
-    - 기존 SSA 직매치와 결합 (var path 먼저 시도 → SSA → None)
-  [완료 기준]:
-    - e2e: let mut s := "a"+"b"; { s } 형태 회귀 방지 테스트 (Str가 alloca화될 때 대비)
-    - 현재 green baseline 유지
-  [복잡도]: 낮음~중 — expr 노드 패턴 매칭 추가.
+- [x] 7. transfer_slot lookup Ident fallback (impl-sonnet) ✅ 2026-04-14
+  changes:
+    crates/vais-codegen/src/stmt_visitor.rs (visit_block_stmts 87-112):
+      two-step lookup — SSA key → fallback to var_string_slot by Ident name
+      when last non-terminator Stmt::Expr(Expr::Ident(name)).
+    crates/vais-codegen/src/inkwell/gen_stmt.rs (generate_block 44-71):
+      symmetric fallback. struct-value key → var_string_slot.get(name).copied().
+    crates/vaisc/tests/e2e/phase191_text_ir_scope_drop.rs:
+      new transfer_slot_ident_fallback_no_uaf test (bare Ident tail referring to
+      heap concat local). Guards future alloca-backed Str representation.
+  verify:
+    cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+    cargo test -p vaisc --test e2e phase191: 6/6 (baseline 5 + 1 new).
+    cargo test -p vaisc --test e2e: 2577/0 (baseline 2576 + 1 new, 681s).
+  rfc: future-proofs RFC-001 §5.4 block-scope drop against SSA representation
+    drift (alloca-backed `let mut s`).
 
 - [ ] 8. Phase 191 #5 보강 E2E — substring/push_str/match/break coverage (impl-sonnet)
   [출처]: team-review W4 (phase191_text_ir_scope_drop.rs: concat-only 5 tests).
@@ -230,8 +231,10 @@ session_checkpoint: 2026-04-14 — /clear 직전. 다음 fresh session에서 #2a
          (impl-sonnet hit tool budget after core impl; Opus finished test file +
          fixed alloc_tracker slot-id collision regression caught by new e2e.)
     #2/#3/#4: Opus direct — RFC + design 의사결정 inseparable, 사용자 리뷰 gating.
+    #7: Sequential impl-sonnet background (iter 4) — 낮은 복잡도 패턴 매칭 추가.
+        양 백엔드(text-IR + inkwell) transfer_slot 계산에 Ident fallback 삽입.
 
-progress: 2/5 (40%) + RFC-002 Approved; +3 구현 subtasks (#2a/#2b/#2c) +3 follow-ups (#6/#7/#8) 등록
+progress: 3/8 resolved (#1, #5, #7 complete; #2 split into #2a/#2b/#2c pending); RFC-002 Approved
 
 ---
 

@@ -141,3 +141,29 @@ F main() -> i64 {
         "ccdd",
     );
 }
+
+/// Regression guard for the Ident fallback in transfer_slot lookup.
+/// The inner block's tail expression is a bare Ident (`s`) referring to a
+/// heap-owning local. Without the var_string_slot fallback, a future change
+/// making Str alloca-backed would produce a fresh load SSA not found in
+/// string_value_slot, causing the inner scope to free the buffer while the
+/// outer binding still holds a pointer to it (UAF). Today this green-path
+/// already passes via SSA coincidence; the test locks in correct behaviour.
+#[test]
+fn transfer_slot_ident_fallback_no_uaf() {
+    assert_stdout_contains(
+        r#"
+F main() -> i64 {
+  s := {
+    a := "hello-"
+    b := "world"
+    c := a + b
+    c
+  }
+  println(s)
+  0
+}
+"#,
+        "hello-world",
+    );
+}
