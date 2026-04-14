@@ -10,16 +10,21 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: pending
-iteration: 7
+iteration: 8
 max_iterations: 30
-session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 (commit 9c616289).
-  RFC-002 §9 scope correction (+211줄) 커밋. 사용자가 직접 검토 + sign-off 예정.
-  재개 조건:
-    1) docs/rfcs/RFC-002-container-string-ownership.md §9 검토.
-    2) §9.6 "Re-sign-off line"에 `Re-approved 2026-04-14 after §9 ...` 기재.
-    3) `/clear` + `/harness` → #2a 구현 착수 (Opus direct, large, fresh session 권장).
-  대안: §9 이견이 있으면 추가 RFC 수정 or path β(stdlib split) 재논의.
-  비-blocked 후속 가능 작업: #9, #3(trait), #4(closure) — 병렬/순차 선택 가능.
+session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 + #2a 구현 survey 완료.
+  commits: 9c616289 (RFC §9), 456f12d4 (session 2 checkpoint).
+  세션 3 업데이트:
+    - 사용자 "전체 그냥 계속" 지시로 §9 re-sign-off 자동 기재.
+    - #2a 구현 시작 시도 → code survey에서 CRITICAL 복잡 요인 발견:
+      `%Vec`(generic) vs `%Vec$str`(specialized) 공존 레이아웃 ABI 충돌.
+      구현 전 설계 결정 3안(i/ii/iii, ROADMAP #2a CRITICAL 섹션 참조) 중 선택 필요.
+    - #2a는 pending 유지, ROADMAP에 정밀 hook 좌표 + 옵션 3안 기록.
+    - auto-progress 중단, mode: pending 전환 (사용자 개입 필요).
+  재개 권장:
+    A) RFC-002에 레이아웃 ABI 결정 §9.7 추가 + 사용자 sign-off → #2a 구현.
+    B) 승인 전 병렬 진행 가능: #9 (match-PHI fix, 중간 규모),
+       #3 (trait-object str RFC), #4 (closure str RFC).
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
@@ -176,6 +181,76 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 (commit 9c616289).
     E2E baseline 유지 (2582 + 3 new).
   [복잡도]: 높음 — 모노모피제이션별 레이아웃 변경, ABI 동일.
   blockedBy: #5 완료 (done), #2a-rfc user re-sign-off.
+
+  [구현 survey 2026-04-14 세션 3 (Explore agent + 수동 확인)]
+  — 다음 세션이 바로 구현 착수할 수 있도록 hook 좌표 확정:
+
+  (A) **Layout hook (text-IR backend)**:
+      crates/vais-codegen/src/function_gen/generics.rs:57-85 —
+      `generate_specialized_struct_type`가 generic struct monomorphization마다
+      호출되며, fields 벡터에 ("owned", ResolvedType::I64) append, llvm_fields에
+      "i64" push하면 `%Vec$str = type { i64, i64, i64, i64, i64 }` emit됨.
+      조건: `generic_struct.name.node == "Vec"` AND `inst.type_args[0] ==
+      ResolvedType::Str` (아래 CRITICAL 주의).
+  (A') **Layout hook (inkwell backend)**:
+      crates/vais-codegen/src/inkwell/gen_types.rs:162-200
+      (`define_specialized_struct`) — 같은 조건으로 5필드 분기.
+
+  (B) **Push-site wrapping**:
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:620-691 의
+      Vec_ elem_size patch 로직과 **같은 블록**에 추가 가능.
+      조건: `full_method_name.starts_with("Vec_push$str")`.
+      삽입 위치: line 691 직후 (call emission 직전).
+      필요 IR:
+        1) owned bitmap-grow: helper fn `__vais_vec_str_owned_grow(%Vec*, i64 new_cap)` 호출.
+        2) 현재 self.len 로드 → index i.
+        3) rvalue의 alloc_slot을 string_value_slot에서 lookup:
+           — found (heap-owned): `__vais_vec_str_owned_set(%Vec*, i64 i)` 호출,
+                                  string_value_slot + scope_str_stack 제거,
+                                  alloc_tracker entry에 null store.
+           — not found (literal/borrowed): no-op.
+
+  (C) **Scope-exit drop prelude splice**:
+      crates/vais-codegen/src/stmt.rs:828-902 `generate_scope_drop_cleanup`.
+      line 862 for-loop **이전**에:
+        droppable iter하면서 `type_name == "Vec$str"` 또는 (더 robust하게)
+        StructInfo 조회하여 fields에 "owned" field가 있는 Vec 파생 타입이면
+        `call void @__vais_vec_str_shallow_free(%Vec$str* %{llvm_name})` emit.
+      순서: prelude → 기존 user Vec.drop → 완료.
+
+  (D) **Helper function emission**:
+      vtable.rs 또는 전용 신규 파일 (예: crates/vais-codegen/src/container_drop.rs).
+      Module-level emit (generate_module_with_instantiations에서 한 번):
+        define void @__vais_vec_str_owned_set(%Vec$str*, i64)
+        define void @__vais_vec_str_owned_grow(%Vec$str*, i64)
+        define void @__vais_vec_str_shallow_free(%Vec$str*)
+      Vec<str> 인스턴스화가 존재할 때만 emit (instantiations 스캔).
+
+  (E) **Return-transfer 확장**:
+      stmt.rs의 `pending_return_skip_slot` 옆에 `pending_return_skip_container`
+      추가 (state.rs). Return value가 %Vec$str* 이면 그 Vec의 data/owned 버퍼를
+      function-exit 청소 대상에서 제외. Test case (6) vec_str_return_transfers.
+
+  (F) **Alloc_tracker index 충돌 회피**:
+      Phase 191 #5에서 검증된 패턴 — transfer 시 entry는 유지, 포인터만 null store.
+      owned bitmap transfer도 같은 규약 준수.
+
+  ⚠️ **CRITICAL 복잡 요인 — 다음 세션 시작 시 먼저 확인**:
+      현재 text-IR codegen은 `%Vec`(generic fallback)과 `%Vec$T`(specialized)를
+      **공존**시킨다 (method_call.rs:650, helpers.rs:438, loops.rs:289 등이 모두
+      `%Vec` GEP를 emit). 5필드 `%Vec$str`는 `%Vec` 레이아웃(4필드)과 **binary-
+      incompatible**이므로, Vec<str> self-pointer가 `%Vec*`로 bitcast되는 경로에서
+      GEP field-index 3 (elem_size) 이후로 field-index 4 (owned)를 읽으면 OOB 발생.
+      옵션:
+        (i) 모든 `%Vec` GEP 사이트를 `%Vec$str` 전용 경로로 분기 — 침습적.
+        (ii) 5필드 공통 `%Vec` 레이아웃으로 통일하고 비-str Vec은 owned를 dead
+             field로 방치 — ABI 변경(§4.1 "non-str Vec 불변" 약속 위배).
+        (iii) Vec<str>만 별도 alias `%Vec_str_repr`로 관리하고 self-pointer를
+             use site마다 bitcast — 복잡하지만 가장 invariant-preserving.
+      결정 필요 → 다음 세션 첫 번째 작업.
+
+  iter_note: 세션 3(iter 8)에서 survey + 정밀 hook 좌표 확보 후 구현 착수 전에
+    CRITICAL 복잡 요인 발견 → 사용자 의사결정 필요하여 fresh session으로 연기.
 
 - [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct)
   [참조]: RFC-002 §4.2 Option D

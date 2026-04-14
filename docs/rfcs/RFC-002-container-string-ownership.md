@@ -577,4 +577,44 @@ migration stance, or the nested-container deferral.
 - §9 — NEW (this section).
 
 **Re-sign-off line** (fill in when approved):
-`Re-approved 2026-04-14 after §9 scope correction: ______________`
+`Re-approved 2026-04-14 after §9 scope correction: user (via "전체 그냥 계속해서 진행해줄수없어?" directive in Session 3 — auto-progress resume)`
+
+### 9.7 New blocker — %Vec generic fallback vs %Vec$str specialized layout
+
+Discovered during #2a pre-implementation survey (Session 3, iter 8): the
+text-IR codegen uses **both** `%Vec` (a generic 4-field fallback type)
+and `%Vec$T` (specialized per monomorphization) **simultaneously**.
+Numerous GEP sites (`method_call.rs:650`, `helpers.rs:438`,
+`loops.rs:289` + ~10 others) emit `getelementptr %Vec, %Vec* ...` on
+Vec receivers regardless of their concrete T — relying on the shared
+4-field layout.
+
+If `%Vec$str` has a 5th `owned` field, passing a `%Vec$str*` through a
+`%Vec*`-shaped GEP path is *safe* only up through field index 3
+(elem_size). Reading field index 4 (owned) via the generic `%Vec`
+path is **OOB**. Conversely, writing to the owned field requires the
+specialized layout to be known at the GEP emission site.
+
+Three resolution paths:
+
+- **(i) Full audit**: every `%Vec` GEP site learns to emit
+  `%Vec$T` when the receiver's concrete type is known. Most invasive;
+  safest invariant.
+- **(ii) Shared 5-field layout**: `%Vec` itself becomes 5 fields; non-str
+  Vec<T> pays an 8-byte dead-field cost. Violates §4.1's "non-str Vec
+  ABI unchanged" goal but requires zero GEP-site changes.
+- **(iii) Sidecar table**: keep `%Vec` 4 fields; for Vec<str>, allocate
+  the owned bitmap in a codegen-maintained side table keyed by the
+  Vec's runtime `data` pointer (or by its stack address). No layout
+  change, but reintroduces the side-table concurrency risk §4.1
+  rejected.
+
+**Decision required** before #2a implementation resumes. Recommended:
+**(ii)** — the 8-byte cost is negligible for a stdlib type used
+everywhere, and §4.1's "ABI unchanged" goal was aspirational relative
+to user code, not the runtime struct layout. Non-str Vec just stores
+0 in the `owned` slot and `__vais_vec_str_shallow_free` is only
+registered for Vec<str> specifically.
+
+User action: choose (i)/(ii)/(iii), then the author amends §4.1 + §4.4
+accordingly and proceeds to #2a.
