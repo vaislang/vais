@@ -227,3 +227,102 @@ F main() -> i64 {
         "hello-world",
     );
 }
+
+/// Guards substring's scope_str_stack path: each iteration allocates a heap
+/// buffer via __vais_str_substring; block-exit must free it or a later
+/// double-free / UAF will SIGABRT under libc malloc guards.
+#[test]
+fn e2e_phase191_loop_body_substring_no_leak() {
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+  i := mut 0
+  L i < 100000 {
+    s := "abcdefghij"
+    _sub := s.substring(2, 7)
+    i = i + 1
+  }
+  0
+}
+"#,
+        0,
+    );
+}
+
+/// Guards push_str's scope_str_stack path: each iteration allocates a concat
+/// buffer via push_str; the per-iteration slot must be freed at block exit.
+#[test]
+fn e2e_phase191_loop_body_push_str_no_leak() {
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+  i := mut 0
+  L i < 100000 {
+    _s := "hello".push_str("world")
+    i = i + 1
+  }
+  0
+}
+"#,
+        0,
+    );
+}
+
+/// Would guard PHI-merge + scope-drop interaction through a match expression.
+/// Blocked: text-IR backend emits a mixed-type PHI (`{ptr, i64}` fat pointer
+/// from arm 1, raw `i8*` from default arm) — pre-existing match-arm string
+/// unification bug, not caused by Phase 191 #5/#6. Tracked as separate
+/// follow-up #9.
+#[test]
+#[ignore]
+fn e2e_phase191_match_arm_concat_phi() {
+    assert_stdout_contains(
+        r#"
+F build(n: i64) -> str {
+  msg := M n {
+    1 => {
+      s := "aa" + "bb"
+      s
+    },
+    _ => {
+      s := "cc" + "dd"
+      s
+    }
+  }
+  R msg
+}
+
+F main() -> i64 {
+  println(build(1))
+  println(build(2))
+  0
+}
+"#,
+        "aabb",
+    );
+}
+
+/// Guards post-Phase-191-#6 break cleanup for a loop body with two concat
+/// sites: the first concat's slot must be freed by the break path before
+/// branching out; the second concat (after the break guard) must be freed
+/// normally on loop-body exit for the non-breaking iterations.
+#[test]
+fn e2e_phase191_break_before_concat_no_leak() {
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+  i := mut 0
+  L i < 100000 {
+    _first := "abcde" + "fghij"
+    i = i + 1
+    I i > 99999 {
+      B
+    }
+    _second := "klmno" + "pqrst"
+  }
+  0
+}
+"#,
+        0,
+    );
+}
