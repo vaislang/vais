@@ -9,12 +9,15 @@
 
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
-mode: auto
+mode: pending
 iteration: 6
 max_iterations: 30
-session_checkpoint: 2026-04-14 — fresh session 복귀. 전체 자동 진행 선택.
-  순서: #7(impl-sonnet) → #6(Opus) → #2a → #2b → #2c → #3 → #4. #8은 #6 완료 후 unblock.
-  완료: #1 (RSS 스크립트), #5 (text-IR parity). RFC-002 Approved.
+session_checkpoint: 2026-04-14 세션 2 — 3 tasks complete (#7, #6, #8).
+  commits: 6a47c582 (#7), 5bbf8a9a (#6), 70280d84 (#8).
+  surfaced: #9 (match-arm PHI fat-ptr bug) — Opus direct, 선결 아님.
+  다음 권장: #2a (RFC-002 core, Opus direct, large — fresh session 권장).
+  대안: #9 (match-PHI fix, 중간 규모) 또는 #4/#5 (RFC 작성 단계).
+  컨텍스트 보호 목적으로 mode: auto → pending 전환, /clear 후 재개 권장.
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
