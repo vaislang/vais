@@ -52,7 +52,8 @@ S Vec<T> {
     data: i64,      # Pointer to element array
     len: i64,       # Current number of elements
     cap: i64,       # Allocated capacity
-    elem_size: i64  # Size of each element in bytes (sizeof(T))
+    elem_size: i64, # Size of each element in bytes (sizeof(T))
+    owned: i64      # Vec<str> owned-bitmap pointer-int (0=unset); ignored for non-str Vecs (RFC-002 §4.1)
 }
 
 # ===== Vec helper functions (recursive, non-method) =====
@@ -128,7 +129,7 @@ X Vec<T> {
         # For backward compatibility: if sizeof returns 0 (e.g., Unit), default to 8
         elem_sz := I es <= 0 { 8 } EL { es }
         data := malloc(capacity * elem_sz)
-        Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
+        Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz, owned: 0 }
     }
 
     # Get the number of elements

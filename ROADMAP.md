@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: pending
-iteration: 9
+iteration: 10
 max_iterations: 30
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
@@ -399,6 +399,20 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
         RFC §2/§4.1/§4.3/§4.4 보정 + §9 (scope correction, 211줄 추가) 신설.
         구현(#2a)은 사용자 re-sign-off gating — §9.6 확인 필요.
         auto-progress 여기서 일시 정지 (user gate).
+    #2a: Opus direct foreground (iter 10, fresh session 4) — RFC-002 §9.8
+        revised plan 6단계. strategy: design-impl inseparable (stdlib Vec<T> 레이아웃
+        변경 + codegen call-site wrap + helper emission + scope-exit prelude +
+        return-transfer + e2e tests는 모두 §9.8 invariant "%Vec 与 %Vec$T body
+        동일"에 묶여있어 단일 브레인 필요). 파일 범위 넓음(std/vec.vais +
+        vais-codegen 5+ files) + ABI 영향 → impl-sonnet 위임 시 설계 의도 상실 위험.
+        opus_direct: RFC-002 §9.8 invariant-preserving stdlib amendment —
+        layout 변경 + 모든 specialization 전파 + helper ABI 동시 설계 필요.
+        user_gate: 2-3 sub-iterations 합의 (2026-04-15).
+          Iter A: std/vec.vais owned:i64 5th field + with_capacity init ✅ 2026-04-15
+            (E2E 2582/0, baseline 유지 — structural equivalence 실증).
+          Iter B: codegen helpers emission + Vec_push$str call-site wrap
+                  + scope-exit prelude splice + pending_return_skip_container.
+          Iter C: e2e phase191_container_str_drop.rs (3 tests) + 전체 회귀.
 
 progress: 6/9 resolved (#1, #5, #6, #7, #8, #2a-rfc complete; #2a unblocked by §9.8; #2b/#2c pending blocked by #2a; #9 new surfaced by #8); RFC-002 §9.8 final — %Vec/%Vec$T structural equivalence invariant documented, #2a implementable via uniform stdlib amendment; RFC-003 (Phase 192) withdrawn as unnecessary.
 
