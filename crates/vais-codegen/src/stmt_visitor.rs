@@ -427,13 +427,16 @@ impl CodeGenerator {
         if let Some(labels) = self.fn_ctx.loop_stack.last() {
             // Clone to avoid borrow conflict with generate_expr
             let break_label = labels.break_label.clone();
+            let loop_depth = labels.scope_str_depth;
             let mut ir = String::new();
             if let Some(expr) = value {
                 let (val, expr_ir) = self.generate_expr(expr, counter)?;
                 ir.push_str(&expr_ir);
+                ir.push_str(&self.generate_loop_scope_cleanup(loop_depth));
                 write_ir!(ir, "  br label %{}", break_label);
                 Ok((val, ir))
             } else {
+                ir.push_str(&self.generate_loop_scope_cleanup(loop_depth));
                 write_ir!(ir, "  br label %{}", break_label);
                 Ok(("void".to_string(), ir))
             }
@@ -449,7 +452,9 @@ impl CodeGenerator {
         if let Some(labels) = self.fn_ctx.loop_stack.last() {
             // Clone to avoid potential borrow issues
             let continue_label = labels.continue_label.clone();
-            let ir = format!("  br label %{}\n", continue_label);
+            let loop_depth = labels.scope_str_depth;
+            let mut ir = self.generate_loop_scope_cleanup(loop_depth);
+            write_ir!(ir, "  br label %{}", continue_label);
             Ok(("void".to_string(), ir))
         } else {
             Err(CodegenError::Unsupported(

@@ -70,6 +70,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         write_ir!(ir, "  br label %{}", loop_cond);

@@ -44,6 +44,10 @@ pub(crate) fn format_llvm_float(n: f64) -> String {
 pub(crate) struct LoopLabels {
     pub continue_label: String,
     pub break_label: String,
+    /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
+    /// are loop-internal and must be freed on break/continue to prevent leaks
+    /// of mid-iteration concat/push_str buffers (Phase 191 #6).
+    pub scope_str_depth: usize,
 }
 
 #[derive(Debug, Clone)]

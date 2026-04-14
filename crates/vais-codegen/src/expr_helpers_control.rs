@@ -434,6 +434,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         let mut ir = String::new();
@@ -495,6 +496,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         let mut ir = String::new();

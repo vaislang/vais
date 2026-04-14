@@ -530,6 +530,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.push(LoopContext {
             break_block: loop_end,
             continue_block: loop_inc,
+            scope_str_depth: self.scope_str_stack.len(),
         });
 
         // Branch to condition check
@@ -638,6 +639,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.push(LoopContext {
             break_block: loop_end,
             continue_block: loop_start,
+            scope_str_depth: self.scope_str_stack.len(),
         });
 
         // Allocate an alloca to cache the iterator value when both a pattern and an
@@ -782,6 +784,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.push(LoopContext {
             break_block: loop_end,
             continue_block: loop_cond,
+            scope_str_depth: self.scope_str_stack.len(),
         });
 
         // Branch to condition check
@@ -1044,17 +1047,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         &mut self,
         value: Option<&Expr>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let break_block = self
-            .loop_stack
-            .last()
-            .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?
-            .break_block;
+        let (break_block, loop_depth) = {
+            let ctx = self.loop_stack.last().ok_or_else(|| {
+                CodegenError::Unsupported("break outside of loop".to_string())
+            })?;
+            (ctx.break_block, ctx.scope_str_depth)
+        };
 
         // Generate value if present (for loop with value)
         if let Some(val_expr) = value {
             let _val = self.generate_expr(val_expr)?;
             // In a full implementation, this would be used for loop-with-value
         }
+
+        self.emit_loop_scope_cleanup(loop_depth)?;
 
         self.builder
             .build_unconditional_branch(break_block)
@@ -1064,17 +1070,45 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     pub(super) fn generate_continue(&mut self) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let loop_ctx = self
-            .loop_stack
-            .last()
-            .ok_or_else(|| CodegenError::Unsupported("continue outside of loop".to_string()))?;
+        let (continue_block, loop_depth) = {
+            let loop_ctx = self.loop_stack.last().ok_or_else(|| {
+                CodegenError::Unsupported("continue outside of loop".to_string())
+            })?;
+            (loop_ctx.continue_block, loop_ctx.scope_str_depth)
+        };
 
-        let continue_block = loop_ctx.continue_block;
+        self.emit_loop_scope_cleanup(loop_depth)?;
+
         self.builder
             .build_unconditional_branch(continue_block)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
         Ok(self.unit_value())
+    }
+
+    /// Emit free IR for every string-scope frame at index `>= loop_depth`.
+    /// Mirrors text-IR's `generate_loop_scope_cleanup` — releases mid-iteration
+    /// concat/push_str buffers on break/continue (Phase 191 #6). Frames are
+    /// cleared in-place (not popped) so the block-exit `terminated` path
+    /// discards them naturally, and continue's re-entry sees empty frames.
+    fn emit_loop_scope_cleanup(&mut self, loop_depth: usize) -> CodegenResult<()> {
+        let top = self.scope_str_stack.len();
+        for idx in loop_depth..top {
+            let frame: Vec<_> = self.scope_str_stack[idx].clone();
+            for slot in frame.iter() {
+                let still_tracked = self
+                    .string_value_slot
+                    .values()
+                    .any(|s| s == slot);
+                if !still_tracked {
+                    continue;
+                }
+                self.emit_free_slot(*slot)?;
+                self.string_value_slot.retain(|_, s| s != slot);
+            }
+            self.scope_str_stack[idx].clear();
+        }
+        Ok(())
     }
 
     // ========== Array/Tuple/Index ==========

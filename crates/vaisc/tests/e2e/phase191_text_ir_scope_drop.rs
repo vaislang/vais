@@ -142,6 +142,66 @@ F main() -> i64 {
     );
 }
 
+/// Phase 191 #6 — break path frees loop-inner scope frames.
+/// Before the fix, concat results produced in the loop body before a `break`
+/// leaked until function exit (alloc_tracker held them but with no slot null
+/// stored, the fn-exit cleanup would still free them — so the visible failure
+/// was not a leak at `main` exit but a double-free / UAF when the same slot
+/// id got reused in a later iteration after re-entry. In this synthetic test,
+/// the loop breaks on the first iteration after one concat, so the guarantee
+/// is simpler: the heap buffer must be freed at break (otherwise linear-growth
+/// regressions in later `L` bodies would resurface).
+#[test]
+fn e2e_phase191_break_frees_scope_strings() {
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+  i := mut 0
+  L i < 100000 {
+    a := "abcdefghij"
+    b := "klmnopqrst"
+    _msg := a + b
+    i = i + 1
+    I i > 99990 {
+      B
+    }
+  }
+  0
+}
+"#,
+        0,
+    );
+}
+
+/// Phase 191 #6 — continue path frees loop-inner scope frames.
+/// Without the fix, `continue` skipped block-exit cleanup entirely, so a
+/// `L { concat; I cond { C }; rest }` body leaks one buffer per hit on the
+/// fast path. 100k iterations × ~40 bytes = 4 MB, still too small to OOM in
+/// CI but enough to verify no double-free / UAF regression.
+#[test]
+fn e2e_phase191_continue_frees_scope_strings() {
+    assert_exit_code(
+        r#"
+F main() -> i64 {
+  i := mut 0
+  j := mut 0
+  L i < 100000 {
+    a := "abcdefghij"
+    b := "klmnopqrst"
+    _msg := a + b
+    i = i + 1
+    I i % 2 == 0 {
+      C
+    }
+    j = j + 1
+  }
+  0
+}
+"#,
+        0,
+    );
+}
+
 /// Regression guard for the Ident fallback in transfer_slot lookup.
 /// The inner block's tail expression is a bare Ident (`s`) referring to a
 /// heap-owning local. Without the var_string_slot fallback, a future change

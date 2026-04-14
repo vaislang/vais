@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 4
+iteration: 5
 max_iterations: 30
 session_checkpoint: 2026-04-14 — fresh session 복귀. 전체 자동 진행 선택.
   순서: #7(impl-sonnet) → #6(Opus) → #2a → #2b → #2c → #3 → #4. #8은 #6 완료 후 unblock.
@@ -175,17 +175,36 @@ session_checkpoint: 2026-04-14 — fresh session 복귀. 전체 자동 진행 �
 
 ### Phase 191 follow-ups (team-review 2026-04-14 발견)
 
-- [ ] 6. Break/Continue 경로 string scope cleanup (Opus direct)
-  [출처]: team-review W1 (stmt_visitor.rs:122-128 주석 과단정). inkwell/gen_stmt.rs:54-58도 동일.
-  [상태]: Return만 drop/alloc cleanup을 호출하고 Break/Continue는 호출하지 않음.
-    루프 body 내부 concat 뒤 break/continue 직전에 만들어진 중간 버퍼가 fn 종료까지 leak.
-  [대상 파일]:
-    - crates/vais-codegen/src/stmt_visitor.rs (generate_break_stmt/generate_continue_stmt)
-    - crates/vais-codegen/src/inkwell/gen_stmt.rs (동일 한계)
-  [완료 기준]:
-    - e2e: loop body + break/continue 직전 concat leak 회귀 테스트
-    - 양 백엔드 동일 동작
-  [복잡도]: 중 — loop_stack 범위 내 프레임 집계 필요.
+- [x] 6. Break/Continue 경로 string scope cleanup (Opus direct) ✅ 2026-04-14
+  design:
+    LoopLabels/LoopContext에 scope_str_depth 스냅샷 추가. loop 진입 시
+    scope_str_stack.len() 저장 → break/continue 시 [loop_depth..top) 프레임을
+    null-check + free IR로 해제. 프레임은 pop하지 않음 — block-exit의
+    terminated=true 경로가 discard하고, continue 재진입 시 frame.clear()로
+    빈 프레임만 보이므로 redundant free 없음.
+  changes:
+    crates/vais-codegen/src/types/mod.rs: LoopLabels.scope_str_depth 필드 추가.
+    crates/vais-codegen/src/generate_expr_loop.rs,
+      generate_expr/loops.rs (×3 sites), expr_helpers_control.rs (×2 sites):
+      6개 LoopLabels push 지점에 scope_str_depth 스냅샷 전달.
+    crates/vais-codegen/src/stmt.rs: generate_loop_scope_cleanup 헬퍼 추가.
+      Stmt::Break/Stmt::Continue 경로에 cleanup emission 삽입.
+    crates/vais-codegen/src/stmt_visitor.rs: generate_break_stmt/
+      generate_continue_stmt에 cleanup emission 삽입 (visitor 경로).
+    crates/vais-codegen/src/inkwell/generator.rs: LoopContext.scope_str_depth.
+    crates/vais-codegen/src/inkwell/gen_stmt.rs: 3개 LoopContext push 사이트에
+      스냅샷 전달. generate_break/generate_continue에 emit_loop_scope_cleanup
+      호출 삽입 + 신규 헬퍼 (emit_free_slot + string_value_slot 스크럽 +
+      frame.clear()).
+    crates/vaisc/tests/e2e/phase191_text_ir_scope_drop.rs: 2 new regression
+      tests (e2e_phase191_break_frees_scope_strings, e2e_phase191_continue_
+      frees_scope_strings) — 100k 이터 L 루프 + B/C 경로 leak-free 확인.
+  verify:
+    cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+    cargo test -p vaisc --test e2e phase191: 8/8 (baseline 6 + 2 new).
+    cargo test -p vaisc --test e2e: 2579/0 (baseline 2577 + 2 new, 690s).
+  rfc: RFC-001 §5.4 단일 경로. out-of-scope: break-with-value 소유권 전이
+    (Return의 pending_return_skip_slot과 유사한 메커니즘 필요 — follow-up).
 
 - [x] 7. transfer_slot lookup Ident fallback (impl-sonnet) ✅ 2026-04-14
   changes:
@@ -232,9 +251,12 @@ session_checkpoint: 2026-04-14 — fresh session 복귀. 전체 자동 진행 �
          fixed alloc_tracker slot-id collision regression caught by new e2e.)
     #2/#3/#4: Opus direct — RFC + design 의사결정 inseparable, 사용자 리뷰 gating.
     #7: Sequential impl-sonnet background (iter 4) — 낮은 복잡도 패턴 매칭 추가.
-        양 백엔드(text-IR + inkwell) transfer_slot 계산에 Ident fallback 삽입.
+        양 백엔드(text-IR + inkwell) transfer_slot 계산에 Ident fallback 삽입. ✅ 6a47c582
+    #6: Sequential Opus direct (iter 5) — loop_stack 프레임 집계 설계 필요.
+        opus_direct: Return/Break/Continue ownership-transfer 불변성 설계-구현 inseparable.
+        파일 #7과 겹침(stmt_visitor.rs + inkwell/gen_stmt.rs) → 다른 작업과 병렬 불가.
 
-progress: 3/8 resolved (#1, #5, #7 complete; #2 split into #2a/#2b/#2c pending); RFC-002 Approved
+progress: 4/8 resolved (#1, #5, #6, #7 complete; #2 split into #2a/#2b/#2c pending); RFC-002 Approved
 
 ---
 

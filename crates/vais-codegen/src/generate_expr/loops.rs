@@ -83,6 +83,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.clone(), // keep: used in continue stmt
             break_label: loop_end.clone(),      // keep: used in break stmt
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         let mut ir = String::new();
@@ -369,6 +370,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         write_ir!(ir, "  br label %{}", loop_cond);
@@ -587,6 +589,7 @@ impl CodeGenerator {
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.clone(), // keep: used in continue stmt
             break_label: loop_end.clone(),      // keep: used in break stmt
+            scope_str_depth: self.fn_ctx.scope_str_stack.len(),
         });
 
         let mut ir = String::new();

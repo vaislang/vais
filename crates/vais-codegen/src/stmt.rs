@@ -526,14 +526,16 @@ impl CodeGenerator {
             Stmt::Break(value) => {
                 if let Some(labels) = self.fn_ctx.loop_stack.last() {
                     let break_label = labels.break_label.clone();
+                    let loop_depth = labels.scope_str_depth;
                     let mut ir = String::new();
                     if let Some(expr) = value {
                         let (val, expr_ir) = self.generate_expr(expr, counter)?;
                         ir.push_str(&expr_ir);
-                        // Store break value if needed (for loop expressions)
+                        ir.push_str(&self.generate_loop_scope_cleanup(loop_depth));
                         write_ir!(ir, "  br label %{}", break_label);
                         Ok((val, ir))
                     } else {
+                        ir.push_str(&self.generate_loop_scope_cleanup(loop_depth));
                         write_ir!(ir, "  br label %{}", break_label);
                         Ok(("void".to_string(), ir))
                     }
@@ -546,7 +548,9 @@ impl CodeGenerator {
             Stmt::Continue => {
                 if let Some(labels) = self.fn_ctx.loop_stack.last() {
                     let continue_label = labels.continue_label.clone();
-                    let ir = format!("  br label %{}\n", continue_label);
+                    let loop_depth = labels.scope_str_depth;
+                    let mut ir = self.generate_loop_scope_cleanup(loop_depth);
+                    write_ir!(ir, "  br label %{}", continue_label);
                     Ok(("void".to_string(), ir))
                 } else {
                     Err(CodegenError::Unsupported(
@@ -778,6 +782,29 @@ impl CodeGenerator {
             // function-exit cleanup load null and skip the free branch.
 
             slot_idx += 1;
+        }
+        ir
+    }
+
+    /// Emit string-scope free IR for every frame in `scope_str_stack` at index
+    /// `>= loop_depth`. Called from Break/Continue to release mid-iteration
+    /// concat/push_str buffers that would otherwise leak when control leaves
+    /// the loop body via a non-natural edge (Phase 191 #6).
+    ///
+    /// Frames are NOT popped — `visit_block_stmts`' `terminated=true` path
+    /// discards them after the br, and `generate_string_scope_cleanup` nulls
+    /// each slot + scrubs `string_value_slot`, so re-entry through `continue`
+    /// sees empty frames and the block-exit path emits no redundant frees.
+    pub(crate) fn generate_loop_scope_cleanup(&mut self, loop_depth: usize) -> String {
+        let mut ir = String::new();
+        let top = self.fn_ctx.scope_str_stack.len();
+        for idx in loop_depth..top {
+            let frame = self.fn_ctx.scope_str_stack[idx].clone();
+            let piece = self.generate_string_scope_cleanup(&frame, None);
+            if !piece.is_empty() {
+                ir.push_str(&piece);
+            }
+            self.fn_ctx.scope_str_stack[idx].clear();
         }
         ir
     }

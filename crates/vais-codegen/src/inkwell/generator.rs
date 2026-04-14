@@ -23,6 +23,9 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) break_block: inkwell::basic_block::BasicBlock<'ctx>,
     /// Block to jump to on continue
     pub(super) continue_block: inkwell::basic_block::BasicBlock<'ctx>,
+    /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
+    /// are loop-internal and must be freed on break/continue (Phase 191 #6).
+    pub(super) scope_str_depth: usize,
 }
 
 /// LLVM code generator using inkwell.
