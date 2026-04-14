@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 2
+iteration: 3
 max_iterations: 30
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
@@ -33,7 +33,15 @@ max_iterations: 30
     delta 0KB → PASS. 46행 CSV(헤더+45 샘플) 정상 수집, 종료 시 바이너리 + 임시파일 정리.
   skipped: 실전 300s 구동은 사용자 CI에서 실행 권장. Rust 코드 변경 없음 → E2E 영향 0.
 
-- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct)
+- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — RFC 초안 작성 (2026-04-14)
+  RFC: docs/rfcs/RFC-002-container-string-ownership.md (pre-implementation).
+  구조: Vec<str>에 owned bitmap 필드 추가(모노모피제이션별), 구조체에 ownership_mask i64 필드,
+        push/literal init 시 소유권 이전, 컨테이너 drop 시 bitmap 기반 선택적 free.
+  대체안 4건 기각 사유 기록 (tag-bit / clone-on-push / runtime bounds / wrapper type).
+  리뷰 대기: §5 open questions 5건 (64-field limit, user-Drop interaction,
+            nested cycles, iter borrow safety, migration).
+  세 번 sub-phase 분할: #2a (Vec<str> layout + drop), #2b (struct shallow-drop),
+            #2c (nested container recursion). 각 단계 e2e + team-review.
   [목표]: 컨테이너에 소유된 heap string이 컨테이너 destructor에서 free되도록 연결.
   [현재 상태]: Vec<str> push된 heap 문자열은 컨테이너가 drop돼도 문자열 버퍼는 leak.
   [대상 파일]:
