@@ -240,6 +240,18 @@ impl CodeGenerator {
                 let drop_ir = self.generate_drop_cleanup();
                 ir.push_str(&drop_ir);
 
+                // Ownership transfer for implicit-return string values. RFC-001 §4.6.
+                // Direct SSA match first; fall back to var_string_slot via expr.
+                if matches!(ret_type, ResolvedType::Str) {
+                    let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                    if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
+                        self.fn_ctx.pending_return_skip_slot.push(slot);
+                        if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
+                            self.fn_ctx.pending_return_skip_slot.extend(extras);
+                        }
+                    }
+                }
+
                 // Free tracked heap allocations before return
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
@@ -367,6 +379,17 @@ impl CodeGenerator {
                     // Call Drop::drop() for droppable locals (reverse order)
                     let drop_ir = self.generate_drop_cleanup();
                     ir.push_str(&drop_ir);
+
+                    // Ownership transfer for implicit-return string values. RFC-001 §4.6.
+                    if matches!(ret_type, ResolvedType::Str) {
+                        let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                        if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
+                            self.fn_ctx.pending_return_skip_slot.push(slot);
+                            if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
+                                self.fn_ctx.pending_return_skip_slot.extend(extras);
+                            }
+                        }
+                    }
 
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
@@ -712,6 +735,18 @@ impl CodeGenerator {
                 let drop_ir = self.generate_drop_cleanup();
                 ir.push_str(&drop_ir);
 
+                // Ownership transfer for implicit-return string values. RFC-001 §4.6.
+                // Direct SSA match first; fall back to var_string_slot via expr.
+                if matches!(ret_type, ResolvedType::Str) {
+                    let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                    if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
+                        self.fn_ctx.pending_return_skip_slot.push(slot);
+                        if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
+                            self.fn_ctx.pending_return_skip_slot.extend(extras);
+                        }
+                    }
+                }
+
                 // Free tracked heap allocations before return
                 let alloc_cleanup_ir = self.generate_alloc_cleanup();
                 ir.push_str(&alloc_cleanup_ir);
@@ -770,6 +805,17 @@ impl CodeGenerator {
                     // Call Drop::drop() for droppable locals (reverse order)
                     let drop_ir = self.generate_drop_cleanup();
                     ir.push_str(&drop_ir);
+
+                    // Ownership transfer for implicit-return string values. RFC-001 §4.6.
+                    if matches!(ret_type, ResolvedType::Str) {
+                        let key = value.strip_prefix("{ i8*, i64 } ").unwrap_or(&value).trim().to_string();
+                        if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
+                            self.fn_ctx.pending_return_skip_slot.push(slot);
+                            if let Some(extras) = self.fn_ctx.phi_extra_slots.get(&key).cloned() {
+                                self.fn_ctx.pending_return_skip_slot.extend(extras);
+                            }
+                        }
+                    }
 
                     // Free tracked heap allocations before return
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();

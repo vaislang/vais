@@ -341,6 +341,34 @@ impl CodeGenerator {
             // Register the phi result type so a parent expression seeing
             // this if-expression's value gets the correct struct/enum type.
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
+            // String ownership merge: if both incoming branches own a tracked
+            // heap string slot, the PHI result inherits ownership of ALL.
+            // Register the first slot against the PHI's SSA register (direct
+            // lookup); stash extras in phi_extra_slots so the let-binding
+            // hook pulls them into var_string_slots_multi, or the return
+            // hook appends them to the skip list directly.
+            // See RFC-001 §4 PHI merge (team-review UAF fix 2026-04-14).
+            if phi_llvm == "{ i8*, i64 }" {
+                let then_key = then_val_for_phi.trim().to_string();
+                let else_key = else_val_for_phi.trim().to_string();
+                let then_slot = self.fn_ctx.string_value_slot.get(&then_key).cloned();
+                let else_slot = self.fn_ctx.string_value_slot.get(&else_key).cloned();
+                let mut slots: Vec<String> = Vec::new();
+                if let Some(s) = then_slot { slots.push(s); }
+                if let Some(s) = else_slot {
+                    if !slots.contains(&s) { slots.push(s); }
+                }
+                if !slots.is_empty() {
+                    self.fn_ctx
+                        .string_value_slot
+                        .insert(result.clone(), slots[0].clone());
+                    if slots.len() > 1 {
+                        self.fn_ctx
+                            .phi_extra_slots
+                            .insert(result.clone(), slots[1..].to_vec());
+                    }
+                }
+            }
         } else if !then_from_label.is_empty() {
             let safe = if then_val_for_phi == "void" { "0".to_string() } else { then_val_for_phi.clone() };
             write_ir!(

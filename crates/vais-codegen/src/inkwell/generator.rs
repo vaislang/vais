@@ -123,6 +123,54 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Each entry is a PointerValue that should be freed before function return.
     pub(super) alloc_tracker: Vec<inkwell::values::PointerValue<'ctx>>,
 
+    /// Maps a string fat-pointer StructValue (keyed by raw LLVM value ref as usize)
+    /// to the `alloc_slot` PointerValue that owns its heap buffer. Used at `return`
+    /// to transfer ownership: the returned fat pointer's slot is excluded from free
+    /// so the caller receives a live buffer instead of UAF. See RFC-001 §4.6.
+    pub(super) string_value_slot: HashMap<usize, inkwell::values::PointerValue<'ctx>>,
+
+    /// Slots to skip in the next emit_alloc_cleanup call. Typically holds one
+    /// slot — the one owning the returned buffer. For PHI results (if/match as
+    /// expression producing a string), both incoming branches' slots must be
+    /// skipped because we can't know at codegen time which ran. Cleared after
+    /// cleanup emission.
+    pub(super) pending_return_skip_slot: Vec<inkwell::values::PointerValue<'ctx>>,
+
+    /// Per-scope stack of owned string slots. Each frame is a list of alloc_slot
+    /// PointerValues created during that block scope. At block exit, any slot in
+    /// the innermost frame that still appears in `string_value_slot` (i.e. was not
+    /// transferred out via return or consumed by a later concat) is freed. This
+    /// is the loop-iteration leak fix: each iteration of a loop body enters and
+    /// exits a scope, freeing the iteration's final concat result. See RFC-001
+    /// §4.2.
+    pub(super) scope_str_stack: Vec<Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// Maps a local variable name to its owning alloc_slot — when a `let`
+    /// binding receives a tracked concat result, we record the slot under the
+    /// variable name so that `return x` (which loads `x` and produces a new SSA
+    /// register not equal to the concat's original SSA) can still find the slot
+    /// and mark it for ownership transfer. This is the fix for the UAF that
+    /// team-review caught on 2026-04-14: without variable-level tracking, a
+    /// `let msg = a+b; return msg` pattern freed `msg`'s buffer before the
+    /// caller could use it. See RFC-001 §4.5 / §4.6.
+    pub(super) var_string_slot: HashMap<String, inkwell::values::PointerValue<'ctx>>,
+
+    /// Maps a local variable name to multiple owning slots — used when the RHS
+    /// is a PHI (if/match as expression): both incoming branches' slots must
+    /// be kept live until the owner uses the value (runtime picks exactly one,
+    /// the other remains null). On `return x` we exclude ALL slots in this
+    /// list; the null one is already a no-op in emit_alloc_cleanup.
+    pub(super) var_string_slots_multi:
+        HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
+
+    /// For PHI results that represent a merge of multiple tracked concat
+    /// results (if/match-as-expression producing a string), the PHI's SSA is
+    /// registered in `string_value_slot` with its first incoming slot; any
+    /// additional slots go here, keyed by the PHI's raw LLVM value ref.
+    /// Consumed by the `let` binding hook to populate `var_string_slots_multi`.
+    pub(super) phi_extra_slots:
+        HashMap<usize, Vec<inkwell::values::PointerValue<'ctx>>>,
+
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
     pub(super) tco_state: Option<TcoState<'ctx>>,
@@ -199,6 +247,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
             alloc_tracker: Vec::new(),
+            string_value_slot: HashMap::new(),
+            pending_return_skip_slot: Vec::new(),
+            scope_str_stack: Vec::new(),
+            var_string_slot: HashMap::new(),
+            var_string_slots_multi: HashMap::new(),
+            phi_extra_slots: HashMap::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),

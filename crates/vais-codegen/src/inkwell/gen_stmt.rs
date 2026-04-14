@@ -19,6 +19,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let mut last_value: BasicValueEnum = self.unit_value();
 
+        // Scope frame for string ownership: any concat result allocated in this
+        // block is registered here and freed on block exit unless transferred
+        // out (via return, or escape to outer scope via let/assign — see RFC-001
+        // §4.2, §4.5). Without this, loop-body concat results leak per
+        // iteration because the slot's LLVM alloca is function-level and gets
+        // overwritten each iter.
+        self.scope_str_stack.push(Vec::new());
+
         for stmt in stmts {
             // Stop generating after a terminator (return/break/continue)
             if let Some(block) = self.builder.get_insert_block() {
@@ -27,6 +35,53 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
             }
             last_value = self.generate_stmt(&stmt.node)?;
+        }
+
+        // If the block's last value is itself a tracked concat result and the
+        // block is being used as an expression (e.g. `let x = { ... }`), the
+        // ownership transfers to the outer scope — unregister from this frame
+        // and re-register at the outer frame (if any). Otherwise free it.
+        let transfer_slot = if last_value.is_struct_value() {
+            use inkwell::values::AsValueRef;
+            let key = last_value.into_struct_value().as_value_ref() as usize;
+            self.string_value_slot.get(&key).copied()
+        } else {
+            None
+        };
+        let frame = self.scope_str_stack.pop().unwrap_or_default();
+        // Only emit frees if the current block is not already terminated
+        // (early return / break would have handled cleanup via other paths).
+        let insert_block_ok = self
+            .builder
+            .get_insert_block()
+            .map(|b| b.get_terminator().is_none())
+            .unwrap_or(false);
+        if insert_block_ok {
+            for slot in frame.iter() {
+                if Some(*slot) == transfer_slot {
+                    // Transfer ownership to enclosing scope if possible.
+                    if let Some(outer) = self.scope_str_stack.last_mut() {
+                        outer.push(*slot);
+                    }
+                    continue;
+                }
+                // Only free if the slot is still registered as owning its
+                // buffer. A previous intermediate-free may have nulled it and
+                // removed it from string_value_slot — emit_free_slot is
+                // defensive against null but removing from string_value_slot
+                // lets us skip the IR emission entirely.
+                let still_tracked = self
+                    .string_value_slot
+                    .values()
+                    .any(|s| s == slot);
+                if !still_tracked {
+                    continue;
+                }
+                self.emit_free_slot(*slot)?;
+                // Remove from string_value_slot so end-of-fn cleanup and
+                // outer-scope exits don't double-process it.
+                self.string_value_slot.retain(|_, s| s != slot);
+            }
         }
 
         Ok(last_value)
@@ -50,6 +105,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     if let Some((lambda_fn_name, captures)) = self._last_lambda_info.take() {
                         self.lambda_bindings
                             .insert(name.node.clone(), (lambda_fn_name, captures));
+                    }
+                }
+
+                // Owning-string binding: if the RHS is a tracked concat result,
+                // record the slot under this variable's name. A later
+                // `return x` or `x + y` reaches through the alloca load (which
+                // produces a fresh SSA), and we use var_string_slot to recover
+                // the slot for ownership transfer / intermediate free. If the
+                // RHS is a PHI merging multiple concat results (if/match as
+                // expression), transfer the extra slots into the multi-slot
+                // map. See RFC-001 §4.5 / §4.6 (team-review fix 2026-04-14).
+                if val.is_struct_value() {
+                    use inkwell::values::AsValueRef;
+                    let key = val.into_struct_value().as_value_ref() as usize;
+                    if let Some(slot) = self.string_value_slot.get(&key).copied() {
+                        self.var_string_slot.insert(name.node.clone(), slot);
+                        let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
+                        if !extras.is_empty() {
+                            let owned: Vec<_> =
+                                std::iter::once(slot).chain(extras).collect();
+                            self.var_string_slots_multi
+                                .insert(name.node.clone(), owned);
+                        }
+                        // Ownership stays with the enclosing block's scope
+                        // frame. The variable and the scope frame share the
+                        // slot: `return x` via var_string_slot hands the slot
+                        // to the caller; otherwise the scope-drop at block
+                        // exit frees it. This keeps loop-body allocations
+                        // freed per iteration.
                     }
                 }
                 // Track resolved type for variables with type annotations
@@ -124,6 +208,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Stmt::Return(Some(expr)) => {
                 let val = self.generate_expr(&expr.node)?;
                 self.emit_defer_cleanup()?;
+                // Ownership transfer: if the returned value owns a tracked heap
+                // buffer, exclude its slot from free so the caller receives a
+                // live buffer. Two lookup paths, checked in order:
+                //   1. Direct SSA match: the returned SSA is itself the concat
+                //      result (e.g. `return a + b`).
+                //   2. Variable-name match: the returned expression is a local
+                //      identifier whose binding owns a tracked slot (e.g.
+                //      `let msg = a+b; return msg`). The load produces a fresh
+                //      SSA that is NOT in string_value_slot, so we fall through
+                //      to var_string_slot which is keyed by variable name.
+                // See RFC-001 §4.6 (team-review UAF fix 2026-04-14).
+                let transfer_slots = self.resolve_return_owning_slots(&val, &expr.node);
+                self.pending_return_skip_slot.extend(transfer_slots);
                 self.emit_alloc_cleanup()?;
                 self.builder
                     .build_return(Some(&val))
@@ -263,7 +360,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             for (val, block) in &incoming {
                 phi.add_incoming(&[(*val, *block)]);
             }
-            Ok(phi.as_basic_value())
+            // String ownership merge: if both branch values were tracked concat
+            // results, the PHI result inherits ownership of BOTH slots. At
+            // runtime only one is populated; the other is null. Both must be
+            // kept alive until the PHI consumer (e.g. a `let` binding or
+            // `return`) transfers ownership. See RFC-001 §4 PHI merge
+            // (team-review UAF fix 2026-04-14).
+            let phi_val = phi.as_basic_value();
+            if phi_val.is_struct_value() {
+                use inkwell::values::AsValueRef;
+                let mut slots: Vec<inkwell::values::PointerValue<'ctx>> = Vec::new();
+                // then_val / else_val are BasicValueEnum and have is_struct_value.
+                let branch_vals = [then_val, else_val];
+                for v in branch_vals {
+                    if v.is_struct_value() {
+                        let k = v.into_struct_value().as_value_ref() as usize;
+                        if let Some(s) = self.string_value_slot.get(&k).copied() {
+                            slots.push(s);
+                        }
+                    }
+                }
+                if !slots.is_empty() {
+                    let phi_key = phi_val.into_struct_value().as_value_ref() as usize;
+                    self.string_value_slot.insert(phi_key, slots[0]);
+                    if slots.len() > 1 {
+                        self.phi_extra_slots.insert(phi_key, slots[1..].to_vec());
+                    }
+                }
+            }
+            Ok(phi_val)
         } else if !incoming.is_empty() {
             // Types differ between branches — this happens when if/else is used as a
             // statement (not expression) and each branch ends with a different-typed
@@ -704,8 +829,150 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// Emit `if (*slot != null) { free(*slot); *slot = null; }` for a single
+    /// tracked allocation slot. Used to free concat intermediates as soon as
+    /// they have been consumed by the next concat in a chain. See RFC-001 §4.3.
+    pub(super) fn emit_free_slot(
+        &mut self,
+        slot: inkwell::values::PointerValue<'ctx>,
+    ) -> CodegenResult<()> {
+        let free_fn = self
+            .module
+            .get_function("free")
+            .ok_or_else(|| CodegenError::UndefinedFunction("free".to_string()))?;
+        let ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::default());
+        let loaded = self
+            .builder
+            .build_load(ptr_type, slot, "ifr_load")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let is_null = self
+            .builder
+            .build_is_null(loaded, "ifr_is_null")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let current_fn = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let free_block = self.context.append_basic_block(current_fn, "ifr_free");
+        let after = self.context.append_basic_block(current_fn, "ifr_after");
+        self.builder
+            .build_conditional_branch(is_null, after, free_block)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.position_at_end(free_block);
+        self.builder
+            .build_call(free_fn, &[loaded.into()], "")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(slot, ptr_type.const_null())
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_unconditional_branch(after)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.position_at_end(after);
+        Ok(())
+    }
+
+    /// Find the alloc_slot(s) that own the heap buffer behind the returned
+    /// string value, consulting the SSA→slot map (for direct `return a + b`),
+    /// the variable→slot map (for `let x = a+b; return x`), and the multi-slot
+    /// map (for `let x = I c {a+b} E {c+d}; return x` — PHI bindings). Returns
+    /// an empty Vec for string literals, borrowed parameters, or non-string
+    /// returns.
+    pub(super) fn resolve_return_owning_slots(
+        &self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+        expr: &Expr,
+    ) -> Vec<inkwell::values::PointerValue<'ctx>> {
+        // Path 1: direct SSA match.
+        if val.is_struct_value() {
+            use inkwell::values::AsValueRef;
+            let key = val.into_struct_value().as_value_ref() as usize;
+            if let Some(slot) = self.string_value_slot.get(&key).copied() {
+                return vec![slot];
+            }
+        }
+        // Path 2: the return expression is `x` (an identifier).
+        if let Expr::Ident(name) = expr {
+            // Multi-slot (PHI) binding takes priority — covers the case where
+            // the variable's RHS was an if/match expression producing str.
+            if let Some(slots) = self.var_string_slots_multi.get(name) {
+                return slots.clone();
+            }
+            if let Some(slot) = self.var_string_slot.get(name).copied() {
+                return vec![slot];
+            }
+        }
+        Vec::new()
+    }
+
+    /// If `val` is a struct value whose key is tracked in `string_value_slot`,
+    /// mark its slot as the one to skip in the next emit_alloc_cleanup.
+    /// Used on implicit-return (function body last expression) paths where we
+    /// don't go through `Stmt::Return`. Callers that know the source Expr
+    /// should prefer `mark_return_ownership_transfer_expr` to also match on
+    /// `let`-bound identifier returns. See RFC-001 §4.6.
+    pub(super) fn mark_return_ownership_transfer(&mut self, val: &inkwell::values::BasicValueEnum<'ctx>) {
+        if val.is_struct_value() {
+            use inkwell::values::AsValueRef;
+            let key = val.into_struct_value().as_value_ref() as usize;
+            if let Some(slot) = self.string_value_slot.get(&key).copied() {
+                self.pending_return_skip_slot.push(slot);
+            }
+        }
+    }
+
+    /// Same as `mark_return_ownership_transfer` but also falls back to
+    /// `var_string_slot` / multi-slot map when the returned expression is a
+    /// local identifier — fixes the UAF on `let x = a+b; x` patterns and
+    /// `let x = if c {..} else {..}; x` (team-review 2026-04-14).
+    pub(super) fn mark_return_ownership_transfer_expr(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+        expr: &Expr,
+    ) {
+        let slots = self.resolve_return_owning_slots(val, expr);
+        self.pending_return_skip_slot.extend(slots);
+    }
+
+    /// For a `Block` function body, the implicit return is the trailing
+    /// expression. Extracts it so we can apply variable-level ownership
+    /// transfer on `F foo() -> str { let msg = a+b; msg }` patterns.
+    pub(super) fn block_trailing_expr<'a>(
+        &self,
+        stmts: &'a [Spanned<Stmt>],
+    ) -> Option<&'a Expr> {
+        match stmts.last().map(|s| &s.node) {
+            Some(Stmt::Expr(e)) => Some(&e.node),
+            _ => None,
+        }
+    }
+
+    /// Combined helper: mark return ownership transfer for block-body returns,
+    /// using the trailing expression when available so `let`-bound identifier
+    /// returns work (team-review 2026-04-14).
+    pub(super) fn mark_return_ownership_transfer_block(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+        stmts: &[Spanned<Stmt>],
+    ) {
+        if let Some(expr) = self.block_trailing_expr(stmts) {
+            self.mark_return_ownership_transfer_expr(val, expr);
+        } else {
+            self.mark_return_ownership_transfer(val);
+        }
+    }
+
     /// Emit free calls for all tracked heap allocations (scope-based auto free).
     /// Called before function exit points, after defer cleanup.
+    ///
+    /// Return-value exclusion: if `pending_return_skip_slot` is set, that slot is
+    /// skipped so the caller receives a live buffer. See RFC-001 §4.6.
     pub(super) fn emit_alloc_cleanup(&mut self) -> CodegenResult<()> {
         if self.alloc_tracker.is_empty() {
             return Ok(());
@@ -716,8 +983,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .ok_or_else(|| CodegenError::UndefinedFunction("free".to_string()))?;
         // Clone to avoid borrow conflict
         let slots: Vec<_> = self.alloc_tracker.clone();
+        let skip_slots: Vec<_> = std::mem::take(&mut self.pending_return_skip_slot);
         let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
         for slot in slots {
+            if skip_slots.contains(&slot) {
+                continue;
+            }
             // Load the actual pointer from the entry-block alloca slot
             let loaded = self.builder
                 .build_load(ptr_type, slot, "alloc_cleanup_ptr")
@@ -735,6 +1006,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.position_at_end(free_block);
             self.builder
                 .build_call(free_fn, &[loaded.into()], "")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            // Null the slot after free — if control re-enters (shouldn't happen
+            // before `ret`, but defensive) the next cleanup sees null and skips.
+            self.builder
+                .build_store(slot, ptr_type.const_null())
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.build_unconditional_branch(skip_block)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

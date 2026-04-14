@@ -791,31 +791,86 @@ impl CodeGenerator {
     /// Each tracked allocation has an entry-block alloca that stores the i8* pointer.
     /// At cleanup time we load from the alloca and free, avoiding SSA dominance issues
     /// when the original pointer was defined inside a conditional branch.
+    ///
+    /// Null-check: each slot is null-initialized and may be untouched on a branch
+    /// that never allocated — we skip `free(null)` (defined as no-op in C but we
+    /// avoid the call anyway to keep IR tight).
+    ///
+    /// Return-value exclusion: if `fn_ctx.pending_return_skip_slot` is set, that
+    /// slot is skipped. The caller takes ownership of the returned heap buffer.
+    /// See RFC-001 §4.6.
     pub(crate) fn generate_alloc_cleanup(&mut self) -> String {
-        // DISABLED: auto-free causes use-after-free crashes when concat results
-        // are still referenced by the caller. Accept memory leaks for now.
-        // TODO: implement proper lifetime tracking or arena allocator.
-        String::new()
+        if self.fn_ctx.alloc_tracker.is_empty() {
+            return String::new();
+        }
+        let skip_slots: Vec<String> =
+            std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
+        let slots: Vec<(String, String)> = self.fn_ctx.alloc_tracker.clone();
+        let mut ir = String::new();
+        ir.push_str("  ; auto-free cleanup (string concat heap buffers)\n");
+        for (slot_name, _ptr_reg) in &slots {
+            if skip_slots.iter().any(|s| s == slot_name) {
+                continue;
+            }
+            let id = self.fn_ctx.label_counter;
+            self.fn_ctx.label_counter += 1;
+            let loaded = format!("%__fr_{}", id);
+            write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            let is_null = format!("%__fr_nn_{}", id);
+            write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            let do_free = format!("__fr_do_{}", id);
+            let after = format!("__fr_after_{}", id);
+            write_ir!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                is_null,
+                after,
+                do_free
+            );
+            write_ir!(ir, "{}:", do_free);
+            write_ir!(ir, "  call void @free(i8* {})", loaded);
+            // Null the slot after free so any subsequent cleanup (e.g. a later
+            // return path reaching the same alloca) sees null and skips.
+            write_ir!(ir, "  store i8* null, i8** {}", slot_name);
+            write_ir!(ir, "  br label %{}", after);
+            write_ir!(ir, "{}:", after);
+        }
+        // skip_slots was already taken via mem::take above, so no reset needed.
+        ir
     }
 
     /// Clear the alloc tracker (called when entering a new function)
     pub(crate) fn clear_alloc_tracker(&mut self) {
         self.fn_ctx.alloc_tracker.clear();
+        self.fn_ctx.string_value_slot.clear();
+        self.fn_ctx.pending_return_skip_slot.clear();
+        self.fn_ctx.var_string_slot.clear();
+        self.fn_ctx.var_string_slots_multi.clear();
+        self.fn_ctx.phi_extra_slots.clear();
     }
 
     /// Register a heap allocation for automatic cleanup at scope exit.
     /// `ptr_reg` should be an i8* register name (e.g., "%tmp.5").
     /// Creates an entry-block alloca to store the pointer, ensuring the value
     /// is accessible from any basic block at cleanup time (avoids dominance errors).
-    /// Returns IR that must be emitted at the current insertion point (the store).
-    pub(crate) fn track_alloc(&mut self, ptr_reg: String) -> String {
+    ///
+    /// Returns (ir_to_emit, slot_name) so callers can record the slot for
+    /// ownership tracking (e.g., string concat results).
+    pub(crate) fn track_alloc_with_slot(&mut self, ptr_reg: String) -> (String, String) {
         let id = self.fn_ctx.alloc_tracker.len();
         let alloca_name = format!("%__alloc_slot_{}", id);
         self.emit_entry_alloca(&alloca_name, "i8*");
         let mut ir = String::new();
         write_ir!(ir, "  store i8* {}, i8** {}", ptr_reg, alloca_name);
-        self.fn_ctx.alloc_tracker.push((alloca_name, ptr_reg));
-        ir
+        self.fn_ctx
+            .alloc_tracker
+            .push((alloca_name.clone(), ptr_reg));
+        (ir, alloca_name)
+    }
+
+    /// Back-compat wrapper around `track_alloc_with_slot` that discards the slot.
+    pub(crate) fn track_alloc(&mut self, ptr_reg: String) -> String {
+        self.track_alloc_with_slot(ptr_reg).0
     }
 
     /// Generate IR to call Drop::drop() for all local variables that implement Drop.

@@ -144,6 +144,31 @@ impl CodeGenerator {
 
         let (val, val_ir) = self.generate_expr(value, counter)?;
 
+        // Owning-string binding: if the RHS is a tracked concat result, record
+        // the slot under this variable's name. A later `return x` reaches
+        // through the alloca load (producing a fresh SSA), and we use
+        // var_string_slot to recover the slot for ownership transfer. If the
+        // RHS is a PHI with multiple incoming slots, pull the extras into
+        // var_string_slots_multi so all are preserved at return.
+        // See RFC-001 §4.5 / §4.6 (team-review UAF fix 2026-04-14).
+        let val_key = val
+            .strip_prefix("{ i8*, i64 } ")
+            .unwrap_or(&val)
+            .trim()
+            .to_string();
+        if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
+            self.fn_ctx
+                .var_string_slot
+                .insert(name.node.clone(), slot.clone());
+            if let Some(extras) = self.fn_ctx.phi_extra_slots.remove(&val_key) {
+                let mut all = vec![slot];
+                all.extend(extras);
+                self.fn_ctx
+                    .var_string_slots_multi
+                    .insert(name.node.clone(), all);
+            }
+        }
+
         let resolved_ty = ty
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(inferred_ty);
@@ -453,6 +478,15 @@ impl CodeGenerator {
             // so we don't free memory that the expression still needs.
             let (val, expr_ir) = self.generate_expr(expr, counter)?;
             ir.push_str(&expr_ir);
+            // Keep an independent copy for later ownership-transfer lookup
+            // (the original `val` is moved into `ret_val` below). Strip the
+            // optional "{ i8*, i64 } " prefix so the key matches the format
+            // used by string_value_slot.
+            let val_key = val
+                .strip_prefix("{ i8*, i64 } ")
+                .unwrap_or(&val)
+                .trim()
+                .to_string();
 
             // Get return type from current function context
             let ret_type = self
@@ -523,6 +557,49 @@ impl CodeGenerator {
             // Call Drop::drop() for droppable locals (reverse order)
             let drop_ir = self.generate_drop_cleanup();
             ir.push_str(&drop_ir);
+
+            // Return-value ownership transfer: if the returned SSA fat pointer
+            // owns a tracked heap buffer (e.g., result of concat/substring),
+            // exclude its slot from free. See RFC-001 §4.6.
+            // `val` is the original SSA reg (before coerce), which is what
+            // string_value_slot is keyed on.
+            if matches!(ret_type, ResolvedType::Str) {
+                // Variable-name lookup takes priority when the return expression
+                // is a local identifier — this covers `let x = phi_result;
+                // return x` where the let-binding hook already consumed
+                // phi_extra_slots into var_string_slots_multi. Direct-SSA
+                // matching would miss the extras because the let hook transfers
+                // them to the variable's multi-slot list.
+                let mut matched = false;
+                if let Expr::Ident(name) = &expr.node {
+                    if let Some(slots) =
+                        self.fn_ctx.var_string_slots_multi.get(name).cloned()
+                    {
+                        self.fn_ctx.pending_return_skip_slot.extend(slots);
+                        matched = true;
+                    } else if let Some(slot) =
+                        self.fn_ctx.var_string_slot.get(name).cloned()
+                    {
+                        self.fn_ctx.pending_return_skip_slot.push(slot);
+                        matched = true;
+                    }
+                }
+                // Fallback: direct SSA match (e.g. `return a + b` without a
+                // binding). Also includes phi_extra_slots for inline PHI
+                // returns like `return I c { a+b } E { c+d }`.
+                if !matched {
+                    if let Some(slot) =
+                        self.fn_ctx.string_value_slot.get(&val_key).cloned()
+                    {
+                        self.fn_ctx.pending_return_skip_slot.push(slot);
+                        if let Some(extras) =
+                            self.fn_ctx.phi_extra_slots.get(&val_key).cloned()
+                        {
+                            self.fn_ctx.pending_return_skip_slot.extend(extras);
+                        }
+                    }
+                }
+            }
 
             // Free tracked heap allocations before return
             let alloc_cleanup_ir = self.generate_alloc_cleanup();

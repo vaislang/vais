@@ -99,6 +99,39 @@ pub(crate) struct FunctionContext {
     /// i8* pointer so it can be loaded from any basic block at cleanup time.
     pub(crate) alloc_tracker: Vec<(String, String)>,
 
+    /// Maps a string fat-pointer SSA value (e.g. "%4") to the alloc_slot alloca name
+    /// (e.g. "%__alloc_slot_2") that owns its heap buffer. Used at `return` to
+    /// transfer ownership: the returned fat pointer's slot is excluded from
+    /// `generate_alloc_cleanup` so the caller receives a live buffer instead of UAF.
+    /// Populated by concat / substring / push_str / format paths that push heap ptrs.
+    pub(crate) string_value_slot: std::collections::HashMap<String, String>,
+
+    /// Slot names to skip in the next `generate_alloc_cleanup` call. Normally
+    /// holds one slot — the one owning the returned buffer. For PHI results
+    /// (if/match as expression producing str), both incoming branches' slots
+    /// must be skipped because codegen can't tell which ran. Cleared after
+    /// cleanup emission.
+    pub(crate) pending_return_skip_slot: Vec<String>,
+
+    /// Maps a local variable name to multiple owning slots — used when the RHS
+    /// is a PHI (if/match as expression). Mirrors inkwell's
+    /// `var_string_slots_multi`.
+    pub(crate) var_string_slots_multi: std::collections::HashMap<String, Vec<String>>,
+
+    /// For PHI results (str-producing if/match), the PHI's SSA is registered
+    /// against its first incoming slot in `string_value_slot`; any additional
+    /// slots go here keyed by PHI SSA. The let-binding hook pulls these into
+    /// `var_string_slots_multi`.
+    pub(crate) phi_extra_slots: std::collections::HashMap<String, Vec<String>>,
+
+    /// Maps a local variable name to the alloc_slot it owns. When `let msg = a+b`
+    /// binds a tracked concat result, the variable name is registered here so
+    /// that a later `return msg` (which loads `msg`'s alloca and produces a new
+    /// SSA) can still find the owning slot for ownership transfer. Mirrors the
+    /// inkwell backend's `var_string_slot`. See RFC-001 §4.5 / §4.6
+    /// (team-review UAF fix 2026-04-14).
+    pub(crate) var_string_slot: std::collections::HashMap<String, String>,
+
     /// Maps temporary variable names (e.g., "%5", "%t.3") to their resolved types.
     /// Used by downstream passes to emit correct LLVM IR types instead of
     /// falling back to i64 for every temporary. Populated by generate_expr paths

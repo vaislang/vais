@@ -92,6 +92,44 @@ impl CodeGenerator {
         t1
     }
 
+    /// Emit `free(slot); store null, slot` if `value` is a tracked concat
+    /// intermediate (its fat pointer owns a slot in `string_value_slot`).
+    /// Safe because the caller has guaranteed that `value` has been consumed
+    /// (e.g., memcpy'd by the next concat) and is not otherwise referenced.
+    /// After this, the slot is null-valued; end-of-scope cleanup skips null.
+    fn emit_intermediate_free(&mut self, value: &str, ir: &mut String) {
+        // Extract the SSA register name (strip optional "{ i8*, i64 } " prefix).
+        let key = value
+            .strip_prefix("{ i8*, i64 } ")
+            .unwrap_or(value)
+            .trim()
+            .to_string();
+        let slot = match self.fn_ctx.string_value_slot.remove(&key) {
+            Some(s) => s,
+            None => return,
+        };
+        let tick = self.fn_ctx.label_counter;
+        self.fn_ctx.label_counter += 1;
+        let prev = format!("%__ifr_p_{}", tick);
+        write_ir!(ir, "  {} = load i8*, i8** {}", prev, slot);
+        let is_null = format!("%__ifr_n_{}", tick);
+        write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, prev);
+        let do_free = format!("__ifr_f_{}", tick);
+        let after = format!("__ifr_a_{}", tick);
+        write_ir!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            is_null,
+            after,
+            do_free
+        );
+        write_ir!(ir, "{}:", do_free);
+        write_ir!(ir, "  call void @free(i8* {})", prev);
+        write_ir!(ir, "  store i8* null, i8** {}", slot);
+        write_ir!(ir, "  br label %{}", after);
+        write_ir!(ir, "{}:", after);
+    }
+
     /// Generate LLVM IR for string binary operations (+, ==, !=, <, >)
     #[inline(never)]
     pub(crate) fn generate_string_binary_op(
@@ -127,7 +165,16 @@ impl CodeGenerator {
                     raw_ptr_for_free,
                     result
                 );
-                ir.push_str(&self.track_alloc(raw_ptr_for_free));
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
+                ir.push_str(&store_ir);
+                // Record ownership: the fat-pointer SSA register owns this slot.
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                // Intermediate free: in `a + b + c`, the LHS `a+b` is a tracked
+                // concat result whose fat-pointer SSA value is `left_val`. It has
+                // been consumed by this concat (memcpy'd), so the intermediate
+                // buffer is safe to free now. See RFC-001 §4.3. We free and null
+                // the slot; cleanup later skips null slots.
+                self.emit_intermediate_free(left_val, &mut ir);
                 Ok((result, ir))
             }
             BinOp::Eq => {
@@ -320,7 +367,14 @@ impl CodeGenerator {
                     raw_ptr_for_free,
                     result
                 );
-                ir.push_str(&self.track_alloc(raw_ptr_for_free));
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
+                ir.push_str(&store_ir);
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                // Substring consumes its receiver's buffer as input only; we do
+                // NOT free recv_val here because the receiver may still be
+                // referenced elsewhere (common pattern: `s.substring(...)` where
+                // `s` is a local). Intermediate free only applies when we
+                // provably consumed the entire SSA chain (concat LHS).
                 Ok((result, ir))
             }
             "startsWith" => {
@@ -399,7 +453,14 @@ impl CodeGenerator {
                     raw_ptr,
                     result
                 );
-                ir.push_str(&self.track_alloc(raw_ptr));
+                let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr);
+                ir.push_str(&store_ir);
+                self.fn_ctx.string_value_slot.insert(result.clone(), slot);
+                // push_str("x", y) — the receiver is consumed (we concat it with
+                // y and throw away the old buffer) ONLY if the receiver is itself
+                // a tracked concat result. Otherwise it's a literal or borrowed
+                // value we must not free.
+                self.emit_intermediate_free(recv_val, &mut ir);
                 Ok((result, ir))
             }
             "clone" | "to_string" | "as_str" => {

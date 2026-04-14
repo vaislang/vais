@@ -304,6 +304,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .build_insert_value(with_ptr, total_len, 1, "concat_len")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
+                // Record ownership: this fat pointer SSA value owns `alloc_slot`.
+                // At `return`, if this value is returned, its slot is excluded from
+                // free so the caller receives a live buffer. See RFC-001 §4.6.
+                use inkwell::values::AsValueRef;
+                self.string_value_slot
+                    .insert(fat_ptr.as_value_ref() as usize, alloc_slot);
+                // Register slot with the innermost block scope so it gets freed
+                // at block end (loop iteration end, etc.) if not transferred out.
+                if let Some(frame) = self.scope_str_stack.last_mut() {
+                    frame.push(alloc_slot);
+                }
+                // Intermediate free: if the LHS was itself a tracked concat
+                // result, its buffer has been consumed (memcpy'd above) and is
+                // no longer referenced. Free it and null the slot so end-of-
+                // scope cleanup becomes a no-op for it. See RFC-001 §4.3.
+                // This fires per `+` in a chain like `a+b+c+d` and inside loop
+                // bodies, eliminating per-iteration concat leaks.
+                if lhs.is_struct_value() {
+                    let lhs_key = lhs.into_struct_value().as_value_ref() as usize;
+                    if let Some(old_slot) = self.string_value_slot.remove(&lhs_key) {
+                        self.emit_free_slot(old_slot)?;
+                    }
+                }
                 Ok(fat_ptr.into())
             }
             BinOp::Eq | BinOp::Neq => {
