@@ -12,11 +12,14 @@
 mode: pending
 iteration: 7
 max_iterations: 30
-session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 (RFC-002 §9 scope correction).
-  사용자 re-sign-off gate에서 auto-progress 일시 정지.
-  다음 권장:
-    A) RFC-002 §9 검토 후 승인 → #2a 구현 착수 (Opus direct, large — 1 task로 fresh iteration 권장).
-    B) 승인 전 #9 (match-PHI fix, 중간 규모) 또는 #3/#4 (RFC 작성, 병렬 가능) 먼저 진행.
+session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 (commit 9c616289).
+  RFC-002 §9 scope correction (+211줄) 커밋. 사용자가 직접 검토 + sign-off 예정.
+  재개 조건:
+    1) docs/rfcs/RFC-002-container-string-ownership.md §9 검토.
+    2) §9.6 "Re-sign-off line"에 `Re-approved 2026-04-14 after §9 ...` 기재.
+    3) `/clear` + `/harness` → #2a 구현 착수 (Opus direct, large, fresh session 권장).
+  대안: §9 이견이 있으면 추가 RFC 수정 or path β(stdlib split) 재논의.
+  비-blocked 후속 가능 작업: #9, #3(trait), #4(closure) — 병렬/순차 선택 가능.
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
