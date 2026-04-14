@@ -618,3 +618,84 @@ registered for Vec<str> specifically.
 
 User action: choose (i)/(ii)/(iii), then the author amends §4.1 + §4.4
 accordingly and proceeds to #2a.
+
+### 9.8 Actual diagnosis (2026-04-14, Session 3 deeper probe)
+
+The §9.7 blocker analysis was **incomplete** — a runtime IR probe
+revealed the real architecture:
+
+**Probe**: compile a trivial `Vec::new()` / `v.push(42)` program, dump
+`.vais-cache/*.ll`, inspect type declarations.
+
+**Finding**: the generated IR contains BOTH
+
+```llvm
+%Vec$i64 = type { i64, i64, i64, i64 }
+%Vec     = type { i64, i64, i64, i64 }
+```
+
+— with **identical bodies**. LLVM treats two type aliases with the same
+field body as structurally equivalent: `%Vec*` and `%Vec$i64*` are
+interchangeable in GEPs, loads, stores, and function-pointer casts.
+That is the real reason all the `%Vec` GEP sites inventoried in §9.7
+"just work" across arbitrary T — it is not a type-safety hole, it's
+structural equivalence exploited deliberately.
+
+**Invariant (previously implicit, now explicit)**: `%Vec` and every
+`%Vec$T` MUST have identical field layouts. Any layout change to one
+must be applied to all.
+
+**Consequence for #2a (supersedes §9.7 path (i)/(ii)/(iii))**: we do
+not need to remove `%Vec` or audit every GEP site. We only need to
+apply the `owned: i64` 5th field **uniformly** — to the stdlib Vec<T>
+definition in `std/vec.vais:51-56` — which automatically propagates
+into both `%Vec` (from `register_struct`/`generate_struct_type`) and
+every `%Vec$T` (from `generate_specialized_struct_type`). The
+structural-equivalence invariant is preserved.
+
+This is path **(ii) restated as "uniform stdlib amendment"**, but
+without the previously feared ABI concern: there is no non-text-IR
+external user of the Vec layout, and `%Vec` was already a stdlib-
+internal aggregate, not a stable ABI boundary.
+
+**Revised #2a implementation plan**:
+
+1. **std/vec.vais amendment**: add `owned: i64` field (initialized 0
+   in `Vec::new` and `Vec::with_capacity`; reallocated in `grow`;
+   freed in `drop`). This is a plain Vais change, no codegen edit.
+2. **Push-site wrapping** (codegen): at `Vec_push$str` call sites,
+   emit owned-bit set + alloc_slot transfer (per RFC-002 §4.3).
+3. **Prelude splice** (codegen): emit `__vais_vec_str_shallow_free`
+   helper call for Vec<str> locals *before* the existing user
+   `Vec.drop`, consulting the `owned` bitmap to free heap elements.
+4. **Helper emission** (codegen): synthesize
+   `__vais_vec_str_owned_set`, `__vais_vec_str_owned_grow`,
+   `__vais_vec_str_shallow_free` once per module when Vec<str>
+   monomorphization exists.
+5. **Return-transfer tracking** (codegen): extend
+   `pending_return_skip_slot` machinery to skip Vec<str>'s data +
+   owned buffers on function-exit cleanup when returning a Vec<str>.
+6. **Tests**: RFC-002 §6 cases (1) (2) (6) in
+   `phase191_container_str_drop.rs`.
+
+**Safety invariants structurally guaranteed**:
+- No layout divergence between `%Vec` and `%Vec$T` (because the
+  source of truth is the single `S Vec<T>` in std/vec.vais).
+- No double-free: bitmap consultation is monotonic — once a bit
+  is cleared (via transfer-out), re-freeing is structurally
+  impossible.
+- No UAF: shallow-free runs *before* user `Vec.drop`, so element
+  buffers are live at free time.
+- Non-str Vec pays exactly 8 bytes/Vec for an unused owned slot
+  that's stored as 0 and never read.
+
+**RFC-003 ("Vec codegen unification") not required**: the §9.7
+diagnosis was based on a misread of the `%Vec` vs `%Vec$T` relationship;
+there is no underlying bug to unify. RFC-003 is withdrawn as an
+unnecessary RFC. The §9.8 invariant is documented here as the
+authoritative explanation.
+
+**Decision for re-sign-off (2026-04-14)**: proceed with the revised
+#2a plan above. `%Vec`/`%Vec$T` structural equivalence is now an
+explicit invariant documented in this RFC; any future Vec layout
+change goes through the same uniform-amendment path.
