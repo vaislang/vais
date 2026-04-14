@@ -33,15 +33,17 @@ max_iterations: 30
     delta 0KB → PASS. 46행 CSV(헤더+45 샘플) 정상 수집, 종료 시 바이너리 + 임시파일 정리.
   skipped: 실전 300s 구동은 사용자 CI에서 실행 권장. Rust 코드 변경 없음 → E2E 영향 0.
 
-- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — RFC 초안 작성 (2026-04-14)
-  RFC: docs/rfcs/RFC-002-container-string-ownership.md (pre-implementation).
-  구조: Vec<str>에 owned bitmap 필드 추가(모노모피제이션별), 구조체에 ownership_mask i64 필드,
-        push/literal init 시 소유권 이전, 컨테이너 drop 시 bitmap 기반 선택적 free.
-  대체안 4건 기각 사유 기록 (tag-bit / clone-on-push / runtime bounds / wrapper type).
-  리뷰 대기: §5 open questions 5건 (64-field limit, user-Drop interaction,
-            nested cycles, iter borrow safety, migration).
-  세 번 sub-phase 분할: #2a (Vec<str> layout + drop), #2b (struct shallow-drop),
-            #2c (nested container recursion). 각 단계 e2e + team-review.
+- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — 분할 진행
+  RFC: docs/rfcs/RFC-002-container-string-ownership.md ✅ Approved (user sign-off 2026-04-14, commit e1edb7bb).
+  결정 요약:
+    Q1: struct ownership_mask = 고정 i64 (64 필드 cap, overflow = 컴파일 에러).
+    Q2: Option D — codegen shallow-drop만 heap 필드 free 가능. user Drop은 도메인 로직 전용.
+         `take_field!` primitive로 명시적 ownership 이전만 허용. 구조적으로 double-free/leak 불가.
+    Q5: 전체 재컴파일 허용 (pre-1.0).
+  대체안 4건 기각 기록 (§4.6): tag-bit / always-clone / runtime provenance / wrapper.
+  하위 작업: #2a (Vec<str> 레이아웃 + drop), #2b (struct shallow-drop + user Drop sequencing),
+            #2c (nested container recursion). 각 단계 e2e + team-review. blockedBy 체이닝.
+  블록: #9 (2a), #10 (2b), #11 (2c) 모두 완료 시 이 작업 close.
   [목표]: 컨테이너에 소유된 heap string이 컨테이너 destructor에서 free되도록 연결.
   [현재 상태]: Vec<str> push된 heap 문자열은 컨테이너가 drop돼도 문자열 버퍼는 leak.
   [대상 파일]:
@@ -131,6 +133,43 @@ max_iterations: 30
     W3 (doc drift on `exit_scope`) fixed inline. W1/W2/W4 → follow-up items
     below (#6/#7/#8). Quote paths kept for traceability.
 
+### Phase 191 #2 하위 구현 작업 (RFC-002 Approved 2026-04-14)
+
+- [ ] 2a. Vec<str> 레이아웃 + owned bitmap + __drop_Vec_str (Opus direct)
+  [참조]: RFC-002 §4.1, §4.4
+  [대상 파일]:
+    - crates/vais-codegen/src/vtable.rs (auto-emit __drop_Vec_str)
+    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (Vec<str>.push path)
+    - crates/vais-codegen/src/string_ops.rs (ownership transfer to bitmap)
+    - crates/vais-codegen/src/state.rs (pending_return_skip_container)
+  [완료 기준]: RFC-002 §6 tests (1) vec_str_push_drop_no_leak, (2) mixed_literal, (6) return_transfers.
+    E2E baseline 유지 (2576 + 3 new).
+  [복잡도]: 높음 — 모노모피제이션별 레이아웃 변경, ABI 동일.
+  blockedBy: #5 완료 (done).
+
+- [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct)
+  [참조]: RFC-002 §4.2 Option D
+  [대상 파일]:
+    - crates/vais-codegen/src/vtable.rs (auto-emit __drop_shallow_{Struct})
+    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (struct literal ownership transfer)
+    - crates/vais-codegen/src/trait_dispatch.rs (drop sequence: user drop() → shallow-drop)
+    - crates/vais-codegen/src/stmt.rs (struct drop emission path)
+  [설계]:
+    - user drop() 호출 후 shallow-drop 무조건 emission
+    - ownership_mask i64 필드: 비트 i = 필드 i가 heap-owned
+    - `take_field!` macro/builtin 스펙 작성 (구현은 별도 follow-up 가능)
+  [완료 기준]: RFC-002 §6 tests (3) struct_str_field_drop, (4) struct_user_drop_takes_ownership.
+    double-free 구조적 불가 증명: user가 free를 호출할 API 없음 검증.
+  [복잡도]: 높음 — drop sequencing + bitmap + take_field! 스펙.
+  blockedBy: #2a.
+
+- [ ] 2c. Nested container recursion (Vec<Vec<str>>, Vec<struct{str}>) (Opus direct)
+  [참조]: RFC-002 §5 Q3
+  [대상 파일]: vtable.rs (모노모피제이션 recursion), drop_registry
+  [완료 기준]: RFC-002 §6 test (5) nested_vec_of_struct_str. 외곽 Vec drop이 모든 내부 str 정리.
+  [복잡도]: 중간.
+  blockedBy: #2a, #2b.
+
 ### Phase 191 follow-ups (team-review 2026-04-14 발견)
 
 - [ ] 6. Break/Continue 경로 string scope cleanup (Opus direct)
@@ -188,7 +227,7 @@ max_iterations: 30
          fixed alloc_tracker slot-id collision regression caught by new e2e.)
     #2/#3/#4: Opus direct — RFC + design 의사결정 inseparable, 사용자 리뷰 gating.
 
-progress: 2/5 (40%); +3 follow-ups (#6/#7/#8) 등록
+progress: 2/5 (40%) + RFC-002 Approved; +3 구현 subtasks (#2a/#2b/#2c) +3 follow-ups (#6/#7/#8) 등록
 
 ---
 
