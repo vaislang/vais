@@ -1,6 +1,6 @@
 # RFC-002: Container-Owned Strings (Vec<str> and struct str fields)
 
-- **Status**: Draft (Phase 191 #2, 2026-04-14)
+- **Status**: Approved (user sign-off 2026-04-14, Phase 191 #2)
 - **Author**: Phase 191 #2 harness (Opus direct)
 - **Area**: `crates/vais-codegen/src/vtable.rs`, `crates/vais-codegen/src/inkwell/gen_aggregate.rs`, `crates/vais-codegen/src/string_ops.rs`, `crates/vais-codegen/src/state.rs`
 - **Requires**: RFC-001 §4 (function-scope ownership model is the base).
@@ -164,15 +164,44 @@ transfers ownership: the source alloc_slot is removed from
 `scope_str_stack` + `string_value_slot`, and the struct's "field is owned"
 flag is set.
 
-**(b) struct with user `impl Drop`**: the user's Drop is called; codegen
-does NOT also call shallow-drop. The user is responsible for freeing str
-fields. We document this clearly: "If you write `impl Drop`, you own the
-bodies of all heap fields." This matches Rust's model.
+**(b) struct with user `impl Drop`** — **Option D (double-safe)**:
+
+User `impl Drop` is treated as a **pre-drop hook** for domain logic
+(logging, closing external handles, decrementing counters), not a
+memory-reclamation hook. The sequence at container destruction is:
+
+1. User `drop(&self)` runs. User code **cannot free heap fields** — the
+   language provides no `free_field(&mut self, name)` primitive, and
+   field pointers are read-only through `&self`.
+2. shallow-drop runs **unconditionally** immediately after. It consults
+   the struct's `ownership_mask` and frees only fields whose bit is
+   still set.
+3. If the user wants to transfer ownership of a field out of the struct
+   during `drop`, they call the explicit helper `take_field!(self, name)`
+   which clears the corresponding bit in `ownership_mask`. shallow-drop
+   will then skip that field.
+
+This design makes **double-free impossible** (only shallow-drop can
+free, and it consults a monotonic-cleared bitmap) and **leak
+impossible** (every bit set at drop time produces exactly one free).
+User Drop has a clean orthogonal role and cannot accidentally corrupt
+the memory model. The trade-off is that users cannot directly `free`
+fields from Drop — but they also cannot forget to free them.
+
+Note: `take_field!` is a macro/builtin (not a function) because it
+needs to return the moved value and simultaneously clear the bit; its
+ABI and syntax are out-of-scope for this RFC and will be specified in
+an implementation follow-up. Until it exists, transferring ownership
+out of a struct Drop is not supported — users must use a dedicated
+`into_parts() -> (T1, T2, ...)` method pattern instead.
 
 **Ownership flag storage**: for structs with per-field heap ownership, the
 monomorphized struct layout gains a trailing `ownership_mask: i64` field
-(bit i = 1 → field i is heap-owned). 64 heap fields per struct should
-cover every realistic case; overflow can be a compile error.
+(bit i = 1 → field i is heap-owned). 64 heap fields per struct is
+accepted as the hard cap (Q1 resolved 2026-04-14); overflow is a
+compile error. Fixed `i64` is preferred over a dynamic bitmap pointer
+because it avoids an extra per-struct heap allocation and keeps the
+struct layout fully stack-allocatable.
 
 ### 4.3 Vec<str>.push / struct-literal emission changes
 
@@ -262,35 +291,32 @@ is extended:
   the fat-pointer ABI leaks through iter(), slice access, and any user
   code that borrows an element — we'd have to redesign `&str` too.
 
-## 5. Open questions for reviewer
+## 5. Resolved design decisions (user review 2026-04-14)
 
-1. **Ownership mask for structs**: Is the 64-field limit acceptable, or
-   should we use a growable bitset pointer (matching Vec<str>.owned)?
-   Trade-off: fixed i64 is fast/simple; pointer requires extra alloc per
-   struct.
+1. **Struct ownership mask — RESOLVED**: Fixed `i64` (64-field cap). An
+   overflow is a compile error. Dynamic bitmap pointer rejected to keep
+   structs stack-allocatable and avoid an extra per-struct heap alloc.
 
-2. **User-Drop interaction**: If the user writes `impl Drop for Person`
-   and forgets to free `name`, should codegen warn? RFC-001 established
-   compile-time-only discrimination; here we could emit a diagnostic
-   when we can prove a heap-owned field is never freed in the user's
-   Drop body. But dataflow analysis of Vais Drop bodies is out of scope
-   for this RFC. Proposal: defer to a separate lint RFC.
+2. **User Drop interaction — RESOLVED (Option D)**: User `impl Drop` is
+   a pre-drop hook for domain logic. Users **cannot free heap fields**
+   from Drop — only shallow-drop (consulting the ownership bitmap) may
+   free. Ownership transfer out of a struct during Drop requires an
+   explicit `take_field!` primitive that clears the corresponding bit.
+   Eliminates double-free and leak-through-forgotten-free by
+   construction. `take_field!` syntax/ABI deferred to impl follow-up.
 
-3. **Nested containers**: `Vec<Vec<str>>` — the outer Vec's `__drop_Vec_Vec_str`
-   must call `__drop_Vec_str` for each element. The monomorphization path
-   needs to recurse. Is there a cycle risk (Vec<T> where T references a
-   Vec transitively)? Vais does not have cyclic generics today; confirm
-   and document.
+3. **Nested containers — deferred to implementation**: `Vec<Vec<str>>`
+   requires `__drop_Vec_Vec_str` to recurse into `__drop_Vec_str` per
+   element. Vais does not have cyclic generics today (confirmed in
+   RFC-001 context); revisit if future language changes allow them.
 
-4. **`Vec<str>` iter borrow**: `for s in vec` — the borrowed `s` must
-   not free. The owned-bit belongs to the Vec, not to the iterator's
-   fat-pointer copy. Confirmed safe by §4.1 — only at drop time does
-   the Vec consult its own owned bitmap.
+4. **`Vec<str>` iter borrow — confirmed safe by §4.1**: Only the Vec
+   consults its owned bitmap at drop; iterator fat-pointer copies cannot
+   trigger a free path.
 
-5. **Migration**: existing code that uses `Vec<str>` will get the new
-   layout after rebuild. Is a compat shim needed, or can we rely on
-   full recompilation? (Vais is currently pre-1.0; recompilation is
-   acceptable.)
+5. **Migration — RESOLVED**: Full recompilation required (Vais is
+   pre-1.0). No compat shim. selfhost/std rebuild is part of the
+   implementation plan.
 
 ## 6. Test plan
 
@@ -337,5 +363,7 @@ baseline preservation + team-review.
 
 ---
 
-**Next step**: User reviews §5 open questions. After sign-off, draft
-implementation plan and split into 191 #2a/#2b/#2c subtasks.
+**Sign-off (2026-04-14)**: All five review questions resolved. Safety
+invariants (no double-free, no silent leak) made structural via Option
+D + bitmap-as-single-source-of-truth. Implementation can proceed as
+191 #2a → #2b → #2c, each with its own e2e baseline gate + team-review.
