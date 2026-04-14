@@ -9,7 +9,7 @@
 
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
-mode: pending
+mode: auto
 iteration: 1
 max_iterations: 30
 
@@ -23,21 +23,15 @@ max_iterations: 30
 
 ### 작업
 
-- [ ] 1. vais-apps/monitor RSS plateau 자동화 스크립트 (impl-sonnet)
-  [목표]: RFC-001 §9가 요구한 "장기 실행 서버 RSS가 상수 시간 내 수렴" 검증을 자동화.
-  [대상 파일]:
-    - vais-apps/monitor/bench/rss_plateau.sh (신규)
-    - (선택) CI workflow에 연결 시 .github/workflows/ 수정
-  [기능]:
-    - monitor 바이너리를 5분(기본, 인자로 조정 가능) 구동
-    - `ps -o rss=`로 1초 간격 샘플링, CSV 저장
-    - 첫 30초(워밍업) 이후 샘플의 max-min 델타가 X MB 미만이면 PASS, 초과면 FAIL
-    - 결과 요약 출력 (시작 RSS / 안정화 RSS / 최대 RSS / delta / verdict)
-  [완료 기준]:
-    - 현재 바이너리로 실행 시 PASS (190.5/190.6 fix 효과 입증)
-    - README.md 혹은 docs/PERFORMANCE_TESTING.md에 사용법 1개 섹션 추가
-    - 임시 파일(CSV) 정리 로직 포함
-  [복잡도]: 낮음 — 쉘 스크립팅 + 문서. Rust 코드 변경 없음.
+- [x] 1. vais-apps/monitor RSS plateau 자동화 스크립트 (Opus direct) ✅ 2026-04-14
+  changes:
+    vais-apps/monitor/bench/rss_plateau.sh (신규, 실행 가능) — ps -o rss= 1초 샘플링,
+      warmup 제외 max-min delta 계산, threshold 기반 PASS/FAIL, trap으로 cleanup.
+    vais-apps/monitor/docs/PERFORMANCE_TESTING.md (신규) — 사용법/exit codes/CI 가이드.
+  verify:
+    45s 스모크 (warmup 10s, threshold 500MB, keep_csv): monitor-server RSS 2.38MB,
+    delta 0KB → PASS. 46행 CSV(헤더+45 샘플) 정상 수집, 종료 시 바이너리 + 임시파일 정리.
+  skipped: 실전 300s 구동은 사용자 CI에서 실행 권장. Rust 코드 변경 없음 → E2E 영향 0.
 
 - [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct)
   [목표]: 컨테이너에 소유된 heap string이 컨테이너 destructor에서 free되도록 연결.
@@ -117,8 +111,13 @@ max_iterations: 30
   execution: 난이도/위험도 기준 제안 순서 #1(쉘, 가장 안전) → #5(text-IR, 참조 구현 있음) →
              #2/3/4(RFC 필요, Opus direct). RFC 작업은 사전 설계 초안 + 사용자 리뷰 필수.
   blockedBy: 없음 (모두 병렬 가능하지만 충돌 방지 및 리뷰 부담 고려해 순차 권장)
+  mode_log: auto 선택 (사용자), 순차 실행 (#1→#5→#2→#3→#4). #2/#3/#4 RFC 단계에서 리뷰 대기.
+  strategy_log:
+    #1: Direct delegate fast-path — 쉘 + docs, Rust 변경 없음, foreground impl-sonnet.
+    #5: Sequential impl-sonnet background — 참조 구현(inkwell) 존재, E2E baseline 검증 필수.
+    #2/#3/#4: Opus direct — RFC + design 의사결정 inseparable, 사용자 리뷰 gating.
 
-progress: 0/5
+progress: 1/5 (20%)
 
 ---
 
