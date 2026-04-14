@@ -9,9 +9,13 @@
 
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
-mode: auto
+mode: pending
 iteration: 3
 max_iterations: 30
+session_checkpoint: 2026-04-14 — /clear 직전. 다음 fresh session에서 #2a부터 시작 권장.
+  완료: #1 (RSS 스크립트, 675d4c1 monitor), #5 (text-IR parity, 7814ba62).
+  RFC-002 Approved: e1edb7bb. 구현 subtasks 분할: 3bc2e51b.
+  다음 작업 후보: #2a (Vec<str> impl, Opus direct) 또는 #7 (transfer_slot Ident fallback, impl-sonnet, 빠름).
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
