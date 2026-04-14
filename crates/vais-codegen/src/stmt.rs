@@ -675,15 +675,111 @@ impl CodeGenerator {
 
     /// Push a new scope frame onto the scope stack.
     /// Called at the start of a block (if branch, loop body, explicit block expr, etc.).
+    /// Also pushes a new string ownership frame onto scope_str_stack (mirrors inkwell).
     pub(crate) fn enter_scope(&mut self) {
         self.fn_ctx.scope_stack.push(Vec::new());
+        self.fn_ctx.scope_str_stack.push(Vec::new());
     }
 
-    /// Pop the current scope frame from the scope stack.
+    /// Pop the current Named-type scope frame.
     /// Returns the list of variable names declared in that scope (in declaration order).
-    /// The caller is responsible for removing these variables from fn_ctx.locals.
+    /// String slots are popped separately via `exit_scope_str`, because strings and
+    /// Named-type locals follow different cleanup sequences (strings first, Named second).
+    /// The caller is responsible for emitting string-scope cleanup and Named-type drop.
     pub(crate) fn exit_scope(&mut self) -> Vec<String> {
         self.fn_ctx.scope_stack.pop().unwrap_or_default()
+    }
+
+    /// Pop the string ownership frame from scope_str_stack.
+    /// Returns the Vec of alloc_slot names allocated in the current block.
+    pub(crate) fn exit_scope_str(&mut self) -> Vec<String> {
+        self.fn_ctx.scope_str_stack.pop().unwrap_or_default()
+    }
+
+    /// Generate null-check + free IR for each slot in `frame`, skipping:
+    ///   - the `transfer_slot` (ownership being handed to the outer scope)
+    ///   - any slot no longer referenced in `string_value_slot` (already freed by
+    ///     intermediate-free, which removes the owning SSA→slot entry)
+    ///
+    /// Uses `__sd_*_N_M` label prefixes (N = `scope_drop_label_counter`, M = per-slot index)
+    /// to guarantee no collision with `generate_alloc_cleanup`'s `__fr_*` labels.
+    ///
+    /// This method does NOT remove entries from `alloc_tracker` — doing so would let
+    /// `track_alloc_with_slot` (which numbers new slots from `alloc_tracker.len()`)
+    /// reuse the name of a freed slot within the same function, causing
+    /// `multiple definition of local value '%__alloc_slot_N'` at the LLVM level.
+    /// The emitted `store i8* null, i8** slot` lets the function-exit cleanup
+    /// safely skip the slot on its null-check load path.
+    pub(crate) fn generate_string_scope_cleanup(
+        &mut self,
+        frame: &[String],
+        transfer_slot: Option<&str>,
+    ) -> String {
+        if frame.is_empty() {
+            return String::new();
+        }
+
+        let block_id = self.fn_ctx.scope_drop_label_counter;
+        self.fn_ctx.scope_drop_label_counter += 1;
+
+        let mut ir = String::new();
+        let mut slot_idx = 0usize;
+
+        for slot_name in frame {
+            // Skip the slot being transferred out
+            if let Some(ts) = transfer_slot {
+                if slot_name == ts {
+                    continue;
+                }
+            }
+
+            // Skip if the slot is no longer live in string_value_slot (intermediate-free
+            // already consumed it — `emit_intermediate_free` removes the owning SSA→slot
+            // entry and nulls the slot pointer). Mirrors inkwell's generate_block.
+            // Note: `alloc_tracker` retains the slot entry across intermediate-free (its
+            // role is the function-exit null-check-free backstop), so it's not a reliable
+            // signal here.
+            let still_tracked = self
+                .fn_ctx
+                .string_value_slot
+                .values()
+                .any(|s| s == slot_name);
+            if !still_tracked {
+                slot_idx += 1;
+                continue;
+            }
+
+            let loaded = format!("%__sd_ld_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            self.fn_ctx.label_counter += 1;
+            let is_null = format!("%__sd_nn_{}_{}_{}", block_id, slot_idx, self.fn_ctx.label_counter);
+            self.fn_ctx.label_counter += 1;
+            let do_free = format!("__sd_do_{}_{}", block_id, slot_idx);
+            let after = format!("__sd_af_{}_{}", block_id, slot_idx);
+
+            write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            write_ir!(ir, "  br i1 {}, label %{}, label %{}", is_null, after, do_free);
+            write_ir!(ir, "{}:", do_free);
+            write_ir!(ir, "  call void @free(i8* {})", loaded);
+            write_ir!(ir, "  store i8* null, i8** {}", slot_name);
+            write_ir!(ir, "  br label %{}", after);
+            write_ir!(ir, "{}:", after);
+
+            // Remove from string_value_slot so the transferred-slot lookup at
+            // outer-scope exit can't match a slot that has already been freed.
+            self.fn_ctx
+                .string_value_slot
+                .retain(|_, s| s != slot_name);
+            // DO NOT remove from alloc_tracker: `track_alloc_with_slot` assigns
+            // slot ids from `alloc_tracker.len()`, so removing an entry would
+            // let a later concat in the same function collide with this slot
+            // name (-> `multiple definition of local value named '%__alloc_slot_N'`).
+            // The `store i8* null, i8** slot` emitted above makes the eventual
+            // function-exit cleanup load null and skip the free branch.
+
+            slot_idx += 1;
+        }
+        ir
     }
 
     /// Register a variable in the current innermost scope (if any scope is active).
@@ -847,6 +943,8 @@ impl CodeGenerator {
         self.fn_ctx.var_string_slot.clear();
         self.fn_ctx.var_string_slots_multi.clear();
         self.fn_ctx.phi_extra_slots.clear();
+        self.fn_ctx.scope_str_stack.clear();
+        self.fn_ctx.scope_drop_label_counter = 0;
     }
 
     /// Register a heap allocation for automatic cleanup at scope exit.

@@ -74,22 +74,59 @@ impl StmtVisitor for CodeGenerator {
             }
         }
 
-        // Pop the scope and collect variables declared in this block.
+        // Pop the Named-type scope and the string-scope frames.
         let scope_vars = self.exit_scope();
+        let str_frame = self.exit_scope_str();
 
         if !terminated {
-            // Block reached natural end (no early return/break/continue):
-            // drop Named-type locals in LIFO order, then remove from fn_ctx.locals
-            // so the function-level cleanup at return/implicit-exit doesn't double-drop them.
+            // Block reached natural end (no early return/break/continue).
+            //
+            // Determine which string slot (if any) the block's last value owns —
+            // that slot's ownership transfers to the outer scope and must NOT be
+            // freed here.
+            let val_key = last_value
+                .strip_prefix("{ i8*, i64 } ")
+                .unwrap_or(&last_value)
+                .trim()
+                .to_string();
+            let transfer_slot: Option<String> = self
+                .fn_ctx
+                .string_value_slot
+                .get(&val_key)
+                .cloned();
+
+            // Step 1: free all string-scope slots BEFORE Named-type drops.
+            // (Strings are raw heap; Named drops may reference their contents.)
+            let str_cleanup_ir = self.generate_string_scope_cleanup(
+                &str_frame,
+                transfer_slot.as_deref(),
+            );
+            if !str_cleanup_ir.is_empty() {
+                ir.push_str(&str_cleanup_ir);
+            }
+
+            // If a transfer slot exists and an outer string scope frame is present,
+            // move the slot into the outer frame (ownership handoff).
+            if let Some(ref ts) = transfer_slot {
+                if let Some(outer) = self.fn_ctx.scope_str_stack.last_mut() {
+                    outer.push(ts.clone());
+                }
+            }
+
+            // Step 2: drop Named-type locals in LIFO order.
             let drop_ir = self.generate_scope_drop_cleanup(&scope_vars);
             if !drop_ir.is_empty() {
                 ir.push_str(&drop_ir);
             }
             self.remove_scope_locals(&scope_vars);
+        } else {
+            // If terminated (Return/Break/Continue): the Return stmt already called
+            // generate_drop_cleanup() and generate_alloc_cleanup() for ALL locals.
+            // We skip scope cleanup here to avoid double-drop/double-free.
+            // The str_frame is simply discarded — its slots were handled by the
+            // terminator's own cleanup path.
+            let _ = str_frame;
         }
-        // If terminated (Return/Break/Continue): the Return stmt already called
-        // generate_drop_cleanup() for ALL current locals (including sub-scope vars).
-        // We skip scope cleanup here to avoid double-drop.
 
         Ok((last_value, ir, terminated))
     }

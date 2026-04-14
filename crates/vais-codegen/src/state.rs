@@ -145,6 +145,18 @@ pub(crate) struct FunctionContext {
     /// The outer Vec is a stack of scopes (innermost scope last).
     pub(crate) scope_stack: Vec<Vec<String>>,
 
+    /// Block-scope string ownership stack (text-IR backend, mirrors inkwell's scope_str_stack).
+    /// Each entry is a list of alloc_slot names (e.g., "%__alloc_slot_2") allocated within
+    /// that lexical block. When the block exits naturally (no break/continue/return), every
+    /// slot in the frame is freed via null-check+free IR, except the one transferring
+    /// ownership to the outer scope (last expression of the block). See RFC-001 §4.2, §5.4.
+    pub(crate) scope_str_stack: Vec<Vec<String>>,
+
+    /// Counter for unique label suffixes in `generate_string_scope_cleanup`.
+    /// Each block-exit free emission increments this to avoid label collisions
+    /// across multiple block exits within the same function.
+    pub(crate) scope_drop_label_counter: usize,
+
     /// Collected alloca instructions to be hoisted to the function entry block.
     ///
     /// LLVM can only optimize alloca instructions that appear in the entry basic block.

@@ -168,6 +168,10 @@ impl CodeGenerator {
                 let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
                 ir.push_str(&store_ir);
                 // Record ownership: the fat-pointer SSA register owns this slot.
+                // Also register in the topmost string-scope frame for block-exit cleanup.
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
                 self.fn_ctx.string_value_slot.insert(result.clone(), slot);
                 // Intermediate free: in `a + b + c`, the LHS `a+b` is a tracked
                 // concat result whose fat-pointer SSA value is `left_val`. It has
@@ -369,6 +373,10 @@ impl CodeGenerator {
                 );
                 let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr_for_free);
                 ir.push_str(&store_ir);
+                // Register in the topmost string-scope frame for block-exit cleanup.
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
                 self.fn_ctx.string_value_slot.insert(result.clone(), slot);
                 // Substring consumes its receiver's buffer as input only; we do
                 // NOT free recv_val here because the receiver may still be
@@ -455,6 +463,10 @@ impl CodeGenerator {
                 );
                 let (store_ir, slot) = self.track_alloc_with_slot(raw_ptr);
                 ir.push_str(&store_ir);
+                // Register in the topmost string-scope frame for block-exit cleanup.
+                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                    frame.push(slot.clone());
+                }
                 self.fn_ctx.string_value_slot.insert(result.clone(), slot);
                 // push_str("x", y) — the receiver is consumed (we concat it with
                 // y and throw away the old buffer) ONLY if the receiver is itself

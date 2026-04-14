@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 1
+iteration: 2
 max_iterations: 30
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
@@ -88,22 +88,83 @@ max_iterations: 30
     - E2E baseline 유지
   [복잡도]: 높음 — 클로저 런타임(captures struct)과 얽힘. pre-RFC 필수.
 
-- [ ] 5. Text-IR backend scope-drop parity (impl-sonnet → Opus 필요 시)
-  [목표]: Text-IR 백엔드에도 inkwell과 동등한 block-scope drop 도입.
-  [현재 상태]: 190.5/190.6에서 text-IR은 return-transfer + intermediate-free + let-var + PHI merge만.
-    루프 body concat 결과의 "final un-consumed value"는 여전히 fn 종료까지 leak.
+- [x] 5. Text-IR backend scope-drop parity (impl-sonnet + Opus fix) ✅ 2026-04-14
+  changes:
+    state.rs: scope_str_stack (Vec<Vec<String>>), scope_drop_label_counter fields.
+    init.rs: init new fields on FunctionContext construction.
+    stmt.rs: enter_scope also pushes scope_str_stack; new exit_scope_str;
+      new generate_string_scope_cleanup (null-check+free IR with __sd_* labels);
+      clear_alloc_tracker resets the new fields.
+    stmt_visitor.rs: visit_block_stmts resolves last_value's transfer_slot,
+      emits string-scope cleanup before Named-type drops, transfers slot to
+      outer frame on natural block exit. Terminated paths discard the frame
+      (already cleaned by Return/Break/Continue).
+    string_ops.rs: concat/substring/push_str register each new slot in the
+      topmost scope_str_stack frame alongside string_value_slot.
+    crates/vaisc/tests/e2e/phase191_text_ir_scope_drop.rs (신규, 5 tests).
+    crates/vaisc/tests/e2e/main.rs: module registration.
+  impl-sonnet + Opus fix note:
+    Initial impl removed freed slots from `alloc_tracker` inside scope
+    cleanup. `track_alloc_with_slot` numbers new slots by
+    `alloc_tracker.len()`, so removal caused post-loop concat to reuse
+    `%__alloc_slot_0`, producing `multiple definition of local value`
+    LLVM errors. Fix (Opus): leave `alloc_tracker` untouched, only remove
+    from `string_value_slot`; the `store i8* null` lets function-exit
+    cleanup skip safely. `still_tracked` also switched from `alloc_tracker`
+    to `string_value_slot` to mirror inkwell's generate_block.
+  verify:
+    cargo build --workspace --exclude vais-python --exclude vais-node: green.
+    cargo test -p vaisc --test e2e: 2576 passed / 0 failed (676s),
+      baseline 2571 + 5 phase191 tests. No regressions.
+    phase190_str_concat_drop: all green.
+  rfc: RFC-001 §5.4 "single implementation path" — text-IR and inkwell now
+    share the block-scope drop structural pattern.
+  team-review_2026-04-14: Approve, 0 Critical, 4 Warnings, 3 Info.
+    W3 (doc drift on `exit_scope`) fixed inline. W1/W2/W4 → follow-up items
+    below (#6/#7/#8). Quote paths kept for traceability.
+
+### Phase 191 follow-ups (team-review 2026-04-14 발견)
+
+- [ ] 6. Break/Continue 경로 string scope cleanup (Opus direct)
+  [출처]: team-review W1 (stmt_visitor.rs:122-128 주석 과단정). inkwell/gen_stmt.rs:54-58도 동일.
+  [상태]: Return만 drop/alloc cleanup을 호출하고 Break/Continue는 호출하지 않음.
+    루프 body 내부 concat 뒤 break/continue 직전에 만들어진 중간 버퍼가 fn 종료까지 leak.
   [대상 파일]:
-    - crates/vais-codegen/src/stmt.rs (enter_scope / exit_scope 확장 — 이미 scope_stack 존재)
-    - crates/vais-codegen/src/stmt_visitor.rs (block 진입/퇴출마다 push/pop)
-    - crates/vais-codegen/src/state.rs (scope_str_stack 추가 — inkwell과 대칭)
-  [설계 참조]:
-    - inkwell generate_block의 scope_str_stack push → last_value transfer → remaining slots free 패턴을 그대로 텍스트 IR에 복제.
-    - 기존 fn_ctx.scope_stack(드롭용 var 리스트)와 별개의 `string_scope_stack: Vec<Vec<slot_name>>` 권장.
+    - crates/vais-codegen/src/stmt_visitor.rs (generate_break_stmt/generate_continue_stmt)
+    - crates/vais-codegen/src/inkwell/gen_stmt.rs (동일 한계)
   [완료 기준]:
-    - text-IR로 빌드한 loop 프로그램도 누수 없이 종료 (e2e에서 기본 검증)
-    - RFC-001 §5.4 "single implementation path" 요구사항 충족
+    - e2e: loop body + break/continue 직전 concat leak 회귀 테스트
+    - 양 백엔드 동일 동작
+  [복잡도]: 중 — loop_stack 범위 내 프레임 집계 필요.
+
+- [ ] 7. transfer_slot lookup Ident fallback (impl-sonnet)
+  [출처]: team-review W2 (stmt_visitor.rs:87-96). 현재는 last_value의 SSA 레지스터만 조회.
+  [상태]: Str local이 `is_simple_type=true` 덕분에 SSA let optimization으로 우연 일치.
+    향후 `let mut s := ...` 또는 Str의 alloca화 시 transfer_slot=None → 내부 scope가 free → UAF.
+  [대상 파일]:
+    - crates/vais-codegen/src/stmt_visitor.rs (visit_block_stmts의 transfer_slot 계산 지점)
+    - crates/vais-codegen/src/inkwell/gen_stmt.rs (동일 한계)
+  [설계]:
+    - 마지막 표현식이 Expr::Ident(name)이면 var_string_slot.get(name) fallback
+    - 기존 SSA 직매치와 결합 (var path 먼저 시도 → SSA → None)
+  [완료 기준]:
+    - e2e: let mut s := "a"+"b"; { s } 형태 회귀 방지 테스트 (Str가 alloca화될 때 대비)
+    - 현재 green baseline 유지
+  [복잡도]: 낮음~중 — expr 노드 패턴 매칭 추가.
+
+- [ ] 8. Phase 191 #5 보강 E2E — substring/push_str/match/break coverage (impl-sonnet)
+  [출처]: team-review W4 (phase191_text_ir_scope_drop.rs: concat-only 5 tests).
+  [대상 파일]:
+    - crates/vaisc/tests/e2e/phase191_text_ir_scope_drop.rs (확장)
+  [요구]:
+    (a) 루프 body 내부 substring 반복 (OOM smoke)
+    (b) 루프 body 내부 push_str 반복
+    (c) match arm이 concat 결과를 반환하는 PHI 경로
+    (d) #6 fix 후: break 직전 concat (회귀 방지)
+  [완료 기준]:
+    - 4개 이상 신규 테스트 추가, 전부 green
     - E2E baseline 유지
-  [복잡도]: 중간 — inkwell 구현을 참조 가능하므로 impl-sonnet 위임 시도. 막히면 Opus direct로 승격.
+  [복잡도]: 낮음 — 기존 테스트 패턴 복제.
 
 ### 전략
 
@@ -113,11 +174,13 @@ max_iterations: 30
   blockedBy: 없음 (모두 병렬 가능하지만 충돌 방지 및 리뷰 부담 고려해 순차 권장)
   mode_log: auto 선택 (사용자), 순차 실행 (#1→#5→#2→#3→#4). #2/#3/#4 RFC 단계에서 리뷰 대기.
   strategy_log:
-    #1: Direct delegate fast-path — 쉘 + docs, Rust 변경 없음, foreground impl-sonnet.
-    #5: Sequential impl-sonnet background — 참조 구현(inkwell) 존재, E2E baseline 검증 필수.
+    #1: Direct delegate fast-path — 쉘 + docs, Rust 변경 없음, foreground impl-sonnet. ✅ iter 1
+    #5: Sequential impl-sonnet background — 참조 구현(inkwell) 존재. ✅ iter 2
+         (impl-sonnet hit tool budget after core impl; Opus finished test file +
+         fixed alloc_tracker slot-id collision regression caught by new e2e.)
     #2/#3/#4: Opus direct — RFC + design 의사결정 inseparable, 사용자 리뷰 gating.
 
-progress: 1/5 (20%)
+progress: 2/5 (40%); +3 follow-ups (#6/#7/#8) 등록
 
 ---
 
