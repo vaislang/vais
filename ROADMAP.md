@@ -10,14 +10,13 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: pending
-iteration: 6
+iteration: 7
 max_iterations: 30
-session_checkpoint: 2026-04-14 세션 2 — 3 tasks complete (#7, #6, #8).
-  commits: 6a47c582 (#7), 5bbf8a9a (#6), 70280d84 (#8).
-  surfaced: #9 (match-arm PHI fat-ptr bug) — Opus direct, 선결 아님.
-  다음 권장: #2a (RFC-002 core, Opus direct, large — fresh session 권장).
-  대안: #9 (match-PHI fix, 중간 규모) 또는 #4/#5 (RFC 작성 단계).
-  컨텍스트 보호 목적으로 mode: auto → pending 전환, /clear 후 재개 권장.
+session_checkpoint: 2026-04-14 세션 3 — #2a-rfc 완료 (RFC-002 §9 scope correction).
+  사용자 re-sign-off gate에서 auto-progress 일시 정지.
+  다음 권장:
+    A) RFC-002 §9 검토 후 승인 → #2a 구현 착수 (Opus direct, large — 1 task로 fresh iteration 권장).
+    B) 승인 전 #9 (match-PHI fix, 중간 규모) 또는 #3/#4 (RFC 작성, 병렬 가능) 먼저 진행.
 
 > Phase 190.5/190.6에서 RFC-001 §8 "Future work"로 명시한 범위 밖 항목들.
 > 각 작업은 **독립적으로 진행 가능**하며 blockedBy 없음. 난이도/위험도 기준으로
@@ -139,19 +138,41 @@ session_checkpoint: 2026-04-14 세션 2 — 3 tasks complete (#7, #6, #8).
     W3 (doc drift on `exit_scope`) fixed inline. W1/W2/W4 → follow-up items
     below (#6/#7/#8). Quote paths kept for traceability.
 
-### Phase 191 #2 하위 구현 작업 (RFC-002 Approved 2026-04-14)
+### Phase 191 #2 하위 구현 작업 (RFC-002 Approved 2026-04-14, **§9 re-review required 2026-04-14**)
+
+- [x] 2a-rfc. RFC-002 보정 (§9 scope correction, Opus direct) ✅ 2026-04-14
+  drift_found:
+    std/vec.vais:51 Vec<T>는 4필드 {data,len,cap,elem_size} (RFC §2.1 3필드 가정과 불일치).
+    std/vec.vais:238 이미 user F drop(&self) 존재 (RFC §2.1 "no Drop" 가정과 불일치).
+    push는 user method (std/vec.vais:186), codegen intrinsic 아님 (RFC §2.2 가정과 불일치).
+  changes:
+    docs/rfcs/RFC-002-container-string-ownership.md (+211 lines):
+      §2: "corrected 2026-04-14" — 실제 4필드 + user drop 상태 반영.
+      §4.1: Vec<str> 레이아웃 4필드 → 5필드 (`+owned: i64`), 비-str Vec 불변.
+      §4.3: push는 call-site wrapping (path α) — stdlib 미수정, codegen이
+        call 주변에 owned-bit set + slot transfer IR inject.
+      §4.4: user drop과 충돌 없는 prelude helper `__vais_vec_str_shallow_free`
+        (Vec<str>에만, user drop 전 실행). struct는 기존대로 postlude 유지.
+      §9 (신규): scope correction 상세, drift table, path β 기각, drop-ordering
+        asymmetry 해설, monomorphization 주석, re-sign-off 요청.
+  verify:
+    원문 §1/§3/§5/§6/§7/§8 무변경. 구조: 9개 ## 섹션 (wc -l: 369 → 580).
+    Rust 코드 변경 0 — 빌드/테스트 영향 없음.
+  gate: **user re-sign-off 필요** (§9.6). 2a 구현은 approval 후 착수.
+  iter: 7
 
 - [ ] 2a. Vec<str> 레이아웃 + owned bitmap + __drop_Vec_str (Opus direct)
-  [참조]: RFC-002 §4.1, §4.4
+  [참조]: RFC-002 §4.1, §4.4 **(§9 corrected)**, §9 integration notes
   [대상 파일]:
-    - crates/vais-codegen/src/vtable.rs (auto-emit __drop_Vec_str)
-    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (Vec<str>.push path)
-    - crates/vais-codegen/src/string_ops.rs (ownership transfer to bitmap)
+    - crates/vais-codegen/src/vtable.rs (synthesize __vais_vec_str_shallow_free + splice into drop sequence, NOT replace Vec.drop)
+    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (Vec<str>.push call-site wrapping)
+    - crates/vais-codegen/src/string_ops.rs (alloc_slot transfer on push)
     - crates/vais-codegen/src/state.rs (pending_return_skip_container)
+    - (monomorphization) Vec<str> 5필드 레이아웃 선택 지점 (구현 시 정확한 hook 확정)
   [완료 기준]: RFC-002 §6 tests (1) vec_str_push_drop_no_leak, (2) mixed_literal, (6) return_transfers.
-    E2E baseline 유지 (2576 + 3 new).
+    E2E baseline 유지 (2582 + 3 new).
   [복잡도]: 높음 — 모노모피제이션별 레이아웃 변경, ABI 동일.
-  blockedBy: #5 완료 (done).
+  blockedBy: #5 완료 (done), #2a-rfc user re-sign-off.
 
 - [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct)
   [참조]: RFC-002 §4.2 Option D
@@ -280,8 +301,14 @@ session_checkpoint: 2026-04-14 세션 2 — 3 tasks complete (#7, #6, #8).
         follow-up #9 등록. Agent는 "PROMISE: COMPLETE" 빠뜨리고 bug 분석 중 반환 —
         lead가 scope 조정 + 테스트 #[ignore] 처리로 마무리.
         #2a(Opus direct, large RFC work)는 #8 후 체크포인트 → fresh session 권장.
+    #2a-rfc: Opus direct foreground (iter 7, 신규 sub-task). ✅ 완료.
+        사전 verify에서 std/vec.vais Vec<T>=4필드{data,len,cap,elem_size} +
+        user drop() 이미 존재 → RFC-002 §2/§4 "3필드" 가정 drift 발견.
+        RFC §2/§4.1/§4.3/§4.4 보정 + §9 (scope correction, 211줄 추가) 신설.
+        구현(#2a)은 사용자 re-sign-off gating — §9.6 확인 필요.
+        auto-progress 여기서 일시 정지 (user gate).
 
-progress: 5/9 resolved (#1, #5, #6, #7, #8 complete; #2 → #2a/#2b/#2c pending; #9 new surfaced by #8); RFC-002 Approved
+progress: 6/10 resolved (#1, #5, #6, #7, #8, #2a-rfc complete; #2a/#2b/#2c pending — blocked on #2a-rfc re-sign-off; #9 new surfaced by #8); RFC-002 **re-review pending §9**
 
 ---
 
