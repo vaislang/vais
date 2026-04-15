@@ -29,14 +29,21 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
-session_checkpoint: 2026-04-15 세션 5 iter 18 — #2b Iter A 완료 (survey + design plan ROADMAP 갱신).
+session_checkpoint: 2026-04-15 세션 5 iter 18 — #2b Iter A 완료 + Iter B/C/D 분할.
+  commits: bd087e58 (Iter A survey + plan).
   user_gate: #2b 착수 선택 (RFC-002 §4.2 Option D approved).
-  세션 5 완료: Iter A만 (survey + sub-iter plan). 구현 0. E2E 2587 baseline 유지.
+  세션 5 완료: Iter A (survey + sub-iter plan) + #2b를 #2b-B/#2b-C/#2b-D 3개 
+    독립 sub-task로 분할하여 등록. 구현 0. E2E 2587 baseline 유지.
   scope_decision: 세션 4 "광범위 회귀 위험 + fresh session 권장" warning 존중.
-    #2a/#2a' 분할 패턴 그대로 재사용. 한 세션에 구현 밀어넣기 → 중간 truncation 위험 高.
-  남은 Iter B/C/D 각각 fresh session 권장. 자세한 계획은 #2b entry 본문(Iter A 완료 섹션) 참조.
-  재개 권장: fresh session에서 #2b Iter B (layout amendment) 착수
-    또는 저위험 RFC 작업 #3/#4로 스위치.
+    #2a/#2a' 분할 패턴 재사용. 각 Iter 한 세션 1개씩 — auto mode가 자연스럽게
+    blockedBy 체인으로 한 iter만 픽업하도록 #2b-B → #2b-C → #2b-D 체인 설정.
+  **NEXT SESSION (fresh)**: `/clear` + `/harness` → auto mode가 미완료 `- [ ]` 
+    재복원. blockedBy 체인에 의해 **#2b-B만 unblocked 상태**로 진입 → 자동 픽업.
+    Iter B 완료 후 `/loop` 재진입 시 #2b-C가 unblock, 그 다음 #2b-D 순.
+    각 Iter 1 세션. Iter 종료 후 사용자가 `/clear` 결정.
+  재개 권장: fresh session에서 #2b-B (layout amendment) 착수 — 자동 진입 예정.
+    저위험 스위치 옵션: RFC 작업 #3/#4는 blockedBy 없으므로 auto가 우선 #2b-B 선택.
+    사용자가 다른 순서 원하면 `/harness` 진입 후 작업 선택 단계에서 명시 가능.
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
   세션 3 최종 상태:
@@ -70,7 +77,10 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     delta 0KB → PASS. 46행 CSV(헤더+45 샘플) 정상 수집, 종료 시 바이너리 + 임시파일 정리.
   skipped: 실전 300s 구동은 사용자 CI에서 실행 권장. Rust 코드 변경 없음 → E2E 영향 0.
 
-- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — 분할 진행
+- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — parent tracker
+  note: 상위 tracker. 실행은 #2a(완료)/#2a-rfc(완료)/#2a'(완료)/#2b(tracker)/#2b-B/#2b-C/#2b-D/#2c로 분할.
+    이 항목은 auto pickup 대상 아님. 모든 sub-task 완료 시 `- [x] 2`로 close.
+  blockedBy: #2b-D, #2c.
   RFC: docs/rfcs/RFC-002-container-string-ownership.md ✅ Approved (user sign-off 2026-04-14, commit e1edb7bb).
   결정 요약:
     Q1: struct ownership_mask = 고정 i64 (64 필드 cap, overflow = 컴파일 에러).
@@ -311,7 +321,11 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     4. pending_return_skip_container 추가 (return transfer).
     5. e2e tests (§6 cases 1, 2, 6).
 
-- [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct)
+- [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct, tracker)
+  status: Iter A 완료 (survey + design plan, 세션 5 iter 18 commit bd087e58).
+    남은 작업은 #2b-B/#2b-C/#2b-D 3개 독립 sub-task로 분할 — 각 fresh session 1개씩.
+    이 항목은 auto pickup 대상 아님 (blockedBy로 gating). 모두 완료 시 `- [x] 2b` close.
+  blockedBy: #2b-D.
   [참조]: RFC-002 §4.2 Option D, §4.3 struct 경로, §4.4 post-emission.
   [대상 파일]:
     - crates/vais-codegen/src/generate_expr_struct.rs:87-130 (struct literal 필드 저장 루프
@@ -404,12 +418,114 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
       - user drop이 pre-drop hook로 `&self`만 받으므로 필드 무결성 유지 (RFC-002 §4.2).
     verify: ROADMAP update only, Rust 코드 변경 0 — E2E 2587 baseline 유지.
 
+- [ ] 2b-B. #2b Iter B — StructInfo 파생 + layout amendment (Opus direct)
+  [상속]: #2b Iter A 완료 (commit bd087e58, ROADMAP #2b 본문 참조).
+  [sub-steps]:
+    1. crates/vais-codegen/src/types/mod.rs:60-68 `StructInfo`에 집계 필드 추가:
+       `pub has_owned_mask: bool, pub heap_fields: Vec<usize>`. 계산 시점은
+       struct 등록(register_struct 혹은 등가 경로)에서 fields 훑어 ResolvedType::Str
+       또는 Named{"Vec$str"} 포함 시 true + 인덱스 수집.
+    2. generate_expr_struct.rs:17 `resolve_struct_name` 직후 `struct_info.has_owned_mask`
+       조회 → true면 `effective_fields`에 ("__ownership_mask", I64) append +
+       `effective_type_name` layout에도 i64 append. 해당 alloca는 기존 struct_ptr가
+       포괄 (같은 %Type 레이아웃이므로).
+    3. monomorphization 경로(generate_specialized_struct_type — #2a 좌표: 
+       function_gen/generics.rs:57-85, inkwell/gen_types.rs:162-200)에도 대칭 분기.
+       base struct가 has_owned_mask면 specialized layout에도 i64 append.
+    4. with_capacity/new 같은 constructor 경로 확인 — 새 필드가 0으로 초기화되도록.
+       struct literal이 아닌 필드 누락 케이스 감지.
+  [검증]: E2E 2587 baseline 유지 (Iter B만으론 기능 추가 0, layout 변경이 기존 struct에
+    영향 없음 확인). test-case: str 필드 없는 struct은 layout 무변경.
+  [완료 기준]: cargo test -p vaisc --test e2e 2587/0/0. `- [x] 2b-B` + changes: log.
+    Iter C를 위한 unblock 신호.
+  [대상 파일]:
+    - crates/vais-codegen/src/types/mod.rs
+    - crates/vais-codegen/src/generate_expr_struct.rs (line 17-79 영역)
+    - crates/vais-codegen/src/function_gen/generics.rs (line 57-85 근처)
+    - crates/vais-codegen/src/inkwell/gen_types.rs (line 162-200 근처, 대칭)
+    - crates/vais-codegen/src/registration.rs (StructInfo 생성 지점 — 재확인)
+  [복잡도]: 중. ABI 조건부 변경 + monomorphization 대칭성이 핵심.
+  blockedBy: 없음 (#2a 완료).
+
+- [ ] 2b-C. #2b Iter C — shallow-drop helper emission + scope/function-exit splice (Opus direct)
+  [상속]: #2b-B 완료 (StructInfo.has_owned_mask + layout).
+  [sub-steps]:
+    1. crates/vais-codegen/src/string_ops.rs에 `generate_struct_shallow_free_helpers(
+       struct_name: &str, fields: &[(String, ResolvedType)], heap_field_indices: &[usize])` 
+       추가. 패턴: #2a'의 `generate_vec_str_container_helpers` 대응.
+       시그니처: `void @__vais_struct_shallow_free_{Name}(%{Name}*)`.
+       IR: ownership_mask 필드 GEP+load → 각 heap_field_index i마다:
+         (a) bit (1 << i) 마스크 & mask → ne 0 체크
+         (b) set이면 field i GEP → fat-ptr이면 .0 extractvalue → free
+         (c) 비트 clear 불필요 (struct consume-once).
+    2. crates/vais-codegen/src/lib.rs + init.rs에 `needs_struct_shallow: HashSet<String>`
+       신규 필드 (#2a'의 needs_vec_str_helpers 패턴).
+    3. module_gen/{mod,instantiations,subset}.rs에 declarations + helper body emission:
+       needs_struct_shallow의 각 type마다 generate_struct_shallow_free_helpers + extern 선언.
+       #2a 패턴(generated_structs.contains_key 가드) 재사용.
+    4. crates/vais-codegen/src/stmt.rs:862 scope-exit drop loop — drop_fn call 직후:
+       `if self.types.structs[type_name].has_owned_mask` 검사 후 
+       `call void @__vais_struct_shallow_free_{Name}(%Name* %ptr_tmp)` splice +
+       `self.needs_struct_shallow.insert(type_name)`.
+    5. crates/vais-codegen/src/stmt.rs:1038 function-exit drop loop — 동일 splice.
+    6. 사전 체크: user drop이 정의 없는 struct(drop_registry 미등록)인데 heap 필드는
+       있는 경우 — shallow-drop만 호출해야 함. stmt.rs:842 guard가 drop_registry 있을
+       때만 진입이므로, 추가로 `has_owned_mask만 true` 분기 필요. 
+  [검증]: 
+    - cargo test -p vaisc --test e2e 2587/0/0 (helper emission이 dormant 상태일 때).
+    - 수동 테스트: S Person {name: str}; p := Person {name: "a"+"b"}; ← Iter D에서 
+      literal wrapping까지 연결되어야 leak 0 확인 가능. Iter C 단독은 infrastructure만.
+  [완료 기준]: cargo clippy green + E2E 2587/0/0. Iter D unblock.
+  [대상 파일]:
+    - crates/vais-codegen/src/string_ops.rs
+    - crates/vais-codegen/src/lib.rs + init.rs
+    - crates/vais-codegen/src/module_gen/{mod,instantiations,subset}.rs
+    - crates/vais-codegen/src/stmt.rs (line 828-900 + 1001-1080)
+  [복잡도]: 높음. shallow-drop sequencing + helper lifecycle + user-drop-없는 경로 분기.
+  blockedBy: #2b-B.
+
+- [ ] 2b-D. #2b Iter D — struct literal wrapping + E2E RFC-002 §6 (3)(4) (Opus direct)
+  [상속]: #2b-C 완료 (shallow-drop helpers + splice wired, dormant).
+  [sub-steps]:
+    1. crates/vais-codegen/src/generate_expr_struct.rs:106-107 hook — val (field rvalue)
+       확정 직후:
+         - effective_fields[field_idx].1 == ResolvedType::Str
+         - struct_info.has_owned_mask == true
+         - fn_ctx.string_value_slot에 val의 SSA token 존재
+       3가지 조건 AND 시:
+         (a) ownership_mask 필드 GEP → load → OR with (1 << field_idx) → store.
+         (b) string_value_slot remove + scope_str_stack 최상위 frame에서 해당 slot 제거.
+         (c) `store i8* null, i8** {slot}` emit (Phase 191 #5 패턴).
+         (d) alloc_tracker entry 유지.
+       모든 struct 필드 저장 전 ownership_mask를 0으로 초기화하는 prelude 1회 필요.
+    2. 새 e2e: crates/vaisc/tests/e2e/phase191_struct_str_drop.rs (신규, 2+ tests)
+       - (3) struct_str_field_drop: S P {n: str}; p := P {n: "a"+"b"}; drop → leaks 0
+       - (4) struct_user_drop_takes_ownership: S P {n: str} + X P: Drop {F drop...};
+             user drop이 도메인 로직만, shallow-drop이 n 정리. leaks 0.
+       선택: (5) struct_literal_only — literal name → bitmap 0, free 호출 없음 확인.
+    3. crates/vaisc/tests/e2e/main.rs 모듈 등록.
+    4. docs/rfcs/RFC-002-container-string-ownership.md §4.2 문구 업데이트 —
+       구현 완료 상태 반영 + take_field! 스펙은 별도 follow-up으로 명시.
+  [검증]:
+    - cargo test -p vaisc --test e2e: 2589/0/0 (baseline 2587 + 2~3 new).
+    - macOS leaks --atExit 스모크 (Iter D 변경 확인).
+    - cargo clippy green.
+  [완료 기준]: E2E baseline+new 통과. #2b parent tracker close (`- [x] 2b`) + 
+    RFC-002 §8 check item 1개 close.
+  [대상 파일]:
+    - crates/vais-codegen/src/generate_expr_struct.rs (line 81-150 영역 hook 추가)
+    - crates/vaisc/tests/e2e/phase191_struct_str_drop.rs (신규)
+    - crates/vaisc/tests/e2e/main.rs
+    - docs/rfcs/RFC-002-container-string-ownership.md (§4.2 마감 주석)
+  [복잡도]: 중간. hook 1개 + e2e 2~3개 + RFC 문구.
+  blockedBy: #2b-C.
+
 - [ ] 2c. Nested container recursion (Vec<Vec<str>>, Vec<struct{str}>) (Opus direct)
   [참조]: RFC-002 §5 Q3
   [대상 파일]: vtable.rs (모노모피제이션 recursion), drop_registry
   [완료 기준]: RFC-002 §6 test (5) nested_vec_of_struct_str. 외곽 Vec drop이 모든 내부 str 정리.
   [복잡도]: 중간.
-  blockedBy: #2a, #2b.
+  blockedBy: #2a (completed), #2b-D.
 
 ### Phase 191 follow-ups (team-review 2026-04-14 발견)
 
