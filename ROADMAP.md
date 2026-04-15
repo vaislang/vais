@@ -375,7 +375,27 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     cargo test -p vaisc --test e2e phase191: 11/0, 1 ignored.
     cargo test -p vaisc --test e2e: 2582/0, 1 ignored (baseline 2579 + 3 new).
 
-- [ ] 10. stdlib Vec<T> Vec_grow 특수화 버그 수정 (impl-sonnet + Opus gate)
+- [ ] 10. stdlib Vec<T> Vec_grow 특수화 버그 수정 (Opus direct)
+  strategy: sequential research-first — research-haiku 진단 시도 → truncated → Opus 직접 조사로 **근본 원인 확정**.
+  diagnosis_2026-04-15 (Opus):
+    버그 지점: crates/vais-codegen/src/expr_helpers_call/method_call.rs:164-193.
+    메커니즘: `Vec_push$i64` specialize 중 내부 `@.grow()` = `MethodCall{receiver: SelfCall, method: "grow"}`.
+      self의 recv_type = `Vec<i64>` (concrete). Line 166: base = "Vec_grow".
+      Line 188: mangled = vais_types::mangle_name("Vec_grow", [i64]) = "Vec_grow$i64".
+      Line 189 guard: `self.types.functions.contains_key(&mangled)` → **FALSE** (아직 스케줄 안 됨).
+      Line 192: fallback to unmangled `base` = "Vec_grow" → LLVM에 `@Vec_grow` 미정의 symbol 참조 → 링크 에러.
+    근본 문제: **on-demand specialization이 "Vec_push$i64 body 안의 Vec_grow$i64 호출"을 감지하지 못함**.
+      `Vec_push$i64`는 user 최상위 호출부에서 스케줄됨.
+      그 body 안의 `@.grow()` (같은 impl block의 generic method)는 별도 스케줄 엔트리가 없음.
+      따라서 `Vec_grow$i64` specialization은 영원히 호출/emit되지 않음.
+    **fix path**: method_call.rs:189 guard 수정 —
+      `contains_key` false일 때 fallback하지 말고 **specialization 스케줄링**.
+      즉, generic method base(`Vec_grow`)가 fn_instantiations에 있고 자기 struct의 impl method면,
+      resolve_generic_call() 호출 + generate_specialized_function 트리거 + 이후 mangled 사용.
+    구현 규모: 중간 (monomorphization worklist 재진입 패턴 확인 필요, Vec<T> 외 다른
+      generic impl의 self-method-call도 동일 영향 — 광범위 회귀 위험).
+    model: Opus direct — dispatch 설계 이슈 + 잠재적 광범위 영향 + 설계-구현 inseparable.
+    deferred: 이 세션에서 context 소진. fresh session에서 재개 권장.
   [출처]: Phase 191 #2a Iter B 진행 중 2026-04-15 발견.
   [증상]: `U std/vec` 후 `Vec.with_capacity(N).push(x).drop()` 최소 예제에서
     LLVM `error: use of undefined value '@Vec_grow'` — Vec_push<T> specialize는
