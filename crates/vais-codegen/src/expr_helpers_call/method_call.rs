@@ -186,10 +186,23 @@ impl CodeGenerator {
                         }
                     }
                     let mangled = vais_types::mangle_name(&base, generics);
-                    if self.types.functions.contains_key(&mangled) {
+                    if self.types.functions.contains_key(&mangled)
+                        || self.generics.generated_functions.contains_key(&mangled)
+                    {
                         mangled
                     } else {
-                        base
+                        // Not yet registered. Try on-demand specialization — the
+                        // receiver type has concrete generics but the method body
+                        // that referenced this call (e.g., Vec_push$T body calling
+                        // @.grow()) was specialized without also scheduling the
+                        // inner generic method. See ROADMAP Phase 191 #10.
+                        self.try_generate_vec_specialization(
+                            &resolved,
+                            method_name,
+                            generics,
+                            counter,
+                        )
+                        .unwrap_or(base)
                     }
                 } else {
                     // Unresolved generics (e.g., Generic("T")): use fn_instantiations
@@ -1075,8 +1088,17 @@ impl CodeGenerator {
         use vais_types::GenericInstantiation;
         use vais_types::InstantiationKind;
 
-        // Only handle known generic containers
-        if struct_name != "Vec" && struct_name != "HashMap" && struct_name != "Option" {
+        // Only handle generic structs that we have a template for.
+        // Previously restricted to {Vec, HashMap, Option}; generalized so that
+        // user-defined generic impls also get on-demand specialization when
+        // reached from another specialization's body (Phase 191 #10 fix).
+        let has_template = self.generics.struct_defs.contains_key(struct_name)
+            || self
+                .generics
+                .generic_method_bodies
+                .keys()
+                .any(|(s, _)| s == struct_name);
+        if !has_template {
             return None;
         }
 
@@ -1123,10 +1145,142 @@ impl CodeGenerator {
             if self.generics.generated_functions.contains_key(&mangled) {
                 return Some(mangled);
             }
+
+            // Register the specialized method signature in types.functions BEFORE
+            // generating the body, so that: (a) callers looking up return/arg types
+            // during codegen find correct concrete types, and (b) recursive
+            // references within the body itself resolve (e.g., Vec_push$T calling
+            // @.grow() — Vec_grow$T must be looked-up-able mid-specialization).
+            let struct_generics = self
+                .generics
+                .struct_defs
+                .get(struct_name)
+                .map(|s| s.generics.clone())
+                .unwrap_or_default();
+            let method_generic_params: Vec<_> = if !method_fn.generics.is_empty() {
+                method_fn
+                    .generics
+                    .iter()
+                    .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                    .collect()
+            } else {
+                struct_generics
+                    .iter()
+                    .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                    .collect()
+            };
+            let mut substitutions: std::collections::HashMap<String, ResolvedType> =
+                method_generic_params
+                    .iter()
+                    .zip(type_args.iter())
+                    .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                    .collect();
+            substitutions.insert(
+                "Self".to_string(),
+                ResolvedType::Named {
+                    name: struct_name.to_string(),
+                    generics: type_args.to_vec(),
+                },
+            );
+            let params: Vec<_> = method_fn
+                .params
+                .iter()
+                .map(|p| {
+                    let name = p.name.node.to_string();
+                    let ty = if name == "self" {
+                        substitutions
+                            .get("Self")
+                            .cloned()
+                            .unwrap_or(ResolvedType::Unknown)
+                    } else {
+                        let raw = self.ast_type_to_resolved(&p.ty.node);
+                        vais_types::substitute_type(&raw, &substitutions)
+                    };
+                    (name, ty, p.is_mut)
+                })
+                .collect();
+            let ret_type = method_fn
+                .ret_type
+                .as_ref()
+                .map(|t| {
+                    let ty = self.ast_type_to_resolved(&t.node);
+                    vais_types::substitute_type(&ty, &substitutions)
+                })
+                .unwrap_or(ResolvedType::Unit);
+            self.types.functions.insert(
+                mangled.clone(),
+                crate::types::FunctionInfo {
+                    signature: vais_types::FunctionSig {
+                        name: mangled.clone(),
+                        params,
+                        ret: ret_type,
+                        is_async: method_fn.is_async,
+                        ..Default::default()
+                    },
+                    is_extern: false,
+                    _extern_abi: None,
+                },
+            );
+
+            // Snapshot fn_ctx fields that `initialize_function_state` will clobber.
+            // Required because this runs mid-body of another function, so locals
+            // like `value`, `self` (belonging to the outer spec) must survive.
+            // Why: without this, generating Vec_grow$T from inside Vec_push$T's
+            // body erases Vec_push's `value` local → later IR emits fail.
+            // How to apply: only around re-entrant specialization; not needed at
+            // top-level module_gen because fn_ctx is already empty there.
+            let saved_current_function = self.fn_ctx.current_function.take();
+            let saved_current_return_type = self.fn_ctx.current_return_type.take();
+            let saved_locals = std::mem::take(&mut self.fn_ctx.locals);
+            let saved_label_counter = self.fn_ctx.label_counter;
+            let saved_loop_stack = std::mem::take(&mut self.fn_ctx.loop_stack);
+            let saved_current_block = std::mem::replace(
+                &mut self.fn_ctx.current_block,
+                String::from("entry"),
+            );
+            let saved_future_poll_fns = std::mem::take(&mut self.fn_ctx.future_poll_fns);
+            let saved_async_poll_context = self.fn_ctx.async_poll_context.take();
+            let saved_alloc_tracker = std::mem::take(&mut self.fn_ctx.alloc_tracker);
+            let saved_string_value_slot = std::mem::take(&mut self.fn_ctx.string_value_slot);
+            let saved_pending_return_skip_slot =
+                std::mem::take(&mut self.fn_ctx.pending_return_skip_slot);
+            let saved_var_string_slot = std::mem::take(&mut self.fn_ctx.var_string_slot);
+            let saved_var_string_slots_multi =
+                std::mem::take(&mut self.fn_ctx.var_string_slots_multi);
+            let saved_phi_extra_slots = std::mem::take(&mut self.fn_ctx.phi_extra_slots);
+            let saved_temp_var_types = std::mem::take(&mut self.fn_ctx.temp_var_types);
+            let saved_scope_stack = std::mem::take(&mut self.fn_ctx.scope_stack);
+            let saved_scope_str_stack = std::mem::take(&mut self.fn_ctx.scope_str_stack);
+            let saved_scope_drop_label_counter = self.fn_ctx.scope_drop_label_counter;
+            let saved_entry_allocas = std::mem::take(&mut self.fn_ctx.entry_allocas);
+
             // Generate the specialized function
-            match self.generate_specialized_function(&method_fn, &inst) {
+            let result = self.generate_specialized_function(&method_fn, &inst);
+
+            // Restore fn_ctx snapshot (pending_specialized_ir intentionally kept
+            // accumulating — it's flushed at module emission).
+            self.fn_ctx.current_function = saved_current_function;
+            self.fn_ctx.current_return_type = saved_current_return_type;
+            self.fn_ctx.locals = saved_locals;
+            self.fn_ctx.label_counter = saved_label_counter;
+            self.fn_ctx.loop_stack = saved_loop_stack;
+            self.fn_ctx.current_block = saved_current_block;
+            self.fn_ctx.future_poll_fns = saved_future_poll_fns;
+            self.fn_ctx.async_poll_context = saved_async_poll_context;
+            self.fn_ctx.alloc_tracker = saved_alloc_tracker;
+            self.fn_ctx.string_value_slot = saved_string_value_slot;
+            self.fn_ctx.pending_return_skip_slot = saved_pending_return_skip_slot;
+            self.fn_ctx.var_string_slot = saved_var_string_slot;
+            self.fn_ctx.var_string_slots_multi = saved_var_string_slots_multi;
+            self.fn_ctx.phi_extra_slots = saved_phi_extra_slots;
+            self.fn_ctx.temp_var_types = saved_temp_var_types;
+            self.fn_ctx.scope_stack = saved_scope_stack;
+            self.fn_ctx.scope_str_stack = saved_scope_str_stack;
+            self.fn_ctx.scope_drop_label_counter = saved_scope_drop_label_counter;
+            self.fn_ctx.entry_allocas = saved_entry_allocas;
+
+            match result {
                 Ok(ir_code) => {
-                    // Append to pending specialized IR
                     self.fn_ctx.pending_specialized_ir.push(ir_code);
                     Some(mangled)
                 }

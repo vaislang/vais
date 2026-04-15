@@ -68,6 +68,7 @@ mod phase190_generic_async;
 mod phase190_str_concat_drop;
 mod phase190_vec_field_access;
 mod phase191_text_ir_scope_drop;
+mod phase191_vec_grow_spec;
 mod phase30;
 mod phase31;
 mod phase32;

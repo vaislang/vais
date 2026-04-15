@@ -792,6 +792,17 @@ impl CodeGenerator {
         self.emit_global_vars(&mut ir);
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
+        // Flush on-demand specialized functions generated during body codegen
+        // (e.g., Vec_grow$i64 triggered from Vec_push$i64 body). generate_module
+        // has the same flush; this path (with instantiations) needs it too.
+        if !self.fn_ctx.pending_specialized_ir.is_empty() {
+            ir.push_str("\n; On-demand specialized functions\n");
+            for spec_ir in self.fn_ctx.pending_specialized_ir.drain(..) {
+                ir.push_str(&spec_ir);
+                ir.push('\n');
+            }
+        }
+
         // Add WASM runtime if targeting WebAssembly
         if self.target.is_wasm() {
             ir.push_str(&self.generate_wasm_runtime());

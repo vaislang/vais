@@ -770,6 +770,16 @@ impl CodeGenerator {
         self.emit_global_vars_with_ownership(&mut ir, Some(&module_globals));
         self.emit_body_lambdas_vtables(&mut ir, &body_ir);
 
+        // Flush on-demand specialized functions triggered from within body
+        // codegen (see Phase 191 #10: Vec_grow$T from Vec_push$T body).
+        if !self.fn_ctx.pending_specialized_ir.is_empty() {
+            ir.push_str("\n; On-demand specialized functions\n");
+            for spec_ir in self.fn_ctx.pending_specialized_ir.drain(..) {
+                ir.push_str(&spec_ir);
+                ir.push('\n');
+            }
+        }
+
         // Add WASM runtime for main module
         if is_main_module && self.target.is_wasm() {
             ir.push_str(&self.generate_wasm_runtime());

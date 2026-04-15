@@ -9,8 +9,8 @@
 
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
-mode: pending
-iteration: 10
+mode: auto
+iteration: 11
 max_iterations: 30
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
@@ -375,7 +375,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     cargo test -p vaisc --test e2e phase191: 11/0, 1 ignored.
     cargo test -p vaisc --test e2e: 2582/0, 1 ignored (baseline 2579 + 3 new).
 
-- [ ] 10. stdlib Vec<T> Vec_grow 특수화 버그 수정 (Opus direct)
+- [x] 10. stdlib Vec<T> Vec_grow 특수화 버그 수정 (Opus direct) ✅ 2026-04-15
   strategy: sequential research-first — research-haiku 진단 시도 → truncated → Opus 직접 조사로 **근본 원인 확정**.
   diagnosis_2026-04-15 (Opus):
     버그 지점: crates/vais-codegen/src/expr_helpers_call/method_call.rs:164-193.
@@ -417,6 +417,50 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     - 신규 e2e (Vec<i64>, Vec<str> 양쪽) 추가
   [복잡도]: 중간. monomorphization 경로 1개 점 수정일 것으로 예상.
   [블록 해제]: #2a' 착수 가능해짐.
+
+  [완료 2026-04-15 Opus direct]:
+    changes:
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:188-206 —
+        all-concrete 경로에서 mangled 미등록 시 generated_functions 재검사 +
+        try_generate_vec_specialization fallback 추가. 무한 재진입은
+        generate_specialized_function_inner:241의 generated_functions.insert
+        先 guard로 차단.
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:1128-1140 —
+        try_generate_vec_specialization의 {Vec, HashMap, Option} whitelist 제거,
+        struct_defs/generic_method_bodies 보유 여부로 일반화.
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:1149-1226 —
+        method signature pre-register (types.functions.insert) — recursive
+        body 내 자기 참조가 return/param 타입 조회에 걸리도록. 이후 fn_ctx
+        snapshot/restore로 `initialize_function_state` clobber 방지 (locals/
+        scope_stack/alloc_tracker/entry_allocas 등 19개 필드 저장).
+      crates/vais-codegen/src/module_gen/instantiations.rs:794-803 +
+        crates/vais-codegen/src/module_gen/subset.rs:773-781 —
+        pending_specialized_ir flush 추가 (기존 generate_module만 flush하던 것을
+        with_instantiations + subset 양쪽에 미러).
+    verify:
+      cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+      cargo test -p vaisc --test e2e: 2583 passed / 0 failed / 1 ignored
+        (baseline 2582 + 1 new e2e_phase191_vec_grow_spec_from_push).
+      새 테스트: Local Vec<T> 구조(std/vec와 동일 5-field 레이아웃) + push(1,2,3)
+        + drop. 이전 동작: link error `@Vec_grow` undefined. 현재 동작: exit 0.
+    scope_decision:
+      원래 계획(U std/vec + Vec.with_capacity/push/drop 실행)은 달성 못함 —
+      stdlib `vec_new() -> Vec<i64>` 내 `Vec.with_capacity(8)` 경로가 별도
+      타입 추론 버그 (infer_expr_type이 Vec<i64>가 아니라 Vec<> 반환 → alloca
+      `%Vec` vs call 결과 `%Vec$i64` LLVM 타입 불일치) 때문.
+      static method dispatch 분기(method_call.rs:917+)에 on-demand 확장을
+      넣어봤으나, 이 경로가 활성화되면 stdlib 자체 vec_new 컴파일이 깨져 스택
+      전체가 막힘. 따라서 이번 작업은 ROADMAP 진단 원문의 `method_call.rs:189`
+      범위(=`@.grow()` self-method 호출 경로)에만 한정.
+    follow_up:
+      별도 작업 `#12. Vec static method + user-code Vec.with_capacity<T>
+      specialization`으로 분리 권장. 필요한 부수 fix:
+      (a) infer_expr_type에서 generic struct 정적 메서드 호출의 반환 타입에
+          컨텍스트로부터 T를 전파.
+      (b) generate_expr_struct_lit에서 `has_generic_fields=false`지만 struct
+          자체는 generic인 경우(Vec<T>의 전부-i64 필드)도 specialized 이름 사용.
+      (c) 또는 `%Vec`와 `%Vec$T`를 LLVM opaque struct로 전환해 structural
+          equivalence를 언어 레벨로 관철.
 
 - [ ] 2a'. Vec<str> call-site wiring + e2e (Opus direct) — #2a 후속
   [상속]: RFC-002 §9.8 6단계 중 stdlib(#2a 완료) 제외한 나머지.
