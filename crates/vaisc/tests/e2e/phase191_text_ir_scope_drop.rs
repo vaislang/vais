@@ -268,13 +268,12 @@ F main() -> i64 {
     );
 }
 
-/// Would guard PHI-merge + scope-drop interaction through a match expression.
-/// Blocked: text-IR backend emits a mixed-type PHI (`{ptr, i64}` fat pointer
-/// from arm 1, raw `i8*` from default arm) — pre-existing match-arm string
-/// unification bug, not caused by Phase 191 #5/#6. Tracked as separate
-/// follow-up #9.
+/// Guards PHI-merge + scope-drop interaction through a match expression.
+/// Phase 191 #9 fixed the text-IR backend's mixed-type PHI by unifying the
+/// arm types to `{ i8*, i64 }` (fat pointer) and adding ownership transfer
+/// for any tracked alloc_slot, mirroring the if-expr PHI handling at
+/// expr_helpers_control.rs:344-371.
 #[test]
-#[ignore]
 fn e2e_phase191_match_arm_concat_phi() {
     assert_stdout_contains(
         r#"

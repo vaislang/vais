@@ -316,6 +316,7 @@ impl CodeGenerator {
 
             // Default fallthrough block (no arm matched)
             write_ir!(ir, "{}:", default_label);
+            self.fn_ctx.current_block.clone_from(&default_label);
             // Use appropriate default value based on arm types or function return type
             let default_val = {
                 let mut resolved = if !arms.is_empty() {
@@ -332,8 +333,18 @@ impl CodeGenerator {
                     }
                 }
                 match &resolved {
+                    ResolvedType::Str => {
+                        // Str PHI uses fat-pointer { i8*, i64 } — emit a zero
+                        // constant for the unreachable default fallthrough.
+                        let zinit = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
+                            zinit
+                        );
+                        zinit
+                    }
                     ResolvedType::Named { .. }
-                    | ResolvedType::Str
                     | ResolvedType::Ref(_)
                     | ResolvedType::RefMut(_) => "null".to_string(),
                     ResolvedType::F64 => "0.0".to_string(),
@@ -401,7 +412,7 @@ impl CodeGenerator {
                     let llvm_ty = self.type_to_llvm(&arm_body_type);
                     format!("{}*", llvm_ty)
                 }
-                ResolvedType::Str => "i8*".to_string(),
+                ResolvedType::Str => "{ i8*, i64 }".to_string(),
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                     let inner_ty = self.type_to_llvm(inner);
                     format!("{}*", inner_ty)
@@ -444,6 +455,32 @@ impl CodeGenerator {
                 if matches!(arm_body_type, ResolvedType::Bool) {
                     self.fn_ctx
                         .register_temp_type(&phi_result, ResolvedType::I64);
+                }
+                // Str PHI ownership merge (Phase 191 #9, mirrors if-expr at
+                // expr_helpers_control.rs:344-371). If any arm value owns a
+                // tracked alloc_slot, register all such slots against the PHI
+                // SSA so a subsequent return / let-binding can transfer
+                // ownership and skip the would-be cleanup.
+                if matches!(arm_body_type, ResolvedType::Str) {
+                    let mut slots: Vec<String> = Vec::new();
+                    for (val, _label) in &arm_values {
+                        let key = val.trim().to_string();
+                        if let Some(slot) = self.fn_ctx.string_value_slot.get(&key).cloned() {
+                            if !slots.contains(&slot) {
+                                slots.push(slot);
+                            }
+                        }
+                    }
+                    if !slots.is_empty() {
+                        self.fn_ctx
+                            .string_value_slot
+                            .insert(phi_result.clone(), slots[0].clone());
+                        if slots.len() > 1 {
+                            self.fn_ctx
+                                .phi_extra_slots
+                                .insert(phi_result.clone(), slots[1..].to_vec());
+                        }
+                    }
                 }
                 Ok((phi_result, ir))
             }

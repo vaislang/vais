@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 13
+iteration: 14
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10 Vec_grow$T on-demand specialization 완료.
   commit: b61f6e7a. E2E 2583/0 (+1 new).
@@ -531,7 +531,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
       - stdlib std/vec import 경로는 `Vec.with_capacity` 타입 추론 버그
         (#10 scope 제외) 미해결 상태 지속.
 
-- [ ] 9. Match-arm string PHI fat-ptr unification (text-IR) (Opus direct)
+- [x] 9. Match-arm string PHI fat-ptr unification (text-IR) (Opus direct) ✅ 2026-04-15
   [출처]: #8의 e2e_phase191_match_arm_concat_phi (#[ignore] 상태).
   [상태]: 매치 식이 str을 반환할 때 text-IR이 arm별로 다른 형태를 emit.
     arm 1의 let-bound concat은 fat ptr `{ptr, i64}`로, default arm은 raw `i8*`로
@@ -545,6 +545,34 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     - e2e_phase191_match_arm_concat_phi에서 #[ignore] 제거 후 pass
     - 기존 if-expr PHI 테스트 무회귀
   [복잡도]: 중~높음. arm별 fat-ptr widening 설계 필요.
+
+  [완료 2026-04-15 Opus direct]:
+    changes:
+      crates/vais-codegen/src/control_flow/match_gen.rs:404 —
+        Str arm의 phi_type을 `i8*` → `{ i8*, i64 }`로 통일. 모든 arm body가
+        fat-pointer를 emit하므로 PHI도 fat-pointer로 받음 (LLVM 검증 통과).
+      crates/vais-codegen/src/control_flow/match_gen.rs:317-355 —
+        default fallthrough block의 default_val: Str 타입일 때
+        `insertvalue { i8*, i64 } { i8* null, i64 0 }, i64 0, 1` 명령어를
+        emit하여 fat-pointer zero 값 생성. 또한 default_label 진입 시
+        fn_ctx.current_block 갱신 누락을 수정 (이전엔 arm body는 갱신했으나
+        default 분기는 누락 → 후속 IR이 잘못된 block으로 emit).
+      crates/vais-codegen/src/control_flow/match_gen.rs:460-484 —
+        Str PHI ownership merge 로직 추가. if-expr PHI(expr_helpers_control.rs
+        :344-371)와 동형: 각 arm value의 string_value_slot 조회 → PHI 결과
+        SSA에 첫 slot 등록 + 추가 slot은 phi_extra_slots에 stash. 후속
+        return / let-binding hook이 ownership transfer 처리.
+      crates/vaisc/tests/e2e/phase191_text_ir_scope_drop.rs:271-278 —
+        e2e_phase191_match_arm_concat_phi의 `#[ignore]` 제거 + 주석 갱신.
+        테스트는 `M n { 1 => "aa"+"bb", _ => "cc"+"dd" }`를 println으로 출력
+        검증 — UAF 없이 "aabb"가 출력되어야 통과.
+    verify:
+      cargo build -p vais-codegen: green.
+      cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+      cargo test -p vaisc --test e2e: 2587 passed / 0 failed / 0 ignored
+        (baseline 2586 + 1 unignored test, ignored count 1→0).
+    rfc: RFC-001 §4.6 PHI merge UAF fix를 match에도 적용 — if/match가 동일
+      ownership-transfer 규약을 따르도록 통일.
 
 ### 전략
 
