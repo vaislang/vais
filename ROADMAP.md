@@ -10,17 +10,25 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 14
+iteration: 17
 max_iterations: 30
-session_checkpoint: 2026-04-15 세션 4 — #10 Vec_grow$T on-demand specialization 완료.
-  commit: b61f6e7a. E2E 2583/0 (+1 new).
-  method_call.rs:188 fallback에 try_generate_vec_specialization 추가 + fn_ctx
-  snapshot/restore + pending_specialized_ir flush (instantiations/subset).
-  scope reduced: user-code `U std/vec + Vec.with_capacity<T>` 경로는 별도
-  타입 추론 버그 때문에 이번 작업 범위에서 제외. #2a' 착수 가능.
-  재개 권장: fresh session 권장 — 다음 후보는 #2a' (Vec<str> wiring) 또는
-  #9 (match-arm PHI) 또는 RFC 작업 #3/#4. #2a'가 RFC-002 §9.8 6단계 중
-  2/6만 완료 상태로 가장 중간 단계 작업.
+session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
+  commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
+  E2E 진행: 2583 → 2586 → 2587 (ignored 1→0).
+  세션 4 완료 작업:
+    #10 — method_call.rs:188 fallback에 try_generate_vec_specialization 추가
+          + fn_ctx snapshot/restore + pending_specialized_ir flush.
+    #2a' — Vec_push$str owned-bitmap wrapping + Vec_drop$str shallow-free
+           prelude. RFC-002 §9.8 4/6 완료 (return-transfer 미완).
+    #9 — match arm Str PHI을 fat-pointer로 통일 + ownership transfer.
+  남은 작업 (모두 design-heavy + 사용자 리뷰 또는 RFC 필수):
+    #2b — RFC-002 §4.2 Option D 구현. ownership_mask field (ABI 변경) +
+          struct shallow-drop + take_field! builtin. 광범위 회귀 위험,
+          fresh session + 사용자 리뷰 권장.
+    #2c — Nested container recursion. blockedBy: #2b.
+    #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
+    #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
+  재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
   세션 3 최종 상태:
