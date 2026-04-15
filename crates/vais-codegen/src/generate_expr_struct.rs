@@ -84,6 +84,30 @@ impl CodeGenerator {
             let struct_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&struct_ptr, &format!("%{}", effective_type_name));
 
+            // Phase 191 #2b: zero-initialize the trailing __ownership_mask field
+            // for structs that carry heap-owned string fields. The bitmap field
+            // is appended to the LLVM layout but not to `effective_fields`, so
+            // its GEP index is `effective_fields.len()`. #2b-D will OR per-field
+            // bits into this slot at literal time.
+            let effective_has_owned_mask = self
+                .types
+                .structs
+                .get(&effective_type_name)
+                .is_some_and(|si| si.has_owned_mask);
+            if effective_has_owned_mask {
+                let mask_ptr = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                    mask_ptr,
+                    effective_type_name,
+                    effective_type_name,
+                    struct_ptr,
+                    effective_fields.len()
+                );
+                write_ir!(ir, "  store i64 0, i64* {}", mask_ptr);
+            }
+
             // Store each field
             for (field_name, field_expr) in fields {
                 // Find field index

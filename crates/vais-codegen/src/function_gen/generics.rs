@@ -64,7 +64,7 @@ impl CodeGenerator {
             })
             .collect();
 
-        let llvm_fields: Vec<String> = fields
+        let mut llvm_fields: Vec<String> = fields
             .iter()
             .map(|(_, ty)| {
                 let llvm_ty = self.type_to_llvm(ty);
@@ -76,6 +76,14 @@ impl CodeGenerator {
                 }
             })
             .collect();
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when this
+        // specialization carries heap-owned string fields. Derived first so
+        // layout and StructInfo stay in sync.
+        let (has_owned_mask, heap_fields) = StructInfo::derive_ownership_mask(&fields);
+        if has_owned_mask {
+            llvm_fields.push("i64".to_string());
+        }
 
         write_ir!(
             ir,
@@ -90,6 +98,8 @@ impl CodeGenerator {
             fields,
             _repr_c: false,
             _invariants: Vec::new(),
+            has_owned_mask,
+            heap_fields,
         };
         self.types
             .structs

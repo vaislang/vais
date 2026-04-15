@@ -180,13 +180,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Substitute types in fields
-        let field_types: Vec<BasicTypeEnum> = fields
+        let mut field_types: Vec<BasicTypeEnum> = fields
             .iter()
             .map(|(_, ty)| {
                 let substituted = vais_types::substitute_type(ty, &substitutions);
                 self.type_mapper.map_type(&substituted)
             })
             .collect();
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when substituted
+        // fields include a heap-owned candidate (e.g., Vec<str> element).
+        // Mirrors the text-IR path (function_gen/generics.rs + type_gen.rs).
+        let substituted_fields: Vec<(String, ResolvedType)> = fields
+            .iter()
+            .map(|(n, ty)| {
+                let sub = vais_types::substitute_type(ty, &substitutions);
+                (n.clone(), sub)
+            })
+            .collect();
+        let (has_owned_mask, _heap_fields) =
+            crate::types::StructInfo::derive_ownership_mask(&substituted_fields);
+        if has_owned_mask {
+            field_types.push(self.context.i64_type().into());
+        }
 
         // Store field names
         let field_names: Vec<String> = fields.iter().map(|(name, _)| name.clone()).collect();

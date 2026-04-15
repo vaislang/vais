@@ -208,6 +208,8 @@ impl CodeGenerator {
         // Intern the struct name for deduplication
         self.ident_pool.intern(&struct_name);
 
+        let (has_owned_mask, heap_fields) = StructInfo::derive_ownership_mask(&fields);
+
         self.types.structs.insert(
             struct_name.clone(),
             StructInfo {
@@ -218,6 +220,8 @@ impl CodeGenerator {
                     .iter()
                     .any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
                 _invariants: invariants,
+                has_owned_mask,
+                heap_fields,
             },
         );
 

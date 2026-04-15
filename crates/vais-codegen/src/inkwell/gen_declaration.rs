@@ -7,6 +7,7 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
 use vais_ast::{self as ast, Expr};
+use vais_types::ResolvedType;
 
 use super::generator::InkwellCodeGenerator;
 use crate::{CodegenError, CodegenResult};
@@ -97,12 +98,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut field_types = Vec::new();
         let mut field_names = Vec::new();
         let mut field_type_names = Vec::new();
+        let mut resolved_fields: Vec<(String, ResolvedType)> = Vec::new();
 
         for field in &s.fields {
             let resolved = self.ast_type_to_resolved(&field.ty.node);
             let field_type = self.type_mapper.map_type(&resolved);
             field_types.push(field_type);
             field_names.push(field.name.node.clone());
+            resolved_fields.push((field.name.node.clone(), resolved));
 
             // Extract type name for nested field access
             let type_name = match &field.ty.node {
@@ -110,6 +113,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 _ => String::from("unknown"),
             };
             field_type_names.push((field.name.node.clone(), type_name));
+        }
+
+        // Phase 191 #2b: append trailing i64 __ownership_mask when this
+        // user struct carries heap-owned string fields. Parallel to the
+        // text-IR backend (types/type_gen.rs::generate_struct_type).
+        let (has_owned_mask, _heap_fields) =
+            crate::types::StructInfo::derive_ownership_mask(&resolved_fields);
+        if has_owned_mask {
+            field_types.push(self.context.i64_type().into());
         }
 
         // Create opaque struct

@@ -32,6 +32,8 @@ fn test_struct_sizeof_sums_fields() {
             ],
             _repr_c: false,
             _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
         },
     );
     let struct_type = ResolvedType::Named {
@@ -56,6 +58,8 @@ fn test_struct_alignof_takes_max_field() {
             ],
             _repr_c: false,
             _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
         },
     );
     let struct_type = ResolvedType::Named {
@@ -599,6 +603,8 @@ fn test_generate_struct_type() {
         ],
         _repr_c: false,
         _invariants: vec![],
+        has_owned_mask: false,
+        heap_fields: vec![],
     };
     gen.types.structs.insert("Point".to_string(), info.clone());
     let def = gen.generate_struct_type("Point", &info);
@@ -620,6 +626,8 @@ fn test_generate_struct_type_mixed() {
         ],
         _repr_c: false,
         _invariants: vec![],
+        has_owned_mask: false,
+        heap_fields: vec![],
     };
     gen.types.structs.insert("Mixed".to_string(), info.clone());
     let def = gen.generate_struct_type("Mixed", &info);

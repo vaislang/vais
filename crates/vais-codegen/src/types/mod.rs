@@ -65,6 +65,50 @@ pub(crate) struct StructInfo {
     /// Invariant expressions for formal verification
     /// These are checked after struct construction/modification
     pub _invariants: Vec<vais_ast::Spanned<vais_ast::Expr>>,
+    /// True when the struct carries heap-owned string fields and codegen must
+    /// append a trailing `i64 __ownership_mask` field to the LLVM layout
+    /// (Phase 191 #2b, RFC-002 §4.2 Option D). When true, `heap_fields` lists
+    /// the user-visible field indices that participate in the bitmap.
+    pub has_owned_mask: bool,
+    /// Indices into `fields` of heap-owned candidates (Str or Vec$str). Populated
+    /// when `has_owned_mask == true`. Consumed by shallow-drop helpers (#2b-C/D).
+    #[allow(dead_code)]
+    pub heap_fields: Vec<usize>,
+}
+
+impl StructInfo {
+    /// Classify a field as heap-owned for ownership-mask purposes.
+    ///
+    /// Returns true for direct `Str` and for the monomorphized `Vec$str` Named
+    /// container. Nested user structs with their own mask are handled by #2c.
+    pub fn field_is_heap_owned(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Str => true,
+            ResolvedType::Named { name, generics, .. } => {
+                if name == "Vec$str" {
+                    return true;
+                }
+                // Vec<str> before name-mangling: Named("Vec", [Str]).
+                if name == "Vec" && generics.len() == 1 {
+                    return matches!(generics[0], ResolvedType::Str);
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// Compute heap_fields + has_owned_mask from a field list. Keeps the two
+    /// registration sites (register_struct + generate_specialized_struct_type)
+    /// in sync.
+    pub fn derive_ownership_mask(fields: &[(String, ResolvedType)]) -> (bool, Vec<usize>) {
+        let heap_fields: Vec<usize> = fields
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (_, ty))| Self::field_is_heap_owned(ty).then_some(i))
+            .collect();
+        (!heap_fields.is_empty(), heap_fields)
+    }
 }
 
 #[derive(Debug, Clone)]

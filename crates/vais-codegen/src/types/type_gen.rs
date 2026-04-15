@@ -6,11 +6,17 @@ use crate::CodeGenerator;
 impl CodeGenerator {
     /// Generate LLVM struct type definition
     pub(crate) fn generate_struct_type(&self, name: &str, info: &StructInfo) -> String {
-        let fields: Vec<_> = info
+        let mut fields: Vec<_> = info
             .fields
             .iter()
             .map(|(_, ty)| self.type_to_llvm(ty))
             .collect();
+
+        // Phase 191 #2b (RFC-002 §4.2 Option D): append trailing i64
+        // __ownership_mask for structs carrying heap-owned string fields.
+        if info.has_owned_mask {
+            fields.push("i64".to_string());
+        }
 
         format!("%{} = type {{ {} }}", name, fields.join(", "))
     }

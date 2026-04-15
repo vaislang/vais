@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 18
+iteration: 19
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
   commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
@@ -418,7 +418,50 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
       - user drop이 pre-drop hook로 `&self`만 받으므로 필드 무결성 유지 (RFC-002 §4.2).
     verify: ROADMAP update only, Rust 코드 변경 0 — E2E 2587 baseline 유지.
 
-- [ ] 2b-B. #2b Iter B — StructInfo 파생 + layout amendment (Opus direct)
+- [x] 2b-B. #2b Iter B — StructInfo 파생 + layout amendment (Opus direct) ✅ 2026-04-16
+  strategy: sequential → Opus direct. opus_direct: ABI 레이아웃 조건부 변경 +
+    monomorphization 대칭성 (text-IR + inkwell 두 백엔드) → 설계-구현 inseparable.
+  session_iter: 19 (auto).
+  changes:
+    crates/vais-codegen/src/types/mod.rs:
+      StructInfo에 `has_owned_mask: bool, heap_fields: Vec<usize>` 필드 추가.
+      `StructInfo::field_is_heap_owned(ty)` — Str / Named{"Vec$str"} / Named{"Vec", [Str]} 판정.
+      `StructInfo::derive_ownership_mask(fields)` — 두 registration site 동기화용 헬퍼.
+      heap_fields에 #[allow(dead_code)] (Iter C/D에서 소비).
+    crates/vais-codegen/src/registration.rs:
+      register_struct에서 derive_ownership_mask 호출 → StructInfo 초기화.
+    crates/vais-codegen/src/function_gen/generics.rs:
+      generate_specialized_struct_type에서 post-substitution fields 기반 derive +
+      llvm_fields에 "i64" 조건부 append. StructInfo 등록 시 동일한 값 사용.
+    crates/vais-codegen/src/types/type_gen.rs:
+      generate_struct_type이 info.has_owned_mask → "i64" append.
+    crates/vais-codegen/src/inkwell/gen_declaration.rs:
+      define_struct 대칭 분기 (vais_types::ResolvedType import 추가,
+      resolved_fields 수집 → derive_ownership_mask → i64_type() 추가).
+    crates/vais-codegen/src/inkwell/gen_types.rs:
+      define_specialized_struct 대칭 (substituted_fields 기반 derive).
+    crates/vais-codegen/src/generate_expr_struct.rs:
+      struct literal alloca 직후 ownership_mask 필드 zero-init 프리루드 추가
+      (effective_type_name StructInfo 조회 → has_owned_mask 시 GEP+store i64 0).
+    crates/vais-codegen/src/types/tests.rs:
+      4개 StructInfo literal 생성 site에 has_owned_mask/heap_fields 필드 채움.
+  verify:
+    cargo check --workspace --exclude vais-python --exclude vais-node: green.
+    cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+    cargo test -p vais-codegen --lib types::tests: 73/0 passed.
+    cargo test -p vaisc --test e2e phase191: 16/0 passed (baseline 16 유지).
+    cargo test -p vaisc --test e2e: 2587/0/0 passed (baseline 2587 유지, 742s).
+  invariant_preserved:
+    - 기존 non-str struct 레이아웃 무변경 (heap_fields 없으면 i64 append 하지 않음).
+    - Vec$str 레이아웃 무변경 (post-substitution fields에 직접 Str 없음 →
+      has_owned_mask=false). #2a에서 이미 owned:i64 추가됨.
+    - User struct `S P { name: str }` → has_owned_mask=true, heap_fields=[0],
+      레이아웃 { {ptr,i64}, i64 } (fat-ptr + mask).
+    - 텍스트-IR과 inkwell 두 백엔드 모두 대칭 분기.
+  scope:
+    Iter B는 infrastructure 단계 — mask 필드 할당/제로초기화만 구현.
+    실제 비트 OR (struct literal wrapping) 은 Iter D.
+    shallow-drop helper emission은 Iter C.
   [상속]: #2b Iter A 완료 (commit bd087e58, ROADMAP #2b 본문 참조).
   [sub-steps]:
     1. crates/vais-codegen/src/types/mod.rs:60-68 `StructInfo`에 집계 필드 추가:
