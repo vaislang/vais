@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 17
+iteration: 18
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
   commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
@@ -29,6 +29,14 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-15 세션 5 iter 18 — #2b Iter A 완료 (survey + design plan ROADMAP 갱신).
+  user_gate: #2b 착수 선택 (RFC-002 §4.2 Option D approved).
+  세션 5 완료: Iter A만 (survey + sub-iter plan). 구현 0. E2E 2587 baseline 유지.
+  scope_decision: 세션 4 "광범위 회귀 위험 + fresh session 권장" warning 존중.
+    #2a/#2a' 분할 패턴 그대로 재사용. 한 세션에 구현 밀어넣기 → 중간 truncation 위험 高.
+  남은 Iter B/C/D 각각 fresh session 권장. 자세한 계획은 #2b entry 본문(Iter A 완료 섹션) 참조.
+  재개 권장: fresh session에서 #2b Iter B (layout amendment) 착수
+    또는 저위험 RFC 작업 #3/#4로 스위치.
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
   세션 3 최종 상태:
@@ -304,20 +312,97 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     5. e2e tests (§6 cases 1, 2, 6).
 
 - [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct)
-  [참조]: RFC-002 §4.2 Option D
+  [참조]: RFC-002 §4.2 Option D, §4.3 struct 경로, §4.4 post-emission.
   [대상 파일]:
-    - crates/vais-codegen/src/vtable.rs (auto-emit __drop_shallow_{Struct})
-    - crates/vais-codegen/src/inkwell/gen_aggregate.rs (struct literal ownership transfer)
-    - crates/vais-codegen/src/trait_dispatch.rs (drop sequence: user drop() → shallow-drop)
-    - crates/vais-codegen/src/stmt.rs (struct drop emission path)
+    - crates/vais-codegen/src/generate_expr_struct.rs:87-130 (struct literal 필드 저장 루프
+      — ownership_mask bit set hook 위치, #2a' method_call.rs:706-768 패턴 대칭).
+    - crates/vais-codegen/src/stmt.rs:828-902 `generate_scope_drop_cleanup` (struct 타입
+      scope-exit — user drop 호출 직후 __vais_struct_shallow_free_{Name} splice).
+    - crates/vais-codegen/src/stmt.rs:1001-1080 `generate_drop_cleanup` (function-exit 대칭).
+    - crates/vais-codegen/src/string_ops.rs (신규 헬퍼 emission — __vais_vec_str_*와 동형).
+    - crates/vais-codegen/src/types/mod.rs:60-68 `StructInfo` (heap-owned 필드 인덱스 집계).
+    - crates/vais-codegen/src/trait_dispatch.rs:105-129 `register_trait_impl` (Drop impl
+      등록 지점 확인 — shallow-drop은 drop_registry 항목에 엮지 말고 별도 emission
+      경로로 갈 것 — 변경 최소).
+    - docs/rfcs/RFC-002-container-string-ownership.md §4.2 업데이트 (take_field! ABI 확정).
   [설계]:
-    - user drop() 호출 후 shallow-drop 무조건 emission
-    - ownership_mask i64 필드: 비트 i = 필드 i가 heap-owned
-    - `take_field!` macro/builtin 스펙 작성 (구현은 별도 follow-up 가능)
+    - ownership_mask i64 필드: 구조체에 heap-owned 후보 필드(str/Vec<str>/사용자 Drop) 존재 시
+      레이아웃 끝에 i64 append. 64 필드 cap, overflow = 컴파일 에러. Vec<T>의 owned:i64
+      (§4.1 §9.8)와 동일한 "field가 있으면 있는 대로 전파" 원리.
+    - struct literal codegen: 각 필드 rvalue 분류 — heap-owned(string_value_slot 보유)면
+      ownership_mask 비트 set + slot transfer (Phase 191 #5 null-store 패턴 유지).
+      literal/borrowed은 no-op (비트 0 유지).
+    - user F drop 호출 후 shallow-drop 무조건 emission. 사용자는 free API 없음 →
+      double-free 구조적 불가.
+    - `take_field!` macro/builtin 스펙 작성 (구현은 별도 follow-up 가능). 없을 땐
+      사용자는 into_parts() 패턴 사용.
   [완료 기준]: RFC-002 §6 tests (3) struct_str_field_drop, (4) struct_user_drop_takes_ownership.
-    double-free 구조적 불가 증명: user가 free를 호출할 API 없음 검증.
-  [복잡도]: 높음 — drop sequencing + bitmap + take_field! 스펙.
-  blockedBy: #2a.
+    E2E baseline 2587 유지 + new 2 tests.
+  [복잡도]: 높음 — 레이아웃 변경 + drop sequencing + bitmap helper + take_field! 스펙.
+  blockedBy: #2a (completed).
+
+  [Iter A 완료 2026-04-15 세션 5 iter 18 (Opus direct)]:
+    survey_results:
+      1. struct drop emission 경로: stmt.rs:828 `generate_scope_drop_cleanup`가
+         drop_registry 기반으로 user drop 호출. stmt.rs:1001 `generate_drop_cleanup`이
+         function-exit 대칭 경로 (양쪽 대응 필요).
+      2. struct literal codegen: generate_expr_struct.rs:87-130 — 필드별 GEP+store 루프
+         (line 106에서 field rvalue 생성 → line 110의 GEP → coercion → store).
+         Hook 지점: line 106 후 val (rvalue) 확정 시점에 string_value_slot 조회
+         → 보유 시 ownership_mask 비트 계산 + transfer (method_call.rs:730-780 패턴).
+      3. StructInfo: types/mod.rs:60-68 `StructInfo { fields: Vec<(String, ResolvedType)> }`.
+         heap-owned 판정: ResolvedType::Str 직접 비교 + Vec<str> / Named(with owned field)
+         재귀 판정 (#2c 경로). ownership_mask 부착 여부는 field에 ::Str 포함 시에 한함.
+      4. trait_dispatch.rs:105-129 `register_trait_impl`: "Drop" trait impl 시
+         drop_registry[type] = drop_fn_name 등록. shallow-drop은 drop_registry에 엮지
+         않음 (그러면 user drop과 경합) — stmt.rs:862 drop 호출 직후 추가 명령만 splice.
+      5. vtable.rs: 현재 `__drop_{type_name}` 경로는 dyn Trait용 generic drop이라 관계 없음.
+         user-defined Drop은 trait_dispatch.rs 경로가 드라이브. shallow-drop은 codegen이
+         직접 `__vais_struct_shallow_free_{Name}` LLVM 함수를 emit.
+      6. 백엔드 단일화: RFC-001 §5.4 "single implementation path" — generate_expr_struct.rs,
+         stmt.rs, string_ops.rs는 inkwell/text-IR 공유. inkwell/gen_aggregate.rs는 tuple
+         literal용이라 struct literal과 별도 경로 (확인 필요). #2a'에서도 단일 경로 유지.
+    design_decisions_tentative (user gate 필요):
+      D1. Layout 변경 조건: `StructInfo.fields`에 `ResolvedType::Str` 또는 "Vec$str"
+          Named 또는 owned-containing Named가 포함되면 ownership_mask i64 append.
+          그 외는 기존 레이아웃 유지 (비-str struct ABI 무변경).
+      D2. Helper emission: string_ops.rs에 `generate_struct_shallow_free_helpers(struct_name,
+          heap_field_indices: Vec<usize>)` 신규. module 수준에서 per-struct emit.
+          시그니처: `void __vais_struct_shallow_free_{Name}(%Name*)`.
+          IR: mask 로드 → 각 heap_field_index i마다 bit i 검사 → set이면 해당 필드 로드
+          (field가 fat-ptr이면 .0 extractvalue) → free. bit clear는 불필요 (struct는
+          consume-once).
+      D3. Scope-exit sequence: stmt.rs:862 `droppable.iter().rev()` loop 안에서
+          `drop_fn` call **직후** shallow-drop available 체크하여 call 추가.
+          Shallow-drop available 조건: `needs_struct_shallow[type_name]` (신규 set).
+      D4. Function-exit 대칭: stmt.rs:1038 동일 블록에서 대칭 처리.
+      D5. Struct literal wrapping: generate_expr_struct.rs:106-107 val 확정 직후,
+          effective_fields[field_idx].1이 Str이고 val이 string_value_slot에 있으면:
+            (a) mask 비트 (1 << field_idx) OR로 ownership_mask에 set
+            (b) string_value_slot remove + scope_str_stack entry remove
+            (c) slot에 null store (Phase 191 #5 패턴)
+            (d) alloc_tracker entry 유지
+      D6. take_field! 스펙: 별도 follow-up (#2b-takef) 권장. Iter D에서 구현 여부 결정.
+    sub_iter_plan:
+      Iter B (fresh session): D1 layout amendment —
+        types/mod.rs StructInfo에 `pub has_owned_mask: bool, pub heap_fields: Vec<usize>`
+        파생 집계 메서드 추가. monomorphization 시점 정확한 hook 좌표 확인 필요
+        (generate_expr_struct.rs line 17의 resolve_struct_name 직후 possible).
+        검증: struct literal 정의 시 E2E 2587 유지.
+      Iter C (fresh session): D2 + D3 + D4 emission —
+        string_ops.rs에 generate_struct_shallow_free_helpers 추가 (Vec$str
+        helpers의 방법과 동일). stmt.rs 두 drop cleanup 경로에 splice. module_gen/
+        subset.rs + instantiations.rs에도 helper declarations 추가 (Phase 191 #2a 패턴).
+        검증: user Drop + str 필드 struct 로컬 drop 시 leaks 0.
+      Iter D (fresh session): D5 wrapping + e2e —
+        generate_expr_struct.rs:106 hook + RFC-002 §6 tests (3)(4) 추가.
+        E2E 2587 + 2 new tests.
+        take_field! 스펙은 이 iter에서는 RFC 문구만 확정 (구현은 별도 작업).
+    blocker_check:
+      - 현재 `#[ignore]` 0건, #2a'의 함정(structural equivalence %Vec vs %Vec$T)은
+        struct에는 없음 — 모든 struct monomorphization은 고유 이름. 안전.
+      - user drop이 pre-drop hook로 `&self`만 받으므로 필드 무결성 유지 (RFC-002 §4.2).
+    verify: ROADMAP update only, Rust 코드 변경 0 — E2E 2587 baseline 유지.
 
 - [ ] 2c. Nested container recursion (Vec<Vec<str>>, Vec<struct{str}>) (Opus direct)
   [참조]: RFC-002 §5 Q3
