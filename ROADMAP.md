@@ -29,6 +29,18 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-16 세션 6 iter 19 — #2b Iter B 완료.
+  commits: 8c4c7ba1 (#2b-B layout amendment).
+  E2E: 2587/0/0 baseline 유지. ABI 변경이 기존 non-str struct에 영향 없음 실증.
+  변경 규모: 9 files, +172 lines. struct layout 변경은 `name: str` 같은 heap-owned
+    필드를 가진 **사용자 struct에만 적용** (trailing i64 append). Vec$str은 #2a
+    stdlib 경로로 이미 처리됨.
+  infrastructure_only: mask 필드 할당 + 제로초기화까지만. 실제 비트 OR는 Iter D,
+    shallow-drop helper emission은 Iter C.
+  **NEXT SESSION (fresh)**: `/clear` + `/harness` → #2b-C auto pickup.
+    Iter A 체크포인트(L42) 원칙대로 각 Iter 1 세션 유지 — 컨텍스트 경계 존중.
+    Iter B 완료로 #2b-C blockedBy 해제됨.
+  재개 권장: fresh session에서 #2b-C (shallow-drop helper emission + splice).
 session_checkpoint: 2026-04-15 세션 5 iter 18 — #2b Iter A 완료 + Iter B/C/D 분할.
   commits: bd087e58 (Iter A survey + plan).
   user_gate: #2b 착수 선택 (RFC-002 §4.2 Option D approved).
