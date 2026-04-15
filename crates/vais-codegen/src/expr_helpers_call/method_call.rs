@@ -703,6 +703,91 @@ impl CodeGenerator {
             }
         }
 
+        // Vec<str>.drop shallow-free prelude (RFC-002 §4.4; Phase 191 #2a').
+        // Before the user-level Vec_drop$str runs (which frees `self.data`), free
+        // any heap-owned element string buffers tracked in the owned bitmap so
+        // `drop()` doesn't leak them. drop() itself only frees the data block.
+        if full_method_name == "Vec_drop$str" && !arg_vals.is_empty() {
+            let self_ptr = arg_vals[0]
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .to_string();
+            if !self_ptr.is_empty() {
+                write_ir!(
+                    ir,
+                    "  call void @__vais_vec_str_shallow_free(%Vec* {})",
+                    self_ptr
+                );
+                self.needs_vec_str_helpers = true;
+            }
+        }
+
+        // Vec<str>.push ownership wrapping (RFC-002 §4.1/§4.4; Phase 191 #2a').
+        // When a heap-owned str (tracked via string_value_slot) is pushed into a
+        // Vec<str>, transfer ownership to the container's `owned` bitmap. Literal
+        // / borrowed strs are left as no-ops — they don't need freeing on drop.
+        if full_method_name == "Vec_push$str" && arg_vals.len() >= 2 {
+            let self_ptr = arg_vals[0]
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .to_string();
+            // arg_vals[1] is "{ i8*, i64 } %tN" — extract %tN.
+            let rvalue_token = arg_vals[1]
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .to_string();
+            if !self_ptr.is_empty() && !rvalue_token.is_empty() {
+                let slot_opt = self
+                    .fn_ctx
+                    .string_value_slot
+                    .get(&rvalue_token)
+                    .cloned();
+                if let Some(slot) = slot_opt {
+                    // 1) Ensure bitmap capacity covers current self.len.
+                    let len_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %Vec, %Vec* {}, i32 0, i32 1",
+                        len_ptr,
+                        self_ptr
+                    );
+                    let cur_len = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", cur_len, len_ptr);
+                    let idx = cur_len.clone();
+                    let need_plus_one = self.next_temp(counter);
+                    write_ir!(ir, "  {} = add i64 {}, 1", need_plus_one, idx);
+                    write_ir!(
+                        ir,
+                        "  call void @__vais_vec_str_owned_ensure(%Vec* {}, i64 {})",
+                        self_ptr,
+                        need_plus_one
+                    );
+                    // 2) Mark owned bit.
+                    write_ir!(
+                        ir,
+                        "  call void @__vais_vec_str_owned_set(%Vec* {}, i64 {})",
+                        self_ptr,
+                        idx
+                    );
+                    // 3) Transfer: null out slot pointer + remove string_value_slot
+                    //    so scope-exit cleanup skips it. alloc_tracker entry
+                    //    stays (Phase 191 #5 pattern) to avoid slot-id reuse.
+                    write_ir!(ir, "  store i8* null, i8** {}", slot);
+                    self.fn_ctx.string_value_slot.remove(&rvalue_token);
+                    // Also remove from the current scope_str_stack frame so
+                    // the enclosing block's string-scope cleanup doesn't
+                    // free a now-null slot it doesn't own anymore.
+                    if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                        frame.retain(|s| s != &slot);
+                    }
+                    self.needs_vec_str_helpers = true;
+                }
+            }
+        }
+
         if ret_type == "void" {
             write_ir!(
                 ir,

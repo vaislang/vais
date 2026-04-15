@@ -10,8 +10,17 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 11
+iteration: 13
 max_iterations: 30
+session_checkpoint: 2026-04-15 세션 4 — #10 Vec_grow$T on-demand specialization 완료.
+  commit: b61f6e7a. E2E 2583/0 (+1 new).
+  method_call.rs:188 fallback에 try_generate_vec_specialization 추가 + fn_ctx
+  snapshot/restore + pending_specialized_ir flush (instantiations/subset).
+  scope reduced: user-code `U std/vec + Vec.with_capacity<T>` 경로는 별도
+  타입 추론 버그 때문에 이번 작업 범위에서 제외. #2a' 착수 가능.
+  재개 권장: fresh session 권장 — 다음 후보는 #2a' (Vec<str> wiring) 또는
+  #9 (match-arm PHI) 또는 RFC 작업 #3/#4. #2a'가 RFC-002 §9.8 6단계 중
+  2/6만 완료 상태로 가장 중간 단계 작업.
 session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   commits: 9c616289 (RFC §9), 456f12d4 (세션 2 체크포인트), 6728b481 (§9.7 blocker).
   세션 3 최종 상태:
@@ -462,7 +471,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
       (c) 또는 `%Vec`와 `%Vec$T`를 LLVM opaque struct로 전환해 structural
           equivalence를 언어 레벨로 관철.
 
-- [ ] 2a'. Vec<str> call-site wiring + e2e (Opus direct) — #2a 후속
+- [x] 2a'. Vec<str> call-site wiring + e2e (Opus direct) ✅ 2026-04-15
   [상속]: RFC-002 §9.8 6단계 중 stdlib(#2a 완료) 제외한 나머지.
   [sub-steps]:
     3. Vec_push$str call-site wrapping —
@@ -480,6 +489,47 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   [완료 기준]: RFC-002 §6 tests 통과 + E2E baseline + leaks 0 (macOS `leaks --atExit`).
   [복잡도]: 높음.
   blockedBy: #10 (Vec_grow 수정).
+
+  [완료 2026-04-15 Opus direct]:
+    changes:
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:706-768 —
+        Vec_push$str call-site wrapping: `__vais_vec_str_owned_ensure(v, len+1)` +
+        `__vais_vec_str_owned_set(v, len)` when rvalue is heap-owned (tracked via
+        string_value_slot). Transfer 후 slot에 null store + string_value_slot /
+        scope_str_stack entry 제거 (Phase 191 #5 ownership-transfer 패턴).
+      crates/vais-codegen/src/expr_helpers_call/method_call.rs:686-703 —
+        Vec_drop$str prelude splice: user Vec.drop() 직전
+        `__vais_vec_str_shallow_free(v)` inject. 이 helper가 owned bitmap을
+        순회하며 heap-owned element 문자열 버퍼를 free → user drop이 data 블록
+        free하면서 전체 소유권 정리 완료.
+      crates/vais-codegen/src/lib.rs:203-205 + init.rs:99 —
+        `needs_vec_str_helpers` flag 추가 (현재는 helper emission이 이미
+        `generated_structs["Vec$str"]` 조건으로 gated되어 있어 flag는 future
+        use; struct registration 없이 helper만 필요한 edge case 대비).
+      crates/vaisc/tests/e2e/phase191_vec_str_sandbox.rs (신규, 3 tests):
+        (a) push_literal_only — literal str만 push, bitmap 비활성 경로.
+        (b) push_concat_drop — 100-iter concat 결과 push, drop 후 heap 정리.
+        (c) push_mixed_literal_heap — literal + heap 혼합, bitmap 정확도 확인.
+      crates/vaisc/tests/e2e/main.rs: module registration.
+    verify:
+      cargo build -p vais-codegen: green.
+      cargo clippy --workspace --exclude vais-python --exclude vais-node: green.
+      cargo test -p vaisc --test e2e: 2586 passed / 0 failed / 1 ignored
+        (baseline 2583 + 3 new phase191_vec_str_sandbox tests).
+    scope_reduced:
+      RFC-002 §9.8 6단계 중 완료: #2a 기존(1,2) + 이번 (3,4).
+      미완료: (5) pending_return_skip_container — Vec<str> 반환 시 function-exit
+      청소 스킵. 현재 구현된 경로는 user가 명시적 drop()을 호출하는 flow만
+      커버. `F make() -> Vec<str> { v := ...; v.push(...); v }` 같은 return-by-
+      value 경로는 drop이 누락되면 leak, 중복 호출되면 double-free 가능. 별도
+      follow-up 권장 (#2a'' 또는 #2b와 묶음).
+    known_limit:
+      - vaisc CLI로 직접 `.vais` 파일 컴파일 시 TC가 store_typed를 인식하지
+        못해 "Undefined function" 에러 발생. 그러나 TypeChecker API를 직접
+        사용하는 e2e 테스트는 정상 동작. CLI-specific TC 초기화 이슈로 판단,
+        #2a' 범위 밖.
+      - stdlib std/vec import 경로는 `Vec.with_capacity` 타입 추론 버그
+        (#10 scope 제외) 미해결 상태 지속.
 
 - [ ] 9. Match-arm string PHI fat-ptr unification (text-IR) (Opus direct)
   [출처]: #8의 e2e_phase191_match_arm_concat_phi (#[ignore] 상태).

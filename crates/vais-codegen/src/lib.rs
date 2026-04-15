@@ -201,6 +201,10 @@ pub struct CodeGenerator {
     // Flag to emit string helper functions
     needs_string_helpers: bool,
 
+    // Flag to emit Vec<str> container ownership helpers (RFC-002 §4.1/§4.4).
+    // Set by Vec_push$str call-site wrapping (Phase 191 #2a').
+    needs_vec_str_helpers: bool,
+
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
 

@@ -96,6 +96,7 @@ impl CodeGenerator {
             needs_sync_spawn_poll: false,
             needs_llvm_memcpy: false,
             needs_string_helpers: false,
+            needs_vec_str_helpers: false,
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::with_capacity(64)),
             gc_enabled: false,
