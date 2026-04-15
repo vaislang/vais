@@ -168,7 +168,27 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   gate: **user re-sign-off 필요** (§9.6). 2a 구현은 approval 후 착수.
   iter: 7
 
-- [ ] 2a. Vec<str> 레이아웃 + owned bitmap + __drop_Vec_str (Opus direct)
+- [x] 2a. Vec<str> 레이아웃 + owned bitmap + __drop_Vec_str — **scope reduced** (Opus direct) ✅ 2026-04-15
+  scope_decision: RFC-002 §9.8 6단계 중 stdlib 레이아웃(step 1) + codegen helpers IR 정의(step 2)만 이 작업에 포함.
+    push 호출-부 wrapping / scope-exit prelude / return-transfer / e2e 검증은 #2a' (신규)로 이관.
+    이유: Iter B 진행 중 발견된 stdlib-Vec-generic-grow 미특수화 버그가 Vec<str> 컴파일 자체를 막아서
+    wiring 검증 경로 부재. 별도 선결 작업 필요. RFC-002 §9.8은 실제 구현 2/6만 커버하므로 §9.9 업데이트 권장.
+  changes:
+    std/vec.vais: Vec<T> 5필드 `owned:i64` 추가 + with_capacity init=0.
+    crates/vais-codegen/src/string_ops.rs:
+      generate_vec_str_container_helpers (~140 LOC LLVM IR) —
+        __vais_vec_str_owned_ensure(%Vec*, i64), __vais_vec_str_owned_set(%Vec*, i64),
+        __vais_vec_str_shallow_free(%Vec*). ABI: `void @free(i8*)` + `i8* @malloc(i64)` 기반.
+      generate_vec_str_container_declarations — per-module extern 선언.
+    crates/vais-codegen/src/module_gen/{mod,instantiations,subset}.rs:
+      `generated_structs.contains_key("Vec$str")` 가드 하에 emission.
+  verify:
+    cargo build --workspace --exclude vais-python --exclude vais-node: green.
+    cargo test -p vaisc --test e2e: 2582 passed / 0 failed / 1 ignored (baseline 유지).
+    조건부 emission이므로 기존 e2e에서 dormant. Vec<str> specialize trigger 테스트 부재.
+  invariant_confirmed: RFC-002 §9.8 structural equivalence — stdlib 단독 변경이 모든
+    Vec<T> specialization에 자동 전파 실증. 5필드 → 모든 %Vec$T 5필드.
+  follow-up: #2a' (새 작업) + 그 전에 #10 (Vec_grow 특수화 버그 선행 수정).
   [참조]: RFC-002 §4.1, §4.4 **(§9 corrected)**, §9 integration notes
   [대상 파일]:
     - crates/vais-codegen/src/vtable.rs (synthesize __vais_vec_str_shallow_free + splice into drop sequence, NOT replace Vec.drop)
@@ -355,6 +375,48 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     cargo test -p vaisc --test e2e phase191: 11/0, 1 ignored.
     cargo test -p vaisc --test e2e: 2582/0, 1 ignored (baseline 2579 + 3 new).
 
+- [ ] 10. stdlib Vec<T> Vec_grow 특수화 버그 수정 (impl-sonnet + Opus gate)
+  [출처]: Phase 191 #2a Iter B 진행 중 2026-04-15 발견.
+  [증상]: `U std/vec` 후 `Vec.with_capacity(N).push(x).drop()` 최소 예제에서
+    LLVM `error: use of undefined value '@Vec_grow'` — Vec_push<T> specialize는
+    emit되지만 호출하는 Vec_grow는 base name으로만 참조되고 specialize 미emit.
+  [재현]:
+    examples/simple_vec_test.vais 또는
+    `U std/vec\nF main() -> i64 { v := Vec.with_capacity(4); v.push(42); v.drop(); 0 }`
+  [예상 근본 원인]:
+    - Vec_push 내부의 `@.grow()` self-method 호출이 specialize instantiate하는 경로 누락.
+    - 또는 Vec_grow$T가 monomorphization worklist에 추가되지 않음.
+  [대상 파일]:
+    - crates/vais-codegen/src/function_gen/generics.rs (specialization worklist)
+    - crates/vais-codegen/src/expr_helpers_call/method_call.rs (@ self-recursion dispatch)
+    - 관련 확인: 2582 e2e가 모두 local Vec<T>를 재정의해서 우회 — stdlib Vec는
+      production에서 실사용 경로 부재. 역사적으로 가려져 있었음.
+  [완료 기준]:
+    - `U std/vec` + `Vec.with_capacity`/push/drop 최소 예제 컴파일 + 실행 성공
+    - 2582 baseline 유지
+    - 신규 e2e (Vec<i64>, Vec<str> 양쪽) 추가
+  [복잡도]: 중간. monomorphization 경로 1개 점 수정일 것으로 예상.
+  [블록 해제]: #2a' 착수 가능해짐.
+
+- [ ] 2a'. Vec<str> call-site wiring + e2e (Opus direct) — #2a 후속
+  [상속]: RFC-002 §9.8 6단계 중 stdlib(#2a 완료) 제외한 나머지.
+  [sub-steps]:
+    3. Vec_push$str call-site wrapping —
+       crates/vais-codegen/src/expr_helpers_call/method_call.rs:620-691 부근.
+       조건: full_method_name.starts_with("Vec_push$str"). push 호출 직전에
+       heap-owned rvalue 판정 (string_value_slot lookup) → owned_ensure(cap) +
+       owned_set(len) inject + alloc_slot transfer (Phase 191 #5 패턴).
+    4. Scope-exit drop prelude splice —
+       crates/vais-codegen/src/stmt.rs:828 `generate_scope_drop_cleanup`에
+       type_name == "Vec$str" (또는 "owned" 필드 보유 struct)면 user drop 직전
+       `__vais_vec_str_shallow_free` 호출 inject.
+    5. pending_return_skip_container (state.rs) + return-transfer 플러밍.
+    6. e2e phase191_container_str_drop.rs:
+       (1) vec_str_push_drop_no_leak, (2) mixed_literal, (6) return_transfers.
+  [완료 기준]: RFC-002 §6 tests 통과 + E2E baseline + leaks 0 (macOS `leaks --atExit`).
+  [복잡도]: 높음.
+  blockedBy: #10 (Vec_grow 수정).
+
 - [ ] 9. Match-arm string PHI fat-ptr unification (text-IR) (Opus direct)
   [출처]: #8의 e2e_phase191_match_arm_concat_phi (#[ignore] 상태).
   [상태]: 매치 식이 str을 반환할 때 text-IR이 arm별로 다른 형태를 emit.
@@ -410,11 +472,30 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
         user_gate: 2-3 sub-iterations 합의 (2026-04-15).
           Iter A: std/vec.vais owned:i64 5th field + with_capacity init ✅ 2026-04-15
             (E2E 2582/0, baseline 유지 — structural equivalence 실증).
-          Iter B: codegen helpers emission + Vec_push$str call-site wrap
-                  + scope-exit prelude splice + pending_return_skip_container.
-          Iter C: e2e phase191_container_str_drop.rs (3 tests) + 전체 회귀.
+          Iter B: codegen helpers emission (3 functions) ✅ 2026-04-15
+            (string_ops.rs: __vais_vec_str_owned_ensure/set/shallow_free +
+             module_gen/{mod,instantiations,subset}.rs: emit when Vec$str exists.
+             E2E 2582/0 유지, dormant until call-site wiring).
+          **BLOCKER 발견 2026-04-15**: stdlib Vec<T>는 **어떤 T에 대해서도
+            현재 빌드 실패** — Vec_push 특수화가 generic @Vec_grow를 호출하는데
+            해당 symbol 미정의. /tmp/test_vec_i64.vais, examples/simple_vec_test.vais
+            모두 `use of undefined value '@Vec_grow'`. 모든 e2e 테스트는 inline
+            local Vec<T> 정의를 사용하므로 이 버그가 가려져 있었음 (U std/vec
+            임포트한 e2e 0개 확인).
+            영향: #2a 원래 계획(stdlib Vec<str> call-site wrap)은 stdlib Vec
+            자체가 작동해야 검증 가능. Iter C 착수 전 결정 필요.
+            옵션 A: Vec_grow 특수화 버그 선행 수정 (scope creep, 별도 작업).
+            옵션 B: e2e를 local Vec<T> + 직접 __vais_vec_str_* helper 호출로
+              작성 (stdlib 우회, #2a 핵심 의미 검증 가능).
+            옵션 C: #2a를 helpers emission 완료까지만 범위 축소, #2a' 신설.
+          Iter B-next: 사용자 결정 대기.
 
-progress: 6/9 resolved (#1, #5, #6, #7, #8, #2a-rfc complete; #2a unblocked by §9.8; #2b/#2c pending blocked by #2a; #9 new surfaced by #8); RFC-002 §9.8 final — %Vec/%Vec$T structural equivalence invariant documented, #2a implementable via uniform stdlib amendment; RFC-003 (Phase 192) withdrawn as unnecessary.
+progress: 7/11 resolved (#1, #5, #6, #7, #8, #2a-rfc, #2a scope-reduced complete;
+  #2b/#2c still blocked by #2a' + #10; #9 new surfaced by #8; #10 new surfaced by #2a Iter B;
+  #2a' new — carries remaining #2a wiring post-#10);
+  RFC-002 §9.8 partial — structural equivalence + stdlib amendment 실증됨,
+  helpers IR 완비, 하지만 stdlib Vec generic specialization 경로 자체가 깨져있어
+  wiring 진입점 막힘. #10 선결 필요. RFC-002 §9.9 업데이트 권장(scope split 반영).
 
 ---
 

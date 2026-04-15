@@ -810,6 +810,11 @@ impl CodeGenerator {
             }
         }
 
+        // Vec<str> container-ownership helpers (RFC-002 §4.1, §4.4).
+        if self.generics.generated_structs.contains_key("Vec$str") {
+            ir.push_str(&self.generate_vec_str_container_helpers());
+        }
+
         // Add contract runtime declarations if any contracts are present
         if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());

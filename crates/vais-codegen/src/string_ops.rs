@@ -627,4 +627,197 @@ impl CodeGenerator {
         ir.push_str("declare i32 @snprintf(i8*, i64, i8*, ...)\n");
         ir
     }
+
+    /// Generate LLVM IR for Vec<str> container ownership helpers (RFC-002 §4.1, §4.4).
+    /// These operate on the `owned` 5th field of Vec<T> (i64 bitmap pointer-int) and
+    /// rely on the structural-equivalence invariant (%Vec body ≡ {i64,i64,i64,i64,i64}).
+    ///
+    /// ABI constraints (match codegen conventions):
+    ///   @free is declared as `void @free(i8*)` (see function_gen/signature.rs:71).
+    ///   @malloc is declared as `i8* @malloc(i64)` (see builtins/memory.rs).
+    ///   Caller passes `%Vec*` — a typed pointer valid under structural equivalence.
+    ///
+    /// Helper ABI (stable):
+    ///   __vais_vec_str_owned_ensure(%Vec*, i64 min_cap) -> void
+    ///   __vais_vec_str_owned_set   (%Vec*, i64 idx)     -> void
+    ///   __vais_vec_str_shallow_free(%Vec*)              -> void
+    #[inline(never)]
+    pub(crate) fn generate_vec_str_container_helpers(&self) -> String {
+        let mut ir = String::with_capacity(2048);
+
+        // __vais_vec_str_owned_ensure: ensure bitmap has ceil(min_cap/8) bytes,
+        // freshly zero-filled. Strategy: free old (if any) and malloc+memset new.
+        // Called from push-site when pushing a heap-owned value AND len >= old bitmap
+        // coverage. Worst-case cost: O(cap/8) per grow, amortized O(1).
+        //
+        // Simplification: always allocate fresh on grow (no copy-preserve). This is
+        // safe because the push-site loop below re-sets bits lazily as needed.
+        // But to preserve already-set bits (earlier owned elements), we copy the
+        // existing bytes via inline loop, then zero-fill the tail.
+        ir.push_str("\n; Vec<str> container helper: ensure owned bitmap covers min_cap\n");
+        ir.push_str("define void @__vais_vec_str_owned_ensure(%Vec* %v, i64 %min_cap) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %n7 = add i64 %min_cap, 7\n");
+        ir.push_str("  %bytes_needed = sdiv i64 %n7, 8\n");
+        // Guard: if min_cap == 0, do nothing
+        ir.push_str("  %need_zero = icmp sle i64 %bytes_needed, 0\n");
+        ir.push_str("  br i1 %need_zero, label %exit, label %check_ptr\n");
+        ir.push_str("check_ptr:\n");
+        ir.push_str("  %owned_field = getelementptr %Vec, %Vec* %v, i32 0, i32 4\n");
+        ir.push_str("  %owned_i = load i64, i64* %owned_field\n");
+        ir.push_str("  %is_null = icmp eq i64 %owned_i, 0\n");
+        ir.push_str("  br i1 %is_null, label %alloc_fresh, label %grow_copy\n");
+        ir.push_str("alloc_fresh:\n");
+        ir.push_str("  %fresh_ptr = call i8* @malloc(i64 %bytes_needed)\n");
+        ir.push_str("  %fresh_int = ptrtoint i8* %fresh_ptr to i64\n");
+        ir.push_str("  store i64 %fresh_int, i64* %owned_field\n");
+        // Zero-fill fresh buffer byte-by-byte (simple inline loop).
+        ir.push_str("  br label %zfill_head\n");
+        ir.push_str("zfill_head:\n");
+        ir.push_str("  %zi = phi i64 [ 0, %alloc_fresh ], [ %zi_next, %zfill_body ]\n");
+        ir.push_str("  %zdone = icmp sge i64 %zi, %bytes_needed\n");
+        ir.push_str("  br i1 %zdone, label %exit, label %zfill_body\n");
+        ir.push_str("zfill_body:\n");
+        ir.push_str("  %zptr = getelementptr i8, i8* %fresh_ptr, i64 %zi\n");
+        ir.push_str("  store i8 0, i8* %zptr\n");
+        ir.push_str("  %zi_next = add i64 %zi, 1\n");
+        ir.push_str("  br label %zfill_head\n");
+        // grow_copy: allocate new, copy old ceil(len/8) bytes, zero tail, free old.
+        ir.push_str("grow_copy:\n");
+        ir.push_str("  %old_ptr = inttoptr i64 %owned_i to i8*\n");
+        ir.push_str("  %new_ptr = call i8* @malloc(i64 %bytes_needed)\n");
+        // Derive old byte-count from len (conservative upper bound since grow is called before len exceeds cap).
+        ir.push_str("  %len_field = getelementptr %Vec, %Vec* %v, i32 0, i32 1\n");
+        ir.push_str("  %len_v = load i64, i64* %len_field\n");
+        ir.push_str("  %l7 = add i64 %len_v, 7\n");
+        ir.push_str("  %old_bytes = sdiv i64 %l7, 8\n");
+        // Bound old_bytes by bytes_needed (never copy more than destination holds).
+        ir.push_str("  %obn_gt = icmp sgt i64 %old_bytes, %bytes_needed\n");
+        ir.push_str("  %copy_bytes = select i1 %obn_gt, i64 %bytes_needed, i64 %old_bytes\n");
+        ir.push_str("  br label %copy_head\n");
+        ir.push_str("copy_head:\n");
+        ir.push_str("  %ci = phi i64 [ 0, %grow_copy ], [ %ci_next, %copy_body ]\n");
+        ir.push_str("  %cdone = icmp sge i64 %ci, %copy_bytes\n");
+        ir.push_str("  br i1 %cdone, label %copy_zero_tail, label %copy_body\n");
+        ir.push_str("copy_body:\n");
+        ir.push_str("  %src_ptr = getelementptr i8, i8* %old_ptr, i64 %ci\n");
+        ir.push_str("  %dst_ptr = getelementptr i8, i8* %new_ptr, i64 %ci\n");
+        ir.push_str("  %src_byte = load i8, i8* %src_ptr\n");
+        ir.push_str("  store i8 %src_byte, i8* %dst_ptr\n");
+        ir.push_str("  %ci_next = add i64 %ci, 1\n");
+        ir.push_str("  br label %copy_head\n");
+        ir.push_str("copy_zero_tail:\n");
+        ir.push_str("  br label %zt_head\n");
+        ir.push_str("zt_head:\n");
+        ir.push_str("  %ti = phi i64 [ %copy_bytes, %copy_zero_tail ], [ %ti_next, %zt_body ]\n");
+        ir.push_str("  %tdone = icmp sge i64 %ti, %bytes_needed\n");
+        ir.push_str("  br i1 %tdone, label %swap_ptr, label %zt_body\n");
+        ir.push_str("zt_body:\n");
+        ir.push_str("  %tzptr = getelementptr i8, i8* %new_ptr, i64 %ti\n");
+        ir.push_str("  store i8 0, i8* %tzptr\n");
+        ir.push_str("  %ti_next = add i64 %ti, 1\n");
+        ir.push_str("  br label %zt_head\n");
+        ir.push_str("swap_ptr:\n");
+        ir.push_str("  %new_int = ptrtoint i8* %new_ptr to i64\n");
+        ir.push_str("  store i64 %new_int, i64* %owned_field\n");
+        ir.push_str("  call void @free(i8* %old_ptr)\n");
+        ir.push_str("  br label %exit\n");
+        ir.push_str("exit:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __vais_vec_str_owned_set: set bit at index idx.
+        // Assumes bitmap is already grown to cover idx (caller invokes owned_ensure first).
+        ir.push_str("\n; Vec<str> container helper: set owned bit at index\n");
+        ir.push_str("define void @__vais_vec_str_owned_set(%Vec* %v, i64 %idx) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %owned_field = getelementptr %Vec, %Vec* %v, i32 0, i32 4\n");
+        ir.push_str("  %owned_i = load i64, i64* %owned_field\n");
+        ir.push_str("  %is_null = icmp eq i64 %owned_i, 0\n");
+        ir.push_str("  br i1 %is_null, label %exit, label %do_set\n");
+        ir.push_str("do_set:\n");
+        ir.push_str("  %bm = inttoptr i64 %owned_i to i8*\n");
+        ir.push_str("  %byte_idx = sdiv i64 %idx, 8\n");
+        ir.push_str("  %bit_idx = srem i64 %idx, 8\n");
+        ir.push_str("  %byte_ptr = getelementptr i8, i8* %bm, i64 %byte_idx\n");
+        ir.push_str("  %byte_val = load i8, i8* %byte_ptr\n");
+        ir.push_str("  %bit_i8 = trunc i64 %bit_idx to i8\n");
+        ir.push_str("  %mask = shl i8 1, %bit_i8\n");
+        ir.push_str("  %new_val = or i8 %byte_val, %mask\n");
+        ir.push_str("  store i8 %new_val, i8* %byte_ptr\n");
+        ir.push_str("  br label %exit\n");
+        ir.push_str("exit:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __vais_vec_str_shallow_free: free all heap-owned element buffers + free bitmap.
+        // Does NOT free self.data — user Vec.drop runs AFTER this helper.
+        // Element encoding: Vec<str>.data is an array of {i8*, i64} fat pointers
+        //   (elem_size=16, matches method_call.rs "str" → 16 branch).
+        // For each index i in [0, len): if bit i set, free the i8* at offset 0 of
+        //   the fat pointer at data + i*16.
+        ir.push_str("\n; Vec<str> container helper: shallow-free owned element buffers + bitmap\n");
+        ir.push_str("define void @__vais_vec_str_shallow_free(%Vec* %v) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %owned_field = getelementptr %Vec, %Vec* %v, i32 0, i32 4\n");
+        ir.push_str("  %owned_i = load i64, i64* %owned_field\n");
+        ir.push_str("  %no_bm = icmp eq i64 %owned_i, 0\n");
+        ir.push_str("  br i1 %no_bm, label %exit, label %iter_init\n");
+        ir.push_str("iter_init:\n");
+        ir.push_str("  %bm = inttoptr i64 %owned_i to i8*\n");
+        ir.push_str("  %data_field = getelementptr %Vec, %Vec* %v, i32 0, i32 0\n");
+        ir.push_str("  %data_i = load i64, i64* %data_field\n");
+        ir.push_str("  %len_field = getelementptr %Vec, %Vec* %v, i32 0, i32 1\n");
+        ir.push_str("  %len_v = load i64, i64* %len_field\n");
+        ir.push_str("  br label %loop_head\n");
+        ir.push_str("loop_head:\n");
+        ir.push_str("  %i = phi i64 [ 0, %iter_init ], [ %i_next, %loop_cont ]\n");
+        ir.push_str("  %done_cmp = icmp sge i64 %i, %len_v\n");
+        ir.push_str("  br i1 %done_cmp, label %free_bm, label %check_bit\n");
+        ir.push_str("check_bit:\n");
+        ir.push_str("  %byte_idx = sdiv i64 %i, 8\n");
+        ir.push_str("  %bit_idx = srem i64 %i, 8\n");
+        ir.push_str("  %byte_ptr = getelementptr i8, i8* %bm, i64 %byte_idx\n");
+        ir.push_str("  %byte_val = load i8, i8* %byte_ptr\n");
+        ir.push_str("  %bit_i8 = trunc i64 %bit_idx to i8\n");
+        ir.push_str("  %mask = shl i8 1, %bit_i8\n");
+        ir.push_str("  %bit_and = and i8 %byte_val, %mask\n");
+        ir.push_str("  %is_owned = icmp ne i8 %bit_and, 0\n");
+        ir.push_str("  br i1 %is_owned, label %do_free, label %loop_cont\n");
+        ir.push_str("do_free:\n");
+        ir.push_str("  %off = mul i64 %i, 16\n");
+        ir.push_str("  %elem_int = add i64 %data_i, %off\n");
+        ir.push_str("  %elem_ptr = inttoptr i64 %elem_int to i8**\n");
+        ir.push_str("  %buf_ptr = load i8*, i8** %elem_ptr\n");
+        ir.push_str("  %buf_is_null = icmp eq i8* %buf_ptr, null\n");
+        ir.push_str("  br i1 %buf_is_null, label %loop_cont, label %do_call_free\n");
+        ir.push_str("do_call_free:\n");
+        ir.push_str("  call void @free(i8* %buf_ptr)\n");
+        ir.push_str("  store i8* null, i8** %elem_ptr\n");
+        ir.push_str("  br label %loop_cont\n");
+        ir.push_str("loop_cont:\n");
+        ir.push_str("  %i_next = add i64 %i, 1\n");
+        ir.push_str("  br label %loop_head\n");
+        ir.push_str("free_bm:\n");
+        ir.push_str("  %bm_as_i8p = inttoptr i64 %owned_i to i8*\n");
+        ir.push_str("  call void @free(i8* %bm_as_i8p)\n");
+        ir.push_str("  store i64 0, i64* %owned_field\n");
+        ir.push_str("  br label %exit\n");
+        ir.push_str("exit:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        ir
+    }
+
+    /// `declare` statements for Vec<str> container helpers (per-module compilation).
+    #[inline(never)]
+    pub(crate) fn generate_vec_str_container_declarations(&self) -> String {
+        let mut ir = String::with_capacity(384);
+        ir.push_str("\n; Vec<str> container helper declarations (defined in main module)\n");
+        ir.push_str("declare void @__vais_vec_str_owned_ensure(%Vec*, i64)\n");
+        ir.push_str("declare void @__vais_vec_str_owned_set(%Vec*, i64)\n");
+        ir.push_str("declare void @__vais_vec_str_shallow_free(%Vec*)\n");
+        ir
+    }
 }

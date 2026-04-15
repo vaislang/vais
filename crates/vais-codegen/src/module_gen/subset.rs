@@ -813,6 +813,15 @@ impl CodeGenerator {
             }
         }
 
+        // Vec<str> container-ownership helpers (RFC-002 §4.1, §4.4).
+        if self.generics.generated_structs.contains_key("Vec$str") {
+            if is_main_module {
+                ir.push_str(&self.generate_vec_str_container_helpers());
+            } else {
+                ir.push_str(&self.generate_vec_str_container_declarations());
+            }
+        }
+
         if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
             ir.push_str(&self.generate_contract_string_constants());
