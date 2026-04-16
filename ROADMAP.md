@@ -30,7 +30,7 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
 session_checkpoint: 2026-04-16 세션 7 iter 20 — #2b Iter C 완료.
-  commits: (pending commit).
+  commits: f086cb14 (#2b-C shallow-drop + LocalVar.is_double_ptr).
   E2E: 2587/0/0 baseline 유지. shallow-free helper 호출이 mask=0 상태에서 no-op.
   변경 규모: 9 files. string_ops.rs (struct shallow-free helper), lib.rs + init.rs
     (needs_struct_shallow), module_gen/{mod,instantiations,subset}.rs (emission),
