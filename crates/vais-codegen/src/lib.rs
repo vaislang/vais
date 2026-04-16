@@ -205,6 +205,10 @@ pub struct CodeGenerator {
     // Set by Vec_push$str call-site wrapping (Phase 191 #2a').
     needs_vec_str_helpers: bool,
 
+    // Struct types that need __vais_struct_shallow_free_{Name} emission (RFC-002 §4.2).
+    // Populated by scope/function-exit drop cleanup when a struct with has_owned_mask is dropped.
+    needs_struct_shallow: std::collections::HashSet<String>,
+
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
 

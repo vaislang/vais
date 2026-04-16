@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 19
+iteration: 20
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
   commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
@@ -29,6 +29,21 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-16 세션 7 iter 20 — #2b Iter C 완료.
+  commits: (pending commit).
+  E2E: 2587/0/0 baseline 유지. shallow-free helper 호출이 mask=0 상태에서 no-op.
+  변경 규모: 9 files. string_ops.rs (struct shallow-free helper), lib.rs + init.rs
+    (needs_struct_shallow), module_gen/{mod,instantiations,subset}.rs (emission),
+    stmt.rs (scope + function-exit drop 양쪽 splice + is_double_ptr 분기),
+    types/mod.rs (LocalVar.is_double_ptr + heap_fields dead_code 제거),
+    function_gen/dependent_checks.rs (is_double_ptr 전파).
+  discovered_bug: stmt_visitor.rs 경로가 single-ptr alloca를 사용하는데 drop cleanup이
+    double-ptr로 가정 → SIGSEGV. LocalVar.is_double_ptr 필드 추가로 근본 수정.
+  infrastructure_only: 실제 mask bit-OR은 Iter D에서 struct literal wrapping 구현 시
+    활성화. 현재는 mask=0 → shallow-free 즉시 exit.
+  **NEXT SESSION (fresh)**: `/clear` + `/harness` → #2b-D auto pickup.
+    Iter C 완료로 #2b-D blockedBy 해제됨. 각 Iter 1 세션 유지 원칙.
+  재개 권장: fresh session에서 #2b-D (struct literal wrapping + E2E).
 session_checkpoint: 2026-04-16 세션 6 iter 19 — #2b Iter B 완료.
   commits: 8c4c7ba1 (#2b-B layout amendment).
   E2E: 2587/0/0 baseline 유지. ABI 변경이 기존 non-str struct에 영향 없음 실증.
@@ -502,7 +517,50 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   [복잡도]: 중. ABI 조건부 변경 + monomorphization 대칭성이 핵심.
   blockedBy: 없음 (#2a 완료).
 
-- [ ] 2b-C. #2b Iter C — shallow-drop helper emission + scope/function-exit splice (Opus direct)
+- [x] 2b-C. #2b Iter C — shallow-drop helper emission + scope/function-exit splice (Opus direct) ✅ 2026-04-16
+  strategy: sequential → Opus direct. opus_direct: shallow-drop sequencing + helper lifecycle
+    + stmt_visitor.rs single-ptr/double-ptr alloca 분기 발견/수정 → 설계-구현 inseparable.
+  session_iter: 20 (auto).
+  changes:
+    crates/vais-codegen/src/string_ops.rs:
+      generate_struct_shallow_free_helper(struct_name, field_count, heap_field_indices) 추가.
+      시그니처: void @__vais_struct_shallow_free_{Name}(%{Name}*).
+      IR: trailing ownership_mask i64 GEP+load → 각 heap field bit 체크 → set이면 fat-ptr
+      extractvalue → free. 비트 clear 불필요 (struct consume-once).
+      generate_struct_shallow_free_declaration(struct_name) 추가 (per-module extern).
+    crates/vais-codegen/src/lib.rs:
+      needs_struct_shallow: HashSet<String> 필드 추가.
+    crates/vais-codegen/src/init.rs:
+      needs_struct_shallow 초기화.
+    crates/vais-codegen/src/module_gen/{mod,instantiations,subset}.rs:
+      Vec$str helpers 뒤에 struct shallow-free helpers 조건부 emission 추가.
+      subset.rs: main → define, non-main → declare 분기.
+    crates/vais-codegen/src/stmt.rs:
+      generate_scope_drop_cleanup: drop_registry 없는 struct도 has_owned_mask면 droppable.
+        user drop 호출 후 shallow-free splice. drop 없으면 shallow-free만 호출.
+      generate_drop_cleanup: 동일 패턴 대칭 적용.
+      is_double_ptr 감지: LocalVar.is_double_ptr 필드 사용 (아래).
+      stmt.rs let-binding: struct literal + Named 타입은 alloca_double_ptr(), 그 외 alloca().
+    crates/vais-codegen/src/types/mod.rs:
+      LocalVar에 is_double_ptr: bool 필드 추가. alloca_double_ptr() 생성자 추가.
+      heap_fields에서 #[allow(dead_code)] 제거 (이제 shallow-free에서 소비).
+    crates/vais-codegen/src/function_gen/dependent_checks.rs:
+      LocalVar 복사 시 is_double_ptr 전파.
+  discovered_bug:
+    stmt_visitor.rs 경로의 Named let-binding은 single-ptr alloca (%Type*)를 사용하지만,
+    기존 drop cleanup은 모든 alloca를 double-ptr (%Type**)로 가정. has_owned_mask struct가
+    이 경로에서 shallow-free 대상이 되면서 첫 노출 → SIGSEGV. LocalVar.is_double_ptr
+    필드 추가로 근본 수정. 기존 user Drop은 drop_registry에 있는 타입만 처리했으므로
+    stmt_visitor.rs 경로의 struct (user Drop 없는 struct)를 처리하지 않아 잠복해 있었음.
+  verify:
+    cargo clippy --workspace --exclude vais-python --exclude vais-node: 0 warnings.
+    cargo test -p vais-codegen --lib types::tests: 73/0 passed.
+    cargo test -p vaisc --test e2e phase191: 16/0 passed.
+    cargo test -p vaisc --test e2e: 2587/0/0 passed (baseline 2587 유지, 686s).
+  scope:
+    Iter C는 infrastructure — helper emission + splice wiring. mask 비트는 항상 0
+    (Iter D wrapping 미구현) → shallow-free 호출되어도 mask=0 → 즉시 exit → no-op.
+    실제 leak 방지 동작은 Iter D에서 struct literal wrapping 완료 시 활성화.
   [상속]: #2b-B 완료 (StructInfo.has_owned_mask + layout).
   [sub-steps]:
     1. crates/vais-codegen/src/string_ops.rs에 `generate_struct_shallow_free_helpers(

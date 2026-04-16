@@ -820,4 +820,114 @@ impl CodeGenerator {
         ir.push_str("declare void @__vais_vec_str_shallow_free(%Vec*)\n");
         ir
     }
+
+    /// Generate `__vais_struct_shallow_free_{name}` helper for a struct with heap-owned
+    /// string fields (Phase 191 #2b-C, RFC-002 §4.2 Option D).
+    ///
+    /// The helper reads the trailing `__ownership_mask` i64 field and, for each
+    /// heap_field_index where the corresponding bit is set, frees the i8* pointer
+    /// from that field's fat-pointer `{ i8*, i64 }`. Called after user Drop (if any)
+    /// to release heap-owned string buffers without double-free risk.
+    #[inline(never)]
+    pub(crate) fn generate_struct_shallow_free_helper(
+        &self,
+        struct_name: &str,
+        field_count: usize,
+        heap_field_indices: &[usize],
+    ) -> String {
+        let mut ir = String::with_capacity(1024);
+        let ty = format!("%{}", struct_name);
+        let mask_idx = field_count;
+
+        write_ir!(
+            ir,
+            "\n; Struct shallow-free helper: free heap-owned string fields (RFC-002 §4.2)"
+        );
+        write_ir!(
+            ir,
+            "define void @__vais_struct_shallow_free_{}({}* %s) {{",
+            struct_name,
+            ty
+        );
+        ir.push_str("entry:\n");
+        write_ir!(
+            ir,
+            "  %mask_ptr = getelementptr {}, {}* %s, i32 0, i32 {}",
+            ty,
+            ty,
+            mask_idx
+        );
+        ir.push_str("  %mask = load i64, i64* %mask_ptr\n");
+        ir.push_str("  %no_owned = icmp eq i64 %mask, 0\n");
+        ir.push_str("  br i1 %no_owned, label %exit, label %check_fields\n");
+        ir.push_str("check_fields:\n");
+
+        for (seq, &field_idx) in heap_field_indices.iter().enumerate() {
+            let bit: u64 = 1u64 << field_idx;
+            let lbl_free = format!("free_f{}_{}", field_idx, seq);
+            let lbl_next = if seq + 1 < heap_field_indices.len() {
+                format!("check_f{}_{}", heap_field_indices[seq + 1], seq + 1)
+            } else {
+                "exit".to_string()
+            };
+
+            let check_lbl = format!("check_f{}_{}", field_idx, seq);
+            if seq > 0 {
+                write_ir!(ir, "{}:", check_lbl);
+            }
+
+            let and_tmp = format!("%bit_and_{}", seq);
+            write_ir!(ir, "  {} = and i64 %mask, {}", and_tmp, bit);
+            let is_set = format!("%is_set_{}", seq);
+            write_ir!(ir, "  {} = icmp ne i64 {}, 0", is_set, and_tmp);
+            write_ir!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                is_set,
+                lbl_free,
+                lbl_next
+            );
+
+            write_ir!(ir, "{}:", lbl_free);
+            let fptr = format!("%fp_{}", seq);
+            write_ir!(
+                ir,
+                "  {} = getelementptr {}, {}* %s, i32 0, i32 {}",
+                fptr,
+                ty,
+                ty,
+                field_idx
+            );
+            let fat = format!("%fat_{}", seq);
+            write_ir!(ir, "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}", fat, fptr);
+            let buf = format!("%buf_{}", seq);
+            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", buf, fat);
+            let is_null = format!("%null_{}", seq);
+            write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, buf);
+            let do_free = format!("do_free_{}", seq);
+            write_ir!(
+                ir,
+                "  br i1 {}, label %{}, label %{}",
+                is_null,
+                lbl_next,
+                do_free
+            );
+            write_ir!(ir, "{}:", do_free);
+            write_ir!(ir, "  call void @free(i8* {})", buf);
+            write_ir!(ir, "  br label %{}", lbl_next);
+        }
+
+        ir.push_str("exit:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+        ir
+    }
+
+    /// `declare` statement for a struct shallow-free helper (per-module compilation).
+    pub(crate) fn generate_struct_shallow_free_declaration(struct_name: &str) -> String {
+        format!(
+            "declare void @__vais_struct_shallow_free_{}(%{}*)\n",
+            struct_name, struct_name
+        )
+    }
 }

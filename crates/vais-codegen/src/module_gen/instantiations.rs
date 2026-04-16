@@ -826,6 +826,19 @@ impl CodeGenerator {
             ir.push_str(&self.generate_vec_str_container_helpers());
         }
 
+        // Struct shallow-free helpers (RFC-002 §4.2, Phase 191 #2b-C).
+        for struct_name in &self.needs_struct_shallow.clone() {
+            if let Some(info) = self.types.structs.get(struct_name) {
+                let field_count = info.fields.len();
+                let heap_fields = info.heap_fields.clone();
+                ir.push_str(&self.generate_struct_shallow_free_helper(
+                    struct_name,
+                    field_count,
+                    &heap_fields,
+                ));
+            }
+        }
+
         // Add contract runtime declarations if any contracts are present
         if !self.contracts.contract_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());

@@ -145,11 +145,23 @@ impl CodeGenerator {
                     );
                     // No additional IR needed - we just register the mapping
                 } else {
-                    // Traditional alloca style
-                    self.fn_ctx.locals.insert(
-                        name.node.clone(),
-                        LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
-                    );
+                    // Traditional alloca style.
+                    // Struct literals and Named function returns use double-pointer
+                    // (%Type**) because the codegen stores a %Type* in an alloca.
+                    let needs_double_ptr =
+                        is_struct_lit || is_enum_variant_call || is_unit_variant
+                        || matches!(resolved_ty, ResolvedType::Named { .. });
+                    if needs_double_ptr {
+                        self.fn_ctx.locals.insert(
+                            name.node.clone(),
+                            LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone()),
+                        );
+                    } else {
+                        self.fn_ctx.locals.insert(
+                            name.node.clone(),
+                            LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
+                        );
+                    }
 
                     // For struct literals and enum variant constructors, the value is already an alloca'd pointer
                     // We store the pointer to the struct/enum (i.e., %Point*, %Option*)
@@ -826,28 +838,35 @@ impl CodeGenerator {
     /// `alloca %Type*` → pointer stored in locals. We must load the inner
     /// `%Type*` before passing it to the drop function.
     pub(crate) fn generate_scope_drop_cleanup(&mut self, scope_vars: &[String]) -> String {
-        if scope_vars.is_empty() || self.types.drop_registry.is_empty() {
+        if scope_vars.is_empty() {
             return String::new();
         }
 
-        // Collect (type_name, llvm_name, drop_fn, is_double_ptr) in declaration order.
-        // is_double_ptr=true when the local is a struct literal stored as %Type**.
-        let mut droppable: Vec<(String, String, String, bool)> = Vec::new();
+        // Collect (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr).
+        // drop_fn_opt is Some when user Drop exists, has_shallow is true when
+        // has_owned_mask requires shallow-free after user drop (RFC-002 §4.2).
+        let mut droppable: Vec<(String, String, Option<String>, bool, bool)> = Vec::new();
         for var_name in scope_vars {
             if let Some(local) = self.fn_ctx.locals.get(var_name) {
                 let type_name = match &local.ty {
                     vais_types::ResolvedType::Named { name, .. } => name.clone(),
                     _ => continue,
                 };
-                if let Some(drop_fn) = self.types.drop_registry.get(&type_name).cloned() {
-                    if local.is_alloca() {
-                        // Alloca locals for struct literals are double-pointers (%Type**)
-                        // because the codegen stores a %Type* in an alloca.
-                        // Parameters and SSA values are not owned by this block — skip them.
-                        droppable.push((type_name, local.llvm_name.clone(), drop_fn, true));
-                    }
-                    // Parameters: passed by reference — caller owns them, do not drop.
-                    // SSA values: no alloca pointer to pass to drop — skip.
+                let drop_fn = self.types.drop_registry.get(&type_name).cloned();
+                let has_shallow = self
+                    .types
+                    .structs
+                    .get(&type_name)
+                    .is_some_and(|si| si.has_owned_mask);
+
+                if (drop_fn.is_some() || has_shallow) && local.is_alloca() {
+                    droppable.push((
+                        type_name,
+                        local.llvm_name.clone(),
+                        drop_fn,
+                        has_shallow,
+                        local.is_double_ptr,
+                    ));
                 }
             }
         }
@@ -859,17 +878,14 @@ impl CodeGenerator {
         let mut ir = String::new();
         ir.push_str("  ; block-scope drop cleanup\n");
         // Drop in reverse order (last declared first — LIFO)
-        for (_type_name, llvm_name, drop_fn, is_double_ptr) in droppable.iter().rev() {
-            let type_name_for_fn = drop_fn.strip_suffix("_drop").unwrap_or(drop_fn);
-            let struct_ty = format!("%{}", type_name_for_fn);
-            // Drop functions return i64 per the Drop trait definition (F drop(&self) -> i64).
-            // Use a temp to capture the return value and discard it.
+        for (type_name, llvm_name, drop_fn, has_shallow, is_double_ptr) in droppable.iter().rev() {
+            let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
-            if *is_double_ptr {
-                // Need to load the inner %Type* from the %Type** before calling drop
+
+            // For double-ptr locals, load the inner pointer once (shared by drop + shallow-free).
+            let effective_ptr = if *is_double_ptr {
                 let ptr_tmp = format!("__drop_ptr_{}", id);
-                let ret_tmp = format!("__drop_ret_{}", id);
                 write_ir!(
                     ir,
                     "  %{} = load {}*, {}** %{}",
@@ -878,24 +894,34 @@ impl CodeGenerator {
                     struct_ty,
                     llvm_name
                 );
-                write_ir!(
-                    ir,
-                    "  %{} = call i64 @{}({}* %{})",
-                    ret_tmp,
-                    drop_fn,
-                    struct_ty,
-                    ptr_tmp
-                );
+                format!("%{}", ptr_tmp)
             } else {
+                format!("%{}", llvm_name)
+            };
+
+            // 1) User drop (if registered)
+            if let Some(drop_fn) = drop_fn {
                 let ret_tmp = format!("__drop_ret_{}", id);
                 write_ir!(
                     ir,
-                    "  %{} = call i64 @{}({}* %{})",
+                    "  %{} = call i64 @{}({}* {})",
                     ret_tmp,
                     drop_fn,
                     struct_ty,
-                    llvm_name
+                    effective_ptr
                 );
+            }
+
+            // 2) Shallow-free (if has_owned_mask — frees heap-owned string fields)
+            if *has_shallow {
+                write_ir!(
+                    ir,
+                    "  call void @__vais_struct_shallow_free_{}({}* {})",
+                    type_name,
+                    struct_ty,
+                    effective_ptr
+                );
+                self.needs_struct_shallow.insert(type_name.clone());
             }
         }
         ir
@@ -1002,28 +1028,29 @@ impl CodeGenerator {
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
     pub(crate) fn generate_drop_cleanup(&mut self) -> String {
-        if self.types.drop_registry.is_empty() {
-            return String::new();
-        }
-
-        // Collect (var_name, llvm_name, drop_fn, is_double_ptr) in declaration order.
-        // Struct literal alloca locals are stored as %Type** (double pointer), so we
-        // need to load the inner %Type* before calling drop.
-        let mut droppable: Vec<(String, String, String, bool)> = Vec::new();
+        // Collect (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr).
+        let mut droppable: Vec<(String, String, String, Option<String>, bool, bool)> = Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
             let type_name = match &local.ty {
                 ResolvedType::Named { name, .. } => name.clone(),
                 _ => continue,
             };
-            if let Some(drop_fn) = self.types.drop_registry.get(&type_name).cloned() {
-                if local.is_alloca() {
-                    // Alloca-style struct locals are double pointers (%Type**)
-                    // because the codegen stores a %Type* in an alloca.
-                    // Parameters and SSA values are not owned by this function — skip them.
-                    droppable.push((var_name.clone(), local.llvm_name.clone(), drop_fn, true));
-                }
-                // Parameters: passed by reference (&self) or by-value but caller-owned — do not drop.
-                // SSA values: no alloca pointer to pass to drop — skip.
+            let drop_fn = self.types.drop_registry.get(&type_name).cloned();
+            let has_shallow = self
+                .types
+                .structs
+                .get(&type_name)
+                .is_some_and(|si| si.has_owned_mask);
+
+            if (drop_fn.is_some() || has_shallow) && local.is_alloca() {
+                droppable.push((
+                    var_name.clone(),
+                    type_name,
+                    local.llvm_name.clone(),
+                    drop_fn,
+                    has_shallow,
+                    local.is_double_ptr,
+                ));
             }
         }
 
@@ -1032,20 +1059,16 @@ impl CodeGenerator {
         }
 
         let mut ir = String::new();
-        ir.push_str("  ; auto-drop cleanup (Drop trait)\n");
+        ir.push_str("  ; auto-drop cleanup (Drop trait + shallow-free)\n");
         // Drop in reverse order (last declared first)
         droppable.reverse();
-        for (_var_name, llvm_name, drop_fn, is_double_ptr) in &droppable {
-            let type_name_for_fn = drop_fn.strip_suffix("_drop").unwrap_or(drop_fn);
-            let struct_ty = format!("%{}", type_name_for_fn);
-            // Drop functions return i64 per the Drop trait definition (F drop(&self) -> i64).
-            // Use a temp to capture the return value and discard it.
+        for (_var_name, type_name, llvm_name, drop_fn, has_shallow, is_double_ptr) in &droppable {
+            let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
-            if *is_double_ptr {
-                // Load the inner %Type* from the %Type** before calling drop
+
+            let effective_ptr = if *is_double_ptr {
                 let ptr_tmp = format!("__drop_ptr_{}", id);
-                let ret_tmp = format!("__drop_ret_{}", id);
                 write_ir!(
                     ir,
                     "  %{} = load {}*, {}** %{}",
@@ -1054,24 +1077,32 @@ impl CodeGenerator {
                     struct_ty,
                     llvm_name
                 );
-                write_ir!(
-                    ir,
-                    "  %{} = call i64 @{}({}* %{})",
-                    ret_tmp,
-                    drop_fn,
-                    struct_ty,
-                    ptr_tmp
-                );
+                format!("%{}", ptr_tmp)
             } else {
+                format!("%{}", llvm_name)
+            };
+
+            if let Some(drop_fn) = drop_fn {
                 let ret_tmp = format!("__drop_ret_{}", id);
                 write_ir!(
                     ir,
-                    "  %{} = call i64 @{}({}* %{})",
+                    "  %{} = call i64 @{}({}* {})",
                     ret_tmp,
                     drop_fn,
                     struct_ty,
-                    llvm_name
+                    effective_ptr
                 );
+            }
+
+            if *has_shallow {
+                write_ir!(
+                    ir,
+                    "  call void @__vais_struct_shallow_free_{}({}* {})",
+                    type_name,
+                    struct_ty,
+                    effective_ptr
+                );
+                self.needs_struct_shallow.insert(type_name.clone());
             }
         }
 

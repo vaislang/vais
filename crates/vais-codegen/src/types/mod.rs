@@ -71,8 +71,7 @@ pub(crate) struct StructInfo {
     /// the user-visible field indices that participate in the bitmap.
     pub has_owned_mask: bool,
     /// Indices into `fields` of heap-owned candidates (Str or Vec$str). Populated
-    /// when `has_owned_mask == true`. Consumed by shallow-drop helpers (#2b-C/D).
-    #[allow(dead_code)]
+    /// when `has_owned_mask == true`. Consumed by shallow-drop helper emission (#2b-C).
     pub heap_fields: Vec<usize>,
 }
 
@@ -172,6 +171,10 @@ pub(crate) struct LocalVar {
     pub kind: LocalVarKind,
     /// The actual LLVM IR name for this variable (may differ from source name in loops)
     pub llvm_name: String,
+    /// True when the alloca stores a pointer-to-struct (`%Type**`), requiring a
+    /// load before passing to drop/shallow-free. False for direct struct allocas
+    /// (`%Type*`) where the alloca IS the struct pointer.
+    pub is_double_ptr: bool,
 }
 
 impl LocalVar {
@@ -181,6 +184,7 @@ impl LocalVar {
             ty,
             kind: LocalVarKind::Param,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
         }
     }
 
@@ -190,15 +194,27 @@ impl LocalVar {
             ty,
             kind: LocalVarKind::Ssa,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
         }
     }
 
-    /// Create a new alloca variable (stack-allocated)
+    /// Create a new alloca variable (stack-allocated, single pointer `%Type*`)
     pub fn alloca(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
         Self {
             ty,
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
+            is_double_ptr: false,
+        }
+    }
+
+    /// Create a new alloca variable that stores a pointer to struct (`%Type**`)
+    pub fn alloca_double_ptr(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
+        Self {
+            ty,
+            kind: LocalVarKind::Alloca,
+            llvm_name: llvm_name.into(),
+            is_double_ptr: true,
         }
     }
 
