@@ -132,11 +132,12 @@ impl CodeGenerator {
 
                 // First try the base name (non-generic or already resolved struct)
                 if let Some(struct_info) = self.types.structs.get(name) {
-                    return struct_info
+                    let base: i64 = struct_info
                         .fields
                         .iter()
                         .map(|(_name, ty)| self.compute_sizeof(ty))
                         .sum();
+                    return base + if struct_info.has_owned_mask { 8 } else { 0 };
                 }
                 // For generic Named types, try the mangled (specialized) name
                 if !generics.is_empty() {
@@ -146,11 +147,12 @@ impl CodeGenerator {
                     if all_concrete {
                         let mangled = self.mangle_struct_name(name, generics);
                         if let Some(struct_info) = self.types.structs.get(&mangled) {
-                            return struct_info
+                            let base: i64 = struct_info
                                 .fields
                                 .iter()
                                 .map(|(_name, ty)| self.compute_sizeof(ty))
                                 .sum();
+                            return base + if struct_info.has_owned_mask { 8 } else { 0 };
                         }
                     }
                 }

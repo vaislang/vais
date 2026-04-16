@@ -842,10 +842,13 @@ impl CodeGenerator {
             return String::new();
         }
 
-        // Collect (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr).
+        // Collect (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow).
         // drop_fn_opt is Some when user Drop exists, has_shallow is true when
         // has_owned_mask requires shallow-free after user drop (RFC-002 §4.2).
-        let mut droppable: Vec<(String, String, Option<String>, bool, bool)> = Vec::new();
+        // vec_elem_shallow: Some(inner_struct_name) when this is a Vec$X and X has has_owned_mask
+        //   (Phase 191 #2c — nested container recursion).
+        let mut droppable: Vec<(String, String, Option<String>, bool, bool, Option<String>)> =
+            Vec::new();
         for var_name in scope_vars {
             if let Some(local) = self.fn_ctx.locals.get(var_name) {
                 let type_name = match &local.ty {
@@ -859,13 +862,18 @@ impl CodeGenerator {
                     .get(&type_name)
                     .is_some_and(|si| si.has_owned_mask);
 
-                if (drop_fn.is_some() || has_shallow) && local.is_alloca() {
+                let vec_elem_shallow = self.detect_vec_elem_shallow(&type_name);
+
+                if (drop_fn.is_some() || has_shallow || vec_elem_shallow.is_some())
+                    && local.is_alloca()
+                {
                     droppable.push((
                         type_name,
                         local.llvm_name.clone(),
                         drop_fn,
                         has_shallow,
                         local.is_double_ptr,
+                        vec_elem_shallow,
                     ));
                 }
             }
@@ -878,7 +886,9 @@ impl CodeGenerator {
         let mut ir = String::new();
         ir.push_str("  ; block-scope drop cleanup\n");
         // Drop in reverse order (last declared first — LIFO)
-        for (type_name, llvm_name, drop_fn, has_shallow, is_double_ptr) in droppable.iter().rev() {
+        for (type_name, llvm_name, drop_fn, has_shallow, is_double_ptr, vec_elem_shallow) in
+            droppable.iter().rev()
+        {
             let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
@@ -898,6 +908,16 @@ impl CodeGenerator {
             } else {
                 format!("%{}", llvm_name)
             };
+
+            // 0) Vec element shallow-free (iterate elements and call struct shallow-free)
+            if let Some(inner_name) = vec_elem_shallow {
+                ir.push_str(&self.generate_vec_elem_shallow_free_ir(
+                    &effective_ptr,
+                    type_name,
+                    inner_name,
+                ));
+                self.needs_struct_shallow.insert(inner_name.clone());
+            }
 
             // 1) User drop (if registered)
             if let Some(drop_fn) = drop_fn {
@@ -1028,8 +1048,9 @@ impl CodeGenerator {
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
     pub(crate) fn generate_drop_cleanup(&mut self) -> String {
-        // Collect (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr).
-        let mut droppable: Vec<(String, String, String, Option<String>, bool, bool)> = Vec::new();
+        // Collect (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow).
+        let mut droppable: Vec<(String, String, String, Option<String>, bool, bool, Option<String>)> =
+            Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
             let type_name = match &local.ty {
                 ResolvedType::Named { name, .. } => name.clone(),
@@ -1042,7 +1063,10 @@ impl CodeGenerator {
                 .get(&type_name)
                 .is_some_and(|si| si.has_owned_mask);
 
-            if (drop_fn.is_some() || has_shallow) && local.is_alloca() {
+            let vec_elem_shallow = self.detect_vec_elem_shallow(&type_name);
+
+            if (drop_fn.is_some() || has_shallow || vec_elem_shallow.is_some()) && local.is_alloca()
+            {
                 droppable.push((
                     var_name.clone(),
                     type_name,
@@ -1050,6 +1074,7 @@ impl CodeGenerator {
                     drop_fn,
                     has_shallow,
                     local.is_double_ptr,
+                    vec_elem_shallow,
                 ));
             }
         }
@@ -1062,7 +1087,9 @@ impl CodeGenerator {
         ir.push_str("  ; auto-drop cleanup (Drop trait + shallow-free)\n");
         // Drop in reverse order (last declared first)
         droppable.reverse();
-        for (_var_name, type_name, llvm_name, drop_fn, has_shallow, is_double_ptr) in &droppable {
+        for (_var_name, type_name, llvm_name, drop_fn, has_shallow, is_double_ptr, vec_elem_shallow) in
+            &droppable
+        {
             let struct_ty = format!("%{}", type_name);
             let id = self.fn_ctx.label_counter;
             self.fn_ctx.label_counter += 1;
@@ -1081,6 +1108,15 @@ impl CodeGenerator {
             } else {
                 format!("%{}", llvm_name)
             };
+
+            if let Some(inner_name) = vec_elem_shallow {
+                ir.push_str(&self.generate_vec_elem_shallow_free_ir(
+                    &effective_ptr,
+                    type_name,
+                    inner_name,
+                ));
+                self.needs_struct_shallow.insert(inner_name.clone());
+            }
 
             if let Some(drop_fn) = drop_fn {
                 let ret_tmp = format!("__drop_ret_{}", id);
@@ -1105,6 +1141,114 @@ impl CodeGenerator {
                 self.needs_struct_shallow.insert(type_name.clone());
             }
         }
+
+        ir
+    }
+
+    /// Detect if type_name is a Vec$X where X has has_owned_mask (Phase 191 #2c).
+    /// Returns Some(inner_struct_name) if so.
+    fn detect_vec_elem_shallow(&self, type_name: &str) -> Option<String> {
+        let inner = type_name.strip_prefix("Vec$")?;
+        if inner == "str" {
+            return None; // Already handled by __vais_vec_str_shallow_free
+        }
+        let inner_info = self.types.structs.get(inner)?;
+        if inner_info.has_owned_mask {
+            Some(inner.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Generate inline IR to iterate Vec elements and call __vais_struct_shallow_free_{inner}
+    /// on each element (Phase 191 #2c — nested container recursion).
+    fn generate_vec_elem_shallow_free_ir(
+        &mut self,
+        vec_ptr: &str,
+        vec_type: &str,
+        inner_name: &str,
+    ) -> String {
+        let mut ir = String::new();
+        let id = self.fn_ctx.label_counter;
+        self.fn_ctx.label_counter += 1;
+        let vec_ty = format!("%{}", vec_type);
+        let inner_ty = format!("%{}", inner_name);
+
+        let data_ptr = format!("%__ved_data_{}", id);
+        write_ir!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+            data_ptr, vec_ty, vec_ty, vec_ptr
+        );
+        let data_i = format!("%__ved_di_{}", id);
+        write_ir!(ir, "  {} = load i64, i64* {}", data_i, data_ptr);
+        let len_ptr = format!("%__ved_lp_{}", id);
+        write_ir!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+            len_ptr, vec_ty, vec_ty, vec_ptr
+        );
+        let len_v = format!("%__ved_len_{}", id);
+        write_ir!(ir, "  {} = load i64, i64* {}", len_v, len_ptr);
+        let es_ptr = format!("%__ved_esp_{}", id);
+        write_ir!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 3",
+            es_ptr, vec_ty, vec_ty, vec_ptr
+        );
+        let es_v = format!("%__ved_es_{}", id);
+        write_ir!(ir, "  {} = load i64, i64* {}", es_v, es_ptr);
+
+        let skip_cmp = format!("%__ved_skip_{}", id);
+        write_ir!(ir, "  {} = icmp sle i64 {}, 0", skip_cmp, len_v);
+        let lbl_init = format!("__ved_init_{}", id);
+        let lbl_head = format!("__ved_head_{}", id);
+        let lbl_body = format!("__ved_body_{}", id);
+        let lbl_cont = format!("__ved_cont_{}", id);
+        let lbl_exit = format!("__ved_exit_{}", id);
+        write_ir!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            skip_cmp, lbl_exit, lbl_init
+        );
+        write_ir!(ir, "{}:", lbl_init);
+        write_ir!(ir, "  br label %{}", lbl_head);
+        write_ir!(ir, "{}:", lbl_head);
+        let i_phi = format!("%__ved_i_{}", id);
+        write_ir!(
+            ir,
+            "  {} = phi i64 [ 0, %{} ], [ %__ved_inext_{}, %{} ]",
+            i_phi, lbl_init, id, lbl_cont
+        );
+        let done_cmp = format!("%__ved_done_{}", id);
+        write_ir!(ir, "  {} = icmp sge i64 {} , {}", done_cmp, i_phi, len_v);
+        write_ir!(
+            ir,
+            "  br i1 {}, label %{}, label %{}",
+            done_cmp, lbl_exit, lbl_body
+        );
+        write_ir!(ir, "{}:", lbl_body);
+        let offset = format!("%__ved_off_{}", id);
+        write_ir!(ir, "  {} = mul i64 {}, {}", offset, i_phi, es_v);
+        let elem_int = format!("%__ved_ei_{}", id);
+        write_ir!(ir, "  {} = add i64 {}, {}", elem_int, data_i, offset);
+        let elem_ptr = format!("%__ved_ep_{}", id);
+        write_ir!(
+            ir,
+            "  {} = inttoptr i64 {} to {}*",
+            elem_ptr, elem_int, inner_ty
+        );
+        write_ir!(
+            ir,
+            "  call void @__vais_struct_shallow_free_{}({}* {})",
+            inner_name, inner_ty, elem_ptr
+        );
+        write_ir!(ir, "  br label %{}", lbl_cont);
+        write_ir!(ir, "{}:", lbl_cont);
+        let i_next = format!("%__ved_inext_{}", id);
+        write_ir!(ir, "  {} = add i64 {}, 1", i_next, i_phi);
+        write_ir!(ir, "  br label %{}", lbl_head);
+        write_ir!(ir, "{}:", lbl_exit);
 
         ir
     }

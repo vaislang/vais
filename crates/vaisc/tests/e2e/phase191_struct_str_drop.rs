@@ -102,3 +102,59 @@ F main() -> i64 {
         0,
     );
 }
+
+/// (RFC-002 §6 test 5) Vec<struct{str}> nested container recursion.
+/// Outer Vec contains Person structs with heap-owned name fields.
+/// When Vec drops, each element's shallow-free is called to free the
+/// inner str buffers.
+#[test]
+fn e2e_phase191_nested_vec_struct_str() {
+    assert_exit_code(
+        r#"
+S Person {
+    name: str,
+    age: i64
+}
+
+S Vec<T> {
+    data: i64,
+    len: i64,
+    cap: i64,
+    elem_size: i64,
+    owned: i64
+}
+
+X Vec<T> {
+    F grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+        new_data := malloc(new_cap * self.elem_size)
+        memcpy(new_data, self.data, self.len * self.elem_size)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    F push(&self, value: T) -> i64 {
+        I self.len >= self.cap { @.grow() }
+        ptr := self.data + self.len * self.elem_size
+        store_typed(ptr, value)
+        self.len = self.len + 1
+        self.len
+    }
+
+    F drop(&self) -> i64 { free(self.data); self.data = 0; 0 }
+}
+
+F main() -> i64 {
+    v: Vec<Person> := Vec { data: 0, len: 0, cap: 0, elem_size: 32, owned: 0 }
+    v.push(Person { name: "hello-" + "world", age: 1 })
+    v.push(Person { name: "foo-" + "bar", age: 2 })
+    v.push(Person { name: "static-literal", age: 3 })
+    v.drop()
+    0
+}
+"#,
+        0,
+    );
+}
