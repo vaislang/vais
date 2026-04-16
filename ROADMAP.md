@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 21
+iteration: 23
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
   commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
@@ -29,6 +29,13 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-16 세션 8 iter 22 — #2b-D + #2c 완료. #2 parent tracker close.
+  commits: cf4bab8f (#2b-D), 4681c28a (#2c nested container + sizeof fix).
+  E2E: 2592/0/0 (baseline 2587 + 5 new). container-owned strings 전체 완료.
+  milestone: Phase 191 #2 parent tracker 종료. Vec<str> + struct{str} + Vec<struct{str}> 전부 처리.
+    sizeof fix (compute_sizeof에 ownership_mask 포함) 발견 + 수정.
+  **NEXT**: #3 (trait object str, RFC 필요) + #4 (closure str capture, RFC 필요).
+    두 작업 모두 design-heavy, pre-RFC 필수. 사용자 리뷰 권장.
 session_checkpoint: 2026-04-16 세션 8 iter 21 — #2b-D 완료. #2b parent tracker close.
   commits: cf4bab8f (#2b-D struct literal wrapping + 4 e2e).
   E2E: 2591/0/0 (baseline 2587 + 4 new). struct str 필드 ownership lifecycle 전체 활성화.
@@ -112,7 +119,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     delta 0KB → PASS. 46행 CSV(헤더+45 샘플) 정상 수집, 종료 시 바이너리 + 임시파일 정리.
   skipped: 실전 300s 구동은 사용자 CI에서 실행 권장. Rust 코드 변경 없음 → E2E 영향 0.
 
-- [ ] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — parent tracker
+- [x] 2. Container-owned strings: Vec<str> / 사용자 struct str 필드 (Opus direct) — parent tracker ✅ 2026-04-16
   note: 상위 tracker. 실행은 #2a(완료)/#2a-rfc(완료)/#2a'(완료)/#2b(tracker)/#2b-B/#2b-C/#2b-D/#2c로 분할.
     이 항목은 auto pickup 대상 아님. 모든 sub-task 완료 시 `- [x] 2`로 close.
   blockedBy: #2b-D, #2c.
@@ -666,7 +673,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   [복잡도]: 중간. hook 1개 + e2e 2~3개 + RFC 문구.
   blockedBy: #2b-C.
 
-- [ ] 2c. Nested container recursion (Vec<Vec<str>>, Vec<struct{str}>) (Opus direct)
+- [x] 2c. Nested container recursion (Vec<Vec<str>>, Vec<struct{str}>) (Opus direct) ✅ 2026-04-16
   [참조]: RFC-002 §5 Q3
   [대상 파일]: vtable.rs (모노모피제이션 recursion), drop_registry
   [완료 기준]: RFC-002 §6 test (5) nested_vec_of_struct_str. 외곽 Vec drop이 모든 내부 str 정리.
