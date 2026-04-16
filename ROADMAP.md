@@ -29,6 +29,19 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-16 세션 8 iter 23 — Phase 191 전 작업 완료.
+  commits: cf4bab8f (#2b-D), 4681c28a (#2c), a7a614df (#3), f29993d7 (#4).
+  E2E: phase191 25/0/0. 전체 검증 대기 중.
+  milestone: Phase 191 (문자열 소유권 모델 확장) 전체 완료.
+    #1 (RSS 자동화), #2 (container-owned strings + 모든 sub-tasks),
+    #3 (trait object str return), #4 (closure str capture),
+    #5~#10 (follow-ups) 모두 완료.
+  changes_summary:
+    #2b-D: struct literal ownership_mask bit-OR wrapping (generate_expr_struct.rs)
+    #2c: Vec<struct{str}> nested container recursion (stmt.rs + sizeof fix)
+    #3: vtable dispatch {i8*, i64} fat-pointer return (vtable.rs + trait_dispatch.rs)
+    #4: closure clone-on-capture for heap-owned str (expr_helpers_misc.rs)
+    RFCs: RFC-002-trait-object-string.md, RFC-003-closure-string-capture.md 작성
 session_checkpoint: 2026-04-16 세션 8 iter 22 — #2b-D + #2c 완료. #2 parent tracker close.
   commits: cf4bab8f (#2b-D), 4681c28a (#2c nested container + sizeof fix).
   E2E: 2592/0/0 (baseline 2587 + 5 new). container-owned strings 전체 완료.
@@ -155,7 +168,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     - RFC-001 §8에서 이 항목 check 처리
   [복잡도]: 높음 — RFC 설계 결정(§4.4 수준) 필요. 사전 RFC 초안 권장.
 
-- [ ] 3. Trait object str 반환 (Opus direct)
+- [x] 3. Trait object str 반환 (Opus direct) ✅ 2026-04-16
   [목표]: `dyn Trait` 메서드가 str을 반환할 때 소유권 규약 정립 + 구현.
   [현재 상태]: RFC-001 §5.3에서 "out of scope"로 명시, 현재 호출 시 동작 불확정.
   [대상 파일]:
@@ -171,7 +184,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     - E2E baseline 유지
   [복잡도]: 중~높음 — trait 시스템과 얽힘. pre-RFC 필수.
 
-- [ ] 4. 클로저 캡처된 str 소유권 (Opus direct)
+- [x] 4. 클로저 캡처된 str 소유권 (Opus direct) ✅ 2026-04-16
   [목표]: `||` 클로저가 str을 캡처할 때 소유권/수명 규약 + UAF 방지.
   [현재 상태]: RFC-001 §7에서 "closures + long-running concat 안전 문제" 명시, 현재 alias-by-copy로 UAF 잠재 위험.
   [대상 파일]:
