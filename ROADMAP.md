@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
 
 mode: auto
-iteration: 20
+iteration: 21
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
   commits: b61f6e7a (#10), 7561b3dc (#2a'), c57943e1 (#9).
@@ -29,6 +29,14 @@ session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
     #3 — Trait object str 반환. RFC-002-trait-object-string.md 작성 필요.
     #4 — 클로저 캡처된 str. RFC-003-closure-string-capture.md 작성 필요.
   재개 권장: fresh session에서 #2b 착수 또는 RFC 작업 #3/#4 시작.
+session_checkpoint: 2026-04-16 세션 8 iter 21 — #2b-D 완료. #2b parent tracker close.
+  commits: cf4bab8f (#2b-D struct literal wrapping + 4 e2e).
+  E2E: 2591/0/0 (baseline 2587 + 4 new). struct str 필드 ownership lifecycle 전체 활성화.
+  변경 규모: 3 files, +45 lines (generate_expr_struct.rs hook + 4 e2e tests + main.rs mod).
+  milestone: #2b 4-iter chain (A→B→C→D) 전부 완료. struct shallow-drop 인프라 완성.
+    Iter B (layout) + Iter C (helper emission + splice) + Iter D (wrapping) 통합.
+  **NEXT**: #2c (nested container recursion) 또는 #3/#4 (RFC 필요 — fresh session 권장).
+  재개 권장: fresh session에서 #2c (blockedBy: #2b-D 해제됨).
 session_checkpoint: 2026-04-16 세션 7 iter 20 — #2b Iter C 완료.
   commits: f086cb14 (#2b-C shallow-drop + LocalVar.is_double_ptr).
   E2E: 2587/0/0 baseline 유지. shallow-free helper 호출이 mask=0 상태에서 no-op.
@@ -348,7 +356,7 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
     4. pending_return_skip_container 추가 (return transfer).
     5. e2e tests (§6 cases 1, 2, 6).
 
-- [ ] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct, tracker)
+- [x] 2b. struct shallow-drop + ownership_mask + user-Drop sequencing (Opus direct, tracker) ✅ 2026-04-16
   status: Iter A 완료 (survey + design plan, 세션 5 iter 18 commit bd087e58).
     남은 작업은 #2b-B/#2b-C/#2b-D 3개 독립 sub-task로 분할 — 각 fresh session 1개씩.
     이 항목은 auto pickup 대상 아님 (blockedBy로 gating). 모두 완료 시 `- [x] 2b` close.
@@ -597,7 +605,32 @@ session_checkpoint: 2026-04-14 세션 3 — #2a-rfc + RFC §9.8 진단 완료.
   [복잡도]: 높음. shallow-drop sequencing + helper lifecycle + user-drop-없는 경로 분기.
   blockedBy: #2b-B.
 
-- [ ] 2b-D. #2b Iter D — struct literal wrapping + E2E RFC-002 §6 (3)(4) (Opus direct)
+- [x] 2b-D. #2b Iter D — struct literal wrapping + E2E RFC-002 §6 (3)(4) (Opus direct) ✅ 2026-04-16
+  strategy: sequential → Opus direct. opus_direct: ownership_mask bit-OR + string_value_slot
+    transfer + scope_str_stack cleanup 일체형 — 설계-구현 inseparable.
+  session_iter: 21 (auto).
+  changes:
+    crates/vais-codegen/src/generate_expr_struct.rs:
+      struct literal 필드 저장 후 ownership transfer hook 추가 (+41 lines).
+      effective_has_owned_mask && Str 필드 && string_value_slot 보유 시:
+        (a) ownership_mask GEP → load → OR (1 << field_idx) → store
+        (b) alloc slot null store (Phase 191 #5 패턴)
+        (c) scope_str_stack top frame에서 slot 제거
+      literal/borrowed str은 no-op (bit 0 유지).
+    crates/vaisc/tests/e2e/phase191_struct_str_drop.rs (신규, 4 tests):
+      e2e_phase191_struct_str_field_drop — concat → struct field → scope drop → free.
+      e2e_phase191_struct_user_drop — user Drop + shallow-drop sequencing.
+      e2e_phase191_struct_literal_str_no_free — literal str → bitmap 0, free 호출 없음.
+      e2e_phase191_struct_str_loop_no_leak — 1000회 루프 stress test.
+    crates/vaisc/tests/e2e/main.rs: 모듈 등록.
+  verify:
+    cargo clippy --workspace --exclude vais-python --exclude vais-node: 0 warnings.
+    cargo test -p vais-codegen --lib types::tests: 73/0 passed.
+    cargo test -p vaisc --test e2e phase191: 20/0 passed (baseline 16 + 4 new).
+    cargo test -p vaisc --test e2e: 2591/0/0 passed (baseline 2587 + 4 new, 684s).
+  infrastructure_activated: Iter B (layout) + Iter C (shallow-drop helpers + splice) +
+    Iter D (wrapping)가 완성되어 struct str 필드의 전체 ownership lifecycle 동작.
+    mask=0 → mask bit-OR 활성화로 shallow-free가 실제 free 수행.
   [상속]: #2b-C 완료 (shallow-drop helpers + splice wired, dormant).
   [sub-steps]:
     1. crates/vais-codegen/src/generate_expr_struct.rs:106-107 hook — val (field rvalue)
