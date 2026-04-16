@@ -128,6 +128,7 @@ impl CodeGenerator {
         write_ir!(ir, "  store i8* null, i8** {}", slot);
         write_ir!(ir, "  br label %{}", after);
         write_ir!(ir, "{}:", after);
+        self.fn_ctx.current_block = after;
     }
 
     /// Generate LLVM IR for string binary operations (+, ==, !=, <, >)

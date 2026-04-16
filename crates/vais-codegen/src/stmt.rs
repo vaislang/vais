@@ -780,6 +780,7 @@ impl CodeGenerator {
             write_ir!(ir, "  store i8* null, i8** {}", slot_name);
             write_ir!(ir, "  br label %{}", after);
             write_ir!(ir, "{}:", after);
+            self.fn_ctx.current_block = after;
 
             // Remove from string_value_slot so the transferred-slot lookup at
             // outer-scope exit can't match a slot that has already been freed.
@@ -1003,6 +1004,7 @@ impl CodeGenerator {
             write_ir!(ir, "  store i8* null, i8** {}", slot_name);
             write_ir!(ir, "  br label %{}", after);
             write_ir!(ir, "{}:", after);
+            self.fn_ctx.current_block.clone_from(&after);
         }
         // skip_slots was already taken via mem::take above, so no reset needed.
         ir

@@ -134,6 +134,7 @@ impl CodeGenerator {
         self.fn_ctx.future_poll_fns.clear();
         self.fn_ctx.scope_stack.clear();
         self.fn_ctx.entry_allocas.clear();
+        self.clear_alloc_tracker();
 
         write_ir!(ir, "; Poll function for async {}", func_name);
         write_ir!(
