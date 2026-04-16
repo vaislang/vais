@@ -222,10 +222,10 @@ impl CodeGenerator {
                     }
                 } else {
                     // ByValue/Move: load and pass the value
-                    if local.is_param() {
-                        captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
+                    let val = if local.is_param() {
+                        format!("%{}", local.llvm_name)
                     } else if local.is_ssa() {
-                        captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
+                        local.llvm_name.clone()
                     } else {
                         let tmp = self.next_temp(counter);
                         let llvm_ty = self.type_to_llvm(&ty);
@@ -237,8 +237,75 @@ impl CodeGenerator {
                             llvm_ty,
                             local.llvm_name
                         );
-                        captured_vars.push((cap_name.clone(), ty, tmp));
-                    }
+                        tmp
+                    };
+
+                    // Phase 191 #4: clone heap-owned str on capture to prevent UAF.
+                    // If the captured value is a tracked heap str, the outer scope
+                    // will free the buffer at exit. Clone so the closure has an
+                    // independent copy. Literal strs (null slot) are safe as-is.
+                    let val = if matches!(ty, ResolvedType::Str) {
+                        let is_heap = self.fn_ctx.var_string_slot.contains_key(cap_name)
+                            || self.fn_ctx.string_value_slot.contains_key(&val);
+                        if is_heap {
+                            self.needs_string_helpers = true;
+                            self.needs_llvm_memcpy = true;
+                            let id = self.fn_ctx.label_counter;
+                            self.fn_ctx.label_counter += 1;
+                            let ptr = format!("%__cap_ptr_{}", id);
+                            write_ir!(
+                                capture_ir,
+                                "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                                ptr,
+                                val
+                            );
+                            let len = format!("%__cap_len_{}", id);
+                            write_ir!(
+                                capture_ir,
+                                "  {} = extractvalue {{ i8*, i64 }} {}, 1",
+                                len,
+                                val
+                            );
+                            let alloc_sz = format!("%__cap_sz_{}", id);
+                            write_ir!(capture_ir, "  {} = add i64 {}, 1", alloc_sz, len);
+                            let new_buf = format!("%__cap_buf_{}", id);
+                            write_ir!(
+                                capture_ir,
+                                "  {} = call i8* @malloc(i64 {})",
+                                new_buf,
+                                alloc_sz
+                            );
+                            write_ir!(
+                                capture_ir,
+                                "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
+                                new_buf,
+                                ptr,
+                                alloc_sz
+                            );
+                            let fat0 = format!("%__cap_fat0_{}", id);
+                            write_ir!(
+                                capture_ir,
+                                "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                                fat0,
+                                new_buf
+                            );
+                            let fat1 = format!("%__cap_fat1_{}", id);
+                            write_ir!(
+                                capture_ir,
+                                "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                                fat1,
+                                fat0,
+                                len
+                            );
+                            fat1
+                        } else {
+                            val
+                        }
+                    } else {
+                        val
+                    };
+
+                    captured_vars.push((cap_name.clone(), ty, val));
                 }
             }
         }
