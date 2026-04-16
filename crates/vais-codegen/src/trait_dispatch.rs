@@ -233,11 +233,7 @@ impl CodeGenerator {
             ))
         })?;
 
-        let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
-            "void"
-        } else {
-            "i64" // Simplified
-        };
+        let ret_type = super::vtable::vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
         Ok(self.vtable_generator.generate_dynamic_call(
             trait_object,

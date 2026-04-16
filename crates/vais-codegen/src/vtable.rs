@@ -24,6 +24,18 @@ use vais_types::{ResolvedType, TraitDef};
 /// LLVM IR type for trait object (fat pointer)
 pub const TRAIT_OBJECT_TYPE: &str = "{ i8*, i8* }";
 
+pub(crate) fn vtable_ret_type(ret: &ResolvedType, is_async: bool) -> &'static str {
+    if is_async {
+        "i64"
+    } else {
+        match ret {
+            ResolvedType::Unit => "void",
+            ResolvedType::Str => "{ i8*, i64 }",
+            _ => "i64",
+        }
+    }
+}
+
 /// Information about a vtable for a specific type implementing a trait
 #[derive(Debug, Clone)]
 pub struct VtableInfo {
@@ -182,14 +194,7 @@ done:
                 param_types.push("i64".to_string()); // Simplified: all args as i64
             }
 
-            // For async methods, return type is always i64 (Future handle)
-            let ret_type = if method_sig.is_async {
-                "i64" // Async methods return a Future handle (i64 pointer to state)
-            } else if matches!(method_sig.ret, ResolvedType::Unit) {
-                "void"
-            } else {
-                "i64" // Simplified: all returns as i64
-            };
+            let ret_type = vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
             let fn_type = format!("{}({})*", ret_type, param_types.join(", "));
             fields.push(fn_type);
@@ -230,13 +235,7 @@ done:
                     for _ in &method_sig.params[1..] {
                         vtable_param_types.push("i64".to_string());
                     }
-                    let ret_type = if method_sig.is_async {
-                        "i64"
-                    } else if matches!(method_sig.ret, ResolvedType::Unit) {
-                        "void"
-                    } else {
-                        "i64"
-                    };
+                    let ret_type = vtable_ret_type(&method_sig.ret, method_sig.is_async);
 
                     // Build concrete function type (uses %Type* for self)
                     let mut concrete_param_types = vec![format!("%{}*", info.impl_type)];
