@@ -33,7 +33,6 @@
 - [生命周期 & 借用检查](../language/lifetimes.md)
 - [异步编程](../language/async-tutorial.md)
 - [闭包 & Lambda](../language/closures.md)
-- [惰性求值（Lazy/Force）](../language/lazy-evaluation.md)
 - [编译时功能](../language/comptime-feature.md)
 
 # 标准库

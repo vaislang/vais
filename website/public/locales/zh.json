@@ -13,7 +13,7 @@
     "blog": "博客"
   },
   "hero": {
-    "badge": "v0.0.5 — 生产就绪",
+    "badge": "v0.1.0 — 生产就绪",
     "title": "编写<span class=\"gradient-text\">更少的令牌</span>，<br>获得<span class=\"gradient-text\">原生性能</span>",
     "subtitle": "Vais（Vibe AI Language for Systems）是为 AI 代码生成优化的系统编程语言。单字符关键字、表达式导向语法和 LLVM 驱动的原生速度。",
     "tryBrowser": "在浏览器中试用",
@@ -71,7 +71,7 @@
     },
     "selfHosting": {
       "title": "自托管编译器",
-      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 900 个 E2E 测试和总共 5,300 多个测试支持。"
+      "description": "Vais 可以编译自己。自托管编译器通过 50,000 多行 Vais 实现引导，由 2,592 个 E2E 测试和总共 12,000 多个测试支持。"
     }
   },
   "playground": {

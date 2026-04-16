@@ -39,8 +39,8 @@
 Vais is built from the ground up to excel in AI-assisted development:
 
 - **Token Efficiency**: Single-character keywords minimize token usage in LLM context windows
-- **Self-Hosting**: 50,000+ LOC bootstrap compiler written in Vais itself
-- **Production-Ready**: 2,500+ tests across 28+ crates, 655 E2E tests
+- **Self-Hosting**: Self-hosting compiler (bootstrap achieved) — v0.9.0, 51,190 LOC, 58 .vais files
+- **Production-Ready**: 12,000+ tests across all crates, 2,592 E2E tests
 - **Rich Ecosystem**: 74 standard library modules, 9 official packages
 - **Fast Iteration**: JIT compiler, REPL, hot reloading, incremental compilation
 
@@ -66,7 +66,7 @@ crates/
 └── vais-playground-server/  # Web playground backend
 
 std/               # Standard library (80 modules)
-selfhost/          # Self-hosting compiler (50,000+ LOC)
+selfhost/          # Self-hosting compiler (51,190 LOC, 58 .vais files)
 vscode-vais/       # VSCode extension
 intellij-vais/     # IntelliJ plugin
 docs-site/         # mdBook documentation
@@ -173,7 +173,7 @@ F compute() -> Result<i64, str> {
 | Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
 | **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
 
-**Self-Hosting Bootstrap:** 50,000+ LOC compiles to LLVM IR with 21/21 clang success (100%)
+**Self-Hosting:** Self-hosting compiler (bootstrap achieved) — v0.9.0, 51,190 LOC, 58 .vais files compile to native with full test coverage.
 
 ### Runtime Performance
 

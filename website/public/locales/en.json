@@ -13,7 +13,7 @@
     "blog": "Blog"
   },
   "hero": {
-    "badge": "v0.0.5 — Production Ready",
+    "badge": "v0.1.0 — Production Ready",
     "title": "Write <span class=\"gradient-text\">fewer tokens</span>,<br>get <span class=\"gradient-text\">native performance</span>",
     "subtitle": "Vais (Vibe AI Language for Systems) is a systems programming language optimized for AI code generation. Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.",
     "tryBrowser": "Try in Browser",
@@ -71,7 +71,7 @@
     },
     "selfHosting": {
       "title": "Self-Hosting Compiler",
-      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 900 E2E tests and 5,300+ total tests."
+      "description": "Vais can compile itself. The self-hosting compiler achieves bootstrap with 50,000+ lines of Vais, backed by 2,592 E2E tests and 12,000+ total tests."
     }
   },
   "playground": {

@@ -62,7 +62,6 @@
 - [Lifetimes & Borrow Checking](./language/lifetimes.md)
 - [비동기 프로그래밍](./language/async-tutorial.md)
 - [클로저 & 람다](./language/closures.md)
-- [지연 평가 (Lazy/Force)](./language/lazy-evaluation.md)
 - [Defer 문](./language/defer-statement.md)
 - [전역 변수](./language/globals.md)
 - [Union 타입](./language/union-types.md)

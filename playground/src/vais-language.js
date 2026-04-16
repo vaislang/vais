@@ -9,13 +9,16 @@ export function registerVaisLanguage(monaco) {
     tokenPostfix: '.vais',
 
     keywords: [
-      'F', 'S', 'E', 'I', 'L', 'M', 'T', 'U', 'R', 'C', 'O', 'A', 'Y',
-      'B', 'W', 'X', 'P', 'D', 'N', 'G',
-      'break', 'continue', 'return', 'true', 'false',
-      'async', 'await', 'pub', 'mut', 'const', 'static',
-      'where', 'self', 'Self', 'super',
-      'extern', 'type',
-      'as', 'lazy', 'force'
+      'F', 'S', 'E', 'I', 'L', 'M', 'R',
+      'B', 'C', 'T', 'U', 'W', 'X', 'P',
+      'D', 'A', 'Y', 'N', 'G', 'O',
+      'true', 'false', 'null', 'mut', 'self',
+      'async', 'await', 'spawn', 'yield',
+      'pub', 'impl', 'trait', 'struct', 'enum',
+      'fn', 'let', 'const', 'type', 'use',
+      'if', 'else', 'match', 'for', 'while', 'loop',
+      'break', 'continue', 'return', 'defer',
+      'where', 'as', 'in'
     ],
 
     typeKeywords: [

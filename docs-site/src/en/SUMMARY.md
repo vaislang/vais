@@ -33,7 +33,6 @@
 - [Lifetimes & Borrow Checking](../language/lifetimes.md)
 - [Async Programming](../language/async-tutorial.md)
 - [Closures & Lambdas](../language/closures.md)
-- [Lazy Evaluation (Lazy/Force)](../language/lazy-evaluation.md)
 - [Compile-Time Features](../language/comptime-feature.md)
 
 # Standard Library

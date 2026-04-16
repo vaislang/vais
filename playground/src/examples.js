@@ -623,29 +623,6 @@ F main() -> i64 {
 }`
   },
 
-  'lazy-evaluation': {
-    name: 'Lazy Evaluation (compile only)',
-    description: 'Deferred computation with lazy/force (codegen in progress)',
-    code: `# Lazy evaluation with caching
-F expensive(n: i64) -> i64 {
-    # Simulate heavy computation
-    n * n + n * 2 + 1
-}
-
-F main() -> i64 {
-    # Defer evaluation
-    val := lazy expensive(10)
-
-    # Force evaluates and caches result
-    result := force val      # 121
-
-    # Second force returns cached value
-    result2 := force val     # 121 (cached)
-
-    result
-}`
-  },
-
   'result-option': {
     name: 'Result Type',
     description: 'Error handling with Result type and pattern matching',
