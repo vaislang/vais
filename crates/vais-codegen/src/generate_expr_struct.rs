@@ -130,6 +130,8 @@ impl CodeGenerator {
                 let (val, field_ir) = self.generate_expr(field_expr, counter)?;
                 ir.push_str(&field_ir);
 
+                let rvalue_key = val.clone();
+
                 let field_ptr = self.next_temp(counter);
                 write_ir!(
                     ir,
@@ -190,6 +192,45 @@ impl CodeGenerator {
                     llvm_ty,
                     field_ptr
                 );
+
+                // Phase 191 #2b-D: ownership transfer for heap-owned str fields.
+                // When a struct literal field is Str and the rvalue is a tracked
+                // concat intermediate (present in string_value_slot), transfer
+                // ownership to the struct's __ownership_mask bitmap.
+                if effective_has_owned_mask && matches!(field_ty, ResolvedType::Str) {
+                    if let Some(slot) = self.fn_ctx.string_value_slot.remove(&rvalue_key) {
+                        // (a) OR (1 << field_idx) into ownership_mask
+                        let mask_ptr_r = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                            mask_ptr_r,
+                            effective_type_name,
+                            effective_type_name,
+                            struct_ptr,
+                            effective_fields.len()
+                        );
+                        let old_mask = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, i64* {}", old_mask, mask_ptr_r);
+                        let new_mask = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = or i64 {}, {}",
+                            new_mask,
+                            old_mask,
+                            1u64 << field_idx
+                        );
+                        write_ir!(ir, "  store i64 {}, i64* {}", new_mask, mask_ptr_r);
+
+                        // (b) null out the alloc slot so scope/function cleanup skips it
+                        write_ir!(ir, "  store i8* null, i8** {}", slot);
+
+                        // (c) remove from scope_str_stack top frame
+                        if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                            frame.retain(|s| s != &slot);
+                        }
+                    }
+                }
             }
 
             // Return pointer to struct
