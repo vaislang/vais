@@ -23,7 +23,7 @@ F main() -> i64 {
     # sum ages
     total := mut 0
     LF i:0..n {
-        opt := v.get(i)
+        opt := v.get_opt(i)
         M opt {
             Some(p) => { total = total + p.age },
             None    => {}

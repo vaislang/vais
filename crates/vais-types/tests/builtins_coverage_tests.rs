@@ -320,9 +320,12 @@ fn test_builtin_atan2() {
 
 #[test]
 fn test_builtin_exit() {
+    // `exit` is divergent (never returns). A future pass should model it
+    // as `!` so callers can stay `total`; until then mark the caller
+    // `partial` explicitly to exercise the exit() signature path.
     check_ok(
         r#"
-        F test() -> i64 {
+        partial F test() -> i64 {
             exit(0)
             R 0
         }
