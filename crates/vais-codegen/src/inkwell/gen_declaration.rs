@@ -248,14 +248,39 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             return Ok(*existing);
         }
 
-        // Union is represented as a struct with a single byte array field
-        // sized to the largest variant
-        let union_type = self
-            .context
-            .struct_type(&[self.context.i64_type().into()], false);
+        // For codegen purposes a Vais union is modeled as a single-cell struct
+        // wide enough to hold the largest variant. We pick i64 — all scalar
+        // types and pointers fit, and f64 is bit-compatible at the same width.
+        // Field-name → index mapping is populated so the struct-constructor
+        // path (`UnionName { field: value }`) and field-access path can reuse
+        // the same lookup machinery as user structs. The *first* declared
+        // field dictates the wire representation; others are kept for name
+        // resolution only.
+        let union_type = self.context.opaque_struct_type(union_name);
+        union_type.set_body(&[self.context.i64_type().into()], false);
 
+        // Mirror struct registration so struct-constructor and field-access
+        // codegen can locate the union by name.
         self.generated_structs
             .insert(union_name.clone(), union_type);
+
+        let field_names: Vec<String> = u.fields.iter().map(|f| f.name.node.clone()).collect();
+        let field_type_names: Vec<(String, String)> = u
+            .fields
+            .iter()
+            .map(|f| {
+                let type_name = match &f.ty.node {
+                    ast::Type::Named { name, .. } => name.clone(),
+                    _ => String::from("unknown"),
+                };
+                (f.name.node.clone(), type_name)
+            })
+            .collect();
+        self.struct_fields
+            .insert(union_name.clone(), field_names);
+        self.struct_field_type_names
+            .insert(union_name.clone(), field_type_names);
+        self.type_mapper.register_struct(union_name, union_type);
 
         Ok(union_type)
     }

@@ -1,6 +1,8 @@
 # Compression Library Example
 # Demonstrates gzip and deflate compression/decompression
 
+U std/compress
+
 F main() -> i64 {
     __println("=== Vais Compression Library Demo ===\n")
 
@@ -96,7 +98,7 @@ F main() -> i64 {
 
     # Test 4: Different compression levels
     __println("\n--- Test 4: Compression Levels ---")
-    test_data := "Test data for compression levels. " * 10
+    test_data := "Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. Test data for compression levels. "
 
     fast_comp := Compressor::gzip(COMPRESS_LEVEL_FAST)
     fast_result := fast_comp.compress(test_data as i64, __strlen(test_data))
