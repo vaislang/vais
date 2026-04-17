@@ -3,9 +3,10 @@ use vais_parser::parse;
 
 #[test]
 fn test_alloc_tracker_string_concat() {
-    // Verify that track_alloc registers allocations and returns store IR.
-    // generate_alloc_cleanup is currently disabled (returns empty) to avoid
-    // use-after-free — so we only test the tracking + store IR path.
+    // Verify that track_alloc registers allocations and emits store IR and
+    // that generate_alloc_cleanup emits a matching null-guarded free for
+    // each tracked slot. Phase 190.5/191 re-enabled scope-drop emission
+    // against the Phase 186-era assumption that cleanup stays empty.
     let mut gen = CodeGenerator::new("test");
     let store_ir1 = gen.track_alloc("%ptr1".to_string());
     let store_ir2 = gen.track_alloc("%ptr2".to_string());
@@ -20,11 +21,18 @@ fn test_alloc_tracker_string_concat() {
         store_ir2
     );
     assert_eq!(gen.fn_ctx.alloc_tracker.len(), 2);
-    // Cleanup is disabled — should return empty
+    // Cleanup emits the null-guarded free sequence (load → icmp null →
+    // br → call free → store null) once per tracked allocation.
     let cleanup_ir = gen.generate_alloc_cleanup();
     assert!(
-        cleanup_ir.is_empty(),
-        "Expected empty cleanup (disabled), got: {}",
+        cleanup_ir.contains("call void @free"),
+        "Expected `call void @free` in cleanup IR, got: {}",
+        cleanup_ir
+    );
+    assert_eq!(
+        cleanup_ir.matches("call void @free").count(),
+        2,
+        "Expected two free calls (one per tracked slot), got: {}",
         cleanup_ir
     );
 }
