@@ -63,10 +63,6 @@ const SKIP_LIST: &[&str] = &[
     // Type-error regression fixture: file intentionally triggers E001 to
     // exercise the type checker's range-type-mismatch diagnostic.
     "range_type_error_test.vais",
-    // Deferred to Phase 196: downstream inkwell ICE in string-concat fat-ptr
-    // codegen (insertvalue IntValue expected, got StructValue). Not caused by
-    // the tutorial content; exposed after P195-3 byte-op migration.
-    "tutorial_wc.vais",
     // Deferred to Phase 196: enum multi-field tuple variant pattern binding
     // loses every field after the first when the scrutinee arrives via a
     // function parameter. Minimal repro:

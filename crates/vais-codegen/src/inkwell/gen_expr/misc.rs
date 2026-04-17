@@ -192,6 +192,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(result.into())
+        } else if val.is_struct_value() && target_type.is_int_type() {
+            // str fat ptr { ptr, i64 } -> i64
+            // Extract the raw data pointer (field 0) and ptrtoint it. Examples
+            // like `load_byte(text as i64 + i)` rely on getting the underlying
+            // address, not the struct bits.
+            let raw_ptr = self.extract_str_raw_ptr(val)?;
+            let result = self
+                .builder
+                .build_ptr_to_int(raw_ptr, target_type.into_int_type(), "cast_strtoi")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(result.into())
         } else {
             // Same type or unsupported cast - return as-is
             Ok(val)
