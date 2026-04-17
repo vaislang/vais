@@ -40,7 +40,7 @@ X Stats {
 F store_i64(buf: i64, offset: i64, value: i64) {
     LF i:0..8 {
         byte := (value >> (i * 8)) & 255
-        store_byte(buf + offset, i, byte)
+        store_byte(buf + offset + i, byte)
     }
 }
 
@@ -48,7 +48,7 @@ F store_i64(buf: i64, offset: i64, value: i64) {
 F load_i64_at(buf: i64, offset: i64) -> i64 {
     result := mut 0
     LF i:0..8 {
-        byte := load_byte(buf + offset, i)
+        byte := load_byte(buf + offset + i)
         result = result | (byte << (i * 8))
     }
     result

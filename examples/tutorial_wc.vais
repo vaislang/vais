@@ -36,13 +36,13 @@ F is_whitespace(b: i64) -> i64 {
 F count_lines(text: str, len: i64) -> i64 {
     count := mut 0
     LF i:0..len {
-        byte := load_byte(text, i)
+        byte := load_byte(text as i64 + i)
         I byte == 10 {
             count = count + 1
         }
     }
     I len > 0 {
-        last := load_byte(text, len - 1)
+        last := load_byte(text as i64 + (len - 1))
         I last != 10 {
             count = count + 1
         }
@@ -55,7 +55,7 @@ F count_words(text: str, len: i64) -> i64 {
     in_word := mut 0
 
     LF i:0..len {
-        byte := load_byte(text, i)
+        byte := load_byte(text as i64 + i)
         I is_whitespace(byte) == 1 {
             I in_word == 1 {
                 count = count + 1
