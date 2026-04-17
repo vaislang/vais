@@ -8,11 +8,71 @@ use std::collections::HashMap;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 
-use vais_ast::{Expr, Type};
-use vais_types::ResolvedType;
+use vais_ast::{ConstExpr, Expr, Type};
+use vais_types::{ResolvedConst, ResolvedType};
 
 use super::generator::InkwellCodeGenerator;
 use crate::CodegenResult;
+
+/// Convert an AST `ConstExpr` (used in `[T; N]` sizes etc.) into the
+/// codegen-facing `ResolvedConst`. Literal / negate / binop are lowered to
+/// their concrete integer value when possible; symbolic parameters are kept
+/// as `Param` (unresolved const generics aren't supported downstream yet, but
+/// the value stays visible for display/errors).
+fn convert_const_expr(expr: &ConstExpr) -> ResolvedConst {
+    match expr {
+        ConstExpr::Literal(n) => ResolvedConst::Value(*n),
+        ConstExpr::Param(name) => ResolvedConst::Param(name.clone()),
+        ConstExpr::Negate(inner) => {
+            if let ResolvedConst::Value(n) = convert_const_expr(inner) {
+                ResolvedConst::Value(-n)
+            } else {
+                ResolvedConst::Negate(Box::new(convert_const_expr(inner)))
+            }
+        }
+        ConstExpr::BinOp { op, left, right } => {
+            let l = convert_const_expr(left);
+            let r = convert_const_expr(right);
+            if let (ResolvedConst::Value(lv), ResolvedConst::Value(rv)) = (&l, &r) {
+                use vais_ast::ConstBinOp;
+                let v = match op {
+                    ConstBinOp::Add => lv + rv,
+                    ConstBinOp::Sub => lv - rv,
+                    ConstBinOp::Mul => lv * rv,
+                    ConstBinOp::Div if *rv != 0 => lv / rv,
+                    _ => return ResolvedConst::BinOp {
+                        op: convert_const_binop(op),
+                        left: Box::new(l),
+                        right: Box::new(r),
+                    },
+                };
+                return ResolvedConst::Value(v);
+            }
+            ResolvedConst::BinOp {
+                op: convert_const_binop(op),
+                left: Box::new(l),
+                right: Box::new(r),
+            }
+        }
+    }
+}
+
+fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
+    use vais_ast::ConstBinOp as A;
+    use vais_types::ConstBinOp as R;
+    match op {
+        A::Add => R::Add,
+        A::Sub => R::Sub,
+        A::Mul => R::Mul,
+        A::Div => R::Div,
+        A::Mod => R::Mod,
+        A::BitAnd => R::BitAnd,
+        A::BitOr => R::BitOr,
+        A::BitXor => R::BitXor,
+        A::Shl => R::Shl,
+        A::Shr => R::Shr,
+    }
+}
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
@@ -69,6 +129,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::ConstArray { element, size } => {
+                // Resolve the element type and preserve the declared size so
+                // downstream codegen can emit `[N x T]` LLVM arrays for
+                // fixed-size globals / locals instead of decaying to i64.
+                let resolved_elem = self.ast_type_to_resolved(&element.node);
+                let resolved_size = convert_const_expr(size);
+                ResolvedType::ConstArray {
+                    element: Box::new(resolved_elem),
+                    size: resolved_size,
+                }
             }
             Type::Tuple(elems) => {
                 let elem_types: Vec<ResolvedType> = elems

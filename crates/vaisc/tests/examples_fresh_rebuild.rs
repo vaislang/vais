@@ -51,17 +51,7 @@ use std::process::Command;
 /// `examples/intentional_errors/` instead — those subdirectories are skipped
 /// wholesale by the discovery loop below and do not need individual entries
 /// here.
-const SKIP_LIST: &[&str] = &[
-    // Phase 196 P196-C1: the `LW expr { body }` loop expects the scrutinee to
-    // have type Optional/Result, but several reactor-style examples use it on
-    // an `()`-valued comparison. Deferred until the type checker grows a
-    // `while (bool)` admission rule for LW.
-    "async_reactor_test.vais",
-    // Phase 196 P196-C1: `[i64; 100]` fixed-size arrays are not treated as
-    // indexable by the type checker, so `todo_ids[idx] = v` reports E001.
-    // Global-array codegen works; the type-level admission rule is missing.
-    "wasm_todo_app.vais",
-];
+const SKIP_LIST: &[&str] = &[];
 
 /// Invoke `vaisc build FILE --emit-ir --no-cache` and return Ok(()) on success
 /// or Err(truncated_stderr) on failure.

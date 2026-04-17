@@ -331,6 +331,22 @@ impl TypeChecker {
                             Some(Ok(*elem_type))
                         }
                     }
+                    // Fixed-size array `[T; N]` (ConstArray) is indexable
+                    // — decays to T at the index expression. Bounds-checking
+                    // is codegen/runtime territory, not the type checker.
+                    ResolvedType::ConstArray { element, size: _ } => {
+                        if is_slice {
+                            Some(Ok(ResolvedType::Slice(element)))
+                        } else if !index_type.is_integer() {
+                            Some(Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: Some(index.span),
+                            }))
+                        } else {
+                            Some(Ok(*element))
+                        }
+                    }
                     // Vec<T> is indexable — vec[idx] returns T
                     ResolvedType::Named {
                         ref name,
