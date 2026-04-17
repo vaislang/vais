@@ -63,25 +63,12 @@ const SKIP_LIST: &[&str] = &[
     // Type-error regression fixture: file intentionally triggers E001 to
     // exercise the type checker's range-type-mismatch diagnostic.
     "range_type_error_test.vais",
-    // Deferred to Phase 196: enum multi-field tuple variant pattern binding
-    // loses every field after the first when the scrutinee arrives via a
-    // function parameter. Minimal repro:
-    //   EN Op { Add(i64, i64) } F eval(op: Op) -> i64 { M op { Add(a,b) => b }}
-    // Inline match scrutinees work; the parameter path misses
-    // enum_variant_multi_payload_types and hits the "Payload layout unknown"
-    // fallback that only binds the first field.
-    "calculator_enum.vais",
     // Deferred to Phase 196: SIMD intrinsic codegen emits LLVM IR that fails
     // the verifier with "Aggregate extract index out of range". Likely the
     // vector-extract helpers use a hard-coded index that doesn't match the
     // resolved vector width for the specialized type.
     "simd_test.vais",
     "simd_distance.vais",
-    // Deferred to Phase 196: f64 local values flow into the integer load
-    // path and the inkwell BasicValueEnum::into_float_value assertion trips
-    // ("Found IntValue but expected FloatValue"). Mixed int/float local
-    // inference needs a dedicated pass.
-    "js_target.vais",
     // Deferred to Phase 196: the example imports `U std/test_simple`, which
     // does not exist in std/. Either the example predates a stdlib split or
     // test_simple was renamed; needs a decision on whether to provide the

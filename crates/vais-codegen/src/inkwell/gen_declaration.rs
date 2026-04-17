@@ -205,6 +205,24 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             ll_ty,
                         );
                     }
+                } else if types.len() > 1 {
+                    // Multi-field tuple variant (e.g., Rect(f64, f64)): build an
+                    // anonymous struct type that packs all field types and record
+                    // it up-front. The constructor path (generate_call) also
+                    // registers this, but registering here too means pattern
+                    // bindings in code compiled before any construction call
+                    // (e.g., `F eval(op: Op) { M op { ... } }`) can still find
+                    // the payload layout — without this pre-registration the
+                    // match path would hit the "Payload layout unknown"
+                    // fallback and only bind the first field.
+                    let mut field_ll_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                    for ty in types {
+                        let resolved = self.ast_type_to_resolved(&ty.node);
+                        field_ll_types.push(self.type_mapper.map_type(&resolved));
+                    }
+                    let payload_ty = self.context.struct_type(&field_ll_types, false);
+                    self.enum_variant_multi_payload_types
+                        .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
                 }
             }
         }
