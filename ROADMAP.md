@@ -1,9 +1,91 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 194 완료 → Phase 195 대기)
+> **현재 버전**: 0.1.0 (Phase 195 대기 — /clear 후 harness-init 복원)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-17 (Phase 194 완료: Option<T> infer + closure unit return + higher-order f(x) + examples fresh gate; E2E 2596/0/0 유지)
+> **최종 업데이트**: 2026-04-18 (Phase 195 Plan: P194-4 gate surfaced 14 example regressions + 2 pre-existing test failures + S2 smoke 업데이트)
+
+---
+
+## 🟢 대기 — Phase 195: P194-4 gate 실측 기반 회귀 해소
+
+mode: pending
+max_iterations: 12
+iteration: 0
+strategy: recon-first (Phase 193/194 계승). 14 regression을 **에러 코드별로 분류**해서 "1건 수정 = N건 해소" 패턴 찾기. P001(9) / no-stdlib(3) / E002(2) / E034(1) / C001(1). 동일 에러 코드는 대개 공통 근본 원인이므로 그룹당 1 task로 묶음. 각 에러 그룹별 recon 후 Opus direct 또는 impl-sonnet 결정.
+
+### 배경 (2026-04-18)
+
+Phase 194 P194-4 (`examples_fresh_rebuild` gate)가 첫 실행에서 14개 example 회귀 노출 — cache 은닉으로 수주간 감춰져 있던 pre-existing 파손. 같은 실행으로 **P194-1/2/3 fix가 실전 거의 모든 회귀를 해결하지 못했음**도 확인 (회귀 범주가 codegen보다 parser/module-resolution 쪽). Phase 195 목표: 14건을 카테고리별로 묶어 순차 해소 + S2 smoke 업데이트 + pre-existing test 2건 처리.
+
+### 진입 조건 ✅
+- Phase 194 완료 (2026-04-17), E2E 2596/0/0 유지, clippy 0/0
+- P194-4 gate 작동 확인 (on-demand `-- --ignored`로 실측 가능)
+- 14 failing examples 목록 확정 (`/tmp/fresh_rebuild_output.log` 참조, 2026-04-18 측정)
+
+### 실측 회귀 분포 (2026-04-18 측정)
+
+| 에러 코드 | 건수 | 대표 파일 | 추정 카테고리 |
+|---|---|---|---|
+| P001 Unexpected token | 9 | tutorial_pipeline, wasm_* | parser — struct field comma rule or `G X := mut Y` 구문 |
+| Cannot find Vais standard library | 3 | vec_test_minimal 등 | stdlib path resolution — `--no-cache` 경로에서 `VAIS_STD_PATH` 미설정 / 상대경로 탐색 실패 |
+| E002 Undefined Var | 2 | - | TC identifier resolution |
+| E034 | 1 | void_phi_assert | type error (메시지 미완 — i18n key 노출) |
+| C001 Undefined Var | 1 | union_test | codegen — `IntOrFloat` union 처리 |
+
+### 작업 (6개)
+
+- [ ] 1. **Recon-E: 14 회귀 에러코드 그룹별 근본원인 분류** (research-haiku)
+  - P001 9건 2~3개 하위 패턴 분석 (struct field 구분자 / Global `:=` / ...)
+  - stdlib path 3건 — `examples_fresh_rebuild` subprocess가 `VAIS_STD_PATH` 전달 안 하는지 확인
+  - E002/E034/C001 각 1~2건 recon
+  - 산출물: `docs/phase195/recon_findings.md` — 그룹당 fix scope 추정 + 담당 backend
+
+- [ ] 2. **P195-1: P001 parser 회귀 해소 (9건)** (Opus direct) [blockedBy: 1]
+  - 수정 포인트 후보: `crates/vais-parser/src/{item.rs, types.rs, expr/*.rs}` (Recon-E 결과에 따라)
+  - 완료 기준: 9건 전수 fresh build 성공, E2E 2596+/0/0, clippy 0/0
+
+- [ ] 3. **P195-2: stdlib path resolution 3건** (impl-sonnet) [blockedBy: 1]
+  - `examples_fresh_rebuild.rs`가 subprocess 호출 시 `VAIS_STD_PATH` 환경변수 전달 안 하는 게 원인이면 **test infra 수정**으로 해결 가능 (실제 컴파일러 버그 아닐 수도)
+  - 완료 기준: 3건 gate 통과, test 로직 documented
+
+- [ ] 4. **P195-3: E002/E034/C001 각 1~2건** (Opus direct) [blockedBy: 1]
+  - E034는 i18n key(`type.E034.message`)가 literal로 노출된 것 — error message 번역 누락
+  - 완료 기준: 4건 수정, E2E regression 0
+
+- [ ] 5. **P195-4: Phase 193 smoke S2 업데이트 + pre-existing 2건** (impl-sonnet) [blockedBy: 1]
+  - S2 smoke를 `Vec.get` → `Vec.get_opt` 전환 (P194-1 혜택 적용)
+  - `selfhost_token_module_compiles` (NotCallable i64) — recon 후 root-cause 판단
+  - `vais-types::test_builtin_exit` — exit() total-function rule 정책 검토
+  - 완료 기준: S2 runtime PASS, pre-existing 2건 판정(수정/주석/`#[ignore]`)
+
+- [ ] 6. **Final Gate: 통합 검증 + Phase 195 종료** (impl-sonnet) [blockedBy: 2, 3, 4, 5]
+  - cargo test --workspace, clippy, `examples_fresh_rebuild -- --ignored` 전수 green 목표
+  - 산출물: `docs/phase195/final_report.md`
+
+### 파일 영향 예상 매트릭스
+
+| 파일 | 관련 task | 수정 성격 |
+|---|---|---|
+| `vais-parser/src/item.rs` | #2 | struct field terminator rule |
+| `vais-parser/src/expr/*.rs` 또는 module globals | #2 | `G X := mut Y` parse |
+| `crates/vaisc/tests/examples_fresh_rebuild.rs` | #3 | env var propagation |
+| (또는) 컴파일러 stdlib path resolver | #3 | fallback path when cwd != project root |
+| `vais-types/src/checker_*.rs` | #4 | E002 분석 결과 |
+| `vais-i18n/` 또는 error.rs | #4 | E034 i18n key 번역 |
+| `examples/phase193_smoke/S2_vec_of_struct.vais` | #5 | get → get_opt |
+| `crates/vaisc/tests/selfhost_lexer_tests.rs`, `vais-types/tests/builtins_coverage_tests.rs` | #5 | pre-existing 판정 |
+| `docs/phase195/*.md` | #1, #6 | recon + final report |
+
+### Gate 체크리스트 (각 task 완료 전)
+
+- [ ] 관련 에러 코드 실측 건수 감소
+- [ ] E2E 2596/0/0 유지
+- [ ] Clippy 0/0
+- [ ] `examples_fresh_rebuild -- --ignored` 실패 수 감소
+- [ ] commit 분리
+
+progress: 0/6 (0%)
 
 ---
 
