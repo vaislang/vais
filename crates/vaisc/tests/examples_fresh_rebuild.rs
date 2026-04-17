@@ -50,14 +50,27 @@ const SKIP_LIST: &[&str] = &[];
 
 /// Invoke `vaisc build FILE --emit-ir --no-cache` and return Ok(()) on success
 /// or Err(truncated_stderr) on failure.
+///
+/// Propagates `VAIS_STD_PATH` pointing at the repo-root `std/` so examples that
+/// import standard library modules (e.g. `U std/vec`) resolve regardless of the
+/// subprocess CWD (cargo test environments launch binaries from `target/`).
 fn compile_example_emit_ir(example_path: &PathBuf) -> Result<(), String> {
     let vaisc = env!("CARGO_BIN_EXE_vaisc");
+
+    // CARGO_MANIFEST_DIR is crates/vaisc — go up two levels to reach the
+    // project root where `std/` lives.
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("failed to canonicalize project root path");
+    let std_path = project_root.join("std");
 
     let output = Command::new(vaisc)
         .arg("build")
         .arg(example_path)
         .arg("--emit-ir")
         .arg("--no-cache")
+        .env("VAIS_STD_PATH", &std_path)
         .output()
         .map_err(|e| format!("failed to spawn vaisc: {}", e))?;
 
