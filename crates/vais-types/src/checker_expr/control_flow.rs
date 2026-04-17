@@ -205,6 +205,11 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
+                // Resolve any type variables in the scrutinee before pattern
+                // binding — e.g. Option<?N> where ?N was later unified with a
+                // concrete type must reach register_pattern_bindings fully
+                // substituted, otherwise Some(p) binds p as ?N.
+                let expr_type = self.apply_substitutions(&expr_type);
                 let mut result_type: Option<ResolvedType> = None;
 
                 for arm in arms {

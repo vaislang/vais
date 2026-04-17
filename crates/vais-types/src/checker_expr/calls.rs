@@ -353,6 +353,12 @@ impl TypeChecker {
                     self.substitute_generics(&method_sig.ret, &generic_substitutions)
                 };
 
+                // Resolve any lingering type variables (e.g. receiver Vec<?N>
+                // whose ?N was later unified with a concrete type by arg checks).
+                // Without this, Option<T> returns can stay as Option<?N> and
+                // match-arm pattern bindings fail to propagate T into sub-patterns.
+                let ret_type_raw = self.apply_substitutions(&ret_type_raw);
+
                 // For async methods, wrap the return type in Future
                 let ret_type = if method_sig.is_async {
                     ResolvedType::Future(Box::new(ret_type_raw))
