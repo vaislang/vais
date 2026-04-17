@@ -1,3 +1,3 @@
 # 로드맵
 
-{{#include ../../../ROADMAP.md}}
+{{#include ../../../PUBLIC_ROADMAP.md}}

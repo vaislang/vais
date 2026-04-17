@@ -5,10 +5,10 @@ This guide covers deployment options and strategies for the Vais website and rel
 ## Overview
 
 The Vais project consists of multiple web properties:
-- **Main website** (website/) → `vais-lang.org`
-- **Documentation** (docs-site/) → `docs.vais-lang.org`
-- **Playground** (playground/) → `play.vais-lang.org`
-- **Blog** (website/blog/) → `vais-lang.org/blog/`
+- **Main website** (website/) → `vaislang.dev`
+- **Documentation** (docs-site/) → `docs.vaislang.dev`
+- **Playground** (playground/) → `play.vaislang.dev`
+- **Blog** (website/blog/) → `vaislang.dev/blog/`
 
 ## Deployment Options
 
@@ -29,27 +29,17 @@ GitHub Pages is the simplest and most cost-effective option for static sites. It
 
 2. **Custom Domain Configuration**
 
-   Choose one of the following:
-
-   **Option A: Using vais-lang.org (Recommended)**
-   ```
-   In GitHub Pages settings:
-   - Custom domain: vais-lang.org
-   - Enforce HTTPS: ✓ (checked)
-   ```
-
-   **Option B: Using vaislang.dev**
    ```
    In GitHub Pages settings:
    - Custom domain: vaislang.dev
    - Enforce HTTPS: ✓ (checked)
    ```
 
-3. **DNS Configuration for vais-lang.org**
+3. **DNS Configuration for vaislang.dev**
 
    If you own the domain, configure DNS records:
 
-   **For apex domain (vais-lang.org):**
+   **For apex domain (vaislang.dev):**
    ```
    Type: A
    Name: @
@@ -68,7 +58,7 @@ GitHub Pages is the simplest and most cost-effective option for static sites. It
    Value: 185.199.111.153
    ```
 
-   **For www subdomain (www.vais-lang.org):**
+   **For www subdomain (www.vaislang.dev):**
    ```
    Type: CNAME
    Name: www
@@ -81,13 +71,13 @@ GitHub Pages is the simplest and most cost-effective option for static sites. It
    - Enable "Enforce HTTPS" in GitHub Pages settings
    - Wait 5-10 minutes for the certificate to be issued
 
-#### Setup for Documentation (docs.vais-lang.org)
+#### Setup for Documentation (docs.vaislang.dev)
 
 Create a separate docs-site repository or use a subdomain:
 
 1. Build documentation site
 2. Deploy to GitHub Pages on `docs-site` branch
-3. Set custom domain to `docs.vais-lang.org`
+3. Set custom domain to `docs.vaislang.dev`
 
 Alternatively, if docs-site is in the same repo:
 ```
@@ -96,12 +86,12 @@ In GitHub Pages settings:
 - Deploy built docs-site/ to docs subdirectory
 ```
 
-#### Setup for Playground (play.vais-lang.org)
+#### Setup for Playground (play.vaislang.dev)
 
 Similar to documentation:
 1. Build playground
 2. Deploy via GitHub Pages
-3. Set custom domain to `play.vais-lang.org`
+3. Set custom domain to `play.vaislang.dev`
 
 #### Automated Deployment with GitHub Actions
 
@@ -147,7 +137,7 @@ Vercel is an excellent alternative with fast edge deployments and built-in analy
 
 4. **Configure Custom Domain**
    - Go to Vercel dashboard → Project Settings → Domains
-   - Add `vais-lang.org`
+   - Add `vaislang.dev`
    - Follow DNS instructions (usually CNAME to vercel.com)
 
 5. **Environment Variables**
@@ -157,13 +147,13 @@ Vercel is an excellent alternative with fast edge deployments and built-in analy
 #### Setup for Documentation
 
 1. Create separate Vercel project for docs-site
-2. Configure custom domain as `docs.vais-lang.org`
+2. Configure custom domain as `docs.vaislang.dev`
 3. Point DNS CNAME to Vercel
 
 #### Setup for Playground
 
 1. Create separate Vercel project for playground
-2. Configure custom domain as `play.vais-lang.org`
+2. Configure custom domain as `play.vaislang.dev`
 3. Point DNS CNAME to Vercel
 
 #### GitHub Integration (Recommended)
@@ -204,18 +194,18 @@ vais/
 ### Deployment Targets
 | Property | Domain | Source | Build | Deploy |
 |----------|--------|--------|-------|--------|
-| Website | vais-lang.org | website/ | Vite | GitHub Pages or Vercel |
-| Docs | docs.vais-lang.org | docs-site/ | Docs build | GitHub Pages or Vercel |
-| Playground | play.vais-lang.org | playground/ | Vite | GitHub Pages or Vercel |
-| Blog | vais-lang.org/blog | website/blog/ | Part of website | GitHub Pages or Vercel |
+| Website | vaislang.dev | website/ | Vite | GitHub Pages or Vercel |
+| Docs | docs.vaislang.dev | docs-site/ | Docs build | GitHub Pages or Vercel |
+| Playground | play.vaislang.dev | playground/ | Vite | GitHub Pages or Vercel |
+| Blog | vaislang.dev/blog | website/blog/ | Part of website | GitHub Pages or Vercel |
 
 ### Multi-Property Workflow
 
 If deploying all properties to GitHub Pages:
 
-1. **Website builds to:** `dist/` at root (served at vais-lang.org)
-2. **Docs builds to:** `dist/docs/` (served at docs.vais-lang.org via separate repo)
-3. **Playground builds to:** `dist/play/` (served at play.vais-lang.org via separate repo)
+1. **Website builds to:** `dist/` at root (served at vaislang.dev)
+2. **Docs builds to:** `dist/docs/` (served at docs.vaislang.dev via separate repo)
+3. **Playground builds to:** `dist/play/` (served at play.vaislang.dev via separate repo)
 4. **Blog included in:** website build
 
 Or use separate repositories for each property for better isolation.
@@ -272,9 +262,9 @@ npm run preview
 
 ### If Using GitHub Pages
 
-**vais-lang.org setup:**
+**vaislang.dev setup:**
 1. Add A records pointing to GitHub Pages IPs (see GitHub Pages section)
-2. Add CNAME record for www.vais-lang.org → vaislang.github.io
+2. Add CNAME record for www.vaislang.dev → vaislang.github.io
 
 **Subdomains (docs, play):**
 1. Add CNAME records for docs and play subdomains
@@ -282,8 +272,8 @@ npm run preview
 
 ### If Using Vercel
 
-**vais-lang.org setup:**
-1. Add CNAME record: vais-lang.org → cname.vercel.com (or as instructed)
+**vaislang.dev setup:**
+1. Add CNAME record: vaislang.dev → cname.vercel.com (or as instructed)
 
 **Subdomains:**
 1. Add separate CNAME records for each subdomain
