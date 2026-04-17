@@ -123,11 +123,16 @@ pub(crate) fn run_per_module_emit_ir(
     let resolved_expr_types = checker.get_expr_types().clone();
     let resolved_implicit_try_sites = checker.get_implicit_try_sites().clone();
     let instantiations = checker.get_generic_instantiations();
-    for inst in &instantiations {
-        eprintln!(
-            "  [INST] base={}, mangled={}, kind={:?}, args={:?}",
-            inst.base_name, inst.mangled_name, inst.kind, inst.type_args
-        );
+    // Gate instantiation tracing behind VAIS_TRACE_INST so fresh-rebuild gates
+    // and normal user builds don't see stderr noise. Set VAIS_TRACE_INST=1 to
+    // diagnose generic-instantiation issues in the build pipeline.
+    if std::env::var("VAIS_TRACE_INST").is_ok_and(|v| v == "1") {
+        for inst in &instantiations {
+            eprintln!(
+                "  [INST] base={}, mangled={}, kind={:?}, args={:?}",
+                inst.base_name, inst.mangled_name, inst.kind, inst.type_args
+            );
+        }
     }
     let instantiations = &instantiations;
 

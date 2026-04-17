@@ -134,7 +134,7 @@ X StringMap<V> {
         cap := I capacity < 8 { 8 } EL { capacity }
         buckets := malloc(cap * 8)
         strmap_init_buckets(buckets, 0, cap)
-        StringMap<V> { buckets: buckets, size: 0, cap: cap }
+        StringMap { buckets: buckets, size: 0, cap: cap }
     }
 
     # Get number of entries

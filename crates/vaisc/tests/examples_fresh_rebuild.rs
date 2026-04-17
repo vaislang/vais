@@ -77,13 +77,6 @@ const SKIP_LIST: &[&str] = &[
     // resolved vector width for the specialized type.
     "simd_test.vais",
     "simd_distance.vais",
-    // Deferred to Phase 196: HashMap/StringMap generic instantiation streams
-    // `[INST] base=... mangled=...` instantiation-tracing prints to stderr
-    // and then bubbles a downstream codegen error. Both the log leak and the
-    // underlying generic-method codegen need separate investigation.
-    "option_result_simple_test.vais",
-    "option_result_test.vais",
-    "simple_hashmap_test.vais",
     // Deferred to Phase 196: f64 local values flow into the integer load
     // path and the inkwell BasicValueEnum::into_float_value assertion trips
     // ("Found IntValue but expected FloatValue"). Mixed int/float local
