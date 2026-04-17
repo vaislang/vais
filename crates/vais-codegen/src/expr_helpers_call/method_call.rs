@@ -1049,6 +1049,30 @@ impl CodeGenerator {
                 let mangled = vais_types::mangle_name(&base_method_name, &inferred_type_args);
                 if self.types.functions.contains_key(&mangled) {
                     mangled
+                } else if let Some(spec) = self.try_generate_vec_specialization(
+                    &type_name.node,
+                    &method.node,
+                    &inferred_type_args,
+                    counter,
+                ) {
+                    spec
+                } else {
+                    base_method_name.clone()
+                }
+            } else if let Some(type_args) = self
+                .infer_static_ctor_type_args_from_peers(&type_name.node, &method.node)
+            {
+                // Phase 193 R-1: static ctor (Vec.new / Vec.with_capacity) has
+                // non-informative args (e.g., just i64 capacity). Recover T by
+                // scanning already-registered method instantiations for the same
+                // struct and reuse the first concrete type_args seen.
+                if let Some(spec) = self.try_generate_vec_specialization(
+                    &type_name.node,
+                    &method.node,
+                    &type_args,
+                    counter,
+                ) {
+                    spec
                 } else {
                     base_method_name.clone()
                 }
@@ -1173,6 +1197,55 @@ impl CodeGenerator {
             );
             Ok((tmp, ir))
         }
+    }
+
+    /// Phase 193 R-1: For static constructors like `Vec.new()` / `Vec.with_capacity(8)`
+    /// whose args carry no informative type (e.g., only `i64 capacity`), recover the
+    /// element type `T` by scanning method instantiations already registered for the
+    /// same generic struct. Returns the first set of concrete type_args found.
+    ///
+    /// Rationale: TC's built-in Vec/HashMap path returns a fresh type var without
+    /// registering an instantiation for the ctor itself; other method calls on the
+    /// resulting value (e.g., `v.push(42)`) do register e.g. `Vec_push$i64`, so we
+    /// can piggyback on that to monomorphize the ctor.
+    fn infer_static_ctor_type_args_from_peers(
+        &self,
+        struct_name: &str,
+        skip_method: &str,
+    ) -> Option<Vec<ResolvedType>> {
+        // fn_instantiations keys: method base names can be stored either as
+        // raw "push" or as mangled-prefix "Vec_push" depending on the TC path.
+        // Match both. Also scan method_instantiations in generic instantiations.
+        let prefix = format!("{}_", struct_name);
+        let skip_base = format!("{}_{}", struct_name, skip_method);
+        for (base, insts) in self.generics.fn_instantiations.iter() {
+            // Accept either "push" (raw) or "Vec_push" (prefixed) as matching our struct.
+            let matches_struct = base.starts_with(&prefix) || {
+                // Raw method name — check if the mangled suffix points to our struct.
+                insts.iter().any(|(_, mangled)| {
+                    mangled.starts_with(&prefix)
+                        && mangled != &skip_base
+                        && !mangled.contains("$Var")
+                })
+            };
+            if !matches_struct || base == &skip_base || base == skip_method {
+                continue;
+            }
+            for (type_args, mangled) in insts {
+                // If base is raw method name, make sure the mangled is for our struct.
+                if !base.starts_with(&prefix) && !mangled.starts_with(&prefix) {
+                    continue;
+                }
+                let concrete = !type_args.is_empty()
+                    && type_args.iter().all(|t| {
+                        !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_))
+                    });
+                if concrete {
+                    return Some(type_args.clone());
+                }
+            }
+        }
+        None
     }
 
     /// Try to generate a specialized Vec/generic method on demand.
