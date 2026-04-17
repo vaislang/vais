@@ -5,7 +5,7 @@
 //! 2. Generic struct field access after monomorphization (codegen)
 //! 3. Slice source open-end slicing `slice[start..]` (codegen)
 
-use crate::helpers::{assert_compiles, assert_exit_code};
+use crate::helpers::assert_exit_code;
 
 // ==================== Task 1: Nested Slice Coercion ====================
 

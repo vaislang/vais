@@ -607,14 +607,37 @@ impl CodeGenerator {
         counter: &mut usize,
         ir: &mut String,
     ) -> String {
-        // If value looks like an i64 but return type is float/double, bitcast
+        // If value looks like an i64 but return type is float/double, bitcast.
+        // When generic body already produced a typed float/double (e.g., the
+        // identity body just returns its `T` parameter), the bitcast would
+        // emit `bitcast i64 %x to double` against an actual `double %x`, which
+        // clang rejects. Inspect the tracked LLVM type and skip the bitcast
+        // (or convert via fpext/fptrunc) when the source is already floating.
         if ret_llvm == "double" {
+            let val_llvm = self.llvm_type_of(value);
+            if val_llvm == "double" {
+                return value.to_string();
+            }
+            if val_llvm == "float" {
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                return tmp;
+            }
             // Assume value is i64 from generic body — bitcast to double
             let tmp = self.next_temp(counter);
             write_ir!(ir, "  {} = bitcast i64 {} to double", tmp, value);
             return tmp;
         }
         if ret_llvm == "float" {
+            let val_llvm = self.llvm_type_of(value);
+            if val_llvm == "float" {
+                return value.to_string();
+            }
+            if val_llvm == "double" {
+                let tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
+                return tmp;
+            }
             let tmp1 = self.next_temp(counter);
             let tmp2 = self.next_temp(counter);
             write_ir!(ir, "  {} = bitcast i64 {} to double", tmp1, value);

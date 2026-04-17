@@ -198,13 +198,13 @@ F main() -> i64 {
 
 /// Generic identity function called with f32 must preserve f32 type in IR.
 ///
-/// Phase 191: specialized method codegen now generates correct IR.
-/// NOTE: assert_compiles — the generated IR contains a `bitcast i64 %x to double`
-/// where %x is typed `float`, which clang rejects. The Vais IR generation step
-/// succeeds; full clang round-trip requires the Phase 191 codegen fix.
+/// Phase 192 Group C: `coerce_specialized_return` now inspects the value's
+/// LLVM type. When the body already returns a `float`, the i64-bitcast
+/// shortcut is skipped (previously emitted `bitcast i64 %x to double` that
+/// clang rejected on a `float %x`).
 #[test]
 fn e2e_phase182_generic_identity_f32_compiles() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F identity<T>(x: T) -> T { x }
 
@@ -213,18 +213,16 @@ F main() -> i64 {
     0
 }
 "#,
+        0,
     );
 }
 
 /// Generic identity function called with f64 must emit `double` in IR.
 ///
-/// Phase 191: specialized method codegen now generates correct IR.
-/// NOTE: assert_compiles — the generated IR contains a `bitcast i64 %x to double`
-/// where %x is typed `double`, which clang rejects. The Vais IR generation step
-/// succeeds; full clang round-trip requires the Phase 191 codegen fix.
+/// Phase 192 Group C: bitcast skipped when body already returns `double`.
 #[test]
 fn e2e_phase182_generic_identity_f64_compiles() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 F identity<T>(x: T) -> T { x }
 
@@ -233,6 +231,7 @@ F main() -> i64 {
     0
 }
 "#,
+        0,
     );
 }
 
