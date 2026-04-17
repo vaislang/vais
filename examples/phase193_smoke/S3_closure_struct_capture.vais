@@ -1,0 +1,45 @@
+# Phase 193 Recon-C Smoke S3
+# Goal: Closure captures Vec<Struct{str}> + iterates with closure per-element.
+# Hypothesis: Phase 191 #4 (closure str clone-on-capture) 이후 str capture 안정.
+#             Vec<Person> 전체 capture + 내부 Person.name str 접근.
+
+U std/vec
+
+S Person {
+    name: str,
+    age: i64
+}
+
+F count_over_30(v: Vec<Person>) -> i64 {
+    # Closure captures no outer state, but takes Person by ref-like (vais semantics).
+    # First test: plain function dispatch (sanity before closure).
+    count := mut 0
+    n := v.len()
+    LF i:0..n {
+        opt := v.get(i)
+        M opt {
+            Some(p) => { I p.age > 30 { count = count + 1 } },
+            None    => {}
+        }
+    }
+    count
+}
+
+F main() -> i64 {
+    v := Vec.with_capacity(4)
+    v.push(Person { name: "Alice", age: 30 })
+    v.push(Person { name: "Bob",   age: 25 })
+    v.push(Person { name: "Carol", age: 40 })
+
+    # --- Part A: plain function with Vec<Struct{str}> param ---
+    c := count_over_30(v)
+    puts("S3a: count over 30 = {c}")
+
+    # --- Part B: closure capturing a str from outer scope ---
+    greeting := "Hello"
+    greet := |name: str| puts("{greeting}, {name}!")
+    greet("World")
+
+    # Expected: c == 1, exit 0
+    I c == 1 { 0 } EL { 1 }
+}

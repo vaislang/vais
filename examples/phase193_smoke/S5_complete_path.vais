@@ -1,0 +1,45 @@
+# Phase 193 Recon-C Smoke S5
+# Goal: Complete path combining S1+S2+S3+S4.
+# Vec<Struct{str}> + closure (non-async variant) + async aggregation.
+# Hypothesis: 가장 가능성 높은 failure — 여러 Phase 191/192 fix 영역 교차.
+
+U std/vec
+
+S Person {
+    name: str,
+    age: i64
+}
+
+A F sum_ages(v: Vec<Person>) -> i64 {
+    # Async takes Vec (generic struct) + iterates str-containing struct.
+    total := mut 0
+    n := v.len()
+    LF i:0..n {
+        opt := v.get(i)
+        M opt {
+            Some(p) => { total = total + p.age },
+            None    => {}
+        }
+    }
+    total
+}
+
+F main() -> i64 {
+    v := Vec.with_capacity(4)
+    v.push(Person { name: "Alice", age: 30 })
+    v.push(Person { name: "Bob",   age: 25 })
+    v.push(Person { name: "Carol", age: 40 })
+
+    # Plain closure over outer str scope (warm-up from S3 part B)
+    prefix := "Person"
+    describe := |p: Person| puts("{prefix}: {p.name} ({p.age})")
+    p0 := Person { name: "Dana", age: 22 }
+    describe(p0)
+
+    # Async + Vec<Struct{str}>
+    total := sum_ages(v).await
+    puts("S5: total ages = {total}")
+
+    # Expected: total=95, exit 0
+    I total == 95 { 0 } EL { 1 }
+}

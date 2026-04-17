@@ -7,6 +7,114 @@
 
 ---
 
+## 🟢 진행 중 — Phase 193: 컴파일러 실전 안정화 — 전수조사 + 실제 한계 수정
+
+mode: auto
+max_iterations: 16
+iteration: 1
+strategy: recon-first. Phase 192에서 recon 오식(vec_i32_push 미존재)으로 시간 손실한 선례 반복 방지. 1~3번 전수조사로 "실제 한계" 목록을 정확히 확정한 후, 4번부터 영역별 수정. opus_direct: codegen 설계-구현 inseparable 건만 (monomorphization/ownership/async 경계). 그 외 research-haiku(recon) + impl-sonnet(impl) 조합.
+  iter1 strategy: Recon-A/B/C 3건 blockedBy 무, 파일 영향 매트릭스 겹침 무(docs/phase193/*.md + examples/phase193_smoke/*.vais 각자 분리) → independent parallel. Task #1,#2 research-haiku (foreground), Task #3 Opus direct background (smoke + IR 분석 inseparable).
+
+### 배경 (2026-04-17 의사결정)
+
+Phase 192 완료 후 사용자 우선순위 재확인: "앱(monitor) 재작성보다 **컴파일러 자체 완벽 안정화 먼저**". 선택된 범위: **전수조사 → 실제 한계만 수정** (의도적 assert_compiles 22건은 유지, 실제 한계 ~10건 추정 해소).
+
+### 진입 조건 ✅
+- Phase 192 완료 (2026-04-17), E2E 2596/0/0, clippy 0/0
+- assert_compiles 32건 (22 의도적 + 2 검증용 + 8 실제 한계 — Phase 192 recon 분류 기준. 실제 한계 중 1건(Group D runtime null)만 미해결, 나머지 ~7건은 신규 발견 예상)
+- harness-issues.log: Apr 5~7 flock dead 기간 이슈 25건 + Apr 17 1건 = 26건. 대부분 복구 전 로그
+
+### 구성 원칙 (Phase 192에서 계승)
+- **recon 의무**: 구현 전 IR 실측. ROADMAP/memory 수치 신뢰 금지
+- **0 regression**: E2E 2596/0/0 유지 또는 증가, Clippy 0/0
+- **commit 분리**: 각 task 개별 commit, 실패 시 bisect/revert 용이
+- **새 기능 추가 금지**: 안정화에만 집중
+- **의도적 assert_compiles 유지**: 22건 중 "의도적"으로 분류된 건은 건드리지 않음
+
+### 작업 (8개)
+
+- [x] 1. **Recon-A: assert_compiles 32건 전수 재분류** (research-haiku) ✅ 2026-04-17
+  - 실측: **16건** (ROADMAP의 32 추정은 과다 — rg 실측이 정답)
+  - 분류: intentional 11 / real_limit_codegen 4 / real_limit_runtime 1 / verification_only 0
+  - real_limit_* 5건 모두 Group-I(Vec<T> generic) 또는 Group-II(Vec→slice coercion). Group-III/IV 관련 발굴 0
+  - changes: docs/phase193/assert_compiles_audit.md 생성 (157줄)
+
+- [x] 2. **Recon-B: 하네스 이슈 로그 26건 근본원인 재확인** (research-haiku) ✅ 2026-04-17
+  - 분류: already_fixed 24 / flock_dead_loss 1 / still_open 1
+  - still_open 1건(Apr 17 14:50:39)은 Recon-C 신규 발굴 C1(Vec_with_capacity emit)과 동일 세션으로 추정 → 별도 task 불필요
+  - changes: docs/phase193/harness_issues_audit.md 생성 (384줄, 15KB)
+
+- [x] 3. **Recon-C: 실전 시나리오 스모크 프로그램 + 구멍 발굴** (Opus direct) ✅ 2026-04-17
+  - 결과: 2/7 pass (S1 struct+str PASS, S4 async+struct+str PASS). S2/S3/S5 실행 전 차단
+  - **신규 중대 회귀 4건 발굴**:
+    * **R-1 (CRITICAL)**: `Vec.with_capacity` fresh 빌드 시 `@Vec_with_capacity` 심볼 정의 누락. simple_vec_test.vais조차 재빌드 실패. Phase 192 commit e260c893(Group A elem_size 가드) 의심
+    * **R-2 (CRITICAL)**: closure가 외부 변수(int/str) capture 못 함. `n := 42; show := || puts("{n}")` → "Undefined variable: n". Phase 191 #4 f29993d7 의심
+    * **R-3 (HIGH)**: `F apply_n(f: |i64| -> i64, ...)` pipe-style closure type parameter parse 실패. closure_counter.vais 작동 불가
+    * **R-4 (HIGH)**: `Vec<Person>.get(i) → Some(p) => p.age` match arm에서 p의 type 미전파
+  - **E2E 2596/0/0 녹색인데 examples 회귀**: E2E 커버리지가 .vais-cache 은닉 + 실전 조합 누락으로 부족
+  - 총 수정 대상 재편: Group-I 4건(A1+A2+C1+C4), Group-II 1건(B1), Group-III 2건(C2+C3), Group-IV 0건(task #7 삭제)
+  - changes: docs/phase193/smoke_findings.md + examples/phase193_smoke/S1~S5 (7 .vais)
+
+- [ ] 4. **Group-I: Generic/Vec 회귀 + 잔여 (4건)** (Opus direct) [blockedBy: 1, 3]
+  - **최우선 C1 (R-1)**: `Vec_with_capacity` emit 누락 회귀 — bisect `39922874..4066ab9d` 범위로 원인 커밋 특정 후 수정. stdlib Vec `with_capacity` 본체가 조건부로 emit 스킵되는 경로 복구
+  - **C4 (R-4)**: Vec<Struct>.get() → Some(p) match arm type 미전파. `checker_expr.rs` 또는 `inference.rs`에서 generic return substitution이 pattern binding까지 이어지도록
+  - **A1 (Recon-A #8)**: `e2e_vec_param_index_compiles` runtime null data ptr
+  - **A2 (Recon-A #11)**: Vec<i32/u8> `trunc i64 to i32` IR type mismatch
+  - 수정 포인트 후보: `module_gen/instantiations.rs`, `expr_helpers_call/method_call.rs`, `function_gen/generics.rs`, `expr_helpers_data.rs`, `checker_expr.rs`
+  - 완료 기준: 4건 모두 runtime 통과 또는 assert_exit_code 전환. Recon-C S2/S2b/S5 runtime PASS. E2E 2596+ 유지, clippy 0/0
+
+- [ ] 5. **Group-II: Struct ownership / drop 경계** (Opus direct) [blockedBy: 1, 3]
+  - Recon-A/C 결과에서 struct 소유권 / `ownership_mask` / drop 계열 모음
+  - Phase 191 #2b (ownership_mask wrapping, shallow-drop helper) 연관 영역
+  - 수정 포인트 후보: `generate_expr_struct.rs`, `struct_drop.rs`, `stmt.rs` droppable scope
+  - 완료 기준: struct+Vec+str 조합 스모크(Recon-C S1/S2) 모두 runtime 통과, Vec/HashMap 기존 테스트 regression 0
+
+- [ ] 6. **Group-III: Closure capture 회귀 (2건)** (Opus direct) [blockedBy: 1, 3]
+  - **C2 (R-2, CRITICAL)**: closure outer variable capture 실패. int/str 모두 `Undefined variable`로 거부. 0-param 클로저 `||` + 문자열 보간 `{name}` 내부 reference가 capture 분석에서 누락. Phase 191 #4 f29993d7 (clone-on-capture) 이후 회귀로 의심
+  - **C3 (R-3, HIGH)**: parser가 함수 parameter type 위치에서 pipe-closure `|T| -> U` 구문 거부. `(T) -> U` 괄호 형태만 허용됨. closure_counter.vais 작동 불가
+  - 수정 포인트 후보: `crates/vais-codegen/src/closure.rs`, `crates/vais-types/src/checker_expr.rs` (capture resolution), `crates/vais-parser/src/types.rs` (pipe closure type parse)
+  - 완료 기준: Recon-C S3b/S3c runtime 통과, closure_counter.vais fresh 빌드 성공, E2E 기존 closure 3건 regression 0
+
+- [ ] 8. **Final Gate: 통합 검증 + Phase 193 종료** (impl-sonnet) [blockedBy: 4, 5, 6]
+  - `cargo test --workspace` 풀 실행, E2E 카운트 기록
+  - `cargo clippy --workspace --exclude vais-python --exclude vais-node -- -D warnings`
+  - Recon-C 스모크 S1~S5 재실행, 모두 runtime 통과 확인
+  - assert_compiles 최종 카운트 측정 (목표: 의도적 22건만 잔존, real_limit_* 0건)
+  - ROADMAP.md Phase 193 섹션 progress 업데이트 + 완료 처리
+  - **추가 요건 (Recon-C 발견에 따른 보강)**: E2E에 `examples/ fresh rebuild` 게이트 추가 — `.vais-cache` 삭제 후 `examples/*.vais` 컴파일 자동화. 현재 E2E가 caching 때문에 회귀 은닉하는 문제 근본 대응
+  - 산출물: `docs/phase193/final_report.md` (before/after 카운트, 해소 내역, 남은 의도적 22건 리스트)
+
+### 파일 영향 예상 매트릭스 (recon 후 정정)
+
+| 파일 | 관련 task | 수정 성격 |
+|---|---|---|
+| `module_gen/instantiations.rs` | #4 | specialization hook 누락 보완 |
+| `function_gen/generics.rs` | #4 | runtime 안전성 (null data ptr) |
+| `expr_helpers_data.rs` | #4, #5, #6 | field GEP / capture data 경로 |
+| `generate_expr_struct.rs` | #5 | struct drop/ownership 경계 |
+| `struct_drop.rs` | #5 | shallow-drop 경계 케이스 |
+| `closure.rs` | #6 | str capture 경로 |
+| `async_codegen.rs` | #7 | poll state machine |
+| `docs/phase193/*.md` | #1, #2, #3, #8 | 감사 산출물 (신규) |
+
+### Gate 체크리스트 (각 task 완료 전)
+
+- [ ] 해당 task의 `real_limit_*` 또는 스모크 시나리오 건수 감소
+- [ ] E2E 2596/0/0 유지 또는 증가
+- [ ] Clippy 0 warning / 0 error
+- [ ] 파일 수정 범위가 "파일 영향 예상 매트릭스" 내 (벗어나면 ROADMAP 먼저 갱신)
+- [ ] commit 분리 (task별 1 commit)
+
+### Phase 194 진입 조건 (미래)
+- 본 Phase 8개 task 완료
+- assert_compiles 의도적 22건 외 0건 잔존
+- Recon-C 스모크 S1~S5 전부 runtime 통과
+- → Phase 194: vais-monitor self-hosted 재작성 (Phase 192에서 밀려난 앱 게이트)
+
+progress: 3/7 (43%) — Recon 3건 완료, task #7(Group-IV) 삭제 (신규 구멍 0건), 남은 4건: #4 #5 #6 #8
+
+---
+
 ## ⏸ 완료 — Phase 192: 무결점 100% 게이트 (codegen 실제 한계 9건)
 
 mode: completed

@@ -1,0 +1,17 @@
+# S3b: Closure + str capture only (no Vec<Struct> — isolated from S2 bug).
+# Hypothesis: Phase 191 #4 (closure str clone-on-capture) 검증.
+
+F main() -> i64 {
+    greeting := "Hello"
+    greet := |name: str| puts("{greeting}, {name}!")
+    greet("World")
+    greet("Vais")
+
+    # Closure capturing int + str
+    n := 42
+    tag := "answer"
+    report := || puts("{tag} = {n}")
+    report()
+
+    0
+}

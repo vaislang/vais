@@ -1,0 +1,37 @@
+# Phase 193 Recon-C Smoke S2
+# Goal: Vec<Struct{str}> — push, iterate, drop.
+# Hypothesis: Phase 191 #2c (nested container recursion) + Phase 192 Group B
+#             (main-path struct lit specialized layout) 이후 작동해야 함.
+
+U std/vec
+
+S Person {
+    name: str,
+    age: i64
+}
+
+F main() -> i64 {
+    v := Vec.with_capacity(4)
+    v.push(Person { name: "Alice", age: 30 })
+    v.push(Person { name: "Bob",   age: 25 })
+    v.push(Person { name: "Carol", age: 40 })
+
+    # length check
+    n := v.len()
+    puts("S2: len = {n}")
+
+    # sum ages
+    total := mut 0
+    LF i:0..n {
+        opt := v.get(i)
+        M opt {
+            Some(p) => { total = total + p.age },
+            None    => {}
+        }
+    }
+    puts("S2: total age = {total}")
+
+    v.drop()
+    # Expected: len=3, total=95, exit 0
+    I total == 95 { 0 } EL { 1 }
+}

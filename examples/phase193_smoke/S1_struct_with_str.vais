@@ -1,0 +1,15 @@
+# Phase 193 Recon-C Smoke S1
+# Goal: Struct with str field — create, read, drop.
+# Hypothesis: string ownership (Phase 191) 안정. 이 단계는 baseline.
+
+S Person {
+    name: str,
+    age: i64
+}
+
+F main() -> i64 {
+    p := Person { name: "Alice", age: 30 }
+    puts("S1: name = {p.name}, age = {p.age}")
+    # Expected exit: 0
+    0
+}
