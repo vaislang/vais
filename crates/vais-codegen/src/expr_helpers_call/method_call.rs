@@ -631,7 +631,21 @@ impl CodeGenerator {
         // Vec elem_size patch: before calling a specialized Vec method,
         // set self.elem_size to sizeof(T) and adjust capacity.
         // Applied to ALL Vec methods that access elements (push/insert/set/get/pop/grow/etc.)
-        if full_method_name.starts_with("Vec_")
+        //
+        // Gate: only the stdlib std::Vec<T> layout has the 4th field `elem_size`.
+        // User-defined `Vec<T>` with different layout (e.g. only `elem`+`len`) must
+        // not trigger this patch — it would emit OOB GEPs into a 2-field struct.
+        let stdlib_vec_layout = self
+            .types
+            .structs
+            .get("Vec")
+            .map(|si| {
+                si.fields.len() >= 4
+                    && si.fields.get(3).map(|(n, _)| n == "elem_size").unwrap_or(false)
+            })
+            .unwrap_or(false);
+        if stdlib_vec_layout
+            && full_method_name.starts_with("Vec_")
             && full_method_name.contains('$')
             && !arg_vals.is_empty()
         {

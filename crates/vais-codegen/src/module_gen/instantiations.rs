@@ -321,11 +321,14 @@ impl CodeGenerator {
                         .iter()
                         .map(|p| {
                             if p.name.node == "self" {
+                                // Self type must carry the concrete generic args so
+                                // that downstream callers can compute the specialized
+                                // LLVM type (e.g. %Vec$i32* instead of %Vec*).
                                 (
                                     "self".to_string(),
                                     ResolvedType::Ref(Box::new(ResolvedType::Named {
                                         name: struct_name.clone(),
-                                        generics: vec![],
+                                        generics: inst.type_args.clone(),
                                     })),
                                     false,
                                 )

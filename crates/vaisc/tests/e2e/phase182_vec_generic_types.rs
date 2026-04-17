@@ -122,13 +122,13 @@ F main() -> i64 {
 
 // ==================== 2. Vec<i32> — assert_compiles ====================
 
-/// Vec<i32> struct IR must specialize the element field to `i32`, not `i64`.
-/// NOTE: assert_compiles — struct literal uses specialized layout (%Vec$i32),
-/// but method dispatch (len/get) still uses base struct GEP (%Vec).
-/// Full fix requires specialized method codegen (Phase 4d.5+).
+/// Vec<i32> end-to-end: struct construction with i32 element + len() method
+/// dispatch through generic impl. Phase 192 Group A: codegen now produces
+/// consistent IR (base layout uniformly used) that compiles via clang and
+/// executes correctly. `Vec.new(42 as i32)` sets `len: 1`, so `v.len() == 1`.
 #[test]
 fn e2e_phase182_vec_i32_struct_field_type_preserved() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     elem: T,
@@ -154,15 +154,17 @@ F main() -> i64 {
     v.len()
 }
 "#,
+        1,
     );
 }
 
-/// Vec<u8> struct IR must specialize to `i8`, not `i64`.
-/// NOTE: assert_compiles — same as Vec<i32>: struct literal uses specialized
-/// layout but method dispatch uses base struct GEP.
+/// Vec<u8> end-to-end: struct construction with u8 element + size() method
+/// dispatch through generic impl. Phase 192 Group A: codegen IR runs cleanly
+/// through clang and executes. `Vec.new(99 as u8)` sets `len: 1`, so
+/// `v.size() == 1`.
 #[test]
 fn e2e_phase182_vec_u8_struct_field_type_preserved() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Vec<T> {
     elem: T,
@@ -188,6 +190,7 @@ F main() -> i64 {
     v.size()
 }
 "#,
+        1,
     );
 }
 

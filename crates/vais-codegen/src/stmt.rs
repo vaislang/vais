@@ -7,6 +7,11 @@ use crate::{CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{Expr, Pattern, Spanned, Stmt};
 use vais_types::ResolvedType;
 
+// (type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
+type DroppableScopeEntry = (String, String, Option<String>, bool, bool, Option<String>);
+// (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow)
+type DroppableFnEntry = (String, String, String, Option<String>, bool, bool, Option<String>);
+
 impl CodeGenerator {
     /// Generate LLVM IR for a block of statements
     pub(crate) fn generate_block(
@@ -848,8 +853,7 @@ impl CodeGenerator {
         // has_owned_mask requires shallow-free after user drop (RFC-002 §4.2).
         // vec_elem_shallow: Some(inner_struct_name) when this is a Vec$X and X has has_owned_mask
         //   (Phase 191 #2c — nested container recursion).
-        let mut droppable: Vec<(String, String, Option<String>, bool, bool, Option<String>)> =
-            Vec::new();
+        let mut droppable: Vec<DroppableScopeEntry> = Vec::new();
         for var_name in scope_vars {
             if let Some(local) = self.fn_ctx.locals.get(var_name) {
                 let type_name = match &local.ty {
@@ -1050,9 +1054,7 @@ impl CodeGenerator {
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
     pub(crate) fn generate_drop_cleanup(&mut self) -> String {
-        // Collect (var_name, type_name, llvm_name, drop_fn_opt, has_shallow, is_double_ptr, vec_elem_shallow).
-        let mut droppable: Vec<(String, String, String, Option<String>, bool, bool, Option<String>)> =
-            Vec::new();
+        let mut droppable: Vec<DroppableFnEntry> = Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
             let type_name = match &local.ty {
                 ResolvedType::Named { name, .. } => name.clone(),

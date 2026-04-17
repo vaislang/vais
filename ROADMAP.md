@@ -9,8 +9,8 @@
 
 ## Current Tasks — Phase 192: 무결점 100% 게이트 (codegen 실제 한계 9건)
 
-mode: pending
-iteration: 2
+mode: auto
+iteration: 3
 max_iterations: 12
 strategy: blockedBy chain (1→2→3) + method_call.rs file overlap → sequential. opus_direct: codegen 설계-구현 inseparable (substitution propagation + monomorphization hook + IR layout) — research/impl 분리 시 의도 손실.
 
@@ -75,14 +75,14 @@ session_checkpoint: 2026-04-17 iter 2 — Group A 정밀 recon 완료, 구현 0.
 
 ### 작업 (3개, 순차)
 
-- [ ] 1. **Group A: Vec<i32>/<u8> method dispatch 특수화** (Opus direct, foreground, ≤2h)
-  - **대상 테스트**: phase182 vec_i32_push, vec_i32_struct_field_type_preserved, vec_u8_struct_field_type_preserved
-  - **수정 포인트**:
-    - `crates/vais-codegen/src/expr_helpers_call/method_call.rs`: receiver의 concrete generics → substitutions 전파
-    - `crates/vais-codegen/src/expr_helpers_data.rs::generate_field_expr`: specialized struct GEP base 조회
-    - iter 19 revert 조건(`Vec_new` undefined) 회피: base method skip 로직에서 i64 specialization 명시 유지
-  - **완료 기준**: 3 테스트 `assert_compiles → assert_exit_code` 전환, E2E 2592 baseline 유지, clippy 0/0
-  - **체크포인트**: `cargo test -p vaisc --test e2e phase182 --workspace`
+- [x] 1. **Group A: Vec<i32>/<u8> method dispatch 특수화** (Opus direct) ✅ 2026-04-17
+  - **실제 수정 포인트** (recon 대비 좁음):
+    - `module_gen/instantiations.rs` method instantiation `params[0] self` 타입에 `inst.type_args` 전파 (기존: `generics: vec![]` → specialized fn이 `Vec_len$i32(%Vec* %self)`로 잘못된 self 타입을 가져 호출 시 %Vec*→%Vec$i32* 불일치)
+    - `expr_helpers_call/method_call.rs` `Vec elem_size patch` 가드 추가: 호출 전 `self.elem_size` 갱신 IR(`getelementptr %Vec,*,0,3`)은 stdlib `std::Vec<T>` (4+ fields + 4번째 필드 이름 `elem_size`)일 때만 방출. 사용자 정의 `Vec<T>`(2 fields)에서는 OOB GEP였음
+    - recon이 지목한 `expr_helpers_data.rs::generate_field_expr` 및 monomorphization 트리거 수정 불필요 — method call `recv_llvm_ty`가 `fn_info.signature.params[0]`을 우선 사용하므로 params self 타입만 고치면 call site 자동 정렬
+  - **대상 테스트 결과**: `phase182_vec_i32_struct_field_type_preserved` + `phase182_vec_u8_struct_field_type_preserved` 두 건을 `assert_compiles → assert_exit_code(_, 1)`로 전환 (runtime exit 1: `Vec.new`가 `len: 1`로 초기화 후 `.len()`/`.size()` 반환). recon의 세 번째(`vec_i32_push`) 테스트는 애초에 존재하지 않음 (recon §3에서 ROADMAP 오식 지적됨).
+  - **검증**: E2E 2596/0/1 ignored (baseline 2592 + 2 신규 + 2 기존 전환 재계측). clippy 0/0 (사전 존재하던 `stmt.rs` type_complexity 2건도 type alias로 해결). assert_compiles 39 → 35.
+  - **부가 fix**: `stmt.rs` `DroppableScopeEntry` / `DroppableFnEntry` type alias — 사전 존재하던 clippy `type_complexity` 에러(gate 차단) 해제.
 
 - [ ] 2. **Group B: phase164 generic struct field access** (Opus direct, foreground, ≤2h) [blockedBy: 1]
   - **대상 테스트**: phase164 generic_struct_field_access, generic_fn_struct_field_access, generic_struct_nested_field
@@ -134,7 +134,7 @@ session_checkpoint: 2026-04-17 iter 2 — Group A 정밀 recon 완료, 구현 0.
 - **commit 분리**: task #1, #2, #3 각각 개별 commit. 실패 시 bisect·revert 용이.
 - **이 섹션이 엔트리포인트**: 다음 세션 `/harness` 시 harness-init이 이 `- [ ]` 목록 복구.
 
-progress: 0/3 (0%)
+progress: 1/3 (33%)
 
 ---
 
