@@ -102,7 +102,13 @@ intellij-vais/     # IntelliJ plugin
 - Generics: `F foo<T>(x: T) -> T`
 - Pattern matching: `M expr { pattern => result, _ => default }`
 - Closures: `|x| x * 2`, `|x, y| { x + y }`
-- Spawn: `spawn expr`, Yield: `yield expr`
+- Async: `A F name() -> T { ... }` + `.await` (no `spawn` — removed in Phase 195)
+
+### Removed keywords
+> `lazy` / `force` (Phase 194, commit 8c60c075) and `spawn` (Phase 195,
+> commit 12592076) were deleted across lexer/AST/parser/types/codegen.
+> Migration guide: `docs/language/removed_keywords.md`. Do not re-introduce
+> these in new examples or std/.
 
 ### Attributes
 - `#[cfg(target_os = "linux")]` — conditional compilation

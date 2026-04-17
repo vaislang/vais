@@ -290,10 +290,12 @@ fn test_try_on_non_result_errors() {
 
 #[test]
 fn test_unwrap_option_type() {
+    // The `!` unwrap operator can panic on None, so the caller must be
+    // `partial`. E034 was added in Phase 195 P195-3.
     check_ok(
         r#"
         F wrap(x: i64) -> Option<i64> = Some(x)
-        F f() -> i64 {
+        partial F f() -> i64 {
             v := wrap(42)
             v!
         }

@@ -227,9 +227,13 @@ fn test_string_interp_multiple_vars() {
 
 #[test]
 fn test_assert_bool_condition() {
+    // `assert` is a panic source, so the caller must be `partial`.
+    // Phase 195 added the E034 TotalFunctionViolation check (models
+    // assert as panic-on-false); the earlier version of this test
+    // predated that rule.
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
+        partial F test(x: i64) -> i64 {
             assert(x > 0)
             R x
         }

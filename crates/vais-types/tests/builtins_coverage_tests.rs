@@ -320,12 +320,11 @@ fn test_builtin_atan2() {
 
 #[test]
 fn test_builtin_exit() {
-    // `exit` is divergent (never returns). A future pass should model it
-    // as `!` so callers can stay `total`; until then mark the caller
-    // `partial` explicitly to exercise the exit() signature path.
+    // `exit(code)` is intentional termination, not a panic. Callers can
+    // stay `total`. Phase 196 P196-D removed exit from PANIC_BUILTINS.
     check_ok(
         r#"
-        partial F test() -> i64 {
+        F test() -> i64 {
             exit(0)
             R 0
         }

@@ -87,7 +87,15 @@ use crate::types::{TypeError, TypeResult};
 ///
 /// Matches the panic group in `effects.rs` builtins table. If that list
 /// ever grows, extend this one to stay in sync.
-const PANIC_BUILTINS: &[&str] = &["panic", "abort", "exit", "assert", "__panic"];
+// `exit` used to be in this list but was removed in Phase 196 P196-D: a
+// well-written program often calls `exit(code)` as the intentional shutdown
+// path (e.g. end of `main`, clean error-code propagation), and that is
+// categorically different from a panic/abort/unwrap-violation — the program
+// is ending on purpose, not crashing. `assert`/`panic`/`abort`/`__panic`
+// remain panic sources because they fire on a violated invariant. If
+// divergent-return modeling lands later, `exit` can be re-added at the
+// type-system level via a `!` return type.
+const PANIC_BUILTINS: &[&str] = &["panic", "abort", "assert", "__panic"];
 
 /// Run the totality gate on a freshly type-checked module.
 ///
