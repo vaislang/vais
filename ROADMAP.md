@@ -1,9 +1,87 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 193 완료 → Phase 194 대기)
+> **현재 버전**: 0.1.0 (Phase 194 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-17 (Phase 193 완료: 전수조사 후 실제 한계 수정 — C4 TC substitution, C2/C3 closure capture/parser; E2E 2596/0/0 유지)
+> **최종 업데이트**: 2026-04-17 (Phase 194 Plan: Option<T> monomorphization + closure unit return + higher-order f(x) + examples fresh gate)
+
+---
+
+## 🟢 진행 중 — Phase 194: Phase 193 surfaced follow-ups — codegen generics 완결 + closure 생태계 + CI 안전망
+
+mode: auto
+max_iterations: 12
+iteration: 1
+strategy: recon-first (Phase 193 계승). Recon-D 한 번으로 4건 동시 실측 → Opus direct로 P194-1/2/3 (codegen 설계-구현 inseparable) + impl-sonnet으로 P194-4 (test infra). 겹치는 파일: inkwell/gen_match.rs, inkwell/gen_aggregate.rs, generate_expr_call.rs — P194-1/2/3은 sequential 권장. P194-4는 독립 병렬 가능.
+  iter1 strategy: Task #5(Recon-D) 단일 pending unblocked. research-haiku foreground. 4건 IR 실측으로 P194-1/2/3 수정 포인트 확정.
+
+### 배경 (2026-04-17 의사결정)
+
+Phase 193 완료 직후 사용자 선택으로 follow-up 4건 즉시 Plan. 각 건은 Phase 193에서 **실제 막힌 지점**으로 확인됨 (smoke 실패 or baseline 재현). Phase 194 후보로 final_report.md에 기록된 그 4건.
+
+### 진입 조건 ✅
+- Phase 193 완료 (2026-04-17), E2E 2596/0/0, clippy 0/0
+- Phase 193 smoke S2/S3b/S3c/S3 여전히 실패 (Phase 194 목표)
+- Higher-order `f(x)` baseline 재현됨 (pre-existing, Phase 194 범위)
+
+### 구성 원칙 (Phase 193 계승)
+- recon 의무, 0 regression, commit 분리, 새 기능 추가 금지 (안정화만)
+
+### 작업 (6개)
+
+- [x] 1. **Recon-D: 4건 현장 재현 + 수정 포인트 IR 실측** ✅ 2026-04-17
+  - 4건 reproducer /tmp/p194_b{1,2,3}.vais + IR 실측 완료
+  - **중대 발견 — Bug 1 scope 축소**: "Option<T> monomorphization"이 아니라 `type_inference.rs:681-690` Vec<T> 메서드 반환타입 테이블에 `get_opt/pop_opt` 누락. `v.get_opt(0)` → I64 추론 → `let opt`가 use_ssa 경로 탔음. **3줄 fix** 예상 (enum monomorphization hook 불필요, 기존 %Option layout 그대로 작동 중)
+  - **Bug 2**: `expr_helpers_misc.rs:369-377` lambda signature + ret 둘 다 i64 hardcoded. body가 unit일 때 `ret {} zeroinitializer`. unit→0 auto-coerce 권고
+  - **Bug 3**: 텍스트 백엔드는 L249에 locals 경로 이미 있음. 실제 실패는 inkwell 백엔드 `gen_aggregate.rs:~711` 예상 (backend 확인 필요)
+  - **Bug 4**: examples 188개 전부 main 있음. 전수 fresh compile ~3분. `#[ignore]` 기본 + IR-only (link skip) 권고
+  - 총 예상 수정량: ~70 lines, 3-4 files + 1 신규 test
+  - changes: docs/phase194/recon_findings.md (160+ lines), /tmp/p194_b{1,2,3}.vais
+
+- [ ] 2. **P194-1: Option<T> codegen monomorphization** (Opus direct) [blockedBy: 1]
+  - C4 TC fix downstream. `%Option` → `%Option$T` specialization hook
+  - Phase 192 Group A struct specialization 패턴 참고
+  - 수정 포인트 후보: module_gen/instantiations.rs, inkwell/gen_match.rs, types/mod.rs
+
+- [ ] 3. **P194-2: Closure unit→i64 return inference** (Opus direct) [blockedBy: 1]
+  - Smoke S3b/S3c의 clang IR ret type mismatch
+  - 설계 결정 필요: lambda signature body-type-based vs auto-coerce vs TC reject
+  - 수정 포인트 후보: expr_helpers_misc.rs generate_lambda_expr, inkwell gen_aggregate.rs
+
+- [ ] 4. **P194-3: Higher-order f(x) param call resolution** (Opus direct) [blockedBy: 1]
+  - pre-existing C002. function-typed param을 codegen call site가 lookup 못함
+  - 수정 포인트 후보: generate_expr_call.rs, inkwell/gen_expr/*
+
+- [ ] 5. **P194-4: examples/ fresh-rebuild E2E gate** (impl-sonnet) [blockedBy: 1]
+  - Recon-C가 드러낸 "cache 은닉" 방어망
+  - 146 files × fresh build. 실행 시간 고려 → `#[ignore]` 기본 or main-only subset
+
+- [ ] 6. **Final Gate: 통합 검증 + Phase 194 종료** (impl-sonnet) [blockedBy: 2, 3, 4, 5]
+  - cargo test --workspace, clippy, Phase 193 smoke 전부 runtime 통과
+  - 산출물: docs/phase194/final_report.md
+
+### 파일 영향 예상 매트릭스
+
+| 파일 | 관련 task | 수정 성격 |
+|---|---|---|
+| `module_gen/instantiations.rs` | #2 | enum specialization hook |
+| `inkwell/gen_match.rs` | #2 | match arm GEP with generics |
+| `inkwell/gen_aggregate.rs` | #3 | lambda signature return type |
+| `expr_helpers_misc.rs` | #3 | text backend lambda signature |
+| `generate_expr_call.rs` | #4 | function pointer call emit |
+| `inkwell/gen_expr/*` | #4 | inkwell function pointer call |
+| `crates/vaisc/tests/examples_fresh_rebuild.rs` (신규) | #5 | fresh build E2E |
+| `docs/phase194/*.md` | #1, #6 | recon + final report |
+
+### Gate 체크리스트 (각 task 완료 전)
+
+- [ ] Phase 193 smoke 관련 파일 runtime 통과 증거
+- [ ] E2E 2596/0/0 유지 또는 증가
+- [ ] Clippy 0/0
+- [ ] 파일 수정 범위가 매트릭스 내
+- [ ] commit 분리 (task별 1 commit)
+
+progress: 1/6 (17%)
 
 ---
 
