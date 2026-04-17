@@ -4,6 +4,7 @@
 
 # Getting Started
 
+- [5-Minute Vibe Coding Guide](./getting-started/vibe-coding.md)
 - [Installation](./getting-started/installation.md)
 - [Quick Start](./getting-started/quick-start.md)
 - [Tutorial](./getting-started/tutorial.md)
@@ -209,6 +210,27 @@
 - [GPU](../api/gpu.md)
 - [Hot Reload](../api/hot.md)
 - [DynLoad](../api/dynload.md)
+
+---
+
+# Ecosystem
+
+- [Overview](./ecosystem/README.md)
+- [VaisX (vais-web)]()
+  - [Overview](./ecosystem/vais-web/README.md)
+  - [Getting Started](./ecosystem/vais-web/getting-started.md)
+  - [VaisX Syntax](./ecosystem/vais-web/syntax.md)
+  - [Components](./ecosystem/vais-web/components.md)
+- [VaisDB]()
+  - [Overview](./ecosystem/vaisdb/README.md)
+  - [Getting Started](./ecosystem/vaisdb/getting-started.md)
+  - [Query Guide](./ecosystem/vaisdb/queries.md)
+  - [RAG Features](./ecosystem/vaisdb/rag.md)
+- [vais-server]()
+  - [Overview](./ecosystem/vais-server/README.md)
+  - [Getting Started](./ecosystem/vais-server/getting-started.md)
+  - [Routing & Middleware](./ecosystem/vais-server/routing.md)
+  - [Database Integration](./ecosystem/vais-server/database.md)
 
 ---
 

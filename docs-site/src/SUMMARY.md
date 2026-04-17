@@ -4,6 +4,7 @@
 
 # 시작하기
 
+- [AI 바이브코딩 5분 가이드](./getting-started/vibe-coding.md)
 - [설치](./getting-started/installation.md)
 - [빠른 시작](./getting-started/quick-start.md)
 - [튜토리얼](./getting-started/tutorial.md)
