@@ -1,9 +1,116 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 195 대기 — /clear 후 harness-init 복원)
+> **현재 버전**: 0.1.0 (Phase 196 진행 — 언어 100% 안정성·문법 명확성 확보)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 195 Plan: P194-4 gate surfaced 14 example regressions + 2 pre-existing test failures + S2 smoke 업데이트)
+> **최종 업데이트**: 2026-04-18 (Phase 196 Plan: Phase 195 deferral 16건 전수 해결 — ICE 제거 + enum/generic silent failure 제거 + type checker rule gap + 정책 문서화)
+
+---
+
+## 🟢 진행 — Phase 196: 언어 100% 안정성·문법 명확성 확보
+
+mode: auto
+max_iterations: 22
+iteration: 0
+strategy: recon-first (Phase 193/194/195 계승). Phase 195 deferral 16건을 category별로 묶어서 동일 root cause 그룹 식별 → 대표 fix 1건으로 N건 파급 해소 패턴 찾기 (Phase 195 Global codegen이 5건 해결한 선례). Recon-F 완료 후 4개 병렬 그룹(A/B/C/D/E)이 blockedBy: 1 로 풀리므로 기본 설정은 independent parallel. 파일 overlap 주의: A1/A2/A3 (inkwell codegen) + B1/B2 (codegen+match) 는 `crates/vais-codegen/src/inkwell/` 공유 — recon 결과에 따라 sequential 조정 가능.
+
+### 목표 (Exit Criteria)
+
+1. **Zero ICE**: 컴파일러 panic 0건 (현재 3건: tutorial_wc, js_target, simd_* LLVM assert)
+2. **Zero silent failure**: 기본 문법·기능이 silent하게 실패하지 않음 (enum multi-field, generic instantiation)
+3. **Type checker rule 완비**: 허용 문법 = 검증 통과 문법 (현재 `LW () case`, `[T; N]` indexing, cross-module nullary fn 미지원)
+4. **문법 명확성**: 제거된 키워드 정책 문서화 + divergent function 모델링 (exit → `!`)
+5. **Final gate**: examples_fresh_rebuild 188/188 pass, SKIP_LIST 0건 (또는 문서화된 archive 자동 제외만), E2E 2596+/0/0, clippy 0/0
+
+### 배경 (2026-04-18)
+
+Phase 195는 P194-4 gate가 노출한 29 regression 중 13건을 해결하고 16건을 deferred(SKIP_LIST)로 분리 종료했다. 각 deferral은 inline TODO로 root cause까지 문서화되었지만, 이 상태는 "안정성 확보"라고 할 수 없다:
+- **ICE 3건**: 컴파일러가 패닉하는 것은 언어 신뢰성의 최악 사례
+- **Silent failure 4건**: 기본 기능(enum multi-field, generic drop, HashMap method)이 조용히 실패하거나 디버그 로그 누출
+- **Rule gap 3건**: 문법은 허용되는데 type checker가 막음 (inconsistent 문법 명확성)
+- **미완 정책 2건**: lazy/force/spawn 제거는 커밋만 있고 문서 없음; exit()가 divergent로 모델링되지 않아 total F에서 쓸 수 없음
+- **잔여 4건**: historical/intentional/conceptual 파일을 archive로 분리하지 않아 gate가 SKIP_LIST에 의존
+
+사용자 목표는 "Vais 언어를 프로젝트에 믿고 사용할 수 있게" 이므로 위 10 카테고리(16 파일)를 전수 해소하고, 동일 root cause 그룹은 대표 fix로 파급 해결한다.
+
+### 작업 (11개)
+
+- [ ] 1. **Recon-F: 16 deferral root-cause 재확인 + 작업 경계 확정** (research-haiku)
+  - docs/phase195/final_report.md 및 SKIP_LIST inline TODO 재검증
+  - 각 파일의 현재 에러 재측정 (Phase 195 부산물로 변화 가능성)
+  - 카테고리 간 overlap 식별 (예: js_target int/float vs SIMD aggregate가 동일 type_mapper인지)
+  - 산출물: docs/phase196/recon_findings.md — 그룹당 fix scope 추정 + Opus/impl-sonnet 분류
+
+- [ ] 2. **P196-A1: Inkwell ICE — tutorial_wc string-concat fat-ptr** (Opus direct) [blockedBy: 1]
+  - insertvalue IntValue/StructValue 불일치. gen_aggregate.rs concat 경로
+  - string interpolation unit test 추가
+
+- [ ] 3. **P196-A2: Inkwell ICE — js_target int/float value mix** (Opus direct) [blockedBy: 1]
+  - f64 local이 int load 경로 진입 → into_float_value assertion fail
+  - 혼합 int/float local 단위 테스트
+
+- [ ] 4. **P196-A3: Inkwell C004 SIMD aggregate extract (2건)** (Opus direct) [blockedBy: 1]
+  - SIMD intrinsic vector width 불일치 (hard-coded index vs specialized width)
+  - simd_test, simd_distance fresh build + IR verify
+
+- [ ] 5. **P196-B1: Enum multi-field variant binding via parameter** (Opus direct) [blockedBy: 1]
+  - `EN Op { Add(i64,i64) }` + `F eval(op: Op) { M op { Add(a,b) => b } }` 에서 b undefined
+  - enum_variant_multi_payload_types 등록 경로 수정
+
+- [ ] 6. **P196-B2: Generic instantiation — HashMap/Vec drop + [INST] 로그 제거** (Opus direct) [blockedBy: 1]
+  - instantiation tracing stderr 누출 제거 + underlying generic method drop 수정
+  - 3개 예제(option_result_simple/test, simple_hashmap_test) fresh build
+
+- [ ] 7. **P196-C1: Type checker — LW on unit + fixed-size array indexing** (impl-sonnet) [blockedBy: 1]
+  - `LW cond { body }` unit 허용 규칙 / `[T; N]` indexable trait
+  - 스펙 문서화 + 단위 테스트
+
+- [ ] 8. **P196-C2: Cross-module nullary fn resolution (selfhost token)** (Opus direct) [blockedBy: 1]
+  - `F TOK_KW_F() -> i64 = 1` + `U constants` 경로에서 call-site가 i64로 resolve
+  - selfhost_token_module_compiles #[ignore] 해제
+
+- [ ] 9. **P196-D: exit() divergent + 제거된 키워드 정책 문서화** (impl-sonnet) [blockedBy: 1]
+  - exit()을 `!`로 모델링해서 total F에서 사용 가능
+  - docs/language/removed_keywords.md (lazy/force/spawn 이주 가이드)
+
+- [ ] 10. **P196-E: 잔여 cleanup — test_import, range_type_error, tcp_10k_bench, lazy_*** (impl-sonnet) [blockedBy: 1]
+  - std/test_simple.vais 최소 stub
+  - examples/intentional_errors/ (range_type_error) + examples/archive/ (lazy_*, tcp_10k_bench) 로 이동
+  - gate 자동 archive 제외 로직 → SKIP_LIST 0건화
+
+- [ ] 11. **Final Gate: 전수 검증 + Phase 196 종료** (impl-sonnet) [blockedBy: 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  - 모든 목표 지표 달성 확인
+  - docs/phase196/final_report.md 작성
+
+### 파일 영향 예상 매트릭스
+
+| 파일/디렉토리 | 관련 task | 수정 성격 |
+|---|---|---|
+| `crates/vais-codegen/src/inkwell/gen_aggregate.rs` | #2 | string concat insertvalue 타입 정합 |
+| `crates/vais-codegen/src/inkwell/gen_expr/literal.rs` | #2 | string interpolation |
+| `crates/vais-codegen/src/inkwell/gen_stmt.rs`, `gen_expr/var.rs` | #3 | int/float local load 경로 |
+| `crates/vais-codegen/src/inkwell/builtins/simd.rs` | #4 | SIMD vector width 처리 |
+| `crates/vais-codegen/src/inkwell/gen_match.rs` | #5 | Pattern::Variant multi-field 경로 |
+| `crates/vais-codegen/src/inkwell/gen_expr/call.rs` | #5, #6 | enum 생성자 등록 + generic instantiation |
+| `crates/vais-types/src/checker_expr.rs` | #7 | LW 구문 rule |
+| `crates/vais-types/src/inference.rs` | #7 | `[T; N]` indexable |
+| `crates/vais-types/src/checker_module.rs`, `checker_fn.rs` | #8 | cross-module fn resolution |
+| `crates/vais-types/src/builtins/system.rs`, `types/never.rs` | #9 | exit divergent 모델링 |
+| `docs/language/removed_keywords.md`, `CLAUDE.md` | #9 | 정책 문서 |
+| `examples/archive/`, `examples/intentional_errors/`, `std/test_simple.vais` | #10 | archive 구조 |
+| `crates/vaisc/tests/examples_fresh_rebuild.rs` | #10, #11 | SKIP_LIST → archive 자동 제외 |
+| `docs/phase196/*.md` | #1, #11 | recon + final report |
+
+### Gate 체크리스트 (각 task 완료 전)
+
+- [ ] 관련 에러 코드 실측 건수 감소 (ICE 0, silent failure 감소)
+- [ ] E2E 2596+/0/0 유지
+- [ ] Clippy 0/0
+- [ ] `examples_fresh_rebuild -- --ignored` 실패 수 감소
+- [ ] SKIP_LIST 감소 또는 archive 구조로 이전
+- [ ] commit 분리 (category 단위)
+
+progress: 0/11 (0%)
 
 ---
 
