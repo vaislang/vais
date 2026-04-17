@@ -954,10 +954,13 @@ fn test_example_files_exist() {
         .unwrap()
         .parent()
         .unwrap();
+    // wasm_todo_app.vais was moved to examples/archive/ in Phase 196 P196-C1
+    // pending inkwell array-GEP codegen for global `[T; N]` access. The
+    // other three still live under examples/.
     let examples = [
         "examples/wasm_interop.vais",
         "examples/wasm_calculator.vais",
-        "examples/wasm_todo_app.vais",
+        "examples/archive/wasm_todo_app.vais",
         "examples/wasm_api_client.vais",
     ];
     for rel_path in &examples {
