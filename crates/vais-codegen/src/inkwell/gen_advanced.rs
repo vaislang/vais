@@ -27,6 +27,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .build_store(ptr, val)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     Ok(val)
+                } else if let Some((global, _ty)) = self.globals.get(name).copied() {
+                    self.builder
+                        .build_store(global.as_pointer_value(), val)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    Ok(val)
                 } else {
                     Err(CodegenError::UndefinedVar(name.clone()))
                 }

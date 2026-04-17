@@ -116,6 +116,12 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Constants: name -> value (evaluated at compile time)
     pub(super) constants: HashMap<String, BasicValueEnum<'ctx>>,
 
+    /// User-declared globals (`G name: T = value`):
+    /// name -> (LLVM global pointer, pointee type).
+    /// Populated in generate_module's first pass from `Item::Global`.
+    /// Looked up by `generate_var` (load) and assignment paths (store).
+    pub(super) globals: HashMap<String, (GlobalValue<'ctx>, BasicTypeEnum<'ctx>)>,
+
     /// Function name -> return struct type name (for struct type inference)
     pub(super) function_return_structs: HashMap<String, String>,
 
@@ -247,6 +253,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_bindings: HashMap::new(),
             _last_lambda_info: None,
             constants: HashMap::new(),
+            globals: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
             alloc_tracker: Vec::new(),
@@ -352,6 +359,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 ast::Item::Const(const_def) => {
                     self.define_const(const_def)?;
+                }
+                ast::Item::Global(global_def) => {
+                    self.define_global(global_def)?;
                 }
                 _ => {}
             }

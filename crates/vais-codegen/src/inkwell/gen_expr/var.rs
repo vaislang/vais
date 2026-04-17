@@ -51,6 +51,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         } else if let Some(val) = self.constants.get(name) {
             // Check constants
             Ok(*val)
+        } else if let Some((global, ty)) = self.globals.get(name).copied() {
+            // User-declared global (`G name: T = v`) — load from the module-level pointer.
+            let value = self
+                .builder
+                .build_load(ty, global.as_pointer_value(), name)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(value)
         } else {
             // Check if this is an enum variant name (e.g., Red, Green, Blue)
             for ((_, v_name), tag) in &self.enum_variants {
