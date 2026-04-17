@@ -1,15 +1,147 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 190 완료 → Phase 190.5 준비)
+> **현재 버전**: 0.1.0 (Phase 191 완료 → Phase 192 진입)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-14 (Phase 190.5 + 190.6 완료 → Phase 191 follow-up 5건 등록)
+> **최종 업데이트**: 2026-04-17 (Phase 191 완료 + 무결점 100% 게이트 정의 → Phase 192 등록)
 
 ---
 
-## Current Tasks — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
+## Current Tasks — Phase 192: 무결점 100% 게이트 (codegen 실제 한계 9건)
 
-mode: auto
+mode: pending
+iteration: 2
+max_iterations: 12
+strategy: blockedBy chain (1→2→3) + method_call.rs file overlap → sequential. opus_direct: codegen 설계-구현 inseparable (substitution propagation + monomorphization hook + IR layout) — research/impl 분리 시 의도 손실.
+
+session_checkpoint: 2026-04-17 iter 2 — Group A 정밀 recon 완료, 구현 0.
+  harness_improvements: 감사 권고 #1 적용. task-completed.sh + harness-issue-logger.sh에서 macOS 미지원 `flock` 제거 → atomic single-line append로 교체. /tmp/harness-metrics.log 스키마 JSON-line으로 재작성 (ts/task_id/subject/agent/model/status/tokens_in/tokens_out/raw_keys). 다음 Task 완료 시 /tmp/task-completed-sample.json 자동 dump (실제 페이로드 스키마 확인용).
+    memory 기록: ~/.claude/projects/.../memory/feedback_macos_flock.md — 향후 hook 설계 시 flock 함정 차단.
+    부가 발견: ~/.claude/harness-issues.log의 25건은 Apr 7 이전 이슈. flock 버그로 Apr 7부터 4/17까지 로그 dead 상태였음. 현재 세션부터 복구됨.
+  group_a_recon:
+    1. iter 19 revert(commit 36e2c5b0, Apr 12) 사유 재확인: "exactly one specialization" struct literal path가 non-generic context(main)에서 specialized layout 적용 → base generic methods(Vec_new)의 i64-uniform params와 충돌. 현재 접근은 "base method skip + i64 specialization 명시 유지"로 회피 중.
+    2. test-harness 경로 IR 실측(compile_to_ir, ir_dump_tmp 임시 모듈로 수행 후 제거):
+       - Vec<i32> 테스트 케이스 IR 분석:
+         * `%Vec$i32 = type { i32, i64 }` specialized layout 정상 생성
+         * `%Vec = type { i64, i64 }` base layout도 공존
+         * `define %Vec$i32 @Vec_new$i32(i32 %v)` 생성 ✅
+         * `define i64 @Vec_len$i32(%Vec$i32* %self)` 생성 ✅
+         * `define i64 @Vec_get(%Vec* %self)` — base만, `Vec_get$i32` monomorphization 누락 ❌
+         * main()에서 `%v.2 = alloca %Vec$i32` ✅
+         * main()에서 `%t3 = getelementptr %Vec, %Vec* %v.2, i32 0, i32 3` ❌ base layout GEP + OOB 필드 3 (layout 2필드)
+         * main()에서 `%t7 = getelementptr %Vec, %Vec* %v.2, i32 0, i32 2` ❌ OOB 필드 2
+         * main()에서 `%t11 = call i64 @Vec_len$i32(%Vec* %v.2)` ❌ specialized 함수에 base ptr 전달 (type mismatch)
+    3. ROADMAP 문서 정정: 원 ROADMAP은 `vec_i32_push` 테스트를 명시하지만 실존하지 않음. 실제 phase182 대상 3건은:
+       - `e2e_phase182_vec_i32_struct_field_type_preserved` (line 130) assert_compiles
+       - `e2e_phase182_vec_u8_struct_field_type_preserved` (line 164) assert_compiles
+       - `e2e_phase182_vec_f32_generic_compiles` (line 31) 이미 assert_exit_code 사용 중 → Group A 범위에서 제외해야 함 (ROADMAP 오류)
+    4. 현재 3 테스트 모두 assert_compiles로 통과 중 (clang IR verification은 통과, runtime 미검증).
+    5. 실제 수정 포인트(정확 위치):
+       a. `v.len()` / `v.size()` 같은 method call에서 receiver(`v`의 타입 `%Vec$i32*`)를 wrapper 함수로 넘길 때 `%Vec*`로 잘못 캐스팅됨 → `method_call.rs`에서 receiver LLVM type 보존 필요.
+       b. receiver preparation 중 `v.elem` / `v.len` field GEP가 base layout으로 생성 + 잘못된 필드 인덱스 → `expr_helpers_data.rs::generate_field_expr`에서 expr_types 조회하여 specialized struct GEP 사용 필요.
+       c. `Vec_get`은 method body에 specialized 버전이 생성되지 않음 → `function_gen/generics.rs` 또는 `module_gen/instantiations.rs`에서 receiver의 concrete generics 기반 method monomorphization 트리거 필요.
+  next_session_protocol:
+    1. Group A 시작 전 이 recon 결과를 읽고 시작.
+    2. 수정 순서: (c) monomorphization 트리거 → (a) method_call receiver type 보존 → (b) field_expr specialized GEP.
+    3. 각 수정 후 즉시 test-harness IR 실측으로 회귀 확인. inkwell CLI(`--emit-ir`)의 partial IR 신뢰 금지.
+    4. Group A 한 세션, Group B 한 세션, Group C 한 세션 (각 1+ 시간 추정).
+    5. Phase 182 ROADMAP 텍스트의 `vec_i32_push` 언급은 오식. 실제 대상 테스트 이름으로 정정 필요.
+
+### 배경 (2026-04-17 의사결정)
+
+사용자 명시 원칙(생태계 ROADMAP L26): *"vais 언어가 무결점 100%가 되어야 web/db/server가 동일하게 무결점이 가능하다"*. 이를 측정 가능한 게이트로 정의:
+
+- **컴파일러 게이트** (Phase 192, 이 섹션): codegen 실제 한계 9건 해결 → assert_compiles 39 → 30 도달
+- **앱 게이트** (Phase 193, 별도): vais-monitor를 self-hosted vais로 재작성 (Phase 4 방향)
+- **통합 게이트** (Phase 194, 별도): E2E + Bootstrap + monitor 실측 통합 검증
+
+### Phase 192 진입 조건 ✅
+- Phase 191 (문자열 소유권 모델) 완료 (2026-04-16)
+- E2E 2592/0/0 baseline
+- cargo check green, clippy 0/0
+- assert_compiles 39건 재측정 분류 완료 (22 의도적 + 9 실제 한계 + 8 검증용)
+- 생태계 ROADMAP "Phase 191 전략 B" 폐기 처리 완료 (2026-04-17, 메트릭 무효 확정)
+
+### 9건 codegen 실제 한계 (재측정 결과)
+
+| 그룹 | 테스트 | 근본 원인 |
+|---|---|---|
+| **A. Vec<i32>/<u8> method dispatch (3건)** | phase182 vec_i32_push, vec_i32_struct_field_type_preserved, vec_u8_struct_field_type_preserved | struct literal은 specialized layout (`%Vec$i32`) 사용하지만 method dispatch는 base struct GEP. method body 진입 시 receiver의 concrete generics를 substitutions에 전파 필요 |
+| **B. Generic struct field access (3건)** | phase164 generic_struct_field_access, generic_fn_struct_field_access, generic_struct_nested_field | non-generic 함수가 `Entry<str>` 같은 concrete-generic struct를 받을 때 함수 monomorphization hook 누락 (`get_key$Entry$str` 미생성) |
+| **C. Vec<f32>/<f64> bitcast 잔재 (2건)** | phase182 generic_identity_f32_compiles, generic_identity_f64_compiles | `coerce_specialized_return`이 value의 LLVM type 미확인 후 `bitcast i64 %x to double` 강제 → clang 거부. value가 이미 `double`/`float`이면 bitcast 생략 필요 |
+| **D. Vec<T> generic fn index (1건)** | phase182 vec_param_generic_fn_index_compiles | runtime null data pointer crash. clang IR 통과는 가능, 실행 안전성은 별도 |
+
+**합계 9건**. 모두 해결 시 assert_compiles **39 → 30**.
+
+### 작업 (3개, 순차)
+
+- [ ] 1. **Group A: Vec<i32>/<u8> method dispatch 특수화** (Opus direct, foreground, ≤2h)
+  - **대상 테스트**: phase182 vec_i32_push, vec_i32_struct_field_type_preserved, vec_u8_struct_field_type_preserved
+  - **수정 포인트**:
+    - `crates/vais-codegen/src/expr_helpers_call/method_call.rs`: receiver의 concrete generics → substitutions 전파
+    - `crates/vais-codegen/src/expr_helpers_data.rs::generate_field_expr`: specialized struct GEP base 조회
+    - iter 19 revert 조건(`Vec_new` undefined) 회피: base method skip 로직에서 i64 specialization 명시 유지
+  - **완료 기준**: 3 테스트 `assert_compiles → assert_exit_code` 전환, E2E 2592 baseline 유지, clippy 0/0
+  - **체크포인트**: `cargo test -p vaisc --test e2e phase182 --workspace`
+
+- [ ] 2. **Group B: phase164 generic struct field access** (Opus direct, foreground, ≤2h) [blockedBy: 1]
+  - **대상 테스트**: phase164 generic_struct_field_access, generic_fn_struct_field_access, generic_struct_nested_field
+  - **수정 포인트**:
+    - `crates/vais-codegen/src/module_gen/instantiations.rs`: call site argument가 concrete-generic struct (`Entry<str>`)인 함수 만날 때 `get_key$Entry$str` 트리거
+    - `crates/vais-codegen/src/generate_expr_struct.rs:72-76`: main-path에서 TC expr_types 조회하여 specialized struct 등록 → `%Entry$str` type-def 생성
+    - `crates/vais-codegen/src/expr_helpers_call/generate_expr_call.rs`: monomorphized 함수 호출 시 `%Entry$str` 인자 전달
+  - **경계 조건**: generic 함수(`get_key_off<T>`)는 기존 경로 유지, non-generic + generic struct arg만 신규
+  - **완료 기준**: 3 테스트 `assert_compiles → assert_exit_code` 전환, E2E baseline 유지, clippy 0/0
+  - 파일 겹침: #1과 `method_call.rs` 공유 → 순차 실행 (병렬 금지)
+
+- [ ] 3. **Group C+D: Vec<f32>/<f64> coerce + 검증 gate** (Opus direct, foreground, ≤1.5h) [blockedBy: 2]
+  - **Group C** — float coerce type-aware (`function_gen/generics.rs:602-623`)
+    - `coerce_specialized_return`이 value의 LLVM type 확인 (`llvm_type_of(value)`)
+    - 이미 `double`/`float`이면 bitcast 생략, `i64`일 때만 bitcast
+    - 대상 2건: generic_identity_f32_compiles, generic_identity_f64_compiles
+  - **Group D** — vec_param_generic_fn_index 1건은 runtime null data pointer (별도 추적). 이번 Phase 범위는 IR 통과만 확인 후 codegen 변경 없음 (이미 통과 중).
+  - **검증 gate**:
+    - `cargo test -p vaisc --test e2e --workspace 2>&1 | tail -10` (E2E pass count)
+    - `cargo clippy --workspace --exclude vais-python --exclude vais-node -- -D warnings`
+    - `grep -rh "assert_compiles" crates/vaisc/tests/e2e/ | wc -l` (39 → 30 기대)
+    - ROADMAP Current Tasks 섹션을 "⏸ 완료"로 전환 + Phase 193 진입 조건 기록
+  - **Git**: task #1, #2, #3 각각 별도 커밋 (bisect 용이). 사용자 승인 후 push.
+
+### 파일 영향 매트릭스
+
+| 파일 | task | 수정 성격 |
+|---|---|---|
+| `expr_helpers_call/method_call.rs` | #1, #2 | substitution 전파 + monomorphize 트리거 |
+| `expr_helpers_data.rs::generate_field_expr` | #1 | specialized GEP base 조회 |
+| `module_gen/instantiations.rs` | #2 | non-generic fn + generic struct arg hook |
+| `generate_expr_struct.rs:72-76` | #2 | main-path specialized layout |
+| `expr_helpers_call/generate_expr_call.rs` | #2 | monomorphized 함수 호출 type 일치 |
+| `function_gen/generics.rs:602-623` | #3 | float coerce type-aware 분기 |
+
+### Gate 체크리스트 (각 task 완료 전)
+
+- [ ] 대상 assert_compiles 건수 정확히 감소 (3 / 3 / 2건)
+- [ ] pre-existing assert_exit_code 테스트 regression 0건
+- [ ] E2E 2592/0/0 유지 또는 증가
+- [ ] Clippy 0 warning / 0 error
+- [ ] iter 19 revert 조건(`Vec_new` undefined) 재발 없음
+- [ ] 수정된 파일이 "파일 영향 매트릭스" 범위 내
+
+### 원칙 (strong)
+
+- **recon 의무**: 구현 전 IR 실측 (`cargo run --release --bin vaisc -- --emit-ir /tmp/test.vais`). ROADMAP/memory 수치 신뢰 금지.
+- **0 regression**: E2E 2592/0/0 유지 또는 증가, Clippy 0/0.
+- **commit 분리**: task #1, #2, #3 각각 개별 commit. 실패 시 bisect·revert 용이.
+- **이 섹션이 엔트리포인트**: 다음 세션 `/harness` 시 harness-init이 이 `- [ ]` 목록 복구.
+
+progress: 0/3 (0%)
+
+---
+
+## ⏸ 완료 — Phase 191: 문자열 소유권 모델 확장 (RFC-001 follow-ups)
+
+mode: completed
+completed_at: 2026-04-16
 iteration: 23
 max_iterations: 30
 session_checkpoint: 2026-04-15 세션 4 — #10/#2a'/#9 3건 연속 완료.
