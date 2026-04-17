@@ -684,6 +684,13 @@ impl CodeGenerator {
                         "push" | "insert" | "remove" | "clear" | "truncate" | "resize" | "swap"
                         | "sort" | "reverse" => ResolvedType::I64,
                         "pop" | "get" | "last" | "first" => elem_ty,
+                        // Option-returning accessors: without this, `let opt := v.get_opt(i)`
+                        // falls back to I64, takes the SSA branch in stmt.rs, and downstream
+                        // `M opt { Some(..) => .. }` GEPs the %Option value as if it were a ptr.
+                        "get_opt" | "pop_opt" | "first_opt" | "last_opt" => ResolvedType::Named {
+                            name: "Option".to_string(),
+                            generics: vec![elem_ty],
+                        },
                         "clone" => recv_type,
                         "data" => ResolvedType::I64,
                         _ => ResolvedType::I64,
