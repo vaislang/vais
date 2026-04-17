@@ -134,21 +134,35 @@ fn assert_ir_contains(source: &str, expected: &str) {
 // Rust-based compiler pipeline. This confirms the selfhost code is valid Vais.
 
 #[test]
-#[ignore = "Phase 196: cross-module fn resolution treats nullary constant fn (e.g. F TOK_KW_F() -> i64 = 1) as i64 literal at the call site, so `TOK_KW_F()` fails with NotCallable(\"i64\", None). Type checker needs to preserve function identity across `U constants` imports."]
 fn selfhost_token_module_compiles() {
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let path = format!("{}/../..", project_root);
-    let token_path = format!("{}/selfhost/token.vais", path);
-    match compile_file_to_ir(&token_path) {
-        Ok(ir) => {
-            // Verify the IR contains function definitions for token constants
-            assert!(
-                ir.contains("TOK_KW_F") || ir.contains("tok_kw_f") || ir.contains("define"),
-                "Token module IR should contain token constant function definitions"
-            );
-        }
-        Err(e) => panic!("selfhost/token.vais failed to compile: {}", e),
-    }
+    // Use the real vaisc subprocess so `U constants` import resolution runs.
+    // The in-process `compile_file_to_ir` helper parses a single source file
+    // only; selfhost/token.vais imports constants.vais and the call sites
+    // like `TOK_KW_F()` fail NotCallable without the import graph.
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("canonicalize project root");
+    let token_path = project_root.join("selfhost/token.vais");
+    let std_path = project_root.join("std");
+    let vaisc = env!("CARGO_BIN_EXE_vaisc");
+
+    let output = Command::new(vaisc)
+        .arg("build")
+        .arg(&token_path)
+        .arg("--emit-ir")
+        .arg("--no-cache")
+        .env("VAIS_STD_PATH", &std_path)
+        .output()
+        .expect("spawn vaisc");
+    assert!(
+        output.status.success(),
+        "selfhost/token.vais failed to compile: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
