@@ -152,6 +152,35 @@ impl TypeChecker {
             self.unify(&expected_ret, &body_type_deref)?;
         }
 
+        // Phase 193 R-1b: finalize method instantiations that were deferred
+        // because their type args still contained free vars at call-site time
+        // (e.g., `Vec.with_capacity(8)` inside `fn -> Vec<i64>`). Now that the
+        // return type has been unified, apply substitutions and record any
+        // newly-concrete instantiations for monomorphization.
+        if !self.pending_method_instantiations.is_empty() {
+            let pending = std::mem::take(&mut self.pending_method_instantiations);
+            for (struct_name, method_name, type_args) in pending {
+                let resolved: Vec<ResolvedType> = type_args
+                    .iter()
+                    .map(|t| self.apply_substitutions(t))
+                    .collect();
+                let all_concrete = resolved
+                    .iter()
+                    .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                if all_concrete {
+                    self.add_instantiation(crate::types::GenericInstantiation::struct_type(
+                        &struct_name,
+                        resolved.clone(),
+                    ));
+                    self.add_instantiation(crate::types::GenericInstantiation::method(
+                        &struct_name,
+                        &method_name,
+                        resolved,
+                    ));
+                }
+            }
+        }
+
         // Verify ImplTrait/DynTrait bounds: if return type is impl Trait or dyn Trait,
         // check that the concrete body type implements the required trait bounds.
         self.verify_trait_type_bounds(&expected_ret, &body_type_deref);

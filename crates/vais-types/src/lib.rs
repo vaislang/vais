@@ -191,6 +191,13 @@ pub struct TypeChecker {
     /// Expression types from type checking, keyed by expression span.
     /// Used by codegen to get accurate types instead of re-inferring.
     pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+
+    /// Pending method instantiations accumulated while checking a function body
+    /// when type args still contain fresh type variables. Drained at end of
+    /// `check_function` after body/return unification so vars resolve to
+    /// concrete types (e.g., `Vec.with_capacity(n)` inside `fn -> Vec<i64>`).
+    /// Entries: (struct_name, method_name, type_args-possibly-with-vars).
+    pub(crate) pending_method_instantiations: Vec<(String, String, Vec<ResolvedType>)>,
 }
 
 impl TypeChecker {
@@ -232,6 +239,7 @@ impl TypeChecker {
             loop_depth: 0,
             moved_vars: HashSet::new(),
             expr_types: HashMap::new(),
+            pending_method_instantiations: Vec::new(),
         };
         checker.register_builtins();
         checker

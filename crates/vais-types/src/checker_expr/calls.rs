@@ -721,6 +721,17 @@ impl TypeChecker {
                             inferred_type_args,
                         );
                         self.add_instantiation(method_inst);
+                    } else {
+                        // Phase 193 R-1b: type args still contain free vars (e.g., a
+                        // static ctor like `Vec.with_capacity(n)` whose element type
+                        // has not yet been constrained by this expression alone).
+                        // Defer instantiation until after function body unification
+                        // resolves the vars against the declared return type.
+                        self.pending_method_instantiations.push((
+                            type_name.node.clone(),
+                            method.node.clone(),
+                            inferred_type_args,
+                        ));
                     }
 
                     return Ok(resolved_return);
