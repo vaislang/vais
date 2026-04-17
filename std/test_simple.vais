@@ -1,0 +1,8 @@
+# std/test_simple — minimal module used by examples/test_import.vais to
+# exercise the `U std/…` import resolution path. Keep the surface area
+# tiny: a single exported function that examples can call without
+# pulling in any heavier stdlib.
+
+P F test_func(a: i64, b: i64) -> i64 {
+    a + b
+}

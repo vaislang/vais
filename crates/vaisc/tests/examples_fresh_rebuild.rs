@@ -44,44 +44,22 @@ use std::process::Command;
 
 /// Files to skip (filename only, not full path).
 ///
-/// Entries are examples that intentionally cannot compile under the current
-/// language rules and are kept as historical / conceptual references. The
-/// comment next to each entry records the reason it is skipped so future
-/// contributors know whether the skip is still justified.
+/// Entries here are examples that compile today but **must fail** the gate for
+/// a specific architectural reason (e.g. the test checker is expected to be
+/// strict about a rule that examples/ samples happen to trip). Historical or
+/// intentional-error fixtures belong in `examples/archive/` and
+/// `examples/intentional_errors/` instead — those subdirectories are skipped
+/// wholesale by the discovery loop below and do not need individual entries
+/// here.
 const SKIP_LIST: &[&str] = &[
-    // `lazy`/`force` keywords removed in commit 8c60c075 (ROADMAP #16+#17).
-    // Examples predate the removal and are kept as historical references.
-    "lazy_simple.vais",
-    "lazy_test.vais",
-    "lazy_func_test.vais",
-    // Conceptual TCP example: file comment explicitly labels it "simplified
-    // example showing the architecture — production would use AsyncTcpListener".
-    // Uses stdlib byte-ops that were never implemented (store_i8, store_i16,
-    // store_i32, load_i32). Kept for documentation; would need a full rewrite
-    // against AsyncTcpListener before it could compile.
-    "tcp_10k_bench.vais",
-    // Type-error regression fixture: file intentionally triggers E001 to
-    // exercise the type checker's range-type-mismatch diagnostic.
-    "range_type_error_test.vais",
-    // Deferred to Phase 196: SIMD intrinsic codegen emits LLVM IR that fails
-    // the verifier with "Aggregate extract index out of range". Likely the
-    // vector-extract helpers use a hard-coded index that doesn't match the
-    // resolved vector width for the specialized type.
-    "simd_test.vais",
-    "simd_distance.vais",
-    // Deferred to Phase 196: the example imports `U std/test_simple`, which
-    // does not exist in std/. Either the example predates a stdlib split or
-    // test_simple was renamed; needs a decision on whether to provide the
-    // module or port the example to an existing one.
-    "test_import.vais",
-    // Deferred to Phase 196: E001 — `LW ev_fd == read_fd` expects
-    // Optional/Result, found `()`. Downstream of the `LW` type-inference
-    // rule; requires a change in the type checker, not the example.
+    // Phase 196 P196-C1: the `LW expr { body }` loop expects the scrutinee to
+    // have type Optional/Result, but several reactor-style examples use it on
+    // an `()`-valued comparison. Deferred until the type checker grows a
+    // `while (bool)` admission rule for LW.
     "async_reactor_test.vais",
-    // Deferred to Phase 196: [i64; 100] fixed-size array type is not
-    // treated as indexable in the type checker, so `todo_ids[idx] = v`
-    // reports E001. The global-array codegen works; the type-level index
-    // admissibility rule is missing.
+    // Phase 196 P196-C1: `[i64; 100]` fixed-size arrays are not treated as
+    // indexable by the type checker, so `todo_ids[idx] = v` reports E001.
+    // Global-array codegen works; the type-level admission rule is missing.
     "wasm_todo_app.vais",
 ];
 
