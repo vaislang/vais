@@ -98,6 +98,15 @@ pub struct InkwellCodeGenerator<'ctx> {
     pub(super) enum_variant_multi_payload_types:
         HashMap<(String, String), inkwell::types::StructType<'ctx>>,
 
+    /// Enum single-primitive variant payload LLVM type:
+    /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
+    /// variants whose sole payload is a non-struct primitive. The enum data
+    /// slot always stores this as i64 (bitcast for floats, widen for smaller
+    /// ints), but pattern bindings need to recover the declared type so the
+    /// bound identifier has the right type when referenced downstream.
+    pub(super) enum_variant_primitive_payload_types:
+        HashMap<(String, String), inkwell::types::BasicTypeEnum<'ctx>>,
+
     /// Variable name -> struct type name tracking (for method call resolution)
     pub(super) var_struct_types: HashMap<String, String>,
 
@@ -246,6 +255,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
             enum_variant_struct_types: HashMap::new(),
+            enum_variant_primitive_payload_types: HashMap::new(),
             enum_variant_multi_payload_types: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),

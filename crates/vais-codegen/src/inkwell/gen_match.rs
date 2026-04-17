@@ -931,6 +931,50 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 return Ok(());
                             }
                         }
+
+                        // Non-struct payload (e.g. Circle(f64)): the enum data
+                        // slot stored the payload as i64 (floats bitcast, ints
+                        // widened). Recover the declared primitive type if we
+                        // have it recorded so the bound identifier has the
+                        // right LLVM type downstream.
+                        let primitive_ty: Option<inkwell::types::BasicTypeEnum<'ctx>> = self
+                            .enum_variant_primitive_payload_types
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == &name.node)
+                            .map(|(_, ty)| *ty);
+                        if let Some(decl_ty) = primitive_ty {
+                            let data_i64 = data_val.into_int_value();
+                            let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
+                                self.builder
+                                    .build_bitcast(data_i64, decl_ty.into_float_type(), "variant_i64_to_f")
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else if decl_ty.is_int_type() {
+                                let target = decl_ty.into_int_type();
+                                if target.get_bit_width() == 64 {
+                                    data_i64.into()
+                                } else if target.get_bit_width() < 64 {
+                                    self.builder
+                                        .build_int_truncate(data_i64, target, "variant_i64_trunc")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                } else {
+                                    self.builder
+                                        .build_int_s_extend(data_i64, target, "variant_i64_sext")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                }
+                            } else if decl_ty.is_pointer_type() {
+                                self.builder
+                                    .build_int_to_ptr(data_i64, decl_ty.into_pointer_type(), "variant_i64_to_ptr")
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                data_val
+                            };
+                            self.generate_pattern_bindings(first_field, &decoded)?;
+                            return Ok(());
+                        }
+
                         self.generate_pattern_bindings(first_field, &data_val)?;
                     }
                 } else {

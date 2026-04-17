@@ -172,15 +172,37 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             // If the variant has a single Tuple field that is a named type,
             // record it so pattern bindings can recover the struct type.
+            // If the single field is a primitive (int/float/etc), record its
+            // LLVM type so pattern bindings can bitcast the i64 data slot back
+            // to the declared type before binding.
             if let ast::VariantFields::Tuple(types) = &variant.fields {
                 if types.len() == 1 {
                     if let ast::Type::Named {
                         name: struct_name, ..
                     } = &types[0].node
                     {
-                        self.enum_variant_struct_types.insert(
+                        // Struct payloads: existing code path.
+                        if self.generated_structs.contains_key(struct_name) {
+                            self.enum_variant_struct_types.insert(
+                                (enum_name.clone(), variant.name.node.clone()),
+                                struct_name.clone(),
+                            );
+                        } else {
+                            // Primitive type reached here by name (e.g. "f64", "i32").
+                            let resolved = self.ast_type_to_resolved(&types[0].node);
+                            let ll_ty = self.type_mapper.map_type(&resolved);
+                            self.enum_variant_primitive_payload_types.insert(
+                                (enum_name.clone(), variant.name.node.clone()),
+                                ll_ty,
+                            );
+                        }
+                    } else {
+                        // Non-Named single-tuple payload (tuple of primitives, etc.).
+                        let resolved = self.ast_type_to_resolved(&types[0].node);
+                        let ll_ty = self.type_mapper.map_type(&resolved);
+                        self.enum_variant_primitive_payload_types.insert(
                             (enum_name.clone(), variant.name.node.clone()),
-                            struct_name.clone(),
+                            ll_ty,
                         );
                     }
                 }
