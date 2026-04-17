@@ -36,12 +36,12 @@ N F dom_remove_child(parent_id: i64, child_id: i64) -> i64
 N F dom_add_event_listener(elem_id: i64, event_ptr: i64, event_len: i64, callback_id: i64) -> i64
 
 # Todo item structure (simulated with parallel arrays)
-G todo_ids := mut [0; 100]
-G todo_titles_ptr := mut [0; 100]
-G todo_titles_len := mut [0; 100]
-G todo_completed := mut [0; 100]
-G todo_count := mut 0
-G next_id := mut 1
+G todo_ids: [i64; 100] = [0; 100]
+G todo_titles_ptr: [i64; 100] = [0; 100]
+G todo_titles_len: [i64; 100] = [0; 100]
+G todo_completed: [i64; 100] = [0; 100]
+G todo_count: i64 = 0
+G next_id: i64 = 1
 
 # Initialize the todo app
 #[wasm_export("init")]

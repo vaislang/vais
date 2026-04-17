@@ -8,8 +8,8 @@ N "C" {
 
 # Count result struct
 S WcResult {
-    lines: i64
-    words: i64
+    lines: i64,
+    words: i64,
     bytes: i64
 }
 

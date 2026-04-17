@@ -32,29 +32,29 @@ C EV_DELETE: i64 = 2
 F main() -> i64 {
     # Test 1: Platform detection
     platform := async_platform()
-    P "=== Async Reactor Cross-Platform Test ==="
+    puts("=== Async Reactor Cross-Platform Test ===")
 
     LW platform == PLATFORM_MACOS {
-        P "Platform: macOS (kqueue)"
+        puts("Platform: macOS (kqueue)")
     }
     LW platform == PLATFORM_LINUX {
-        P "Platform: Linux (epoll)"
+        puts("Platform: Linux (epoll)")
     }
     LW platform == PLATFORM_WINDOWS {
-        P "Platform: Windows (IOCP)"
+        puts("Platform: Windows (IOCP)")
     }
     LW platform == 0 {
-        P "Platform: Unknown"
+        puts("Platform: Unknown")
         R 1
     }
 
     # Test 2: Create event backend
     kq := kqueue()
     LW kq < 0 {
-        P "FAIL: Could not create event backend"
+        puts("FAIL: Could not create event backend")
         R 1
     }
-    P "PASS: Event backend created"
+    puts("PASS: Event backend created")
 
     # Test 3: Create pipe and register for events
     pipe_buf := malloc(16)
@@ -64,14 +64,14 @@ F main() -> i64 {
     free(pipe_buf)
 
     LW read_fd < 0 {
-        P "FAIL: Could not create pipe"
+        puts("FAIL: Could not create pipe")
         R 1
     }
-    P "PASS: Pipe created"
+    puts("PASS: Pipe created")
 
     # Test 4: Register read interest
     kevent_register(kq, read_fd, EVFILT_READ, EV_ADD)
-    P "PASS: Read interest registered"
+    puts("PASS: Read interest registered")
 
     # Test 5: Write to pipe and poll for events
     write_byte(write_fd, 42)
@@ -83,28 +83,28 @@ F main() -> i64 {
         ev_fd := kevent_get_fd(events_buf, 0)
         ev_filter := kevent_get_filter(events_buf, 0)
         LW ev_fd == read_fd {
-            P "PASS: Received read event on pipe"
+            puts("PASS: Received read event on pipe")
         } ! {
-            P "WARN: Event on unexpected fd"
+            puts("WARN: Event on unexpected fd")
         }
     } ! {
-        P "FAIL: No events received"
+        puts("FAIL: No events received")
     }
 
     # Test 6: Read the byte back
     byte := read_byte(read_fd)
     LW byte == 42 {
-        P "PASS: Correct byte read from pipe"
+        puts("PASS: Correct byte read from pipe")
     } ! {
-        P "FAIL: Wrong byte value"
+        puts("FAIL: Wrong byte value")
     }
 
     # Test 7: Time measurement
     t1 := time_now_ms()
     LW t1 > 0 {
-        P "PASS: time_now_ms works"
+        puts("PASS: time_now_ms works")
     } ! {
-        P "FAIL: time_now_ms returned 0"
+        puts("FAIL: time_now_ms returned 0")
     }
 
     # Cleanup
@@ -114,6 +114,6 @@ F main() -> i64 {
     close(kq)
     free(events_buf)
 
-    P "=== All reactor tests passed ==="
+    puts("=== All reactor tests passed ===")
     0
 }

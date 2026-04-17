@@ -20,7 +20,7 @@ C TOK_ERROR: i64 = -1
 
 # Parser state
 G input_ptr: i64 = 0
-G pos: i64 = mut 0
+G pos: i64 = 0
 G input_len: i64 = 0
 G num_value: i64 = 0
 
@@ -100,11 +100,6 @@ F next_token() -> i64 {
         }
     }
 }
-
-# Forward declarations via mutual recursion
-F parse_value() -> i64
-F parse_object() -> i64
-F parse_array() -> i64
 
 F parse_value() -> i64 {
     tok := next_token()

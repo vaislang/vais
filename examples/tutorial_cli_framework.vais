@@ -13,7 +13,7 @@ N "C" {
     F __atoi(s: str) -> i64
 }
 
-G verbose: i64 = mut 0
+G verbose: i64 = 0
 
 F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
 

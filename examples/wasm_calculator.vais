@@ -12,7 +12,7 @@
 #   console.log(wasm.exports.get_memory());        # Last result
 
 # Memory for last calculation result
-G memory := mut 0
+G memory: i64 = 0
 
 # Basic arithmetic operations
 #[wasm_export("add")]

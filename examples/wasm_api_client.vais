@@ -33,9 +33,9 @@ N F json_stringify(obj_ptr: i64) -> i64
 N F console_log(ptr: i64, len: i64) -> i64
 
 # Global state for response caching
-G last_response_ptr := mut 0
-G last_response_len := mut 0
-G last_status_code := mut 0
+G last_response_ptr: i64 = 0
+G last_response_len: i64 = 0
+G last_status_code: i64 = 0
 
 # Get all users from API
 #[wasm_export("get_users")]

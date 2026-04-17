@@ -9,15 +9,15 @@ N "C" {
 
 # Student score record
 S Record {
-    id: i64
+    id: i64,
     score: i64
 }
 
 # Aggregation statistics
 S Stats {
-    count: i64
-    total: i64
-    max_val: i64
+    count: i64,
+    total: i64,
+    max_val: i64,
     min_val: i64
 }
 
