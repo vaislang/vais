@@ -236,6 +236,14 @@ impl CodeGenerator {
                     self.collect_free_vars_in_expr(&e.node, bound, free);
                 }
             }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` references must be captured by the lambda.
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        self.collect_free_vars_in_expr(&e.node, bound, free);
+                    }
+                }
+            }
             // Literals and other expressions don't contain free variables
             _ => {}
         }

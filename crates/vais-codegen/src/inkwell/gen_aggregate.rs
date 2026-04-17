@@ -1030,6 +1030,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     Self::collect_idents_inner(&e.node, idents);
                 }
             }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` references must be surfaced as captures.
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        Self::collect_idents_inner(&e.node, idents);
+                    }
+                }
+            }
             _ => {}
         }
     }

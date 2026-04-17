@@ -462,6 +462,24 @@ impl Parser {
                     Type::Tuple(types)
                 }
             }
+        } else if self.check(&Token::Pipe) {
+            // Closure type: `|T1, T2| -> U` — equivalent to `(T1, T2) -> U`.
+            self.advance();
+            let mut types = Vec::new();
+            if !self.check(&Token::Pipe) {
+                types.push(self.parse_type()?);
+                while self.check(&Token::Comma) {
+                    self.advance();
+                    types.push(self.parse_type()?);
+                }
+            }
+            self.expect(&Token::Pipe)?;
+            self.expect(&Token::Arrow)?;
+            let ret = self.parse_type()?;
+            Type::Fn {
+                params: types,
+                ret: Box::new(ret),
+            }
         } else if self.check(&Token::LBracket) {
             let lbracket_span = self.current_span();
             self.advance();

@@ -1,6 +1,7 @@
 //! Free variable analysis for closure capture.
 
 use vais_ast::*;
+use vais_ast::StringInterpPart;
 
 use super::TypeChecker;
 
@@ -207,6 +208,15 @@ impl TypeChecker {
                         self.collect_free_vars(&guard.node, &arm_bound, free);
                     }
                     self.collect_free_vars(&arm.body.node, &arm_bound, free);
+                }
+            }
+            Expr::StringInterp(parts) => {
+                // Interpolated `{name}` segments reference outer variables and
+                // must be visible to closure capture analysis.
+                for part in parts {
+                    if let StringInterpPart::Expr(e) = part {
+                        self.collect_free_vars(&e.node, bound, free);
+                    }
                 }
             }
             // Literals and other expressions don't contain free variables
