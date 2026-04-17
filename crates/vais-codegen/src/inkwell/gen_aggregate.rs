@@ -924,9 +924,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Generate lambda body
         let body_val = self.generate_expr(body)?;
 
+        // Lambda signature is fixed to `i64` return (see fn_type above) so all
+        // callsites can use `call i64 %lambda(...)`. When the body is unit
+        // (e.g. `|| puts("...")` whose last expression is a side-effect call),
+        // body_val is a non-i64 aggregate — coerce to `i64 0` so the return
+        // instruction matches the function signature.
+        let i64_ty = self.context.i64_type();
+        let ret_val: BasicValueEnum<'ctx> = if body_val.get_type() == i64_ty.into() {
+            body_val
+        } else {
+            i64_ty.const_zero().into()
+        };
+
         // Add return
         self.builder
-            .build_return(Some(&body_val))
+            .build_return(Some(&ret_val))
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
         // Restore context

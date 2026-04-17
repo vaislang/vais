@@ -366,6 +366,17 @@ impl CodeGenerator {
         let mut lambda_counter = 0;
         let (body_val, body_ir) = self.generate_expr(body, &mut lambda_counter)?;
 
+        // Lambdas are emitted with a hardcoded `i64` return so all callsites
+        // can use `call i64 %lambda(...)`. When the body is unit (e.g.
+        // `|| puts("...")`), body_val is the unit sentinel which clang rejects
+        // for an `i64` return. Coerce to `0` — the closure is side-effect-only
+        // and the caller discards the value anyway.
+        let body_ret = if body_val == "void" || body_val.contains("zeroinitializer") {
+            "0".to_string()
+        } else {
+            body_val
+        };
+
         let mut lambda_ir = format!(
             "define i64 @{}({}) {{\nentry:\n",
             lambda_name,
@@ -374,7 +385,7 @@ impl CodeGenerator {
         // Splice entry allocas (for local variables in the lambda body) right after "entry:"
         self.splice_entry_allocas(&mut lambda_ir);
         lambda_ir.push_str(&body_ir);
-        write_ir!(lambda_ir, "  ret i64 {}\n}}", body_val);
+        write_ir!(lambda_ir, "  ret i64 {}\n}}", body_ret);
 
         self.lambdas.generated_ir.push(lambda_ir);
 
