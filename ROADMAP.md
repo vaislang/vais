@@ -9,10 +9,14 @@
 
 ## 🟢 대기 — Phase 195: P194-4 gate 실측 기반 회귀 해소
 
-mode: pending
-max_iterations: 12
-iteration: 0
+mode: auto
+max_iterations: 18
+iteration: 3
 strategy: recon-first (Phase 193/194 계승). 14 regression을 **에러 코드별로 분류**해서 "1건 수정 = N건 해소" 패턴 찾기. P001(9) / no-stdlib(3) / E002(2) / E034(1) / C001(1). 동일 에러 코드는 대개 공통 근본 원인이므로 그룹당 1 task로 묶음. 각 에러 그룹별 recon 후 Opus direct 또는 impl-sonnet 결정.
+  iter1 strategy: Task #1(Recon-E) 단일 pending unblocked. research-haiku foreground (read-only 분석, 도구 ~12회 예상). 14 회귀 파일 경로 수집 + 에러 코드별 근본원인 가설 3~5개. 산출물: docs/phase195/recon_findings.md. ✅ 완료 (642 lines, PROMISE: COMPLETE).
+  iter2 strategy: Recon-E 결과 기반 design 결정 수신 — (a) P001-b/c: example 업데이트, (b) P001-d.1 spawn: async migrate. Task #2/#3/#4/#5 unblocked. 파일 영향 cross-check: #2(vais-parser/ + vais-lexer/ + examples/*.vais 9건) / #3(crates/vaisc/tests/examples_fresh_rebuild.rs) / #4(vais-i18n/ + vais-codegen/ + std/ + vais-types/checker_*) / #5(examples/phase193_smoke/S2_*.vais + vais-types/tests/ + crates/vaisc/tests/selfhost_lexer_tests.rs). **파일 overlap 0** → **independent parallel**. worktree isolation 적용 (repo 932 commits, git work-tree=true). #2: Opus direct (parser 설계-구현 inseparable, lexer bug P001-d.2 조사 포함). #3/#4/#5: impl-sonnet.
+  iter2 outcome: ❌ worktree isolation picked **stale dfaf8015 branch** (pre-Phase 194) — agents worked on code that doesn't match current main. Tasks #2/#4 returned mid-investigation (agent tool budget cut-off). Task #3 produced clean portable diff. Task #5 made partial progress before kill. **Recovery**: worktrees removed, pivot to **sequential direct work on main** with Opus direct + focused impl-sonnet delegations (1 group each). Task #3 diff preserved at /tmp/task3_agent_version.rs — apply directly. Lesson: worktree isolation branch-base needs investigation before Phase 195 complete (track as Phase 196 follow-up).
+  iter3 strategy: Sequential on main. Order: #3 (apply saved diff, smallest risk) → #5 S2 smoke부터 (mechanical example update) → #2 (parser fix + 7 example edits + lexer recon) → #4 (i18n E034 + codegen C001 + E002 stdlib rename). 각 단계 후 build/test gate. 한 단계 실패 시 stop.
 
 ### 배경 (2026-04-18)
 
@@ -23,7 +27,7 @@ Phase 194 P194-4 (`examples_fresh_rebuild` gate)가 첫 실행에서 14개 examp
 - P194-4 gate 작동 확인 (on-demand `-- --ignored`로 실측 가능)
 - 14 failing examples 목록 확정 (`/tmp/fresh_rebuild_output.log` 참조, 2026-04-18 측정)
 
-### 실측 회귀 분포 (2026-04-18 측정)
+### 실측 회귀 분포 (2026-04-18 최초 측정)
 
 | 에러 코드 | 건수 | 대표 파일 | 추정 카테고리 |
 |---|---|---|---|
@@ -33,21 +37,40 @@ Phase 194 P194-4 (`examples_fresh_rebuild` gate)가 첫 실행에서 14개 examp
 | E034 | 1 | void_phi_assert | type error (메시지 미완 — i18n key 노출) |
 | C001 Undefined Var | 1 | union_test | codegen — `IntOrFloat` union 처리 |
 
-### 작업 (6개)
+### ⚠️ Scope 확장 (iter3, 2026-04-18 재측정)
 
-- [ ] 1. **Recon-E: 14 회귀 에러코드 그룹별 근본원인 분류** (research-haiku)
-  - P001 9건 2~3개 하위 패턴 분석 (struct field 구분자 / Global `:=` / ...)
-  - stdlib path 3건 — `examples_fresh_rebuild` subprocess가 `VAIS_STD_PATH` 전달 안 하는지 확인
-  - E002/E034/C001 각 1~2건 recon
-  - 산출물: `docs/phase195/recon_findings.md` — 그룹당 fix scope 추정 + 담당 backend
+P195-2 (VAIS_STD_PATH fix, commit a73da4ca) 후 **실제 실패 수 29건**으로 상승. Task #3 fix가 stdlib resolution 실패 뒤에 숨어있던 downstream 실패를 노출.
+
+| 에러 코드 | 최초 | 실측 | Δ | 대표 파일 |
+|---|---|---|---|---|
+| P001 | 9 | 10 | +1 | async_reactor_test 추가 |
+| stdlib path | 3 | 0 | -3 ✅ | (P195-2로 해소) |
+| E002 | 2 | 5 | +3 | compress_example, lazy_func/simple/test, tcp_10k_bench |
+| E034 | 1 | 3 | +2 | assert_violation_test, formal_verification_test, void_phi_assert |
+| C001 | 1 | 2 | +1 | calculator_enum 추가 |
+| E022 (new) | 0 | 1 | +1 | slice_test (use after move) |
+| E001 (new) | 0 | 1 | +1 | range_type_error_test |
+| C004 (new) | 0 | 2 | +2 | simd_distance, simd_test (LLVM error) |
+| [INST] log leak (new) | 0 | 3 | +3 | option_result_*, simple_hashmap_test (debug 로그 STDERR) |
+| js_target + missing std module (new) | 0 | 2 | +2 | js_target.vais, test_import.vais |
+| **합계** | **17** | **29** | **+12** | |
+
+**User decision (iter3)**: 29건 전수 해소. Phase 195 scope = 29 regressions → task #7~#10 신설, max_iterations 12→18 상향.
+
+### 작업 (10개 — iter3에서 4개 추가)
+
+- [x] 1. **Recon-E: 14 회귀 에러코드 그룹별 근본원인 분류** ✅ 2026-04-18
+  - research-haiku 위임, docs/phase195/recon_findings.md (642 lines) 생성
+  - P001 4개 하위 패턴 확정, stdlib 원인 확정, E034 i18n 누락 확정, C001 union codegen 가설
+  - 파일 위치 매핑 완료 (vais-parser/item/declarations.rs, vaisc/imports.rs, vaisc/tests/examples_fresh_rebuild.rs 등)
 
 - [ ] 2. **P195-1: P001 parser 회귀 해소 (9건)** (Opus direct) [blockedBy: 1]
   - 수정 포인트 후보: `crates/vais-parser/src/{item.rs, types.rs, expr/*.rs}` (Recon-E 결과에 따라)
   - 완료 기준: 9건 전수 fresh build 성공, E2E 2596+/0/0, clippy 0/0
 
-- [ ] 3. **P195-2: stdlib path resolution 3건** (impl-sonnet) [blockedBy: 1]
-  - `examples_fresh_rebuild.rs`가 subprocess 호출 시 `VAIS_STD_PATH` 환경변수 전달 안 하는 게 원인이면 **test infra 수정**으로 해결 가능 (실제 컴파일러 버그 아닐 수도)
-  - 완료 기준: 3건 gate 통과, test 로직 documented
+- [x] 3. **P195-2: stdlib path resolution 3건** ✅ 2026-04-18 a73da4ca
+  - `examples_fresh_rebuild.rs`가 subprocess에 VAIS_STD_PATH env var 전달하도록 수정
+  - 결과: 159/188 passed (+14), std_import_test/vec_test_minimal 통과. test_import는 다른 원인(missing module) 잔존 → task #10에서 처리
 
 - [ ] 4. **P195-3: E002/E034/C001 각 1~2건** (Opus direct) [blockedBy: 1]
   - E034는 i18n key(`type.E034.message`)가 literal로 노출된 것 — error message 번역 누락
@@ -59,9 +82,26 @@ Phase 194 P194-4 (`examples_fresh_rebuild` gate)가 첫 실행에서 14개 examp
   - `vais-types::test_builtin_exit` — exit() total-function rule 정책 검토
   - 완료 기준: S2 runtime PASS, pre-existing 2건 판정(수정/주석/`#[ignore]`)
 
-- [ ] 6. **Final Gate: 통합 검증 + Phase 195 종료** (impl-sonnet) [blockedBy: 2, 3, 4, 5]
+- [ ] 6. **Final Gate: 통합 검증 + Phase 195 종료** (impl-sonnet) [blockedBy: 2, 3, 4, 5, 7, 8, 9, 10]
   - cargo test --workspace, clippy, `examples_fresh_rebuild -- --ignored` 전수 green 목표
   - 산출물: `docs/phase195/final_report.md`
+
+- [ ] 7. **P195-5: E022 use-after-move + E001 type mismatch 회귀 (2건)** (impl-sonnet) [blockedBy: 1]
+  - slice_test.vais (E022 `slice2 := arr[1..=3]` 에서 arr moved), range_type_error_test.vais (E001)
+  - 각 파일 의도 확인 후 fix 또는 의도된 에러 테스트면 `#[ignore]`
+
+- [ ] 8. **P195-6: C004 LLVM error (SIMD 2건)** (Opus direct) [blockedBy: 1]
+  - simd_distance.vais, simd_test.vais — LLVM IR 생성 중 타입/instruction 검증 실패
+  - inkwell/gen_*.rs SIMD 관련 탐색 후 fix
+
+- [ ] 9. **P195-7: [INST] 디버그 로그 누출 정리 (3건)** (impl-sonnet) [blockedBy: 1]
+  - option_result_simple_test.vais, option_result_test.vais, simple_hashmap_test.vais
+  - instantiation tracing 로그가 stderr leak → `#[cfg(debug_*)]` 등으로 gate
+  - 로그 제거 후 실제 에러 원인도 fix
+
+- [ ] 10. **P195-8: js_target.vais + test_import.vais missing module (2건)** (impl-sonnet) [blockedBy: 1]
+  - js_target.vais: 에러 메시지 비어있음 — 원인 파악 후 fix or `#[ignore]`
+  - test_import.vais: `U std/test_simple` import하지만 std/test_simple.vais 없음 — minimal stub 추가 or example 수정
 
 ### 파일 영향 예상 매트릭스
 
@@ -85,7 +125,7 @@ Phase 194 P194-4 (`examples_fresh_rebuild` gate)가 첫 실행에서 14개 examp
 - [ ] `examples_fresh_rebuild -- --ignored` 실패 수 감소
 - [ ] commit 분리
 
-progress: 0/6 (0%)
+progress: 2/10 (20%) — #1 Recon-E ✅ / #3 P195-2 ✅ a73da4ca
 
 ---
 
