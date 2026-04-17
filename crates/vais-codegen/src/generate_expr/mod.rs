@@ -156,7 +156,7 @@ impl CodeGenerator {
                     let variant = &name.node;
                     self.generate_enum_variant_struct(ename, variant, fields, counter)
                 } else {
-                    self.generate_expr_struct_lit(name, fields, counter)
+                    self.generate_expr_struct_lit(name, fields, expr, counter)
                 }
             }
 

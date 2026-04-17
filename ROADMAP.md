@@ -10,7 +10,7 @@
 ## Current Tasks — Phase 192: 무결점 100% 게이트 (codegen 실제 한계 9건)
 
 mode: auto
-iteration: 3
+iteration: 4
 max_iterations: 12
 strategy: blockedBy chain (1→2→3) + method_call.rs file overlap → sequential. opus_direct: codegen 설계-구현 inseparable (substitution propagation + monomorphization hook + IR layout) — research/impl 분리 시 의도 손실.
 
@@ -84,15 +84,13 @@ session_checkpoint: 2026-04-17 iter 2 — Group A 정밀 recon 완료, 구현 0.
   - **검증**: E2E 2596/0/1 ignored (baseline 2592 + 2 신규 + 2 기존 전환 재계측). clippy 0/0 (사전 존재하던 `stmt.rs` type_complexity 2건도 type alias로 해결). assert_compiles 39 → 35.
   - **부가 fix**: `stmt.rs` `DroppableScopeEntry` / `DroppableFnEntry` type alias — 사전 존재하던 clippy `type_complexity` 에러(gate 차단) 해제.
 
-- [ ] 2. **Group B: phase164 generic struct field access** (Opus direct, foreground, ≤2h) [blockedBy: 1]
-  - **대상 테스트**: phase164 generic_struct_field_access, generic_fn_struct_field_access, generic_struct_nested_field
-  - **수정 포인트**:
-    - `crates/vais-codegen/src/module_gen/instantiations.rs`: call site argument가 concrete-generic struct (`Entry<str>`)인 함수 만날 때 `get_key$Entry$str` 트리거
-    - `crates/vais-codegen/src/generate_expr_struct.rs:72-76`: main-path에서 TC expr_types 조회하여 specialized struct 등록 → `%Entry$str` type-def 생성
-    - `crates/vais-codegen/src/expr_helpers_call/generate_expr_call.rs`: monomorphized 함수 호출 시 `%Entry$str` 인자 전달
-  - **경계 조건**: generic 함수(`get_key_off<T>`)는 기존 경로 유지, non-generic + generic struct arg만 신규
-  - **완료 기준**: 3 테스트 `assert_compiles → assert_exit_code` 전환, E2E baseline 유지, clippy 0/0
-  - 파일 겹침: #1과 `method_call.rs` 공유 → 순차 실행 (병렬 금지)
+- [x] 2. **Group B: phase164 generic struct field access** (Opus direct) ✅ 2026-04-17
+  - **실제 수정 포인트** (recon 대비 최소):
+    - `generate_expr_struct.rs:72-76` (no-substitutions branch): TC `expr_types`를 parent struct-lit expr span으로 조회. `Named { _, [concrete..] }`이면 specialized struct(`%Entry$str`)의 layout으로 alloca/GEP 생성. 그 외에는 base layout 유지(generic 함수 내부 호출 호환).
+    - `generate_expr/mod.rs:159`: `generate_expr_struct_lit` 시그니처에 `parent_expr: &Spanned<Expr>` 추가하여 span 전달. 호출자(dispatcher)는 이미 span 있는 expr 보유.
+    - recon이 지목한 `module_gen/instantiations.rs` (concrete-generic struct arg trigger), `generate_expr_call.rs` (인자 type 일치) 추가 수정 불필요 — TC가 이미 `get_key$Row` 등 specialization을 인식해 instantiation 등록 + 함수 시그니처 정렬 완료. struct lit alloca만 specialized type으로 바꾸면 caller→callee 자동 정렬.
+  - **대상 테스트 결과**: 3건 모두 `assert_compiles → assert_exit_code` 전환. exit codes: 42 / 10 / 5.
+  - **검증**: E2E 2596/0/0, clippy 0/0. assert_compiles 35 → 32.
 
 - [ ] 3. **Group C+D: Vec<f32>/<f64> coerce + 검증 gate** (Opus direct, foreground, ≤1.5h) [blockedBy: 2]
   - **Group C** — float coerce type-aware (`function_gen/generics.rs:602-623`)
@@ -134,7 +132,7 @@ session_checkpoint: 2026-04-17 iter 2 — Group A 정밀 recon 완료, 구현 0.
 - **commit 분리**: task #1, #2, #3 각각 개별 commit. 실패 시 bisect·revert 용이.
 - **이 섹션이 엔트리포인트**: 다음 세션 `/harness` 시 harness-init이 이 `- [ ]` 목록 복구.
 
-progress: 1/3 (33%)
+progress: 2/3 (67%)
 
 ---
 

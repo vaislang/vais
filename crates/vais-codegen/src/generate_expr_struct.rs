@@ -12,6 +12,7 @@ impl CodeGenerator {
         &mut self,
         name: &Spanned<String>,
         fields: &[(Spanned<String>, Spanned<Expr>)],
+        parent_expr: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let resolved_name = self.resolve_struct_name(&name.node);
@@ -70,9 +71,36 @@ impl CodeGenerator {
                         (type_name.clone(), struct_info.fields.clone())
                     }
                 } else {
-                    // No substitutions active — use base struct layout (i64-uniform).
-                    // This handles base generic methods (Vec_new) where params are i64.
-                    (type_name.clone(), struct_info.fields.clone())
+                    // No substitutions active (main / non-generic caller).
+                    // Check TC expr_types for the parent struct-lit expression; if
+                    // TC resolved it as Named { T, [concrete..] }, use the specialized
+                    // layout so caller alloca/GEP and callee signature align.
+                    let tc_ty = self.tc_expr_type(parent_expr).cloned();
+                    let concrete_generics = match tc_ty {
+                        Some(ResolvedType::Named { generics, .. })
+                            if !generics.is_empty()
+                                && generics.iter().all(|g| {
+                                    !matches!(
+                                        g,
+                                        ResolvedType::Generic(_) | ResolvedType::Var(_)
+                                    )
+                                }) =>
+                        {
+                            Some(generics)
+                        }
+                        _ => None,
+                    };
+                    if let Some(gens) = concrete_generics {
+                        let mangled = self.mangle_struct_name(&name.node, &gens);
+                        if let Some(specialized) = self.types.structs.get(&mangled).cloned() {
+                            (mangled, specialized.fields)
+                        } else {
+                            (type_name.clone(), struct_info.fields.clone())
+                        }
+                    } else {
+                        // Base generic methods (Vec_new) where params are i64.
+                        (type_name.clone(), struct_info.fields.clone())
+                    }
                 }
             } else {
                 (type_name.clone(), struct_info.fields.clone())

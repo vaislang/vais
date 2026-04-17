@@ -97,10 +97,11 @@ F main() -> i64 {
 
 // ==================== Task 2: Generic Struct Field Access ====================
 
-/// Generic struct with concrete type param should allow field access after monomorphization
+/// Generic struct with concrete type param: main-path struct literal now uses
+/// the specialized layout %Entry$str (Phase 192 Group B).
 #[test]
 fn e2e_phase164_generic_struct_field_access() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Entry<T> {
     key: i64,
@@ -116,13 +117,15 @@ F main() -> i64 {
     get_key(e)
 }
 "#,
+        42,
     );
 }
 
 /// Generic function accessing fields of generic struct — requires monomorphization
+/// (Phase 192 Group B).
 #[test]
 fn e2e_phase164_generic_fn_struct_field_access() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S BTreeEntry<T> {
     key_off: i64,
@@ -143,13 +146,14 @@ F main() -> i64 {
     get_key_off(e)
 }
 "#,
+        10,
     );
 }
 
-/// Generic struct field access where T is used in nested access
+/// Generic struct field access where T is used in nested access (Phase 192 Group B).
 #[test]
 fn e2e_phase164_generic_struct_nested_field() {
-    assert_compiles(
+    assert_exit_code(
         r#"
 S Wrapper<T> {
     inner: T,
@@ -170,5 +174,6 @@ F main() -> i64 {
     extract(w)
 }
 "#,
+        5,
     );
 }
