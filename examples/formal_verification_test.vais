@@ -30,7 +30,7 @@ F multiply_positive(a: i64, b: i64) -> i64 {
 }
 
 # Test 5: Assert expression
-F test_assert(x: i64) -> i64 {
+partial F test_assert(x: i64) -> i64 {
     assert(x >= 0)
     x * 2
 }
@@ -56,7 +56,7 @@ F increment(x: i64) -> i64 {
 }
 
 # Main function for testing
-F main() -> i64 {
+partial F main() -> i64 {
     result1 := abs_positive(5)
     result2 := abs_simple(-3)
     result3 := factorial(5)

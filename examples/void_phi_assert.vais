@@ -2,7 +2,7 @@ N "C" {
     F printf(fmt: str, ...) -> i64
 }
 
-F main() -> i64 {
+partial F main() -> i64 {
     x := 5
 
     # if-else with assert (Unit type) in both branches
