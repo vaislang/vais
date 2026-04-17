@@ -1,9 +1,95 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 196 완료 — 언어 100% 안정성·문법 명확성 달성)
+> **현재 버전**: 0.1.0 (Phase 197 진행 — 하위 패키지 3종 회귀 감사)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 196 완료: 179/179 examples pass, SKIP_LIST empty, ICE 0건, clippy 0/0. 제거된 키워드 정책 문서 완비. final report: docs/phase196/final_report.md)
+> **최종 업데이트**: 2026-04-18 (Phase 197 Plan: vaisdb / vais-server / vais-web 독립 fresh-build + test. 감사만 수행, 발견된 regression은 Phase 198로 이월)
+
+---
+
+## 🟢 진행 — Phase 197: 하위 패키지 3종 회귀 감사
+
+mode: auto
+max_iterations: 10
+iteration: 0
+strategy: audit-only. Phase 195/196에서 compiler 자체는 green (179/179, clippy 0/0, E2E 2596/0/0) 이지만 하위 패키지 `vais/lang/packages/{vaisdb,vais-server,vais-web}/` 는 실측 없음. 이번 phase는 **감사만** — 3 패키지 각각 fresh-build + test 돌려서 regression 실측. 어떤 수정도 금지. 발견된 문제는 Phase 198 task로 분류.
+  iter1 strategy: Recon-G 먼저 (research-haiku, read-only). 각 패키지의 빌드 시스템(cargo/pnpm/hybrid), 의존성, test 진입점 파악. 그 뒤 P197-V/S/W 병렬 background (worktree 없음, 각 패키지 독립 디렉토리). Consolidate 후 Phase 198 계획 수립.
+
+### 목표 (Exit Criteria)
+
+1. **3 패키지 각각 fresh-build 결과 실측 기록** (build 성공/실패, test 통계, stderr 샘플)
+2. **발견된 regression을 카테고리별 Phase 198 task로 분할**
+3. **compiler crate는 touch 금지** — 이 phase 내 수정 0건
+4. **증거 보존**: `docs/phase197/{package_layouts, vaisdb_report, vais-server_report, vais-web_report, consolidated, final_report}.md`
+
+### 배경
+
+Phase 196이 compiler self-check 기준으로 "100% 안정성"을 선언했지만, 이는 `crates/`+`examples/`+`std/` 기준. Phase 196 중 변경한 inkwell Global codegen, enum primitive payload decode, multi-field variant 등은 **실제 vaisdb/vais-web/vais-server 컴파일 경로에서 검증되지 않음**. vaisdb는 특히 Vec/HashMap/Option/generic 무겁게 사용하므로 회귀 가능성 실재.
+
+사용자 확인 (2026-04-18): 검증 수준 = Build + Test + Fresh빌드. Regression 처리 = 기록만, Phase 198에서 fix.
+
+### 작업 (8개)
+
+- [ ] 1. **Recon-G: 3 패키지 구조 + 빌드 시스템 파악** (research-haiku) — read-only
+  - 각 패키지 디렉토리 레이아웃 (Cargo.toml, package.json, 커스텀 빌드 스크립트)
+  - 빌드·테스트 진입점 확정 (`cargo build`, `cargo test`, `pnpm build`, etc.)
+  - 의존성 그래프 (compiler crate를 어떻게 참조하는지, workspace or path dep)
+  - 산출물: `docs/phase197/package_layouts.md`
+
+- [ ] 2. **P197-V: vaisdb fresh-build + test 전수** (impl-sonnet, background) [blockedBy: 1]
+  - `cargo clean` → `cargo build` → `cargo test` (workspace 기준)
+  - 모든 실패 stderr 기록, pass/fail 카운트
+  - 산출물: `docs/phase197/vaisdb_report.md` — 증상 + 실패 파일/라인 + 가설
+
+- [ ] 3. **P197-S: vais-server fresh-build + test 전수** (impl-sonnet, background) [blockedBy: 1]
+  - 동일 패턴. runtime.c 등 추가 빌드 산출물도 확인.
+  - 산출물: `docs/phase197/vais-server_report.md`
+
+- [ ] 4. **P197-W: vais-web fresh-build + test 전수** (impl-sonnet, background) [blockedBy: 1]
+  - Rust crates + Node (pnpm) 양쪽 모두 fresh-build
+  - vaisc + vaisx 컴파일 경로 확인
+  - 산출물: `docs/phase197/vais-web_report.md`
+
+- [ ] 5. **Consolidate: 3 리포트 통합 + regression 분류** (Opus direct) [blockedBy: 2, 3, 4]
+  - 각 package 상태를 green/yellow/red 라벨
+  - 동일 root cause 묶기 (Phase 195/196 교훈 — merge opportunity)
+  - 산출물: `docs/phase197/consolidated.md`
+
+- [ ] 6. **Phase 198 계획 수립: regression 카테고리별 task 분할** (Opus direct) [blockedBy: 5]
+  - 각 regression을 task화, Opus direct vs impl-sonnet 분류
+  - ROADMAP Phase 198 섹션 추가 (mode: pending, 승인 대기)
+
+- [ ] 7. **User 승인 게이트**: Phase 198 scope + task 수 확인 [blockedBy: 6]
+  - AskUserQuestion으로 Phase 198 진입 승인 요청
+  - 문제 0건이면 "완전 green" 선언 후 Phase 종료
+
+- [ ] 8. **Final: Phase 197 종료** (impl-sonnet) [blockedBy: 7]
+  - `docs/phase197/final_report.md` 작성
+  - ROADMAP 업데이트
+
+### 파일 영향 예상 매트릭스 (read-only)
+
+| 디렉토리 | 관련 task | 수정 |
+|---|---|---|
+| `/Users/sswoo/study/projects/vais/lang/packages/vaisdb/` | #2 | 읽기만 |
+| `/Users/sswoo/study/projects/vais/lang/packages/vais-server/` | #3 | 읽기만 |
+| `/Users/sswoo/study/projects/vais/lang/packages/vais-web/` | #4 | 읽기만 |
+| `/Users/sswoo/study/projects/vais/compiler/docs/phase197/` | #1,#2,#3,#4,#5,#6,#8 | 쓰기 (감사 리포트) |
+| `/Users/sswoo/study/projects/vais/compiler/ROADMAP.md` | #6,#8 | 쓰기 (Phase 198 section) |
+| `/Users/sswoo/study/projects/vais/compiler/crates/`, `examples/`, `std/` | — | **수정 금지** |
+
+### Gate 체크리스트
+
+- [ ] 3 리포트 각각 작성됨 (실측 수치 포함)
+- [ ] compiler crate 0 파일 변경
+- [ ] Phase 198 계획 작성됨 (또는 "0 regression" 선언)
+- [ ] docs/phase197/final_report.md 완성
+
+progress: 0/8 (0%)
+
+---
+
+
 
 ---
 
