@@ -1,11 +1,15 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 354-370 + compiler deep work 확장, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 354-370 + Tier 2 extended compiler drive, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (대형 세션 — 17 phases + compiler patches + batch refactors, OK 134→159/261 +25 files) 🎯
-> **현재 vaisdb OK: 159/261 (60.9%)** — Tier 2 목표 210까지 +51 필요.
-> **Tier 2 세션 2+3 성과**: posting.vais (9→0), handler codegen cascade (+5 files), tuple codegen (+13 cascade), Str/HashMap inference, span attach for UndefinedVar, SqlValue variant prefix 대량 적용, NodeLookup 이름 해소 — compiler 인프라 대폭 개선.
+> **최종 업데이트**: 2026-04-19 (대형 세션 — 17 phases + 10+ compiler patches + 15+ vaisdb refactors, OK 134→174/261 +40 files) 🎯
+> **현재 vaisdb OK: 174/261 (66.7%)** — Tier 2 목표 210까지 +36 필요.
+> **Tier 2 extended drive 성과**:
+>   - Codegen: tuple `.0`/`.1` (cascade +13), Str methods (is_empty/byte_at/char_at/trim/to_upper/to_lower/starts_with/ends_with), handler cascade (+5)
+>   - Type inference: Str method returns (split/lines/parse_*), HashMap/StringMap full method set, Optional(Ref(V)) uniform
+>   - Span attach: UndefinedVar, if-else branch, fn-arg unify
+>   - vaisdb refactor: SqlValue variant prefix 전방위, Vec[i]→.get() 패턴, Vec<Struct>[i].field= → pop-modify-push, traverse_fn split→byte_at, planner partial markers, optimizer clone, NodeLookup rename, fulltext_plan rename inner_params, filter.ok_or→M, overflow/user/bootstrap/tls/split/audit/rls annotations.
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
