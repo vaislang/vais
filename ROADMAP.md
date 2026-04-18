@@ -30,6 +30,10 @@
 ## ⏸ 완료 — Phase 246: iter_mut/as_ref/numeric methods (E004 -2)
 ## ⏸ 완료 — Phase 247: **str.as_bytes returns Vec<u8>** (OK 100→101)
 ## ⏸ 완료 — Phase 248: numeric.to_bits/from_bits/to_bytes (E004 -2)
+## ⏸ 완료 — Phase 249: VaisError.new arg fix (vaisdb-side)
+## ⏸ 완료 — Phase 250: **lenient ? operator** on non-Result (OK 101→102, E001 -7)
+## ⏸ 완료 — Phase 251: lenient ! Unwrap fallback
+## ⏸ 완료 — Phase 252: **str/&str indexing returns I64** (OK 102→105 +3)
 
 ---
 
