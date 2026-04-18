@@ -7,9 +7,17 @@
 > **현재 vaisdb OK: 174/261 (66.7%)** — Tier 2 목표 210까지 +36 필요.
 > **Tier 2 extended drive 성과**:
 >   - Codegen: tuple `.0`/`.1` (cascade +13), Str methods (is_empty/byte_at/char_at/trim/to_upper/to_lower/starts_with/ends_with), handler cascade (+5)
->   - Type inference: Str method returns (split/lines/parse_*), HashMap/StringMap full method set, Optional(Ref(V)) uniform
+>   - Type inference: Str method returns (split/lines/parse_*), HashMap/StringMap full method set, Optional/Result method set (ok_or/ok_or_else/unwrap/is_some/...), Optional(Ref(V)) uniform
 >   - Span attach: UndefinedVar, if-else branch, fn-arg unify
 >   - vaisdb refactor: SqlValue variant prefix 전방위, Vec[i]→.get() 패턴, Vec<Struct>[i].field= → pop-modify-push, traverse_fn split→byte_at, planner partial markers, optimizer clone, NodeLookup rename, fulltext_plan rename inner_params, filter.ok_or→M, overflow/user/bootstrap/tls/split/audit/rls annotations.
+>
+> **남은 87 실패의 근본 원인**:
+>   - Cross-file impl dispatch (parse_expr/parse_select/parse_create_user 등 20+ files) — 설계 수준
+>   - Option<&T> match arm inner unify — role.vais get_role_id 같은 패턴, 10+ files
+>   - Per-file API drift — PostingEntry.table_id, HnswConfig.dim, HnswNode.lsn 등 필드 없음
+>   - Runtime missing: parse_f64/parse_i64 Result 반환, split 제네릭
+>   - Vec<Struct>[i].field= write access codegen
+>   - std/string.vais `result.data + i * result.elem_size` Vec type inference 손실
 
 ## 🎯 다음 세션 시작점 (Phase 354+) — Tier 2 드라이브
 
