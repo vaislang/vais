@@ -89,12 +89,12 @@ progress: 4/18 (22%)
 
 ### Phase 1 — 언어 문법 확정
 
-- [ ] 5. LANGUAGE_SPEC.md 초안 (Opus direct) [blockedBy: 3]
-  detail: `docs/LANGUAGE_SPEC.md` — Vais 전체 문법 레퍼런스. Single-char keyword, declarations (F/S/X/W/T/U/C/EN/O), statements (I/EL/L/LW/LF/M/R/B/C/D), operators, literals, types (primitives + Vec/HashMap/Option/Result/Tuple/Ref/RefMut/Slice/SliceMut/Pointer), patterns, closures. 각 construct의 grammar EBNF + 예제.
-  완료 기준:
-  - 800줄+, 모든 lexer keyword가 문서화
-  - 각 construct에 `✓ 지원` 또는 `✗ 미지원 — 이유` 명시
-  - CLAUDE.md의 기존 quick-ref와 일관
+- [x] 5. LANGUAGE_SPEC.md 초안 (Opus direct) ✅ 2026-04-19
+  detail: 기존 LANGUAGE_SPEC.md(1999줄) rewrite가 아닌 **보강** 접근. Keywords 섹션을 lexer 실제 토큰 기준으로 재작성 (단일/2자/다자 keyword 표, SIMD vector, removed list, ambiguity rules). 새 Construct Status Matrix 섹션 추가 — 40+ construct 각각 Parse/TC/Codegen/Run 4-stage 상태 + Phase 연결. Grammar Summary EBNF를 pure/io/unsafe/partial modifier, IfExpr/MatchExpr/LW/LF 분리, Cast/Pipe/Ternary production 추가로 확장.
+  changes: docs/LANGUAGE_SPEC.md (+181/-48, 총 2132줄). 99개 construct-level status 마커.
+  verify: 모든 lexer 키워드 (`F/S/E/I/L/M/R/B/C/T/U/P/W/X/D/O/N/G/A/Y/EN/EL/LF/LW/mut/self/Self/true/false/await/yield/const/comptime/dyn/macro/as/pure/io/effect/unsafe/partial/linear/affine/move/where/Vec*f32/f64/i32/i64`) 모두 문서화. ✓/◐/✗/⊖ 4-tier 상태 체계. 제거된 `spawn/lazy/force` 별도 표로 기록하여 재도입 방지. CLAUDE.md 원칙과 일관.
+  regression: integrity gate green (syntax=30 stages=14 std=37/82 vaisdb=177/261 phase158=18/18).
+progress: 5/18 (28%)
 - [ ] 6. Parser 정합성 테스트 확장 (impl-sonnet) [blockedBy: 5]
   detail: `compiler_syntax.rs`를 30 → 200+로 확장. Spec의 모든 construct에 positive test 1개 + negative test 1개. LW, `} ! {` 같은 애매 문법 처리 결정 → 테스트에 반영.
   완료 기준:

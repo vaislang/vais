@@ -119,47 +119,161 @@ false
 
 ## Keywords
 
-Vais uses single-letter keywords for maximum token efficiency:
+Vais reserves the following tokens. **Status column** uses:
 
-| Keyword | Meaning | Usage |
-|---------|---------|-------|
-| `F` | Function | Define a function |
-| `S` | Struct | Define a struct type |
-| `E` | Enum (or Else) | Define enum type, or else branch in if |
-| `I` | If | Conditional expression |
-| `L` | Loop | Loop construct |
-| `M` | Match | Pattern matching |
-| `W` | Trait (Where) | Define a trait (interface) |
-| `X` | Impl (eXtend) | Implement methods or traits |
-| `T` | Type | Type alias definition |
-| `U` | Use | Import/use modules |
-| `P` | Pub | Public visibility |
-| `A` | Async | Async function marker |
-| `R` | Return | Early return from function |
-| `B` | Break | Break from loop |
-| `C` | Continue/Const | Continue to next loop iteration, or Const for constants |
-| `D` | Defer | Deferred execution |
-| `N` | Extern | Foreign function declaration |
-| `G` | Global | Global variable declaration |
-| `O` | Union | C-style untagged union |
-| `Y` | Yield/Await | Yield value (shorthand for await) |
+- ✓ **stable** — fully lexed, parsed, type-checked, codegened; covered by regression tests
+- ◐ **partial** — lexed & parsed, but codegen/TC incomplete (see `docs/COMPILER_STAGES.md` §6 "Known gaps")
+- ✗ **removed** — formerly reserved, deleted in a past phase; re-adding requires RFC
+- ⊖ **reserved** — token exists but no grammar production yet (reserved for future use)
 
-Note: The `C` keyword has dual meaning - `C` for continue in loops, and `C` for constants (see [Constants](#constants)). Context determines usage.
+Source of truth for every entry below is `crates/vais-lexer/src/lib.rs`.
 
-### Multi-letter Keywords
+### Single-letter Declaration/Statement Keywords
 
-- `mut` - Mutable variable/reference
-- `self` - Instance reference
-- `Self` - Type reference in impl
-- `true`, `false` - Boolean literals
-- `spawn` - Spawn async task
-- `await` - Await async result (also available as `Y` shorthand)
-- `yield` - Yield value in iterator/coroutine (simplified implementation)
+| Token | Name | Role | Status | Test gate |
+|-------|------|------|--------|-----------|
+| `F` | `Function` | Function declaration | ✓ | compiler_syntax test_function_basic |
+| `S` | `Struct` | Struct declaration | ✓ | compiler_syntax test_struct_minimal |
+| `E` | `Enum` | Legacy enum / else tail (context-dependent) | ◐ | prefer `EN`/`EL` — `E` kept for backcompat |
+| `I` | `If` | If-expression opener | ✓ | compiler_syntax test_if_expression |
+| `L` | `Loop` | Infinite loop | ✓ | compiler_syntax test_loop_break |
+| `M` | `Match` | Match expression | ✓ | compiler_syntax test_match_basic |
+| `R` | `Return` | Early return | ✓ | compiler_syntax test_return |
+| `B` | `Break` | Loop break | ✓ | compiler_syntax test_loop_break |
+| `C` | `Continue` | Loop continue (**never Const** — `const` is its own keyword) | ✓ | compiler_syntax test_loop_continue |
+| `T` | `TypeKeyword` | Type alias | ✓ | compiler_syntax test_type_alias |
+| `U` | `Use` | Import | ✓ | compiler_syntax test_use_std |
+| `P` | `Pub` | Public visibility modifier | ✓ | parser_tests visibility |
+| `W` | `Trait` | Trait (interface) declaration | ✓ | compiler_syntax test_trait_decl |
+| `X` | `Impl` | Impl block (method / trait impl) | ✓ | compiler_syntax test_impl_methods |
+| `D` | `Defer` | Defer block (runs on scope exit) | ◐ | partially implemented; see B5 in COMPILER_STAGES.md |
+| `O` | `Union` | C-style untagged union | ◐ | FFI-only; not recommended in pure Vais |
+| `N` | `Extern` | Extern "C" block | ✓ | FFI tests |
+| `G` | `Global` | Global variable declaration | ✓ | selfhost/ uses `G` widely |
+| `A` | `Async` | Async function modifier (`A F foo()`) | ✓ | phase158 async tests |
+| `Y` | `Await` | Postfix-await (`expr.Y`) | ✓ | phase158 async tests |
+
+### Two-letter Unambiguous Keywords
+
+| Token | Name | Role | Status |
+|-------|------|------|--------|
+| `EN` | `EnumKeyword` | Unambiguous enum declaration | ✓ |
+| `EL` | `Else` | Else branch (`I … { … } EL { … }`) | ✓ |
+| `LF` | `ForEach` | For-each loop (`LF i: range`) | ✓ |
+| `LW` | `While` | While loop (`LW cond { … }`) | ✓ |
+
+### Multi-letter Word Keywords
+
+| Token | Role | Status |
+|-------|------|--------|
+| `mut` | Mutability marker for bindings/refs | ✓ |
+| `self` | Instance receiver | ✓ |
+| `Self` | Self type (inside `X`/`W`) | ✓ |
+| `true`, `false` | Boolean literals | ✓ |
+| `await` | Long-form of `Y` (both accepted) | ✓ |
+| `yield` | Iterator/coroutine yield | ◐ |
+| `const` | Compile-time constant binding | ✓ |
+| `comptime` | Compile-time expression/block | ◐ |
+| `dyn` | Dynamic dispatch trait object | ◐ |
+| `macro` | Declarative macro definition | ◐ |
+| `as` | Type cast (`x as i64`) | ✓ |
+| `pure` | Pure function modifier (effect system) | ◐ Phase 4c |
+| `io` | I/O effect marker | ◐ Phase 4c |
+| `effect` | Effect declaration | ⊖ |
+| `unsafe` | Unsafe block/function modifier | ◐ |
+| `partial` | Partial-function (may panic) modifier | ◐ Phase 4c |
+| `linear` | Linear type annotation (must-use) | ◐ experimental |
+| `affine` | Affine type annotation (at-most-once) | ◐ experimental |
+| `move` | Move capture in closure | ◐ |
+| `where` | Generic where-clause | ✓ |
+
+### Primitive Type Keywords
+
+`i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `f32`, `f64`, `bool`, `str` — all ✓ stable. See [Types](#types) for semantics.
+
+### SIMD Vector Type Keywords
+
+`Vec2f32`, `Vec4f32`, `Vec8f32`, `Vec2f64`, `Vec4f64`, `Vec4i32`, `Vec8i32`, `Vec2i64`, `Vec4i64` — ◐ codegen partial (LLVM vector intrinsics only on supported targets).
+
+### Removed Keywords (DO NOT RE-INTRODUCE)
+
+| Keyword | Removed in | Reason |
+|---------|-----------|--------|
+| `spawn` | Phase 195 (commit `12592076`) | Replaced by runtime task APIs; removal simplified async surface |
+| `lazy`  | Phase 194 (commit `8c60c075`) | Incomplete force/lazy implementation; replaced by `LazyCell`-style stdlib |
+| `force` | Phase 194 (commit `8c60c075`) | Paired with `lazy` |
+
+Re-introducing requires RFC + update to `docs/language/removed_keywords.md`.
+
+### Ambiguity Rules
+
+1. **`E` vs `EN`/`EL`**: `E` is a single-letter context-dependent token. The parser accepts `E` as both enum-head (`E Color { Red, Green }`) and else-tail (`I c { a } E { b }`). New code must prefer `EN` and `EL` — they have higher lexer priority (4 > 3) and eliminate ambiguity. Phase 1.7 will add a deprecation diagnostic for bare `E`.
+2. **`C` is always Continue**: Compile-time constants use the lowercase keyword `const`, not `C`. Historical documents that claimed "C can mean Const" are wrong — the lexer has never produced Const from `C`.
+3. **`Y` vs `await`**: The lexer emits both to the same `Await` token. Choose based on readability; the compiler is indifferent.
+
+---
+
+## Construct Status Matrix
+
+This table enumerates every top-level or statement-level construct the parser accepts and its implementation status across stages.
+
+| Construct | Example | Parse | TC | Codegen | Run |
+|-----------|---------|-------|----|---------|-----|
+| Function decl | `F foo(x:i64)->i64 = x+1` | ✓ | ✓ | ✓ | ✓ |
+| Function body block | `F foo(x:i64)->i64 { R x+1 }` | ✓ | ✓ | ✓ | ✓ |
+| Async function | `A F fetch()->str { … }` | ✓ | ✓ | ✓ | ✓ |
+| Pure modifier | `pure F add(a:i64,b:i64)->i64` | ✓ | ◐ | ✓ (no extra codegen) | ✓ |
+| Partial modifier | `partial F div(a:i64,b:i64)->i64` | ✓ | ◐ | ✓ | ✓ |
+| Struct decl | `S Point { x: i64, y: i64 }` | ✓ | ✓ | ✓ | ✓ |
+| Enum decl (`EN`) | `EN Color { Red, Green(i64) }` | ✓ | ✓ | ✓ | ✓ |
+| Enum decl (`E`) | `E Color { … }` | ✓ | ✓ | ✓ | ✓ (legacy) |
+| Trait decl | `W Eq { F eq(a:Self,b:Self)->bool }` | ✓ | ✓ | ✓ | ✓ |
+| Impl block | `X Foo: MyTrait { … }` | ✓ | ✓ | ◐ cross-file dispatch: Phase 2.9 | ✓ |
+| Type alias | `T Id = i64` | ✓ | ✓ | ✓ | ✓ |
+| Use import | `U std::io` | ✓ | ✓ | ✓ | ✓ |
+| Extern block | `N "C" { F malloc(s:i64)->*u8 }` | ✓ | ✓ | ✓ | ✓ |
+| Union (O) | `O Payload { i:i64, f:f64 }` | ✓ | ◐ | ◐ | FFI only |
+| Global | `G COUNTER: i64 = 0` | ✓ | ✓ | ✓ | ✓ |
+| Const | `const PI: f64 = 3.14` | ✓ | ✓ | ✓ | ✓ |
+| If expression | `I c { a } EL { b }` | ✓ | ✓ | ✓ | ✓ |
+| Ternary | `cond ? a : b` | ✓ | ✓ | ✓ | ✓ |
+| Match expression | `M x { 0 => "zero", _ => "n" }` | ✓ | ✓ | ✓ | ✓ |
+| Infinite loop (`L`) | `L { I done { B } }` | ✓ | ✓ | ✓ | ✓ |
+| While (`LW`) | `LW i < 10 { i += 1 }` | ✓ | ✓ | ✓ | ✓ |
+| For-each (`LF`) | `LF i: 0..10 { … }` | ✓ | ✓ | ✓ | ✓ |
+| Break/Continue | `B`, `C` (inside loop) | ✓ | ✓ | ✓ | ✓ |
+| Return (`R`) | `R x + 1` | ✓ | ✓ | ✓ | ✓ |
+| Defer (`D`) | `D { cleanup() }` | ✓ | ◐ | ◐ scope-exit only | partial |
+| Let binding (`:=`) | `x := 5` | ✓ | ✓ | ✓ | ✓ |
+| Mut binding | `x := mut 5` | ✓ | ✓ | ✓ | ✓ |
+| Assignment | `x = 10`, `x += 1` | ✓ | ✓ | ✓ | ✓ |
+| String interpolation | `"hello {name}"` | ✓ | ✓ | ✓ | ✓ |
+| Pipe (`\|>`) | `x \|> f \|> g` | ✓ | ✓ | ✓ | ✓ |
+| Self-recursion `@` | `F fact(n:i64)->i64 = I n<=1 { 1 } EL { n * @(n-1) }` | ✓ | ✓ | ✓ | ✓ |
+| Closure | `\|x\| x * 2`, `\|x,y\| { x + y }` | ✓ | ✓ | ✓ | ✓ |
+| Move closure | `move \|x\| x + captured` | ✓ | ◐ | ◐ | partial |
+| Generics | `F id<T>(x:T)->T = x` | ✓ | ✓ | ✓ monomorphized | ✓ |
+| Where clause | `F f<T>(x:T)->T where T: Eq` | ✓ | ✓ | ✓ | ✓ |
+| Try operator `?` | `expr?` on Result/Option | ✓ | ✓ | ✓ | ✓ |
+| Unwrap `!` | `expr!` on Result/Option | ✓ | ✓ | ✓ | ✓ (panics on None/Err) |
+| Range `..` / `..=` | `0..10`, `0..=9` | ✓ | ✓ | ✓ | ✓ |
+| Tuple literal | `(1, "hi", true)` | ✓ | ✓ | ✓ | ✓ |
+| Array/Vec indexing | `v[i]`, `v[i] = x` | ✓ | ✓ | ✓ | ✓ |
+| `Vec<Struct>[i].field =` write | `v[i].x = 5` | ✓ | ✓ | ◐ Phase 3.14 | ◐ |
+| Attribute `#[…]` | `#[cfg(target_os="linux")]` | ✓ | limited | limited | limited |
+| Unsafe block | `unsafe { … }` | ✓ | ◐ | ✓ (trivial pass-through) | ✓ |
+| Comptime block | `comptime { … }` | ✓ | ◐ | ◐ | partial |
+| Macro definition | `macro name!(…) { … }` | ✓ | ◐ | ◐ | experimental |
+| Dyn trait object | `dyn MyTrait` | ✓ | ◐ | ◐ | experimental |
+| Linear/affine types | `linear T`, `affine T` | ✓ | ◐ | ◐ | experimental |
+| Yield (iterator) | `yield x` | ✓ | ◐ | ◐ | experimental |
+
+**Gate rule**: every `◐` entry has a planned Phase in `ROADMAP.md`. Moving a `◐` to `✓` requires a compiler_syntax or e2e test that currently fails, passes after the change, and stays green in Phase-0 regression floor.
 
 ### Shorthand Keywords (Phase 29)
 
-| Shorthand | Replaces | Example |
-|-----------|----------|---------|
+| Shorthand | Long form | Example |
+|-----------|-----------|---------|
 | `Y` | `await` | `result.Y` (postfix await) |
 
 ---
@@ -1949,29 +2063,46 @@ Below is a condensed quick-reference:
 
 ```
 Module       ::= Item*
-Item         ::= Attribute* ['P'] (FunctionDef | StructDef | EnumDef | UnionDef
-                 | TypeAlias | TraitAlias | UseDef | TraitDef | ImplDef
+Item         ::= Attribute* Visibility? Modifier* (FunctionDef | StructDef | EnumDef
+                 | UnionDef | TypeAlias | TraitAlias | UseDef | TraitDef | ImplDef
                  | MacroDef | ExternBlock | ConstDef | GlobalDef)
+Visibility   ::= 'P'
+Modifier     ::= 'pure' | 'io' | 'unsafe' | 'partial' | 'A'      (* async *)
 
-FunctionDef  ::= ['A'] 'F' Ident Generics? '(' Params? ')' ['->' Type] WhereClause? ('=' Expr | Block)
+FunctionDef  ::= Modifier* 'F' Ident Generics? '(' Params? ')' ['->' Type]
+                 WhereClause? ('=' Expr | Block)
 StructDef    ::= 'S' Ident Generics? WhereClause? '{' (Field | Method)* '}'
-EnumDef      ::= 'E' Ident Generics? '{' Variant (',' Variant)* '}'
+EnumDef      ::= ('E' | 'EN') Ident Generics? '{' Variant (',' Variant)* '}'
 UnionDef     ::= 'O' Ident Generics? '{' Field (',' Field)* '}'
-TraitDef     ::= 'W' Ident Generics? [':' TraitBounds] WhereClause? '{' (AssocType | TraitMethod)* '}'
-ImplDef      ::= 'X' Generics? Type [':' Ident] WhereClause? '{' Method* '}'
-ExternBlock  ::= 'N' StringLit? '{' ExternFunc* '}' | 'X' 'F' ExternFuncSig
+TraitDef     ::= 'W' Ident Generics? [':' TraitBounds] WhereClause?
+                 '{' (AssocType | TraitMethod)* '}'
+ImplDef      ::= 'X' Generics? Type [':' TypePath] WhereClause?
+                 '{' Method* '}'
+ExternBlock  ::= 'N' StringLit? '{' ExternFunc* '}' | 'N' 'F' ExternFuncSig
 UseDef       ::= 'U' Path ['.' ('{' Idents '}' | Ident)] [';']
-ConstDef     ::= 'C' Ident ':' Type '=' Expr
+ConstDef     ::= 'const' Ident ':' Type '=' Expr
 GlobalDef    ::= 'G' Ident ':' Type '=' Expr
 TypeAlias    ::= 'T' Ident Generics? '=' Type
 TraitAlias   ::= 'T' Ident Generics? '=' TraitBound ('+' TraitBound)*
 MacroDef     ::= 'macro' Ident '!' '{' MacroRule* '}'
 
+IfExpr       ::= 'I' Expr Block ('EL' (IfExpr | Block))?
+MatchExpr    ::= 'M' Expr '{' MatchArm (',' MatchArm)* '}'
+MatchArm     ::= Pattern ('if' Expr)? '=>' Expr
+InfiniteLoop ::= 'L' Block
+WhileLoop    ::= 'LW' Expr Block
+ForEachLoop  ::= 'LF' Pattern ':' Expr Block
+Ternary      ::= Expr '?' Expr ':' Expr
+
 Expr         ::= Assignment | Pipe | Ternary | LogicalOr | LogicalAnd
                | BitwiseOr | BitwiseXor | BitwiseAnd | Equality | Range
-               | Comparison | Shift | Term | Factor | Unary | Postfix | Primary
+               | Comparison | Shift | Term | Factor | Unary | Cast | Postfix | Primary
+Cast         ::= Expr 'as' Type
+Pipe         ::= Expr '|>' Expr
 
-Stmt         ::= 'R' Expr? | 'B' Expr? | 'C' | 'D' Expr | LetStmt | Expr
+Stmt         ::= 'R' Expr? | 'B' Expr? | 'C' | 'D' Block | 'D' Expr
+               | LetStmt | Expr
+LetStmt      ::= Ident (':' Type)? ':=' ('mut')? Expr
 
 Type         ::= BaseType ['?' | '!']
 BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
@@ -1983,8 +2114,10 @@ BaseType     ::= NamedType | TupleType | FnType | ArrayType | MapType
 
 Pattern      ::= '_' | Ident ['@' Pattern] | Ident '(' Patterns ')' | Literal
                | '(' Patterns ')' | Pattern '..' Pattern | Pattern '|' Pattern
+               | 'Some' '(' Pattern ')' | 'None' | 'Ok' '(' Pattern ')' | 'Err' '(' Pattern ')'
 
 Closure      ::= '|' Params? '|' Expr | 'move' '|' Params? '|' Expr
+SelfRecur    ::= '@' '(' Args? ')'
 ```
 
 See `docs/grammar/vais.ebnf` for the complete grammar with all 18 sections,
