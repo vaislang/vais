@@ -423,6 +423,12 @@ impl TypeChecker {
                         } = **inner
                         {
                             if name == "Vec" && !generics.is_empty() {
+                                // Phase 262: &Vec<T>[range] → Slice<T>.
+                                if is_slice {
+                                    return Some(Ok(ResolvedType::Slice(Box::new(
+                                        self.apply_substitutions(&generics[0]),
+                                    ))));
+                                }
                                 if !index_type.is_integer() {
                                     return Some(Err(TypeError::Mismatch {
                                         expected: "integer".to_string(),
