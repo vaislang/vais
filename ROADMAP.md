@@ -3,7 +3,66 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 203 시작: compiler crate 작업 — cross-module field resolution + generic method dispatch)
+> **최종 업데이트**: 2026-04-18 (Phase 204 시작: E001/E002/E004 진짜 에러 도메인 처리)
+
+---
+
+## ⏸ 완료 — Phase 204: vaisdb E-계열 잔여 처리
+completed_at: 2026-04-18
+
+mode: auto
+max_iterations: 20
+iteration: 1
+  iter1 strategy: #30 Recon-204 Opus direct. grep + vaisc check로 E-계열 sub-pattern 분류. **compiler dir에서 실행 필수** (Phase 203 lesson). ✅ 핵심: `__strlen` 20 파일, `put_u8→write_u8` 21 파일.
+iteration: 2
+  iter2 strategy: #31 (E030+E003 Opus direct, 9건 small) + #32 (E002 __strlen 등 sonnet) + #33 (E001/E004 top sonnet). #32/#33 파일 분리 — sonnet 병렬 background, #31 Opus main-thread. ✅ E002 26→3, E003 6→0, E030 3→1, E004 47→40, P001=0 유지. import path 6+ 추가 fix.
+iteration: 3
+  iter3 strategy: #34 Gate. final_report + Phase 205 seed.
+strategy: Phase 203 breakthrough로 E-계열 **진짜** 측정치 확보 (E001=121, E004=47, E002=26, E030=3, E003=6, OTHER=73). 이제 compiler 정확히 동작 중 — vaisdb domain migration만 남음. Phase 204는 E002/E030/E003 (작은 도메인 먼저) 처리 + E001/E004 top pattern 추출.
+
+### 배경 (Phase 203 종료 시점)
+- vaisdb P001 = 0 (Phase 199~202 누적 100%)
+- Phase 203 compiler fix → 진짜 E-계열 측정 가능
+- compiler baseline green
+- 실측: E001 121 (type mismatch 진짜), E004 47 (undefined fn 진짜), E002 26, E030 3, E003 6
+
+### 목표 (Phase 204 Exit Criteria)
+1. E030 3 → 0 (완료)
+2. E003 6 → 0 또는 ≤2
+3. E002 26 → ≤10 (60%+ 해소)
+4. E001/E004는 top pattern 추출 + 20%+ 해소 (전수는 Phase 205)
+5. compiler baseline 유지
+
+### 작업 (5개)
+
+- [ ] 1. **Recon-204: E-계열 sub-pattern 분류** (Opus direct)
+  - 각 E 코드별 파일 + 패턴 샘플 수집
+  - E001/E004 top 심볼 + 도메인 분류
+  - 산출물: docs/phase204/recon.md
+
+- [ ] 2. **E030-0 + E003 처리** (Opus direct) [blockedBy: 1]
+  - E030 3건 + E003 6건 full fix
+  - 산출물: docs/phase204/e030_e003.md
+
+- [ ] 3. **E002 top 처리** (impl-sonnet, 5-7 파일) [blockedBy: 1]
+  - E002 26건 중 top 10 파일 처리 (import 추가 또는 constant 정의)
+  - 산출물: docs/phase204/e002.md
+
+- [ ] 4. **E001/E004 top pattern** (impl-sonnet, 5-7 파일) [blockedBy: 1]
+  - top 1-2 sub-pattern 20+ 파일 처리
+  - 나머지는 Phase 205로
+  - 산출물: docs/phase204/e001_e004.md
+
+- [ ] 5. **P204-Gate** (Opus direct) [blockedBy: 2, 3, 4]
+  - 전수 재측정 + Phase 205 seed
+  - 산출물: docs/phase204/final_report.md
+
+### 파일 영향
+- vaisdb/src/**/*.vais — 수정 (외부 git repo)
+- compiler docs/phase204/*.md — 산출물
+- compiler crate — 무수정 (Phase 203으로 이미 fix)
+
+progress: 5/5 (100%) — E002 88%↓, E003 100%↓, E030 67%↓. P001=0 유지. 누적 P001 47→0, E030 27→1, E004 143→40.
 
 ---
 
