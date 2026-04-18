@@ -188,6 +188,11 @@ F time_now() -> i64 {
     time(0)
 }
 
+# Alias used by apps — seconds since epoch.
+F unix_timestamp() -> i64 {
+    time(0)
+}
+
 # Get current time in milliseconds
 # Returns milliseconds since epoch
 F time_millis() -> i64 {
