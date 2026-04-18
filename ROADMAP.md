@@ -3,7 +3,25 @@
 
 > **현재 버전**: 0.1.0 (Phase 198 부분완료, Phase 199 계획 완료 — 다음 session에서 시작)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 214 시작: E004 89건 deep dive + tests/ panic! 제거)
+> **최종 업데이트**: 2026-04-18 (Phase 215: stdlib aliases — HashMap.insert, Vec.clone/as_slice)
+
+---
+
+## ⏸ 완료 — Phase 215: stdlib API aliases (insert/clone/as_slice) — E004 17%↓
+
+mode: auto
+max_iterations: 5
+iteration: 1
+strategy: vaisdb가 Rust-style API name (.insert, .clone, .as_slice) 호출. stdlib에 alias 추가하여 method dispatch 만족시킴.
+
+### 작업
+- [x] 1. **HashMap.insert (alias for set)** ✅ std/hashmap.vais 일반 + StrHashMap 둘 다
+- [x] 2. **Vec.clone (alias for to_vec)** ✅ std/vec.vais
+- [x] 3. **Vec.as_slice (returns self)** ✅ placeholder
+- [x] 4. **재측정** ✅ E004 88→73 (17%↓), OK 79→80
+
+progress: 4/4 (100%)
+completed_at: 2026-04-18
 
 ---
 

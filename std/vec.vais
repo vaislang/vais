@@ -442,6 +442,19 @@ X Vec<T> {
         result
     }
 
+    # Alias for to_vec — Rust-style deep clone. Phase 215.
+    F clone(&self) -> Vec<T> {
+        @.to_vec()
+    }
+
+    # Return underlying storage as a reference (placeholder; returns self).
+    # Phase 215: vaisdb calls `.as_slice()` expecting a slice view. Vais
+    # currently returns the Vec itself — callers typically just pass this
+    # where a &[T] would be expected.
+    F as_slice(&self) -> &Vec<T> {
+        self
+    }
+
     # Sort by comparison function (bubble sort for simplicity)
     F sort_by(&self, cmp: fn(T, T) -> i64) -> i64 {
         n := self.len

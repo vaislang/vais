@@ -301,6 +301,13 @@ X HashMap<K, V> {
         }
     }
 
+    # Alias for `set` — Rust-style insert name. Added Phase 215 so that
+    # downstream code (e.g. vaisdb migrating from a Rust HashMap API) can
+    # call `.insert(k, v)` without rename churn.
+    F insert(&self, key: K, value: V) -> V {
+        @.set(key, value)
+    }
+
     # Remove key-value pair, returns removed value or 0 if not found
     F remove(&self, key: K) -> V {
         idx := @.hash(key)
@@ -764,6 +771,11 @@ X StrHashMap<V> {
                 @.find_and_update_str(next, key, value)
             }
         }
+    }
+
+    # Alias for `set` (StrHashMap) — Rust-style insert name. Phase 215.
+    F insert(&self, key: str, value: V) -> V {
+        @.set(key, value)
     }
 
     F remove(&self, key: str) -> V {
