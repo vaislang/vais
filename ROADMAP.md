@@ -1,10 +1,10 @@
 # Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **현재 버전**: 0.1.0 (Phase 261 완료, vaisdb 마이그레이션 진행 중)
+> **현재 버전**: 0.1.0 (Phase 265 완료, vaisdb 마이그레이션 진행 중)
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-04-18 (Phase 261: str_recv broadens Named Str/str)
-> **현재 vaisdb OK: 110/261 (42.1%)** — Phase 199 시작 대비 +80 파일 개선
+> **최종 업데이트**: 2026-04-18 (Phase 265: numeric.to_le_bytes + str.starts_with)
+> **현재 vaisdb OK: 118/261 (45.2%)** — Phase 199 시작 대비 +88 파일 개선
 
 ## ⏸ 완료 — Phase 225: RwLock.read_lock/write_lock aliases (E004 53→51)
 ## ⏸ 완료 — Phase 226: push_byte alias + generic to_string/clone
@@ -43,6 +43,10 @@
 ## ⏸ 완료 — Phase 259: **Option/Result auto-unwrap for field access** (OK 105→109 +4)
 ## ⏸ 완료 — Phase 260: numeric methods for all int widths (u32.min etc.) (OK 109→110)
 ## ⏸ 완료 — Phase 261: str_recv broadens to Named Str/str
+## ⏸ 완료 — Phase 262: **&Vec<T>[range] returns Slice<T>** (OK 110→113 +3)
+## ⏸ 완료 — Phase 263: Option/Result auto-unwrap for method dispatch
+## ⏸ 완료 — Phase 264: HashMap.keys/values fallback dispatch
+## ⏸ 완료 — Phase 265: numeric.to_le_bytes + str.starts_with fallbacks (OK 117→118)
 
 ---
 
