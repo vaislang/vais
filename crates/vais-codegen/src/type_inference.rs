@@ -770,6 +770,47 @@ impl CodeGenerator {
                             generics: vec![],
                         };
                     }
+
+                    // HashMap<K, V> / StringMap<V> method return types.
+                    // Keeping these in sync with the stdlib signatures avoids the
+                    // I64 fallback that made `map.keys()[i]` trigger C003 in codegen.
+                    if name == "HashMap" || name == "StringMap" {
+                        let generics = if let ResolvedType::Named { generics, .. } =
+                            inner_recv
+                        {
+                            generics.clone()
+                        } else {
+                            vec![]
+                        };
+                        let key_ty = generics.get(0).cloned().unwrap_or(ResolvedType::Str);
+                        let val_ty = generics
+                            .get(1)
+                            .cloned()
+                            .or_else(|| generics.get(0).cloned())
+                            .unwrap_or(ResolvedType::I64);
+                        return match method.node.as_str() {
+                            "keys" => ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![key_ty],
+                            },
+                            "values" => ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![val_ty],
+                            },
+                            "get" | "get_mut" => ResolvedType::Named {
+                                name: "Option".to_string(),
+                                generics: vec![ResolvedType::Ref(Box::new(val_ty))],
+                            },
+                            "insert" | "remove" => ResolvedType::Named {
+                                name: "Option".to_string(),
+                                generics: vec![val_ty],
+                            },
+                            "contains_key" | "is_empty" => ResolvedType::Bool,
+                            "len" | "capacity" => ResolvedType::I64,
+                            "clear" => ResolvedType::Unit,
+                            _ => ResolvedType::I64,
+                        };
+                    }
                 }
 
                 // clone on any type returns the same type
