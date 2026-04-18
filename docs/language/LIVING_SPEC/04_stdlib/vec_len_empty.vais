@@ -1,0 +1,15 @@
+# LIVING_SPEC/04_stdlib/vec_len_empty.vais
+# Key concept: .len()은 원소 개수를 i64로 반환; .is_empty()는 빈 벡터 여부(i64 0/1).
+
+F main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    puts("before push")
+    I v.is_empty() == 1 { puts("empty") }
+
+    v.push(42)
+    v.push(99)
+    puts("after push")
+    I v.len() == 2 { puts("len is 2") }
+
+    0
+}

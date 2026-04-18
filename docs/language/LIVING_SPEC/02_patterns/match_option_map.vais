@@ -1,0 +1,19 @@
+# LIVING_SPEC/02_patterns/match_option_map.vais
+# Key concept: Option<T>를 직접 매칭해서 값 추출.
+# NOTE: `Some(r.field)`로 재포장하는 대신 결과를 바로 사용. (Phase 2.10 참고)
+
+S Point { x: i64, y: i64 }
+
+F get_x_or(p: Option<Point>, def: i64) -> i64 {
+    M p {
+        Some(pt) => pt.x,
+        None => def
+    }
+}
+
+F main() -> i64 {
+    p := Point { x: 5, y: 10 }
+    a := get_x_or(Some(p), 0)
+    b := get_x_or(None, 99)
+    a + b
+}

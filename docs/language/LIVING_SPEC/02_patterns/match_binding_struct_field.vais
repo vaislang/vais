@@ -1,0 +1,18 @@
+# LIVING_SPEC/02_patterns/match_binding_struct_field.vais
+# Key concept: Option<Struct>에서 struct의 특정 필드만 꺼내 쓰기.
+
+S User { id: i64, age: i64 }
+
+F get_age(u: Option<User>) -> i64 {
+    M u {
+        Some(user) => user.age,
+        None => -1
+    }
+}
+
+F main() -> i64 {
+    u := User { id: 1, age: 30 }
+    a := get_age(Some(u))
+    b := get_age(None)
+    a + b
+}

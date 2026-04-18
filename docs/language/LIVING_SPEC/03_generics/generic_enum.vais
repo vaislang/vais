@@ -1,0 +1,21 @@
+# LIVING_SPEC/03_generics/generic_enum.vais
+# Key concept: EN Name<T> { Variant(T), Other } 제네릭 열거형 선언.
+# 타입 파라미터를 variant 페이로드로 사용.
+
+EN Maybe<T> {
+    Just(T),
+    Nothing
+}
+
+F unwrap_or(m: Maybe<i64>, default: i64) -> i64 {
+    M m {
+        Just(v) => v,
+        Nothing => default
+    }
+}
+
+F main() -> i64 {
+    a := Just(42)
+    b := Nothing
+    unwrap_or(a, 0) + unwrap_or(b, 0)
+}

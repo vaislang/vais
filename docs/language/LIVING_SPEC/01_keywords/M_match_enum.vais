@@ -1,0 +1,24 @@
+# LIVING_SPEC/01_keywords/M_match_enum.vais
+# Key concept: M expr { EnumVariant(bind) => ... } 열거형 패턴 매치.
+# 튜플/유닛 variant 모두 패턴으로 분해 가능.
+
+EN Cmd {
+    Quit,
+    Move(i64, i64),
+    Print(i64)
+}
+
+F run(c: Cmd) -> i64 {
+    M c {
+        Quit => 0,
+        Move(x, y) => x + y,
+        Print(v) => v
+    }
+}
+
+F main() -> i64 {
+    a := run(Move(3, 4))
+    b := run(Print(10))
+    c := run(Quit)
+    a + b + c
+}

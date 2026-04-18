@@ -1,0 +1,17 @@
+# LIVING_SPEC/04_stdlib/option_map.vais
+# Key concept: Option<T>에서 값만 꺼내 변환 후 바로 사용 (Some으로 재포장 X).
+# Phase 2.10 known bug: `M opt { Some(r) => Some(r.field), ... }` 패턴은
+# codegen에서 문제가 있으므로, 아래처럼 값을 바로 반환/계산.
+
+F get_doubled(opt: Option<i64>) -> i64 {
+    M opt {
+        Some(v) => v * 2,
+        None => 0
+    }
+}
+
+F main() -> i64 {
+    a := get_doubled(Some(5))
+    b := get_doubled(None)
+    a + b
+}

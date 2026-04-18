@@ -1,0 +1,15 @@
+# LIVING_SPEC/02_patterns/deref_auto.vais
+# Key concept: 메서드/필드 접근 시 참조 자동 해제 (auto-deref).
+
+S Point { x: i64, y: i64 }
+
+F add(a: &Point, b: &Point) -> i64 {
+    # a.x와 b.x는 &Point 통해 접근 — auto-deref.
+    a.x + b.x + a.y + b.y
+}
+
+F main() -> i64 {
+    p1 := Point { x: 1, y: 2 }
+    p2 := Point { x: 3, y: 4 }
+    add(&p1, &p2)
+}

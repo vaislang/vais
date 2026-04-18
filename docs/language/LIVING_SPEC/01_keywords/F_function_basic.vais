@@ -1,0 +1,16 @@
+# LIVING_SPEC/01_keywords/F_function_basic.vais
+# Key concept: F name(params) -> ReturnType { body } 기본 함수 선언.
+# 표현식 body는 = 로도 가능: F add(a:i64, b:i64) -> i64 = a + b
+
+F add(a: i64, b: i64) -> i64 = a + b
+
+F greet(x: i64) -> i64 {
+    puts("hello")
+    x
+}
+
+F main() -> i64 {
+    result := add(2, 3)
+    greet(result)
+    0
+}

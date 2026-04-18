@@ -1,0 +1,15 @@
+# LIVING_SPEC/04_stdlib/option_unwrap_or.vais
+# Key concept: Option<T>의 기본값을 M으로 지정.
+
+F with_default(opt: Option<i64>, def: i64) -> i64 {
+    M opt {
+        Some(v) => v,
+        None => def
+    }
+}
+
+F main() -> i64 {
+    a := with_default(Some(5), 0)
+    b := with_default(None, 99)
+    a + b
+}

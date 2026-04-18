@@ -1,0 +1,13 @@
+# LIVING_SPEC/05_idioms/idiom_pipe_transform.vais
+# Key concept: ❌ nested f(g(h(x))) vs ✅ 파이프 체이닝
+# ✅ DO: x |> h |> g |> f — 좌→우 읽기 순서.
+# ❌ DON'T: f(g(h(x))) — 안쪽부터 읽어야 흐름 파악.
+
+F add_1(x: i64) -> i64 = x + 1
+F double(x: i64) -> i64 = x * 2
+F sq(x: i64) -> i64 = x * x
+
+F main() -> i64 {
+    # 3 → 4 → 8 → 64
+    3 |> add_1 |> double |> sq
+}

@@ -1,0 +1,25 @@
+# LIVING_SPEC/04_stdlib/vec_max.vais
+# Key concept: Vec<i64>에서 최댓값 찾기 (LF 순회 + 비교).
+# NOTE: Some(n)에서 n의 타입은 &i64이므로 `*n` 또는 비교 맥락에서 auto-deref.
+
+F max_of(v: Vec<i64>) -> i64 {
+    max := mut 0
+    LF i: 0..v.len() {
+        M v.get(i) {
+            Some(n) => {
+                cur := *n
+                I cur > max { max = cur }
+            },
+            None => {}
+        }
+    }
+    max
+}
+
+F main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(3)
+    v.push(7)
+    v.push(2)
+    max_of(v)  # 7
+}

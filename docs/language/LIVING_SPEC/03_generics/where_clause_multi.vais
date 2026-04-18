@@ -1,0 +1,37 @@
+# LIVING_SPEC/03_generics/where_clause_multi.vais
+# Key concept: F f<A, B>(a: A, b: B) where A: T1, B: T2 다중 where 절.
+# 여러 타입 파라미터에 각각 다른 trait bound 적용.
+
+W HasValue {
+    F val(&self) -> i64
+}
+
+W HasLabel {
+    F label(&self) -> i64
+}
+
+S Item {
+    data: i64
+}
+
+S Tag {
+    code: i64
+}
+
+X Item: HasValue {
+    F val(&self) -> i64 = self.data
+}
+
+X Tag: HasLabel {
+    F label(&self) -> i64 = self.code
+}
+
+F combine<A, B>(a: A, b: B) -> i64 where A: HasValue, B: HasLabel {
+    a.val() + b.label()
+}
+
+F main() -> i64 {
+    item := Item { data: 30 }
+    tag := Tag { code: 12 }
+    combine(item, tag)
+}

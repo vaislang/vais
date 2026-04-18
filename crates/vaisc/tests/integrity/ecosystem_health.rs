@@ -11,7 +11,7 @@
 /// Thresholds for Phase 0.2: at least 1 file must pass in each category.
 /// The actual counts feed ROADMAP via Phase 0.3.
 
-use super::{ok_codegen, ok_codegen_pkg, setup_std_symlink};
+use super::{ok_codegen, ok_codegen_pkg, ok_tc, setup_std_symlink};
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
@@ -204,4 +204,91 @@ fn report_compiler_syntax_summary() {
     // (186 active + 14 ignored). Pass count is runtime-determined;
     // emit the total so CI/regression gate can read it.
     eprintln!("INTEGRITY compiler_syntax pass=? fail=? total=200");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1.8 — LIVING_SPEC executable reference examples
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_living_spec_files_ok() {
+    // LIVING_SPEC is the authoritative executable reference for Vais syntax.
+    // Every .vais file under docs/language/LIVING_SPEC/ must pass `vaisc check`
+    // (type-check, no codegen). If any file fails, agents relying on these
+    // examples as ground truth will propagate the failure.
+    //
+    // Phase 1.8: baseline ≥ 100 files, ALL passing.
+
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("failed to canonicalize project root");
+    let living_spec_dir = project_root.join("docs/language/LIVING_SPEC");
+
+    if !living_spec_dir.is_dir() {
+        eprintln!(
+            "INTEGRITY living_spec pass=0 fail=0 total=0 (SKIP: {} not found)",
+            living_spec_dir.display()
+        );
+        return;
+    }
+
+    let mut files: Vec<PathBuf> = WalkDir::new(&living_spec_dir)
+        .into_iter()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.into_path();
+            if path.extension().and_then(|s| s.to_str()) == Some("vais") {
+                Some(path)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    files.sort();
+    let total = files.len();
+
+    let mut pass = 0usize;
+    let mut fail_names: Vec<String> = Vec::new();
+
+    for path in &files {
+        if ok_tc(path) {
+            pass += 1;
+        } else {
+            let rel = path
+                .strip_prefix(&living_spec_dir)
+                .unwrap_or(path)
+                .display()
+                .to_string();
+            fail_names.push(rel);
+        }
+    }
+
+    eprintln!(
+        "INTEGRITY living_spec pass={} fail={} total={}",
+        pass,
+        fail_names.len(),
+        total
+    );
+
+    if !fail_names.is_empty() {
+        eprintln!("  living_spec FAIL list ({}):", fail_names.len());
+        for name in &fail_names {
+            eprintln!("    - {}", name);
+        }
+    }
+
+    // Phase 1.8 gate: 100+ files, ALL passing.
+    assert!(
+        total >= 100,
+        "LIVING_SPEC must have ≥100 files; found {}",
+        total
+    );
+    assert!(
+        fail_names.is_empty(),
+        "LIVING_SPEC has {} failing files: {:?}",
+        fail_names.len(),
+        fail_names
+    );
 }

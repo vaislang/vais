@@ -1,0 +1,22 @@
+# LIVING_SPEC/05_idioms/idiom_match_exhaustive.vais
+# Key concept: ❌ 방어적 `_` vs ✅ 모든 variant 명시
+# ✅ DO: 모든 enum variant를 arm에 명시 — 새 variant 추가 시 컴파일러 경고.
+# ❌ DON'T: `_ => default` 로 닫으면 enum 확장 시 silently 누락됨.
+
+EN Signal {
+    Start,
+    Pause,
+    Stop
+}
+
+F cost(s: Signal) -> i64 {
+    M s {
+        Start => 1,
+        Pause => 2,
+        Stop  => 3
+    }
+}
+
+F main() -> i64 {
+    cost(Start) + cost(Pause) + cost(Stop)
+}

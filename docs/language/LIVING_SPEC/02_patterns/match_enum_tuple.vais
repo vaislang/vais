@@ -1,0 +1,18 @@
+# LIVING_SPEC/02_patterns/match_enum_tuple.vais
+# Key concept: 튜플 variant의 필드를 패턴으로 바인딩.
+
+EN Shape {
+    Circle(i64),
+    Rect(i64, i64)
+}
+
+F area(s: Shape) -> i64 {
+    M s {
+        Circle(r) => r * r * 3,  # π ≈ 3으로 단순화
+        Rect(w, h) => w * h
+    }
+}
+
+F main() -> i64 {
+    area(Circle(5)) + area(Rect(3, 4))
+}

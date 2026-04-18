@@ -1,0 +1,10 @@
+# LIVING_SPEC/04_stdlib/pipe_operator.vais
+# Key concept: `x |> f` 는 f(x)와 같음. 체이닝으로 읽기 좋게 표현.
+
+F add_one(x: i64) -> i64 = x + 1
+F double(x: i64) -> i64 = x * 2
+
+F main() -> i64 {
+    # 5 → add_one → 6 → double → 12
+    5 |> add_one |> double
+}

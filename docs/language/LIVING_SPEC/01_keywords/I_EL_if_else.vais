@@ -1,0 +1,20 @@
+# LIVING_SPEC/01_keywords/I_EL_if_else.vais
+# Key concept: I cond { ... } EL { ... } 조건 분기.
+# EL은 else를 의미. I/EL 체인도 가능: I ... { } EL I ... { } EL { }.
+
+F classify(n: i64) -> i64 {
+    I n < 0 {
+        -1
+    } EL I n == 0 {
+        0
+    } EL {
+        1
+    }
+}
+
+F main() -> i64 {
+    a := classify(-5)
+    b := classify(0)
+    c := classify(7)
+    a + b + c
+}

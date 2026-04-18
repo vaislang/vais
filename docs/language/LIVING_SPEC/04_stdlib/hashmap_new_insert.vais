@@ -1,0 +1,12 @@
+# LIVING_SPEC/04_stdlib/hashmap_new_insert.vais
+# Key concept: HashMap::new()로 해시맵 생성; .insert(key, val)로 키-값 삽입.
+# 동일 키를 다시 insert하면 값이 덮어써진다.
+
+F main() -> i64 {
+    m: HashMap<str, i64> = HashMap::new()
+    m.insert("apple", 1)
+    m.insert("banana", 2)
+    m.insert("cherry", 3)
+    # m.len() == 3
+    m.len()
+}

@@ -1,0 +1,20 @@
+# LIVING_SPEC/01_keywords/M_match_literal.vais
+# Key concept: M expr { lit => result, _ => default } 리터럴 패턴 매치.
+# 정수/bool 리터럴을 직접 패턴으로 사용. _ 는 와일드카드.
+
+F day_name(d: i64) -> i64 {
+    M d {
+        1 => 10,
+        2 => 20,
+        3 => 30,
+        4 => 40,
+        5 => 50,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    a := day_name(3)
+    b := day_name(7)
+    a + b
+}

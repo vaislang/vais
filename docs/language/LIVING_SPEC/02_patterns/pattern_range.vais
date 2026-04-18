@@ -1,0 +1,18 @@
+# LIVING_SPEC/02_patterns/pattern_range.vais
+# Key concept: range 패턴 `a..=b`로 범위 매칭.
+
+F grade(score: i64) -> i64 {
+    M score {
+        0..=59 => 0,
+        60..=69 => 1,
+        70..=79 => 2,
+        80..=89 => 3,
+        _ => 4
+    }
+}
+
+F main() -> i64 {
+    a := grade(55)
+    b := grade(85)
+    a + b
+}

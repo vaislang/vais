@@ -1,0 +1,19 @@
+# LIVING_SPEC/02_patterns/pattern_guard_if.vais
+# Key concept: 패턴 가드는 현재 파서에서 미지원. 대안: match 밖에서 I 분기.
+
+F sign(n: i64) -> i64 {
+    I n < 0 {
+        -1
+    } EL I n == 0 {
+        0
+    } EL {
+        1
+    }
+}
+
+F main() -> i64 {
+    a := sign(-5)
+    b := sign(0)
+    c := sign(7)
+    a + b + c
+}

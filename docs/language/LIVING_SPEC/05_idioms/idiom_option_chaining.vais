@@ -1,0 +1,20 @@
+# LIVING_SPEC/05_idioms/idiom_option_chaining.vais
+# Key concept: ❌ Some(r.field) 재포장 vs ✅ 값 바로 추출
+# ✅ DO: M opt { Some(r) => r.field, None => default } — 직접 반환.
+# ❌ DON'T: M opt { Some(r) => Some(r.field), None => None } — Phase 2.10 codegen 버그.
+
+S Profile { age: i64 }
+
+F get_age(p: Option<Profile>, def: i64) -> i64 {
+    M p {
+        Some(r) => r.age,
+        None => def
+    }
+}
+
+F main() -> i64 {
+    p := Profile { age: 25 }
+    a := get_age(Some(p), 0)
+    b := get_age(None, 99)
+    a + b
+}

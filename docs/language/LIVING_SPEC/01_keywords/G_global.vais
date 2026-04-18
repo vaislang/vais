@@ -1,0 +1,26 @@
+# LIVING_SPEC/01_keywords/G_global.vais
+# Key concept: G name: Type = value 전역 변수/상수 선언.
+# 모듈 최상위에 선언. 함수에서 읽기 가능.
+
+G MAX: i64 = 100
+G BASE: i64 = 10
+
+F clamp(v: i64) -> i64 {
+    I v > MAX {
+        R MAX
+    }
+    I v < 0 {
+        R 0
+    }
+    v
+}
+
+F offset(v: i64) -> i64 {
+    v + BASE
+}
+
+F main() -> i64 {
+    a := clamp(150)
+    b := offset(5)
+    a + b
+}

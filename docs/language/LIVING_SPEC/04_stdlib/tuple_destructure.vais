@@ -1,0 +1,12 @@
+# LIVING_SPEC/04_stdlib/tuple_destructure.vais
+# Key concept: 튜플 값을 M으로 분해.
+
+F swap_add(t: (i64, i64)) -> i64 {
+    M t {
+        (a, b) => b + a
+    }
+}
+
+F main() -> i64 {
+    swap_add((3, 7))
+}

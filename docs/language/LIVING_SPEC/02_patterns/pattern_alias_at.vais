@@ -1,0 +1,16 @@
+# LIVING_SPEC/02_patterns/pattern_alias_at.vais
+# Key concept: `name @ pattern` 바인딩은 전체 매칭 값을 이름에 부착.
+
+F describe(n: i64) -> i64 {
+    M n {
+        x @ 0..=9 => x + 100,
+        y @ 10..=99 => y + 200,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    a := describe(5)
+    b := describe(42)
+    a + b
+}

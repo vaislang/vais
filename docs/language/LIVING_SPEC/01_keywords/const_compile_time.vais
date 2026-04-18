@@ -1,0 +1,13 @@
+# LIVING_SPEC/01_keywords/const_compile_time.vais
+# Key concept: 상수성 — 파서에 따라 top-level `const`가 지원되지 않을 수 있으므로
+# `G` 글로벌로 불변 상수 패턴을 대체.
+
+G MAX: i64 = 100
+
+F clamp(x: i64) -> i64 {
+    I x > MAX { MAX } EL { x }
+}
+
+F main() -> i64 {
+    clamp(150) + clamp(50)  # 100 + 50 = 150
+}

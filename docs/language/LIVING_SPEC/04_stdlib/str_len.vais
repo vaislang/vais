@@ -1,0 +1,7 @@
+# LIVING_SPEC/04_stdlib/str_len.vais
+# Key concept: 문자열 길이는 .len() 메서드로 조회.
+
+F main() -> i64 {
+    s := "abcdef"
+    s.len()
+}

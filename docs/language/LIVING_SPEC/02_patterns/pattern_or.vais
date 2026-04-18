@@ -1,0 +1,15 @@
+# LIVING_SPEC/02_patterns/pattern_or.vais
+# Key concept: or-pattern `a | b | c` — 여러 대안을 같은 arm에 묶음.
+
+F is_vowel(c: i64) -> i64 {
+    M c {
+        97 | 101 | 105 | 111 | 117 => 1,
+        _ => 0
+    }
+}
+
+F main() -> i64 {
+    a := is_vowel(97)
+    b := is_vowel(98)
+    a + b
+}

@@ -56,10 +56,11 @@ CI entry `scripts/check-integrity.sh` (Phase 0.4) enforces the floor automatical
 
 ## Current Tasks (2026-04-19)
 
-mode: stopped (Phase 2.10 requires user review — two fix attempts regressed baseline; deeper Named↔Optional bridge investigation needed before proceeding)
-iteration: 10
+mode: auto
+iteration: 1
 max_iterations: 30
-  strategy: parallel — iteration 3, #26 (trivial ROADMAP edit, direct) + #27 (CI script, impl-sonnet background); no file overlap.
+  strategy-note: A안 채택 — Phase 2.10 fix 재시도하기 전에 **체계(LIVING_SPEC + COOKBOOK + CLAUDE.md 철칙)** 먼저 구축. 에이전트 작업 시 "과거 문법 추측 → regression" 루프를 근본 차단하는 게 목적. Phase 1.8 → 1.9 → 1.10 체인 후 2.10 재개.
+  strategy iteration 1: sequential — #42 (#43, #44 blockedBy 체인). #42는 100+ 파일 생성 + regression floor 유지 필요 → impl-sonnet background.
 
 ### Phase 0 — Baseline & Integrity Matrix
 
@@ -105,6 +106,55 @@ progress: 9/18 (50%)
   changes: docs/language/LEXER_KEYWORDS.md (124줄, 신규). LANGUAGE_SPEC와 cross-link.
   verify: Phase 1.6의 compiler_syntax 테스트가 lexer invariant를 검증 (186 passed, negative tests 섹션 21). 제거된 `spawn/lazy/force`는 removed_keywords.md + LEXER_KEYWORDS.md 양쪽 기록.
   deferred: "did you mean X?" suggestion 에러 — 완료 기준에 포함되지 않음. Phase 1.8+ 확장 작업으로 남겨둠.
+
+### Phase 1.5 — Living Spec & 에이전트 가드레일 (2026-04-19 추가, A안)
+
+> **배경**: Phase 1.5 LANGUAGE_SPEC은 이미 있지만, 에이전트가 실제 작업 시 훈련 데이터의 구식 Vais 지식으로 "추측"해서 regression을 만들어내는 루프가 관찰됨. Phase 2.10 fix 시도에서 3번 연속 baseline regression 발생한 것도 이 맥락. **실행 가능한 참조**(LIVING_SPEC) + **자주 틀리는 패턴 사전**(COOKBOOK) + **강제적 개발 철칙**(CLAUDE.md 상단) 3단 가드레일 구축.
+
+- [x] 1.8. LIVING_SPEC 예제 세트 (impl-sonnet + Opus fixup) ✅ 2026-04-19
+  target: docs/language/LIVING_SPEC/ 신규 디렉토리
+  structure:
+    - 01_keywords/ — 각 keyword별 실행가능 예제 (F, S, EN, W, X, T, U, I/EL, L/LW/LF, M, R/B/C, D, N, G, A/Y 각 1파일)
+    - 02_patterns/ — match binding, Option/Result destructure, ref/deref, or-pattern
+    - 03_generics/ — 제네릭 fn/struct/impl, where clause, 경계
+    - 04_stdlib/ — Vec/HashMap/Option/Result/Str 사용 패턴 (Phase 0 baseline 기준 작동하는 것만)
+    - 05_idioms/ — 관용적 Vais 패턴 + anti-pattern
+    - 06_examples/ — 100줄+ 실행가능 앱 3개 (calculator, todo store, string processor)
+  [완료 기준]:
+  - 파일 100개+ .vais, 각 파일에 ## 상단 주석으로 "Key Concept" 설명
+  - 모두 `vaisc check` exit 0 (regression floor 유지 필수)
+  - `cargo test -p vaisc --test integrity --release` 기존 수치 불변
+  - 신규 integrity test `test_living_spec_files_ok` 추가 — LIVING_SPEC/ 파일이 하나라도 실패 시 CI fail
+- [ ] 1.9. COOKBOOK.md 작성 (Opus direct) [blockedBy: 1.8]
+  target: docs/language/COOKBOOK.md 신규
+  content: 자주 틀리는 케이스 20+ (에이전트 작업 기록 + 저장소 내 실제 버그 기반):
+    - Option<T>.map 대신 Some(r.field) 재포장 (Phase 2.10 known bug)
+    - `LF i in range` 오용 (colon 문법)
+    - `E` vs `EN`/`EL` 애매성
+    - `C` Continue vs const 혼동
+    - 제거된 keyword (spawn/lazy/force) 재도입 유혹
+    - Vec<T>[i] indexing vs .get(i)
+    - Str/&Str/&str 타입 선택
+    - impl 블록을 다른 파일에 분리하는 함정 (Phase 2.9)
+    - 그 외 12+ 항목
+  [완료 기준]:
+  - 20개+ 항목, 각 항목에 ❌ 실패 코드 + ✅ 성공 코드 + "왜 실패하는지" 설명
+  - LIVING_SPEC/ 관련 예제로 cross-link
+  - CLAUDE.md에 "자주 틀리는 케이스는 COOKBOOK.md 참조" 한 줄 추가
+- [ ] 1.10. CLAUDE.md 개발 철칙 강화 (Opus direct) [blockedBy: 1.9]
+  target: CLAUDE.md 상단에 "Vais 개발 철칙 (MUST READ)" 섹션 신규 추가
+  content:
+    1. 훈련 데이터 Vais는 구식 — 저장소 밖 지식 가정 금지
+    2. 새 문법 쓰기 전: LIVING_SPEC/ 확인 → LEXER_KEYWORDS.md 확인 → COOKBOOK.md 확인 (순서)
+    3. 컴파일러 수정 전: `./scripts/check-integrity.sh` 실행으로 baseline 기록
+    4. 수정 후: 동일 스크립트 실행으로 비교, **1-file라도 regression 시 즉시 revert** (Phase 158 yoyo 방지)
+    5. 추측 금지 — `vaisc check <file>` 실행 결과만 근거로
+    6. Removed keyword (spawn/lazy/force) 재도입 절대 금지 — docs/language/removed_keywords.md 참조
+    7. Opus direct 작업이라도 이 철칙 준수 (규칙의 권위는 역할 불문)
+  [완료 기준]:
+  - CLAUDE.md 최상단(Overview 직후)에 섹션 추가, 강제적 어조
+  - 기존 "Type Conversion Rules" 섹션 뒤로 밀지 않고 병립
+  - 단일 커밋으로 처리
 
 ### Phase 2 — Type system 정합성
 

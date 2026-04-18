@@ -1,0 +1,14 @@
+# LIVING_SPEC/01_keywords/F_function_generic.vais
+# Key concept: F name<T>(x: T) -> T 제네릭 함수 선언.
+# 타입 파라미터는 <T>로 명시; 호출 시 자동 단형화(monomorphization).
+
+F identity<T>(x: T) -> T = x
+
+F first<A, B>(a: A, b: B) -> A = a
+
+F main() -> i64 {
+    n := identity(42)
+    s := identity("hello")
+    k := first(10, "ignored")
+    n + k
+}

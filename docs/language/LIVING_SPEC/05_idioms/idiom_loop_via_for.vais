@@ -1,0 +1,16 @@
+# LIVING_SPEC/05_idioms/idiom_loop_via_for.vais
+# Key concept: ❌ 수동 LW 카운터 vs ✅ LF range
+# ✅ DO: LF i: 0..N { ... } — 범위 반복은 LF 선호.
+# ❌ DON'T: mut i + LW i < N { ...; i = i + 1 } — 오타/무한루프 위험.
+
+F sum_to_n(n: i64) -> i64 {
+    total := mut 0
+    LF i: 0..n {
+        total = total + i
+    }
+    total
+}
+
+F main() -> i64 {
+    sum_to_n(5)  # 0+1+2+3+4 = 10
+}

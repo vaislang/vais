@@ -1,0 +1,15 @@
+# LIVING_SPEC/04_stdlib/vec_contains.vais
+# Key concept: .contains(val)은 값 포함 여부를 i64(0/1)로 반환.
+# 선형 탐색으로 동작하므로 O(n).
+
+F main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+
+    I v.contains(20) == 1 { puts("found 20") }
+    I v.contains(99) == 0 { puts("99 not found") }
+
+    0
+}

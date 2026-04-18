@@ -1,0 +1,13 @@
+# LIVING_SPEC/04_stdlib/result_ok_err.vais
+# Key concept: Result<T, E>로 성공/실패 구분.
+
+F safe_div(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 { Err(1) } EL { Ok(a / b) }
+}
+
+F main() -> i64 {
+    M safe_div(10, 2) {
+        Ok(v) => v,
+        Err(_) => -1
+    }
+}

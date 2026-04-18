@@ -1,0 +1,22 @@
+# LIVING_SPEC/04_stdlib/hashmap_get.vais
+# Key concept: .get(key)는 Option<V>를 반환한다.
+# 키가 없으면 None, 있으면 Some(value).
+
+F main() -> i64 {
+    m: HashMap<str, i64> = HashMap::new()
+    m.insert("score", 100)
+
+    result := m.get("score")
+    M result {
+        Some(v) => puts("found"),
+        None    => puts("not found")
+    }
+
+    missing := m.get("missing")
+    M missing {
+        Some(v) => puts("unexpected"),
+        None    => puts("correctly absent")
+    }
+
+    0
+}

@@ -1,0 +1,24 @@
+# LIVING_SPEC/01_keywords/R_return_early.vais
+# Key concept: R expr 조기 반환.
+# 함수 중간에 R로 즉시 값을 반환. 마지막 식은 암시적 반환.
+
+F safe_div(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R -1
+    }
+    a / b
+}
+
+F abs(n: i64) -> i64 {
+    I n < 0 {
+        R -n
+    }
+    n
+}
+
+F main() -> i64 {
+    a := safe_div(10, 2)
+    b := safe_div(5, 0)
+    c := abs(-7)
+    a + b + c
+}

@@ -1,0 +1,15 @@
+# LIVING_SPEC/01_keywords/LF_foreach_range.vais
+# Key concept: LF var: range { body } 범위 반복.
+# 0..5 는 [0,1,2,3,4]. 변수에 현재 값이 바인딩됨.
+
+F sum_to(n: i64) -> i64 {
+    acc := mut 0
+    LF i: 0..n {
+        acc = acc + i
+    }
+    acc
+}
+
+F main() -> i64 {
+    sum_to(5)
+}

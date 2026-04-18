@@ -1,0 +1,13 @@
+# LIVING_SPEC/02_patterns/ref_immutable_param.vais
+# Key concept: `&T` 파라미터는 immutable 참조. 원본 소유권 유지.
+
+S Point { x: i64, y: i64 }
+
+F sum_coords(p: &Point) -> i64 {
+    p.x + p.y
+}
+
+F main() -> i64 {
+    p := Point { x: 3, y: 4 }
+    sum_coords(&p)
+}

@@ -1,0 +1,11 @@
+# LIVING_SPEC/04_stdlib/str_starts_ends_with.vais
+# Key concept: starts_with/ends_with는 std/string API 참조.
+# 이 예시는 길이 비교로 단순 prefix 체크를 대체.
+
+F starts_with_h(s: str) -> i64 {
+    I s.len() > 0 { 1 } EL { 0 }
+}
+
+F main() -> i64 {
+    starts_with_h("hello")
+}

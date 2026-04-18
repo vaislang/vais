@@ -1,0 +1,23 @@
+# LIVING_SPEC/01_keywords/S_struct_generic.vais
+# Key concept: S Name<T> { field: T } 제네릭 구조체.
+# 사용 시 타입 파라미터가 단형화됨.
+
+S Box<T> {
+    value: T
+}
+
+S Pair<T> {
+    first: T,
+    second: T
+}
+
+X Pair<i64> {
+    F sum(&self) -> i64 = self.first + self.second
+}
+
+F main() -> i64 {
+    b := Box { value: 99 }
+    p := Pair { first: 10, second: 32 }
+    total := p.sum()
+    total + b.value - 141
+}

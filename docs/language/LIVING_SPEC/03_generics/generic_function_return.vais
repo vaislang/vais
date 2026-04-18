@@ -1,0 +1,13 @@
+# LIVING_SPEC/03_generics/generic_function_return.vais
+# Key concept: 제네릭 타입을 반환하는 함수 — 호출부에서 T가 구체화됨.
+
+S Pair<T> { first: T, second: T }
+
+F make_pair<T>(a: T, b: T) -> Pair<T> {
+    Pair { first: a, second: b }
+}
+
+F main() -> i64 {
+    p := make_pair(10, 20)
+    p.first + p.second
+}

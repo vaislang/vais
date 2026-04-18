@@ -1,0 +1,15 @@
+# LIVING_SPEC/04_stdlib/result_map.vais
+# Key concept: Result<T, E>를 M으로 분기해서 변환.
+
+F transform(r: Result<i64, i64>) -> i64 {
+    M r {
+        Ok(v) => v * 2,
+        Err(e) => -e
+    }
+}
+
+F main() -> i64 {
+    a := transform(Ok(5))
+    b := transform(Err(3))
+    a + b
+}

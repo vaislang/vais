@@ -1,0 +1,15 @@
+# LIVING_SPEC/03_generics/generic_vec_usage.vais
+# Key concept: 제네릭 Container 구조체로 다형적인 값 저장.
+
+S Container<T> {
+    value: T
+}
+
+F wrap<T>(v: T) -> Container<T> {
+    Container { value: v }
+}
+
+F main() -> i64 {
+    c := wrap(42)
+    c.value
+}

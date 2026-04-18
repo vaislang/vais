@@ -1,0 +1,20 @@
+# LIVING_SPEC/01_keywords/I_EL_chained.vais
+# Key concept: 체인된 if/else — EL I … EL { … }로 다단계 분기.
+
+F grade_label(score: i64) -> i64 {
+    I score >= 90 {
+        5
+    } EL I score >= 80 {
+        4
+    } EL I score >= 70 {
+        3
+    } EL I score >= 60 {
+        2
+    } EL {
+        1
+    }
+}
+
+F main() -> i64 {
+    grade_label(85) + grade_label(55)
+}

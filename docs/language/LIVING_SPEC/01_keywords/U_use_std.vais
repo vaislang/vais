@@ -1,0 +1,11 @@
+# LIVING_SPEC/01_keywords/U_use_std.vais
+# Key concept: U 로 외부 모듈 import. self-contained 예제를 위해 주석으로 대체.
+# 실제 패키지에서는: U std::io
+
+# U std::io    # 이 예제에선 생략 (self-contained)
+
+F main() -> i64 {
+    # puts는 std 없이도 쓸 수 있는 builtin
+    puts("use import demonstration")
+    0
+}

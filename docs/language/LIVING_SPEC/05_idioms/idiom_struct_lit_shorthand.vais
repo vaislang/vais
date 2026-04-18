@@ -1,0 +1,14 @@
+# LIVING_SPEC/05_idioms/idiom_struct_lit_shorthand.vais
+# Key concept: struct literal에 명시적 field: value 기재.
+# (Rust처럼 field 이름 shorthand는 명시적으로 표기 권장.)
+
+S Point { x: i64, y: i64 }
+
+F make_point(x: i64, y: i64) -> Point {
+    Point { x: x, y: y }
+}
+
+F main() -> i64 {
+    p := make_point(3, 4)
+    p.x + p.y
+}

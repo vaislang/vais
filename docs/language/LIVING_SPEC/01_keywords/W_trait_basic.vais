@@ -1,0 +1,22 @@
+# LIVING_SPEC/01_keywords/W_trait_basic.vais
+# Key concept: W TraitName { F method(...) -> T } 트레이트 선언.
+# X Type: TraitName { ... } 로 구현. 다형성 인터페이스 정의.
+
+W Describable {
+    F describe(self) -> i64
+}
+
+S Dog {
+    age: i64
+}
+
+X Dog: Describable {
+    F describe(self) -> i64 {
+        self.age
+    }
+}
+
+F main() -> i64 {
+    d := Dog { age: 3 }
+    d.describe()
+}
