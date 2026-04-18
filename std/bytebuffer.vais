@@ -264,6 +264,14 @@ X ByteBuffer {
         @.read_u16_le()
     }
 
+    F get_u32_le(&self) -> i64 {
+        @.read_i32_le()
+    }
+
+    F get_u64_le(&self) -> i64 {
+        @.read_i64_le()
+    }
+
     F get_i32_le(&self) -> i64 {
         @.read_i32_le()
     }
