@@ -67,6 +67,18 @@ impl TypeChecker {
             return Ok(());
         }
 
+        // Phase 237: Str / str alias coercion. `T Str = str` should make
+        // them unify in either direction. Without this, vaisdb's `Str` type
+        // alias produces 'expected str, found Str' E001 in many call sites.
+        let str_aliases = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Str)
+                || matches!(t, ResolvedType::Named { name, generics }
+                    if (name == "Str" || name == "str") && generics.is_empty())
+        };
+        if str_aliases(&expected) && str_aliases(&found) {
+            return Ok(());
+        }
+
         match (&expected, &found) {
             // Type variables can unify with anything
             (ResolvedType::Var(id), t) | (t, ResolvedType::Var(id)) => {
